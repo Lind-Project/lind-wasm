@@ -32,3 +32,15 @@ pub const GRATE_ERR: i32 = -1;
 ///
 /// The value is expected to be globally unique among all runtimes registered with 3i
 pub const RUNTIME_TYPE_WASMTIME: u64 = 1;
+/// 3i-specific syscall number for `register_handler`.
+///
+/// Match the definition in `glibc/lind_syscall_num.h`.
+/// TODO: When introducing a Rust-side unified syscall number table
+/// (similar to glibc's `syscall_num` constants), move this constant there.
+pub const REGISTER_HANDLER_SYSCALL: u64 = 1001;
+/// 3i-specific syscall number for `copy_data_between_cages`.
+///
+/// Match the definition in `glibc/lind_syscall_num.h`.
+/// TODO: When introducing a Rust-side unified syscall number table
+/// (similar to glibc's `syscall_num` constants), move this constant there.
+pub const COPY_DATA_BETWEEN_CAGES_SYSCALL: u64 = 1002;

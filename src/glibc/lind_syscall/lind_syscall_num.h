@@ -117,5 +117,9 @@
 #define PIPE2_SYSCALL 293
 #define GETRANDOM_SYSCALL 318
 
+/* Lind-specific syscalls (not part of the Linux syscall table) */
+#define REGISTER_HANDLER_SYSCALL 1001
+#define COPY_DATA_BETWEEN_CAGES_SYSCALL 1002
+
 #endif /* _LIND_SYSCALL_NUM_H */
  

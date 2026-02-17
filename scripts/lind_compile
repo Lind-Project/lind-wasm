@@ -217,7 +217,7 @@ esac
 CLANG_BIN="clang"  # must be on PATH
 WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
-LINDFS_ROOT="${REPO_ROOT}/lindfs"
+LINDFS_ROOT="${REPO_ROOT}/lindfs/"
 if [[ ! -x "${LINDBOOT_BIN}" ]]; then
   echo "ERROR: lind-boot missing: ${LINDBOOT_BIN}" >&2
   exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
@@ -250,7 +250,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -O0
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    debug_default_clang_flags+=(--export-pass-fptr-to-wt)
+    debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
   fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
@@ -279,7 +279,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -O0
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    debug_default_clang_flags+=(--export-pass-fptr-to-wt)
+    debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
   fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
@@ -309,7 +309,7 @@ do_compile() {
   )
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    default_clang_flags+=(--export-pass-fptr-to-wt)
+    default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
   fi
 
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
@@ -325,6 +325,7 @@ do_optimize() {
 }
 
 cp_to_lindfs() {
+  mkdir -p "${LINDFS_ROOT}"
   cp "${OUT_WASM}" "${LINDFS_ROOT}"
 }
 

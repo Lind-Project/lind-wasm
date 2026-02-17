@@ -113,69 +113,6 @@ pub fn add_to_linker<
         },
     )?;
 
-    // Registers grate-specific syscall-like host functions `register-syscall` / `cp-data-syscall` /
-    // `copy_handler_table_to_cage` into the Wasmtime linker. This is part of the 3i (inter-cage
-    // interposition) system, which allows user-level libc code (e.g., glibc) to perform cage-to-grate
-    // syscall routing in a way that *resembles normal syscalls* from the user’s perspective.
-    //
-    // To maintain consistency with traditional syscall patterns, we expose 3i-related functions
-    // using the same mechanism as `lind` syscalls. These functions are declared in glibc headers and
-    // invoked like syscalls. At runtime, they are resolved via Wasmtime’s linker and routed to
-    // closures here. This particular function allows a cage to register a handler function (by index)
-    // for a specific syscall number, targeting a specific grate.
-    //
-    // The same trampoline mechanism used by `lind-syscall` is reused to simplify design and
-    // reduce interface divergence between normal syscalls and 3i interposition calls.
-    //
-    // attach register_handler to wasmtime
-    linker.func_wrap(
-        "lind",
-        "register-syscall",
-        move |targetcage: u64,
-              targetcallnum: u64,
-              handlefunc_flag: u64,
-              this_grate_id: u64,
-              in_grate_fn_ptr_u64: u64|
-              -> i32 {
-            register_handler(
-                in_grate_fn_ptr_u64,
-                targetcage,
-                targetcallnum,
-                threei_const::RUNTIME_TYPE_WASMTIME,
-                handlefunc_flag,
-                this_grate_id,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-            )
-        },
-    )?;
-
-    // attach copy_data_between_cages to wasmtime
-    linker.func_wrap(
-        "lind",
-        "cp-data-syscall",
-        move |thiscage: u64,
-              targetcage: u64,
-              srcaddr: u64,
-              srccage: u64,
-              destaddr: u64,
-              destcage: u64,
-              len: u64,
-              copytype: u64|
-              -> i32 {
-            copy_data_between_cages(
-                thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, UNUSED_ID,
-                copytype, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
-            ) as i32
-        },
-    )?;
-
     // attach copy_handler_table_to_cage to wasmtime
     linker.func_wrap(
         "lind",

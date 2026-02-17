@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <stdint.h> // For uint64_t definition
 #include "addr_translation.h"
+#include "lind_syscall_num.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __lind_make_syscall_trampoline(unsigned int callnumber, 
@@ -109,38 +110,33 @@ int make_threei_call (unsigned int callnumber,
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-// Entry point for wasmtime, lind_syscall is an imported function from wasmtime
-int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage, 
-    uint64_t targetcallnum, 
-    uint64_t handlefunc_flag, 
-    uint64_t this_grate_id,
-    uint64_t optional_arg) __attribute__((
-    __import_module__("lind"),
-    __import_name__("register-syscall")
-));
-
 // 3i function call to register or deregister a syscall handler in a target cage
 // targetcage: the cage id where the syscall will be registered
 // targetcallnum: the syscall number to be registered in the target cage
 // this_grate_id: the grate id of the syscall jump ends
 // register_flag: deregister(0) or register(non-0)
+// in_grate_fn_ptr_u64: the function pointer (cast to uint64_t) of the syscall handler in the grate, only used when register_flag is non-0
 int register_handler (int64_t targetcage, 
     uint64_t targetcallnum, 
     uint64_t handlefunc_flag, 
     uint64_t this_grate_id,
-    uint64_t optional_arg)
+    uint64_t in_grate_fn_ptr_u64)
 {
-    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_flag, this_grate_id, optional_arg);
-    
-    return ret;
+    return make_threei_call(
+        REGISTER_HANDLER_SYSCALL, 
+        0, // callname is not used in the trampoline, set to 0
+        in_grate_fn_ptr_u64,
+        targetcage, 
+        targetcallnum, 
+        0, // runtime_id currently not used, set to 0
+        handlefunc_flag, 
+        this_grate_id, 
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0 /* translate_errno=0: we want to return the raw result without errno translation */
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Entry point for wasmtime, lind_cp_data is an imported function from wasmtime
-int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype) __attribute__((
-    __import_module__("lind"),
-    __import_name__("cp-data-syscall")
-));
 
 // 3i function call to copy data between cages
 // thiscage: the cage id of the caller cage
@@ -153,16 +149,16 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
 // copytype: the type of copy, 0 for normal copy, 1 for string copy
 int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
-    int ret = __imported_lind_3i_trampoline_cp_data(
-		thiscage, 
-		targetcage,
-		TRANSLATE_UADDR_TO_HOST(srcaddr, srccage),
-		srccage,
-		TRANSLATE_UADDR_TO_HOST(destaddr, destcage),
-		destcage,
-		len,
-		copytype
+    return make_threei_call(
+        COPY_DATA_BETWEEN_CAGES_SYSCALL, 
+        0, // callname is not used in the trampoline, set to 0
+        thiscage, 
+        targetcage,
+        TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
+        TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
+        len, 0,
+        copytype, 0,
+        0, 0, 0, 0,
+        0 /* translate_errno=0: we want to return the raw result without errno translation */
     );
-    
-    return ret;
 }
