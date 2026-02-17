@@ -65,9 +65,18 @@ int main(int argc, char *argv[]) {
   }
 
   int status;
+  int failed = 0;
   while (wait(&status) > 0) {
-    printf("[Grate|geteuid] terminated, status: %d\n", status);
+    if (status != 0) {
+      fprintf(stderr, "[Grate|geteuid] FAIL: child exited with status %d\n", status);
+      failed = 1;
+    }
   }
 
+  if (failed) {
+    fprintf(stderr, "[Grate|geteuid] FAIL\n");
+    return EXIT_FAILURE;
+  }
+  printf("[Grate|geteuid] PASS\n");
   return 0;
 }
