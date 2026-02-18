@@ -11,7 +11,7 @@ pub struct CliOptions {
     #[arg(long)]
     pub debug: bool,
 
-    /// todo: Allow using precompiled cwasm artifacts
+    /// Allow executing precompiled .cwasm artifacts
     #[arg(long)]
     pub allow_precompile: bool,
 
