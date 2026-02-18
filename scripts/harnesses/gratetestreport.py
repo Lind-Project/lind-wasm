@@ -33,6 +33,7 @@ HTML_OUTPUT = "grate_report.html"
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
 GRATE_TEST_BASE = REPO_ROOT / "tests" / "grate-tests"
+LIND_TOOL_PATH = REPO_ROOT / "scripts"
 
 GRATE_CLANG = os.environ.get("GRATE_CLANG", "lind-clang")
 GRATE_RUNNER = os.environ.get("GRATE_RUNNER", "lind-wasm")
@@ -226,6 +227,24 @@ def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
     return True, ""
 
 
+def build_grate_run_cmd(grate_wasm: Path, cage_wasm: Path) -> list[str]:
+    """Build grate run command with lind_run wrapper when available.
+
+    Using scripts/lind_run matches wasm harness behavior and provides the
+    same sudo escalation flow in environments that require privilege.
+    """
+    lind_run_wrapper = LIND_TOOL_PATH / "lind_run"
+
+    # Respect explicit override first.
+    if "GRATE_RUNNER" in os.environ:
+        return [GRATE_RUNNER, str(grate_wasm), str(cage_wasm)]
+
+    if lind_run_wrapper.is_file():
+        return [str(lind_run_wrapper), str(grate_wasm), str(cage_wasm)]
+
+    return [GRATE_RUNNER, str(grate_wasm), str(cage_wasm)]
+
+
 def run_grate_test(test: GrateTestCase, timeout_sec: int) -> tuple[str, str, int | str]:
     grate_wasm = resolve_wasm_output(test.grate_source, test.grate_source.parent)
     cage_wasm = resolve_wasm_output(test.cage_source, test.cage_source.parent)
@@ -235,10 +254,10 @@ def run_grate_test(test: GrateTestCase, timeout_sec: int) -> tuple[str, str, int
     # and passing file names when both artifacts are co-located.
     if grate_wasm.parent == cage_wasm.parent:
         run_cwd = grate_wasm.parent
-        run_cmd = [GRATE_RUNNER, grate_wasm.name, cage_wasm.name]
+        run_cmd = build_grate_run_cmd(Path(grate_wasm.name), Path(cage_wasm.name))
     else:
         run_cwd = REPO_ROOT
-        run_cmd = [GRATE_RUNNER, str(grate_wasm), str(cage_wasm)]
+        run_cmd = build_grate_run_cmd(grate_wasm, cage_wasm)
 
     try:
         proc = run_subprocess(run_cmd, timeout=timeout_sec, cwd=run_cwd)
