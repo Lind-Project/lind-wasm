@@ -34,20 +34,30 @@ int main() {
 EOF
 ```
 
+**3. Compile Lind-Wasm Runtime**
+
+Lind-wasm runtime must be compiled before running the program. To compile the lind-wasm runtime, you will first go to the `lind-wasm/` directory. At there, you can choose:
+
+3.a. use `make all` to compile both lind-glibc and rust code at once.
+
+3.b. use `make lind-boot` to compile rust code, and `make sysroot` to compile lind-glibc.
+
+**NOTES: More options can be found in lind-wasm/Makefile**
+
 **3. Compile and run**
 
 Use lind scripts to compile and run your program in the Lind Sandbox.
 
 ```bash
 lind-clang hello.c
-lind-wasm hello.cwasm
+lind-wasm hello.wasm
 ```
 
 *Here is what happens under the hood:*
 
-1.  `lind_compile` compiles `hello.c` into a WebAssembly (WASM)
-binary that is linked against *lind-glibc*.
-1. `lind_run` runs the compiled wasm using *lind-wasm* runtime
+1.  `lind-clang`(aka `scripts/lind_compile`) compiles `hello.c` into a WebAssembly (WASM)
+binary that is linked against *lind-glibc*, and put into lind file system root(`lind-wasm/lindfs`).
+1. `lind-wasm`(aka `scripts/lind_run`) runs the compiled wasm using *lind-wasm* runtime
 and the *lind-posix* microvisor.
 
 --- 
