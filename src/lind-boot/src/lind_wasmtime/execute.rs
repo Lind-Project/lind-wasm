@@ -490,6 +490,27 @@ fn load_main_module(
     ret
 }
 
+/// AOT-compile a `.wasm` file to a `.cwasm` artifact on disk.
+///
+/// This only needs a Wasmtime `Engine` — no runtime, cages, or 3i. The output
+/// path is the input path with the extension replaced by `.cwasm`.
+pub fn precompile_module(cli: &CliOptions) -> Result<()> {
+    let wasm_path = Path::new(cli.wasm_file());
+    let cwasm_path = wasm_path.with_extension("cwasm");
+
+    let engine = Engine::new(&wasmtime::Config::new()).context("failed to create engine")?;
+    let wasm_bytes = std::fs::read(wasm_path)
+        .with_context(|| format!("failed to read {}", wasm_path.display()))?;
+    let cwasm_bytes = engine
+        .precompile_module(&wasm_bytes)
+        .context("failed to precompile module")?;
+    std::fs::write(&cwasm_path, cwasm_bytes)
+        .with_context(|| format!("failed to write {}", cwasm_path.display()))?;
+
+    eprintln!("OK: {}", cwasm_path.display());
+    Ok(())
+}
+
 /// Load a Wasm module from disk, supporting both `.wasm` and precompiled `.cwasm` files.
 ///
 /// When `allow_precompile` is true, the function probes the file header via

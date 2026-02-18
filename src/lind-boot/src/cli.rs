@@ -15,6 +15,10 @@ pub struct CliOptions {
     #[arg(long)]
     pub allow_precompile: bool,
 
+    /// AOT-compile a .wasm file to a .cwasm artifact and exit (no runtime needed)
+    #[arg(long)]
+    pub precompile: bool,
+
     /// First item is WASM file (argv[0]), rest are program args (argv[1..])
     ///
     /// Example:
