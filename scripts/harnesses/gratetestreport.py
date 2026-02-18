@@ -27,7 +27,7 @@ ch.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
 logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 30
-JSON_OUTPUT = "grades.json"
+JSON_OUTPUT = "grates.json"
 HTML_OUTPUT = "grate_report.html"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -383,7 +383,7 @@ def run_harness(
 
     with tempfile.TemporaryDirectory(prefix="harness_gratetestreport_") as td:  # type: ignore[name-defined]
         tmp_path = Path(td)
-        json_out = tmp_path / "grades.json"
+        json_out = tmp_path / "grates.json"
         html_out = tmp_path / "grate_report.html"
         args.extend(["--output", str(json_out), "--report", str(html_out), "--generate-html"])
 
@@ -407,7 +407,7 @@ def run_harness(
 
     return {
         "name": "grate",
-        "json_filename": "grades.json",
+        "json_filename": "grates.json",
         "html_filename": "grate_report.html",
         "report": report_data,
         "html": html_data,
