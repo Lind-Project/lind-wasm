@@ -55,14 +55,16 @@ sync-sysroot:
 
 .PHONY: test
 test: prepare-lind-root
-	# Unified harness entry point (wasm harness only for e2e signal)
+	# Unified harness entry point (run all discovered harnesses for e2e signal)
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
-	python3 ./scripts/test_runner.py --harness wasmtestreport --export-report report.html && \
-	cat reports/wasm.json; \
-	if grep -q '"number_of_failures": [^0]' reports/wasm.json; then \
-	  echo "E2E_STATUS=fail" > e2e_status; \
-	else \
+	python3 ./scripts/test_runner.py --export-report report.html && \
+	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \;; \
+	if python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); total=0\
+for p in paths: total += int(json.load(open(p)).get('number_of_failures', 0));\
+print(f'total_failures={total}'); sys.exit(1 if total else 0)"; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
+	else \
+	  echo "E2E_STATUS=fail" > e2e_status; \
 	fi; \
 	exit 0
 

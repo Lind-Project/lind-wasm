@@ -22,7 +22,8 @@ jobs:
     env:
       REPORT_LOCAL_DIR: test-reports
       REPORT_LOCAL_FILE: wasm-e2e-report.html
-      REPORT_JSON_FILE: wasm.json
+      WASM_REPORT_JSON_FILE: wasm.json
+      GRATE_REPORT_JSON_FILE: grates.json
       REPORT_HTML_IN_REPORTS: report.html
       COMMENT_LOCAL_FILE: e2e_comment.md
 
@@ -105,11 +106,19 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload unified runner JSON report artifact
+      - name: Upload wasm JSON report artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: wasm-e2e-json
-          path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.REPORT_JSON_FILE }}
+          path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.WASM_REPORT_JSON_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload grate JSON report artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: grate-e2e-json
+          path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.GRATE_REPORT_JSON_FILE }}
           if-no-files-found: error
           retention-days: 7
 
