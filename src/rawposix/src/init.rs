@@ -11,9 +11,12 @@ use std::sync::atomic::{AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
     EXIT_SUCCESS, FDKIND_KERNEL, LINDFS_ROOT, RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO,
-    STDOUT_FILENO, VERBOSE,
+    STDOUT_FILENO, THREEI_CAGEID, VERBOSE,
 };
-use threei::{register_handler, RUNTIME_TYPE_WASMTIME};
+use threei::{
+    copy_data_between_cages, register_handler, COPY_DATA_BETWEEN_CAGES_SYSCALL,
+    REGISTER_HANDLER_SYSCALL, RUNTIME_TYPE_WASMTIME,
+};
 
 /// Function signature for a RawPOSIX syscall handler.
 ///
@@ -86,6 +89,76 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
     ret
 }
 
+/// Register 3i-specific syscall handlers for a given cage.
+///
+/// Unlike `register_rawposix_syscall`, which registers POSIX-level
+/// syscall implementations under `RAWPOSIX_CAGEID`, this function
+/// registers *3i-specific operations* under `THREEI_CAGEID`.
+///
+/// Specifically, this includes meta-level operations such as:
+/// - `register_handler`
+/// - `copy_data_between_cages`
+///
+/// By registering them under `THREEI_CAGEID`, those syscalls can be
+/// interposed and routed through 3i's internal logic, allowing for
+/// features like multiple interposition for all syscalls (ie: strace).
+///
+/// ## Parameters
+/// - `self_cageid`: the cage in which these 3i control handlers
+///   are being registered.
+///
+/// ## Returns
+/// - 0 on success.
+/// - Panics if registration of either handlers fails.
+pub fn register_threei_syscall(self_cageid: u64) -> i32 {
+    // Register `register_handler` syscall for this cage
+    let fp_register = register_handler as *const () as usize as u64;
+    let register_ret = register_handler(
+        fp_register,
+        self_cageid, // current cageid
+        REGISTER_HANDLER_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        1,                     // register
+        THREEI_CAGEID,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    );
+
+    // Register `copy_data_between_cages` syscall for this cage
+    let fp_copy = copy_data_between_cages as *const () as usize as u64;
+    let copy_ret = register_handler(
+        fp_copy,
+        self_cageid, // current cageid
+        COPY_DATA_BETWEEN_CAGES_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        1,                     // register
+        THREEI_CAGEID,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    );
+
+    // Check registration results and panic if either fails
+    if register_ret != 0 || copy_ret != 0 {
+        panic!(
+            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_ret {}",
+            register_ret, copy_ret
+        );
+    }
+    0
+}
+
 /// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
 /// detailed error messages will be printed if set.
 ///
@@ -136,6 +209,8 @@ pub fn rawposix_start(verbosity: isize) {
 
     // register syscalls for init cage
     register_rawposix_syscall(1);
+
+    register_threei_syscall(1);
 
     // Set up standard file descriptors for the init cage
     // TODO:
