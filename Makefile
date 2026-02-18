@@ -3,9 +3,20 @@ BUILD_DIR ?= build
 SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
 LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
 LINDBOOT_DEBUG_BIN ?= $(BUILD_DIR)/lind-boot-debug
+LINDFS_DIRS := \
+	       bin \
+	       dev \
+	       etc \
+	       sbin \
+	       tmp \
+	       usr/bin \
+	       usr/lib \
+	       usr/local/bin \
+	       var \
+	       var/log
 
 .PHONY: build 
-build: sysroot lind-boot
+build: sysroot lind-boot lind-fs
 	@echo "Build complete"
 
 .PHONY: prepare-lind-root
@@ -27,6 +38,11 @@ lind-boot: build-dir
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
+.PHONY: lind-fs
+lind-fs: 
+	@for d in $(LINDFS_DIRS); do \
+		mkdir -p $(LINDFS_ROOT)/$$d; \
+	done
 
 .PHONY: lind-debug
 lind-debug: build-dir
