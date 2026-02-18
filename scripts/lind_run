@@ -43,4 +43,4 @@ if [[ $EUID -ne 0 ]]; then
   exec sudo -E "$0" "$@"
 fi
 
-exec "${LINDBOOT_BIN}" --allow-precompile "$@"
+exec "${LINDBOOT_BIN}" "$@"

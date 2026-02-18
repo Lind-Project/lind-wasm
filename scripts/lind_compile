@@ -349,9 +349,10 @@ do_precompile() {
 
 cp_to_lindfs() {
   mkdir -p "${LINDFS_ROOT}"
-  cp "${OUT_WASM}" "${LINDFS_ROOT}"
   if [[ -n "${OUT_CWASM}" && -f "${OUT_CWASM}" ]]; then
     cp "${OUT_CWASM}" "${LINDFS_ROOT}"
+  else
+    cp "${OUT_WASM}" "${LINDFS_ROOT}"
   fi
 }
 

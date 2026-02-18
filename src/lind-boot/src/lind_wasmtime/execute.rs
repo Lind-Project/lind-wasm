@@ -76,7 +76,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     // -- Load module and Attach host APIs --
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
     // so we manually add them to the linker without checking the input
-    let module = load_module(&engine, wasm_file_path, lindboot_cli.allow_precompile)?;
+    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
     let mut linker = Linker::new(&engine);
 
     attach_api(
@@ -145,7 +145,7 @@ pub fn execute_with_lind(
     // -- Load module and Attach host APIs --
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
     // so we manually add them to the linker without checking the input
-    let module = load_module(&engine, wasm_file_path, lind_boot.allow_precompile)?;
+    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
     let mut linker = Linker::new(&engine);
 
     attach_api(
@@ -513,19 +513,16 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
 
 /// Load a Wasm module from disk, supporting both `.wasm` and precompiled `.cwasm` files.
 ///
-/// When `allow_precompile` is true, the function probes the file header via
-/// `Engine::detect_precompiled_file`. If the file is a precompiled module it is
-/// deserialized directly (skipping compilation). Otherwise — or when the flag is
-/// false — the file is compiled from source via `Module::from_file`.
-fn load_module(engine: &Engine, path: &Path, allow_precompile: bool) -> Result<Module> {
-    if allow_precompile {
-        if let Some(Precompiled::Module) = engine
-            .detect_precompiled_file(path)
-            .context("failed to detect precompiled module")?
-        {
-            return unsafe { Module::deserialize_file(engine, path) }
-                .context("failed to deserialize precompiled module");
-        }
+/// The function probes the file header via `Engine::detect_precompiled_file`.
+/// If the file is a precompiled module it is deserialized directly (skipping
+/// compilation). Otherwise it is compiled from source via `Module::from_file`.
+fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
+    if let Some(Precompiled::Module) = engine
+        .detect_precompiled_file(path)
+        .context("failed to detect precompiled module")?
+    {
+        return unsafe { Module::deserialize_file(engine, path) }
+            .context("failed to deserialize precompiled module");
     }
 
     Module::from_file(engine, path).context("failed to compile module")
