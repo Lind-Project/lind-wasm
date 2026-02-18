@@ -218,9 +218,19 @@ def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
 def run_grate_test(test: GrateTestCase, timeout_sec: int) -> tuple[str, str, int | str]:
     grate_wasm = resolve_wasm_output(test.grate_source, test.grate_source.parent)
     cage_wasm = resolve_wasm_output(test.cage_source, test.cage_source.parent)
-    run_cmd = [GRATE_RUNNER, str(grate_wasm), str(cage_wasm)]
+
+    # Some lind-wasm wrappers resolve input files relative to cwd and may not
+    # reliably handle host absolute paths. Prefer running from the wasm folder
+    # and passing file names when both artifacts are co-located.
+    if grate_wasm.parent == cage_wasm.parent:
+        run_cwd = grate_wasm.parent
+        run_cmd = [GRATE_RUNNER, grate_wasm.name, cage_wasm.name]
+    else:
+        run_cwd = REPO_ROOT
+        run_cmd = [GRATE_RUNNER, str(grate_wasm), str(cage_wasm)]
+
     try:
-        proc = run_subprocess(run_cmd, timeout=timeout_sec, cwd=REPO_ROOT)
+        proc = run_subprocess(run_cmd, timeout=timeout_sec, cwd=run_cwd)
     except subprocess.TimeoutExpired:
         return "Timeout", f"Timed Out (timeout: {timeout_sec}s)", "timeout"
     except Exception as exc:
