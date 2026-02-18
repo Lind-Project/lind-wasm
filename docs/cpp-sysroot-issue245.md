@@ -72,5 +72,6 @@ clang++ --target=wasm32-unknown-wasi --sysroot="$PWD/src/glibc/sysroot" \
 clang++ --target=wasm32-unknown-wasi --sysroot="$PWD/src/glibc/sysroot" \
   repro-cpp-error/hello.cpp -o hello.wasm
 ```
+### Special Note
 
 If the sysroot does not contain `libc.a` (from a successful glibc build), link will fail with “unable to find library -lc”. If compiler-rt is missing, link will fail looking for `libclang_rt.builtins-wasm32.a`. Resolve by completing the glibc build and/or building and installing compiler-rt as in issue #245.
