@@ -37,6 +37,13 @@ GRATE_TEST_BASE = REPO_ROOT / "tests" / "grate-tests"
 GRATE_CLANG = os.environ.get("GRATE_CLANG", "lind-clang")
 GRATE_RUNNER = os.environ.get("GRATE_RUNNER", "lind-wasm")
 
+error_types = {
+    "Compile_Failure": "Compile Failure",
+    "Runtime_Failure": "Runtime Failure",
+    "Timeout": "Timeout",
+    "Missing_Pair": "Missing Grate/Cage Pair",
+}
+
 
 def get_empty_result() -> dict[str, Any]:
     return {
@@ -68,6 +75,7 @@ def add_test_result(result: dict[str, Any], test_name: str, status: str, error_t
     if status == "Success":
         result["number_of_success"] += 1
         result["success"].append(test_name)
+        logger.info("SUCCESS")
         return
 
     result["number_of_failures"] += 1
@@ -84,6 +92,9 @@ def add_test_result(result: dict[str, Any], test_name: str, status: str, error_t
     elif error_type == "Missing_Pair":
         result["number_of_missing_pair_failures"] += 1
         result["missing_pair_failures"].append(test_name)
+
+    error_message = error_types.get(error_type or "", "Undefined Failure")
+    logger.error(f"FAILURE: {error_message}")
 
 
 def check_timeout(value: str) -> int:
