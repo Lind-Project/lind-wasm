@@ -10,6 +10,7 @@ clang+llvm-*
 src/glibc/build/
 build/
 lindfs/
+scripts/object_lists_final/
 
 #Ignore testing results
 e2e_status
