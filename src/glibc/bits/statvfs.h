@@ -52,6 +52,7 @@ struct statvfs
     __fsid_t f_fsid;
     unsigned long int f_flag;
     unsigned long int f_namemax;
+    unsigned int __f_type;  /* Lind/issue #245: for libc++ <filesystem>.  */
     unsigned int f_spare[6];
   };
 

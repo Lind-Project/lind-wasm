@@ -1,0 +1,22 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/ren/projects/lind-wasm/libcxx-build/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxxabi/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxxabi/include/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxxabi/src/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxxabi/test/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxxabi/fuzz/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/include/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/src/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/utils/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/benchmarks/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/test/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/test/tools/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/lib/abi/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/libcxx/docs/cmake_install.cmake",
+		"/home/ren/projects/lind-wasm/libcxx-build/llvm-lit/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

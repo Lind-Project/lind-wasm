@@ -78,17 +78,25 @@ rm -rf $BUILD
 mkdir -p $BUILD
 cd $BUILD
 
+# When using /usr/include, glibc make needs arch path so <asm/errno.h> resolves (e.g. /usr/include/x86_64-linux-gnu)
+# -ftls-model=local-exec required for wasm32 (LLVM only supports it for non-Emscripten)
+CONFIGURE_CFLAGS=" -matomics -mbulk-memory -O2 -g -ftls-model=local-exec $ARCH_INCLUDE"
 ../configure \
   --disable-werror \
   --disable-hidden-plt \
   --disable-profile \
   --disable-nscd \
-  --with-headers=/usr/i686-linux-gnu/include \
+  --with-headers=$KERNEL_HEADERS \
   --prefix=$GLIBC/target \
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
-  CFLAGS=" -matomics -mbulk-memory -O2 -g" \
+  CFLAGS="$CONFIGURE_CFLAGS" \
   CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
+
+# Glibc uses sysincludes for assembler-with-cpp and other passes; add arch path so <asm/errno.h> resolves
+if [ -n "$ARCH_INCLUDE" ]; then
+  sed -i "s|^sysincludes = \(.*\)|sysincludes = \1 $ARCH_INCLUDE|" config.make
+fi
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
 

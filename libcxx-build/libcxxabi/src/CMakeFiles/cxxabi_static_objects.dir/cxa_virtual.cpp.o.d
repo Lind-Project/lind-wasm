@@ -1,0 +1,29 @@
+libcxxabi/src/CMakeFiles/cxxabi_static_objects.dir/cxa_virtual.cpp.o: \
+  /home/ren/projects/lind-wasm/llvm-project/libcxxabi/src/cxa_virtual.cpp \
+  /home/ren/projects/lind-wasm/libcxx-build/include/c++/v1/cxxabi.h \
+  /home/ren/projects/lind-wasm/libcxx-build/include/c++/v1/stddef.h \
+  /home/ren/projects/lind-wasm/libcxx-build/include/c++/v1/__config \
+  /home/ren/projects/lind-wasm/libcxx-build/include/c++/v1/__config_site \
+  /usr/lib/llvm-14/lib/clang/14.0.6/include/stddef.h \
+  /usr/lib/llvm-14/lib/clang/14.0.6/include/__stddef_max_align_t.h \
+  /home/ren/projects/lind-wasm/libcxx-build/include/c++/v1/stdint.h \
+  /usr/lib/llvm-14/lib/clang/14.0.6/include/stdint.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/stdint.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/libc-header-start.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/features.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/features-time64.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/wordsize.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/timesize.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/stdc-predef.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/sys/cdefs.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/long-double.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/gnu/stubs.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/types.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/typesizes.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/time64.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/wchar.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/stdint-intn.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/stdint-uintn.h \
+  /home/ren/projects/lind-wasm/src/glibc/sysroot/include/wasm32-wasi/bits/stdint-least.h \
+  /home/ren/projects/lind-wasm/libcxx-build/include/c++/v1/__cxxabi_config.h \
+  /home/ren/projects/lind-wasm/llvm-project/libcxxabi/src/abort_message.h

@@ -44,31 +44,14 @@ struct stat
 
     __blkcnt_t st_blocks;		/* Number 512-byte blocks allocated. */
     
-    /* Nanosecond resolution timestamps are stored in a format
-       equivalent to 'struct timespec'.  This is the type used
-       whenever possible but the Unix namespace rules do not allow the
-       identifier 'timespec' to appear in the <sys/stat.h> header.
-       Therefore we have to handle the use of this header in strictly
-       standard-compliant sources special.  */
-    struct timespec st_atim;		/* Time of last access.  */
-    struct timespec st_mtim;		/* Time of last modification.  */
-    struct timespec st_ctim;		/* Time of last status change.  */
+    /* POSIX/libc++ compatibility: explicit time fields (issue #245).  */
+    __time_t st_atime;                  /* Time of last access.  */
+    __syscall_ulong_t st_atimensec;     /* Nsecs of last access.  */
+    __time_t st_mtime;                  /* Time of last modification.  */
+    __syscall_ulong_t st_mtimensec;     /* Nsecs of last modification.  */
+    __time_t st_ctime;                  /* Time of last status change.  */
+    __syscall_ulong_t st_ctimensec;     /* Nsecs of last status change.  */
   };
-
-
-    /* lind-wasm: define stat times for wasi */
-    #ifndef st_atime
-        #define st_atime st_atim.tv_sec
-    #endif
-
-    #ifndef st_mtime
-        #define st_mtime st_mtim.tv_sec
-    #endif
-
-    #ifndef st_ctime
-        #define st_ctime st_ctim.tv_sec
-    #endif
-    /* lind-wasm ends */
 
 #ifdef __USE_LARGEFILE64
 /* Note stat64 has the same shape as stat for x86-64.  */
