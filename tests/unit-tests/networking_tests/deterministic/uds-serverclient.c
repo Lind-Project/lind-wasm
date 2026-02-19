@@ -54,7 +54,7 @@ int main(void)
     pid_t pid;
     int wstatus;
 
-    snprintf(path, sizeof(path), "/tmp/uds_%d", getpid());
+    snprintf(path, sizeof(path), "uds_%d.sock", getpid());
     unlink(path);
 
     server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
