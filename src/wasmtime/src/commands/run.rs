@@ -6,7 +6,7 @@
 )]
 
 use cfg_if::cfg_if;
-use sysdefs::constants::LIND_ROOT;
+use sysdefs::constants::LINDFS_ROOT;
 
 use crate::common::{Profile, RunCommon, RunTarget};
 
@@ -1162,7 +1162,7 @@ impl RunCommand {
         let engine = main_module.engine();
         // let mut store = main_module.as_context_mut();
 
-        let base_path = Path::new(LIND_ROOT);
+        let base_path = Path::new(LINDFS_ROOT);
         let library_path = Path::new(library_name);
         let library_path = library_path.strip_prefix("/").unwrap_or(library_path);
 
