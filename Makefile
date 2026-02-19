@@ -16,7 +16,7 @@ LINDFS_DIRS := \
 	       var/log
 
 .PHONY: build 
-build: sysroot lind-boot lind-fs
+build: sysroot lind-boot lindfs
 	@echo "Build complete"
 
 .PHONY: prepare-lind-root
@@ -38,8 +38,8 @@ lind-boot: build-dir
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
-.PHONY: lind-fs
-lind-fs: 
+.PHONY: lindfs
+lindfs: 
 	@for d in $(LINDFS_DIRS); do \
 		mkdir -p $(LINDFS_ROOT)/$$d; \
 	done
