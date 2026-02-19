@@ -1,4 +1,8 @@
 LIND_ROOT ?= src/tmp
+BUILD_DIR ?= build
+SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
+WASMTIME_BIN ?= $(BUILD_DIR)/wasmtime
+WASMTIME_DEBUG_BIN ?= $(BUILD_DIR)/wasmtime-debug
 
 .PHONY: build 
 build: sysroot wasmtime
@@ -13,27 +17,41 @@ prepare-lind-root:
 all: build
 
 .PHONY: sysroot
-sysroot:
+sysroot: build-dir
 	./scripts/make_glibc_and_sysroot.sh
+	$(MAKE) sync-sysroot
 
 .PHONY: wasmtime
-wasmtime:
+wasmtime: build-dir
 	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/wasmtime/Cargo.toml --release
+	cp src/wasmtime/target/release/wasmtime $(WASMTIME_BIN)
+
 
 .PHONY: lind-debug
-lind-debug:
+lind-debug: build-dir
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
 	$(MAKE) build_glibc LIND_DEBUG=1
 	
 	# Build Wasmtime with the lind_debug feature enabled
 	cargo build --manifest-path src/wasmtime/Cargo.toml --features lind_debug
+	cp src/wasmtime/target/debug/wasmtime $(WASMTIME_BIN)
 build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
 		echo "Building glibc with LIND_DEBUG enabled"; \
 		./scripts/make_glibc_and_sysroot.sh; \
+		$(MAKE) sync-sysroot; \
 	fi
+
+.PHONY: build-dir
+build-dir:
+	mkdir -p $(BUILD_DIR)
+
+.PHONY: sync-sysroot
+sync-sysroot:
+	$(RM) -r $(SYSROOT_DIR)
+	cp -R src/glibc/sysroot $(SYSROOT_DIR)
 
 .PHONY: test
 test: prepare-lind-root

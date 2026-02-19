@@ -14,6 +14,7 @@ GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Define common flags
 CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -fPIC"
@@ -157,54 +158,11 @@ $CC --target=wasm32-wasi-threads -matomics \
 # First, remove the existing sysroot directory to start cleanly
 rm -rf "$SYSROOT"
 
-# manually delete duplicated symbols
-# TODO: we need to eventually figure out why there are
-#       duplicated symbols and how we are supposed to deal
-#       with it. For now, we just delete one of the duplicated object file
-rm $BUILD/nscd/res_hconf.o
-
-# Find all .o files recursively in the source directory, ignoring stamp.o
-object_files=$(find "$BUILD" -type f -name '*.o' \
-  ! -name 'stamp.o' \
-  ! -name 'argp-pvh.o' \
-  ! -name 'repertoire.o' \
-  ! -name 'static-stubs.o'\
-  ! -name 'zic.o' \
-  ! -name 'ldconfig.o' \
-  ! -name 'sln.o')
-
-# Check if object files were found
-if [ -z "$object_files" ]; then
-  echo "No suitable .o files found in '$BUILD'."
-  exit 1
-fi
 
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
-# Pack all found .o files into a single .a archive, filtering for no-mains.
-filtered_objects=$(
-  for o in $object_files; do
-    llvm-nm --defined-only -g "$o" 2>/dev/null | grep -qE '\bT[[:space:]]+main$' || printf '%s ' "$o"
-  done
-)
-llvm-ar rcs "$SYSROOT_ARCHIVE" $filtered_objects
-
-# pthread library placeholder
-llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
-# math library placeholder
-llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libm.a"
-# dylink library placeholder
-llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libdl.a"
-
-# Check if llvm-ar succeeded
-if [ $? -eq 0 ]; then
-  echo "Successfully created $SYSROOT_ARCHIVE with the following .o files:"
-  echo "$object_files"
-else
-  echo "Failed to create the archive."
-  exit 1
-fi
+"$SCRIPT_DIR/make_archive.sh"
 
 # Copy all files from the external include directory to the new sysroot include directory
 cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"

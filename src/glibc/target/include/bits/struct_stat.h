@@ -55,19 +55,20 @@ struct stat
     struct timespec st_ctim;		/* Time of last status change.  */
   };
 
-/* lind-wasm addition */
-#ifndef st_atime
-    #define st_atime st_atim.tv_sec
-#endif
 
-#ifndef st_mtime
-    #define st_mtime st_mtim.tv_sec
-#endif
+    /* lind-wasm: define stat times for wasi */
+    #ifndef st_atime
+        #define st_atime st_atim.tv_sec
+    #endif
 
-#ifndef st_ctime
-    #define st_ctime st_ctim.tv_sec
-#endif
-/* lind-wasm addition ends */
+    #ifndef st_mtime
+        #define st_mtime st_mtim.tv_sec
+    #endif
+
+    #ifndef st_ctime
+        #define st_ctime st_ctim.tv_sec
+    #endif
+    /* lind-wasm ends */
 
 #ifdef __USE_LARGEFILE64
 /* Note stat64 has the same shape as stat for x86-64.  */

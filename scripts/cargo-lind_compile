@@ -1,0 +1,45 @@
+#!/bin/bash
+set -e
+
+shift
+
+# Determine profile from arguments
+PROFILE="debug"
+CARGO_ARGS=("--target" "wasm32-wasip1")
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+
+for arg in "$@"; do
+    if [ "$arg" = "--release" ] || [ "$arg" = "-r" ]; then
+        PROFILE="release"
+    fi
+    CARGO_ARGS+=("$arg")
+done
+
+# Set linker (allow override via environment variable)
+LINKER="${LIND_WASM_LINKER:-/home/lind/lind-wasm/scripts/wasip1-clang.sh}"
+export CARGO_TARGET_WASM32_WASIP1_LINKER="$LINKER"
+
+# Set rustflags for wasm32-wasip1 target
+export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="\
+-C link-self-contained=no \
+-C target-feature=+crt-static,+atomics,+bulk-memory \
+-C link-arg=-Wl,--import-memory \
+-C link-arg=-Wl,--export-memory \
+-C link-arg=-Wl,--shared-memory \
+-C link-arg=-Wl,--max-memory=67108864 \
+-C link-arg=-Wl,--export=__stack_pointer \
+-C link-arg=-Wl,--export=__stack_low \
+-C link-arg=-Wl,--export=pass_fptr_to_wt"
+
+# Set wasm-opt and wasmtime paths (allow override via environment variables)
+WASM_OPT_BIN="${WASM_OPT_BIN:-wasm-opt}"
+WASMTIME_BIN="${WASMTIME_BIN:-wasmtime}"
+
+echo "Building with profile: $PROFILE"
+cargo +nightly build -Z build-std=std,panic_abort "${CARGO_ARGS[@]}"
+
+echo "-------------------------------"
+# Find the wasm files in the appropriate profile directory
+for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -name "*deps*" 2>/dev/null| sort -r); do
+        lind_compile --opt-only "$f" 2> /dev/null || true
+done

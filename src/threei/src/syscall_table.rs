@@ -7,7 +7,7 @@ use super::threei::RawCallFunc;
 use rawposix::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall,
     close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
-    fcntl_syscall, fdatasync_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
+    fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
     ftruncate_syscall, futex_syscall, getcwd_syscall, getdents_syscall, getrandom_syscall,
     ioctl_syscall, link_syscall, lseek_syscall, mkdir_syscall, mmap_syscall, mprotect_syscall,
     munmap_syscall, nanosleep_time64_syscall, open_syscall, pipe2_syscall, pipe_syscall,
@@ -17,10 +17,11 @@ use rawposix::fs_calls::{
     unlinkat_syscall, write_syscall, writev_syscall,
 };
 use rawposix::net_calls::{
-    accept_syscall, bind_syscall, connect_syscall, epoll_create_syscall, epoll_ctl_syscall,
-    epoll_wait_syscall, gethostname_syscall, getpeername_syscall, getsockname_syscall,
-    getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall, select_syscall,
-    sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
+    accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall, epoll_create_syscall,
+    epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall, getpeername_syscall,
+    getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall,
+    select_syscall, sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall,
+    socketpair_syscall,
 };
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
@@ -79,6 +80,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (62, kill_syscall),
     (67, shmdt_syscall),
     (72, fcntl_syscall),
+    (73, flock_syscall),
     (74, fsync_syscall),
     (75, fdatasync_syscall),
     (76, truncate_syscall),
@@ -111,6 +113,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (263, unlinkat_syscall),
     (267, readlinkat_syscall),
     (277, sync_file_range_syscall),
+    (291, epoll_create1_syscall),
     (292, dup3_syscall),
     (293, pipe2_syscall),
     (318, getrandom_syscall),

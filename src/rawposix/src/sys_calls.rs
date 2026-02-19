@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, LIND_ROOT};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, LINDFS_ROOT};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
@@ -1052,6 +1052,26 @@ pub fn setitimer_syscall(
 /// detailed error messages will be printed if set
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
+    unsafe {
+        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
+        libc::mkdir(lindfs_path.as_ptr(), 0o775);
+        let ret = libc::chroot(lindfs_path.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chroot to {}: {}",
+                LINDFS_ROOT,
+                std::io::Error::last_os_error()
+            );
+        }
+        let root = CString::new("/").unwrap();
+        let ret = libc::chdir(root.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chdir to / after chroot: {}",
+                std::io::Error::last_os_error()
+            )
+        }
+    }
     cagetable_init();
 
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
@@ -1059,7 +1079,7 @@ pub fn rawposix_start(verbosity: isize) {
     // Set up standard file descriptors for the init cage
     // TODO:
     // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
-    let dev_null = CString::new(format!("{}/dev/null", LIND_ROOT)).unwrap();
+    let dev_null = CString::new("/dev/null").unwrap();
 
     // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
     // Standard input (fd = 0) is redirected to /dev/null

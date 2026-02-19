@@ -8,14 +8,13 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    FIOASYNC, FIONBIO, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE,
-    MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-    SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
+    FIOASYNC, FIONBIO, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_POPULATE,
+    MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ,
+    PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
-use sysdefs::constants::LIND_ROOT;
 use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
@@ -699,10 +698,13 @@ pub fn mmap_syscall(
     // 1. Prevent security issues (e.g., MAP_FIXED_NOREPLACE being ignored)
     // 2. Maintain program correctness (e.g., MAP_SHARED_VALIDATE expects validation)
     // 3. Make debugging easier by failing fast rather than having mysterious behavior later
-    let allowed_flags =
-        MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
+    let allowed_flags = MAP_FIXED as i32
+        | MAP_SHARED as i32
+        | MAP_PRIVATE as i32
+        | MAP_ANONYMOUS as i32
+        | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
+        lind_debug_panic("Unsupported mmap flag detected! Only MAP_FIXED, MAP_SHARED, MAP_PRIVATE, MAP_POPULATE AND MAP_ANONYMOUS allowed");
     }
 
     if prot & PROT_EXEC > 0 {
@@ -1352,7 +1354,7 @@ pub fn fcntl_syscall(
 ///
 /// ## Implementation Details:
 ///  - The path arguments are translated from the RawPOSIX perspective into host kernel paths
-///    using `sc_convert_path_to_host`, which applies `LIND_ROOT` prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which applies path normalization relative to the cage's CWD.
 ///  - The unused arguments are validated with `sc_unusedarg`; any unexpected values are treated
 ///    as a security violation.
 ///  - The underlying `libc::link()` is invoked with the translated paths.
@@ -1412,7 +1414,7 @@ pub fn link_syscall(
 ///
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - We pas .
 ///  - The underlying libc::stat() is called and results are copied to the user buffer.
 ///
@@ -1727,13 +1729,13 @@ pub fn sync_file_range_syscall(
 /// requires handling the paths for both the input passed to the Rust kernel libc and the output buffer
 /// returned by the kernel libc.
 ///
-/// For the input path, the transformation is straightforward: we prepend the LIND_ROOT prefix to convert
-/// the user's relative path into a host-compatible absolute path.
-/// However, for the output buffer, we need to first verify whether the path written to buf is an absolute
-/// path. If it is not, we prepend the current working directory to make it absolute. Next, we remove the
-/// LIND_ROOT prefix to adjust the path to the user's perspective. Finally, we truncate the adjusted result
-/// to fit within the user-provided buflen, ensuring compliance with the behavior described in the Linux
-/// readlink man page, which states that truncation is performed silently if the buffer is too small.
+/// For the input path, the transformation is straightforward: we normalize it relative to the cage's CWD
+/// to convert the user's relative path into an absolute path within the chroot jail.
+/// For the output buffer, we need to first verify whether the path written to buf is an absolute
+/// path. If it is not, we prepend the current working directory to make it absolute. The result
+/// is then truncated to fit within the user-provided buflen, ensuring compliance with the behavior
+/// described in the Linux readlink man page, which states that truncation is performed silently if
+/// the buffer is too small.
 ///
 /// ## Input:
 /// - `cageid`: Identifier of the current Cage
@@ -1779,60 +1781,15 @@ pub fn readlink_syscall(
         );
     }
 
-    // We extend the buffer length by `LIND_ROOT.len()` because the host path
-    // is prefixed with `LIND_ROOT``, increasing its length. A new buffer is
-    // allocated instead of reusing the user buffer, since the transformed
-    // path may exceed the original user-allocated region.
-    let libc_buflen = buflen + LIND_ROOT.len();
-    let mut libc_buf = vec![0u8; libc_buflen];
-    let libcret = unsafe {
-        libc::readlink(
-            path.as_ptr(),
-            libc_buf.as_mut_ptr() as *mut c_char,
-            libc_buflen,
-        )
-    };
+    // Call to kernel readlink
+    let bytes_written = unsafe { libc::readlink(path.as_ptr(), buf as *mut libc::c_char, buflen) };
 
-    if libcret < 0 {
+    if bytes_written < 0 {
         let errno = get_errno();
         return handle_errno(errno, "readlink");
     }
-    // Convert the result from readlink to a Rust string
-    let libcbuf_str = unsafe { CStr::from_ptr(libc_buf.as_ptr() as *const c_char) }
-        .to_str()
-        .unwrap();
 
-    // Use libc::getcwd to get the current working directory
-    let mut cwd_buf = vec![0u8; 4096];
-    let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut c_char, cwd_buf.len()) };
-    if cwd_ptr.is_null() {
-        let errno = get_errno();
-        return handle_errno(errno, "getcwd");
-    }
-
-    let pwd = unsafe { CStr::from_ptr(cwd_buf.as_ptr() as *const c_char) }
-        .to_str()
-        .unwrap();
-
-    // Adjust the result to user perspective
-    // Verify if libcbuf_str starts with the current working directory (pwd)
-    let adjusted_result = if libcbuf_str.starts_with(pwd) {
-        libcbuf_str.to_string()
-    } else {
-        format!("{}/{}", pwd, libcbuf_str)
-    };
-    let new_root = format!("{}/", LIND_ROOT);
-    let final_result = adjusted_result
-        .strip_prefix(&new_root)
-        .unwrap_or(&adjusted_result);
-
-    // Check the length and copy the appropriate amount of data to buf
-    let bytes_to_copy = std::cmp::min(buflen, final_result.len());
-    unsafe {
-        std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
-    }
-
-    bytes_to_copy as i32
+    bytes_written as i32
 }
 
 /// `readlinkat` reads the value of a symbolic link relative to a directory file descriptor.
@@ -1875,7 +1832,7 @@ pub fn readlinkat_syscall(
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    let buf = buf_arg as *mut u8;
+    let buf = sc_convert_to_cchar_mut(buf_arg, buf_cageid, cageid);
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
 
     // Validate unused args
@@ -1886,62 +1843,37 @@ pub fn readlinkat_syscall(
         );
     }
 
-    // We extend the buffer length by `LIND_ROOT.len()` because the host path
-    // is prefixed with `LIND_ROOT``, increasing its length. A new buffer is
-    // allocated instead of reusing the user buffer, since the transformed
-    // path may exceed the original user-allocated region.
-    let libc_buflen = buflen + LIND_ROOT.len();
-    let mut libc_buf = vec![0u8; libc_buflen];
-
-    let libcret = if virtual_fd == libc::AT_FDCWD {
-        // Case 1: AT_FDCWD - path is already converted by sc_convert_path_to_host
-        unsafe {
-            libc::readlink(
-                path.as_ptr(),
-                libc_buf.as_mut_ptr() as *mut c_char,
-                libc_buflen,
-            )
-        }
+    let ret = if virtual_fd == libc::AT_FDCWD {
+        unsafe { libc::readlink(path.as_ptr(), buf, buflen) }
     } else {
         // Case 2: Specific directory fd
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
         // Return error
         if kernel_fd < 0 {
-            return handle_errno(kernel_fd, "read");
+            return handle_errno(kernel_fd, "readlinkat");
         }
 
-        // path is already converted by sc_convert_path_to_host
-        unsafe {
-            libc::readlinkat(
-                kernel_fd,
-                path.as_ptr(),
-                libc_buf.as_mut_ptr() as *mut c_char,
-                libc_buflen,
-            )
-        }
+        let raw_path = match get_cstr(path_arg) {
+            Ok(p) => p,
+            Err(_) => {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "readlinkat",
+                    "invalid  
+        path",
+                )
+            }
+        };
+
+        unsafe { libc::readlinkat(kernel_fd, raw_path.as_ptr() as *const c_char, buf, buflen) }
     };
 
-    if libcret < 0 {
+    if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "readlinkat");
     }
 
-    // Convert the result from readlink to a Rust string
-    let libcbuf_str = unsafe { CStr::from_ptr(libc_buf.as_ptr() as *const c_char) }
-        .to_str()
-        .unwrap();
-
-    // Adjust the result to remove LIND_ROOT prefix if present
-    let new_root = format!("{}/", LIND_ROOT);
-    let final_result = libcbuf_str.strip_prefix(&new_root).unwrap_or(libcbuf_str);
-
-    // Check the length and copy the appropriate amount of data to buf
-    let bytes_to_copy = std::cmp::min(buflen, final_result.len());
-    unsafe {
-        std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf as *mut u8, bytes_to_copy);
-    }
-
-    bytes_to_copy as i32
+    ret as i32
 }
 
 //------------------RENAME SYSCALL------------------
@@ -1954,7 +1886,7 @@ pub fn readlinkat_syscall(
 ///
 /// ## Implementation Details:
 ///  - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - The underlying libc::rename() is called with both converted paths.
 ///  - This can move files across directories within the same filesystem.
 ///
@@ -2010,7 +1942,7 @@ pub fn rename_syscall(
 ///
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - The underlying libc::unlink() is called with the converted path.
 ///
 /// ## Return Value:
@@ -2069,8 +2001,8 @@ pub fn unlink_syscall(
 /// There are two cases:
 /// Case 1: When `dirfd` is AT_FDCWD:
 /// - RawPOSIX maintains its own notion of the current working directory.
-/// - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
-///   path by prepending the LIND_ROOT prefix.
+/// - We convert the provided relative `pathname` (using `convpath` and `normpath`) into an absolute
+///   path relative to the cage's CWD within the chroot jail.
 /// - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
 ///   doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
 ///   and the host environment.
@@ -2117,7 +2049,7 @@ pub fn unlinkat_syscall(
     let kernel_fd = if dirfd == AT_FDCWD {
         // Case 1: When AT_FDCWD is used.
         // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
-        // into a host-absolute path by prepending LIND_ROOT.
+        // into an absolute path within the chroot jail.
         c_path = sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid);
         AT_FDCWD
     } else {
@@ -2154,7 +2086,7 @@ pub fn unlinkat_syscall(
 ///  - `mode`: Accessibility check mode (F_OK, R_OK, W_OK, X_OK or combinations).
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - The mode parameter is passed directly to the underlying libc::access() call.
 /// ## Return Value:
 ///  - `0` on success (file is accessible in the requested mode).
@@ -2523,7 +2455,7 @@ pub fn fchdir_syscall(
     if !cwd_ptr.is_null() {
         if let Some(cage) = get_cage(cageid) {
             let host_path = unsafe { std::ffi::CStr::from_ptr(cwd_ptr) }.to_string_lossy();
-            let user_path = strip_lind_root(&host_path);
+            let user_path = PathBuf::from(host_path.as_ref());
             let mut cwd = cage.cwd.write();
             *cwd = Arc::new(user_path);
         }
@@ -3082,8 +3014,7 @@ pub fn chdir_syscall(
 
     // Update the cage's current working directory
     if let Some(cage) = get_cage(cageid) {
-        let host_path = path.to_string_lossy();
-        let user_path = strip_lind_root(&host_path);
+        let user_path = PathBuf::from(path.to_string_lossy().as_ref());
         let mut cwd = cage.cwd.write();
         *cwd = Arc::new(user_path);
     }

@@ -265,7 +265,7 @@ pub fn add_to_linker<
 
     // epoch callback function
     linker.func_wrap(
-        "wasi_snapshot_preview1",
+        "lind",
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
@@ -288,7 +288,7 @@ pub fn add_to_linker<
             "lind_debug_str",
             move |caller: Caller<'_, T>, ptr: i32| -> i32 {
                 let mem_base = get_memory_base(&caller);
-                if let Ok(msg) = get_cstr(mem_base + ptr as u64) {
+                if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
                     eprintln!("[LIND DEBUG STR]: {}", msg);
                 }
                 ptr // Return the pointer to the WASM stack
