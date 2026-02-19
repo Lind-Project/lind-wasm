@@ -86,11 +86,21 @@ extern void restore (void) {
 // RESTORE (restore, __NR_sigreturn)
 
 // entry point of epoch callback in glibc, invoked by wasmtime
+// for signal handlers with signature void(int) — the POSIX-standard case
 __attribute__((export_name("signal_callback")))
 void signal_callback(__sighandler_t callback, int signal) {
   // directly call into user's custom signal handler
   if(callback != 0)
     callback(signal);
+}
+
+// alternate entry point for signal handlers declared with no parameters
+// e.g. void handler() {} — valid C but compiles to ()->() in WASM
+// call_indirect strictly checks types, so we need a separate trampoline
+__attribute__((export_name("signal_callback_noarg")))
+void signal_callback_noarg(int callback_idx, int signal) {
+  if(callback_idx != 0)
+    ((void (*)(void))callback_idx)();
 }
 
 // rawposix sigaction struct

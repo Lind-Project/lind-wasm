@@ -14,10 +14,17 @@ pub fn signal_epoch_trigger(cageid: u64) {
 
     let threadid_guard = cage.main_threadid.read();
     let main_threadid = *threadid_guard;
-    let epoch_handler = cage
-        .epoch_handler
-        .get(&main_threadid)
-        .expect("main threadid does not exist");
+
+    // After exec, epoch_handler is cleared and main_threadid is reset to 0.
+    // If a signal arrives before lind_signal_init() re-establishes the epoch
+    // handler, we must skip the trigger rather than panicking.
+    if main_threadid == 0 {
+        return;
+    }
+    let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
+        Some(handler) => handler,
+        None => return,
+    };
     let guard = epoch_handler.write();
     let epoch = *guard;
     // SAFETY: the pointer is locked with write access so no one is able to modify it concurrently

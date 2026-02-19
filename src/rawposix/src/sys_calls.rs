@@ -258,8 +258,11 @@ pub extern "C" fn exec_syscall(
 
     // perform signal related clean up
     // all the signal handler becomes default after exec
-    // pending signals should be perserved though
     selfcage.signalhandler.clear();
+    // clear pending signals to prevent stale signals from the previous
+    // instance triggering epoch callbacks before the new instance's
+    // lind_signal_init() completes (which would access empty epoch_handler)
+    selfcage.pending_signals.write().clear();
     // the sigset will be reset after exec
     selfcage.sigset.store(0, Relaxed);
     // we also clean up epoch handler and main thread id

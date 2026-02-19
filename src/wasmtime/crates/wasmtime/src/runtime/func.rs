@@ -2270,6 +2270,36 @@ impl<T> Caller<'_, T> {
         }
     }
 
+    // retrieve the exported signal_callback_noarg function from glibc
+    // used for signal handlers declared with no parameters (e.g. void handler() {})
+    pub fn get_signal_callback_noarg(&mut self) -> Result<TypedFunc<(i32, i32), ()>, ()> {
+        if let Some(signal_callback_extern) = self.get_export("signal_callback_noarg") {
+            match signal_callback_extern {
+                Extern::Func(signal_callback) => {
+                    match signal_callback.typed::<(i32, i32), ()>(&self) {
+                        Ok(func) => {
+                            return Ok(func);
+                        }
+                        Err(err) => {
+                            eprintln!(
+                                "the signature of signal_callback_noarg function is not correct: {:?}",
+                                err
+                            );
+                            return Err(());
+                        }
+                    }
+                }
+                _ => {
+                    eprintln!("signal_callback_noarg export is not a function");
+                    return Err(());
+                }
+            }
+        } else {
+            eprintln!("signal_callback_noarg export not found");
+            return Err(());
+        }
+    }
+
     /// Access the underlying data owned by this `Store`.
     ///
     /// Same as [`Store::data`](crate::Store::data)

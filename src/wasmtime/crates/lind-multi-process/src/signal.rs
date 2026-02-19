@@ -31,7 +31,13 @@ pub fn signal_handler<
             .as_context_mut()
             .get_current_signal_rewind_data()
             .unwrap();
-        let _ = signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
+        // try the normal callback first; fall back to noarg variant if type mismatch
+        let res = signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
+        if res.is_err() {
+            if let Ok(noarg_func) = caller.get_signal_callback_noarg() {
+                let _ = noarg_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
+            }
+        }
         return 0;
     }
     // otherwise, we are in normal execution and we should handle signals appropriately
@@ -103,9 +109,25 @@ pub fn signal_handler<
             caller
                 .as_context_mut()
                 .append_signal_asyncify_data(signal_handler as i32, signo);
-            // invoke the
+
+            // Try calling via signal_callback (for handlers with signature void(int)).
+            // If the handler was declared with no parameters (e.g. void handler()),
+            // the WASM call_indirect will trap with "indirect call type mismatch".
+            // In that case, fall back to signal_callback_noarg which uses ()->() call_indirect.
             let invoke_res =
                 signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
+
+            let invoke_res = if invoke_res.is_err() {
+                // Type mismatch — try noarg variant for handlers declared as void handler()
+                if let Ok(noarg_func) = caller.get_signal_callback_noarg() {
+                    noarg_func.call(caller.as_context_mut(), (signal_handler as i32, signo))
+                } else {
+                    invoke_res
+                }
+            } else {
+                invoke_res
+            };
+
             // print errors if any when running the signal handler
             if let Err(err) = invoke_res {
                 let e = wasi_common::maybe_exit_on_error(err);
