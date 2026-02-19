@@ -73,7 +73,7 @@ sync-sysroot:
 test: prepare-lind-root
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
-	./scripts/wasmtestreport.py && \
+	./scripts/wasmtestreport.py --allow-pre-compiled && \
 	cat results.json; \
 	if grep -q '"number_of_failures": [^0]' results.json; then \
 	  echo "E2E_STATUS=fail" > e2e_status; \

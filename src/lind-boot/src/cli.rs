@@ -11,9 +11,9 @@ pub struct CliOptions {
     #[arg(long)]
     pub debug: bool,
 
-    /// todo: Allow using precompiled cwasm artifacts
+    /// AOT-compile a .wasm file to a .cwasm artifact and exit (no runtime needed)
     #[arg(long)]
-    pub allow_precompile: bool,
+    pub precompile: bool,
 
     /// First item is WASM file (argv[0]), rest are program args (argv[1..])
     ///
