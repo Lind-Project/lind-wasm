@@ -33,6 +33,7 @@ This monorepo combines various subprojects and dependencies that work together t
 | `typemap`   | `src/typemap`  | Defines custom data structures and type conversion functions used across Lind |
 | `cage`      | `src/cage`     | Implements the custom `Cage` structure and its subsystems, including `vmmap` (virtual memory mapping) and `signal` handling |
 | `sysdefs`     | `src/sysdefs`     | Shared system call definitions and constants for cross-platform support    |
+| `lind-boot`   | `src/lind-boot`   | Execution entry point that initializes our modified Wasmtime runtime, 3i, and RawPOSIX |
 
 ### Third-Party Projects (Source)
 
