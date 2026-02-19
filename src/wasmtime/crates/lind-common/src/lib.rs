@@ -100,8 +100,8 @@ pub fn add_to_linker<
 
 
     linker.func_wrap(
-        "lind",
-        "lind-debug-num",
+        "debug",
+        "lind_debug_num",
         move |mut caller: Caller<'_, T>,
               num: i32,|
               -> i32 {
@@ -125,6 +125,19 @@ pub fn add_to_linker<
 
             println!("[debug] lind-debug-num: {} (base: {})", num, base); 
             num
+        },
+    )?;
+
+    linker.func_wrap(
+        "debug",
+        "lind_debug_str",
+        move |mut caller: Caller<'_, T>, ptr: i32| -> i32 {
+            let mem_base = get_memory_base(&mut caller);
+            println!("[debug] mem_base: {}, ptr: {}", mem_base, ptr);
+            if let Ok(msg) = get_cstr(mem_base + (ptr as u32 as u64)) {
+                eprintln!("[LIND DEBUG STR]: {}", msg);
+            }
+            ptr // Return the pointer to the WASM stack
         },
     )?;
 

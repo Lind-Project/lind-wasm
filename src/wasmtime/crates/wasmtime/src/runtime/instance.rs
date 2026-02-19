@@ -13,6 +13,7 @@ use crate::{
 use alloc::sync::Arc;
 use cage::memory::{fork_vmmap, init_vmmap};
 use sysdefs::constants::PAGESIZE;
+use wasmtime_lind_utils::round_size;
 use core::ptr::NonNull;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
@@ -26,6 +27,22 @@ use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
 
+/// Describes how a Lind-Wasm instance is being instantiated.
+///
+/// - `InstantiateFirst`:
+///     The first (root) Wasm instance in a process.  
+///     Argument: the cageid associated with this instance.
+///
+/// - `InstantiateChild`:
+///     A child Wasm instance created via a fork-like operation.  
+///     Arguments:
+///       - `parent_pid`: the parent instance's cageid  
+///       - `child_pid`: the newly created child instance's cageid
+///
+/// - `InstantiateLib`:
+///     A dynamically loaded library Wasm instance.  
+///     Argument: a pointer to the underlying `memory_base`, which will be
+///     updated after `mmap` returns to reflect the actual linear memory base.
 pub enum InstantiateType {
     InstantiateFirst(u64),
     InstantiateChild { parent_pid: u64, child_pid: u64 },
@@ -232,13 +249,6 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
-        fn round_size(base: u32, align: u32) -> u32 {
-            if base > 0 {
-                (base + align - 1) / align * align
-            } else {
-                base
-            }
-        }
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
@@ -254,11 +264,11 @@ impl Instance {
         let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
         // let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
         let minimal_pages = 2048 + 1; // stack size + guard page, reference to run.rs
-        println!("[debug] minimal_pages: {}", minimal_pages);
         let module_meminfo = module.dylink_meminfo().unwrap();
-        println!("[debug] module memory size: {}, align: {}", module_meminfo.memory_size, module_meminfo.memory_alignment);
         let module_rounded_size = round_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
         let module_rounded_size = round_size(module_rounded_size, PAGESIZE);
+
+        #[cfg(feature = "debug-dylink")]
         println!("[debug] module memory size round to {}", module_rounded_size);
 
         // initialize the memory
@@ -286,11 +296,10 @@ impl Instance {
                 let memory_base = memory.data_ptr(&mut *store) as usize;
 
                 let module_page = module_rounded_size >> PAGESHIFT;
-                // let stack_size = 8388608;
                 // todo: heap guard page?
                 init_vmmap(cageid, memory_base, Some(minimal_pages as u32 + module_page));
-                // init_vmmap(cageid, memory_base, Some((stack_size >> PAGESHIFT) as u32 + module_page));
 
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] main module allocate {} + {} bytes", module_rounded_size as u64, (minimal_pages << PAGESHIFT));
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -302,8 +311,6 @@ impl Instance {
                     cageid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     cageid,
-                    // minimal_pages << PAGESHIFT, // size of first memory region
-                    // 4096000,
                     module_rounded_size as u64 + (minimal_pages << PAGESHIFT),
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
@@ -339,10 +346,10 @@ impl Instance {
             }
             InstantiateType::InstantiateLib(memory_base) => {
                 let dylink_meminfo = module.dylink_meminfo().unwrap();
-                println!("[debug] library memory size: {}, align: {}", dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
 
                 let rounded_size = round_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
                 let rounded_size = round_size(rounded_size, PAGESIZE);
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
@@ -371,62 +378,53 @@ impl Instance {
                     *memory_base = addr;
                 }
                 
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library memory starts at {}", addr);
             }
         }
         
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
-        // if let Some(start) = start {
-        //     println!("[debug] start func");
-        //     instance.start_raw(store, start)?;
-        // }
-
         match instantiate_type {
             InstantiateType::InstantiateFirst(_) => {
                 if let Some(start) = start {
-                    println!("[debug] start func main");
                     instance.start_raw(store, start)?;
                 }
 
+                // apply data relocations
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] main module start reloc func");
-                let res = reloc.call(store.as_context_mut(), ());
-                println!("[debug] main module reloc result: {:?}", res);
+                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
+                // apply tls relocations if any
                 if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    #[cfg(feature = "debug-dylink")]
                     println!("[debug] main module start __wasm_apply_tls_relocs");
-                    let res = init.call(store.as_context_mut(), ());
-                    println!("[debug] main module __wasm_apply_tls_relocs result: {:?}", res);
+                    let _ = init.call(store.as_context_mut(), ()).unwrap();
                 }
             },
             InstantiateType::InstantiateChild{parent_pid, child_pid} => {
                 if let Some(start) = start {
-                    println!("[debug] start func child");
                     instance.start_raw(store, start)?;
                 }
 
+                // apply data relocations
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] child start reloc func");
-                let res = reloc.call(store.as_context_mut(), ());
-                println!("[debug] child reloc result: {:?}", res);
+                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                // apply tls relocations if any
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] child module start __wasm_apply_tls_relocs");
+                    let _ = init.call(store.as_context_mut(), ()).unwrap();
+                }
             },
             InstantiateType::InstantiateLib(_) => {
-                // if let Some(start) = start {
-                //     println!("[debug] start func library index: {:?}", start);
-                //     instance.start_raw(store, start)?;
-                // }
-
-                // let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
-                // println!("[debug] library start reloc func");
-                // let res = reloc.call(store.as_context_mut(), ());
-                // println!("[debug] library reloc result: {:?}", res);
-
-                // if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
-                //     println!("[debug] library start __wasm_apply_tls_relocs");
-                //     let res = init.call(store.as_context_mut(), ());
-                //     println!("[debug] library __wasm_apply_tls_relocs result: {:?}", res);
-                // }
+                // for library instance, we have to update the GOT entries before relocation happens
+                // so relocation is moved to linker.rs
             }
         }
 

@@ -157,6 +157,7 @@ pub fn add_to_linker<T: Clone + Send + 'static>(
         if let Some(m) = import.ty().memory() {
             if m.is_shared() {
                 let mem = SharedMemory::new(module.engine(), m.clone())?;
+                // Initialize vmmap immediately after creating the shared linear memory
                 let memory_base = mem.get_memory_base();
                 init_vmmap(1, memory_base as usize, None);
                 linker.define(store, import.module(), import.name(), mem.clone())?;

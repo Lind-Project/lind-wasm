@@ -81,8 +81,9 @@ impl SharedMemory {
         &self.0.def.0
     }
     
+    /// Return the base address of this VM linear memory as a raw `u64`.
     pub fn vmmemory_base(&self) -> u64 {
-        self.0.def.0.base as u64
+        self.0.def.0.base as usize as u64
     }
 
     /// Same as `RuntimeLinearMemory::grow`, except with `&self`.

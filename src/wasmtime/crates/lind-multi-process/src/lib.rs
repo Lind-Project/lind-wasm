@@ -1061,9 +1061,6 @@ impl<
     // TODO: exit_call should be switched to epoch interrupt method later
     pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32) {
         // get the base address of the memory
-        // let handle = caller.as_context().0.instance(InstanceId::from_index(0));
-        // let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
-        // let address = defined_memory.base;
         let address = get_memory_base(&mut caller) as *mut u8;
 
         // get the wasm stack top address
@@ -1353,14 +1350,12 @@ impl<
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    // let handle = caller.as_context().0.instance(InstanceId::from_index(1));
-    // let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
     let mut memory_iter = caller.as_context_mut().0.all_memories();
     let memory = memory_iter.next().expect("no defined memory found").clone();
     // assert!(memory_iter.next().is_none(), "multiple defined memory found");
     drop(memory_iter);
 
-    memory.data_ptr(caller.as_context()) as u64
+    memory.data_ptr(caller.as_context()) as usize as u64
 }
 
 // entry point of fork syscall

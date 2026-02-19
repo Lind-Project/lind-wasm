@@ -38,10 +38,6 @@ mod allocator;
 
 pub use allocator::*;
 
-pub fn debug_escaper() {
-    println!("[debug] debug escaper");
-}
-
 /// A type that roughly corresponds to a WebAssembly instance, but is also used
 /// for host-defined objects.
 ///
@@ -1036,7 +1032,6 @@ impl Instance {
         src: u32,
         len: u32,
     ) -> Result<(), Trap> {
-        println!("[debug]: memory_init_segment: src: {}, dst: {}, len: {}", src, dst, len);
         // https://webassembly.github.io/bulk-memory-operations/core/exec/instructions.html#exec-memory-init
 
         let memory = self.get_memory(memory_index);
@@ -1045,22 +1040,12 @@ impl Instance {
         let src = self.validate_inbounds(data.len(), src.into(), len.into())?;
         let len = len as usize;
 
-        println!("[debug]: memory_init_segment memory base: {:?}", memory.base);
-        // if len < 100 {
-        //     println!("[debug]: memory_init_segment data: {:?}", data);
-        // }
-
         unsafe {
             let src_start = data.as_ptr().add(src);
             let dst_start = memory.base.add(dst);
             // FIXME audit whether this is safe in the presence of shared memory
             // (https://github.com/bytecodealliance/wasmtime/issues/4203).
             ptr::copy_nonoverlapping(src_start, dst_start, len);
-            // if len == 8 {
-                // let debug_ptr = memory.base.add(40960080) as *const i32;
-                // println!("[debug] memory base + 40960080: {} ({:?})", *debug_ptr, debug_ptr);
-                // debug_escaper();
-            // }
         }
 
         Ok(())

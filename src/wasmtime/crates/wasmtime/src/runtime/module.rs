@@ -752,6 +752,20 @@ impl Module {
         })
     }
     
+    /// Return a raw iterator over the module's export table.
+    ///
+    /// This exposes the underlying `(name, EntityIndex)` pairs directly from
+    /// the compiled module without converting them into high-level `Extern`
+    /// values or performing any instantiation-time resolution.
+    ///
+    /// The returned iterator:
+    /// - Preserves the exact export entries as recorded in the compiled module.
+    /// - Does not allocate or clone export data.
+    /// - Reflects static module metadata, not instance state.
+    ///
+    /// This is useful for low-level linking or relocation logic (e.g., Lind's
+    /// dynamic loader) where we need access to the raw export indices rather
+    /// than fully materialized runtime objects.
     pub fn raw_exports<'module>(
         &'module self,
     ) -> impl ExactSizeIterator<Item = (&String, &EntityIndex)> + 'module {

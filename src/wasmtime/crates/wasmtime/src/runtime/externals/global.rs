@@ -214,7 +214,20 @@ impl Global {
         Ok(())
     }
 
-    // retrieve the underlying pointer of the wasm Global
+    /// Retrieve a mutable pointer to the underlying storage of this Wasm `Global`
+    /// as a `u64`.
+    ///
+    /// This exposes the raw host-side backing memory used to represent the global's
+    /// value inside the VM. It allows external components (e.g., Lind's dynamic
+    /// loader / GOT logic) to directly read or modify the global without going
+    /// through the higher-level Wasmtime API.
+    ///
+    /// SAFETY INVARIANTS:
+    /// - The global must have a value representation compatible with `u64`.
+    /// - The returned pointer is only valid while the associated `store` is alive
+    ///   and must not outlive it.
+    /// - The caller is responsible for ensuring proper synchronization if the
+    ///   global may be accessed concurrently.
     pub fn get_handler_as_u64(&self, mut store: impl AsContextMut) -> *mut u64 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
         let global_ty = self._ty(&store);
@@ -224,6 +237,8 @@ impl Global {
         }
     }
 
+    /// Retrieve a mutable pointer to the underlying storage of this Wasm `Global`
+    /// as a `u32`.
     pub fn get_handler_as_u32(&self, mut store: impl AsContextMut) -> *mut u32 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
         let global_ty = self._ty(&store);

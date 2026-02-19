@@ -770,13 +770,10 @@ and for re-adding support for interface types you can see this issue:
                 }
             }
             KnownCustom::Dylink0(dylinks) => {
-                println!("[debug]: encounter dylink section");
-
                 for subsection in dylinks {
                     let subsection = subsection.unwrap();
                     match subsection {
                         wasmparser::Dylink0Subsection::MemInfo(meminfo) => {
-                            println!("[debug]: meminfo: {:?}", meminfo);
                             self.result.module.dylink_mem_info.insert(crate::DylinkMemInfo {
                                 memory_size: meminfo.memory_size,
                                 memory_alignment: meminfo.memory_alignment,
@@ -785,13 +782,12 @@ and for re-adding support for interface types you can see this issue:
                             });
                         },
                         wasmparser::Dylink0Subsection::Needed(needed) => {
-                            println!("[debug]: needed: {:?}", needed);
+                            eprintln!("Warning: Dylink.0 Needed Section not handled");
                         },
                         wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
-                            println!("[debug]: exportinfo: {:?}", exportinfo);
+                            eprintln!("Warning: Dylink.0 Export Section not handled");
                         },
                         wasmparser::Dylink0Subsection::ImportInfo(importinfo) => {
-                            println!("[debug]: importinfo: {:?}", importinfo);
                             let mut imports = vec![];
                             for import in importinfo {
                                 imports.push(crate::DylinkImport {
@@ -804,8 +800,8 @@ and for re-adding support for interface types you can see this issue:
                                 imports: imports
                             });
                         },
-                        _ => {
-                            println!("[debug]: unknown dylink subsection!");
+                        wasmparser::Dylink0Subsection::Unknown { ty, data, range } => {
+                            panic!("Dylink.0 Unknown Section Encountered!");
                         },
                     }
                 }

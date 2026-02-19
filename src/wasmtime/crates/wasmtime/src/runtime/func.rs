@@ -2139,10 +2139,12 @@ impl<T> Caller<'_, T> {
             .get_stack_pointer(&mut self.store)
     }
 
+    /// append library's symbols into lookup table
     pub fn push_library_symbols(&mut self, symbols: &DashMap<String, u32>) -> Result<usize> {
         self.store.push_library_symbols(symbols)
     }
 
+    /// retrieve the symbol table of a specific library
     pub fn get_library_symbols(&mut self, index: usize) -> Option<&DashMap<String, u32>> {
         self.store.get_library_symbols(index)
     }
@@ -2339,6 +2341,21 @@ impl<T> Caller<'_, T> {
         self.store.fuel_async_yield_interval(interval)
     }
 
+    /// Grow the library's function table (table index 0) by `delta` entries.
+    ///
+    /// Each newly added slot is initialized with `init_value`, which must be
+    /// convertible to a `funcref` table element.
+    ///
+    /// This assumes:
+    /// - The library uses table index 0 as its primary function table.
+    /// - The table has element type `funcref`.
+    ///
+    /// Returns the previous size of the table (as per Wasm `table.grow` semantics).
+    ///
+    /// Panics if:
+    /// - The table does not exist,
+    /// - The element type is incompatible,
+    /// - Or the grow operation fails.
     pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> u32 {
         let lib_ty = crate::TableType::new(crate::RefType::FUNCREF, 0, None);
         let lib_init = init_value.into_table_element(self.store.0, lib_ty.element()).unwrap();
@@ -2346,7 +2363,15 @@ impl<T> Caller<'_, T> {
 
         res.unwrap()
     }
-
+    
+    /// Return the current size of the library's function table (table index 0).
+    ///
+    /// This directly accesses the underlying VM table structure and queries its size.
+    ///
+    /// SAFETY:
+    /// - Assumes table index 0 exists and remains valid for the lifetime of `self`.
+    /// - The returned pointer from `get_table` must reference a live table.
+    /// - No concurrent mutation should invalidate the table pointer while accessed.
     pub fn get_table_size(&mut self) -> u32 {
         let table_pointer = self.caller.get_table(TableIndex::from_u32(0));
         unsafe {
