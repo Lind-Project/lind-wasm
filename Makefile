@@ -3,9 +3,20 @@ BUILD_DIR ?= build
 SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
 LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
 LINDBOOT_DEBUG_BIN ?= $(BUILD_DIR)/lind-boot-debug
+LINDFS_DIRS := \
+	       bin \
+	       dev \
+	       etc \
+	       sbin \
+	       tmp \
+	       usr/bin \
+	       usr/lib \
+	       usr/local/bin \
+	       var \
+	       var/log
 
 .PHONY: build 
-build: sysroot lind-boot
+build: sysroot lind-boot lindfs
 	@echo "Build complete"
 
 .PHONY: prepare-lind-root
@@ -27,6 +38,11 @@ lind-boot: build-dir
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
+.PHONY: lindfs
+lindfs: 
+	@for d in $(LINDFS_DIRS); do \
+		mkdir -p $(LINDFS_ROOT)/$$d; \
+	done
 
 .PHONY: lind-debug
 lind-debug: build-dir
@@ -57,7 +73,7 @@ sync-sysroot:
 test: prepare-lind-root
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
-	./scripts/wasmtestreport.py && \
+	./scripts/wasmtestreport.py --allow-pre-compiled && \
 	cat results.json; \
 	if grep -q '"number_of_failures": [^0]' results.json; then \
 	  echo "E2E_STATUS=fail" > e2e_status; \

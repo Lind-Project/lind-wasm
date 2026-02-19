@@ -4,7 +4,7 @@ set -Eeuo pipefail
 # Cross-compile C programs to wasm using the lind-wasm toolchain.
 #
 # Default pipeline:
-#   .c -> .wasm (clang) -> (wasm-opt) 
+#   .c -> .wasm (clang) -> (wasm-opt) -> .cwasm (lind-boot --precompile)
 #
 # Usage:
 #   # full pipeline (default)
@@ -13,6 +13,7 @@ set -Eeuo pipefail
 #   # run individual steps
 #   lind_compile --compile-only hello.c      # .c -> .wasm
 #   lind_compile --opt-only hello.wasm       # optimize existing .wasm in place
+#   lind_compile --precompile-only hello.wasm  # .wasm -> .cwasm
 #
 #   # print commands (any mode)
 #   lind_compile --print-cmd hello.c
@@ -33,6 +34,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
     --compile-only      : .c -> .wasm
     --opt-only          : .wasm -> .wasm  (in-place optimization)
+    --precompile-only   : .wasm -> .cwasm (AOT compile via lind-boot)
 
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
@@ -50,6 +52,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     $(basename "$0") --compile-only hello.c
     $(basename "$0") --compile-grate hello.c
     $(basename "$0") --opt-only build/hello.wasm
+    $(basename "$0") --precompile-only build/hello.wasm
     $(basename "$0") --print-cmd hello.c
     $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
     $(basename "$0") hello.c -- -lm
@@ -92,7 +95,10 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --opt-only)
       set_mode "opt-only"
-      ;;    
+      ;;
+    --precompile-only)
+      set_mode "precompile-only"
+      ;;
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
@@ -207,6 +213,15 @@ case "${MODE}" in
     fi
     OUT_WASM="${SRC}"
     ;;
+  "precompile-only")
+    if [[ "${EXT}" != "wasm" ]]; then
+      echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
+      usage
+      exit 2
+    fi
+    OUT_WASM="${SRC}"
+    OUT_CWASM="${SRC%.wasm}.cwasm"
+    ;;
   *)
     echo "error: internal: unknown mode '${MODE}'" >&2
     exit 2
@@ -235,6 +250,10 @@ fi
 
 if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
   [[ -x "${WASM_OPT_BIN}" ]] || { echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2; exit 2; }
+fi
+
+if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
+  [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
 fi
 
 # --- debug output (post-normalization) ---
@@ -324,9 +343,17 @@ do_optimize() {
   run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
 }
 
+do_precompile() {
+  run_cmd "${LINDBOOT_BIN}" --precompile "${OUT_WASM}"
+}
+
 cp_to_lindfs() {
   mkdir -p "${LINDFS_ROOT}"
-  cp "${OUT_WASM}" "${LINDFS_ROOT}"
+  if [[ -n "${OUT_CWASM}" && -f "${OUT_CWASM}" ]]; then
+    cp "${OUT_CWASM}" "${LINDFS_ROOT}"
+  else
+    cp "${OUT_WASM}" "${LINDFS_ROOT}"
+  fi
 }
 
 # --- run selected pipeline ---
@@ -334,6 +361,7 @@ case "${MODE}" in
   full)
     do_compile
     do_optimize
+    do_precompile
     cp_to_lindfs
     ;;
   "compile-only")
@@ -342,12 +370,21 @@ case "${MODE}" in
     ;;
   "opt-only")
     do_optimize
-    ;;  
+    ;;
+  "precompile-only")
+    do_precompile
+    ;;
 esac
 
 # --- result summary ---
 case "${MODE}" in
-  full|"compile-only"|"opt-only")
+  full)
+    echo "OK: ${OUT_CWASM}"
+    ;;
+  "compile-only"|"opt-only")
     echo "OK: ${OUT_WASM}"
+    ;;
+  "precompile-only")
+    echo "OK: ${OUT_CWASM}"
     ;;
 esac

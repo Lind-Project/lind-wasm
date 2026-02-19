@@ -9,7 +9,9 @@ use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const;
 use wasi_common::sync::WasiCtxBuilder;
-use wasmtime::{AsContextMut, Engine, Func, InstantiateType, Linker, Module, Store, Val, ValType};
+use wasmtime::{
+    AsContextMut, Engine, Func, InstantiateType, Linker, Module, Precompiled, Store, Val, ValType,
+};
 use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
 use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID};
 use wasmtime_lind_utils::LindCageManager;
@@ -74,7 +76,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     // -- Load module and Attach host APIs --
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
     // so we manually add them to the linker without checking the input
-    let module = Module::from_file(&engine, wasm_file_path)?;
+    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
     let mut linker = Linker::new(&engine);
 
     attach_api(
@@ -143,7 +145,7 @@ pub fn execute_with_lind(
     // -- Load module and Attach host APIs --
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
     // so we manually add them to the linker without checking the input
-    let module = Module::from_file(&engine, wasm_file_path)?;
+    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
     let mut linker = Linker::new(&engine);
 
     attach_api(
@@ -486,6 +488,44 @@ fn load_main_module(
     }
 
     ret
+}
+
+/// AOT-compile a `.wasm` file to a `.cwasm` artifact on disk.
+///
+/// This only needs a Wasmtime `Engine` — no runtime, cages, or 3i. The output
+/// path is the input path with the extension replaced by `.cwasm`.
+pub fn precompile_module(cli: &CliOptions) -> Result<()> {
+    let wasm_path = Path::new(cli.wasm_file());
+    let cwasm_path = wasm_path.with_extension("cwasm");
+
+    let engine = Engine::new(&wasmtime::Config::new()).context("failed to create engine")?;
+    let wasm_bytes = std::fs::read(wasm_path)
+        .with_context(|| format!("failed to read {}", wasm_path.display()))?;
+    let cwasm_bytes = engine
+        .precompile_module(&wasm_bytes)
+        .context("failed to precompile module")?;
+    std::fs::write(&cwasm_path, cwasm_bytes)
+        .with_context(|| format!("failed to write {}", cwasm_path.display()))?;
+
+    eprintln!("OK: {}", cwasm_path.display());
+    Ok(())
+}
+
+/// Load a Wasm module from disk, supporting both `.wasm` and precompiled `.cwasm` files.
+///
+/// The function probes the file header via `Engine::detect_precompiled_file`.
+/// If the file is a precompiled module it is deserialized directly (skipping
+/// compilation). Otherwise it is compiled from source via `Module::from_file`.
+fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
+    if let Some(Precompiled::Module) = engine
+        .detect_precompiled_file(path)
+        .context("failed to detect precompiled module")?
+    {
+        return unsafe { Module::deserialize_file(engine, path) }
+            .context("failed to deserialize precompiled module");
+    }
+
+    Module::from_file(engine, path).context("failed to compile module")
 }
 
 /// This function takes a Wasm function (Func) and a list of string arguments, parses the

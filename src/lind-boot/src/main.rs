@@ -1,7 +1,10 @@
 mod cli;
 mod lind_wasmtime;
 
-use crate::{cli::CliOptions, lind_wasmtime::execute_wasmtime};
+use crate::{
+    cli::CliOptions,
+    lind_wasmtime::{execute_wasmtime, precompile_module},
+};
 use clap::Parser;
 use rawposix::init::{rawposix_shutdown, rawposix_start};
 
@@ -17,6 +20,12 @@ use rawposix::init::{rawposix_shutdown, rawposix_start};
 /// handling semantics are delegated to `execute.rs`.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lindboot_cli = CliOptions::parse();
+
+    // AOT-compile only — no runtime needed
+    if lindboot_cli.precompile {
+        precompile_module(&lindboot_cli)?;
+        return Ok(());
+    }
 
     // Initialize RawPOSIX and register RawPOSIX syscalls with 3i
     rawposix_start(0);
