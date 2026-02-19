@@ -71,17 +71,16 @@ sync-sysroot:
 
 .PHONY: test
 test: prepare-lind-root
-	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
+	# Unified harness entry point (run all discovered harnesses for e2e signal)
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
-	./scripts/wasmtestreport.py && \
-	cat results.json; \
-	if grep -q '"number_of_failures": [^0]' results.json; then \
-	  echo "E2E_STATUS=fail" > e2e_status; \
-	else \
+	python3 ./scripts/test_runner.py --export-report report.html && \
+	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \;; \
+	if python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); total=sum(int(json.load(open(p)).get('number_of_failures', 0)) for p in paths); print(f'total_failures={total}'); sys.exit(1 if total else 0)"; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
+	else \
+	  echo "E2E_STATUS=fail" > e2e_status; \
 	fi; \
 	exit 0
-
 
 .PHONY: md_generation
 OUT ?= .
@@ -141,5 +140,6 @@ clean:
 distclean: clean
 	@echo "removing test outputs & temp files"
 	$(RM) -f results.json report.html e2e_status
+	$(RM) -r reports || true
 	$(RM) -r $(LINDFS_ROOT)/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete

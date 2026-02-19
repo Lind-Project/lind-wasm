@@ -22,6 +22,9 @@ jobs:
     env:
       REPORT_LOCAL_DIR: test-reports
       REPORT_LOCAL_FILE: wasm-e2e-report.html
+      WASM_REPORT_JSON_FILE: wasm.json
+      GRATE_REPORT_JSON_FILE: grates.json
+      REPORT_HTML_IN_REPORTS: report.html
       COMMENT_LOCAL_FILE: e2e_comment.md
 
     steps:
@@ -31,7 +34,7 @@ jobs:
       # First attempt at build
       - name: Build e2e (attempt 1)
         id: build_e2e_try1
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@601a80b39c9405e50806ae38af30926f9d957c47 # v6.19.1
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -49,7 +52,7 @@ jobs:
       - name: Build e2e (attempt 2)
         id: build_e2e_try2
         if: steps.build_e2e_try1.outcome == 'failure'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@601a80b39c9405e50806ae38af30926f9d957c47 # v6.19.1
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -67,7 +70,7 @@ jobs:
       - name: Build e2e (attempt 3)
         id: build_e2e_try3
         if: steps.build_e2e_try2.outcome == 'failure'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@601a80b39c9405e50806ae38af30926f9d957c47 # v6.19.1
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -100,6 +103,30 @@ jobs:
         with:
           name: wasm-e2e-report
           path: ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload wasm JSON report artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: wasm-e2e-json
+          path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.WASM_REPORT_JSON_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload grate JSON report artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: grate-e2e-json
+          path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.GRATE_REPORT_JSON_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload unified runner HTML report artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: wasm-e2e-unified-html
+          path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.REPORT_HTML_IN_REPORTS }}
           if-no-files-found: error
           retention-days: 7
       
