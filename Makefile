@@ -106,6 +106,12 @@ clean:
 	@echo "cleaning glibc artifacts"
 	# Remove only generated sysroot and intermediate .o files,
 	# but KEEP required objects used by subsequent builds.
+
+	# Remove lindfs root
+	$(RM) -r lindfs || true
+
+	# Remove build artifacts
+	$(RM) -r build || true
 	$(RM) -r src/glibc/sysroot
 	@find src/glibc -type f -name '*.o' \
 	    ! -path 'src/glibc/csu/wasm32/wasi_thread_start.o' \
