@@ -52,13 +52,11 @@ Run `scripts/wasmtestreport.py --help` to list available usage options.
 ## How to add test cases
 To add test cases, a file with .c extension containing c code can be added
 to the appropriate folder in the `tests/unit-tests` or `tests/grate-tests` folder.  
-During the test suite run, the test case will be picked up and run. If the outputs 
-of the file can be directly compared, i.e. contents of gcc run == contents of 
-lind-wasm run, that would be enough
+During the test suite run, the test case will be picked up and run. Wherever possible each 
+test compares the output of running the program in lind and on linux. If these output differ, 
+this is considered a failure.
 
-Any failure in compiling or running using gcc or lind-wasm is considered a
-failure. Mismatch in native (gcc) and wasm outputs are also considered a
-failure.
+Any compilation or runtime failure on either linux or lind-wasm is considered a failure.
 
 ## Unit test suite
 
@@ -148,6 +146,7 @@ hello_grate.c
 
 Each grate test must:
 
+- Has dispatcher function called `pass_fptr_to_wt`
 - Determine test success internally
 - Exit with EXIT_FAILURE if the test fails
 - Exit normally (e.g., EXIT_SUCCESS) on success
