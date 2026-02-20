@@ -1292,7 +1292,7 @@ impl Instance {
             eprintln!("    Instance::wasm_fault: defined_memories={mem_count}, checking addr=0x{addr:x}");
         }
         let mut fault = None;
-        for (idx, (_, memory)) in self.memories.iter().enumerate() {
+        for (idx, (_, (_, memory))) in self.memories.iter().enumerate() {
             let accessible = memory.wasm_accessible();
             eprintln!("      memory[{idx}]: accessible=0x{:x}..0x{:x}", accessible.start, accessible.end);
             if accessible.start <= addr && addr < accessible.end {
