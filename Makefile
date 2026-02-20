@@ -39,10 +39,11 @@ lind-boot: build-dir
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
-lindfs: 
+lindfs:
 	@for d in $(LINDFS_DIRS); do \
 		mkdir -p $(LINDFS_ROOT)/$$d; \
 	done
+	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
 
 .PHONY: lind-debug
 lind-debug: build-dir
