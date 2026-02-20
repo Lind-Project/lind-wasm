@@ -1,7 +1,7 @@
-# Running unit tests
+# Testing
 This document is a practical guide to setting up and using the Lind testing
-infrastructure. It outlines the steps needed to run the test suite, execute unit
-tests, and understand the results produced by the test suite, and how to
+infrastructure. It outlines the steps needed to run the test suites, execute unit
+tests and grate tests, and understand the results produced by the test suite, and how to
 contribute new tests to the framework.
 
 Since Lind is currently limited to the AMD64 architecture, Docker is used to
@@ -42,9 +42,27 @@ make lind-boot sysroot
 ```
 Run `scripts/wasmtestreport.py --help` to list available usage options.
 
+## Directory Structure
 
+- `tests/unit-tests/`: Folder containing all `.c` test cases for general testing.
+- `tests/grate-tests/`: Folder containing all `.c` test cases for grate testing.
+- `expected/`: Directory under each test folder for expected output files.
+- `testfiles/`: Extra files needed by tests, copied into Lind FS.
 
-## What test suite does
+## How to add test cases
+To add test cases, a file with .c extension containing c code can be added
+to the appropriate folder in the `tests/unit-tests` or `tests/grate-tests` folder.  
+During the test suite run, the test case will be picked up and run. If the outputs 
+of the file can be directly compared, i.e. contents of gcc run == contents of 
+lind-wasm run, that would be enough
+
+Any failure in compiling or running using gcc or lind-wasm is considered a
+failure. Mismatch in native (gcc) and wasm outputs are also considered a
+failure.
+
+## Unit test suite
+
+### What test suite does
 
 1. **Test Case Collection:** Scans `unit-tests` folder for `.c` files.
 
@@ -60,7 +78,7 @@ Run `scripts/wasmtestreport.py --help` to list available usage options.
    report in the current working directory. The reports include a summary of the
    full test run, and status, error type, and output of each test case.
 
-## Error Types
+### Error Types
 
 The output will show the total number of test cases, along with counts for
 successes, failures, and each of the following error types:
@@ -79,26 +97,7 @@ successes, failures, and each of the following error types:
 The outputs are split into deterministic and non-deterministic based on how the
 lind-wasm outputs are compared to the native gcc output. 
 
-
-## Directory Structure
-
-- `tests/unit-tests/`: Folder containing all `.c` test cases.
-- `expected/`: Directory under each test folder for expected output files.
-- `testfiles/`: Extra files needed by tests, copied into Lind FS.
-
-## How to add test cases
-To add test cases, a file with .c extension containing c code can be added
-to the appropriate folder in the tests/unit-tests folder.  During the test
-suite run, the test case will be picked up and run. If the outputs of the file
-can be directly compared, i.e. contents of gcc run == contents of lind-wasm
-run, that would be enough
-
-Any failure in compiling or running using gcc or lind-wasm is considered a
-failure. Mismatch in native (gcc) and wasm outputs are also considered a
-failure.
-
-
-## Example Combined Usage
+### Example Combined Usage
 
 ```
 ./scripts/wasmtestreport.py \
@@ -116,3 +115,79 @@ This will:
 - Save output as `results_json.json`
 - Generate a report `test_report.html`
 
+## Grate tests
+
+Grate tests are designed to validate a special feature in lind-wasm: the grate mechanism. The concept of a grate is defined in internal/3i.
+
+Grate tests ensure that the grate–cage interaction model behaves correctly under the expected fork/exec execution semantics.
+
+### Structure of a Grate Test
+
+Each grate test must contain at least two source files:
+
+- A grate file
+- A cage file
+
+### Grate tests Format
+
+**Naming Convention**
+
+```sh
+<cage_name>.c
+<cage_name>_grate.c
+```
+
+Example:
+
+```sh
+hello.c
+hello_grate.c
+```
+
+**Test Requirements**
+
+Each grate test must:
+
+- Determine test success internally
+- Exit with EXIT_FAILURE if the test fails
+- Exit normally (e.g., EXIT_SUCCESS) on success
+
+Tests are expected to be self-validating.
+
+**Execution Model**
+
+Grate tests must follow the fork/exec model:
+
+- The grate file executes first.
+- The grate performs a fork().
+- The child process becomes the cage.
+- The grate registers the necessary handler(s).
+- The child performs exec() to execute the cage file.
+
+### How to Build and Run
+
+**Prerequisite**
+
+Make sure the lind-wasm runtime has already been compiled.
+
+**Step 1 — Compile the Grate**
+
+```sh
+lind-clang --compile-grate <cage_name>_grate.c
+```
+
+This produces `<cage_name>_grate.cwasm`
+
+**Step 2 — Compile the Cage**
+
+```sh
+lind-clang <cage_name>.c
+```
+
+This produces `<cage_name>.cwasm`
+
+**Step 3 — Run the Test**
+
+```sh
+lind-wasm <cage_name>_grate.cwasm <cage_name>.cwasm
+```

@@ -40,7 +40,7 @@ Lind-wasm runtime must be compiled before running the program. To compile the li
 
 3.a. use `make all` to compile both lind-glibc and rust code at once.
 
-3.b. use `make lind-boot` to compile rust code, and `make sysroot` to compile lind-glibc.
+3.b. use `make lind-boot` to compile runtime(lind-boot/wasmtime/rawposix/3i/etc.), and `make sysroot` to compile lind-glibc.
 
 **NOTES: More options can be found in lind-wasm/Makefile**
 
@@ -50,7 +50,7 @@ Use lind scripts to compile and run your program in the Lind Sandbox.
 
 ```bash
 lind-clang hello.c
-lind-wasm hello.wasm
+lind-wasm hello.cwasm
 ```
 
 *Here is what happens under the hood:*
