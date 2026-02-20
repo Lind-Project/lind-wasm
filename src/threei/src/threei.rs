@@ -279,20 +279,20 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub extern "C" fn register_handler(
-    in_grate_fn_ptr_u64: u64,
-    targetcage: u64,     // Cage to modify
+    _self_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
+    _target_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
+    targetcage: u64,
     targetcallnum: u64,  // Syscall number or match-all indicator. todo: Match-all.
     _runtime_id: u64,    // Currently unused, reserved for future potential use
     is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
-    _arg3: u64,
-    _arg3cage: u64,
+    in_grate_fn_ptr_u64: u64,
     _arg4: u64,
-    _arg4cage: u64,
+    _arg4cageid: u64,
     _arg5: u64,
-    _arg5cage: u64,
+    _arg5cageid: u64,
     _arg6: u64,
-    _arg6cage: u64,
+    _arg6cageid: u64,
 ) -> i32 {
     // Make sure that both the cage that registers the handler and the cage being registered are valid (not in exited state)
     if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&handlefunccage) {
@@ -420,20 +420,6 @@ pub fn make_syscall(
         return threei_const::ELINDESRCH as i32;
     }
 
-    let mut self_cageid = self_cageid;
-    let mut handlefunccage = arg2_cageid;
-    let mut fn_ptr_u64 = 0;
-    // If it's a register_handler syscall, we need to get the handlefunccage and fn_ptr_u64 for later use in handler table
-    // check and registration
-    if syscall_num == threei_const::REGISTER_HANDLER_SYSCALL {
-        fn_ptr_u64 = self_cageid;
-        if handlefunccage == threei_const::THREEI_DEREGISTER {
-            self_cageid = target_cageid;
-        } else {
-            self_cageid = arg2_cageid;
-        }
-    }
-
     // TODO:
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
@@ -467,12 +453,12 @@ pub fn make_syscall(
                 let func: GrateTrampolineFn =
                     unsafe { std::mem::transmute::<u64, GrateTrampolineFn>(in_grate_fn_ptr_u64) };
                 return func(
-                    fn_ptr_u64,
+                    self_cageid,
                     target_cageid,
                     arg1,
                     arg1_cageid,
                     arg2,
-                    handlefunccage, // pass self_cageid as grateid for threei internal use
+                    arg2_cageid,
                     arg3,
                     arg3_cageid,
                     arg4,
