@@ -15,6 +15,15 @@ int main(void) {
     assert(strchr(buf, ':') != NULL);
     fclose(f);
 
+    /* /etc/group exists and has at least one valid line */
+    f = fopen("/etc/group", "r");
+    assert(f != NULL);
+    ret = fgets(buf, sizeof(buf), f);
+    assert(ret != NULL);
+    assert(strlen(buf) > 0);
+    assert(strchr(buf, ':') != NULL);
+    fclose(f);
+
     /* /etc/nsswitch.conf exists and has at least one non-empty line */
     f = fopen("/etc/nsswitch.conf", "r");
     assert(f != NULL);
