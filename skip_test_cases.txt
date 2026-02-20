@@ -1,6 +1,4 @@
 file_tests/deterministic/popen.c
-networking_tests/deterministic/uds-nb-select.c
-networking_tests/deterministic/uds-serverclient.c
 process_tests/deterministic/tls_test.c
 process_tests/deterministic/exit_failure.c
 signal_tests/deterministic/sigpipe.c
