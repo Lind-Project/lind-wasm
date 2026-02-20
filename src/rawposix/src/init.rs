@@ -64,14 +64,14 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
         let impl_fn_ptr = func as *const () as u64;
         // Register to handler table in 3i
         ret = register_handler(
-            impl_fn_ptr,
-            self_cageid, // current cageid
-            sysno,
+            0,
+            RAWPOSIX_CAGEID,       // target cageid for this syscall handler
+            self_cageid,           // cage to modify: current cageid
+            sysno,                 // target callnum
             RUNTIME_TYPE_WASMTIME, // runtime id
             1,                     // register
-            RAWPOSIX_CAGEID,
-            0,
-            0,
+            RAWPOSIX_CAGEID,       // handler function is in the RawPOSIX
+            impl_fn_ptr,
             0,
             0,
             0,
@@ -114,14 +114,14 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
     // Register `register_handler` syscall for this cage
     let fp_register = register_handler as *const () as usize as u64;
     let register_ret = register_handler(
-        fp_register,
-        self_cageid, // current cageid
+        0,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
         REGISTER_HANDLER_SYSCALL,
         RUNTIME_TYPE_WASMTIME, // runtime id
         1,                     // register
-        THREEI_CAGEID,
-        0,
-        0,
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_register,
         0,
         0,
         0,
@@ -133,14 +133,14 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
     // Register `copy_data_between_cages` syscall for this cage
     let fp_copy = copy_data_between_cages as *const () as usize as u64;
     let copy_ret = register_handler(
-        fp_copy,
-        self_cageid, // current cageid
+        0,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
         COPY_DATA_BETWEEN_CAGES_SYSCALL,
         RUNTIME_TYPE_WASMTIME, // runtime id
         1,                     // register
-        THREEI_CAGEID,
-        0,
-        0,
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_copy,
         0,
         0,
         0,
