@@ -2291,17 +2291,26 @@ impl StoreOpaque {
         // If this loop becomes hot in the future, however, it should be
         // possible to precompute maps about linear memories in a store and have
         // a quicker lookup.
+        eprintln!("=== LIND-DEBUG wasm_fault: pc=0x{pc:x} addr=0x{addr:x} ===");
+        eprintln!("  total instances in store: {}", self.instances.len());
         let mut fault = None;
-        for instance in self.instances.iter() {
-            if let Some(f) = instance.handle.wasm_fault(addr) {
+        for (idx, instance) in self.instances.iter().enumerate() {
+            let result = instance.handle.wasm_fault(addr);
+            eprintln!("  instance[{idx}]: wasm_fault returned {}", if result.is_some() { "MATCH" } else { "None" });
+            if let Some(f) = result {
+                if fault.is_some() {
+                    eprintln!("  !!! DUPLICATE MATCH at instance[{idx}] — this triggers assert!(fault.is_none())");
+                }
                 assert!(fault.is_none());
                 fault = Some(f);
             }
         }
         if fault.is_some() {
+            eprintln!("  => fault found, returning WasmFault");
             return fault;
         }
 
+        eprintln!("  => NO instance claimed this address! Falling through to abort.");
         cfg_if::cfg_if! {
             if #[cfg(any(feature = "std", unix, windows))] {
                 // With the standard library a rich error can be printed here

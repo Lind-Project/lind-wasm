@@ -1287,9 +1287,14 @@ impl Instance {
     }
 
     fn wasm_fault(&self, addr: usize) -> Option<WasmFault> {
+        let mem_count = self.memories.iter().count();
+        if mem_count > 0 || addr != 0 {
+            eprintln!("    Instance::wasm_fault: defined_memories={mem_count}, checking addr=0x{addr:x}");
+        }
         let mut fault = None;
-        for (_, (_, memory)) in self.memories.iter() {
+        for (idx, (_, memory)) in self.memories.iter().enumerate() {
             let accessible = memory.wasm_accessible();
+            eprintln!("      memory[{idx}]: accessible=0x{:x}..0x{:x}", accessible.start, accessible.end);
             if accessible.start <= addr && addr < accessible.end {
                 // All linear memories should be disjoint so assert that no
                 // prior fault has been found.
