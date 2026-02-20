@@ -4,74 +4,57 @@ id: Overview
 
 # Lind-Wasm
 
-Lind is a sandbox that isolates different applications in the same address space. Thus, conceptually, it executes different applications (which traditionally would be different processes) in separate, non-overlapping parts of a single address space, under a single, non-privileged Linux process.   To provide memory safety, control flow integrity, memory isolation, and similar properties, this version of Lind executes applications using [WebAssembly](webassembly.org) for software fault isolation.  Lind also contains a custom kernel microvisor, written in Rust, which performs strict type checking and safe type conversion (e.g., between 32-bit and 64-bit representations), and enforces resource management and file-system isolation, thereby limiting the potential damage caused by bugs or security flaws in an application.
+Lind is a sandboxing system that runs multiple mutually untrusted applications within a single, unprivileged Linux process. Each application executes in an isolated execution context, called a cage, with its own memory, control flow, and system call behavior.
 
-In Old Norse, Old High German and Old English a "lind" is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which is lightweight and which provides layered security.
+Unlike traditional process isolation, Lind provides strong intra-process isolation while preserving POSIX semantics and avoiding kernel modifications or privileged execution.
+
+In Old Norse, Old High German, and Old English, a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight and resistant to splitting — an appropriate metaphor for a sandboxing system built from layered isolation technologies.
+
+Lind-Wasm is a realization of Lind that uses WebAssembly for software fault isolation and a small trusted runtime to enforce isolation and mediate system calls.
 
 ## Technology Overview
 
 ### Cages
-A cage runs a Linux application in an isolated part of the Lind process's namespace.  The code must recompiled to run in Wasm and linked to our modified glibc so that it makes its system calls through 3i.  However, the source code for applications only needs to be modified in rare cases (such as applications that directly make system calls).
+
+A cage is an isolated execution context within the Lind process. Conceptually, a cage is similar to a Linux process, but multiple cages coexist within a single host process.
+
+Applications are recompiled to WebAssembly and linked against a modified glibc so that all system calls are issued through 3i. Most applications require no source-level changes.
+
+Each cage has:
+- isolated memory and control flow
+- its own system call routing configuration
+- POSIX-like process and thread semantics
 
 ### Grates
-A key advantage of 3i is the ability to support interposition.  In other words, a cage can intercept the system calls from another cage.  Because the use case of writing a cage to intercept system calls is very lightweight it is common in Lind.  As such, we give these cages the special name "grate".  This is meant to convey the mental picture of a caged application which calls down through a series of grates before (potentially) reaching the operating system.
 
-Note that a grate is a cage and Lind makes no actual distinction between them.  Any cage can make the system calls available to grates (unless a grate below it prevents it).  It is just that most legacy applications do not need to regularly make such calls.  This is analogous to strace and its use of the ptrace mechanism.
+A grate is a cage whose primary purpose is to intercept and handle system calls issued by other cages. Lind makes no distinction between cages and grates at the mechanism level; any cage may act as a grate by registering system call handlers.
 
-A major advantage is that this means that implementing something like an in-memory file system can now be done without changing the microvisor or other trusted code.  A grate can intercept the file system calls and code written in C, Rust, etc. can be used to provide this functionality.  Similarly, a network file system can be implemented in a grate by the grate making whatever network system calls are needed.  
+Grates are commonly used to implement policy and system services outside the trusted runtime. They are lightweight, composable, and run entirely in user space.
 
-Another important feature of grates is that they are composable.  A grate may itself have another grate beneath it which provides a separate service.  The recommended grate creation philosophy of 3i is similar to the philosophy in Unix of having small, composable commands you combine with pipes and similar functionality.  So, grates tend to be smaller, simpler utilities that can be combined.  This is sensible since the overhead of having separate cages and calling between cages is very low.
+### 3i
 
-Another similarity of Unix pipelines has to do with how grates interact.  The overwhelmingly common use case for pipes in Unix is to chain commands together sequentially so that the stdout of one becomes the stdin of the next.  However, the pipe functionality is itself general and supports many different use cases beyond this.  The interposition mechanism in 3i is similar in that most grates are likely to be stacked and simply provide functionality to whatever is above them.  However, since the system call table is per-cage and is truly programmable, a sufficiently privileged (ancestor) grate could rewire system calls for all of its descendents in any manner desired.
+The Intercage Interposition Interface (3i) provides a programmable system call routing mechanism between cages, grates, and the microvisor.
 
-In addition to intercepting system calls, a grate can also perform system calls on behalf of a descendant cage.  This is useful in situations where a cage should perform an operation like exiting or setting up a memory mapping or similar, where the goal is for the system to act as though the cage is making the call instead of the grate.
+Each cage has its own system call table, which may route system calls to:
+- another cage acting as a grate
+- or the microvisor
 
-When performing system calls, it is often useful for a grate to be able to pass arguments that refer to buffers in other cages (e.g., the buffer used in a write call).  Thus 3i system call arguments support a notion of which cage each argument comes from.
+3i enables interception, delegation, filtering, and mediation of system calls without modifying kernel code.
 
-**Inheritance Properties**:
+### Microvisor (RawPOSIX)
 
-- A child inherits system call handlers from its parent on fork. Thus, if cage A was forked by cage B, cage A will have the same system call handlers as cage B
-- An ancestor can change the system call table for its decendents and perform calls on their behalf.
-
-## Core Concepts
-
-- **Cage**: This term describes the isolated memory namespace that an application executes in.  It is analogous to a process in Linux. 
-    - Can run legacy code compiled with Wasm as a target
-    - Protects and isolates memory, control flow, etc.
-- **Microvisor**: RawPOSIX is a small kernel analogous to Linux running within the unprivileged Lind process. This is analogous to the Linux kernel.  Note, however, that this and all of the rest of Lind runs as an unprivileged Linux process.
-    - Provides a POSIX-like interface (runs most Linux programs)
-    - Handles file descriptor separation, fork, exec, signals, threading, etc.
-- **3i (pronounced "three-I")**: Capability-based POSIX interface to call between cages or into the microvisor.  This is conceptually similar to a programmable system call table and IPC interface. 
-    - Each cage has a separate system call table which can be independently changed to redirect into other cages or the microvisor
-    - Fast, isolated calling between cages
-    - Enables complex functionality (system call filtering, file systems, proxies, etc.) to be external to the microvisor
+RawPOSIX is a small, trusted runtime component that provides POSIX-compatible system call implementations on behalf of cages. It runs entirely within the unprivileged Lind process and is responsible for interacting with the host kernel.
 
 ## Components
 
-### Wasmtime (our caging technology)
-[Wasmtime](https://wasmtime.dev) is a fast and secure runtime for WebAssembly designed by the [Bytecode Alliance](bytecodealliance.org). Lind-wasm uses wasmtime as a runtime with added support for multi-processing via Asyncify.
+### Wasmtime
+
+Lind-Wasm uses [Wasmtime](https://github.com/bytecodealliance/wasmtime) as the WebAssembly runtime responsible for executing cages. Wasmtime provides fast execution, memory isolation, and a well-defined embedding API.
 
 ### lind-glibc
 
-We’ve ported glibc so that it can be compiled to wasm bytecode and linked with any wasm binary. This includes minor changes like replacing assembly code, and add a mechansim to transfer system calls to the trusted runtime and microvisor.  Also, all system calls are converted to 64-bit system call types because all grates (and the underlying RawPOSIX implementation) support 64-bit system calls.
-
-### RawPOSIX (our microvisor technology)
-Provides normal POSIX system calls including:
-
-- Signals
-- Fork
-- Exec
-- Threading
-- File system
-- Networking
-- Separate handling of cages' fds and threads
+Lind includes a modified glibc that can be compiled to WebAssembly. The modifications remove architecture-specific assembly and redirect system calls through 3i using a uniform 64-bit calling convention.
 
 ### 3i Implementation
-The intra-process interposable interface (3i) enables secure and efficient cage communication with speed similar to a function call. It provides POSIX interfaces between cages with interposition capabilities, enabling fine-grained security and access control by supporting the construction of grates.
 
-## Frequent Q&A
-
-### How hard is it to use Lind-Wasm?
-
-Lind-Wasm aims to minimize application changes.  
-Most applications can run without source-level modifications and only need to be recompiled using `clang` with Lind-Wasm–related feature flags.
+The 3i implementation provides the core system call routing and interposition mechanism used by both application cages and grates.
