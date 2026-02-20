@@ -88,7 +88,7 @@ cd $BUILD
   --prefix=$GLIBC/target \
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
-  CFLAGS=" -matomics -mbulk-memory -O2 -g" \
+  CFLAGS=" -matomics -mbulk-memory -O2 -g -fPIC" \
   CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
