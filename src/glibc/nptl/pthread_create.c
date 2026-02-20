@@ -405,6 +405,13 @@ start_thread (void *arg)
     "global.set __tls_base\n"
     :: "r"(tls_base));
 
+  /* In WASM, THREAD_SELF returns &__wasilibc_pthread_self (a _Thread_local
+     variable) which is separate from the pd struct allocated by allocatestack.
+     The pd has multiple_threads=1 (set by allocatestack), but the child's TLS
+     copy starts at 0.  We must propagate it so SINGLE_THREAD_P returns false,
+     otherwise stdio locking skips futex_wake and deadlocks.  */
+  THREAD_SETMEM (THREAD_SELF, header.multiple_threads, 1);
+
   /* We are either in (a) or (b), and in either case we either own PD already
      (2) or are about to own PD (1), and so our only restriction would be that
      we can't free PD until we know we have ownership (see CONCURRENCY NOTES
