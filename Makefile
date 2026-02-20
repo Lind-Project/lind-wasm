@@ -13,7 +13,7 @@ LINDFS_DIRS := \
 	       usr/lib \
 	       usr/local/bin \
 	       var \
-	       var/log
+	       var/log \
 		   var/run
 
 .PHONY: build 
