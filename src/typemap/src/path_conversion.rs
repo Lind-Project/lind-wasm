@@ -126,13 +126,16 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     };
     // We will create a new variable in host process to handle the path value
     let relpath = normpath(convpath(path), path_arg_cageid);
-    let relative_path = relpath.to_str().unwrap();
+    let relative_path = match relpath.to_str() {
+        Some(s) => s,
+        None => return CString::new("").unwrap(),
+    };
 
     // Check if exceeds the max path
     #[cfg(feature = "secure")]
     {
         if relative_path.len() >= PATH_MAX {
-            panic!("Path exceeds PATH_MAX (4096)");
+            return CString::new("").unwrap();
         }
     }
 
@@ -141,6 +144,6 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     let full_path = relative_path.to_string();
     match CString::new(full_path) {
         Ok(c_path) => c_path,
-        Err(_) => panic!("String contains internal null byte"),
+        Err(_) => CString::new("").unwrap(),
     }
 }
