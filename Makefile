@@ -14,6 +14,7 @@ LINDFS_DIRS := \
 	       usr/local/bin \
 	       var \
 	       var/log
+		   var/run
 
 .PHONY: build 
 build: sysroot lind-boot lindfs
