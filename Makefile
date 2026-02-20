@@ -20,11 +20,6 @@ LINDFS_DIRS := \
 build: sysroot lind-boot lindfs
 	@echo "Build complete"
 
-.PHONY: prepare-lind-root
-prepare-lind-root:
-	mkdir -p $(LINDFS_ROOT)/dev
-	touch $(LINDFS_ROOT)/dev/null
-
 .PHONY: all
 all: build
 
@@ -44,7 +39,10 @@ lindfs:
 	@for d in $(LINDFS_DIRS); do \
 		mkdir -p $(LINDFS_ROOT)/$$d; \
 	done
+	sudo mknod $(LINDFS_ROOT)/dev/null c 1 3
+	sudo chmod 666 $(LINDFS_ROOT)/dev/null
 	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
+	
 
 .PHONY: lind-debug
 lind-debug: build-dir
@@ -72,7 +70,7 @@ sync-sysroot:
 	cp -R src/glibc/sysroot $(SYSROOT_DIR)
 
 .PHONY: test
-test: prepare-lind-root
+test: lindfs
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	./scripts/wasmtestreport.py --allow-pre-compiled && \
