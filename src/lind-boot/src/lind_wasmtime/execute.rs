@@ -193,14 +193,14 @@ fn register_wasmtime_syscall_entry() -> bool {
     let fp_clone = clone_syscall_entry;
     let clone_call_u64: u64 = fp_clone as *const () as usize as u64;
     let clone_ret = threei::register_handler(
-        clone_call_u64,
-        RAWPOSIX_CAGEID,                     // self cageid
+        0,
+        WASMTIME_CAGEID,                     // target cageid for this syscall handler
+        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         56,                                  // clone syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         1,                                   // register
-        WASMTIME_CAGEID,                     // target cageid
-        0,
-        0,
+        WASMTIME_CAGEID,                     // handler function is in the 3i
+        clone_call_u64,
         0,
         0,
         0,
@@ -213,14 +213,14 @@ fn register_wasmtime_syscall_entry() -> bool {
     let fp_exec = exec_syscall_entry;
     let exec_call_u64: u64 = fp_exec as *const () as usize as u64;
     let exec_ret = threei::register_handler(
-        exec_call_u64,
-        RAWPOSIX_CAGEID,                     // self cageid
+        0,
+        WASMTIME_CAGEID,                     // target cageid for this syscall handler
+        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         59,                                  // exec syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         1,                                   // register
-        WASMTIME_CAGEID,                     // target cageid
-        0,
-        0,
+        WASMTIME_CAGEID,                     // handler function is in the 3i
+        exec_call_u64,
         0,
         0,
         0,
@@ -233,14 +233,14 @@ fn register_wasmtime_syscall_entry() -> bool {
     let fp_exit = exit_syscall_entry;
     let exit_call_u64: u64 = fp_exit as *const () as usize as u64;
     let exit_ret = threei::register_handler(
-        exit_call_u64,
-        RAWPOSIX_CAGEID,                     // self cageid
+        0,
+        WASMTIME_CAGEID,                     // target cageid for this syscall handler
+        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         60,                                  // exit syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         1,                                   // register
-        WASMTIME_CAGEID,                     // target cageid
-        0,
-        0,
+        WASMTIME_CAGEID,                     // handler function is in the 3i
+        exit_call_u64,
         0,
         0,
         0,

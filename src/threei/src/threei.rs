@@ -279,20 +279,20 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub extern "C" fn register_handler(
-    in_grate_fn_ptr_u64: u64,
-    targetcage: u64,     // Cage to modify
+    _self_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
+    _target_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
+    targetcage: u64,
     targetcallnum: u64,  // Syscall number or match-all indicator. todo: Match-all.
     _runtime_id: u64,    // Currently unused, reserved for future potential use
     is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
-    _arg3: u64,
-    _arg3cage: u64,
+    in_grate_fn_ptr_u64: u64,
     _arg4: u64,
-    _arg4cage: u64,
+    _arg4cageid: u64,
     _arg5: u64,
-    _arg5cage: u64,
+    _arg5cageid: u64,
     _arg6: u64,
-    _arg6cage: u64,
+    _arg6cageid: u64,
 ) -> i32 {
     // Make sure that both the cage that registers the handler and the cage being registered are valid (not in exited state)
     if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&handlefunccage) {
