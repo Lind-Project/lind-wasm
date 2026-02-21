@@ -1,19 +1,20 @@
 use crate::threei_const;
 use dashmap::DashMap;
 use std::sync::Mutex;
+use sysdefs::constants::lind_platform_const;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
 ///
-/// <self_cageid, <callnum, (in_grate_addr, dest_grateid)>
+/// <self_cageid, <callnum, (dest_grateid, in_grate_addr)>
 /// Keys are the grate, the value is a HashMap with a key of the callnum
-/// and the values are a (in_grate_addr, grate) tuple for the actual handlers...
-type TargetCageMap = DashMap<u64, u64>; // Maps destfunc in grate addr to dest_grateid
+/// and the values are a (dest_grateid, in_grate_addr) tuple for the actual handlers...
+type TargetCageMap = DashMap<u64, u64>; // Maps dest_grateid to destfunc in grate addr
 type CallnumMap = DashMap<u64, TargetCageMap>; // Maps targetcallnum to TargetCageMap
 type CageHandlerTable = DashMap<u64, CallnumMap>; // Maps self_cageid to CallnumMap
 
 lazy_static::lazy_static! {
-    // <self_cageid, <callnum, (in_grate_addr, dest_grateid)>
+    // <self_cageid, <callnum, (dest_grateid, in_grate_addr)>>
     // callnum is mapped to addr, not self
     pub static ref HANDLERTABLE: CageHandlerTable = DashMap::new();
 }
@@ -23,22 +24,21 @@ lazy_static::lazy_static! {
 /// to help inspect cage–callnum–target mappings during development.
 pub fn print_handler_table() {
     println!("=== HANDLERTABLE ===");
-    for cage_entry in HANDLERTABLE.iter() {
-        let self_cageid = cage_entry.key();
-        let callnum_map = cage_entry.value();
+    for self_entry in HANDLERTABLE.iter() {
+        let self_cageid = *self_entry.key();
         println!("CageID: {}", self_cageid);
 
-        for callnum_entry in callnum_map.iter() {
-            let callnum = callnum_entry.key();
-            let target_map = callnum_entry.value();
+        let callnum_map: &CallnumMap = self_entry.value();
+        for call_entry in callnum_map.iter() {
+            let callnum = *call_entry.key();
             println!("  Callnum: {}", callnum);
 
+            let target_map: &TargetCageMap = call_entry.value();
             for target_entry in target_map.iter() {
-                let destfunc = target_entry.key();
-                let dest_grateid = target_entry.value();
                 println!(
-                    "    destfunc: {} -> dest_grateid: {}",
-                    destfunc, dest_grateid
+                    "    dest_grateid: {} -> in_grate_addr: {}",
+                    *target_entry.key(),
+                    *target_entry.value()
                 );
             }
         }
@@ -58,22 +58,81 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
     HANDLERTABLE.contains_key(&cageid)
 }
 
-/// Looks up the destination grate and call index for a given syscall issued by a specific cage.
+/// Lookup the interposed handler for a given (self_cageid, syscall_num, target_cageid).
+///
+/// 1. The lookup path is:
+///        HANDLERTABLE[self_cageid][syscall_num][target_cageid]
+///
+/// 2. If `target_cageid == RAWPOSIX_CAGEID`:
+///        - If an explicit RAWPOSIX handler exists, return it.
+///        - Otherwise, fallback to ANY registered handler under
+///          (self_cageid, syscall_num).
+///          This allows RAWPOSIX to behave as a default dispatch target
+///          when no explicit RAWPOSIX entry was installed.
+///    Note: theoretically there could be only one **grate** handlers for each cage
+///           Execeptions should only happen for fork/exec/exit calls (having WASMTIME_CAGEID entries)
+///
+/// 3. If `target_cageid != RAWPOSIX_CAGEID`:
+///        - An exact match is REQUIRED.
+///        - If not found, panic (this is considered a logic error).
 ///
 /// ## Arguments:
-/// - self_cageid: ID of the calling cage.
-/// - syscall_num: The syscall number issued by the cage.
+/// - self_cageid: The ID of the calling cage (the one executing the syscall).
+/// - syscall_num: The number of the syscall being invoked.
+/// - target_cageid: The ID of the target cage for the syscall.
 ///
 /// ## Returns:
-/// `Some((call_index_in_grate, dest_grateid))` if a handler mapping exists.
-/// `None` if no mapping is found.
-pub fn _get_handler(self_cageid: u64, syscall_num: u64) -> Option<(u64, u64)> {
-    HANDLERTABLE
-        .get(&self_cageid)?
-        .get(&syscall_num)?
-        .iter()
-        .next()
-        .map(|e| (*e.key(), *e.value()))
+///     Some((target_cageid, addr)) if a handler is found according to the lookup rules.
+///
+/// ## Panics:
+///     - If no entry exists for self_cageid.
+///     - If no entry exists for syscall_num.
+///     - If non-RAWPOSIX lookup misses.
+pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
+    // Grab the per-cage map guard.
+    let self_entry = HANDLERTABLE.get(&self_cageid).unwrap_or_else(|| {
+        panic!(
+            "No handler table for self_cageid={} (syscall_num={}, target_cageid={})",
+            self_cageid, syscall_num, target_cageid
+        )
+    });
+
+    // Grab the per-syscall map guard.
+    let call_entry = self_entry.value().get(&syscall_num).unwrap_or_else(|| {
+        panic!(
+            "No handlers for self_cageid={} syscall_num={} (target_cageid={})",
+            self_cageid, syscall_num, target_cageid
+        )
+    });
+
+    let target_map = call_entry.value();
+
+    // RAWPOSIX special case: prefer explicit RAWPOSIX handler; otherwise fallback to any.
+    if target_cageid == lind_platform_const::RAWPOSIX_CAGEID {
+        if let Some(addr_ref) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
+            let addr = *addr_ref.value();
+            return Some((lind_platform_const::RAWPOSIX_CAGEID, addr));
+        }
+
+        // Best-effort fallback: pick any registered handler.
+        if let Some(any) = target_map.iter().next() {
+            let gid = *any.key();
+            let addr = *any.value();
+            return Some((gid, addr));
+        }
+        return None;
+    }
+
+    // Non-RAWPOSIX requires exact match.
+    if let Some(addr_ref) = target_map.get(&target_cageid) {
+        let addr = *addr_ref.value();
+        return Some((target_cageid, addr));
+    }
+
+    panic!(
+        "Handler not found for (self_cageid={}, syscall_num={}, target_cageid={})",
+        self_cageid, syscall_num, target_cageid
+    );
 }
 
 /// Removes **ALL** handler entries across all cages that point to a specific grateid.
@@ -89,13 +148,13 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64) -> Option<(u64, u64)> {
 ///
 /// todo: a more efficient way to do clean up
 pub fn _rm_grate_from_handler(grateid: u64) {
-    HANDLERTABLE.iter().for_each(|entry| {
-        let callmap = entry.value();
-        callmap.iter().for_each(|call_entry| {
-            let target_map = call_entry.value();
-            target_map.retain(|_, dest_grateid| *dest_grateid != grateid);
-        });
-    });
+    for self_entry in HANDLERTABLE.iter() {
+        let call_map: &CallnumMap = self_entry.value();
+        for call_entry in call_map.iter() {
+            let target_map: &TargetCageMap = call_entry.value();
+            target_map.retain(|dest_grateid, _| *dest_grateid != grateid);
+        }
+    }
 }
 
 /// Removes **all** handler mappings registered under a given cage.
@@ -115,98 +174,128 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 }
 
 /// Actual implementation of register_handler.
-/// See comments in threei.rs for details.
+/// See comments in threei.rs for details of high-level design.
+///
+/// ## Implementation details:
+///
+/// This function supports three distinct behaviors according to the value of
+/// `handlefunccage` and `register_flag`.
+///
+/// Case 1: Remove ALL handlers for (srccage, targetcallnum)
+///
+/// If `handlefunccage` equals `THREEI_DEREGISTER`, the entire syscall entry
+/// under `(srccage, targetcallnum)` is removed. This means that all registered
+/// target cages for this syscall are cleared at once. After removal, the code
+/// performs structural cleanup so that empty intermediate maps are deleted in
+/// order to keep the table compact and avoid stale containers.
+///
+/// Case 2: Remove ONLY a specific handler entry
+///
+/// If `register_flag` equals zero, only the specific entry
+/// `(srccage, targetcallnum, handlefunccage)` is removed. In this mode,
+/// deregistration is granular and does not affect other target cages registered
+/// for the same syscall. After removing the specific entry, the function checks
+/// whether the inner maps have become empty and removes them accordingly,
+/// maintaining structural consistency of the nested hash map.
+///
+/// Case 3: Register or overwrite handler
+///
+/// In all other cases, the function performs registration or overwrite. The
+/// `(srccage, targetcallnum)` containers are created if they do not already
+/// exist. The handler is then inserted into the innermost map, replacing any
+/// previous handler registered for the same `handlefunccage`. If a RAWPOSIX
+/// fallback handler exists under the same syscall, it is removed before the
+/// new handler is inserted. This ensures that RAWPOSIX behaves strictly as a
+/// fallback dispatch target and does not shadow a more specific interposed
+/// grate handler.
+///
+/// At the moment, all glibc-originated cage syscalls issued through
+/// `MAKE_LEGACY_SYSCALL` unconditionally set the target cage ID to
+/// `RAWPOSIX_CAGEID`. From the perspective of the glibc cage, every
+/// syscall is therefore dispatched toward RAWPOSIX by default. This
+/// means that even if a grate has already registered an interposed
+/// handler for a given `(srccage, syscall)`, the cage itself has no
+/// prior knowledge of that registration. The grate knows, and 3i knows,
+/// but the cage does not.
+///
+/// As a result, when the syscall reaches 3i, distinguishing the true
+/// intended target becomes difficult. The original target cage was set
+/// to RAWPOSIX by glibc, and no additional metadata is available at the
+/// call site to indicate that a non-RAWPOSIX grate handler should be
+/// preferred. One possible strategy would be to infer intent based on
+/// the number of registered handlers, for example choosing a non-RAWPOSIX
+/// handler whenever more than one entry exists. However, this heuristic
+/// breaks down for syscalls such as `clone`, `exec`, and `exit`, which
+/// inherently require multiple handlers (e.g., one for RAWPOSIX and one
+/// for Wasmtime). In those cases, handler multiplicity does not encode
+/// meaningful dispatch intent.
+///
+/// To reduce complexity and avoid ambiguous runtime inference, we adopt
+/// a simpler registration policy. Whenever a specific grate handler is
+/// registered for a `(srccage, syscall)` pair and a RAWPOSIX entry already
+/// exists, the RAWPOSIX entry is removed and replaced. This ensures that
+/// RAWPOSIX remains strictly a fallback target and cannot coexist in a
+/// misleading way with a more specific handler. By enforcing this rule
+/// at registration time, we eliminate the need for complicated dispatch
+/// disambiguation logic later in 3i and keep the runtime decision path
+/// deterministic and structurally clean.
 pub fn register_handler_impl(
-    targetcage: u64,
+    srccage: u64,
     targetcallnum: u64,
     register_flag: u64, // 0: deregister, otherwise: register
     handlefunccage: u64,
     in_grate_fn_ptr_u64: u64,
 ) -> i32 {
-    // If `handlefunccage == THREEI_DEREGISTER`, remove the entire callnum entry
-    // for the given (targetcage, targetcallnum).
-    // We assume one (targetcage, targetcallnum) could be mapped to multiple (in_grate_fn_ptr_u64, handlefunccage)
-    // and each time calling will check the handlefunccage to determine the destination.
+    // Case 1: remove all handlers for (srccage, targetcallnum)
     if handlefunccage == threei_const::THREEI_DEREGISTER {
-        let mut should_remove_cage = false;
-        if let Some(cage_entry) = HANDLERTABLE.get(&targetcage) {
-            cage_entry.remove(&targetcallnum);
-            should_remove_cage = cage_entry.value().is_empty();
-            drop(cage_entry);
-            // drop the borrow to cage_entry before mutating handler_table again
-            if should_remove_cage {
-                HANDLERTABLE.remove(&targetcage);
-            };
-        }
+        if let Some(self_entry) = HANDLERTABLE.get(&srccage) {
+            let call_map: &CallnumMap = self_entry.value();
+            call_map.remove(&targetcallnum);
 
+            // If the per-cage map is now empty, remove the cage entry.
+            if call_map.is_empty() {
+                drop(self_entry);
+                HANDLERTABLE.remove(&srccage);
+            }
+        }
         return 0;
     }
-
-    if let Some(mut cage_entry) = HANDLERTABLE.get_mut(&targetcage) {
-        let mut should_remove_cage = false;
-        // Check if targetcallnum exists
-        if let Some(mut callnum_entry) = cage_entry.get_mut(&targetcallnum) {
-            // （targetcage, targetcallnum) exists
-            if register_flag == 0 {
-                // If deregistering a single syscall, remove the entry if it exists
-                callnum_entry.retain(|_, dest_grateid| *dest_grateid != handlefunccage);
-                // cleanup empties
-                let empty_callnum = callnum_entry.is_empty();
-                drop(callnum_entry);
-                if empty_callnum {
-                    cage_entry.remove(&targetcallnum);
-                    should_remove_cage = cage_entry.is_empty();
-                    if should_remove_cage {
-                        HANDLERTABLE.remove(&targetcage);
-                    }
-                }
-                return 0;
-            }
-
-            match callnum_entry.get(&in_grate_fn_ptr_u64) {
-                Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
-                    // Already registered with same mapping, do nothing
-                    return 0;
-                }
-                Some(_) => {
-                    return threei_const::ELINDAPIABORTED as i32; // Return error if a conflicting mapping exists
-                }
-                None => {
-                    // If `in_grate_fn_ptr` not exists, insert
-                    callnum_entry.insert(in_grate_fn_ptr_u64, handlefunccage);
-                    return 0;
-                }
-            }
-        } else {
-            // callnum does not exist yet under this cage
-            if register_flag == 0 {
-                // nothing to delete
-                return 0;
-            }
-            let mut m = DashMap::new();
-            m.insert(in_grate_fn_ptr_u64, handlefunccage);
-            cage_entry.insert(targetcallnum, m);
-            return 0;
-        }
-
-        return 0;
-    }
-
-    // cage does not exist yet
-    // Inserts a new mapping in HANDLERTABLE.
+    // Case 2: remove only (srccage, targetcallnum, handlefunccage)
     if register_flag == 0 {
-        // nothing to delete
+        if let Some(self_entry) = HANDLERTABLE.get(&srccage) {
+            let call_map: &CallnumMap = self_entry.value();
+
+            if let Some(call_entry) = call_map.get(&targetcallnum) {
+                let target_map: &TargetCageMap = call_entry.value();
+                target_map.remove(&handlefunccage);
+
+                // If no handlers remain for this syscall, remove the callnum entry.
+                if target_map.is_empty() {
+                    drop(call_entry);
+                    call_map.remove(&targetcallnum);
+                }
+            }
+
+            // If no syscalls remain for this cage, remove the cage entry.
+            if call_map.is_empty() {
+                drop(self_entry);
+                HANDLERTABLE.remove(&srccage);
+            }
+        }
         return 0;
     }
 
-    let cage_entry = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
+    // Case 3: register or overwrite handler
+    let call_map_ref = HANDLERTABLE.entry(srccage).or_insert_with(DashMap::new);
+    let call_map: &CallnumMap = &*call_map_ref;
 
-    let callmap = cage_entry
-        .value()
-        .entry(targetcallnum)
-        .or_insert_with(DashMap::new);
+    let target_map_ref = call_map.entry(targetcallnum).or_insert_with(DashMap::new);
+    let target_map: &TargetCageMap = &*target_map_ref;
 
-    callmap.insert(in_grate_fn_ptr_u64, handlefunccage);
+    // If RAWPOSIX fallback exists, remove it so it does not shadow the new handler.
+    target_map.remove(&lind_platform_const::RAWPOSIX_CAGEID);
+
+    target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
 
     0
 }
@@ -214,34 +303,39 @@ pub fn register_handler_impl(
 /// Actual implementation of copy_handler_table_to_cage.
 /// See comments in threei.rs for details.
 pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
-    // If srccage has a handler table, clones its contents into targetcage.
-    // Does not overwrite any existing handlers in the target.
-    if let Some(src_entry_ref) = HANDLERTABLE.get(&srccage) {
-        let src_entry = src_entry_ref.value();
-        let target_entry_guard = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
-        let target_entry = target_entry_guard.value(); // Ensure the scope of lifetime is long enough
-
-        for callnum_ref in src_entry.iter() {
-            let callnum = callnum_ref.key();
-            let callnum_map = callnum_ref.value();
-            let target_callnum_map_guard =
-                target_entry.entry(*callnum).or_insert_with(DashMap::new);
-            let target_callnum_map = target_callnum_map_guard.value(); // Ensure the scope of lifetime is long enough
-            for handlefunc_ref in callnum_map.iter() {
-                // If not already present, insert
-                let handlefunc = handlefunc_ref.key();
-                let handlefunccage = handlefunc_ref.value();
-                target_callnum_map
-                    .entry(*handlefunc)
-                    .or_insert(*handlefunccage);
-            }
-        }
-        0
+    // Clone the source call map snapshot so we don't hold a long-lived reference
+    // while mutating the destination. DashMap::clone clones the structure and keys/values.
+    let src_snapshot: CallnumMap = if let Some(src_entry) = HANDLERTABLE.get(&srccage) {
+        let snap = src_entry.value().clone();
+        drop(src_entry);
+        snap
     } else {
         eprintln!(
             "[3i|copy_handler_table_to_cage] srccage {} has no handler table",
             srccage
         );
-        threei_const::ELINDAPIABORTED // treat missing src table as an error
+        return threei_const::ELINDAPIABORTED;
+    };
+
+    let dst_call_map_ref = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
+    let dst_call_map: &CallnumMap = &*dst_call_map_ref;
+
+    // Copy without overwriting existing destination handlers.
+    for src_call_entry in src_snapshot.iter() {
+        let callnum = *src_call_entry.key();
+        let src_target_map: &TargetCageMap = src_call_entry.value();
+
+        let dst_target_map_ref = dst_call_map.entry(callnum).or_insert_with(DashMap::new);
+        let dst_target_map: &TargetCageMap = &*dst_target_map_ref;
+
+        for src_target_entry in src_target_map.iter() {
+            let handlefunccage = *src_target_entry.key();
+            let addr = *src_target_entry.value();
+
+            // Insert only if absent, preserving any existing destination mapping.
+            dst_target_map.entry(handlefunccage).or_insert(addr);
+        }
     }
+
+    0
 }

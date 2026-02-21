@@ -48,25 +48,25 @@ pub fn mappings_for(cage: u64, callnum: u64) -> Vec<(u64, u64)> {
 pub fn register_simple(
     targetcage: u64,
     targetcallnum: u64,
-    handlefunc: u64,
     handlefunccage: u64,
+    in_grate_fn_ptr_u64: u64,
     op_flag: u64,
 ) -> i32 {
     register_handler(
-        handlefunc,     // in_grate_fn_ptr_u64, we use handlefunc as a stand-in
-        targetcage,     // target cage
+        0,              // _self_cageid placeholder
+        0,              // _target_cageid placeholder
+        targetcage,     // targetcage (srccage in impl)
         targetcallnum,  // syscall number
-        0,              // _arg1cage
-        op_flag,        // flag (or 0 for selective deregister)
-        handlefunccage, // dest cage / THREEI_DEREGISTER
+        0,              // _runtime_id placeholder
+        op_flag,        // is_register: 0 for deregister, otherwise register
+        handlefunccage, // dest grate/cage id, or THREEI_DEREGISTER
+        in_grate_fn_ptr_u64,
         0,
+        0, // _arg4, _arg4cageid
         0,
+        0, // _arg5, _arg5cageid
         0,
-        0,
-        0,
-        0,
-        0,
-        0, // remaining unused args
+        0, // _arg6, _arg6cageid
     )
 }
 
