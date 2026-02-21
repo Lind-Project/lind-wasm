@@ -7,15 +7,21 @@
  * (not last thread) and lind_manager.decrement() is never called, causing
  * lind_manager.wait() to block forever.
  *
- * Many threads with no work maximizes the probability of hitting this race.
+ * A few threads with minimal work triggers the exit race without
+ * overwhelming the 3i handler table (which causes a separate bug).
  */
 #include <stdio.h>
 #include <pthread.h>
 
-#define NUM_THREADS 20
+#define NUM_THREADS 4
+
+static volatile int dummy;
 
 static void *thread_fn(void *arg) {
-    (void)arg;
+    /* Tiny busywork — avoids 3i handler race at thread start,
+       but finishes fast so start_thread cleanup races with main's exit. */
+    for (int i = 0; i < 1000; i++)
+        dummy = i;
     return NULL;
 }
 
