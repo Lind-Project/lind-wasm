@@ -341,6 +341,7 @@ pub extern "C" fn exit_syscall(
 
     // Since `exit_syscall` may be interposed by a grate, we treat the
     // argument's cageid as the effective operation cage.
+    eprintln!("[DEBUG exit_syscall] reached RawPOSIX, cage={}, tid={}", status_cageid, tid);
     let selfcageid = status_cageid;
     // Indicates whether the exiting thread is the last live thread
     // in the cage (0 = no, 1 = yes).
