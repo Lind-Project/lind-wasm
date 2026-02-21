@@ -274,7 +274,9 @@ pub extern "C" fn futex_syscall(
     let uaddr2 = uaddr2_arg;
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
+    eprintln!("[DEBUG futex] cage={} op={} uaddr=0x{:x} val={}", cageid, futex_op, uaddr, val);
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3) as i32 };
+    eprintln!("[DEBUG futex] ret={}", ret);
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "futex");
