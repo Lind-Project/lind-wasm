@@ -103,7 +103,9 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     match result {
         Ok(ref _res) => {
             // we wait until all other cage exits
+            eprintln!("[execute_wasmtime] load_main_module returned, entering wait()");
             lind_manager.wait();
+            eprintln!("[execute_wasmtime] wait() returned");
         }
         Err(e) => {
             // Exit the process if Wasmtime understands the error;
