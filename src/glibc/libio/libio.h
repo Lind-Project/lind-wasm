@@ -209,8 +209,10 @@ extern int _IO_ftrylockfile (FILE *) __THROW;
 #define _IO_cleanup_region_end(_Doit) /**/
 #endif
 
-#define _IO_need_lock(_fp) \
-  (((_fp)->_flags2 & _IO_FLAGS2_NEED_LOCK) != 0)
+/* In WASM, _IO_enable_locks() may not reliably set _IO_FLAGS2_NEED_LOCK
+   on all FILEs before threads start using stdio.  Always lock so that
+   vfprintf and other stdio functions never skip FILE locking.  */
+#define _IO_need_lock(_fp) (1)
 
 extern int _IO_vfscanf (FILE * __restrict, const char * __restrict,
 			__gnuc_va_list, int *__restrict);

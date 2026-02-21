@@ -31,12 +31,12 @@
    The ABI might define SINGLE_THREAD_BY_GLOBAL to enable the single thread
    check to use global variables instead of the pthread_t field.  */
 
-#if !defined SINGLE_THREAD_BY_GLOBAL || IS_IN (rtld)
-# define SINGLE_THREAD_P \
-  (THREAD_GETMEM (THREAD_SELF, header.multiple_threads) == 0)
-#else
-# define SINGLE_THREAD_P (__libc_single_threaded_internal != 0)
-#endif
+/* In WASM, we cannot reliably set the child thread's
+   header.multiple_threads field from the parent because the compiler
+   caches __tls_base.  Always take the multi-threaded path so that
+   _IO_lock_unlock calls lll_unlock (which does futex_wake) instead of
+   silently writing 0 without waking waiters.  */
+#define SINGLE_THREAD_P (0)
 
 #define RTLD_SINGLE_THREAD_P SINGLE_THREAD_P
 
