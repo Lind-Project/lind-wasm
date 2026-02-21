@@ -77,6 +77,7 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
 
   __lind_debug_write("[exit] TLS dtors done, acquiring lock\n");
   __libc_lock_lock (__exit_funcs_lock);
+  __lind_debug_write("[exit] lock acquired, running atexit handlers\n");
 
   /* We do it this way to handle recursive calls to exit () made by
      the functions registered with `atexit' and `on_exit'. We call
@@ -106,7 +107,7 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
 	    {
 	      void (*atfct) (void);
 	      void (*onfct) (int status, void *arg);
-	      void (*cxafct) (void *arg, int status);
+	      void (*cxafct) (void *arg);
 	      void *arg;
 
 	    case ef_free:
@@ -141,7 +142,7 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
 
 	      /* Unlock the list while we call a foreign function.  */
 	      __libc_lock_unlock (__exit_funcs_lock);
-	      cxafct (arg, status);
+	      cxafct (arg);
 	      __libc_lock_lock (__exit_funcs_lock);
 	      break;
 	    }
