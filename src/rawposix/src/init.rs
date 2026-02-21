@@ -199,6 +199,12 @@ pub fn rawposix_start(verbosity: isize) {
                 std::io::Error::last_os_error()
             )
         }
+
+        // Create /tmp inside the sandbox so that programs using absolute
+        // /tmp paths (e.g. AF_UNIX sockets) work within the chroot.
+        // Ignore EEXIST in case it already exists.
+        let tmp_path = CString::new("/tmp").unwrap();
+        libc::mkdir(tmp_path.as_ptr(), 0o1777);
     }
 
     // init cage table

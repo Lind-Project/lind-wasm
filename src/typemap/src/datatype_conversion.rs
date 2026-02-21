@@ -701,5 +701,9 @@ pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
         }
     }
 
-    (arg as *const u8).is_null()
+    // Also treat the NOTUSED sentinel (0xDEADBEEF_DEADBEEF) from glibc
+    // as null.  glibc passes UNUSED_ARG for unused syscall arguments;
+    // without this check, syscalls like recvfrom interpret the sentinel
+    // as a valid pointer and write to a garbage address.
+    (arg as *const u8).is_null() || arg == UNUSED_ARG
 }
