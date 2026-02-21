@@ -103,9 +103,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     match result {
         Ok(ref _res) => {
             // we wait until all other cage exits
-            eprintln!("[DEBUG execute_wasmtime] load_main_module returned, entering wait()");
             lind_manager.wait();
-            eprintln!("[DEBUG execute_wasmtime] wait() returned");
         }
         Err(e) => {
             // Exit the process if Wasmtime understands the error;
@@ -560,9 +558,14 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
     // Invoke the function and then afterwards print all the results that came
     // out, if there are any.
     let mut results = vec![Val::null_func_ref(); ty.results().len()];
-    let _ = func
+    let call_result = func
         .call(&mut *store, &values, &mut results)
         .with_context(|| format!("failed to invoke command default"));
+    if let Err(ref e) = call_result {
+        eprintln!("[DEBUG invoke_func] func.call returned error: {:?}", e);
+    } else {
+        eprintln!("[DEBUG invoke_func] func.call returned Ok");
+    }
 
     Ok(results)
 }
