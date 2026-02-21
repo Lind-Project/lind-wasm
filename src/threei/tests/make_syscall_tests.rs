@@ -14,6 +14,7 @@ const OP_REMOVE: u64 = 0;
 
 #[test]
 #[serial]
+#[should_panic(expected = "No handler table for self_cageid=")]
 fn non_exit_syscall_falls_through_to_rawposix_path_when_not_interposed() {
     clear_globals();
 
