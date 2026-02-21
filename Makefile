@@ -13,16 +13,12 @@ LINDFS_DIRS := \
 	       usr/lib \
 	       usr/local/bin \
 	       var \
-	       var/log
+	       var/log \
+	       var/run
 
 .PHONY: build 
 build: sysroot lind-boot lindfs
 	@echo "Build complete"
-
-.PHONY: prepare-lind-root
-prepare-lind-root:
-	mkdir -p $(LINDFS_ROOT)/dev
-	touch $(LINDFS_ROOT)/dev/null
 
 .PHONY: all
 all: build
@@ -39,10 +35,12 @@ lind-boot: build-dir
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
-lindfs: 
+lindfs:
 	@for d in $(LINDFS_DIRS); do \
 		mkdir -p $(LINDFS_ROOT)/$$d; \
 	done
+	touch $(LINDFS_ROOT)/dev/null
+	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
 
 .PHONY: lind-debug
 lind-debug: build-dir
@@ -70,7 +68,7 @@ sync-sysroot:
 	cp -R src/glibc/sysroot $(SYSROOT_DIR)
 
 .PHONY: test
-test: prepare-lind-root
+test: lindfs
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	./scripts/wasmtestreport.py --allow-pre-compiled && \
@@ -92,7 +90,6 @@ md_generation:
 	REPORT_PATH=$(REPORT) OUT_DIR=$(OUT) python3 scripts/render_e2e_templates.py
 	@echo "Wrote $(OUT)/e2e_comment.md"
 
-	
 
 .PHONY: lint
 lint:
