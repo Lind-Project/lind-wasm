@@ -118,7 +118,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
 
         // Allocate the main module's indirect function table with
         // the minimal required size.
-        #[cfg(feature = "debug-dylink")]
+        // #[cfg(feature = "debug-dylink")]
         println!("[debug] main module table size: {}", main_module_table_size);
         let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
         table = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
@@ -127,7 +127,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         // calculate the stack address for main module
         let stack_low_num = 1024; // reserve first 1024 bytes for guard page
         let stack_high_num = stack_low_num + 8388608; // 8 MB of default stack size
-        #[cfg(feature = "debug-dylink")]
+        // #[cfg(feature = "debug-dylink")]
         println!("[debug] main module stack pointer starts from {} to {}", stack_low_num, stack_high_num);
         let stack_low = wasmtime::Global::new(&mut wstore, wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
         let stack_high = wasmtime::Global::new(&mut wstore, wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
@@ -242,7 +242,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
 
     // Add the module's functions to the linker.
     for (name, module) in modules.iter().skip(1) {
-        let mut linker = linker.lock().unwrap();
+        let mut lib_linker = linker.lock().unwrap();
 
         // Read dylink metadata for this preloaded (library) module.
         // This contains the module's declared table/memory requirements.
@@ -253,7 +253,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         // within the global indirect function table.
         let table_start = table.size(&mut wstore) as i32;
 
-        #[cfg(feature = "debug-dylink")]
+        // #[cfg(feature = "debug-dylink")]
         println!("[debug] library table_start: {}, grow: {}", table_start, dylink_info.table_size);
         // Grow the shared indirect function table by the amount requested by the
         // library (as recorded in its dylink section). New slots are initialized
@@ -265,8 +265,9 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         // to relocate/interpret the library's function references into the
         // shared table. GOT entries are patched through the shared LindGOT.
         {
+            println!("[debug] library {} instantiate", name);
             let mut guard = lind_got.lock().unwrap();
-            linker.module(&mut wstore, &name, &module, &mut table, table_start, &*guard).context(format!(
+            lib_linker.module(&mut wstore, &name, &module, &mut table, table_start, &*guard).context(format!(
                 "failed to process preload `{}`",
                 name,
             ))?;
@@ -481,6 +482,7 @@ fn attach_api(
     lindboot_cli: CliOptions,
     cageid: Option<i32>,
 ) -> Result<()> {
+    println!("[debug] attach api");
     // Setup WASI-p1
     // --- Why we still attach a WASI preview1 context (WasiCtx) even though we don't use wasi-libc ---
     //
@@ -517,11 +519,12 @@ fn attach_api(
     // by glibc/RawPOSIX.
     let mut linker_guard = linker.lock().unwrap();
 
-    let mut linker = linker_guard.clone();
-    let _ = wasi_common::sync::add_to_linker(&mut linker, |s: &mut HostCtx| {
+    let _ = wasi_common::sync::add_to_linker(&mut linker_guard, |s: &mut HostCtx| {
         AsMut::<wasi_common::WasiCtx>::as_mut(s)
     });
-    drop(linker);
+    drop(linker_guard);
+
+    println!("[debug] attach api wasi");
 
     let mut builder = WasiCtxBuilder::new();
     let _ = builder.inherit_stdio().args(&lindboot_cli.args);
@@ -529,20 +532,24 @@ fn attach_api(
     builder.inherit_stderr();
     wstore.data_mut().preview1_ctx = Some(builder.build());
 
-    let mut linker = linker_guard.clone();
+    let mut linker_guard = linker.lock().unwrap();
     // Setup WASI-thread
     let _ =
-        wasmtime_wasi_threads::add_to_linker(&mut linker, &wstore, &module, |s: &mut HostCtx| {
+        wasmtime_wasi_threads::add_to_linker(&mut linker_guard, &wstore, &module, |s: &mut HostCtx| {
             s.wasi_threads.as_ref().unwrap()
         });
 
+    println!("[debug] attach api wasi thread");
+
     // attach Lind common APIs to the linker
-    let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(&mut linker)?;
+    let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(&mut linker_guard)?;
+
+    println!("[debug] attach api lind common");
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
         module.clone(),
-        linker.clone(),
+        linker_guard.clone(),
         lind_manager.clone(),
         lindboot_cli.clone(),
         cageid,
@@ -563,11 +570,15 @@ fn attach_api(
         },
     )?);
 
-    let _ = wstore.data_mut().wasi_threads = Some(Arc::new(WasiThreadsCtx::new(
-        module.clone(),
-        Arc::new(linker.clone()),
-    )?));
-    drop(linker);
+    println!("[debug] attach api lind multi-process");
+
+    // let _ = wstore.data_mut().wasi_threads = Some(Arc::new(WasiThreadsCtx::new(
+    //     module.clone(),
+    //     Arc::new(linker.clone()),
+    // )?));)
+    drop(linker_guard);
+
+    println!("[debug] attach api done");
 
     Ok(())
 }
@@ -610,8 +621,10 @@ fn load_main_module(
         .get_func(&mut *store, "")
         .or_else(|| instance.get_func(&mut *store, "_start"));
 
-    let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
-    let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+    // let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
+    // let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+    let stack_low = 0;
+    let stack_pointer = 0;
     store.as_context_mut().set_stack_base(stack_pointer as u64);
     store.as_context_mut().set_stack_top(stack_low as u64);
 

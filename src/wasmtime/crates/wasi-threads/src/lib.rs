@@ -160,6 +160,7 @@ pub fn add_to_linker<T: Clone + Send + 'static>(
                 // Initialize vmmap immediately after creating the shared linear memory
                 let memory_base = mem.get_memory_base();
                 init_vmmap(1, memory_base as usize, None);
+                println!("[debug] link memory in wasi-threads");
                 linker.define(store, import.module(), import.name(), mem.clone())?;
             } else {
                 return Err(anyhow!(
