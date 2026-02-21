@@ -274,36 +274,11 @@ pub extern "C" fn futex_syscall(
     let uaddr2 = uaddr2_arg;
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
-    // DEBUG: trace futex operations
-    let base_op = futex_op & 0x7f; // strip FUTEX_PRIVATE_FLAG
-    let op_name = match base_op {
-        0 => "WAIT",
-        1 => "WAKE",
-        9 => "WAIT_BITSET",
-        10 => "WAKE_BITSET",
-        _ => "OTHER",
-    };
-    let priv_flag = if futex_op & 128 != 0 { "|PRIV" } else { "" };
-    eprintln!(
-        "[futex] cage={} tid={:?} op={}{} uaddr=0x{:x} val={} timeout=0x{:x}",
-        cageid, std::thread::current().id(), op_name, priv_flag, uaddr, val, timeout
-    );
-
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3) as i32 };
-
     if ret < 0 {
         let errno = get_errno();
-        let result = handle_errno(errno, "futex");
-        eprintln!(
-            "[futex] cage={} tid={:?} op={}{} uaddr=0x{:x} => ret={} (errno={})",
-            cageid, std::thread::current().id(), op_name, priv_flag, uaddr, result, errno
-        );
-        return result;
+        return handle_errno(errno, "futex");
     }
-    eprintln!(
-        "[futex] cage={} tid={:?} op={}{} uaddr=0x{:x} => ret={}",
-        cageid, std::thread::current().id(), op_name, priv_flag, uaddr, ret
-    );
     ret
 }
 
