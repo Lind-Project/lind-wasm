@@ -517,18 +517,15 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
 /// If the file is a precompiled module it is deserialized directly (skipping
 /// compilation). Otherwise it is compiled from source via `Module::from_file`.
 fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
-    // `detect_precompiled_file` *expects* input to already be an ELF file. It is used to detect 
-    // whether this ELF matches the current host architecture. 
-    // 
+    // `detect_precompiled_file` *expects* input to already be an ELF file. It is used to detect
+    // whether this ELF matches the current host architecture.
+    //
     // When passing in a .wasm file, the ELF parsing unwinds early. (`ElfFile64::parse(&read_cache)?;`)
     // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
     match engine.detect_precompiled_file(path) {
-        Ok(_) => {
-            unsafe { Module::deserialize_file(engine, path) }.context("failed to deserialize precompiled module")
-        }, 
-        Err(_) => {
-            Module::from_file(engine.path).context("failed to compile module")
-        }
+        Ok(_) => unsafe { Module::deserialize_file(engine, path) }
+            .context("failed to deserialize precompiled module"),
+        Err(_) => Module::from_file(engine, path).context("failed to compile module"),
     }
 }
 
