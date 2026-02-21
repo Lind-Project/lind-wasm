@@ -1,4 +1,15 @@
+use std::path::PathBuf;
+
+use anyhow::{bail, Result};
 use clap::*;
+
+fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
+    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        bail!("must contain exactly one equals character ('=')");
+    }
+    Ok((parts[0].into(), parts[1].into()))
+}
 
 #[derive(Debug, Parser, Clone)]
 #[command(name = "lind-boot")]
@@ -31,6 +42,15 @@ pub struct CliOptions {
     /// cause the environment variable `FOO` to be inherited.
     #[arg(long = "env", number_of_values = 1, value_name = "NAME[=VAL]", value_parser = parse_env_var)]
     pub vars: Vec<(String, Option<String>)>,
+
+    /// Load the given WebAssembly module before the main module
+    #[arg(
+        long = "preload",
+        number_of_values = 1,
+        value_name = "NAME=MODULE_PATH",
+        value_parser = parse_preloads,
+    )]
+    pub preloads: Vec<(String, PathBuf)>,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
