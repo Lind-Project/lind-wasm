@@ -23,6 +23,11 @@
 #include <ldsodefs.h>
 #include <shlib-compat.h>
 
+int __lind_dlopen(char* filename) __attribute__((
+    __import_module__("lind"),
+    __import_name__("dlopen")
+));
+
 struct dlopen_args
 {
   /* The arguments for dlopen_doit.  */
@@ -68,7 +73,8 @@ dlopen_implementation (const char *file, int mode, void *dl_caller)
   args.mode = mode;
   args.caller = dl_caller;
 
-  return _dlerror_run (dlopen_doit, &args) ? NULL : args.new;
+  // return _dlerror_run (dlopen_doit, &args) ? NULL : args.new;
+  return __lind_dlopen(file);
 }
 
 #ifdef SHARED

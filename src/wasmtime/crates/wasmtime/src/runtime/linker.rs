@@ -1,12 +1,14 @@
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::StoreOpaque;
-use crate::{prelude::*, IntoFunc};
+use crate::{Global, GlobalType, IntoFunc, Table, prelude::*};
 use crate::{
     AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
 };
 use alloc::sync::Arc;
+use cage::DashMap;
+use wasmtime_lind_utils::LindGOT;
 use core::fmt;
 #[cfg(feature = "async")]
 use core::future::Future;
@@ -242,9 +244,84 @@ impl<T> Linker<T> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] Warning: link undefined symbol \"{}\" to trap", import.name());
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
                     })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Define unresolved *weak* function imports as trap stubs.
+    ///
+    /// ELF semantics: an undefined weak reference resolves to NULL/0 instead of
+    /// causing a link error. Many native programs rely on this to probe optional
+    /// features via `if (sym) { ... }`.
+    ///
+    pub fn define_weak_imports_as_traps(&mut self, module: &Module) -> anyhow::Result<()> {
+        // for weak symbols, it should be resolved to NULL if it is not defined by any module
+        // in wasm, we will instead link these symbols into a panic function
+        let weak_imports = module.dylink_importinfo();
+        if weak_imports.is_none() {
+            return Ok(());
+        }
+        let weak_imports = weak_imports.unwrap();
+        for import in module.imports() {
+            // Only synthesize a trap stub for weak symbols that are NOT already defined
+            // in the linker/environment.
+            if let Err(import_err) = self._get_by_import(&import) {
+                if let ExternType::Func(func_ty) = import_err.ty() {
+                    // check if the undefined symbol is listed as a weak symbol
+                    if !weak_imports.is_weak_symbol(import.module(), import.name()) {
+                        continue;
+                    }
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] define weak symbol {}.{} into trap", import.module(), import.name());
+                    self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
+                        bail!(import_err.clone());
+                    })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// redirect all GOT functions/symbols into a centralized dispatcher function
+    /// 
+    /// We create mutable global "slots" as placeholders for GOT entries so they can be
+    /// patched after instantiation (once exports and relocation targets are known).
+    /// This enables dynamic updates of symbol addresses/indices without re-instantiating
+    /// the module.
+    pub fn define_GOT_dispatcher(&mut self, mut store: impl AsContextMut<Data = T>, module: &Module, got: &mut LindGOT) -> anyhow::Result<()> {
+        for import in module.imports() {
+            if let Err(import_err) = self._get_by_import(&import) {
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug]: define_GOT_dispatcher: import module: {}, name: {}", import.module(), import.name());
+                if import.module() == "GOT.func" || import.module() == "GOT.mem" {
+                    // ASSUMPTION: all GOT imports are represented as `mut i32` globals.
+                    // If the module's import type does not match this representation,
+                    // `Global::new` / linking will fail (currently via unwrap/panic).
+
+                    // Create a mutable global slot initialized to 0 as a GOT placeholder.
+                    //
+                    // Rationale:
+                    // - Some GOT entries are resolved only after instantiation, since
+                    //   the module's exports become available only once instantiation
+                    //   completes and initialization runs.
+                    // - By linking imports to placeholder globals, we allow the instance
+                    //   to instantiate successfully, then patch the globals to the final
+                    //   resolved values (e.g., function indices or memory addresses)
+                    //   during/after relocation.
+                    let got_placeholder = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Var), Val::I32(0)).unwrap();
+                    self.define(&mut store, import.module(), import.name(), got_placeholder);
+
+                    // Record the backing address of the placeholder slot in LindGOT so
+                    // the dynamic loader can update it later when the symbol is resolved.
+                    let handler = got_placeholder.get_handler_as_u32(&mut store);
+                    got.new_entry(import.name().to_string(), handler);
                 }
             }
         }
@@ -794,6 +871,9 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module_name: &str,
         module: &Module,
+        table: &mut Table,
+        table_base: i32,
+        got: &LindGOT,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -840,7 +920,41 @@ impl<T> Linker<T> {
                 )
             }
             ModuleKind::Reactor => {
-                let instance = self.instantiate(&mut store, &module)?;
+                // We clone the linker to instantiate the library with instance-specific globals.
+                // `__memory_base` and `__table_base` are specific to each library instance,
+                // so we create a cloned linker, override these two globals in the clone,
+                // and then instantiate the library using that cloned linker.
+                //
+                // `allow_shadowing(true)` permits redefining these globals in the cloned
+                // linker without affecting the original linker state.
+                self.allow_shadowing(true);
+
+                // Create a placeholder for `__memory_base` for library instantiation.
+                //
+                // In Lind, the final linear-memory base address is only known after the
+                // main module's shared memory is created and `vmmap` is initialized.
+                // We therefore link a dummy `__memory_base` global (initialized to 0)
+                // and pass its backing slot (`handler`) into `InstantiateLib`, so
+                // `instantiate_with_lind` can patch the global once the real base is known.
+                let mut module_linker = self.clone();
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
+                module_linker.define(&mut store, "env", "__memory_base", memory_base);
+                let handler = memory_base.get_handler_as_u32(&mut store);
+
+                // Provide `__table_base` for the library (used by indirect calls / table relocs).
+                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base)).unwrap();
+                module_linker.define(&mut store, "env", "__table_base", table_base);
+
+                // Resolve any remaining unknown imports to trap stubs so the library can
+                // instantiate even when it has optional/unused imports.
+                module_linker.define_unknown_imports_as_traps(module);
+
+                // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
+                // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
+                let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
+
+                // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
+                let memory_base = unsafe { *handler };
 
                 if let Some(export) = instance.get_export(&mut store, "_initialize") {
                     if let Extern::Func(func) = export {
@@ -850,7 +964,211 @@ impl<T> Linker<T> {
                     }
                 }
 
+                // Collect exports first to avoid mutating the store/linker while iterating exports.
+                // We split funcs and globals because they are relocated differently.
+                let mut funcs = vec![];
+                let mut globals = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    match export.into_extern() {
+                        Extern::Func(func) => {
+                            funcs.push((name, func));
+                        },
+                        Extern::Global(global) => {
+                            globals.push((name, global));
+                        },
+                        _ => {}
+                    }
+                }
+
+                // Patch GOT function entries with the runtime table index of each exported function.
+                // We only update slots that are still unresolved to preserve first-definition-wins
+                // semantics (load-order precedence / interposition).
+                for (name, func) in funcs {
+                    let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                    if got.update_entry_if_unresolved(&name, index) {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] update GOT.func.{} to {}", name, index);
+                    }
+                }
+
+                // Patch GOT memory entries for exported globals.
+                // The exported global value is treated as a module-relative offset; we relocate it by
+                // adding the resolved shared-memory base, producing an absolute address in Lind.
+                // Again, only update unresolved slots to preserve load-order precedence.
+                for (name, global) in globals {
+                    let val = global.get(&mut store);
+                    // relocate the variable
+                    let val = val.i32().unwrap() as u32 + memory_base;
+                    if got.update_entry_if_unresolved(&name, val) {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] update GOT.mem.{} to {}", name, val);
+                    }
+                }
+
+                // If the module has a start function, run it (Wasm start semantics).
+                if let Some(start) = module.compiled_module().module().start_func {
+                    instance.start_raw(&mut store.as_context_mut(), start)?;
+                }
+
+                // Apply data relocations emitted by the toolchain after exports/GOT have been patched.
+                // This populates relocated pointers/data segments inside the library's memory.
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library start reloc func");
+                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                // Apply TLS relocations if present.
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] library start __wasm_apply_tls_relocs");
+                    let _ = init.call(store.as_context_mut(), ()).unwrap();
+                }
+
                 self.instance(store, module_name, instance)
+            }
+        }
+    }
+
+
+    pub fn module_dyn(
+        &mut self,
+        mut store: &mut crate::Caller<T>,
+        module_name: &str,
+        module: &Module,
+        table_base: i32,
+        got: &LindGOT,
+    ) -> Result<u64>
+    where
+        T: 'static,
+    {
+        // NB: this is intended to function the same as `Linker::module_async`,
+        // they should be kept in sync.
+
+        // This assert isn't strictly necessary since it'll bottom out in the
+        // `HostFunc::to_func` method anyway. This is placed earlier for this
+        // function though to prevent the functions created here from delaying
+        // the panic until they're called.
+        assert!(
+            Engine::same(&self.engine, store.as_context().engine()),
+            "different engines for this linker and the store provided"
+        );
+        match ModuleKind::categorize(module)? {
+            ModuleKind::Command => {
+                unreachable!();
+            }
+            ModuleKind::Reactor => {
+                println!("[debug] link a reactor module");
+
+                self.allow_shadowing(true);
+
+                // placeholder for memory base, initialized into 0, will be replaced once vmmap for main module
+                // is initialized
+                let mut module_linker = self.clone();
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
+                module_linker.define(&mut store, "env", "__memory_base", memory_base);
+                let handler = memory_base.get_handler_as_u32(&mut store);
+                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base)).unwrap();
+                module_linker.define(&mut store, "env", "__table_base", table_base);
+
+                // TODO: temporarily direct unknown imports into traps
+                module_linker.define_unknown_imports_as_traps(module);
+
+                println!("[debug] library instantiate");
+                let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
+
+                let memory_base = unsafe { *handler };
+                println!("[debug] after instantiate_with_lind, memory_base: {}", memory_base);
+
+                if let Some(export) = instance.get_export(&mut store, "_initialize") {
+                    if let Extern::Func(func) = export {
+                        func.typed::<(), ()>(&store)
+                            .and_then(|f| f.call(&mut store, ()).map_err(Into::into))
+                            .context("calling the Reactor initialization function")?;
+                    }
+                }
+
+                let mut funcs = vec![];
+                let mut globals = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    match export.into_extern() {
+                        Extern::Func(func) => {
+                            funcs.push((name, func));
+                        },
+                        Extern::Global(global) => {
+                            globals.push((name, global));
+                        },
+                        _ => {}
+                    }
+                }
+
+                let mut symbol_mapping = DashMap::<String, u32>::new();
+
+                for (name, func) in funcs {
+                    // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
+                    let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)));
+                    // append the symbol into mappings
+                    symbol_mapping.insert(name.clone(), index);
+                    println!("[debug] add func {} to table with index {}", name, index);
+                    // let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                    if got.update_entry_if_exist(&name, index) {
+                        println!("[debug] update GOT.func.{} to {}", name, index);
+                    }
+                }
+                for (name, global) in globals {
+                    // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
+                    let val = global.get(&mut store);
+                    // relocate the variable
+                    let val = val.i32().unwrap() as u32 + memory_base;
+                    // append the symbol into mappings
+                    symbol_mapping.insert(name.clone(), val);
+                    if got.update_entry_if_exist(&name, val) {
+                        println!("[debug] update GOT.mem.{} to {}", name, val);
+                    }
+                }
+
+                let handle = store.push_library_symbols(&symbol_mapping).unwrap() as u64;
+
+                // if let Some(export) = instance.get_export(&mut store, "lib_function") {
+                //     if let Extern::Func(func) = export {
+                //         // println!("[debug] export lib_function: index: {}",);
+                //         let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                //         println!("[debug] update GOT lib_function to {}", index);
+                //         got.update_entry_if_exist("lib_function", index);
+                //     }
+                // }
+                // if let Some(export) = instance.get_export(&mut store, "data") {
+                //     if let Extern::Global(global) = export {
+                //         let val = global.get(&mut store);
+                //         let val = val.i32().unwrap() as u32 + memory_base;
+                //         println!("[debug] update GOT.data to {}", val);
+                //         got.update_entry_if_exist("data", val);
+                //     }
+                // }
+                // self.allow_shadowing(false);
+
+                if let Some(start) = module.compiled_module().module().start_func {
+                    println!("[debug] start func library");
+                    instance.start_raw(&mut store.as_context_mut(), start)?;
+                }
+
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                println!("[debug] library start reloc func");
+                let res = reloc.call(store.as_context_mut(), ());
+                println!("[debug] library reloc result: {:?}", res);
+
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    println!("[debug] library start __wasm_apply_tls_relocs");
+                    let res = init.call(store.as_context_mut(), ());
+                    println!("[debug] library __wasm_apply_tls_relocs result: {:?}", res);
+                }
+
+
+                println!("[debug] library instance");
+                self.instance(store, module_name, instance);
+
+                Ok(handle)
             }
         }
     }
@@ -1040,6 +1358,15 @@ impl<T> Linker<T> {
                 bail!("import of `{}` defined twice", desc)
             }
             Entry::Occupied(mut o) => {
+                #[cfg(feature = "debug-dylink")]
+                {
+                    let module = &self.strings[key.module];
+                    let desc = match self.strings.get(key.name) {
+                        Some(name) => format!("{}::{}", module, name),
+                        None => module.to_string(),
+                    };
+                    println!("[debug]: warning: {:?} definition overwrite", desc);
+                }
                 o.insert(item);
             }
             Entry::Vacant(v) => {

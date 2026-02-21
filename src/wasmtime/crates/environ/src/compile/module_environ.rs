@@ -769,6 +769,43 @@ and for re-adding support for interface types you can see this issue:
                     log::warn!("failed to parse name section {:?}", e);
                 }
             }
+            KnownCustom::Dylink0(dylinks) => {
+                for subsection in dylinks {
+                    let subsection = subsection.unwrap();
+                    match subsection {
+                        wasmparser::Dylink0Subsection::MemInfo(meminfo) => {
+                            self.result.module.dylink_mem_info.insert(crate::DylinkMemInfo {
+                                memory_size: meminfo.memory_size,
+                                memory_alignment: meminfo.memory_alignment,
+                                table_size: meminfo.table_size,
+                                table_alignment: meminfo.table_alignment
+                            });
+                        },
+                        wasmparser::Dylink0Subsection::Needed(needed) => {
+                            eprintln!("Warning: Dylink.0 Needed Section not handled");
+                        },
+                        wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
+                            eprintln!("Warning: Dylink.0 Export Section not handled");
+                        },
+                        wasmparser::Dylink0Subsection::ImportInfo(importinfo) => {
+                            let mut imports = vec![];
+                            for import in importinfo {
+                                imports.push(crate::DylinkImport {
+                                    module: import.module.to_owned(),
+                                    field: import.field.to_owned(),
+                                    flags: 0 // TODO: we assume the flag is always BINDING_WEAK for now
+                                });
+                            }
+                            self.result.module.dylink_import_info.insert(crate::DylinkImportInfo {
+                                imports: imports
+                            });
+                        },
+                        wasmparser::Dylink0Subsection::Unknown { ty, data, range } => {
+                            panic!("Dylink.0 Unknown Section Encountered!");
+                        },
+                    }
+                }
+            }
             _ => {
                 let name = section.name().trim_end_matches(".dwo");
                 if name.starts_with(".debug_") {
