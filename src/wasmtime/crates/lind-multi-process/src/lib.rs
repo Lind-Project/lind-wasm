@@ -963,7 +963,6 @@ impl<
     // actual exit syscall that would kill other threads is not supported yet
     // TODO: exit_call should be switched to epoch interrupt method later
     pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, is_last_thread: u64) {
-        eprintln!("[exit_call] cage={} code={} is_last_thread={}", self.cageid, code, is_last_thread);
         if is_last_thread == 1 {
             // Clean up the context from the global table
             // If not last thread, cleanup will be handled after each call.

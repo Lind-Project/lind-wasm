@@ -1509,6 +1509,12 @@ impl InstanceHandle {
         allocator::initialize_instance(self.instance_mut(), module, is_bulk_memory)
     }
 
+    /// Lind-WASM: initialize only tables, skipping memory data segments.
+    /// Used for thread creation where the new instance shares existing linear memory.
+    pub fn initialize_tables_only(&mut self, module: &Module, is_bulk_memory: bool) -> Result<()> {
+        allocator::initialize_instance_tables_only(self.instance_mut(), module, is_bulk_memory)
+    }
+
     /// Attempts to convert from the host `addr` specified to a WebAssembly
     /// based address recorded in `WasmFault`.
     ///

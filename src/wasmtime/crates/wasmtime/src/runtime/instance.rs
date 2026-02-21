@@ -247,7 +247,8 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
     ) -> Result<(Instance, InstanceId)> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+        let (instance, start, instanceid) =
+            Instance::new_raw_skip_memory_init(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
@@ -496,6 +497,67 @@ impl Instance {
         // those items are loaded and run we'll have all the metadata to
         // look at them.
         instance_handle.initialize(
+            compiled_module.module(),
+            store
+                .engine()
+                .config()
+                .features
+                .contains(WasmFeatures::BULK_MEMORY),
+        )?;
+
+        Ok((instance, compiled_module.module().start_func, id))
+    }
+
+    /// Lind-WASM: like `new_raw` but only initializes tables, not memory.
+    ///
+    /// When creating a new WASM instance for a thread within an existing cage,
+    /// the thread shares the parent's linear memory. Re-applying data segment
+    /// initializers would overwrite runtime state (e.g. `__lind_cageid`) back
+    /// to compile-time values, causing 3i handler-table panics and deadlocks.
+    unsafe fn new_raw_skip_memory_init(
+        store: &mut StoreOpaque,
+        module: &Module,
+        imports: Imports<'_>,
+    ) -> Result<(Instance, Option<FuncIndex>, InstanceId)> {
+        if !Engine::same(store.engine(), module.engine()) {
+            bail!("cross-`Engine` instantiation is not currently supported");
+        }
+        store.bump_resource_counts(module)?;
+
+        let _ = store.gc_store_mut()?;
+
+        let compiled_module = module.compiled_module();
+
+        let module_id = store.modules_mut().register_module(module);
+        store.fill_func_refs();
+
+        let instance_to_be = store.store_data().next_id::<InstanceData>();
+
+        let mut instance_handle =
+            store
+                .engine()
+                .allocator()
+                .allocate_module(InstanceAllocationRequest {
+                    runtime_info: &ModuleRuntimeInfo::Module(module.clone()),
+                    imports,
+                    host_state: Box::new(Instance(instance_to_be)),
+                    store: StorePtr::new(store.traitobj()),
+                    wmemcheck: store.engine().config().wmemcheck,
+                    pkey: store.get_pkey(),
+                })?;
+
+        let id = store.add_instance(instance_handle.clone(), module_id);
+
+        let instance = {
+            let exports = vec![None; compiled_module.module().exports.len()];
+            let data = InstanceData { id, exports };
+            Instance::from_wasmtime(data, store)
+        };
+
+        assert_eq!(instance.0, instance_to_be);
+
+        // Only initialize tables, skip memory data segments
+        instance_handle.initialize_tables_only(
             compiled_module.module(),
             store
                 .engine()

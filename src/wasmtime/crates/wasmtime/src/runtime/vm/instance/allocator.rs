@@ -792,6 +792,29 @@ pub(super) fn initialize_instance(
     Ok(())
 }
 
+/// Lind-WASM: initialize only tables, skipping memory initialization.
+///
+/// When spawning a new thread within an existing cage, the thread shares the
+/// parent's linear memory. Re-running data segment initializers would overwrite
+/// globals like `__lind_cageid` back to their compile-time values (typically 0),
+/// causing 3i handler-table panics ("cage 0 not found") and cascading deadlocks.
+///
+/// This function performs the same table initialization as `initialize_instance`
+/// but intentionally omits `initialize_memories`.
+pub(super) fn initialize_instance_tables_only(
+    instance: &mut Instance,
+    module: &Module,
+    is_bulk_memory: bool,
+) -> Result<()> {
+    if !is_bulk_memory {
+        check_table_init_bounds(instance, module)?;
+    }
+
+    initialize_tables(instance, module)?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

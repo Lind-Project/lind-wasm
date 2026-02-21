@@ -350,7 +350,6 @@ pub extern "C" fn exit_syscall(
     //
     // `lind_thread_exit` returns true if this thread was the last
     // remaining thread of the cage.
-    eprintln!("[exit_syscall] cage={} tid={} entering lind_thread_exit", selfcageid, tid);
     if cage::lind_thread_exit(selfcageid, tid) {
         // Need to perform cage-level resource cleanup
         is_last_thread = 1;
@@ -392,8 +391,6 @@ pub extern "C" fn exit_syscall(
             remove_cage(selfcageid);
         }
     }
-
-    eprintln!("[exit_syscall] cage={} tid={} is_last_thread={}", selfcageid, tid, is_last_thread);
 
     // Call wasmtime
     // See comments in wasmtime/lind-multi-process
