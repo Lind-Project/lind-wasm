@@ -24,6 +24,16 @@
 #include "exit.h"
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
+
+static void __lind_debug_write(const char *msg) {
+	/* Raw write to stderr (fd 2) bypassing stdio, for exit debugging */
+	int len = 0;
+	while (msg[len]) len++;
+	MAKE_LEGACY_SYSCALL(WRITE_SYSCALL, "syscall|write", 2,
+		TRANSLATE_GUEST_POINTER_TO_HOST((uint64_t)msg), (uint64_t)len,
+		NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+}
 
 void __lind_exit(int status) {
 	MAKE_LEGACY_SYSCALL(EXIT_SYSCALL, "syscall|exit", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
@@ -59,10 +69,13 @@ attribute_hidden
 __run_exit_handlers (int status, struct exit_function_list **listp,
 		     bool run_list_atexit, bool run_dtors)
 {
+  __lind_debug_write("[exit] entering __run_exit_handlers\n");
+
   /* First, call the TLS destructors.  */
   if (run_dtors)
     call_function_static_weak (__call_tls_dtors);
 
+  __lind_debug_write("[exit] TLS dtors done, acquiring lock\n");
   __libc_lock_lock (__exit_funcs_lock);
 
   /* We do it this way to handle recursive calls to exit () made by
@@ -148,9 +161,11 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
 
   __libc_lock_unlock (__exit_funcs_lock);
 
+  __lind_debug_write("[exit] atexit handlers done, calling _IO_cleanup\n");
   if (run_list_atexit)
     call_function_static_weak (_IO_cleanup);
 
+  __lind_debug_write("[exit] _IO_cleanup done, calling _exit\n");
 	_exit(status);
 }
 
@@ -158,6 +173,7 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
 void
 exit (int status)
 {
+  __lind_debug_write("[exit] exit() called\n");
   __run_exit_handlers (status, &__exit_funcs, true, true);
 }
 libc_hidden_def (exit)
