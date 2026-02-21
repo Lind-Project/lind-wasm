@@ -502,6 +502,65 @@ pub struct Module {
 
     /// WebAssembly global initializers for locally-defined globals.
     pub global_initializers: PrimaryMap<DefinedGlobalIndex, ConstExpr>,
+
+    /// dylink memory information
+    pub dylink_mem_info: Option<DylinkMemInfo>,
+
+    /// dylink import information
+    pub dylink_import_info: Option<DylinkImportInfo>
+}
+
+
+/// lind-wasm addition: dylink memory information
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DylinkMemInfo {
+    /// Size of the memory area the loader should reserve for the module, which
+    /// will begin at `env.__memory_base`.
+    pub memory_size: u32,
+
+    /// The required alignment of the memory area, in bytes, encoded as a power
+    /// of 2.
+    pub memory_alignment: u32,
+
+    /// Size of the table area the loader should reserve for the module, which
+    /// will begin at `env.__table_base`.
+    pub table_size: u32,
+
+    /// The required alignment of the table area, in elements, encoded as a
+    /// power of 2.
+    pub table_alignment: u32,
+}
+
+/// lind-wasm addition: dylink import information
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DylinkImport {
+    /// module name of the import
+    pub module: String,
+    /// field name of the import
+    pub field: String,
+    /// flags associated with the import
+    pub flags: i32,
+}
+
+/// lind-wasm addition: dylink import information
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DylinkImportInfo {
+    /// import info consist of a list of imports
+    pub imports: Vec<DylinkImport>
+}
+
+impl DylinkImportInfo {
+    /// check if the symbol is listed as a weak import
+    pub fn is_weak_symbol(&self, module: &str, field: &str) -> bool {
+        // TODO: doing linear search here is slow
+        for import in &self.imports {
+            if import.module == module && import.field == field {
+                // TODO: should check flag here
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 /// Initialization routines for creating an instance, encompassing imports,

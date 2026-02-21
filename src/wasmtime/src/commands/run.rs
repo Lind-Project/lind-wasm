@@ -6,6 +6,7 @@
 )]
 
 use cfg_if::cfg_if;
+use sysdefs::constants::LIND_ROOT;
 
 use crate::common::{Profile, RunCommon, RunTarget};
 
@@ -19,17 +20,17 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{
-    AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
+    AsContextMut, Engine, ExternType, Func, Global, GlobalType, InstantiateType, Module, RefType, Store, StoreLimits, Table, TableType, Val, ValType
 };
 
 use wasmtime::{Caller, Instance};
 
-use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
+use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, LindHost, THREAD_START_ID, get_memory_base};
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_3i::{get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx, VmCtxWrapper};
-use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 use core::ffi::c_void;
@@ -198,6 +199,7 @@ pub struct RunCommand {
     pub module_and_args: Vec<OsString>,
 }
 
+#[derive(Clone)]
 enum CliLinker {
     Core(wasmtime::Linker<Host>),
     #[cfg(feature = "component-model")]
@@ -226,7 +228,7 @@ impl RunCommand {
         }
 
         let engine = Engine::new(&config)?;
-
+        
         // Read the wasm module binary either as `*.wat` or a raw binary.
         let main = self
             .run
@@ -261,51 +263,8 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), None)?;
+        let mut lind_got = Arc::new(Mutex::new(LindGOT::new()));
 
-        store.data_mut().limits = self.run.store_limits();
-        store.limiter(|t| &mut t.limits);
-
-        // If fuel has been configured, we want to add the configured
-        // fuel amount to this store.
-        if let Some(fuel) = self.run.common.wasm.fuel {
-            store.set_fuel(fuel)?;
-        }
-
-        // Load the preload wasm modules.
-        let mut modules = Vec::new();
-        if let RunTarget::Core(m) = &main {
-            modules.push((String::new(), m.clone()));
-        }
-        for (name, path) in self.preloads.iter() {
-            // Read the wasm module binary either as `*.wat` or a raw binary
-            let module = match self.run.load_module(&engine, path)? {
-                RunTarget::Core(m) => m,
-                #[cfg(feature = "component-model")]
-                RunTarget::Component(_) => bail!("components cannot be loaded with `--preload`"),
-            };
-            modules.push((name.clone(), module.clone()));
-
-            // Add the module's functions to the linker.
-            match &mut linker {
-                #[cfg(feature = "cranelift")]
-                CliLinker::Core(linker) => {
-                    linker.module(&mut store, name, &module).context(format!(
-                        "failed to process preload `{}` at `{}`",
-                        name,
-                        path.display()
-                    ))?;
-                }
-                #[cfg(not(feature = "cranelift"))]
-                CliLinker::Core(_) => {
-                    bail!("support for --preload disabled at compile time");
-                }
-                #[cfg(feature = "component-model")]
-                CliLinker::Component(_) => {
-                    bail!("--preload cannot be used with components");
-                }
-            }
-        }
 
         // Initialize Lind here
         rawposix_start(0);
@@ -320,6 +279,264 @@ impl RunCommand {
             threei_const::RUNTIME_TYPE_WASMTIME,
             grate_callback_trampoline,
         );
+
+        // We explicitly manage the indirect function table and memory layout
+        // for each Wasm module instead of relying on default Wasmtime behavior.
+        // This allows Lind to control table growth, stack placement, and relocation.
+        let mut linker = Arc::new(Mutex::new(linker));
+        let mut table;
+        {
+            let mut guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *guard {
+                // Determine the minimal table size required by the main module
+                // from its table import declaration.
+                let mut main_module_table_size = None;
+                let memory_size;
+                match &main {
+                    RunTarget::Core(module) => {
+                        // Extract table minimum size from imports.
+                        for import in module.imports() {
+                            if let ExternType::Table(table) = import.ty() {
+                                main_module_table_size = Some(table.minimum());
+                            }
+                        }
+
+                        // Memory size and alignment are encoded in the dylink section.
+                        let dylink_info = module.dylink_meminfo();
+                        let dylink_info = dylink_info.as_ref().unwrap();
+
+                        let size = dylink_info.memory_size;
+                        let mut align = {
+                            // Enforce minimal alignment requirement for Lind:
+                            // at least 8 bytes (2^3).
+                            if dylink_info.memory_alignment < 3 { 3 }
+                            else { dylink_info.memory_alignment }
+                        };
+                        // round up memory size to align
+                        align = (1 << align) - 1;
+                        memory_size = (size + align) & !align;
+                    }
+                    #[cfg(feature = "component-model")]
+                    RunTarget::Component(_) => {
+                        panic!("component model not supported")
+                    }
+                };
+                let main_module_table_size = main_module_table_size.unwrap();
+
+                // Allocate the main module's indirect function table with
+                // the minimal required size.
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] main module table size: {}", main_module_table_size);
+                let ty = TableType::new(RefType::FUNCREF, main_module_table_size, None);
+                table = Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap();
+                linker.define(&mut store, "env", "__indirect_function_table", table);
+
+                // calculate the stack address for main module
+                let stack_low_num = 1024; // reserve first 1024 bytes for guard page
+                let stack_high_num = stack_low_num + 8388608; // 8 MB of default stack size
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] main module stack pointer starts from {} to {}", stack_low_num, stack_high_num);
+                let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
+                let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
+                linker.define(&mut store, "GOT.mem", "__stack_low", stack_low);
+                linker.define(&mut store, "GOT.mem", "__stack_high", stack_high);
+
+                let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
+                linker.define(&mut store, "env", "__stack_pointer", stack_pointer);
+
+                // For the main module:
+                // - Table base starts at 0.
+                // - Memory base begins after the stack space (plus padding).
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(1024 + 8388608 + 1024)).unwrap();
+                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+                linker.define(&mut store, "env", "__memory_base", memory_base);
+                linker.define(&mut store, "env", "__table_base", table_base);
+
+                // Define placeholder globals for GOT imports so they can be
+                // patched during/after instantiation.
+                if let RunTarget::Core(module) = &main {
+                    let mut guard = lind_got.lock().unwrap();
+                    linker.define_GOT_dispatcher(&mut store, module, &mut *guard);
+                }
+
+            } else {
+                unreachable!()
+            }
+        }
+
+        {
+            let run_cmd = self.clone();
+            let cloned_linker = linker.clone();
+            let cloned_lind_got = lind_got.clone();
+
+            let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
+                let base = get_memory_base(&mut caller);
+                let path = typemap::get_cstr(base + lib as u64).unwrap();
+                println!("[debug] dlopen path \"{}\"", path);
+
+                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), cloned_lind_got.clone(), path) as i32
+            };
+
+            let cloned_lind_got = lind_got.clone();
+            let dlsym = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32, sym: i32| -> i32 {
+                let base = get_memory_base(&mut caller);
+                let symbol = typemap::get_cstr(base + sym as u64).unwrap();
+                println!("[debug] dlsym {}", symbol);
+                let lib_symbol = caller.get_library_symbols((handle - 1) as usize).unwrap();
+                let val = *lib_symbol.get(&String::from(symbol)).unwrap() as i32;
+                println!("[debug] dlsym resolves {} to {}", symbol, val);
+                val
+            };
+
+            let dlclose = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32| -> i32 {
+                println!("[debug] dlclose handle {}", handle);
+                // to do: implement dlclose
+                0
+            };
+
+            let mut guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *guard {
+                linker.func_wrap(
+                    "lind",
+                    "dlopen",
+                    dlopen,
+                ).unwrap();
+
+                linker.func_wrap(
+                    "lind",
+                    "dlsym",
+                    dlsym,
+                ).unwrap();
+
+                linker.func_wrap(
+                    "lind",
+                    "dlclose",
+                    dlclose,
+                ).unwrap();
+            }
+        }
+
+        println!("[debug] before wasi");
+        {
+            let mut guard = linker.lock().unwrap();
+            self.populate_with_wasi(
+                &mut *guard,
+                &mut store,
+                &main,
+                lind_manager.clone(),
+                None,
+            )?;
+        }
+        println!("[debug] after wasi");
+
+        store.data_mut().limits = self.run.store_limits();
+        store.limiter(|t| &mut t.limits);
+
+        // If fuel has been configured, we want to add the configured
+        // fuel amount to this store.
+        if let Some(fuel) = self.run.common.wasm.fuel {
+            store.set_fuel(fuel)?;
+        }
+
+        println!("[debug] preload dynamic modules");
+
+        // Load the preload wasm modules.
+        let mut modules = Vec::new();
+        if let RunTarget::Core(m) = &main {
+            modules.push((String::new(), m.clone()));
+        }
+        println!("[debug]: preload list: {:?}", self.preloads);
+        for (name, path) in self.preloads.iter() {
+            println!("[debug]: preload {}", name);
+            // Read the wasm module binary either as `*.wat` or a raw binary
+            let module = match self.run.load_module(&engine, path)? {
+                RunTarget::Core(m) => m,
+                #[cfg(feature = "component-model")]
+                RunTarget::Component(_) => bail!("components cannot be loaded with `--preload`"),
+            };
+            modules.push((name.clone(), module.clone()));
+        }
+
+        // For each additional module (excluding the main module),
+        // register its GOT imports with the shared LindGOT instance.
+        //
+        // This installs placeholder globals for unresolved GOT entries so that
+        // the library modules can be instantiated first and have their symbols
+        // patched later during relocation/export processing.
+        //
+        // We skip the first module because it is the main module, which was
+        // already processed earlier.
+        for (name, module) in modules.iter().skip(1) {
+            let mut linker_guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *linker_guard {
+                let mut got_guard = lind_got.lock().unwrap();
+                linker.define_GOT_dispatcher(&mut store, &module, &mut *got_guard);
+            }
+        }
+
+        // Add the module's functions to the linker.
+        for (name, module) in modules.iter().skip(1) {
+            let mut guard = linker.lock().unwrap();
+            match &mut *guard {
+                #[cfg(feature = "cranelift")]
+                CliLinker::Core(linker) => {
+                    // Read dylink metadata for this preloaded (library) module.
+                    // This contains the module's declared table/memory requirements.
+                    let dylink_info = module.dylink_meminfo();
+                    let dylink_info = dylink_info.as_ref().unwrap();
+                    // Append this library's function table region to the shared table.
+                    // `table_start` is the starting index of the library's reserved range
+                    // within the global indirect function table.
+                    let table_start = table.size(&mut store) as i32;
+
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] library table_start: {}, grow: {}", table_start, dylink_info.table_size);
+                    // Grow the shared indirect function table by the amount requested by the
+                    // library (as recorded in its dylink section). New slots are initialized
+                    // to null funcref.
+                    table.grow(&mut store, dylink_info.table_size, wasmtime::Ref::Func(None));
+
+                    // Link the library instance into the main linker namespace.
+                    // The linker records the module under `name` and uses `table_start`
+                    // to relocate/interpret the library's function references into the
+                    // shared table. GOT entries are patched through the shared LindGOT.
+                    {
+                        let mut guard = lind_got.lock().unwrap();
+                        linker.module(&mut store, &name, &module, &mut table, table_start, &*guard).context(format!(
+                            "failed to process preload `{}`",
+                            name,
+                        ))?;
+                    }
+                }
+                #[cfg(not(feature = "cranelift"))]
+                CliLinker::Core(_) => {
+                    bail!("support for --preload disabled at compile time");
+                }
+                #[cfg(feature = "component-model")]
+                CliLinker::Component(_) => {
+                    bail!("--preload cannot be used with components");
+                }
+            }
+        }
+
+        {
+            let mut guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *guard {
+                if let RunTarget::Core(module) = &main {
+                    // For now, treat any remaining unresolved imports in the main module as
+                    // trap stubs so instantiation can proceed (especially when some imports
+                    // are optional/unused).
+                    linker.define_unknown_imports_as_traps(module);
+                }
+            }
+        }
+
+        {
+            // Emit warnings for any GOT slots that remain unresolved after processing
+            // preloads and defining trap stubs.
+            let mut guard = lind_got.lock().unwrap();
+            guard.warning_undefined();
+        }
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
@@ -336,6 +553,7 @@ impl RunCommand {
                 &main,
                 modules,
                 CAGE_START_ID as u64,
+                lind_got,
             )
             .with_context(|| {
                 format!(
@@ -453,6 +671,7 @@ impl RunCommand {
         }
 
         let engine = Engine::new(&config)?;
+        let mut lind_got = LindGOT::new();
 
         // Read the wasm module binary either as `*.wat` or a raw binary.
         let main = self
@@ -522,11 +741,12 @@ impl RunCommand {
             match &mut linker {
                 #[cfg(feature = "cranelift")]
                 CliLinker::Core(linker) => {
-                    linker.module(&mut store, name, &module).context(format!(
-                        "failed to process preload `{}` at `{}`",
-                        name,
-                        path.display()
-                    ))?;
+                    unimplemented!()
+                    // linker.module(&mut store, name, &module).context(format!(
+                    //     "failed to process preload `{}` at `{}`",
+                    //     name,
+                    //     path.display()
+                    // ))?;
                 }
                 #[cfg(not(feature = "cranelift"))]
                 CliLinker::Core(_) => {
@@ -548,7 +768,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, cageid as u64)
+            self.load_main_module(&mut store, &mut Arc::new(Mutex::new(linker)), &main, modules, cageid as u64, Arc::new(Mutex::new(lind_got)))
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -687,42 +907,45 @@ impl RunCommand {
 
     fn load_main_module(
         &self,
-        store: &mut Store<Host>,
-        linker: &mut CliLinker,
+        mut store: &mut Store<Host>,
+        linker: &mut Arc<Mutex<CliLinker>>,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
         cageid: u64,
+        got: Arc<Mutex<LindGOT>>,
     ) -> Result<Vec<Val>> {
+        let mut guard = linker.lock().unwrap();
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
-        if self.run.common.wasm.unknown_imports_trap == Some(true) {
-            #[cfg(feature = "cranelift")]
-            match linker {
-                CliLinker::Core(linker) => {
-                    linker.define_unknown_imports_as_traps(module.unwrap_core())?;
-                }
-                _ => bail!("cannot use `--trap-unknown-imports` with components"),
-            }
-            #[cfg(not(feature = "cranelift"))]
-            bail!("support for `unknown-imports-trap` disabled at compile time");
-        }
+        // if self.run.common.wasm.unknown_imports_trap == Some(true) {
+        //     #[cfg(feature = "cranelift")]
+        //     match *guard {
+        //         CliLinker::Core(linker) => {
+        //             linker.define_unknown_imports_as_traps(module.unwrap_core())?;
+        //         }
+        //         _ => bail!("cannot use `--trap-unknown-imports` with components"),
+        //     }
+        //     #[cfg(not(feature = "cranelift"))]
+        //     bail!("support for `unknown-imports-trap` disabled at compile time");
+        // }
 
         // ...or as default values.
-        if self.run.common.wasm.unknown_imports_default == Some(true) {
-            #[cfg(feature = "cranelift")]
-            match linker {
-                CliLinker::Core(linker) => {
-                    linker.define_unknown_imports_as_default_values(module.unwrap_core())?;
-                }
-                _ => bail!("cannot use `--default-values-unknown-imports` with components"),
-            }
-            #[cfg(not(feature = "cranelift"))]
-            bail!("support for `unknown-imports-trap` disabled at compile time");
-        }
+        // if self.run.common.wasm.unknown_imports_default == Some(true) {
+        //     #[cfg(feature = "cranelift")]
+        //     match *guard {
+        //         CliLinker::Core(linker) => {
+        //             linker.define_unknown_imports_as_default_values(module.unwrap_core())?;
+        //         }
+        //         _ => bail!("cannot use `--default-values-unknown-imports` with components"),
+        //     }
+        //     #[cfg(not(feature = "cranelift"))]
+        //     bail!("support for `unknown-imports-trap` disabled at compile time");
+        // }
 
         let finish_epoch_handler = self.setup_epoch_handler(store, modules)?;
 
-        let result = match linker {
+        let guard_linker = guard.clone();
+        let result = match guard_linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
                 let (instance, cage_instanceid) = linker
@@ -735,6 +958,41 @@ impl RunCommand {
                         "failed to instantiate {:?}",
                         self.module_and_args[0]
                     ))?;
+                
+                drop(guard);
+                
+                // update GOT entries after main module is instantiated
+                // let mut funcs = vec![];
+                let mut globals = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    match export.into_extern() {
+                        // I don't think main module should update GOT functions? 
+                        // Extern::Func(func) => {
+                        //     funcs.push((name, func));
+                        // },
+                        wasmtime::Extern::Global(global) => {
+                            globals.push((name, global));
+                        },
+                        _ => {}
+                    }
+                }
+
+                // for (name, func) in funcs {
+                //     let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                //     if got.update_entry_if_exist(&name, index) {
+                //         println!("[debug] update GOT.func.{} to {}", name, index);
+                //     }
+                // }
+                for (name, global) in globals {
+                    let val = global.get(&mut store);
+                    // relocate the variable
+                    let val = val.i32().unwrap() as u32 + 0; // 0 stands for memory base for main module
+                    let mut guard = got.lock().unwrap();
+                    if (*guard).update_entry_if_exist(&name, val) {
+                        println!("[debug] main update GOT.mem.{} to {}", name, val);
+                    }
+                }
 
                 // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
@@ -813,8 +1071,10 @@ impl RunCommand {
                         .or_else(|| instance.get_func(&mut *store, "_start"))
                 };
 
-                let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
-                let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+                // let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
+                let stack_low = 0;
+                // let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+                let stack_pointer = 0;
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
@@ -826,13 +1086,14 @@ impl RunCommand {
                         let pointer = 0;
                     } else {
                         // retrieve the epoch global
-                        let lind_epoch = instance
-                            .get_export(&mut *store, "epoch")
-                            .and_then(|export| export.into_global())
-                            .expect("Failed to find epoch global export!");
+                        // let lind_epoch = instance
+                        //     .get_export(&mut *store, "epoch")
+                        //     .and_then(|export| export.into_global())
+                        //     .expect("Failed to find epoch global export!");
 
                         // retrieve the handler (underlying pointer) for the epoch global
-                        let pointer = lind_epoch.get_handler(&mut *store);
+                        // let pointer = lind_epoch.get_handler(&mut *store);
+                        let pointer = 0;
                     }
                 }
 
@@ -863,7 +1124,7 @@ impl RunCommand {
                 let command = wasmtime_wasi::bindings::sync::Command::instantiate(
                     &mut *store,
                     component,
-                    linker,
+                    &linker,
                 )?;
                 let result = command
                     .wasi_cli_run()
@@ -881,6 +1142,67 @@ impl RunCommand {
         };
         finish_epoch_handler(store);
         result
+    }
+
+    fn load_library_module(
+        &self,
+        mut main_module: &mut wasmtime::Caller<Host>,
+        mut main_linker: Arc<Mutex<CliLinker>>,
+        mut lind_got: Arc<Mutex<LindGOT>>,
+        library_name: &str,
+    ) -> i32 {
+        println!("[debug] load_library_module");
+
+        // use the same engine for the library
+        let engine = main_module.engine();
+        // let mut store = main_module.as_context_mut();
+
+        let base_path = Path::new(LIND_ROOT);
+        let library_path = Path::new(library_name);
+        let library_path = library_path.strip_prefix("/").unwrap_or(library_path);
+
+        let library_full_path = base_path.join(library_path);
+        let library_full_path_str = library_full_path.to_str().unwrap();
+        println!("[debug] base_path: {:?}, library_full_path: {:?}", base_path, library_full_path);
+
+        let library = self
+            .run
+            .load_module(&engine, Path::new(library_full_path_str)).unwrap();
+        let lib_module = match library {
+            RunTarget::Core(module) => module,
+            _ => { unreachable!() }
+        };
+        let dylink_info = lib_module.dylink_meminfo().unwrap();
+
+        let table_size = main_module.get_table_size();
+        main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None));
+        let table_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_size as i32)).unwrap();
+        let memory_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+
+        let handle;
+        {
+            let mut guard = main_linker.lock().unwrap();
+            match &mut *guard {
+                CliLinker::Core(linker) => {
+                    {
+                        let mut guard = lind_got.lock().unwrap();
+                        linker.define_GOT_dispatcher(&mut main_module, &lib_module, &mut *guard);
+                    }
+
+                    {
+                        let mut guard = lind_got.lock().unwrap();
+                        handle = linker.module_dyn(&mut main_module, library_full_path_str, &lib_module, table_size as i32, &*guard).context(format!(
+                            "failed to process library `{}`",
+                            library_full_path_str
+                        )).unwrap();
+                    }
+                },
+                _ => { unreachable!() }
+            }
+        }
+        println!("[debug] dlopen: handle={}", handle);
+
+        handle as i32
     }
 
     fn invoke_func(&self, store: &mut Store<Host>, func: Func) -> Result<Vec<Val>> {
@@ -974,6 +1296,7 @@ impl RunCommand {
         lind_manager: Arc<LindCageManager>,
         cageid: Option<i32>,
     ) -> Result<()> {
+        println!("[debug] populate wasi start");
         let mut cli = self.run.common.wasi.cli;
 
         // Accept -Scommon as a deprecated alias for -Scli.
@@ -989,6 +1312,7 @@ impl RunCommand {
             }
         }
 
+        println!("[debug] populate wasi preview 2");
         if cli != Some(false) {
             match linker {
                 CliLinker::Core(linker) => {
@@ -1029,6 +1353,7 @@ impl RunCommand {
             }
         }
 
+        println!("[debug] populate wasi wasinn");
         if self.run.common.wasi.nn == Some(true) {
             #[cfg(not(feature = "wasi-nn"))]
             {
@@ -1071,6 +1396,7 @@ impl RunCommand {
             }
         }
 
+        println!("[debug] populate wasi threads");
         if self.run.common.wasi.threads == Some(true) {
             #[cfg(not(feature = "wasi-threads"))]
             {
@@ -1134,6 +1460,7 @@ impl RunCommand {
             )?);
         }
 
+        println!("[debug]: wasi threads?");
         // must create wasi_threads context here, because pre_instance requires all
         // imports are fully imported/linked to be created
         if self.run.common.wasi.threads == Some(true) {
@@ -1142,10 +1469,11 @@ impl RunCommand {
                 _ => bail!("wasi-threads does not support components yet"),
             };
             let module = module.unwrap_core();
-            store.data_mut().wasi_threads = Some(Arc::new(WasiThreadsCtx::new(
-                module.clone(),
-                Arc::new(linker.clone()),
-            )?));
+            linker.define_weak_imports_as_traps(module)?;
+            // store.data_mut().wasi_threads = Some(Arc::new(WasiThreadsCtx::new(
+            //     module.clone(),
+            //     Arc::new(linker.clone()),
+            // )?));
         }
 
         if self.run.common.wasi.http == Some(true) {

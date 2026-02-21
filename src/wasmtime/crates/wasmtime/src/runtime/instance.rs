@@ -12,6 +12,8 @@ use crate::{
 };
 use alloc::sync::Arc;
 use cage::memory::{fork_vmmap, init_vmmap};
+use sysdefs::constants::PAGESIZE;
+use wasmtime_lind_utils::round_size;
 use core::ptr::NonNull;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
@@ -25,12 +27,26 @@ use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
 
+/// Describes how a Lind-Wasm instance is being instantiated.
+///
+/// - `InstantiateFirst`:
+///     The first (root) Wasm instance in a process.  
+///     Argument: the cageid associated with this instance.
+///
+/// - `InstantiateChild`:
+///     A child Wasm instance created via a fork-like operation.  
+///     Arguments:
+///       - `parent_pid`: the parent instance's cageid  
+///       - `child_pid`: the newly created child instance's cageid
+///
+/// - `InstantiateLib`:
+///     A dynamically loaded library Wasm instance.  
+///     Argument: a pointer to the underlying `memory_base`, which will be
+///     updated after `mmap` returns to reflect the actual linear memory base.
 pub enum InstantiateType {
     InstantiateFirst(u64),
-    InstantiateChild {
-        parent_cageid: u64,
-        child_cageid: u64,
-    },
+    InstantiateChild { parent_pid: u64, child_pid: u64 },
+    InstantiateLib(*mut u32),
 }
 
 /// An instantiated WebAssembly module.
@@ -280,10 +296,10 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
+
         // in wasmtime, one page is 65536 bytes, so we need to convert to host pagesize
         // 1. Get minimum bytes from Wasmtime’s own metadata.
         let min_bytes = plan
@@ -293,7 +309,14 @@ impl Instance {
 
         // 2. Convert bytes to pages.
         let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
-        let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
+        // let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
+        let minimal_pages = 2048 + 1; // stack size + guard page, reference to run.rs
+        let module_meminfo = module.dylink_meminfo().unwrap();
+        let module_rounded_size = round_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
+        let module_rounded_size = round_size(module_rounded_size, PAGESIZE);
+
+        #[cfg(feature = "debug-dylink")]
+        println!("[debug] module memory size round to {}", module_rounded_size);
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
@@ -313,11 +336,18 @@ impl Instance {
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
-                let handle = store.0.instance(InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let memory_base = defined_memory.base as usize;
+                let mut memory_iter = store.0.all_memories();
+                let memory = memory_iter.next().expect("no defined memory found").clone();
+                // assert!(memory_iter.next().is_none(), "multiple defined memory found");
+                drop(memory_iter);
+                let memory_base = memory.data_ptr(&mut *store) as usize;
 
-                init_vmmap(cageid, memory_base, Some(minimal_pages as u32));
+                let module_page = module_rounded_size >> PAGESHIFT;
+                // todo: heap guard page?
+                init_vmmap(cageid, memory_base, Some(minimal_pages as u32 + module_page));
+
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] main module allocate {} + {} bytes", module_rounded_size as u64, (minimal_pages << PAGESHIFT));
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
@@ -328,7 +358,7 @@ impl Instance {
                     cageid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     cageid,
-                    minimal_pages << PAGESHIFT, // size of first memory region
+                    module_rounded_size as u64 + (minimal_pages << PAGESHIFT),
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
                     cageid,
@@ -344,25 +374,105 @@ impl Instance {
             }
             // InstantiateChild: this is the child wasm instance forked by parent
             InstantiateType::InstantiateChild {
-                parent_cageid,
-                child_cageid,
+                parent_pid,
+                child_pid,
             } => {
                 // if this is a child, we do not need to specifically set up the first memory region
                 // since this should be taken care of when we fork the entire memory region from parent
                 // therefore in this case, we only need to:
                 // 1. set memory base address
                 // 2. fork the memory space from parent
-                let handle = store.0.instance(InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let child_address = defined_memory.base as usize;
+                let mut memory_iter = store.0.all_memories();
+                let memory = memory_iter.next().expect("no defined memory found").clone();
+                assert!(memory_iter.next().is_none(), "multiple defined memory found");
+                drop(memory_iter);
+                let child_address = memory.data_ptr(&mut *store) as usize;
 
-                init_vmmap(child_cageid, child_address, None);
-                fork_vmmap(parent_cageid as u64, child_cageid);
+                init_vmmap(child_pid, child_address, None);
+                fork_vmmap(parent_pid as u64, child_pid);
+            }
+            InstantiateType::InstantiateLib(memory_base) => {
+                let dylink_meminfo = module.dylink_meminfo().unwrap();
+
+                let rounded_size = round_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
+                let rounded_size = round_size(rounded_size, PAGESIZE);
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library size round to {}", rounded_size);
+
+                let mut addr = make_syscall(
+                    1,                   // self cageid
+                    (MMAP_SYSCALL) as u64, // syscall num
+                    0, // since wasmtime operates with lower level memory, it always interacts with underlying os
+                    1, // target cageid (should be same)
+                    0, // the first memory region starts from 0
+                    1,
+                    rounded_size as u64, // size of first memory region
+                    1,
+                    (PROT_READ | PROT_WRITE) as u64,
+                    1,
+                    (MAP_PRIVATE | MAP_ANONYMOUS) as u64,
+                    1,
+                    // we need to pass -1 here, but since make_syscall only accepts u64
+                    // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+                    (0 - 1) as u64,
+                    1,
+                    0,
+                    1,
+                ) as u32;
+
+                // update the address
+                unsafe {
+                    *memory_base = addr;
+                }
+                
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library memory starts at {}", addr);
             }
         }
+        
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
-        if let Some(start) = start {
-            instance.start_raw(store, start)?;
+        match instantiate_type {
+            InstantiateType::InstantiateFirst(_) => {
+                if let Some(start) = start {
+                    instance.start_raw(store, start)?;
+                }
+
+                // apply data relocations
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] main module start reloc func");
+                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                // apply tls relocations if any
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] main module start __wasm_apply_tls_relocs");
+                    let _ = init.call(store.as_context_mut(), ()).unwrap();
+                }
+            },
+            InstantiateType::InstantiateChild{parent_pid, child_pid} => {
+                if let Some(start) = start {
+                    instance.start_raw(store, start)?;
+                }
+
+                // apply data relocations
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] child start reloc func");
+                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                // apply tls relocations if any
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] child module start __wasm_apply_tls_relocs");
+                    let _ = init.call(store.as_context_mut(), ()).unwrap();
+                }
+            },
+            InstantiateType::InstantiateLib(_) => {
+                // for library instance, we have to update the GOT entries before relocation happens
+                // so relocation is moved to linker.rs
+            }
         }
 
         Ok((instance, instanceid))
@@ -511,7 +621,7 @@ impl Instance {
         Instance(store.store_data_mut().insert(handle))
     }
 
-    fn start_raw<T>(&self, store: &mut StoreContextMut<'_, T>, start: FuncIndex) -> Result<()> {
+    pub fn start_raw<T>(&self, store: &mut StoreContextMut<'_, T>, start: FuncIndex) -> Result<()> {
         let id = store.0.store_data()[self.0].id;
         // If a start function is present, invoke it. Make sure we use all the
         // trap-handling configuration in `store` as well.

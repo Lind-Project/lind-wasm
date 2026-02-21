@@ -348,8 +348,8 @@ impl<
                         .instantiate_with_lind(
                             &mut store,
                             InstantiateType::InstantiateChild {
-                                parent_cageid: parent_cageid as u64,
-                                child_cageid: child_cageid,
+                                parent_pid: parent_cageid as u64,
+                                child_pid: child_cageid,
                             },
                         )
                         .unwrap();
@@ -368,7 +368,7 @@ impl<
                                 .expect("Failed to find epoch global export!");
 
                             // retrieve the handler (underlying pointer) for the epoch global
-                            let pointer = lind_epoch.get_handler(&mut store);
+                            let pointer = lind_epoch.get_handler_as_u64(&mut store);
                         }
                     }
 
@@ -673,7 +673,7 @@ impl<
                                 .expect("Failed to find epoch global export!");
 
                             // retrieve the handler (underlying pointer) for the epoch global
-                            let pointer = lind_epoch.get_handler(&mut store);
+                            let pointer = lind_epoch.get_handler_as_u64(&mut store);
                         }
                     }
 
@@ -977,9 +977,7 @@ impl<
             self.lind_manager.decrement();
         }
         // get the base address of the memory
-        let handle = caller.as_context().0.instance(InstanceId::from_index(0));
-        let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
-        let address = defined_memory.base;
+        let address = get_memory_base(&mut caller) as *mut u8;
 
         // get the wasm stack top address
         let parent_stack_low_usr = caller.as_context().get_stack_top();
@@ -1266,11 +1264,14 @@ impl<
 
 // get the base address of the wasm process
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
-    caller: &Caller<'_, T>,
+    mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    let handle = caller.as_context().0.instance(InstanceId::from_index(0));
-    let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
-    defined_memory.base as u64
+    let mut memory_iter = caller.as_context_mut().0.all_memories();
+    let memory = memory_iter.next().expect("no defined memory found").clone();
+    // assert!(memory_iter.next().is_none(), "multiple defined memory found");
+    drop(memory_iter);
+
+    memory.data_ptr(caller.as_context()) as usize as u64
 }
 
 // entry point of fork syscall

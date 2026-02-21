@@ -21,6 +21,11 @@
 #include <shlib-compat.h>
 #include <stddef.h>
 
+int __lind_dlsym(void* handle, char* symbol) __attribute__((
+    __import_module__("lind"),
+    __import_name__("dlsym")
+));
+
 struct dlsym_args
 {
   /* The arguments to dlsym_doit.  */
@@ -49,13 +54,14 @@ dlsym_implementation (void *handle, const char *name, void *dl_caller)
   args.name = name;
 
   /* Protect against concurrent loads and unloads.  */
-  __rtld_lock_lock_recursive (GL(dl_load_lock));
+  // __rtld_lock_lock_recursive (GL(dl_load_lock));
 
-  void *result = (_dlerror_run (dlsym_doit, &args) ? NULL : args.sym);
+  // void *result = (_dlerror_run (dlsym_doit, &args) ? NULL : args.sym);
 
-  __rtld_lock_unlock_recursive (GL(dl_load_lock));
+  // __rtld_lock_unlock_recursive (GL(dl_load_lock));
 
-  return result;
+  // return result;
+  return __lind_dlsym(handle, name);
 }
 
 #ifdef SHARED

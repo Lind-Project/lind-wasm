@@ -129,9 +129,9 @@ pub fn add_to_linker<
     linker.func_wrap(
         "lind",
         "lind-get-memory-base",
-        move |caller: Caller<'_, T>| -> u64 {
+        move |mut caller: Caller<'_, T>| -> u64 {
             // Return the base address of memory[0] for the calling instance
-            let base = get_memory_base(&caller);
+            let base = get_memory_base(&mut caller);
             base
         },
     )?;
