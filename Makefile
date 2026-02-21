@@ -14,7 +14,7 @@ LINDFS_DIRS := \
 	       usr/local/bin \
 	       var \
 	       var/log \
-		   var/run
+	       var/run
 
 .PHONY: build 
 build: sysroot lind-boot lindfs
@@ -39,10 +39,8 @@ lindfs:
 	@for d in $(LINDFS_DIRS); do \
 		mkdir -p $(LINDFS_ROOT)/$$d; \
 	done
-	sudo mknod $(LINDFS_ROOT)/dev/null c 1 3
-	sudo chmod 666 $(LINDFS_ROOT)/dev/null
+	touch $(LINDFS_ROOT)/dev/null
 	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
-	
 
 .PHONY: lind-debug
 lind-debug: build-dir
