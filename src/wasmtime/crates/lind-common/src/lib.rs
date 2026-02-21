@@ -53,6 +53,7 @@ pub fn add_to_linker<
               arg6: u64,
               arg6cageid: u64|
               -> i32 {
+            eprintln!("[DEBUG make-syscall] cage={} syscall={} target={}", self_cageid, call_number, target_cageid);
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
