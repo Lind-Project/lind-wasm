@@ -209,8 +209,19 @@ extern int _IO_ftrylockfile (FILE *) __THROW;
 #define _IO_cleanup_region_end(_Doit) /**/
 #endif
 
-#define _IO_need_lock(_fp) \
+#ifdef __wasilibc_unmodified_upstream
+# define _IO_need_lock(_fp) \
   (((_fp)->_flags2 & _IO_FLAGS2_NEED_LOCK) != 0)
+#else
+/* In WASM, always require FILE locking.  The _IO_enable_locks()
+   mechanism that sets _IO_FLAGS2_NEED_LOCK on existing FILEs during
+   the first pthread_create may not work reliably because the FILE
+   list iteration depends on glibc internals that may not be fully
+   functional in the WASM environment.  Since lind-wasm supports
+   threads, unconditionally taking the locking path is correct and
+   the cost is negligible.  */
+# define _IO_need_lock(_fp) (1)
+#endif
 
 extern int _IO_vfscanf (FILE * __restrict, const char * __restrict,
 			__gnuc_va_list, int *__restrict);
