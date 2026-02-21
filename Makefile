@@ -90,7 +90,6 @@ md_generation:
 	REPORT_PATH=$(REPORT) OUT_DIR=$(OUT) python3 scripts/render_e2e_templates.py
 	@echo "Wrote $(OUT)/e2e_comment.md"
 
-	
 
 .PHONY: lint
 lint:
