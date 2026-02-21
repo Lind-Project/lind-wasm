@@ -333,8 +333,10 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   unsigned char *pthread_addr = stack_bottom - TLS_TCB_SIZE;
   // Allocate space for TLS data below pthread struct
   unsigned char *TLS_addr = pthread_addr - tls_size;
-  // Allocate space for clone_args below TLS data
-  struct clone_args *args = (struct clone_args *)(TLS_addr - sizeof(struct clone_args));
+  // Allocate space for clone_args below TLS data, ensuring 8-byte alignment
+  // (CloneArgStruct on the host side has u64 fields requiring 8-byte alignment)
+  struct clone_args *args = (struct clone_args *)
+      (((uintptr_t)(TLS_addr - sizeof(struct clone_args))) & ~(uintptr_t)7);
   // Reserve 8 bytes below clone_args for the TLS base pointer
   uintptr_t* tls_base_addr = (uintptr_t*)((unsigned char *)args - 8);
   // The actual bottom of the usable stack (with all metadata laid out)
@@ -395,9 +397,11 @@ start_thread (void *arg)
 {
   struct pthread *pd = arg;
 
-  // retrieve the TLS data address
+  // retrieve the TLS data address (must match the layout in create_thread)
   size_t tls_size = __builtin_wasm_tls_size();
-  uintptr_t* tls_base_addr = pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
+  uintptr_t args_start = ((uintptr_t)(pd->stackblock + pd->stackblock_size
+      - TLS_TCB_SIZE - tls_size - sizeof(struct clone_args))) & ~(uintptr_t)7;
+  uintptr_t* tls_base_addr = (uintptr_t*)(args_start - 8);
   void* tls_base = (void*)(*tls_base_addr);
 
   // set __tls_base wasm global
