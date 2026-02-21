@@ -351,19 +351,6 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   void* tls_base = __copy_tls((void *)TLS_addr);
   *tls_base_addr = (uintptr_t)tls_base;
 
-  /* The child's _Thread_local __wasilibc_pthread_self is initialized from the
-     TLS template with multiple_threads=0.  Write directly into the child's
-     TLS block so SINGLE_THREAD_P returns false from the very first
-     instruction — otherwise _IO_lock_unlock skips futex_wake and any
-     concurrent stdio user deadlocks.  */
-  {
-    ptrdiff_t tls_pthread_off = (char *)&__wasilibc_pthread_self
-                                - (char *)__builtin_wasm_tls_base ();
-    struct pthread *child_self =
-        (struct pthread *)((char *)tls_base + tls_pthread_off);
-    child_self->header.multiple_threads = 1;
-  }
-
   // do the clone call
   int ret = __clone_internal(args, &start_thread, pd);
   if (__glibc_unlikely (ret == -1))

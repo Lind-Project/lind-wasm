@@ -214,6 +214,12 @@ void *__copy_tls(unsigned char *mem)
 	mem += tls_align;
 	mem -= (uintptr_t)mem & (tls_align-1);
 	__wasm_init_tls(mem);
+	/* __wasm_init_tls set __tls_base to mem (the child's TLS block).
+	   Mark the new thread as multi-threaded so SINGLE_THREAD_P returns
+	   false — otherwise _IO_lock_unlock skips futex_wake and concurrent
+	   stdio users deadlock.  THREAD_SELF now resolves to the child's
+	   __wasilibc_pthread_self because __tls_base points to mem.  */
+	THREAD_SETMEM (THREAD_SELF, header.multiple_threads, 1);
   	__asm__("local.get %0\n"
 			"global.set __tls_base\n"
 			:: "r"(tls_base));
