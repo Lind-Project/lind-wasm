@@ -664,8 +664,9 @@ out:
   atomic_store_release (&pd->tid, 0);
   MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&pd->tid), (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0, TRANSLATE_ERRNO_ON);
   while (1)
-    // replacing with lind exit
-    exit(0);
+    // Use _exit to avoid running atexit handlers and _IO_cleanup,
+    // which would deadlock if another thread holds a stdio lock.
+    _exit(0);
 
   /* NOTREACHED */
 }
