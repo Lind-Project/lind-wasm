@@ -211,28 +211,15 @@ void *__copy_tls(unsigned char *mem)
 #else
 	size_t tls_align = __builtin_wasm_tls_align();
 	volatile void* tls_base = __builtin_wasm_tls_base();
-	/* Compute offset of __wasilibc_pthread_self within the TLS block.
-	   This is a fixed layout offset, the same for every thread. */
-	ptrdiff_t self_off =
-		(char *)&__wasilibc_pthread_self - (char *)tls_base;
 	mem += tls_align;
 	mem -= (uintptr_t)mem & (tls_align-1);
 	__wasm_init_tls(mem);
-	/* Mark the child thread as multi-threaded so SINGLE_THREAD_P returns
+	/* __wasm_init_tls set __tls_base to mem (the child's TLS block).
+	   Mark the new thread as multi-threaded so SINGLE_THREAD_P returns
 	   false — otherwise _IO_lock_unlock skips futex_wake and concurrent
-	   stdio users deadlock.
-
-	   We write directly via mem + offset (both locals) rather than through
-	   THREAD_SETMEM / THREAD_SELF, because those macros resolve the
-	   address through the __tls_base WASM global.  The compiler may
-	   reorder the store past the asm that restores __tls_base, sending
-	   the write to the parent's TLS instead of the child's.  Using a
-	   local pointer makes the address immune to such reordering.  */
-	{
-		struct pthread *child_self =
-			(struct pthread *)((char *)mem + self_off);
-		child_self->header.multiple_threads = 1;
-	}
+	   stdio users deadlock.  THREAD_SELF now resolves to the child's
+	   __wasilibc_pthread_self because __tls_base points to mem.  */
+	THREAD_SETMEM (THREAD_SELF, header.multiple_threads, 1);
 	__asm__ __volatile__("local.get %0\n"
 			"global.set __tls_base\n"
 			:: "r"(tls_base) : "memory");
