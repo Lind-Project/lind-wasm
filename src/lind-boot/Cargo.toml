@@ -19,7 +19,7 @@ sysdefs = { path = "../wasmtime/crates/sysdefs" }
 typemap = { path = "../wasmtime/crates/typemap" }
 wasi-common = { path = "../wasmtime/crates/wasi-common", features = ["sync"] ,default-features = false }
 wasmtime-lind-3i = { path = "../wasmtime/crates/lind-3i" }
-wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads"], default-features = false }
+wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads", "demangle", "addr2line"], default-features = false }
 wasmtime-wasi-threads = { path = "../wasmtime/crates/wasi-threads" }
 wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
 

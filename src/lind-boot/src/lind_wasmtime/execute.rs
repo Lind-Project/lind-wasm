@@ -11,6 +11,7 @@ use threei::threei_const;
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Linker, Module, Precompiled, Store, Val, ValType,
+    WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
 use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID};
@@ -48,7 +49,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     // -- Initialize the Wasmtime execution environment --
     let wasm_file_path = Path::new(lindboot_cli.wasm_file());
     let args = lindboot_cli.args.clone();
-    let wt_config = wasmtime::Config::new();
+    let wt_config = make_wasmtime_config(lindboot_cli.wasmtime_backtrace);
     let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
@@ -137,7 +138,7 @@ pub fn execute_with_lind(
     // -- Initialize the Wasmtime execution environment --
     let wasm_file_path = Path::new(lind_boot.wasm_file());
     let args = lind_boot.args.clone();
-    let wt_config = wasmtime::Config::new();
+    let wt_config = make_wasmtime_config(lind_boot.wasmtime_backtrace);
     let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
@@ -498,7 +499,8 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     let wasm_path = Path::new(cli.wasm_file());
     let cwasm_path = wasm_path.with_extension("cwasm");
 
-    let engine = Engine::new(&wasmtime::Config::new()).context("failed to create engine")?;
+    let wt_config = make_wasmtime_config(cli.wasmtime_backtrace);
+    let engine = Engine::new(&wt_config).context("failed to create engine")?;
     let wasm_bytes = std::fs::read(wasm_path)
         .with_context(|| format!("failed to read {}", wasm_path.display()))?;
     let cwasm_bytes = engine
@@ -558,9 +560,28 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
     // Invoke the function and then afterwards print all the results that came
     // out, if there are any.
     let mut results = vec![Val::null_func_ref(); ty.results().len()];
-    let _ = func
-        .call(&mut *store, &values, &mut results)
-        .with_context(|| format!("failed to invoke command default"));
+
+    // Unwind in case of an error, this allows us to pretty-print the WasmBacktrace context when option
+    // is enabled.
+    func.call(&mut *store, &values, &mut results)
+        .with_context(|| format!("failed to invoke command default"))?;
 
     Ok(results)
+}
+
+/// Generates a wasmtime config based on the whether or not the --wasmtime-backtrace flag was
+/// provided to lind-boot.
+fn make_wasmtime_config(backtrace: bool) -> wasmtime::Config {
+    let mut wt_config = wasmtime::Config::new();
+    wt_config.wasm_backtrace(backtrace);
+
+    let details = if backtrace {
+        WasmBacktraceDetails::Enable
+    } else {
+        WasmBacktraceDetails::Disable
+    };
+
+    wt_config.wasm_backtrace_details(details);
+
+    wt_config
 }
