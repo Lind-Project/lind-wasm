@@ -28,7 +28,7 @@ nav:
     - Development setup: contribute/dev-container.md
     - Rust style guide: contribute/styleguide.md
     - Lind toolchain: contribute/toolchain.md
-    - Unit tests: contribute/unit-tests.md
+    - Testing: contribute/testing.md
     - Debug programs: contribute/debug-programs.md
     - Adding to the docs: contribute/add-docs.md
     - Security policy: contribute/security.md
