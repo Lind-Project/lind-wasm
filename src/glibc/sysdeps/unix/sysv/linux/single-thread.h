@@ -31,11 +31,20 @@
    The ABI might define SINGLE_THREAD_BY_GLOBAL to enable the single thread
    check to use global variables instead of the pthread_t field.  */
 
-#if !defined SINGLE_THREAD_BY_GLOBAL || IS_IN (rtld)
-# define SINGLE_THREAD_P \
+#ifdef __wasilibc_unmodified_upstream
+# if !defined SINGLE_THREAD_BY_GLOBAL || IS_IN (rtld)
+#  define SINGLE_THREAD_P \
   (THREAD_GETMEM (THREAD_SELF, header.multiple_threads) == 0)
+# else
+#  define SINGLE_THREAD_P (__libc_single_threaded_internal != 0)
+# endif
 #else
-# define SINGLE_THREAD_P (__libc_single_threaded_internal != 0)
+/* In WASM, __tls_base is a WebAssembly global that the C compiler may
+   cache across calls to __wasm_init_tls, making it impossible to
+   reliably set header.multiple_threads in a child's TLS from the
+   parent thread.  Since lind-wasm always supports threads, just
+   disable the single-thread fast path entirely.  */
+# define SINGLE_THREAD_P (0)
 #endif
 
 #define RTLD_SINGLE_THREAD_P SINGLE_THREAD_P
