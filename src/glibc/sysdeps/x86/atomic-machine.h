@@ -52,17 +52,15 @@
   (! __sync_bool_compare_and_swap (mem, oldval, newval))
 
 
+/* lind-wasm: use compiler builtins instead of stripped x86 inline asm */
 #define __arch_c_compare_and_exchange_val_8_acq(mem, newval, oldval) \
-  ({ __typeof (*mem) ret;						      \
-     ret; })
+  __sync_val_compare_and_swap (mem, oldval, newval)
 
 #define __arch_c_compare_and_exchange_val_16_acq(mem, newval, oldval) \
-  ({ __typeof (*mem) ret;						      \
-     ret; })
+  __sync_val_compare_and_swap (mem, oldval, newval)
 
 #define __arch_c_compare_and_exchange_val_32_acq(mem, newval, oldval) \
-  ({ __typeof (*mem) ret;						      \
-     ret; })
+  __sync_val_compare_and_swap (mem, oldval, newval)
 
 #ifdef __x86_64__
 # define __arch_c_compare_and_exchange_val_64_acq(mem, newval, oldval) \
@@ -117,249 +115,69 @@
 #endif
 
 
-/* Note that we need no lock prefix.  */
+/* lind-wasm: use compiler builtin for atomic exchange */
 #define atomic_exchange_acq(mem, newvalue) \
-  ({ __typeof (*mem) result;						      \
-     if (sizeof (*mem) == 1)						      \
-      {}					      \
-     else if (sizeof (*mem) == 2)					      \
-      {}					      \
-     else if (sizeof (*mem) == 4)					      \
-      {}					      \
-     else if (__HAVE_64B_ATOMICS)					      \
-      {}					      \
-     else								      \
-       {								      \
-	 result = 0;							      \
-	 __atomic_link_error ();					      \
-       }								      \
-     result; })
+  __sync_lock_test_and_set (mem, newvalue)
 
 
-#define __arch_exchange_and_add_body(lock, pfx, mem, value) \
-  ({ __typeof (*mem) __result;						      \
-     __typeof (value) __addval = (value);				      \
-     if (sizeof (*mem) == 1)						      \
-      {}					      \
-     else if (sizeof (*mem) == 2)					      \
-      {}					      \
-     else if (sizeof (*mem) == 4)					      \
-      {}					      \
-     else if (__HAVE_64B_ATOMICS)					      \
-      {}					      \
-     else								      \
-       __result = do_exchange_and_add_val_64_acq (pfx, (mem), __addval);      \
-     __result; })
-
+/* lind-wasm: use compiler builtin for fetch-and-add */
 #define atomic_exchange_and_add(mem, value) \
   __sync_fetch_and_add (mem, value)
 
-#define __arch_exchange_and_add_cprefix \
-  "cmpl $0, %%" SEG_REG ":%P4\n\tje 0f\n\tlock\n0:\t"
-
 #define catomic_exchange_and_add(mem, value) \
-  __arch_exchange_and_add_body (__arch_exchange_and_add_cprefix, __arch_c,    \
-				mem, value)
+  __sync_fetch_and_add (mem, value)
 
 
-#define __arch_add_body(lock, pfx, apfx, mem, value) \
-  do {									      \
-    if (__builtin_constant_p (value) && (value) == 1)			      \
-      pfx##_increment (mem);						      \
-    else if (__builtin_constant_p (value) && (value) == -1)		      \
-      pfx##_decrement (mem);						      \
-    else if (sizeof (*mem) == 1)					      \
-      {}					      \
-    else if (sizeof (*mem) == 2)					      \
-      {}					      \
-    else if (sizeof (*mem) == 4)					      \
-      {}					      \
-    else if (__HAVE_64B_ATOMICS)					      \
-      {}					      \
-    else								      \
-      do_add_val_64_acq (apfx, (mem), (value));				      \
-  } while (0)
-
-# define atomic_add(mem, value) \
-  __arch_add_body (LOCK_PREFIX, atomic, __arch, mem, value)
-
-#define __arch_add_cprefix \
-  "cmpl $0, %%" SEG_REG ":%P3\n\tje 0f\n\tlock\n0:\t"
+/* lind-wasm: use compiler builtins for all atomic add/increment/decrement */
+#define atomic_add(mem, value) \
+  (void) __sync_fetch_and_add (mem, value)
 
 #define catomic_add(mem, value) \
-  __arch_add_body (__arch_add_cprefix, atomic, __arch_c, mem, value)
-
+  (void) __sync_fetch_and_add (mem, value)
 
 #define atomic_add_negative(mem, value) \
-  ({ unsigned char __result;						      \
-     if (sizeof (*mem) == 1)						      \
-       __atomic_link_error ();						      \
-     else if (sizeof (*mem) == 2)					      \
-       __atomic_link_error ();						      \
-     else if (sizeof (*mem) == 4)					      \
-       __atomic_link_error ();						      \
-     else if (__HAVE_64B_ATOMICS)					      \
-       __atomic_link_error ();						      \
-     else								      \
-       __atomic_link_error ();						      \
-     __result; })
-
+  (__sync_fetch_and_add (mem, value) + (value) < 0)
 
 #define atomic_add_zero(mem, value) \
-  ({ unsigned char __result;						      \
-     if (sizeof (*mem) == 1)						      \
-      __atomic_link_error ();					      \
-     else if (sizeof (*mem) == 2)					      \
-      __atomic_link_error ();					      \
-     else if (sizeof (*mem) == 4)					      \
-      __atomic_link_error ();					      \
-     else if (__HAVE_64B_ATOMICS)					      \
-      __atomic_link_error ();					      \
-     else								      \
-       __atomic_link_error ();					      \
-     __result; })
+  (__sync_fetch_and_add (mem, value) + (value) == 0)
 
-
-#define __arch_increment_body(lock, pfx, mem) \
-  do {									      \
-    if (sizeof (*mem) == 1)						      \
-       {}					      \
-    else if (sizeof (*mem) == 2)					      \
-       {}					      \
-    else if (sizeof (*mem) == 4)					      \
-       {}					      \
-    else if (__HAVE_64B_ATOMICS)					      \
-       {}					      \
-    else								      \
-      do_add_val_64_acq (pfx, mem, 1);					      \
-  } while (0)
-
-#define atomic_increment(mem) __arch_increment_body (LOCK_PREFIX, __arch, mem)
-
-#define __arch_increment_cprefix \
-  "cmpl $0, %%" SEG_REG ":%P2\n\tje 0f\n\tlock\n0:\t"
+#define atomic_increment(mem) \
+  (void) __sync_fetch_and_add (mem, 1)
 
 #define catomic_increment(mem) \
-  __arch_increment_body (__arch_increment_cprefix, __arch_c, mem)
-
+  (void) __sync_fetch_and_add (mem, 1)
 
 #define atomic_increment_and_test(mem) \
-  ({ unsigned char __result;						      \
-     if (sizeof (*mem) == 1)						      \
-      __atomic_link_error ();					      \
-     else if (sizeof (*mem) == 2)					      \
-      __atomic_link_error ();					      \
-     else if (sizeof (*mem) == 4)					      \
-      __atomic_link_error ();					      \
-     else if (__HAVE_64B_ATOMICS)					      \
-      __atomic_link_error ();					      \
-     else								      \
-       __atomic_link_error ();					      \
-     __result; })
+  (__sync_add_and_fetch (mem, 1) == 0)
 
-
-#define __arch_decrement_body(lock, pfx, mem) \
-  do {									      \
-    if (sizeof (*mem) == 1)						      \
-      {}					      \
-    else if (sizeof (*mem) == 2)					      \
-      {}					      \
-    else if (sizeof (*mem) == 4)					      \
-      {}					      \
-    else if (__HAVE_64B_ATOMICS)					      \
-      {}					      \
-    else								      \
-      do_add_val_64_acq (pfx, mem, -1);					      \
-  } while (0)
-
-#define atomic_decrement(mem) __arch_decrement_body (LOCK_PREFIX, __arch, mem)
-
-#define __arch_decrement_cprefix \
-  "cmpl $0, %%" SEG_REG ":%P2\n\tje 0f\n\tlock\n0:\t"
+#define atomic_decrement(mem) \
+  (void) __sync_fetch_and_sub (mem, 1)
 
 #define catomic_decrement(mem) \
-  __arch_decrement_body (__arch_decrement_cprefix, __arch_c, mem)
-
+  (void) __sync_fetch_and_sub (mem, 1)
 
 #define atomic_decrement_and_test(mem) \
-  ({ unsigned char __result;						      \
-     if (sizeof (*mem) == 1)						      \
-      __result;                                \
-     else if (sizeof (*mem) == 2)					      \
-      __result;                                 \
-     else if (sizeof (*mem) == 4)					      \
-      __result;                                 \
-     else								      \
-     __result; })
+  (__sync_sub_and_fetch (mem, 1) == 0)
 
 
+/* lind-wasm: use compiler builtins for bit/and/or atomics */
 #define atomic_bit_set(mem, bit) \
-  do {									      \
-    if (sizeof (*mem) == 1)						      \
-      __atomic_link_error ();						      \
-    else if (sizeof (*mem) == 2)					      \
-      __atomic_link_error ();						      \
-    else if (sizeof (*mem) == 4)					      \
-      __atomic_link_error ();						      \
-    else if (__builtin_constant_p (bit) && (bit) < 32)			      \
-      __atomic_link_error ();						      \
-    else if (__HAVE_64B_ATOMICS)					      \
-      __atomic_link_error ();						      \
-    else								      \
-      __atomic_link_error ();						      \
-  } while (0)
-
+  (void) __sync_fetch_and_or (mem, (__typeof (*(mem))) 1 << (bit))
 
 #define atomic_bit_test_set(mem, bit) \
-  ({ unsigned char __result;						      \
-     if (sizeof (*mem) == 1)						      \
-     else if (sizeof (*mem) == 2)					      \
-     else if (sizeof (*mem) == 4)					      \
-     else if (__HAVE_64B_ATOMICS)					      \
-     else							      	      \
-       __atomic_link_error ();					      \
-     __result; })
+  ((__sync_fetch_and_or (mem, (__typeof (*(mem))) 1 << (bit)) >> (bit)) & 1)
 
+#define atomic_and(mem, mask) \
+  (void) __sync_fetch_and_and (mem, mask)
 
-#define __arch_and_body(lock, mem, mask) \
-  do {									      \
-    if (sizeof (*mem) == 1)						      \
-      __atomic_link_error ();						      \
-    else if (sizeof (*mem) == 2)					      \
-      __atomic_link_error ();						      \
-    else if (sizeof (*mem) == 4)					      \
-      __atomic_link_error ();						      \
-    else if (__HAVE_64B_ATOMICS)					      \
-      __atomic_link_error ();						      \
-    else								      \
-      __atomic_link_error ();						      \
-  } while (0)
+#define catomic_and(mem, mask) \
+  (void) __sync_fetch_and_and (mem, mask)
 
-#define __arch_cprefix \
-  "cmpl $0, %%" SEG_REG ":%P3\n\tje 0f\n\tlock\n0:\t"
+#define atomic_or(mem, mask) \
+  (void) __sync_fetch_and_or (mem, mask)
 
-#define atomic_and(mem, mask) __arch_and_body (LOCK_PREFIX, mem, mask)
-
-#define catomic_and(mem, mask) __arch_and_body (__arch_cprefix, mem, mask)
-
-
-#define __arch_or_body(lock, mem, mask) \
-  do {									      \
-    if (sizeof (*mem) == 1)						      \
-      __atomic_link_error ();						      \
-    else if (sizeof (*mem) == 2)					      \
-      __atomic_link_error ();						      \
-    else if (sizeof (*mem) == 4)					      \
-      __atomic_link_error ();						      \
-    else if (__HAVE_64B_ATOMICS)					      \
-      __atomic_link_error ();						      \
-    else								      \
-      __atomic_link_error ();						      \
-  } while (0)
-
-#define atomic_or(mem, mask) __arch_or_body (LOCK_PREFIX, mem, mask)
-
-#define catomic_or(mem, mask) __arch_or_body (__arch_cprefix, mem, mask)
+#define catomic_or(mem, mask) \
+  (void) __sync_fetch_and_or (mem, mask)
 
 /* We don't use mfence because it is supposedly slower due to having to
    provide stronger guarantees (e.g., regarding self-modifying code).  */
