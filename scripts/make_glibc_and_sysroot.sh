@@ -93,13 +93,28 @@ cd $BUILD
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
 
-# Build extra
+# Build extra — recompile nptl files that use atomics with explicit -matomics.
+# The glibc `make` step may not propagate -matomics to all files, which causes
+# atomic operations (e.g. atomic_exchange_acquire in __lll_lock_wait_private) to
+# compile as non-atomic load+store pairs instead of i32.atomic.rmw.xchg.  This
+# breaks the lll_lock/lll_unlock protocol: the unlock side (expanded inline in
+# user code with -matomics) does a true atomic exchange, but the lock-wait side
+# (compiled here) does a non-atomic exchange — so the unlock can miss the
+# contention marker (value 2) and skip the futex_wake, leaving the waiter stuck.
 cd ../nptl
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/nptl/pthread_create.o \
     -c pthread_create.c -MD -MP -MF $BUILD/nptl/pthread_create.o.dt \
     -MT $BUILD/nptl/pthread_create.o
+
+# Recompile lowlevellock.c with -matomics so __lll_lock_wait_private and
+# __lll_lock_wake_private use true WASM atomic instructions.
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/nptl/lowlevellock.o \
+    -c lowlevellock.c -MD -MP -MF $BUILD/nptl/lowlevellock.o.dt \
+    -MT $BUILD/nptl/lowlevellock.o
 
 # Compile lind_syscall.c, which contains the make_threei, register_handler, 
 # and copy_data_between_cages functions
