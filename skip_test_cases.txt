@@ -1,13 +1,11 @@
 file_tests/deterministic/popen.c
 networking_tests/deterministic/uds-nb-select.c
 networking_tests/deterministic/uds-serverclient.c
-process_tests/deterministic/tls_test.c
 process_tests/deterministic/exit_failure.c
 signal_tests/deterministic/sigpipe.c
 signal_tests/deterministic/signal_SIGCHLD.c
 signal_tests/fail/signal_resethand.c
 signal_tests/deterministic/signal_recursive.c
-process_tests/deterministic/thread-test.c
 signal_tests/deterministic/signal.c
 signal_tests/deterministic/signal_longjmp.c
 signal_tests/deterministic/signal_nodefer.c
