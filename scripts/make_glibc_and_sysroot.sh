@@ -89,7 +89,7 @@ cd $BUILD
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
   CFLAGS=" -matomics -mbulk-memory -O2 -g" \
-  CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
+  CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion -matomics -mbulk-memory"
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
 
