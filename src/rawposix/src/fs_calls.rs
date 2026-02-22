@@ -1,7 +1,7 @@
 use cage::{
     get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
-    signal::signal::lind_send_signal, shmdt_helper, MemoryBackingType, VmmapOps,
-    HEAP_ENTRY_INDEX, SHM_METADATA,
+    shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
+    SHM_METADATA,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
