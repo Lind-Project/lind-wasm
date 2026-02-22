@@ -2294,7 +2294,13 @@ impl StoreOpaque {
         let mut fault = None;
         for instance in self.instances.iter() {
             if let Some(f) = instance.handle.wasm_fault(addr) {
-                assert!(fault.is_none());
+                // Multiple instances may share the same linear memory (e.g.,
+                // backup VMContext pool instances import the same shared memory).
+                // Return the first match — all shared instances report identical
+                // fault info so subsequent matches can be skipped.
+                if fault.is_some() {
+                    continue;
+                }
                 fault = Some(f);
             }
         }
