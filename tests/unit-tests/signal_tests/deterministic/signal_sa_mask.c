@@ -9,7 +9,7 @@ static volatile sig_atomic_t saw_usr2_during_usr1 = 0;
 static void handler_usr1(int sig) {
     (void)sig;
     in_usr1 = 1;
-    raise(SIGUSR2);
+    kill(getpid(), SIGUSR2);
     if (got_usr2)
         saw_usr2_during_usr1 = 1;
     done_usr1 = 1;
@@ -35,7 +35,7 @@ int main(void) {
     if (sigaction(SIGUSR2, &sa, NULL) != 0)
         return 1;
 
-    raise(SIGUSR1);
+    kill(getpid(), SIGUSR1);
     while (!done_usr1)
         ;
 
