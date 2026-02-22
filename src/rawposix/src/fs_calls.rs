@@ -16,7 +16,7 @@ use sysdefs::constants::fs_const::{
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
-use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
+use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
 use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
@@ -338,8 +338,8 @@ pub extern "C" fn write_syscall(
     if ret < 0 {
         let errno = get_errno();
         // Linux delivers SIGPIPE before returning EPIPE on broken pipe writes
-        if errno == libc::EPIPE as i32 {
-            lind_send_signal(cageid, libc::SIGPIPE);
+        if errno == Errno::EPIPE as i32 {
+            lind_send_signal(cageid, SIGPIPE);
         }
         return handle_errno(errno, "write");
     }
