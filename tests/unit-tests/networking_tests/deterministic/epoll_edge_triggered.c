@@ -54,9 +54,8 @@ int main(void) {
     assert(n == 1);
     printf("1d. ET: new write → edge fires again\n");
 
-    /* Drain */
-    while (read(p[0], buf, sizeof(buf)) > 0)
-        ;
+    /* Drain remaining bytes (abc + d = 4, read 2 already, so 2 left) */
+    assert(read(p[0], buf, sizeof(buf)) == 2);
 
     close(p[0]);
     close(p[1]);

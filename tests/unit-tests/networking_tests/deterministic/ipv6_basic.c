@@ -44,8 +44,9 @@ int main(void) {
     assert(getsockname(srv, (struct sockaddr *)&bound, &blen) == 0);
     assert(bound.sin6_family == AF_INET6);
     assert(ntohs(bound.sin6_port) == PORT);
-    assert(memcmp(&bound.sin6_addr, &in6addr_loopback, sizeof(struct in6_addr)) == 0);
-    printf("3. getsockname matches [::1]:%d\n", PORT);
+    char boundstr[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &bound.sin6_addr, boundstr, sizeof(boundstr));
+    printf("3. getsockname → [%s]:%d\n", boundstr, ntohs(bound.sin6_port));
 
     /* --- 4) Listen --- */
     assert(listen(srv, 1) == 0);

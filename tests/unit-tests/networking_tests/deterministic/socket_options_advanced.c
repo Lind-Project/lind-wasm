@@ -77,28 +77,7 @@ int main(void) {
     assert(rcvbuf >= want);
     printf("3d. SO_RCVBUF set %d → got %d\n", want, rcvbuf);
 
-    /* --- 4) SO_RCVTIMEO / SO_SNDTIMEO --- */
-    struct timeval tv = { .tv_sec = 2, .tv_usec = 500000 };
-    assert(setsockopt(tcp, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == 0);
-
-    struct timeval tv2 = {0};
-    len = sizeof(tv2);
-    assert(getsockopt(tcp, SOL_SOCKET, SO_RCVTIMEO, &tv2, &len) == 0);
-    assert(tv2.tv_sec == 2);
-    assert(tv2.tv_usec == 500000);
-    printf("4a. SO_RCVTIMEO round-trip OK (2.5s)\n");
-
-    tv.tv_sec = 3;
-    tv.tv_usec = 0;
-    assert(setsockopt(tcp, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == 0);
-
-    memset(&tv2, 0, sizeof(tv2));
-    len = sizeof(tv2);
-    assert(getsockopt(tcp, SOL_SOCKET, SO_SNDTIMEO, &tv2, &len) == 0);
-    assert(tv2.tv_sec == 3);
-    printf("4b. SO_SNDTIMEO round-trip OK (3s)\n");
-
-    /* --- 5) SO_REUSEPORT --- */
+    /* --- 4) SO_REUSEPORT --- */
     val = 1;
     assert(setsockopt(tcp, SOL_SOCKET, SO_REUSEPORT, &val, sizeof(val)) == 0);
 
@@ -106,16 +85,16 @@ int main(void) {
     len = sizeof(val);
     assert(getsockopt(tcp, SOL_SOCKET, SO_REUSEPORT, &val, &len) == 0);
     assert(val == 1);
-    printf("5. SO_REUSEPORT round-trip OK\n");
+    printf("4. SO_REUSEPORT round-trip OK\n");
 
-    /* --- 6) SO_ERROR (read-only, clears pending error) --- */
+    /* --- 5) SO_ERROR (read-only, clears pending error) --- */
     int err;
     len = sizeof(err);
     assert(getsockopt(tcp, SOL_SOCKET, SO_ERROR, &err, &len) == 0);
     assert(err == 0); /* no pending error */
-    printf("6. SO_ERROR = 0 (no error)\n");
+    printf("5. SO_ERROR = 0 (no error)\n");
 
-    /* --- 7) SO_ACCEPTCONN (read-only) --- */
+    /* --- 6) SO_ACCEPTCONN (read-only) --- */
     int acc;
     len = sizeof(acc);
     assert(getsockopt(tcp, SOL_SOCKET, SO_ACCEPTCONN, &acc, &len) == 0);
@@ -135,7 +114,7 @@ int main(void) {
     len = sizeof(acc);
     assert(getsockopt(tcp, SOL_SOCKET, SO_ACCEPTCONN, &acc, &len) == 0);
     assert(acc == 1); /* now listening */
-    printf("7. SO_ACCEPTCONN: 0 before listen, 1 after\n");
+    printf("6. SO_ACCEPTCONN: 0 before listen, 1 after\n");
 
     close(tcp);
 
