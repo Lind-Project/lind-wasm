@@ -42,6 +42,10 @@ int main(void) {
     assert(loc != NULL);
     printf("locale: [%s]\n", loc);
     printf("codeset: [%s]\n", nl_langinfo(CODESET));
+    printf("thousep: [%s]\n", nl_langinfo(THOUSEP));
+    printf("day1: [%s]\n", nl_langinfo(DAY_1));
+    printf("currency: [%s]\n", localeconv()->currency_symbol);
+    printf("thousands_sep: [%s]\n", localeconv()->thousands_sep);
     assert(strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
 
     /* Restore C locale */
