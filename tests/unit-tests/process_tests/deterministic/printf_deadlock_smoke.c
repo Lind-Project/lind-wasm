@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
+// printf deadlock smoke test
 typedef struct {
   pthread_mutex_t mu;
   pthread_cond_t  cv;
