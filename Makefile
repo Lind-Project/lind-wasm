@@ -11,6 +11,7 @@ LINDFS_DIRS := \
 	       tmp \
 	       usr/bin \
 	       usr/lib \
+	       usr/lib/locale \
 	       usr/local/bin \
 	       var \
 	       var/log \
@@ -41,6 +42,7 @@ lindfs:
 	done
 	touch $(LINDFS_ROOT)/dev/null
 	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
+	cp -rT scripts/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
 
 .PHONY: lind-debug
 lind-debug: build-dir

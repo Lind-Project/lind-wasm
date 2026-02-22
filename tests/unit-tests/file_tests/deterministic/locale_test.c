@@ -36,11 +36,12 @@ int main(void) {
     loc = setlocale(LC_MONETARY, NULL);
     assert(loc != NULL);
 
-    /* Non-existent locale should return NULL without crashing */
+    /* en_US.UTF-8 should now be available */
     loc = setlocale(LC_ALL, "en_US.UTF-8");
-    /* may be NULL — that's fine, just don't crash */
+    assert(loc != NULL);
+    assert(strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
 
-    /* Restore C locale in case en_US.UTF-8 succeeded */
+    /* Restore C locale */
     setlocale(LC_ALL, "C");
 
     /* ===== localeconv (C locale) ===== */
