@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <langinfo.h>
 #include <locale.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -39,6 +40,8 @@ int main(void) {
     /* en_US.UTF-8 should now be available */
     loc = setlocale(LC_ALL, "en_US.UTF-8");
     assert(loc != NULL);
+    printf("locale: [%s]\n", loc);
+    printf("codeset: [%s]\n", nl_langinfo(CODESET));
     assert(strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
 
     /* Restore C locale */
