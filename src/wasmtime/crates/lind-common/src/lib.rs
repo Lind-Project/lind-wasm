@@ -3,6 +3,7 @@
 use anyhow::Result;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
@@ -84,7 +85,7 @@ pub fn add_to_linker<
             // Concretely, for CLONE/EXEC we override arg2 with the current tid so that, when the call back
             // to wasmtime, it can resolve the correct thread instance deterministically, independent of
             // interposition or cross-cage routing.
-            let final_arg2 = if self_cageid == target_cageid
+            let final_arg2 = if target_cageid == lind_platform_const::RAWPOSIX_CAGEID
                 && matches!(call_number as i32, CLONE_SYSCALL | EXIT_SYSCALL)
             {
                 wasmtime_lind_multi_process::current_tid(&mut caller) as u64

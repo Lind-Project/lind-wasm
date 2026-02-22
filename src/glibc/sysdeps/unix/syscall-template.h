@@ -28,6 +28,7 @@
  * with glibc and legacy POSIX implementations.  New subsystems (e.g., grates)
  * should use make_threei_call directly.
  */
+ /* todo: replace hardcoded RAWPOSIX_CAGEID with a constant */
 #define MAKE_LEGACY_SYSCALL(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, translate_errno) \
     ({ \
         uint64_t __self = __lind_cageid; \
@@ -35,7 +36,7 @@
             (syscall_num), \
             (syscall_name), \
             __self, /* self_cageid */ \
-            __self, /* target_cageid: same as self for traditional syscalls */ \
+            777777, /* target_cageid: set to RAWPOSIX_CAGEID by default */ \
             (uint64_t)(arg1), __self, \
             (uint64_t)(arg2), __self, \
             (uint64_t)(arg3), __self, \
