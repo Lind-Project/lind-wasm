@@ -7,7 +7,14 @@
 #include <string.h>
 #include <unistd.h>
 
-// printf deadlock smoke test
+/*
+ * Printf deadlock smoke test.
+ *
+ * Two threads synchronize at a barrier then fprintf to the same unbuffered
+ * FILE (/dev/null), exercising the stdio FILE lock contention path.
+ * An alarm fires after 2 seconds to catch deadlocks.
+ */
+
 typedef struct {
   pthread_mutex_t mu;
   pthread_cond_t  cv;
@@ -43,7 +50,6 @@ static void barrier_wait_2(barrier_t* b) {
 
 static void on_alarm(int sig) {
   (void)sig;
-  // Deterministic "deadlock" signal for CI.
   const char msg[] = "FAIL: likely deadlock (alarm)\n";
   write(2, msg, sizeof(msg) - 1);
   _exit(124);
@@ -58,14 +64,11 @@ typedef struct {
 static void* worker(void* p) {
   args_t* a = (args_t*)p;
 
-  // Synchronize so both threads enter fprintf together.
   barrier_wait_2(a->bar);
 
-  // If your bug is in stdio FILE locking (futex), this is the critical point.
   int rc = fprintf(a->f, "tid=%d hello\n", a->tid);
   assert(rc > 0);
 
-  // Ensure it actually flushes through the stdio machinery.
   rc = fflush(a->f);
   assert(rc == 0);
 
@@ -74,12 +77,11 @@ static void* worker(void* p) {
 
 int main(void) {
   signal(SIGALRM, on_alarm);
-  alarm(2); // if it deadlocks, fail fast
+  alarm(2);
 
-  FILE* f = fopen("printf_deadlock_smoke.out", "w");
+  FILE* f = fopen("/dev/null", "w");
   assert(f);
 
-  // Unbuffered makes the locking path more "direct" and consistent.
   int rc = setvbuf(f, NULL, _IONBF, 0);
   assert(rc == 0);
 
@@ -99,6 +101,6 @@ int main(void) {
   rc = fclose(f); assert(rc == 0);
 
   alarm(0);
-  fprintf(stderr, "PASS\n");
+  write(1, "done\n", 5);
   return 0;
 }
