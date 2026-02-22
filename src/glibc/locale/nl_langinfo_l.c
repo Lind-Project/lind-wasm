@@ -42,21 +42,11 @@ __nl_langinfo_l (nl_item item, locale_t l)
   if (index == _NL_ITEM_INDEX (_NL_LOCALE_NAME (category)))
     return (char *) l->__names[category];
 
-#if defined NL_CURRENT_INDIRECT
-  /* Make direct reference to every _nl_current_CATEGORY symbol,
-     since we know only at runtime which categories are used.  */
-  switch (category)
-    {
-# define DEFINE_CATEGORY(category, category_name, items, a) \
-      case category: data = *_nl_current_##category; break;
-# include "categories.def"
-# undef DEFINE_CATEGORY
-    default:                   /* Should be impossible.  */
-      abort();
-    }
-#else
+  /* Lind-WASM: use locale parameter directly instead of NL_CURRENT_INDIRECT
+     TLS pointers.  wasm-ld cannot handle TLS relocations against category
+     symbols that may not be linked.  Using l->__locales is also more correct
+     for the _l variant which takes an explicit locale parameter.  */
   data = l->__locales[category];
-#endif
 
   if (index >= data->nstrings)
     /* Bogus index for this category: bogus item.  */
