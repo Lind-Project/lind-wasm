@@ -5,3 +5,6 @@ process_tests/deterministic/tls_test.c
 process_tests/deterministic/exit_failure.c
 process_tests/deterministic/thread-test.c
 networking_tests/deterministic/getifaddrs.c
+signal_tests/deterministic/signal_procmask.c
+signal_tests/deterministic/signal_sa_mask.c
+signal_tests/deterministic/sigpipe.c
