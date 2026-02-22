@@ -4,7 +4,6 @@
 #include <ctype.h>
 #include <langinfo.h>
 #include <locale.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -12,7 +11,7 @@
 
 int main(void) {
 
-    /* ===== setlocale ===== */
+    /* ===== setlocale: C locale basics ===== */
 
     /* Query default — should be "C" or "POSIX" */
     char *loc = setlocale(LC_ALL, NULL);
@@ -37,19 +36,13 @@ int main(void) {
     loc = setlocale(LC_MONETARY, NULL);
     assert(loc != NULL);
 
-    /* en_US.UTF-8 should now be available */
-    loc = setlocale(LC_ALL, "en_US.UTF-8");
+    /* Non-existent locale should return NULL without crashing */
+    loc = setlocale(LC_ALL, "xx_XX.FAKE-42");
+    assert(loc == NULL);
+    /* Locale should still be C after failed setlocale */
+    loc = setlocale(LC_ALL, NULL);
     assert(loc != NULL);
-    printf("locale: [%s]\n", loc);
-    printf("codeset: [%s]\n", nl_langinfo(CODESET));
-    printf("thousep: [%s]\n", nl_langinfo(THOUSEP));
-    printf("day1: [%s]\n", nl_langinfo(DAY_1));
-    printf("currency: [%s]\n", localeconv()->currency_symbol);
-    printf("thousands_sep: [%s]\n", localeconv()->thousands_sep);
-    assert(strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
-
-    /* Restore C locale */
-    setlocale(LC_ALL, "C");
+    assert(strcmp(loc, "C") == 0 || strcmp(loc, "POSIX") == 0);
 
     /* ===== localeconv (C locale) ===== */
 
@@ -72,74 +65,104 @@ int main(void) {
     /* Codeset */
     char *cs = nl_langinfo(CODESET);
     assert(cs != NULL);
-    assert(strlen(cs) > 0);  /* "ANSTRUTS-1" or "ASCII" etc. */
+    assert(strlen(cs) > 0);
 
     /* Day names */
-    char *day = nl_langinfo(DAY_1);  /* Sunday */
-    assert(day != NULL);
-    assert(strcmp(day, "Sunday") == 0);
+    assert(strcmp(nl_langinfo(DAY_1), "Sunday") == 0);
+    assert(strcmp(nl_langinfo(DAY_2), "Monday") == 0);
+    assert(strcmp(nl_langinfo(DAY_3), "Tuesday") == 0);
+    assert(strcmp(nl_langinfo(DAY_4), "Wednesday") == 0);
+    assert(strcmp(nl_langinfo(DAY_5), "Thursday") == 0);
+    assert(strcmp(nl_langinfo(DAY_6), "Friday") == 0);
+    assert(strcmp(nl_langinfo(DAY_7), "Saturday") == 0);
 
-    day = nl_langinfo(DAY_2);  /* Monday */
-    assert(day != NULL);
-    assert(strcmp(day, "Monday") == 0);
-
-    /* Abbreviated day */
-    char *abday = nl_langinfo(ABDAY_1);
-    assert(abday != NULL);
-    assert(strcmp(abday, "Sun") == 0);
+    /* Abbreviated days */
+    assert(strcmp(nl_langinfo(ABDAY_1), "Sun") == 0);
+    assert(strcmp(nl_langinfo(ABDAY_2), "Mon") == 0);
 
     /* Month names */
-    char *mon = nl_langinfo(MON_1);  /* January */
-    assert(mon != NULL);
-    assert(strcmp(mon, "January") == 0);
-
-    char *abmon = nl_langinfo(ABMON_1);
-    assert(abmon != NULL);
-    assert(strcmp(abmon, "Jan") == 0);
+    assert(strcmp(nl_langinfo(MON_1), "January") == 0);
+    assert(strcmp(nl_langinfo(MON_12), "December") == 0);
+    assert(strcmp(nl_langinfo(ABMON_1), "Jan") == 0);
+    assert(strcmp(nl_langinfo(ABMON_12), "Dec") == 0);
 
     /* AM/PM */
-    char *am = nl_langinfo(AM_STR);
-    assert(am != NULL);
-    assert(strcmp(am, "AM") == 0);
-    char *pm = nl_langinfo(PM_STR);
-    assert(pm != NULL);
-    assert(strcmp(pm, "PM") == 0);
+    assert(strcmp(nl_langinfo(AM_STR), "AM") == 0);
+    assert(strcmp(nl_langinfo(PM_STR), "PM") == 0);
 
     /* Radix (decimal point) */
-    char *radix = nl_langinfo(RADIXCHAR);
-    assert(radix != NULL);
-    assert(strcmp(radix, ".") == 0);
+    assert(strcmp(nl_langinfo(RADIXCHAR), ".") == 0);
 
-    /* Thousands separator */
-    char *thou = nl_langinfo(THOUSEP);
-    assert(thou != NULL);
-    assert(strcmp(thou, "") == 0);
+    /* Thousands separator (empty in C) */
+    assert(strcmp(nl_langinfo(THOUSEP), "") == 0);
 
     /* Yes/No expressions */
-    char *yesexpr = nl_langinfo(YESEXPR);
-    assert(yesexpr != NULL);
-    assert(strlen(yesexpr) > 0);
-    char *noexpr = nl_langinfo(NOEXPR);
-    assert(noexpr != NULL);
-    assert(strlen(noexpr) > 0);
+    assert(strlen(nl_langinfo(YESEXPR)) > 0);
+    assert(strlen(nl_langinfo(NOEXPR)) > 0);
+
+    /* ===== en_US.UTF-8 locale ===== */
+
+    loc = setlocale(LC_ALL, "en_US.UTF-8");
+    assert(loc != NULL);
+
+    /* LC_CTYPE */
+    assert(strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
+
+    /* LC_NUMERIC */
+    assert(strcmp(nl_langinfo(RADIXCHAR), ".") == 0);
+    assert(strcmp(nl_langinfo(THOUSEP), ",") == 0);
+
+    /* LC_MONETARY */
+    lc = localeconv();
+    assert(lc != NULL);
+    assert(strcmp(lc->currency_symbol, "$") == 0);
+    assert(strcmp(lc->mon_decimal_point, ".") == 0);
+    assert(strcmp(lc->mon_thousands_sep, ",") == 0);
+    assert(strcmp(lc->int_curr_symbol, "USD ") == 0);
+    assert(lc->frac_digits == 2);
+    assert(lc->int_frac_digits == 2);
+
+    /* LC_TIME — day/month names same as C for en_US */
+    assert(strcmp(nl_langinfo(DAY_1), "Sunday") == 0);
+    assert(strcmp(nl_langinfo(MON_1), "January") == 0);
+
+    /* LC_NUMERIC via localeconv */
+    assert(strcmp(lc->decimal_point, ".") == 0);
+    assert(strcmp(lc->thousands_sep, ",") == 0);
+
+    /* Per-category setlocale */
+    loc = setlocale(LC_CTYPE, "en_US.UTF-8");
+    assert(loc != NULL);
+    loc = setlocale(LC_NUMERIC, "en_US.UTF-8");
+    assert(loc != NULL);
+    loc = setlocale(LC_MONETARY, "en_US.UTF-8");
+    assert(loc != NULL);
+
+    /* Restore C locale */
+    setlocale(LC_ALL, "C");
+
+    /* Verify C locale is fully restored */
+    assert(strcmp(nl_langinfo(CODESET), "ANSI_X3.4-1968") == 0);
+    assert(strcmp(nl_langinfo(THOUSEP), "") == 0);
+    lc = localeconv();
+    assert(strcmp(lc->currency_symbol, "") == 0);
+    assert(strcmp(lc->thousands_sep, "") == 0);
+    assert(lc->frac_digits == 127);
 
     /* ===== ctype (C locale) ===== */
 
-    /* toupper/tolower full range */
     assert(toupper('a') == 'A');
     assert(toupper('z') == 'Z');
-    assert(toupper('A') == 'A');   /* already upper */
-    assert(toupper('5') == '5');   /* non-alpha unchanged */
+    assert(toupper('A') == 'A');
+    assert(toupper('5') == '5');
     assert(tolower('Z') == 'z');
-    assert(tolower('a') == 'a');   /* already lower */
+    assert(tolower('a') == 'a');
 
-    /* isblank */
     assert(isblank(' '));
     assert(isblank('\t'));
     assert(!isblank('\n'));
     assert(!isblank('a'));
 
-    /* isalnum boundary */
     assert(isalnum('0'));
     assert(isalnum('9'));
     assert(isalnum('a'));
@@ -147,11 +170,10 @@ int main(void) {
     assert(!isalnum(' '));
     assert(!isalnum('\0'));
 
-    /* isprint vs iscntrl */
     assert(isprint(' '));
     assert(!isprint('\x01'));
     assert(iscntrl('\x01'));
-    assert(iscntrl('\x7f'));  /* DEL */
+    assert(iscntrl('\x7f'));
     assert(!iscntrl('A'));
 
     /* ===== strftime (C locale) ===== */
@@ -167,41 +189,25 @@ int main(void) {
     t.tm_yday = 14;
     char buf[128];
 
-    /* Full day name */
     assert(strftime(buf, sizeof(buf), "%A", &t) > 0);
     assert(strcmp(buf, "Monday") == 0);
-
-    /* Abbreviated day */
     assert(strftime(buf, sizeof(buf), "%a", &t) > 0);
     assert(strcmp(buf, "Mon") == 0);
-
-    /* Full month name */
     assert(strftime(buf, sizeof(buf), "%B", &t) > 0);
     assert(strcmp(buf, "January") == 0);
-
-    /* Abbreviated month */
     assert(strftime(buf, sizeof(buf), "%b", &t) > 0);
     assert(strcmp(buf, "Jan") == 0);
-
-    /* Year */
     assert(strftime(buf, sizeof(buf), "%Y", &t) > 0);
     assert(strcmp(buf, "2024") == 0);
-
-    /* ISO date */
     assert(strftime(buf, sizeof(buf), "%Y-%m-%d", &t) > 0);
     assert(strcmp(buf, "2024-01-15") == 0);
-
-    /* Time */
     assert(strftime(buf, sizeof(buf), "%H:%M:%S", &t) > 0);
     assert(strcmp(buf, "14:30:45") == 0);
-
-    /* AM/PM */
     assert(strftime(buf, sizeof(buf), "%p", &t) > 0);
     assert(strcmp(buf, "PM") == 0);
 
     /* ===== gmtime / localtime / mktime ===== */
 
-    /* Epoch in UTC */
     setenv("TZ", "UTC0", 1);
     tzset();
 
@@ -254,6 +260,63 @@ int main(void) {
     assert(check->tm_mon == 5);
     assert(check->tm_mday == 15);
     assert(check->tm_hour == 12);
+
+    /* ===== tzdata.zi availability ===== */
+
+    /* Verify the timezone data file is accessible in lindfs.
+       This is needed by C++20 std::chrono::get_tzdb(). */
+    assert(access("/usr/share/zoneinfo/tzdata.zi", R_OK) == 0);
+    assert(access("/usr/share/zoneinfo/leap-seconds.list", R_OK) == 0);
+
+    /* /etc/timezone should exist for current_zone() fallback */
+    assert(access("/etc/timezone", R_OK) == 0);
+
+    /* ===== DST transition via POSIX TZ string ===== */
+
+    /* US Eastern: EST5EDT,M3.2.0,M11.1.0
+       DST starts 2nd Sunday of March, ends 1st Sunday of November */
+    setenv("TZ", "EST5EDT,M3.2.0,M11.1.0", 1);
+    tzset();
+
+    /* Jan 15 2024 12:00 UTC — should be EST (UTC-5) */
+    time_t jan = 1705320000;  /* 2024-01-15 12:00:00 UTC */
+    lt = localtime(&jan);
+    assert(lt != NULL);
+    assert(lt->tm_hour == 7);   /* 07:00 EST */
+    assert(lt->tm_isdst == 0);
+
+    /* Jul 15 2024 12:00 UTC — should be EDT (UTC-4) */
+    time_t jul = 1721044800;  /* 2024-07-15 12:00:00 UTC */
+    lt = localtime(&jul);
+    assert(lt != NULL);
+    assert(lt->tm_hour == 8);   /* 08:00 EDT */
+    assert(lt->tm_isdst == 1);
+
+    /* ===== strftime with en_US.UTF-8 locale ===== */
+
+    setlocale(LC_ALL, "en_US.UTF-8");
+    setenv("TZ", "UTC0", 1);
+    tzset();
+
+    /* strftime %c (locale-dependent date/time) should not crash */
+    t.tm_year = 124;
+    t.tm_mon = 6;       /* July */
+    t.tm_mday = 4;
+    t.tm_hour = 10;
+    t.tm_min = 0;
+    t.tm_sec = 0;
+    t.tm_wday = 4;      /* Thursday */
+    t.tm_yday = 185;
+    assert(strftime(buf, sizeof(buf), "%c", &t) > 0);
+    assert(strlen(buf) > 0);
+
+    /* %x (locale date) and %X (locale time) */
+    assert(strftime(buf, sizeof(buf), "%x", &t) > 0);
+    assert(strlen(buf) > 0);
+    assert(strftime(buf, sizeof(buf), "%X", &t) > 0);
+    assert(strlen(buf) > 0);
+
+    setlocale(LC_ALL, "C");
 
     write(1, "done\n", 5);
     return 0;
