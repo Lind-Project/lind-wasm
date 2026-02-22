@@ -1,6 +1,7 @@
 use cage::{
     get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
-    shmdt_helper, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX, SHM_METADATA,
+    signal::signal::lind_send_signal, shmdt_helper, MemoryBackingType, VmmapOps,
+    HEAP_ENTRY_INDEX, SHM_METADATA,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
@@ -336,6 +337,10 @@ pub extern "C" fn write_syscall(
 
     if ret < 0 {
         let errno = get_errno();
+        // Linux delivers SIGPIPE before returning EPIPE on broken pipe writes
+        if errno == libc::EPIPE as i32 {
+            lind_send_signal(cageid, libc::SIGPIPE);
+        }
         return handle_errno(errno, "write");
     }
     return ret;
