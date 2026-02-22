@@ -3,3 +3,5 @@ networking_tests/deterministic/uds-nb-select.c
 networking_tests/deterministic/uds-serverclient.c
 process_tests/deterministic/exit_failure.c
 networking_tests/deterministic/getifaddrs.c
+networking_tests/deterministic/ipv6_basic.c
+networking_tests/deterministic/epoll_edge_triggered.c
