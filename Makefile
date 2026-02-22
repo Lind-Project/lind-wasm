@@ -11,7 +11,9 @@ LINDFS_DIRS := \
 	       tmp \
 	       usr/bin \
 	       usr/lib \
+	       usr/lib/locale \
 	       usr/local/bin \
+	       usr/share/zoneinfo \
 	       var \
 	       var/log \
 	       var/run
@@ -41,6 +43,8 @@ lindfs:
 	done
 	touch $(LINDFS_ROOT)/dev/null
 	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
+	cp -rT scripts/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
+	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
 
 .PHONY: lind-debug
 lind-debug: build-dir
