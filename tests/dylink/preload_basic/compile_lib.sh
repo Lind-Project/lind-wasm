@@ -1,0 +1,46 @@
+# clang \
+#     --target=wasm32-unknown-wasi \
+#     -fPIC \
+#     --sysroot /home/lind/lind-wasm/src/glibc/sysroot \
+#     -fvisibility=default \
+#     -Wl,--import-memory \
+#     -Wl,--shared-memory \
+#     -Wl,--max-memory=67108864 \
+#     -Wl,--no-entry \
+#     -Wl,--export-dynamic \
+#     -Wl,--export=myfunc \
+#     -Wl,-pie \
+#     lib.c -g -O0 -o libtmp.wasm
+
+clang \
+    --target=wasm32-unknown-wasi \
+    -fPIC \
+    --sysroot /home/lind/lind-wasm/src/glibc/sysroot \
+    -fvisibility=default \
+    -Wl,--import-memory \
+    -Wl,--shared-memory \
+    -Wl,--export-dynamic \
+    -Wl,--experimental-pic \
+    -Wl,--unresolved-symbols=import-dynamic \
+    -Wl,-shared \
+    lib.c -g -O0 -o lib.wasm
+
+# clang \
+#     --target=wasm32-unknown-wasi \
+#     -fPIC \
+#      -matomics \
+#      -mbulk-memory \
+#     --sysroot /home/lind/lind-wasm/src/glibc/sysroot \
+#     -fvisibility=default \
+#     -c lib.c -g -O0 -o lib.o
+
+# wasm-ld \
+#     --import-memory \
+#     --shared-memory \
+#     --export-dynamic \
+#     --experimental-pic \
+#     --unresolved-symbols=import-dynamic \
+#     -shared \
+#     lib.o -o lib.wasm
+
+# wasm-opt --debuginfo --set-globals --pass-arg=set-globals@__tls_base=40960000 lib.wasm -o lib.wasm

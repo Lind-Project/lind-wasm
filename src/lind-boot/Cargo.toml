@@ -10,6 +10,7 @@ lind_debug = ["wasmtime-lind-common/lind_debug"]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
+wasmtime-lind-dylink = { path = "../wasmtime/crates/lind-dylink" }
 wasmtime-lind-multi-process = { path = "../wasmtime/crates/lind-multi-process" }
 wasmtime-lind-utils = { path = "../wasmtime/crates/lind-utils" }
 rawposix = { path = "../wasmtime/crates/rawposix" }

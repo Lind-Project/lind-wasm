@@ -1032,6 +1032,11 @@ impl SharedMemory {
             }
         })
     }
+    
+    /// get the base address of this VM linear memory as a raw `u64`.
+    pub fn get_memory_base(&self) -> u64 {
+        self.vm.vmmemory_base()
+    }
 }
 
 impl fmt::Debug for SharedMemory {

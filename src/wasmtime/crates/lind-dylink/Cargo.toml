@@ -1,8 +1,8 @@
 [package]
-name = "wasmtime-lind-common"
+name = "wasmtime-lind-dylink"
 version.workspace = true
 authors.workspace = true
-description = "lind interface within wasmtime"
+description = "lind dynamic loading implementation inside wasmtime"
 edition.workspace = true
 
 [lints]
@@ -16,11 +16,9 @@ wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 rawposix = { path = "../rawposix" }
 threei = { path = "../threei" }
-wasmtime-lind-dylink = { path = "../lind-dylink" }
 wasmtime-lind-multi-process = { path = "../lind-multi-process" }
 wasmtime-lind-utils = { path = "../lind-utils" }
 sysdefs = { path = "../sysdefs" }
-wasmtime-lind-3i = { path = "../lind-3i" }
 cage = { path = "../cage" }
 typemap = { path = "../typemap" }
 

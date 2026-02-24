@@ -18,8 +18,7 @@ use core::ptr::NonNull;
 use std::path::Path;
 use wasmparser::{Parser, ValidPayload, Validator};
 use wasmtime_environ::{
-    CompiledModuleInfo, EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets,
-    VMSharedTypeIndex,
+    CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex
 };
 mod registry;
 
@@ -752,6 +751,31 @@ impl Module {
             ExportType::new(name, module.type_of(*entity_index), types, engine)
         })
     }
+    
+    /// Return a raw iterator over the module's export table.
+    ///
+    /// This exposes the underlying `(name, EntityIndex)` pairs directly from
+    /// the compiled module without converting them into high-level `Extern`
+    /// values or performing any instantiation-time resolution.
+    ///
+    /// The returned iterator:
+    /// - Preserves the exact export entries as recorded in the compiled module.
+    /// - Does not allocate or clone export data.
+    /// - Reflects static module metadata, not instance state.
+    ///
+    /// This is useful for low-level linking or relocation logic (e.g., Lind's
+    /// dynamic loader) where we need access to the raw export indices rather
+    /// than fully materialized runtime objects.
+    pub fn raw_exports<'module>(
+        &'module self,
+    ) -> impl ExactSizeIterator<Item = (&String, &EntityIndex)> + 'module {
+        let module = self.compiled_module().module();
+        let types = self.types();
+        let engine = self.engine();
+        module.exports.iter().map(move |(name, entity_index)| {
+            (name, entity_index)
+        })
+    }
 
     /// Looks up an export in this [`Module`] by name.
     ///
@@ -1016,6 +1040,16 @@ impl Module {
                 len: loc.length as usize,
             }
         })
+    }
+    
+    // lind-wasm: retrieve dynamic loading memory information
+    pub fn dylink_meminfo<'a>(&'a self) -> Option<&DylinkMemInfo> {
+        self.compiled_module().dylink_mem_info()
+    }
+
+    // lind-wasm: retrieve dynamic loading memory information
+    pub fn dylink_importinfo<'a>(&'a self) -> Option<&DylinkImportInfo> {
+        self.compiled_module().dylink_import_info()
     }
 
     pub(crate) fn id(&self) -> CompiledModuleId {

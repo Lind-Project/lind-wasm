@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use wasmtime_lind_dylink::DynamicLoader;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
@@ -30,7 +31,9 @@ pub fn add_to_linker<
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
-) -> anyhow::Result<()> {
+    dynamic_loader: DynamicLoader<T>,
+) -> anyhow::Result<()>
+{
     // attach make_syscall to wasmtime
     linker.func_wrap(
         "lind",
@@ -129,9 +132,9 @@ pub fn add_to_linker<
     linker.func_wrap(
         "lind",
         "lind-get-memory-base",
-        move |caller: Caller<'_, T>| -> u64 {
+        move |mut caller: Caller<'_, T>| -> u64 {
             // Return the base address of memory[0] for the calling instance
-            let base = get_memory_base(&caller);
+            let base = get_memory_base(&mut caller);
             base
         },
     )?;
@@ -176,6 +179,33 @@ pub fn add_to_linker<
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+        },
+    )?;
+
+    let cloned_dynamic_loader = dynamic_loader.clone();
+    linker.func_wrap(
+        "lind",
+        "dlopen",
+        move |mut caller: wasmtime::Caller<'_, T>, lib: i32| -> i32 {
+            wasmtime_lind_dylink::dlopen_call(&mut caller, lib, cloned_dynamic_loader.clone())
+        },
+    )?;
+
+    // attach copy_handler_table_to_cage to wasmtime
+    linker.func_wrap(
+        "lind",
+        "dlsym",
+        move |mut caller: wasmtime::Caller<'_, T>, handle: i32, sym: i32| -> i32 {
+            wasmtime_lind_dylink::dlsym_call(&mut caller, handle, sym)
+        },
+    )?;
+
+    // export lind-get-memory-base for libc to query base address
+    linker.func_wrap(
+        "lind",
+        "dlclose",
+        move |mut caller: wasmtime::Caller<'_, T>, handle: i32| -> i32 {
+            wasmtime_lind_dylink::dlclose_call(&mut caller, handle)
         },
     )?;
 
