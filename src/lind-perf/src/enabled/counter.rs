@@ -1,9 +1,7 @@
-use crate::timers::{TimerKind, default_timer_kind, read_end, read_start};
+use crate::{TimerKind, default_timer_kind, read_end, read_start};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 /// Counter stores information pertaining to a specific benchmarking site.
-///
-/// Typically declared as `static` and imported in lind-boot.
 pub struct Counter {
     /// Counts the total number of CPU cycles or Nanoseconds spent.
     pub cycles: AtomicU64,
@@ -12,14 +10,12 @@ pub struct Counter {
     pub name: &'static str,
     /// Only one Counter is globally enabled during a given run.
     pub enabled: AtomicBool,
-    /// Stores TimerKind
+    /// Stores TimerKind.
     timer: AtomicU8,
 }
 
 impl Counter {
     /// Create a counter with the default timer.
-    ///
-    /// Use this for most counters; change the timer only when you need cycles.
     pub const fn new(name: &'static str) -> Self {
         Self {
             cycles: AtomicU64::new(0),
@@ -28,6 +24,10 @@ impl Counter {
             enabled: AtomicBool::new(false),
             timer: AtomicU8::new(default_timer_kind() as u8),
         }
+    }
+
+    pub fn get_name(&self) -> Option<&'static str> {
+        Some(self.name)
     }
 
     #[inline(always)]
@@ -49,9 +49,7 @@ impl Counter {
     pub fn record(&self, start: u64) {
         if self.enabled.load(Ordering::Relaxed) {
             let elapsed = read_end(self.timer_kind()).saturating_sub(start);
-            // Add elapsed time to the counter.
             self.cycles.fetch_add(elapsed, Ordering::Relaxed);
-            // Increment total calls.
             self.calls.fetch_add(1, Ordering::Relaxed);
         }
     }
@@ -82,8 +80,6 @@ impl Counter {
     }
 
     /// Set the timer backend for this counter.
-    ///
-    /// This does not reset totals.
     pub fn set_timer_kind(&self, kind: TimerKind) {
         self.timer.store(kind as u8, Ordering::Relaxed);
     }
@@ -97,10 +93,7 @@ impl Counter {
     }
 }
 
-/// Scope is the implementation of the RAII guard which stores a Counter and the start time (when
-/// it was introduced).
-///
-/// Upon drop, it records for the Counter the total time elapsed.
+/// Scope is the RAII guard that records elapsed time on drop.
 pub struct Scope<'a> {
     counter: &'a Counter,
     start: u64,
@@ -120,8 +113,6 @@ pub fn reset_all(counters: &[&Counter]) {
 }
 
 /// Set a timer for a counter group.
-///
-/// This updates the backend for all counters in the slice.
 pub fn set_timer(counters: &[&Counter], kind: TimerKind) {
     for c in counters {
         c.set_timer_kind(kind);
@@ -129,8 +120,6 @@ pub fn set_timer(counters: &[&Counter], kind: TimerKind) {
 }
 
 /// Enable only the named counter in a group.
-///
-/// All other counters in the slice are disabled.
 pub fn enable_name(counters: &[&Counter], name: &str) {
     for c in counters {
         if c.name == name {

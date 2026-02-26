@@ -6,7 +6,6 @@ use wasmtime::{Caller, Instance};
 use wasmtime_lind_3i::{VmCtxWrapper, get_vmctx, set_vmctx};
 use wasmtime_lind_multi_process;
 
-#[cfg(feature = "lind_perf")]
 use crate::perf;
 
 /// The callback function registered with 3i uses a unified Wasm entry
@@ -48,19 +47,16 @@ pub extern "C" fn grate_callback_trampoline(
     arg6: u64,
     arg6cageid: u64,
 ) -> i32 {
-    #[cfg(feature = "lind_perf")]
-    let _grate_callback_timer = perf::enabled::GRATE_CALLBACK_TRAMPOLINE.get_timer();
+    let _grate_callback_timer = lind_perf::get_timer!(perf::GRATE_CALLBACK_TRAMPOLINE);
 
-
-    #[cfg(feature = "lind_perf")]
-    let _vmctx_timer = perf::enabled::TRAMPOLINE_GET_VMCTX.get_timer();
+    let vmctx_timer = lind_perf::get_timer!(perf::TRAMPOLINE_GET_VMCTX);
     let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
         Some(v) => v,
         None => {
             panic!("no VMContext found for cage_id {}", cageid);
         }
     };
-    drop(_vmctx_timer);
+    drop(vmctx_timer);
 
     // Convert back to VMContext
     let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;

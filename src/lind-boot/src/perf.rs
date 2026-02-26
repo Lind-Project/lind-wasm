@@ -5,53 +5,39 @@
 /// - Initializing them
 /// - Combining all the COUNTERS into one list to iterate over and sequentially enable
 /// - Printing a combined lind-perf report.
-#[cfg(feature = "lind_perf")]
-pub mod enabled {
-    use lind_perf::{Counter, TimerKind, enable_name, reset_all, set_timer};
+use crate::cli::CliOptions;
+use lind_perf::{Counter, TimerKind};
 
-    // These are counters defined within lind-boot.
-    pub static GRATE_CALLBACK_TRAMPOLINE: Counter =
-        Counter::new("lind_boot::grate_callback_trampoline");
-    pub static TRAMPOLINE_GET_VMCTX: Counter = Counter::new("lind_boot::trampoline::get_vmctx");
-    pub static TRAMPOLINE_GET_PASS_FPTR_TO_WT: Counter =
-        Counter::new("lind_boot::trampoline::get_pass_fptr_to_wt");
-    pub static TRAMPOLINE_TYPED_DISPATCH_CALL: Counter =
-        Counter::new("lind_boot::trampoline::typed_dispatch_call");
+// These are counters defined within lind-boot.
+pub static GRATE_CALLBACK_TRAMPOLINE: Counter =
+    Counter::new("lind_boot::grate_callback_trampoline");
+pub static TRAMPOLINE_GET_VMCTX: Counter = Counter::new("lind_boot::trampoline::get_vmctx");
 
-    pub static LIND_BOOT_COUNTERS: &[&Counter] = &[
-        &GRATE_CALLBACK_TRAMPOLINE,
-        &TRAMPOLINE_GET_VMCTX,
-        &TRAMPOLINE_GET_PASS_FPTR_TO_WT,
-        &TRAMPOLINE_TYPED_DISPATCH_CALL,
-    ];
+pub static LIND_BOOT_COUNTERS: &[&Counter] = &[&GRATE_CALLBACK_TRAMPOLINE, &TRAMPOLINE_GET_VMCTX];
 
-    /// Initialize counters for all modules, involves setting the TimerKind and resetting the
-    /// counts.
-    pub fn init(kind: TimerKind) {
-        set_timer(LIND_BOOT_COUNTERS, kind);
-
-        reset_all(LIND_BOOT_COUNTERS);
-    }
-
-    /// Finds a counter by it's name and searches for it across modules to enable it. Disables all
-    /// other counters.
-    pub fn enable_one(name: &str) {
-        enable_name(LIND_BOOT_COUNTERS, name);
-    }
-
-    /// Get a list of all counter names.
-    pub fn all_counter_names() -> Vec<&'static str> {
-        let mut names = Vec::new();
-        names.extend(LIND_BOOT_COUNTERS.iter().map(|c| c.name));
-        names
-    }
-
-    /// Print a report for every module
-    pub fn report() {
-        lind_perf::report_header(format!("LIND-BOOT"));
-        lind_perf::report(LIND_BOOT_COUNTERS);
-    }
+/// Initialize counters for all modules, involves setting the TimerKind and resetting the
+/// counts.
+pub fn perf_init(kind: TimerKind) {
+    lind_perf::set_timer(LIND_BOOT_COUNTERS, kind);
+    lind_perf::reset_all(LIND_BOOT_COUNTERS);
 }
 
-#[cfg(not(feature = "lind_perf"))]
-pub mod enabled {}
+/// Finds a counter by it's name and searches for it across modules to enable it. Disables all
+/// other counters.
+pub fn enable_one_counter(name: &str) {
+    lind_perf::enable_name(LIND_BOOT_COUNTERS, name);
+}
+
+/// Get a list of all counter names.
+pub fn all_counter_names() -> Vec<&'static str> {
+    LIND_BOOT_COUNTERS
+        .iter()
+        .filter_map(|c| c.get_name())
+        .collect()
+}
+
+/// Print a report for every module.
+pub fn perf_report() {
+    lind_perf::report_header(format!("LIND-BOOT"));
+    lind_perf::report(LIND_BOOT_COUNTERS);
+}

@@ -1,5 +1,11 @@
 use clap::*;
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum PerfTimer {
+    Clock,
+    Tsc,
+}
+
 #[derive(Debug, Parser, Clone)]
 #[command(name = "lind-boot")]
 pub struct CliOptions {
@@ -40,15 +46,18 @@ pub struct CliOptions {
     #[arg(long = "env", number_of_values = 1, value_name = "NAME[=VAL]", value_parser = parse_env_var)]
     pub vars: Vec<(String, Option<String>)>,
 
-    /// Run performance benchmark with CLOCK_GETTIME (requires the `lind_perf` feature)
-    #[cfg(feature = "lind_perf")]
-    #[arg(long)]
-    pub perf: bool,
-
-    /// Run performance benchmarks with TSC (requires the `lind_perf` feature)
-    #[cfg(feature = "lind_perf")]
-    #[arg(long)]
-    pub perftsc: bool,
+    /// Get performance information for the running module.
+    ///
+    /// Requires compilation with `lind_perf` feature.
+    #[arg(
+        long,
+        value_enum,
+        default_missing_value = "clock",
+        value_name = "clock|tsc",
+        num_args = 0..=1,
+        require_equals = true,
+    )]
+    pub perf: Option<PerfTimer>,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
@@ -62,5 +71,22 @@ pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
 impl CliOptions {
     pub fn wasm_file(&self) -> &str {
         &self.args[0]
+    }
+
+    pub fn perf_timer_kind(&self) -> Option<lind_perf::TimerKind> {
+        match lind_perf::ENABLED {
+            false => match self.perf {
+                Some(_) => {
+                    eprintln!("--perf needs compilation with the feature `lind_perf` enabled.");
+                    std::process::exit(1);
+                }
+                None => None,
+            },
+            true => match self.perf {
+                Some(PerfTimer::Clock) => Some(lind_perf::TimerKind::Clock),
+                Some(PerfTimer::Tsc) => Some(lind_perf::TimerKind::Rdtsc),
+                None => None,
+            },
+        }
     }
 }

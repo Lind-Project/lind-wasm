@@ -3,4 +3,9 @@ name = "lind-perf"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+enabled = ["dep:libc"]
+
 [dependencies]
+libc = { version = "0.2", optional = true }
