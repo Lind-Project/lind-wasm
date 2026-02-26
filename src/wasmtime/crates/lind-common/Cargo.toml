@@ -22,6 +22,8 @@ sysdefs = { path = "../sysdefs" }
 wasmtime-lind-3i = { path = "../lind-3i" }
 cage = { path = "../cage" }
 typemap = { path = "../typemap" }
+lind-perf = { path = "../lind-perf", optional = true }
 
 [features]
 lind_debug = []
+lind_perf = ["dep:lind-perf", "threei/lind_perf", "rawposix/lind_perf"]

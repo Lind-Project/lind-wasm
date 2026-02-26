@@ -16,10 +16,12 @@ sysdefs = { path = "../sysdefs" }
 typemap = { path = "../typemap" }
 cage = { path = "../cage" }
 threei = { path = "../threei" }
+lind-perf = { path = "../lind-perf", optional=true }
 
 [features]
 default = ["fast"]
 fast = []
 secure = []
+lind_perf = ["dep:lind-perf"]
 
 [dev-dependencies]

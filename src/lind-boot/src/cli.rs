@@ -39,6 +39,16 @@ pub struct CliOptions {
     /// cause the environment variable `FOO` to be inherited.
     #[arg(long = "env", number_of_values = 1, value_name = "NAME[=VAL]", value_parser = parse_env_var)]
     pub vars: Vec<(String, Option<String>)>,
+
+    /// Run performance benchmark with CLOCK_GETTIME (requires the `lind_perf` feature)
+    #[cfg(feature = "lind_perf")]
+    #[arg(long)]
+    pub perf: bool,
+
+    /// Run performance benchmarks with TSC (requires the `lind_perf` feature)
+    #[cfg(feature = "lind_perf")]
+    #[arg(long)]
+    pub perftsc: bool,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
