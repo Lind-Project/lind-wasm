@@ -4,22 +4,28 @@
 #include "lind_syscall_num.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
-int __lind_make_syscall_trampoline (
-    unsigned int callnumber, uint64_t callname, uint64_t self_cageid,
-    uint64_t target_cageid, uint64_t arg1, uint64_t arg1cageid, uint64_t arg2,
-    uint64_t arg2cageid, uint64_t arg3, uint64_t arg3cageid, uint64_t arg4,
-    uint64_t arg4cageid, uint64_t arg5, uint64_t arg5cageid, uint64_t arg6,
-    uint64_t arg6cageid) __attribute__ ((__import_module__ ("lind"),
-					 __import_name__ ("make-syscall")));
+int __lind_make_syscall_trampoline(unsigned int callnumber, 
+    uint64_t callname, 
+    uint64_t self_cageid, uint64_t target_cageid,
+    uint64_t arg1, uint64_t arg1cageid,
+    uint64_t arg2, uint64_t arg2cageid,
+    uint64_t arg3, uint64_t arg3cageid,
+    uint64_t arg4, uint64_t arg4cageid,
+    uint64_t arg5, uint64_t arg5cageid,
+    uint64_t arg6, uint64_t arg6cageid
+) __attribute__((
+    __import_module__("lind"),
+    __import_name__("make-syscall")
+));
 
 /*
  * make_threei_call:
  *
  * Unified function used to invoke threei style syscalls.  This is the
  * core entry point for all syscall transitions into the lind runtime,
- * including inter-cage calls and grates.  Unlike MAKE_LEGACY_SYSCALL, this
- * function explicitly specifies both `self_cageid` and `target_cageid`,
- * allowing fine-grained routing of syscalls across cage boundaries.
+ * including inter-cage calls and grates.  Unlike MAKE_LEGACY_SYSCALL, this function
+ * explicitly specifies both `self_cageid` and `target_cageid`, allowing
+ * fine-grained routing of syscalls across cage boundaries.
  *
  * Each logical argument is passed in a (value, cageid) pair, enabling
  * three-i's interposition layer to perform selective rewriting, mediation,
@@ -41,8 +47,8 @@ int __lind_make_syscall_trampoline (
  * trampoline, but also optionally performs post-processing on the return
  * value depending on `translate_errno`.
  *
- * The `translate_errno` controls whether this wrapper should apply the
- * standard errno handling:
+ * The `translate_errno` controls whether this wrapper should apply the standard
+ * errno handling:
  *
  *   translate_errno == 1 (TRANSLATE_ERRNO_ON):
  *       The return value is treated as a complete syscall result.
@@ -56,74 +62,78 @@ int __lind_make_syscall_trampoline (
  *
  * This distinction is required because some syscalls—especially futex-related
  * operations (e.g., lll_futex_wake, lll_futex_requeue, etc.) expect the
- * trampoline to return raw -errno value and must not receive additional errno
- * post-processing at this layer. Other syscalls, however, rely on the standard
+ * trampoline to return raw -errno value and must not receive additional errno 
+ * post-processing at this layer. Other syscalls, however, rely on the standard 
  * POSIX errno translation implemented here.
  */
-int
-make_threei_call (unsigned int callnumber, uint64_t callname,
-		  uint64_t self_cageid, uint64_t target_cageid, uint64_t arg1,
-		  uint64_t arg1cageid, uint64_t arg2, uint64_t arg2cageid,
-		  uint64_t arg3, uint64_t arg3cageid, uint64_t arg4,
-		  uint64_t arg4cageid, uint64_t arg5, uint64_t arg5cageid,
-		  uint64_t arg6, uint64_t arg6cageid, int translate_errno)
+int make_threei_call (unsigned int callnumber, 
+    uint64_t callname, 
+    uint64_t self_cageid, uint64_t target_cageid,
+    uint64_t arg1, uint64_t arg1cageid,
+    uint64_t arg2, uint64_t arg2cageid,
+    uint64_t arg3, uint64_t arg3cageid,
+    uint64_t arg4, uint64_t arg4cageid,
+    uint64_t arg5, uint64_t arg5cageid,
+    uint64_t arg6, uint64_t arg6cageid,
+    int translate_errno)
 {
-  int ret = __lind_make_syscall_trampoline (
-      callnumber, callname, self_cageid, target_cageid, arg1, arg1cageid, arg2,
-      arg2cageid, arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6,
-      arg6cageid);
-  // if translate_errno is not enabled, we do not do any further process to
-  // errno handling and directly return the result
-  if (translate_errno == 0)
+    int ret = __lind_make_syscall_trampoline(callnumber, 
+        callname, 
+        self_cageid, target_cageid,
+        arg1, arg1cageid,
+        arg2, arg2cageid,
+        arg3, arg3cageid,
+        arg4, arg4cageid,
+        arg5, arg5cageid,
+        arg6, arg6cageid);
+    // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
+    if(translate_errno == 0) return ret;
+    // handle the errno
+    // in rawposix, we use -errno as the return value to indicate the error
+    // but this may cause some issues for mmap syscall, because mmap syscall
+    // is returning an 32-bit address, which may overflow the int type (i32)
+    // luckily we can handle this easily because the return value of mmap is always
+    // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
+    // the errno and mmap result by simply checking if the return value is
+    // within the valid errno range
+    if(ret < 0 && ret > -256)
+    {
+        errno = -ret;
+        return -1;
+    }
+    else
+    {
+        errno = 0;
+    }
     return ret;
-  // handle the errno
-  // in rawposix, we use -errno as the return value to indicate the error
-  // but this may cause some issues for mmap syscall, because mmap syscall
-  // is returning an 32-bit address, which may overflow the int type (i32)
-  // luckily we can handle this easily because the return value of mmap is
-  // always multiple of pages (typically 4096) even when overflow, therefore we
-  // can distinguish the errno and mmap result by simply checking if the return
-  // value is within the valid errno range
-  if (ret < 0 && ret > -256)
-    {
-      errno = -ret;
-      return -1;
-    }
-  else
-    {
-      errno = 0;
-    }
-  return ret;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-// 3i function call to register or deregister a syscall handler in a target
-// cage targetcage: the cage id where the syscall will be registered
+// 3i function call to register or deregister a syscall handler in a target cage
+// targetcage: the cage id where the syscall will be registered
 // targetcallnum: the syscall number to be registered in the target cage
 // this_grate_id: the grate id of the syscall jump ends
 // register_flag: deregister(0) or register(non-0)
-// in_grate_fn_ptr_u64: the function pointer (cast to uint64_t) of the syscall
-// handler in the grate, only used when register_flag is non-0
-int
-register_handler (int64_t targetcage, uint64_t targetcallnum,
-		  uint64_t this_grate_id, uint64_t in_grate_fn_ptr_u64)
+// in_grate_fn_ptr_u64: the function pointer (cast to uint64_t) of the syscall handler in the grate, only used when register_flag is non-0
+int register_handler (int64_t targetcage, 
+    uint64_t targetcallnum, 
+    uint64_t this_grate_id,
+    uint64_t in_grate_fn_ptr_u64)
 {
-  return make_threei_call (
-      REGISTER_HANDLER_SYSCALL,
-      0,	  // callname is not used in the trampoline, set to 0
-      targetcage, // pass targetcage as self_cageid
-      targetcage, // pass targetcage as target_cageid. Self_cageid and
-		  // target_cageid are the same to adapt with regular
-		  // make_syscall lookup logic in 3i
-      targetcage, targetcallnum,
-      0,	     // runtime_id currently not used, set to 0
-      this_grate_id, // handlefunccage is the grate id of the handler function,
-		     // which is the same as this_grate_id
-      in_grate_fn_ptr_u64, 0, 0, 0, 0, 0, 0, 0,
-      0 /* translate_errno=0: we want to return the raw result without errno
-	   translation */
-  );
+    return make_threei_call(
+        REGISTER_HANDLER_SYSCALL, 
+        0, // callname is not used in the trampoline, set to 0
+        targetcage, // pass targetcage as self_cageid
+        targetcage, // pass targetcage as target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        targetcage, 
+        targetcallnum, 
+        0, // runtime_id currently not used, set to 0
+        this_grate_id, // handlefunccage is the grate id of the handler function, which is the same as this_grate_id
+        in_grate_fn_ptr_u64,
+        0, 0, 0, 0, 0, 0, 0,
+        0 /* translate_errno=0: we want to return the raw result without errno translation */
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -137,42 +147,44 @@ register_handler (int64_t targetcage, uint64_t targetcallnum,
 // destcage: the cage id of the destination address
 // len: the length of data to copy
 // copytype: the type of copy, 0 for normal copy, 1 for string copy
-int
-copy_data_between_cages (uint64_t thiscage, uint64_t targetcage,
-			 uint64_t srcaddr, uint64_t srccage, uint64_t destaddr,
-			 uint64_t destcage, uint64_t len, uint64_t copytype)
+int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
-  return make_threei_call (
-      COPY_DATA_BETWEEN_CAGES_SYSCALL,
-      0,	// callname is not used in the trampoline, set to 0
-      thiscage, // self_cageid
-      thiscage, // target_cageid. Self_cageid and target_cageid are the same to
-		// adapt with regular make_syscall lookup logic in 3i
-      TRANSLATE_UADDR_TO_HOST (srcaddr, srccage), srccage,
-      TRANSLATE_UADDR_TO_HOST (destaddr, destcage), destcage, len, 0, copytype,
-      0, 0, 0, 0, 0, 0 /* translate_errno=0: we want to return the raw result
-			  without errno translation */
-  );
+    return make_threei_call(
+        COPY_DATA_BETWEEN_CAGES_SYSCALL, 
+        0, // callname is not used in the trampoline, set to 0
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
+        TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
+        len, 0,
+        copytype, 0,
+        0, 0, 0, 0,
+        0 /* translate_errno=0: we want to return the raw result without errno translation */
+    );
 }
 
 // 3i function call to copy handler table to a target cage
-// typically used when a new cage is created and we need to copy the syscall
-// handler table from another cage (has the handlers different than default
-// rawposix registration) to the new cage thiscage: the cage id of the caller
-// cage targetcage: the cage id of the target cage
-int
-copy_handler_table_to_cage (uint64_t thiscage, uint64_t targetcage)
+// typically used when a new cage is created and we need to copy the syscall handler 
+// table from another cage (has the handlers different than default rawposix registration) 
+// to the new cage
+// thiscage: the cage id of the caller cage
+// targetcage: the cage id of the target cage
+int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
 {
-  return make_threei_call (
-      COPY_HANDLER_TABLE_TO_CAGE_SYSCALL,
-      0,	// callname is not used in the trampoline, set to 0
-      thiscage, // self_cageid
-      thiscage, // target_cageid. Self_cageid and target_cageid are the same to
-		// adapt with regular make_syscall lookup logic in 3i
-      thiscage, targetcage, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0 /* translate_errno=0: we want to return the raw result without errno
-	   translation */
-  );
+    return make_threei_call(
+        COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, 
+        0, // callname is not used in the trampoline, set to 0
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        thiscage, 
+        targetcage,
+        0, 0,
+        0, 0,
+        0, 0,
+        0, 0,
+        0, 0,
+        0 /* translate_errno=0: we want to return the raw result without errno translation */
+    );
 }
 
 // Special syscalls meant to be used exclusively for benchmarking purposes.
@@ -187,8 +199,11 @@ int
 libc_syscall ()
 {
   uint64_t __self = __lind_cageid;
-  make_threei_call (LIBC_SYSCALL, NULL, __self, __self, 0, __self, 0, __self,
-		    0, __self, 0, __self, 0, __self, 0, __self, 0);
+  make_threei_call (LIBC_SYSCALL, NULL, 
+		    __self, __self,
+		    0, __self, 0, __self,
+		    0, __self, 0, __self,
+   		    0, __self, 0, __self, 0);
 }
 
 // This simulates the behaviour of a syscall that does not need the kernel for
@@ -204,6 +219,10 @@ int
 fdtables_syscall ()
 {
   uint64_t __self = __lind_cageid;
-  make_threei_call (FDTABLES_SYSCALL, NULL, __self, __self, -1, __self, 0,
-		    __self, 0, __self, 0, __self, 0, __self, 0, __self, 0);
+  make_threei_call (FDTABLES_SYSCALL, NULL, 
+		    __self, __self,
+		    -1, __self, // Set fd argument to -1.
+		    0, __self, 0, __self, 
+	 	    0, __self, 0, __self, 
+		    0, __self, 0);
 }
