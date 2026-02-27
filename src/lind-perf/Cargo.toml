@@ -5,7 +5,7 @@ edition = "2024"
 
 [features]
 default = []
-enabled = ["dep:libc"]
+enabled = []
 
 [dependencies]
-libc = { version = "0.2", optional = true }
+libc = "0.2"

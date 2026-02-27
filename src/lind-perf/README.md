@@ -1,112 +1,88 @@
 # lind-perf
 
-`lind-perf` is a microbenchmarking library for lind-wasm. It generates timing reports for hot
-paths in the syscall lifecycle by measuring the total time spent in specific functions across
-modules.
+`lind-perf` is the instrumentation crate used by Lind crates (for example `lind-boot`) to measure hot paths.
 
-Sample output for running `close(-1)`:
+This crate is defined in a manner where the callsites remain clean i.e. without needing conditional flags. This is implemented using the `enabled` feature.
 
-```bash
-FDTABLE Test    ................
---------------------------------------------LIND-BOOT--------------------------------------------
-name                                                              calls        total          avg
--------------------------------------------------------------------------------------------------
-lind_boot::load_main_module                                           1    111.482ms    111.482ms
-lind_boot::invoke_func                                                1    111.282ms    111.282ms
+The public APIs used remain the same, but if the crate is compiled without the `enabled` feature, each operation is a no-op ensuring that the final binary is not polluted with unused codepaths.
 
--------------------------------------------LIND-COMMON-------------------------------------------
-name                                                              calls        total          avg
--------------------------------------------------------------------------------------------------
-lind_common::add_to_linker::make-syscall                        1000000     94.274ms     94.000ns
+## Build Modes
 
----------------------------------------------THREEI----------------------------------------------
-name                                                              calls        total          avg
--------------------------------------------------------------------------------------------------
-threei::make_syscall                                            1000000     90.815ms     90.000ns
+`lind-perf` supports two compile-time modes via Cargo feature `enabled`:
 
---------------------------------------------RAWPOSIX---------------------------------------------
-name                                                              calls        total          avg
--------------------------------------------------------------------------------------------------
-rawposix::close_syscall                                         1000000     21.255ms     21.000ns
+1. `enabled` on: real counter accumulation + real reporting.
+2. `enabled` off (default): API-compatible no-op behavior.
 
---------------------------------------------FDTABLES---------------------------------------------
-name                                                              calls        total          avg
--------------------------------------------------------------------------------------------------
-fdtables::close_virtualfd                                       1000000     14.372ms     14.000ns
-```
+`lind-boot` maps its crate feature `lind_perf` to `lind-perf/enabled`.
 
-## Building
+## Public API
 
-`lind-perf` is only included in the final binary if `--features lind_perf` is set during build.
+Main exports:
 
-`make lind-boot-perf` is a shorthand for building a `release` version of `lind-boot` with `lind-perf` enabled.
+- `struct Counter` : Responsible for recording information such as cycles spent, calls made for a benchmarking site.
+- `TimerKind::{Clock, Rdtsc}` : Clock uses `CLOCK_MONOTONIC_RAW`, Rdtsc: Time Stamp Counter.
+- `fn set_timer(...)` : Set timer kind for list of Counters.
+- `fn reset_all_counters(...)` : Reset Counters.
+- `fn enable_counter_by_name(...)` : Enable Counter that matches the input name, disable the rest.
+- `fn report(...)` : Print results from a set of counters.
+- `static ENABLED: bool` : Check if `lind-perf` uses the `enabled` feature.
 
-## Running Benchmarks
+Macro:
 
-`lind-perf` will generate a report for any module that is run using `lind-boot` with the
-`--perf` or `--perftsc` flag.
+- `lind_perf::get_timer!(COUNTER_PATH)` : Used to introduce a timer to a scope and start it.
 
-e.g. `sudo lind-boot --perf libc_syscall.wasm`
+## Typical Usage
 
-Standard benchmarks can be run using: [`./scripts/run_microbench.sh`](../../scripts/run_microbench.sh)
-
-Flags:
-- `--perf`: Uses the default Clock timer (nanoseconds)
-- `--perftsc`: Uses the `rdtsc` timer (CPU cycles)
-
-## Internals
-
-### How the timer works
-Each benchmark site is a `Counter`. A counter tracks:
-- total elapsed time across calls
-- number of calls
-
-Timing is scoped. The common pattern is:
-1. Create a guard at the start of the function.
-2. The guard records the start time immediately.
-3. When the function returns, the guard is dropped and records the end time.
-4. The elapsed time is added to the counter total and the call count increments.
-
-This means early returns are timed as well. If the guard is dropped before the work
-finishes (e.g., because of a `return foo(...)` expression), the measurement will be too
-small. Keep the guard alive until after the work:
+Define a counters:
 
 ```rust
-let _scope = perf::enabled::YOUR_COUNTER.scope();
-let ret = (|| {
+pub static MY_COUNTER: lind_perf::Counter = lind_perf::Counter::new("my_crate::my_counter");
+```
+
+Use timer to time a scope:
+
+```rust
+(|| {
+    let _timer = lind_perf::get_timer!(crate::perf::MY_COUNTER); // Starts the timer
     // measured work
-    ...
-})();
-std::hint::black_box(&_scope); // Tells Rust to be pessimistic about optimizing this variable.
-ret
+})(); // Timer stops when dropped.
 ```
 
-### Ensuring only one active timer
-`lind-boot` runs the benchmark module once per counter. On each run it enables exactly one
-counter and disables the rest, then prints a report. This avoids stacked measurement overhead
-from multiple counters running at the same time.
-
-The logic for this can be seen in [`lind-boot/src/main.rs`](../lind-boot/src/main.rs)
-
-### Adding a new benchmark site
-Suppose we want to add a new timer in `threei` for the `copy_data_between_cages` function. We will need to make the following changes:
-
-1. Add a counter in `src/threei/src/perf.rs` and include it in `ALL_COUNTERS`.
-2. Add a scoped timer in `src/threei/src/threei.rs` at the top of the `copy_data_between_cages` function.
-3. Keep the guard alive until after the measured work if the function has multiple return paths. This can be done by moving measured work into an unnamed scope, and using the `std::hint::black_box` to avoid the scope being optimized out early.
-
-In case we want to only benchmark a snippet of a function instead of the entire thing, we can `drop` the scope manually:
+Timers can also be dropped manually for timing non-scope snippets:
 
 ```rust
-let scope = perf::enabled::YOUR_COUNTER.scope();
-// measured snippet
-drop(scope);
+let _timer = lind_perf::get_timer!(crate::perf::MY_COUNTER); // Starts the timer
+// measured work
+drop(_timer); // Implicit drop
 ```
 
-### Adding a new crate
-Currently the crates that are supported are `wasmtime_lind_common`, `fdtables`, `rawposix`, and `threei`. In order to add support for a new crate, the following changes are needed:
+Counters can be enabled or disabled during runtime. The most common use-case for this is to sequentially enable a timer exclusively to avoid performance overheads.
 
-1. Add a `perf.rs` module to the new crate and define counters plus `ALL_COUNTERS`.
-2. Export `ALL_COUNTERS` from the crate�~@~Ys `perf` module.
-3. Add the crate�~@~Ys counters to `lind-boot` enumeration, enable/reset, and reporting.
-4. Rebuild `lind-boot` with `--features lind_perf` to include the new module.
+```rust
+lind_perf::set_timer(ALL_COUNTERS, lind_perf::TimerKind::Clock);
+lind_perf::reset_all(ALL_COUNTERS);
+lind_perf::enable_name(ALL_COUNTERS, "my_crate::my_counter");
+```
+
+Print report:
+
+```rust
+lind_perf::report_header("MY-CRATE".to_string());
+lind_perf::report(ALL_COUNTERS);
+```
+
+## Disabled Mode Semantics
+
+When `enabled` is not set:
+
+- `Counter` is a lightweight no-op type.
+- `get_timer!` returns a no-op scope guard.
+- `set_timer/reset_all/enable_name/report*` are no-ops.
+- `read_start/read_end` return `0`.
+
+This allows instrumentation to remain in code without `cfg` guards at callsites.
+
+## Timer Backends
+
+- `TimerKind::Clock`: uses `clock_gettime(CLOCK_MONOTONIC_RAW)` in enabled mode.
+- `TimerKind::Rdtsc`: uses RDTSC/RDTSCP on `x86_64` (falls back to clock timing on non-`x86_64`).

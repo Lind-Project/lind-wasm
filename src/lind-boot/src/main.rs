@@ -28,6 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // Perf mode is a "one counter per run" workflow:
+    // initialize counters once, then rerun the same workload with each counter
+    // exclusively enabled so measurements do not overlap.
     if let Some(kind) = lindboot_cli.perf_timer_kind() {
         perf::perf_init(kind);
 
@@ -36,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for counter in counters {
             perf::enable_one_counter(counter);
 
+            // Each perf sample gets a fresh RawPOSIX lifecycle boundary.
             rawposix_start(0);
             let _ = execute_wasmtime(lindboot_cli.clone());
             rawposix_shutdown();

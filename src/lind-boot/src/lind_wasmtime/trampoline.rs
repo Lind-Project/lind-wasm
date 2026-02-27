@@ -47,16 +47,16 @@ pub extern "C" fn grate_callback_trampoline(
     arg6: u64,
     arg6cageid: u64,
 ) -> i32 {
+    // This timer measures the entire function since it is never explicitly dropped. The timer
+    // therefore ends only when the function exits.
     let _grate_callback_timer = lind_perf::get_timer!(perf::GRATE_CALLBACK_TRAMPOLINE);
 
-    let vmctx_timer = lind_perf::get_timer!(perf::TRAMPOLINE_GET_VMCTX);
     let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
         Some(v) => v,
         None => {
             panic!("no VMContext found for cage_id {}", cageid);
         }
     };
-    drop(vmctx_timer);
 
     // Convert back to VMContext
     let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
@@ -97,8 +97,11 @@ pub extern "C" fn grate_callback_trampoline(
                 u64,
             ), i32>(&mut store)?;
 
+            // This timer is used for a smaller snippet rather than an entire function or a scope,
+            // and therefore gets dropped manually to record the end time.
+            let _typed_func = lind_perf::get_timer!(perf::TYPED_FUNC_CALL);
             // Call the entry function with all arguments and in grate function pointer
-            typed_func.call(
+            let ret = typed_func.call(
                 &mut store,
                 (
                     in_grate_fn_ptr_u64,
@@ -116,7 +119,9 @@ pub extern "C" fn grate_callback_trampoline(
                     arg6,
                     arg6cageid,
                 ),
-            )
+            );
+            drop(_typed_func);
+            ret
         })
         .unwrap_or(threei_const::GRATE_ERR)
     };

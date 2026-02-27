@@ -1,14 +1,22 @@
-use crate::{TimerKind, default_timer_kind, read_end, read_start};
+use crate::timers::{TimerKind, default_timer_kind, read_end, read_start};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 /// Counter stores information pertaining to a specific benchmarking site.
+///
+/// Timing starts when the counter is introduced to the scope using get_timer() and ends once it
+/// gets dropped.
 pub struct Counter {
     /// Counts the total number of CPU cycles or Nanoseconds spent.
     pub cycles: AtomicU64,
     /// Counts the total number of invocations.
     pub calls: AtomicU64,
+    /// Globally unique name for the counter.
     pub name: &'static str,
-    /// Only one Counter is globally enabled during a given run.
+    /// Depending on the workflow being timed, having multiple timers enabled at the same time can
+    /// lead to unacceptable timing overheads. To avoid this, each Counter can be dynamically
+    /// enabled or disabled.
+    ///
+    /// When disabled, operations such as start() or end() are no-ops.
     pub enabled: AtomicBool,
     /// Stores TimerKind.
     timer: AtomicU8,
@@ -26,6 +34,7 @@ impl Counter {
         }
     }
 
+    /// Get the name of the Counter
     pub fn get_name(&self) -> Option<&'static str> {
         Some(self.name)
     }
@@ -106,7 +115,7 @@ impl Drop for Scope<'_> {
 }
 
 /// Reset all counters in a group.
-pub fn reset_all(counters: &[&Counter]) {
+pub fn reset_all_counters(counters: &[&Counter]) {
     for c in counters {
         c.reset();
     }
@@ -120,7 +129,7 @@ pub fn set_timer(counters: &[&Counter], kind: TimerKind) {
 }
 
 /// Enable only the named counter in a group.
-pub fn enable_name(counters: &[&Counter], name: &str) {
+pub fn enable_counter_by_name(counters: &[&Counter], name: &str) {
     for c in counters {
         if c.name == name {
             c.enable();

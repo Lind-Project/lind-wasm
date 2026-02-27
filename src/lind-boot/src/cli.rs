@@ -2,7 +2,9 @@ use clap::*;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum PerfTimer {
+    /// Use `clock_gettime(CLOCK_MONOTONIC_RAW)` based timing.
     Clock,
+    /// Use RDTSC/RDTSCP cycle counter timing.
     Tsc,
 }
 
@@ -48,7 +50,11 @@ pub struct CliOptions {
 
     /// Get performance information for the running module.
     ///
-    /// Requires compilation with `lind_perf` feature.
+    /// `--perf` defaults to `clock`; pass `--perf=tsc` for cycle-based timing.
+    ///
+    /// `--perf` is always accepted by the CLI, but execution only proceeds when
+    /// lind-boot is compiled with the crate feature `lind_perf` (which wires
+    /// `lind-perf/enabled`).
     #[arg(
         long,
         value_enum,
@@ -74,6 +80,10 @@ impl CliOptions {
     }
 
     pub fn perf_timer_kind(&self) -> Option<lind_perf::TimerKind> {
+        // Runtime gate for the perf CLI path:
+        // - if lind-boot was compiled without `lind_perf`, reject `--perf` early
+        //   with a clear error.
+        // - otherwise map the CLI timer selection to lind-perf's timer backend.
         match lind_perf::ENABLED {
             false => match self.perf {
                 Some(_) => {
