@@ -109,10 +109,13 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
     // If it does, we return it. If not, we fallback to any handler registered for this
     // (self_cageid, syscall_num) pair,
     if target_cageid == self_cageid {
-        // Prefer exact RAWPOSIX handler if registered
+        // Prefer exact RAWPOSIX or THREEI handler if registered
         if let Some(addr) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
             return Some((lind_platform_const::RAWPOSIX_CAGEID, *addr));
+        } else if let Some(addr) = target_map.get(&lind_platform_const::THREEI_CAGEID) {
+            return Some((lind_platform_const::THREEI_CAGEID, *addr));
         }
+
         let grateid = target_map.keys().next().copied()?;
         let addr = target_map.values().next().copied()?;
         // Otherwise fallback to any registered handler
@@ -250,10 +253,13 @@ pub fn register_handler_impl(
     let call_map = table.entry(srccage).or_insert_with(HashMap::new);
     let target_map = call_map.entry(targetcallnum).or_insert_with(HashMap::new);
 
-    // If a RAWPOSIX fallback handler exists for this (srccage, targetcallnum),
+    // If a RAWPOSIX/3i fallback handler exists for this (srccage, targetcallnum),
     // remove it to ensure it does not shadow the new handler.
     if target_map.contains_key(&lind_platform_const::RAWPOSIX_CAGEID) {
         target_map.remove(&lind_platform_const::RAWPOSIX_CAGEID);
+    }
+    if target_map.contains_key(&lind_platform_const::THREEI_CAGEID) {
+        target_map.remove(&lind_platform_const::THREEI_CAGEID);
     }
 
     target_map.insert(handlefunccage, in_grate_fn_ptr_u64);

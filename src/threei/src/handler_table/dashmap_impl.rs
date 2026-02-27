@@ -108,7 +108,8 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
     let target_map = call_entry.value();
 
     // When target_cageid == self_cageid, this means the call is supposed to be handled
-    // within the same cage or this is a cage call, so we first check if a RAWPOSIX handler exists.
+    // within the same cage or this is a cage call, so we first check if a RAWPOSIX/THREEI
+    // handler exists.
     // More details on scenarios and the reason we use this check in the comments
     // in `register_handler_impl`.
     // If it does, we return it. If not, we fallback to any handler registered for this
@@ -117,6 +118,9 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         if let Some(addr_ref) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
             let addr = *addr_ref.value();
             return Some((lind_platform_const::RAWPOSIX_CAGEID, addr));
+        } else if let Some(addr_ref) = target_map.get(&lind_platform_const::THREEI_CAGEID) {
+            let addr = *addr_ref.value();
+            return Some((lind_platform_const::THREEI_CAGEID, addr));
         }
 
         // Best-effort fallback: pick any registered handler.
@@ -265,6 +269,8 @@ pub fn register_handler_impl(
 
     // If RAWPOSIX fallback exists, remove it so it does not shadow the new handler.
     target_map.remove(&lind_platform_const::RAWPOSIX_CAGEID);
+    // If THREEI fallback exists, remove it so it does not shadow the new handler.
+    target_map.remove(&lind_platform_const::THREEI_CAGEID);
 
     target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
 

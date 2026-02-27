@@ -199,19 +199,30 @@ enum
 
 
 /* Structure describing messages sent by
-   `sendmsg' and received by `recvmsg'.  */
+   `sendmsg' and received by `recvmsg'.
+
+   Lind: padded so wasm32 layout (56 bytes) matches x86-64 host
+   byte-for-byte on little-endian.  Pointer fields use the split-pointer
+   trick (low32 + high32 padding) like struct iovec.  */
 struct msghdr
   {
     void *msg_name;		/* Address to send to/receive from.  */
+    int __pad_name;		/* high32 of translated host pointer */
     socklen_t msg_namelen;	/* Length of address data.  */
+    int __pad_namelen;		/* alignment padding (host aligns next ptr to 8) */
 
     struct iovec *msg_iov;	/* Vector of data to send/receive into.  */
-    int msg_iovlen;		/* Number of elements in the vector.  */
+    int __pad_iov;		/* high32 of translated host pointer */
+    size_t msg_iovlen;		/* Number of elements in the vector.  */
+    int __pad_iovlen;		/* wasm32 size_t=4, host size_t=8 */
 
     void *msg_control;		/* Ancillary data (eg BSD filedesc passing). */
-    socklen_t msg_controllen;	/* Ancillary data buffer length.  */
+    int __pad_control;		/* high32 of translated host pointer */
+    size_t msg_controllen;	/* Ancillary data buffer length.  */
+    int __pad_controllen;	/* wasm32 size_t=4, host size_t=8 */
 
     int msg_flags;		/* Flags in received message.  */
+    int __pad_flags;		/* trailing alignment padding */
   };
 
 /* Structure used for storage of ancillary data object information.  */

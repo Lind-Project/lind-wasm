@@ -124,8 +124,8 @@ int register_handler (int64_t targetcage,
     return make_threei_call(
         REGISTER_HANDLER_SYSCALL, 
         0, // callname is not used in the trampoline, set to 0
-        this_grate_id, // pass this_grate_id as self_cageid
-        999999, // pass THREEI_GRATE_CAGE_ID as target_cageid
+        targetcage, // pass targetcage as self_cageid
+        targetcage, // pass targetcage as target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         targetcage, 
         targetcallnum, 
         0, // runtime_id currently not used, set to 0
@@ -152,8 +152,8 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t src
     return make_threei_call(
         COPY_DATA_BETWEEN_CAGES_SYSCALL, 
         0, // callname is not used in the trampoline, set to 0
-        thiscage, 
-        targetcage,
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
         TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
         len, 0,
@@ -174,9 +174,10 @@ int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
     return make_threei_call(
         COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, 
         0, // callname is not used in the trampoline, set to 0
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         thiscage, 
         targetcage,
-        0, 0,
         0, 0,
         0, 0,
         0, 0,
