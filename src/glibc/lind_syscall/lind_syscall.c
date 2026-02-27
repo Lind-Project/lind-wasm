@@ -175,18 +175,35 @@ copy_handler_table_to_cage (uint64_t thiscage, uint64_t targetcage)
   );
 }
 
+// Special syscalls meant to be used exclusively for benchmarking purposes.
+
+// This simulates the behaviour of a syscall that gets resolves through the
+// kernel.
+//
+// To achieve this, it mimics the default behaviour of
+// rawposix::geteuid_syscall(). The function signature therefore matches the
+// function signature of geteuid().
 int
 libc_syscall ()
 {
   uint64_t __self = __lind_cageid;
-  make_threei_call (2001, NULL, __self, __self, 0, __self, 0, __self, 0,
-		    __self, 0, __self, 0, __self, 0, __self, 1);
+  make_threei_call (LIBC_SYSCALL, NULL, __self, __self, 0, __self, 0, __self,
+		    0, __self, 0, __self, 0, __self, 0, __self, 0);
 }
 
+// This simulates the behaviour of a syscall that does not need the kernel for
+// resolution.
+//
+// This is achieved by mimicing the default behaviour of
+// rawposix::close_syscall(-1). i.e., trying to close an invalid file
+// descriptor.
+//
+// To ensure that each invocation always skips the kernel, this function takes
+// no input (unlike close(int fd)), and hardcodes the fd argument to -1.
 int
 fdtables_syscall ()
 {
   uint64_t __self = __lind_cageid;
-  make_threei_call (2002, NULL, __self, __self, -1, __self, 0, __self, 0,
-		    __self, 0, __self, 0, __self, 0, __self, 1);
+  make_threei_call (FDTABLES_SYSCALL, NULL, __self, __self, -1, __self, 0,
+		    __self, 0, __self, 0, __self, 0, __self, 0, __self, 0);
 }
