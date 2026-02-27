@@ -1,3 +1,2 @@
 file_tests/deterministic/popen.c
 process_tests/deterministic/exit_failure.c
-networking_tests/deterministic/ipv6_basic.c

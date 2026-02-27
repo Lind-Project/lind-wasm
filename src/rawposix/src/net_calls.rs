@@ -1802,8 +1802,8 @@ pub extern "C" fn getpeername_syscall(
     fd_cageid: u64,
     addr_arg: u64,
     addr_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
+    addrlen_arg: u64,
+    addrlen_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -1812,12 +1812,12 @@ pub extern "C" fn getpeername_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = addr_arg as *mut u8;
+    let user_addr = addr_arg as *mut SockAddr;
+    let lenp = addrlen_arg as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -1827,12 +1827,32 @@ pub extern "C" fn getpeername_syscall(
         );
     }
 
-    let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
-    let ret = unsafe { libc::getpeername(fd, finalsockaddr, &mut addrlen as *mut u32) };
+    if lenp.is_null() {
+        return syscall_error(Errno::EFAULT, "getpeername_syscall", "len is null");
+    }
+
+    let mut len: socklen_t = unsafe { *lenp };
+    let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
+    if len > max_len {
+        len = max_len;
+    }
+
+    let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
+    let ret = unsafe {
+        libc::getpeername(
+            fd as i32,
+            &mut storage as *mut _ as *mut sockaddr,
+            &mut len as *mut socklen_t,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getpeername");
+    }
+
+    unsafe {
+        copy_out_sockaddr(user_addr, lenp, &storage);
     }
 
     ret
