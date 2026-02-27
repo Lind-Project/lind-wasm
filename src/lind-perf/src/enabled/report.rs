@@ -24,22 +24,18 @@ impl std::fmt::Display for PrettyDuration {
     }
 }
 
-/// Print a section header.
-pub fn report_header(header: String) {
+/// Print a report for a counter group.
+pub fn report(counters: &[&Counter], header: String) {
+    const NAME_W: usize = 60;
+    const CALLS_W: usize = 10;
+    const NUM_W: usize = 12;
+
     let pad = "-";
     let total = 97 - header.len();
     let left = total / 2;
     let right = total - left;
 
     println!("\n{}{}{}", pad.repeat(left), header, pad.repeat(right),);
-}
-
-/// Print a report for a counter group.
-pub fn report(counters: &[&Counter]) {
-    const NAME_W: usize = 60;
-    const CALLS_W: usize = 10;
-    const NUM_W: usize = 12;
-
     let mut rows: Vec<String> = Vec::new();
 
     for c in counters {
