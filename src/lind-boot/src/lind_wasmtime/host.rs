@@ -1,11 +1,11 @@
 use crate::cli::CliOptions;
-use crate::lind_wasmtime::environ::LindEnviron;
 use std::sync::Arc;
+use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_wasi_threads::WasiThreadsCtx;
 
-/// The HostCtx host structure stores all relevant execution context objects
-/// `lind_environ`: minimal argv/environ provider for the 4 WASI preview1 imports;
+/// The HostCtx host structure stores all relevant execution context objects:
+/// `lind_environ`: argv/environ data served by the 4 host functions in lind-common;
 /// `lind_fork_ctx`: the multi-process management structure, encapsulating fork/exec state;
 /// `wasi_threads`: which manages WASI thread-related capabilities.
 #[derive(Default, Clone)]
