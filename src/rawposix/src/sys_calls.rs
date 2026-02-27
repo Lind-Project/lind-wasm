@@ -496,12 +496,17 @@ pub extern "C" fn waitpid_syscall(
                 unsafe {
                     sched_yield();
                 }
-                // Check for pending signals after yielding (only if WNOHANG is not set)
+                // Check for pending signals after yielding (only if WNOHANG is not set).
+                // Re-acquire the zombie lock first: the child's exit may have both
+                // added a zombie AND sent SIGCHLD, so the zombie could already be
+                // available. Prefer completing the wait over returning EINTR.
+                zombies = cage.zombies.write();
+                if zombies.len() > 0 {
+                    continue;
+                }
                 if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
                     return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
                 }
-                // after sleep, get the write access of zombies list back
-                zombies = cage.zombies.write();
                 continue;
             } else {
                 // there are zombies avaliable
@@ -552,11 +557,10 @@ pub extern "C" fn waitpid_syscall(
                 unsafe {
                     sched_yield();
                 }
-                // Check for pending signals after yielding (only if WNOHANG is not set)
-                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
-                }
-                // after sleep, get the write access of zombies list back
+                // Re-acquire the zombie lock before checking signals: the child's
+                // exit may have both added a zombie AND sent SIGCHLD atomically,
+                // so the zombie could already be available. Prefer completing the
+                // wait over returning EINTR.
                 zombies = cage.zombies.write();
 
                 // let's check if the zombie list contains the cage
@@ -567,6 +571,11 @@ pub extern "C" fn waitpid_syscall(
                     // find the cage in zombie list, remove it from the list and break
                     zombie_opt = Some(zombies.remove(index));
                     break;
+                }
+
+                // Check for pending signals after yielding (only if WNOHANG is not set)
+                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
+                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
                 }
 
                 continue;
