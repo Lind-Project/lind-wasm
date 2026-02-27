@@ -682,7 +682,8 @@ pub extern "C" fn mmap_syscall(
     let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
-    let cage = get_cage(cageid).unwrap();
+    let operation_cageid = addr_cageid;
+    let cage = get_cage(operation_cageid).unwrap();
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 
@@ -768,7 +769,7 @@ pub extern "C" fn mmap_syscall(
         }
 
         let result = mmap_inner(
-            cageid,
+            operation_cageid,
             sysaddr as *mut u8,
             rounded_length as usize,
             prot,
@@ -800,7 +801,7 @@ pub extern "C" fn mmap_syscall(
                 } else {
                     // if we are doing file-backed mapping, we need to set maxprot to the file permission
                     let flags = fcntl_syscall(
-                        cageid,
+                        operation_cageid,
                         fildes as u64,
                         vfd_cageid,
                         F_GETFL as u64,
@@ -833,7 +834,7 @@ pub extern "C" fn mmap_syscall(
                 backing,
                 off,
                 len as i64,
-                cageid,
+                operation_cageid,
             );
         }
     }
@@ -937,7 +938,9 @@ pub extern "C" fn munmap_syscall(
     if len == 0 {
         return syscall_error(Errno::EINVAL, "munmap", "length cannot be zero");
     }
-    let cage = get_cage(addr_cageid).unwrap();
+
+    let operation_cageid = addr_cageid;
+    let cage = get_cage(operation_cageid).unwrap();
 
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64) as usize;
@@ -1036,7 +1039,9 @@ pub extern "C" fn brk_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    let operation_cageid = brk_cageid;
+
+    let cage = get_cage(operation_cageid).unwrap();
 
     let mut vmmap = cage.vmmap.write();
     let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
@@ -1089,7 +1094,7 @@ pub extern "C" fn brk_syscall(
     // we need to mmap the new region
     if brk_page > old_brk_page {
         let ret = mmap_inner(
-            brk_cageid,
+            operation_cageid,
             old_heap_end_sys,
             ((brk_page - old_brk_page) * PAGESIZE) as usize,
             heap.prot,
@@ -1109,7 +1114,7 @@ pub extern "C" fn brk_syscall(
     // to unmap the extra memory
     else if brk_page < old_brk_page {
         let ret = mmap_inner(
-            brk_cageid,
+            operation_cageid,
             new_heap_end_sys,
             ((old_brk_page - brk_page) * PAGESIZE) as usize,
             PROT_NONE,
