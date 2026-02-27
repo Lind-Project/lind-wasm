@@ -34,7 +34,10 @@ pub fn enable_one_counter(name: &str) {
 }
 
 fn all_counters() -> impl Iterator<Item = &'static Counter> {
-    LIND_BOOT_COUNTERS.iter().copied()
+    LIND_BOOT_COUNTERS
+        .iter()
+        .copied()
+        .chain(threei::perf::ALL_COUNTERS.iter().copied())
 }
 
 /// Get a list of all counter names.
@@ -47,4 +50,5 @@ pub fn perf_report() {
     // Note: `lind_perf::report*` are no-ops when lind-perf is built without
     // its internal `enabled` feature.
     lind_perf::report(LIND_BOOT_COUNTERS, format!("LIND-BOOT"));
+    lind_perf::report(threei::perf::ALL_COUNTERS, format!("THREE-I"));
 }
