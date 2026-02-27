@@ -39,4 +39,7 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage,
     uint64_t destaddr, uint64_t destcage, 
     uint64_t len, uint64_t copytype);
 
+int libc_syscall();
+int fdtables_syscall();
+
 #endif // _LIND_SYSCALL_H

@@ -3,6 +3,7 @@
 //! https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
 //! https://filippo.io/linux-syscall-table/
 //! Keep these in sync with glibc's lind_syscall_num.h
+use super::bench_calls::{fdtables_syscall, libc_syscall};
 use super::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall,
     close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
@@ -121,4 +122,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (292, dup3_syscall),
     (293, pipe2_syscall),
     (318, getrandom_syscall),
+    (2001, libc_syscall),
+    (2002, fdtables_syscall),
 ];
