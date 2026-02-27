@@ -60,6 +60,27 @@ extern "C"
 #define TRANSLATE_UADDR_TO_HOST(uaddr, cageid)                                \
   __lind_translate_uaddr_to_host ((uaddr), (cageid))
 
+/* Translate an array of guest iovec structures to host layout.
+   Each iov_base is a wasm32 guest pointer; we split the translated
+   64-bit host address across iov_base (low32) and __padding1 (high32).
+   Requires <sys/uio.h> (or <bits/types/struct_iovec.h>) for struct iovec.  */
+#ifdef __iovec_defined
+  static inline void
+  __lind_translate_iov (const struct iovec *guest_iov,
+                        struct iovec *host_iov, int iovcnt)
+  {
+    for (int i = 0; i < iovcnt; ++i)
+      {
+        host_iov[i].iov_len = guest_iov[i].iov_len;
+        uint32_t g = (uint32_t)(uintptr_t) guest_iov[i].iov_base;
+        uint64_t h = __lind_translate_ptr_to_host ((const void *)(uintptr_t) g);
+        host_iov[i].iov_base   = (void *)(uintptr_t)(uint32_t)(h & 0xFFFFFFFFULL);
+        host_iov[i].__padding1 = (int)(uint32_t)(h >> 32);
+        host_iov[i].__padding2 = 0;
+      }
+  }
+#endif
+
 #ifdef __cplusplus
 }
 #endif

@@ -37,7 +37,14 @@ impl SharedMemory {
         // lind-wasm: we enable maximum use of memory at start
         let max_size = MAX_MEMORY_SIZE;
         if minimum_bytes < max_size {
-            mmap_memory.grow_to(max_size);
+            if let Err(e) = mmap_memory.grow_to(max_size) {
+                eprintln!(
+                    "[lind-wasm] SharedMemory::new: grow_to({:#x}) failed: {e}; \
+                     memory stays at {:#x} bytes",
+                    max_size, minimum_bytes
+                );
+                return Err(e);
+            }
         }
         Self::wrap(&plan, Box::new(mmap_memory), plan.memory)
     }

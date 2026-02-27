@@ -982,7 +982,7 @@ pub extern "C" fn munmap_syscall(
     let mut vmmap = cage.vmmap.write();
 
     let user_addr = vmmap.sys_to_user(rounded_addr) as u32;
-    vmmap.remove_entry(user_addr >> PAGESHIFT, len as u32 >> PAGESHIFT);
+    vmmap.remove_entry(user_addr >> PAGESHIFT, (rounded_length as u32) >> PAGESHIFT);
 
     0
 }
@@ -2549,6 +2549,64 @@ pub extern "C" fn writev_syscall(
     ret
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/readv.2.html
+///
+/// Linux `readv()` syscall performs scatter input by reading data from a file descriptor
+/// into multiple buffers in a single operation. Since we implement a file descriptor management
+/// subsystem (called `fdtables`), we first translate the virtual file descriptor to the corresponding
+/// kernel file descriptor, then translate the iovec array pointer from cage virtual memory to host
+/// memory before invoking the kernel's `libc::readv()` function.
+///
+/// ## Input:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - iov_arg: pointer to an array of iovec structures describing the buffers
+///     - iovcnt_arg: number of iovec structures in the array
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes read is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub extern "C" fn readv_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    iov_arg: u64,
+    iov_cageid: u64,
+    iovcnt_arg: u64,
+    iovcnt_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "readv");
+    }
+
+    let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
+    let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "readv"
+        );
+    }
+
+    let ret = unsafe { libc::readv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "readv");
+    }
+    ret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fstat.2.html
 ///
 /// Linux `fstat()` syscall retrieves information about the file referred to by the open file descriptor `fd`.
@@ -3487,11 +3545,27 @@ pub extern "C" fn mprotect_syscall(
         return syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC is not allowed");
     }
 
+    // Round length up to page boundary (mprotect operates on whole pages)
+    let rounded_length = round_up_page(len as u64) as usize;
+
     // Call the kernel mprotect
-    let ret = unsafe { libc::mprotect(addr as *mut c_void, len, prot) };
+    let ret = unsafe { libc::mprotect(addr as *mut c_void, rounded_length, prot) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "mprotect");
+    }
+
+    // Update vmmap to reflect the new protection flags
+    // Skip if length is zero (no pages to update) — Linux treats len=0 as a no-op
+    if rounded_length > 0 {
+        let cage = get_cage(cageid).unwrap();
+        let mut vmmap = cage.vmmap.write();
+        let user_addr = vmmap.sys_to_user(addr as usize) as u32;
+        vmmap.change_prot(
+            user_addr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
+            prot,
+        );
     }
 
     ret
