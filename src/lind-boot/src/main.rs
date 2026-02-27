@@ -9,19 +9,24 @@ use crate::{
 use clap::Parser;
 use libc;
 use std::ffi::CString;
+use std::path::Path;
 
 use rawposix::init::{rawposix_shutdown, rawposix_start};
 use sysdefs::constants::LINDFS_ROOT;
 
 /// Helper function which `chroot`s to `lindfs`.
 ///
-/// - mkdir LINDFS_ROOT.
-/// - chroots to LINDFS_ROOT
-/// - chdirs to new '/'
+/// - check if LINDFS_ROOT exists
+/// - chroot to LINDFS_ROOT
+/// - chdir to new '/'
 fn chroot_to_lindfs() {
     unsafe {
         let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
-        libc::mkdir(lindfs_path.as_ptr(), 0o775);
+
+        if !Path::new(LINDFS_ROOT).is_dir() {
+            panic!("The configured lindfs does not exist: {}", LINDFS_ROOT);
+        }
+
         let ret = libc::chroot(lindfs_path.as_ptr());
         if ret != 0 {
             panic!(
