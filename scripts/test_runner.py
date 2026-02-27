@@ -229,10 +229,10 @@ def main() -> None:
     harness_outputs: list[dict[str, Any]] = []
     for module_name in harness_modules:
         print(f"Running harness: {module_name}")
-         args = list(passthrough_args)
+        args = list(passthrough_args)
 
         if module_name == "wasmtestreport":
-            args.append("--allow-pre-compile")
+            args.append("--allow-pre-compiled")
 
         result = run_harness(module_name, args)
         
