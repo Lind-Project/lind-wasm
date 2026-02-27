@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
-    EXIT_SUCCESS, FDKIND_KERNEL, LINDFS_ROOT, RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO,
-    STDOUT_FILENO, THREEI_CAGEID, VERBOSE,
+    EXIT_SUCCESS, FDKIND_KERNEL, RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
+    THREEI_CAGEID, VERBOSE,
 };
 use threei::{
     copy_data_between_cages, copy_handler_table_to_cage, register_handler,
@@ -200,27 +200,6 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
 /// - `verbosity`: controls runtime logging verbosity.
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
-
-    unsafe {
-        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
-        libc::mkdir(lindfs_path.as_ptr(), 0o775);
-        let ret = libc::chroot(lindfs_path.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chroot to {}: {}",
-                LINDFS_ROOT,
-                std::io::Error::last_os_error()
-            );
-        }
-        let root = CString::new("/").unwrap();
-        let ret = libc::chdir(root.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chdir to / after chroot: {}",
-                std::io::Error::last_os_error()
-            )
-        }
-    }
 
     // init cage table
     cagetable_init();

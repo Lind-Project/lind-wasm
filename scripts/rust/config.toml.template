@@ -16,4 +16,5 @@ rustflags = [
   "-C", "link-arg=-Wl,--max-memory=67108864",
   "-C", "link-arg=-Wl,--export=__stack_pointer",
   "-C", "link-arg=-Wl,--export=__stack_low",
+  "-C", "link-arg=-Wl,--export=__tls_base",
 ]
