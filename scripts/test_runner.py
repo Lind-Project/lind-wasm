@@ -211,15 +211,15 @@ def generate_combined_report(harness_outputs: list[dict[str, Any]], reports_dir:
 
 
 def main() -> None:
-    args = normalize_args(parse_args())
-    reports_dir = args.reports_dir
+    cli_args = normalize_args(parse_args())
+    reports_dir = cli_args.reports_dir
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    passthrough_args = args.harness_args
+    passthrough_args = cli_args.harness_args
     if passthrough_args and passthrough_args[0] == "--":
         passthrough_args = passthrough_args[1:]
 
-    selected = set(args.harnesses) if args.harnesses else None
+    selected = set(cli_args.harnesses) if cli_args.harnesses else None
     harness_modules = discover_harness_modules(selected=selected)
     if not harness_modules:
         raise RuntimeError("No harness modules found to run.")
@@ -229,12 +229,12 @@ def main() -> None:
     harness_outputs: list[dict[str, Any]] = []
     for module_name in harness_modules:
         print(f"Running harness: {module_name}")
-        args = list(passthrough_args)
+        harness_args = list(passthrough_args)
 
         if module_name == "wasmtestreport":
-            args.append("--allow-pre-compiled")
+            harness_args.append("--allow-pre-compiled")
 
-        result = run_harness(module_name, args)
+        result = run_harness(module_name, harness_args)
         
         output_info = write_outputs(result, reports_dir)
         harness_outputs.append(output_info)
@@ -246,8 +246,8 @@ def main() -> None:
     combined_path = generate_combined_report(harness_outputs, reports_dir)
     print(f"Wrote {combined_path}")
 
-    if args.export_report:
-        export_path = args.export_report
+    if cli_args.export_report:
+        export_path = cli_args.export_report
         export_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(combined_path, export_path)
         print(f"Exported combined report to {export_path}")
