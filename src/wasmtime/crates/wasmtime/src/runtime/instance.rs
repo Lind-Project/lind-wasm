@@ -13,6 +13,7 @@ use crate::{
 use alloc::sync::Arc;
 use cage::memory::{fork_vmmap, init_vmmap};
 use core::ptr::NonNull;
+use std::sync::atomic::{AtomicI32, Ordering};
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
@@ -25,6 +26,13 @@ use wasmtime_environ::{
 use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
+
+/// Stores the __tls_base value set by __wasm_init_memory during the first
+/// instantiation. Forked children skip __wasm_init_memory (shared memory flag
+/// is already set in copied memory), leaving __tls_base at the module default
+/// of 0. This causes all TLS variable accesses to read/write wrong addresses.
+/// We save the value here and restore it for each forked child.
+static INIT_TLS_BASE: AtomicI32 = AtomicI32::new(0);
 
 pub enum InstantiateType {
     InstantiateFirst(u64),
@@ -362,8 +370,59 @@ impl Instance {
             }
         }
 
+        let is_first = matches!(instantiate_type, InstantiateType::InstantiateFirst(_));
+
         if let Some(start) = start {
             instance.start_raw(store, start)?;
+        }
+
+        // Fix __tls_base for forked children.
+        //
+        // The module's start function (__wasm_init_memory) uses an atomic flag in
+        // shared linear memory to ensure data-segment initialization runs exactly
+        // once. For the first instance it sets global[1] (__tls_base) to the
+        // address where .tdata was placed. For forked children the flag is already
+        // set (copied from parent), so __wasm_init_memory skips initialization and
+        // __tls_base stays at 0 (the module default). With __tls_base=0 every TLS
+        // variable access (e.g. __ctype_b used by strtoul/isspace) hits the wrong
+        // address, reading garbage pointers and causing spurious memory faults.
+        //
+        // We look up __tls_base by export name rather than hardcoding a global
+        // index, since the index is an implementation detail of wasm-ld that
+        // could change across toolchain versions.
+        // References:
+        //   - LLVM commit implementing __tls_base:
+        //     https://github.com/llvm/llvm-project/commit/42bba4b852b1a63db4043798bba7d9fcea61cbaf
+        //   - WebAssembly tool-conventions TLS segment / __tls_base documentation:
+        //     https://github.com/WebAssembly/tool-conventions/blob/main/Linking.md
+        let tls_global_idx = {
+            let handle = store.0.instance(instanceid);
+            handle
+                .exports()
+                .find(|(name, _)| name.as_str() == "__tls_base")
+                .and_then(|(_, entity)| match entity {
+                    EntityIndex::Global(idx) => Some(*idx),
+                    _ => None,
+                })
+        };
+        if let Some(tls_idx) = tls_global_idx {
+            if is_first {
+                let handle = store.0.instance_mut(instanceid);
+                let export_global = handle.get_exported_global(tls_idx);
+                let val = unsafe { *(*export_global.definition).as_i32() };
+                if val != 0 {
+                    INIT_TLS_BASE.store(val, Ordering::SeqCst);
+                }
+            } else {
+                let saved = INIT_TLS_BASE.load(Ordering::SeqCst);
+                if saved != 0 {
+                    let handle = store.0.instance_mut(instanceid);
+                    let export_global = handle.get_exported_global(tls_idx);
+                    unsafe {
+                        *(*export_global.definition).as_i32_mut() = saved;
+                    }
+                }
+            }
         }
 
         Ok((instance, instanceid))

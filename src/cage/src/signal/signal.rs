@@ -10,46 +10,58 @@ const EPOCH_KILLED: u64 = 0xdead;
 // switch the epoch of the main thread of the cage to "signal" state
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn signal_epoch_trigger(cageid: u64) {
-    let cage = get_cage(cageid).unwrap();
+    #[cfg(feature = "disable_signals")]
+    return;
 
-    let threadid_guard = cage.main_threadid.read();
-    let main_threadid = *threadid_guard;
-    let epoch_handler = cage
-        .epoch_handler
-        .get(&main_threadid)
-        .expect("main threadid does not exist");
-    let guard = epoch_handler.write();
-    let epoch = *guard;
-    // SAFETY: the pointer is locked with write access so no one is able to modify it concurrently
-    // However, Potential BUG (TODO): We still need to verify the lifetime of the pointer. This pointer
-    // is created by wasmtime and will be destroyed at some point when the wasm instance is destroyed
-    // we still need to figure out when is the destroy happening and make sure it is destroyed after the
-    // information in rawposix is updated
-    unsafe {
-        *epoch = EPOCH_SIGNAL;
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let cage = get_cage(cageid).unwrap();
+
+        let threadid_guard = cage.main_threadid.read();
+        let main_threadid = *threadid_guard;
+        let epoch_handler = cage
+            .epoch_handler
+            .get(&main_threadid)
+            .expect("main threadid does not exist");
+        let guard = epoch_handler.write();
+        let epoch = *guard;
+        // SAFETY: the pointer is locked with write access so no one is able to modify it concurrently
+        // However, Potential BUG (TODO): We still need to verify the lifetime of the pointer. This pointer
+        // is created by wasmtime and will be destroyed at some point when the wasm instance is destroyed
+        // we still need to figure out when is the destroy happening and make sure it is destroyed after the
+        // information in rawposix is updated
+        unsafe {
+            *epoch = EPOCH_SIGNAL;
+        }
     }
 }
 
 // switch the epoch of all threads of the cage to "killed" state
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn epoch_kill_all(cageid: u64) {
-    let cage = get_cage(cageid).unwrap();
+    #[cfg(feature = "disable_signals")]
+    return;
 
-    let threadid_guard = cage.main_threadid.read();
-    let main_threadid = *threadid_guard;
-    // we iterate through the epoch handler of each thread in the cage
-    for entry in cage.epoch_handler.iter() {
-        if entry.key() == &main_threadid {
-            // main thread should be the one invoking this method
-            // so main thread could kill itself and we do not need to notify it again
-            continue;
-        }
-        let epoch_handler = entry.value();
-        let guard = epoch_handler.write();
-        let epoch = *guard;
-        // SAFETY: see comment at `signal_epoch_trigger`
-        unsafe {
-            *epoch = EPOCH_KILLED;
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let cage = get_cage(cageid).unwrap();
+
+        let threadid_guard = cage.main_threadid.read();
+        let main_threadid = *threadid_guard;
+        // we iterate through the epoch handler of each thread in the cage
+        for entry in cage.epoch_handler.iter() {
+            if entry.key() == &main_threadid {
+                // main thread should be the one invoking this method
+                // so main thread could kill itself and we do not need to notify it again
+                continue;
+            }
+            let epoch_handler = entry.value();
+            let guard = epoch_handler.write();
+            let epoch = *guard;
+            // SAFETY: see comment at `signal_epoch_trigger`
+            unsafe {
+                *epoch = EPOCH_KILLED;
+            }
         }
     }
 }
@@ -57,43 +69,61 @@ pub fn epoch_kill_all(cageid: u64) {
 // get the current epoch state of the thread
 // thread safety: this function will only be invoked by main thread of the cage
 fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
-    let cage = get_cage(cageid).unwrap();
-    let epoch_handler = cage
-        .epoch_handler
-        .get(&(thread_id as i32))
-        .expect("threadid does not exist");
-    let guard = epoch_handler.read();
-    let epoch = *guard;
-    // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe { *epoch }
+    #[cfg(feature = "disable_signals")]
+    return EPOCH_NORMAL;
+
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let cage = get_cage(cageid).unwrap();
+        let epoch_handler = cage
+            .epoch_handler
+            .get(&(thread_id as i32))
+            .expect("threadid does not exist");
+        let guard = epoch_handler.read();
+        let epoch = *guard;
+        // SAFETY: see comment at `signal_epoch_trigger`
+        unsafe { *epoch }
+    }
 }
 
 // check the specified thread with specified cage is in "killed" state
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
-    let cage = get_cage(cageid).unwrap();
-    // this method should not be invoked if the thread is already killed (i.e. thread is removed from epoch_handler)
-    let epoch_handler = cage.epoch_handler.get(&(thread_id as i32)).unwrap();
-    let guard = epoch_handler.write();
-    let epoch = *guard;
-    // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe { *epoch == EPOCH_KILLED }
+    #[cfg(feature = "disable_signals")]
+    return false;
+
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let cage = get_cage(cageid).unwrap();
+        // this method should not be invoked if the thread is already killed (i.e. thread is removed from epoch_handler)
+        let epoch_handler = cage.epoch_handler.get(&(thread_id as i32)).unwrap();
+        let guard = epoch_handler.write();
+        let epoch = *guard;
+        // SAFETY: see comment at `signal_epoch_trigger`
+        unsafe { *epoch == EPOCH_KILLED }
+    }
 }
 
 // reset the epoch of the main thread of the cage to "normal" state
 // usually invoked when all the pending signals are handled for the cage
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_epoch_reset(cageid: u64) {
-    let cage = get_cage(cageid).unwrap();
+    #[cfg(feature = "disable_signals")]
+    return;
 
-    let threadid_guard = cage.main_threadid.read();
-    let main_threadid = *threadid_guard;
-    let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
-    let guard = epoch_handler.write();
-    let epoch = *guard;
-    // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe {
-        *epoch = EPOCH_NORMAL;
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let cage = get_cage(cageid).unwrap();
+
+        let threadid_guard = cage.main_threadid.read();
+        let main_threadid = *threadid_guard;
+        let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
+        let guard = epoch_handler.write();
+        let epoch = *guard;
+        // SAFETY: see comment at `signal_epoch_trigger`
+        unsafe {
+            *epoch = EPOCH_NORMAL;
+        }
     }
 }
 
@@ -101,16 +131,22 @@ pub fn signal_epoch_reset(cageid: u64) {
 // useful if we want to do our own epoch check in host
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_check_trigger(cageid: u64) -> bool {
-    let cage = get_cage(cageid).unwrap();
+    #[cfg(feature = "disable_signals")]
+    return false;
 
-    let threadid_guard = cage.main_threadid.read();
-    let main_threadid = *threadid_guard;
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let cage = get_cage(cageid).unwrap();
 
-    let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
-    let guard = epoch_handler.write();
-    let epoch = *guard;
-    // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe { *epoch > EPOCH_NORMAL }
+        let threadid_guard = cage.main_threadid.read();
+        let main_threadid = *threadid_guard;
+
+        let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
+        let guard = epoch_handler.write();
+        let epoch = *guard;
+        // SAFETY: see comment at `signal_epoch_trigger`
+        unsafe { *epoch > EPOCH_NORMAL }
+    }
 }
 
 // check if the signal of the cage is in blocked state
@@ -301,28 +337,26 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
             let id = *entry.key();
             *threadid_guard = id;
 
-            // we also need to migrate the epoch state to the new thread
+            // Migrate epoch state to the new main thread. Skipped entirely when
+            // signals are disabled since the epoch pointer is null.
             #[cfg(not(feature = "disable_signals"))]
-            let state = get_epoch_state(cageid, thread_id);
+            {
+                let state = get_epoch_state(cageid, thread_id);
 
-            #[cfg(feature = "disable_signals")]
-            // If the disable_signals feature is enabled, checking the epoch state will yield a null pointer.
-            // To avoid this, we bypass the call to get_epoch_state and set state to 1 directly.
-            let state = 1;
-
-            // if the exiting thread has pending signals, migrate to the newly assigned main-thread
-            // NOTE: below implementation of signal migration between threads is based on the assumption
-            // that EPOCH_KILLED state will only occur when all the threads is in EPOCH_KILLED state
-            // which holds true for now since EPOCH_KILLED is currently only used in epoch_kill_all
-            if state == EPOCH_SIGNAL {
-                let new_thread_epoch_handler = entry.value().write();
-                let new_thread_epoch = *new_thread_epoch_handler;
-                unsafe {
-                    // make sure not to overwrite EPOCH_KILLED
-                    if *new_thread_epoch != EPOCH_KILLED {
-                        *new_thread_epoch = state;
-                    }
-                };
+                // if the exiting thread has pending signals, migrate to the newly assigned main-thread
+                // NOTE: below implementation of signal migration between threads is based on the assumption
+                // that EPOCH_KILLED state will only occur when all the threads is in EPOCH_KILLED state
+                // which holds true for now since EPOCH_KILLED is currently only used in epoch_kill_all
+                if state == EPOCH_SIGNAL {
+                    let new_thread_epoch_handler = entry.value().write();
+                    let new_thread_epoch = *new_thread_epoch_handler;
+                    unsafe {
+                        // make sure not to overwrite EPOCH_KILLED
+                        if *new_thread_epoch != EPOCH_KILLED {
+                            *new_thread_epoch = state;
+                        }
+                    };
+                }
             }
         } else {
             // we just exited the last thread in the cage

@@ -17,17 +17,81 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <sysdep-cancel.h>
 #include <socketcall.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
+/* Lind: translate guest msghdr/iovec pointers to host pointers on the
+   stack, following the writev split-pointer pattern.  rawposix just
+   casts to libc::msghdr and calls recvmsg directly.  */
 static int
 __recvmsg_syscall (int fd, struct msghdr *msg, int flags)
 {
-#ifdef __ASSUME_RECVMSG_SYSCALL
-  return SYSCALL_CANCEL (recvmsg, fd, msg, flags);
-#else
-  return SOCKETCALL_CANCEL (recvmsg, fd, msg, flags);
-#endif
+  int iovcnt = (int) msg->msg_iovlen;
+
+  /* Build host iov array with translated iov_base pointers.  */
+  struct iovec host_iov[iovcnt];
+  for (int i = 0; i < iovcnt; ++i)
+    {
+      host_iov[i].iov_len = msg->msg_iov[i].iov_len;
+
+      uint32_t guest_ptr32 = (uint32_t)(uintptr_t) msg->msg_iov[i].iov_base;
+      uint64_t host_addr64 = TRANSLATE_GUEST_POINTER_TO_HOST (guest_ptr32);
+
+      uint32_t low32  = (uint32_t)(host_addr64 & 0xFFFFFFFFULL);
+      uint32_t high32 = (uint32_t)(host_addr64 >> 32);
+
+      host_iov[i].iov_base   = (void *)(uintptr_t) low32;
+      host_iov[i].__padding1 = (int) high32;
+      host_iov[i].__padding2 = 0;
+    }
+
+  /* Build host msghdr with translated pointers using split-pointer trick.  */
+  struct msghdr host_msg;
+  uint64_t addr;
+
+  /* msg_name */
+  addr = TRANSLATE_GUEST_POINTER_TO_HOST (msg->msg_name);
+  host_msg.msg_name      = (void *)(uintptr_t)(uint32_t)(addr & 0xFFFFFFFFULL);
+  host_msg.__pad_name    = (int)(uint32_t)(addr >> 32);
+  host_msg.msg_namelen   = msg->msg_namelen;
+  host_msg.__pad_namelen = 0;
+
+  /* msg_iov — point to translated host_iov array */
+  addr = TRANSLATE_GUEST_POINTER_TO_HOST (host_iov);
+  host_msg.msg_iov      = (struct iovec *)(uintptr_t)(uint32_t)(addr & 0xFFFFFFFFULL);
+  host_msg.__pad_iov    = (int)(uint32_t)(addr >> 32);
+  host_msg.msg_iovlen   = msg->msg_iovlen;
+  host_msg.__pad_iovlen = 0;
+
+  /* msg_control */
+  addr = TRANSLATE_GUEST_POINTER_TO_HOST (msg->msg_control);
+  host_msg.msg_control      = (void *)(uintptr_t)(uint32_t)(addr & 0xFFFFFFFFULL);
+  host_msg.__pad_control    = (int)(uint32_t)(addr >> 32);
+  host_msg.msg_controllen   = msg->msg_controllen;
+  host_msg.__pad_controllen = 0;
+
+  host_msg.msg_flags    = 0;
+  host_msg.__pad_flags  = 0;
+
+  ssize_t ret = MAKE_LEGACY_SYSCALL (RECVMSG_SYSCALL, "syscall|recvmsg",
+				     (uint64_t) fd,
+				     (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&host_msg),
+				     (uint64_t) flags,
+				     NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+
+  if (ret >= 0)
+    {
+      /* Copy back output fields that the kernel updated.  */
+      msg->msg_namelen   = host_msg.msg_namelen;
+      msg->msg_controllen = host_msg.msg_controllen;
+      msg->msg_flags     = host_msg.msg_flags;
+    }
+
+  return ret;
 }
 
 ssize_t
