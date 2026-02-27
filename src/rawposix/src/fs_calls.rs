@@ -2584,7 +2584,7 @@ pub extern "C" fn readv_syscall(
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "readv");
+        return handle_errno(-kernel_fd, "readv");
     }
 
     let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
