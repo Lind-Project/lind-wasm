@@ -14,11 +14,11 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
                     uint64_t arg6, uint64_t arg6cage) {
   if (fn_ptr_uint == 0) {
-    fprintf(stderr, "[Grate|geteuid] Invalid function ptr\n");
+    fprintf(stderr, "[Grate|interpose-mmap] Invalid function ptr\n");
     assert(0);
   }
 
-  printf("[Grate|geteuid] Handling function ptr: %llu from cage: %llu\n",
+  printf("[Grate|interpose-mmap] Handling function ptr: %llu from cage: %llu\n",
          fn_ptr_uint, cageid);
 
   int (*fn)(uint64_t) = (int (*)(uint64_t))(uintptr_t)fn_ptr_uint;
@@ -26,10 +26,30 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
   return fn(cageid);
 }
 
-int geteuid_grate(uint64_t cageid) {
-  printf("[Grate|geteuid] In geteuid_grate %d handler for cage: %llu\n",
+int mmap_grate(uint64_t cageid, 
+    uint64_t arg1, uint64_t arg1cage, 
+    uint64_t arg2, uint64_t arg2cage,
+    uint64_t arg3, uint64_t arg3cage, 
+    uint64_t arg4, uint64_t arg4cage, 
+    uint64_t arg5, uint64_t arg5cage,
+    uint64_t arg6, uint64_t arg6cage) {
+  printf("[Grate|interpose-mmap] In mmap_grate %d handler for cage: %llu\n",
          getpid(), cageid);
-  return 10;
+  int self_grate_id = getpid();
+  int ret = make_threei_call(
+    9, // syscallnum for mmap
+    0,    // callname is not used in the trampoline, set to 0
+    self_grate_id,    // self_grate_id is not used in the trampoline, set to 0
+    self_grate_id,    // target_cageid is not used in the trampoline, set to 0
+    arg1, arg1cage, 
+    arg2, arg2cage,
+    arg3, arg3cage, 
+    arg4, arg4cage, 
+    arg5, arg5cage,
+    arg6, arg6cage,
+    0 // we will handle the errno in this grate instead of translating it to -1 in the trampoline
+  );
+  return ret;
 }
 
 // Main function will always be same in all grates
@@ -62,17 +82,17 @@ int main(int argc, char *argv[]) {
       if (i % 2 != 0) {
         // Next one is cage, only set the register_handler when next one is cage
         int cageid = getpid();
-        // Set the geteuid (syscallnum=107) of this cage to call this grate
-        // function geteuid_grate 
+        // Set the mmap (syscallnum=9) of this cage to call this grate
+        // function mmap_grate 
         // Syntax of register_handler:
         // <targetcage, targetcallnum, this_grate_id, fn_ptr_u64)>
-        uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&geteuid_grate;
-        printf("[Grate|geteuid] Registering geteuid handler for cage %d in "
+        uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&mmap_grate;
+        printf("[Grate|interpose-mmap] Registering mmap handler for cage %d in "
                "grate %d with fn ptr addr: %llu\n",
                cageid, grateid, fn_ptr_addr);
-        int ret = register_handler(cageid, 107, grateid, fn_ptr_addr);
+        int ret = register_handler(cageid, 9, grateid, fn_ptr_addr);
         if (ret != 0) {
-            fprintf(stderr, "[Grate|geteuid] Failed to register handler for cage %d in "
+            fprintf(stderr, "[Grate|interpose-mmap] Failed to register handler for cage %d in "
                     "grate %d with fn ptr addr: %llu, ret: %d\n",
                     cageid, grateid, fn_ptr_addr, ret);
             assert(0);
@@ -90,11 +110,11 @@ int main(int argc, char *argv[]) {
   int failed = 0;
   while (wait(&status) > 0) {
     if (status != 0) {
-      fprintf(stderr, "[Grate|geteuid] FAIL: child exited with status %d\n", status);
+      fprintf(stderr, "[Grate|interpose-mmap] FAIL: child exited with status %d\n", status);
       assert(0);
     }
   }
 
-  printf("[Grate|geteuid] PASS\n");
+  printf("[Grate|interpose-mmap] PASS\n");
   return 0;
 }

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-disable_signals = []
+disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_signals"]
 secure = ["typemap/secure"]
 lind_debug = ["wasmtime-lind-common/lind_debug"]
 

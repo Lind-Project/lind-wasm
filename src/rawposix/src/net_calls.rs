@@ -897,9 +897,8 @@ pub extern "C" fn epoll_wait_syscall(
     //   kernel to host buffer (underfd) --> translate to guest buffer (vfd).
     let mut events = unsafe { std::slice::from_raw_parts_mut(events_ptr, maxevents as usize) };
 
-    let mut kernel_events: Vec<libc::epoll_event> = Vec::with_capacity(maxevents as usize);
-    // Should always be null value before we call libc::epoll_wait
-    kernel_events.push(libc::epoll_event { events: 0, u64: 0 });
+    let mut kernel_events: Vec<libc::epoll_event> =
+        vec![libc::epoll_event { events: 0, u64: 0 }; maxevents as usize];
 
     if maxevents != 0 {
         let start_time = starttimer();
@@ -1627,6 +1626,51 @@ pub extern "C" fn recvfrom_syscall(
     }
 
     0
+}
+
+/// recvmsg syscall: receive message from socket (wasm32 guest to host pointer translation).
+/// Reads guest msghdr/iovec (ILP32 32-bit layout), translates pointers to host,
+/// calls libc::recvmsg, copies back output fields.
+/// Returns: bytes received on success, negative errno on failure.
+/// Reference: https://man7.org/linux/man-pages/man2/recvmsg.2.html
+pub extern "C" fn recvmsg_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    msg_arg: u64,
+    msg_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "recvmsg_syscall", "Invalid Cage ID");
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    if fd < 0 {
+        return handle_errno(-fd, "recvmsg");
+    }
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // glibc recvmsg.c already translated all guest pointers (msghdr, iov, buffers)
+    // to host layout using the split-pointer trick, so msg_arg is a host pointer
+    // to a host-layout msghdr ready for libc::recvmsg.
+    let msg_ptr = sc_convert_buf(msg_arg, msg_cageid, cageid) as *mut libc::msghdr;
+
+    let ret = unsafe { libc::recvmsg(fd, msg_ptr, flags) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "recvmsg");
+    }
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/gethostname.2.html
