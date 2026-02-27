@@ -17,20 +17,79 @@ use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // involve operations like setting up stack memory that must be performed
 // at the Wasmtime layer. Therefore, in the unified syscall entry point of
 // Wasmtime, these calls are routed to their dedicated logic, while other
-// syscalls are passed directly to 3i’s `make_syscall`.
+// syscalls are passed directly to 3i's `make_syscall`.
 //
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
 use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
-// function to expose the handler to wasm module
-// linker: wasmtime's linker to link the imported function to the actual function definition
+/// Stores argv and environment variables for the guest program. During glibc's
+/// `_start()`, the guest calls 4 imported host functions (`args_sizes_get`,
+/// `args_get`, `environ_sizes_get`, `environ_get`) to retrieve argc/argv and
+/// environ. This struct holds the data those functions serve.
+#[derive(Clone, Default)]
+pub struct LindEnviron {
+    args: Vec<String>,
+    env: Vec<(String, String)>,
+}
+
+impl LindEnviron {
+    /// Build from program arguments and `--env` flags passed on the lind-boot
+    /// command line. For `--env FOO=BAR`, the value is used directly. For
+    /// `--env FOO` (no `=`), the value is inherited from the host process
+    /// via `std::env::var`.
+    pub fn new(args: &[String], vars: &[(String, Option<String>)]) -> Self {
+        let env = vars
+            .iter()
+            .filter_map(|(key, val)| {
+                let resolved = match val {
+                    Some(v) => v.clone(),
+                    None => std::env::var(key).ok()?,
+                };
+                Some((key.clone(), resolved))
+            })
+            .collect();
+        Self {
+            args: args.to_vec(),
+            env,
+        }
+    }
+
+    /// Clone args + env for a forked cage.
+    pub fn fork(&self) -> Self {
+        self.clone()
+    }
+}
+
+/// Write a little-endian u32 at `base + offset` in guest linear memory.
+unsafe fn write_u32(base: *mut u8, offset: usize, val: u32) {
+    unsafe {
+        std::ptr::copy_nonoverlapping(val.to_le_bytes().as_ptr(), base.add(offset), 4);
+    }
+}
+
+/// Write `src` bytes at `base + offset` in guest linear memory.
+unsafe fn write_bytes(base: *mut u8, offset: usize, src: &[u8]) {
+    unsafe {
+        std::ptr::copy_nonoverlapping(src.as_ptr(), base.add(offset), src.len());
+    }
+}
+
+/// Register all Lind host functions under the `"lind"` linker module.
+///
+/// This includes both the core syscall/debug/signal functions and the 4
+/// argv/environ functions that glibc's `_start()` calls to initialize
+/// `argc`, `argv`, and `environ` before entering `main()`.
+///
+/// The `get_environ` closure extracts the `LindEnviron` from the store data
+/// so that the argv/environ functions can read args and env vars.
 pub fn add_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
+    get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
 ) -> anyhow::Result<()> {
     // attach make_syscall to wasmtime
     linker.func_wrap(
@@ -191,5 +250,96 @@ pub fn add_to_linker<
             },
         )?;
     }
+
+    // -- argv/environ host functions --
+    // glibc's _start() calls these 4 functions to initialize argc, argv, and
+    // environ before entering main(). Each writes directly into guest linear
+    // memory at offsets provided by the caller.
+
+    // args_sizes_get: write argc and the total NUL-terminated argv buffer size.
+    linker.func_wrap(
+        "lind",
+        "args_sizes_get",
+        move |caller: Caller<'_, T>, ptr_argc: i32, ptr_buf_size: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let argc = cx.args.len() as u32;
+            let buf_size: u32 = cx.args.iter().map(|a| a.len() as u32 + 1).sum();
+            let base = get_memory_base(&caller) as *mut u8;
+            unsafe {
+                write_u32(base, ptr_argc as usize, argc);
+                write_u32(base, ptr_buf_size as usize, buf_size);
+            }
+            0
+        },
+    )?;
+
+    // args_get: write the argv pointer array and NUL-terminated argument strings.
+    linker.func_wrap(
+        "lind",
+        "args_get",
+        move |caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let args: Vec<String> = cx.args.clone();
+            let base = get_memory_base(&caller) as *mut u8;
+            let mut buf_offset = argv_buf as u32;
+            for (i, arg) in args.iter().enumerate() {
+                let ptr_slot = argv_ptrs as usize + i * 4;
+                let bytes = arg.as_bytes();
+                unsafe {
+                    write_u32(base, ptr_slot, buf_offset);
+                    write_bytes(base, buf_offset as usize, bytes);
+                    *base.add(buf_offset as usize + bytes.len()) = 0;
+                }
+                buf_offset += bytes.len() as u32 + 1;
+            }
+            0
+        },
+    )?;
+
+    // environ_sizes_get: write the env var count and total "KEY=VALUE\0" buffer size.
+    linker.func_wrap(
+        "lind",
+        "environ_sizes_get",
+        move |caller: Caller<'_, T>, ptr_count: i32, ptr_buf_size: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let count = cx.env.len() as u32;
+            let buf_size: u32 = cx
+                .env
+                .iter()
+                .map(|(k, v)| k.len() as u32 + 1 + v.len() as u32 + 1)
+                .sum();
+            let base = get_memory_base(&caller) as *mut u8;
+            unsafe {
+                write_u32(base, ptr_count as usize, count);
+                write_u32(base, ptr_buf_size as usize, buf_size);
+            }
+            0
+        },
+    )?;
+
+    // environ_get: write the env pointer array and NUL-terminated "KEY=VALUE" strings.
+    linker.func_wrap(
+        "lind",
+        "environ_get",
+        move |caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let env: Vec<(String, String)> = cx.env.clone();
+            let base = get_memory_base(&caller) as *mut u8;
+            let mut buf_offset = env_buf as u32;
+            for (i, (key, val)) in env.iter().enumerate() {
+                let ptr_slot = env_ptrs as usize + i * 4;
+                let entry = format!("{}={}", key, val);
+                let bytes = entry.as_bytes();
+                unsafe {
+                    write_u32(base, ptr_slot, buf_offset);
+                    write_bytes(base, buf_offset as usize, bytes);
+                    *base.add(buf_offset as usize + bytes.len()) = 0;
+                }
+                buf_offset += bytes.len() as u32 + 1;
+            }
+            0
+        },
+    )?;
+
     Ok(())
 }
