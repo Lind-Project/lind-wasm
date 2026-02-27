@@ -64,4 +64,4 @@ pub fn set_timer(_counters: impl IntoIterator<Item = &'static Counter>, _kind: T
 
 pub fn enable_counter_by_name(_counters: impl IntoIterator<Item = &'static Counter>, _name: &str) {}
 
-pub fn report(_counters: impl IntoIterator<Item = &'static Counter>, _header: String) {}
+pub fn report(_counters: &[&Counter], _header: String) {}
