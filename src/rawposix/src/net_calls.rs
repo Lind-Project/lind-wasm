@@ -1673,6 +1673,51 @@ pub extern "C" fn recvmsg_syscall(
     ret
 }
 
+/// sendmsg syscall: send message on socket (wasm32 guest to host pointer translation).
+/// Reads guest msghdr/iovec (ILP32 32-bit layout), translates pointers to host,
+/// calls libc::sendmsg.
+/// Returns: bytes sent on success, negative errno on failure.
+/// Reference: https://man7.org/linux/man-pages/man2/sendmsg.2.html
+pub extern "C" fn sendmsg_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    msg_arg: u64,
+    msg_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sendmsg_syscall", "Invalid Cage ID");
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    if fd < 0 {
+        return handle_errno(-fd, "sendmsg");
+    }
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // glibc sendmsg.c already translated all guest pointers (msghdr, iov, buffers)
+    // to host layout using the split-pointer trick, so msg_arg is a host pointer
+    // to a host-layout msghdr ready for libc::sendmsg.
+    let msg_ptr = sc_convert_buf(msg_arg, msg_cageid, cageid) as *const libc::msghdr;
+
+    let ret = unsafe { libc::sendmsg(fd, msg_ptr, flags) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "sendmsg");
+    }
+    ret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/gethostname.2.html
 ///
 /// The Linux `gethostname()` syscall returns the current host name of the system.

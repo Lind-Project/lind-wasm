@@ -34,20 +34,7 @@ __recvmsg_syscall (int fd, struct msghdr *msg, int flags)
 
   /* Build host iov array with translated iov_base pointers.  */
   struct iovec host_iov[iovcnt];
-  for (int i = 0; i < iovcnt; ++i)
-    {
-      host_iov[i].iov_len = msg->msg_iov[i].iov_len;
-
-      uint32_t guest_ptr32 = (uint32_t)(uintptr_t) msg->msg_iov[i].iov_base;
-      uint64_t host_addr64 = TRANSLATE_GUEST_POINTER_TO_HOST (guest_ptr32);
-
-      uint32_t low32  = (uint32_t)(host_addr64 & 0xFFFFFFFFULL);
-      uint32_t high32 = (uint32_t)(host_addr64 >> 32);
-
-      host_iov[i].iov_base   = (void *)(uintptr_t) low32;
-      host_iov[i].__padding1 = (int) high32;
-      host_iov[i].__padding2 = 0;
-    }
+  __lind_translate_iov (msg->msg_iov, host_iov, iovcnt);
 
   /* Build host msghdr with translated pointers using split-pointer trick.  */
   struct msghdr host_msg;
