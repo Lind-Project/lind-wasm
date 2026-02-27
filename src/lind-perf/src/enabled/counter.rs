@@ -115,21 +115,21 @@ impl Drop for Scope<'_> {
 }
 
 /// Reset all counters in a group.
-pub fn reset_all_counters(counters: &[&Counter]) {
+pub fn reset_all_counters(counters: impl IntoIterator<Item = &'static Counter>) {
     for c in counters {
         c.reset();
     }
 }
 
 /// Set a timer for a counter group.
-pub fn set_timer(counters: &[&Counter], kind: TimerKind) {
+pub fn set_timer(counters: impl IntoIterator<Item = &'static Counter>, kind: TimerKind) {
     for c in counters {
         c.set_timer_kind(kind);
     }
 }
 
 /// Enable only the named counter in a group.
-pub fn enable_counter_by_name(counters: &[&Counter], name: &str) {
+pub fn enable_counter_by_name(counters: impl IntoIterator<Item = &'static Counter>, name: &str) {
     for c in counters {
         if c.name == name {
             c.enable();

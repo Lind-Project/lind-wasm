@@ -58,12 +58,10 @@ impl Drop for Scope {
 }
 
 // No-op implementations for the rest.
-pub fn reset_all_counters(_counters: &[&Counter]) {}
+pub fn reset_all_counters(_counters: impl IntoIterator<Item = &'static Counter>) {}
 
-pub fn set_timer(_counters: &[&Counter], _kind: TimerKind) {}
+pub fn set_timer(_counters: impl IntoIterator<Item = &'static Counter>, _kind: TimerKind) {}
 
-pub fn enable_counter_by_name(_counters: &[&Counter], _name: &str) {}
+pub fn enable_counter_by_name(_counters: impl IntoIterator<Item = &'static Counter>, _name: &str) {}
 
-pub fn report_header(_header: String) {}
-
-pub fn report(_counters: &[&Counter]) {}
+pub fn report(_counters: impl IntoIterator<Item = &'static Counter>, _header: String) {}
