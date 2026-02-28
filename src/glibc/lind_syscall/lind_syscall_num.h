@@ -31,7 +31,7 @@
 #define IOCTL_SYSCALL 16
 #define PREAD_SYSCALL 17
 #define PWRITE_SYSCALL 18
-
+#define READV_SYSCALL 19
 #define WRITEV_SYSCALL 20
 #define ACCESS_SYSCALL 21
 #define PIPE_SYSCALL 22
@@ -120,6 +120,7 @@
 /* Lind-specific syscalls (not part of the Linux syscall table) */
 #define REGISTER_HANDLER_SYSCALL 1001
 #define COPY_DATA_BETWEEN_CAGES_SYSCALL 1002
+#define COPY_HANDLER_TABLE_TO_CAGE_SYSCALL 1003
 
 #endif /* _LIND_SYSCALL_NUM_H */
  

@@ -49,8 +49,11 @@ cargo build
 
 To enable the `dashmap` backend:
 
+`--no-default-features` is required to enable dashmap because we're setting 
+hashmap as default feature.
+
 ```sh
-cargo build --features dashmap
+cargo build --no-default-features --features dashmap
 ```
 
 ### How to test

@@ -20,14 +20,14 @@ fn insert_new_handler_creates_mapping() {
 
     let cage = 7;
     let callnum = SYSCALL_FOO;
-    let handlefunc = 11;
-    let dest = 99;
+    let dest_grate = 99;
+    let addr = 11;
 
-    let rc = register_simple(cage, callnum, handlefunc, dest, OP_ADD);
+    let rc = register_simple(cage, callnum, dest_grate, addr, OP_ADD);
     assert_eq!(rc, 0);
 
     let m = mappings_for(cage, callnum);
-    assert_eq!(m, vec![(handlefunc, dest)]);
+    assert_eq!(m, vec![(dest_grate, addr)]);
 }
 
 #[test]
@@ -37,36 +37,34 @@ fn re_register_same_mapping_is_idempotent() {
 
     let cage = 7;
     let callnum = SYSCALL_FOO;
-    let handlefunc = 11;
-    let dest = 99;
+    let dest_grate = 99;
+    let addr = 11;
 
-    assert_eq!(register_simple(cage, callnum, handlefunc, dest, OP_ADD), 0);
-    // Re-register exactly the same mapping
-    assert_eq!(register_simple(cage, callnum, handlefunc, dest, OP_ADD), 0);
+    assert_eq!(register_simple(cage, callnum, dest_grate, addr, OP_ADD), 0);
+    assert_eq!(register_simple(cage, callnum, dest_grate, addr, OP_ADD), 0);
 
     let m = mappings_for(cage, callnum);
-    assert_eq!(m, vec![(handlefunc, dest)]);
+    assert_eq!(m, vec![(dest_grate, addr)]);
 }
 
 #[test]
 #[serial]
-fn conflicting_mapping_returns_apiaborted() {
+fn re_register_overwrites_existing_mapping() {
     clear_globals();
 
     let cage = 7;
     let callnum = SYSCALL_FOO;
-    let handlefunc = 11;
-    let dest1 = 99;
-    let dest2 = 100; // conflicting destination
+    let dest_grate = 99;
+    let addr1 = 11;
+    let addr2 = 12;
 
-    assert_eq!(register_simple(cage, callnum, handlefunc, dest1, OP_ADD), 0);
-    // Same (cage, callnum, handlefunc) but different destination -> conflict
-    let rc = register_simple(cage, callnum, handlefunc, dest2, OP_ADD);
-    assert_eq!(rc, threei_const::ELINDAPIABORTED as i32);
+    assert_eq!(register_simple(cage, callnum, dest_grate, addr1, OP_ADD), 0);
 
-    // Mapping should remain the original one
+    let rc = register_simple(cage, callnum, dest_grate, addr2, OP_ADD);
+    assert_eq!(rc, 0);
+
     let m = mappings_for(cage, callnum);
-    assert_eq!(m, vec![(handlefunc, dest1)]);
+    assert_eq!(m, vec![(dest_grate, addr2)]);
 }
 
 #[test]
@@ -76,61 +74,41 @@ fn deregister_entire_callnum_with_constant() {
 
     let cage = 7;
     let callnum = SYSCALL_FOO;
-    // Install multiple handlers under the same (cage, callnum)
-    assert_eq!(register_simple(cage, callnum, 1, 90, OP_ADD), 0);
-    assert_eq!(register_simple(cage, callnum, 2, 91, OP_ADD), 0);
-    assert_eq!(register_simple(cage, callnum, 3, 92, OP_ADD), 0);
 
-    // Now remove the entire callnum entry:
+    assert_eq!(register_simple(cage, callnum, 90, 1, OP_ADD), 0);
+    assert_eq!(register_simple(cage, callnum, 91, 2, OP_ADD), 0);
+    assert_eq!(register_simple(cage, callnum, 92, 3, OP_ADD), 0);
+
     assert_eq!(
-        register_simple(
-            cage,
-            callnum,
-            12345,
-            threei_const::THREEI_DEREGISTER,
-            OP_REMOVE
-        ),
+        register_simple(cage, callnum, threei_const::THREEI_DEREGISTER, 0, OP_REMOVE),
         0
     );
 
-    // No mappings should remain for that (cage, callnum)
-    let m = mappings_for(cage, callnum);
-    assert!(m.is_empty());
+    assert!(mappings_for(cage, callnum).is_empty());
 
-    // Idempotent: removing again is still success
     assert_eq!(
-        register_simple(
-            cage,
-            callnum,
-            9999,
-            threei_const::THREEI_DEREGISTER,
-            OP_REMOVE
-        ),
+        register_simple(cage, callnum, threei_const::THREEI_DEREGISTER, 0, OP_REMOVE),
         0
     );
 }
 
 #[test]
 #[serial]
-fn selective_deregister_with_handlefunc_zero_removes_only_matching_dest() {
+fn selective_deregister_removes_only_matching_target_cage() {
     clear_globals();
 
     let cage = 7;
     let callnum = SYSCALL_FOO;
-    // Two handlers pointing to different destinations
-    // targetcage: u64, targetcallnum: u64, handlefunc: u64, handlefunccage: u64
-    assert_eq!(register_simple(cage, callnum, 1, 90, OP_ADD), 0);
-    assert_eq!(register_simple(cage, callnum, 2, 91, OP_ADD), 0);
-    assert_eq!(register_simple(cage, callnum, 3, 90, OP_ADD), 0);
 
-    // handlefunc == 0 -> remove all entries whose dest == 90
-    assert_eq!(register_simple(cage, callnum, 1, 90, OP_REMOVE), 0);
-    assert_eq!(register_simple(cage, callnum, 3, 90, OP_REMOVE), 0);
+    assert_eq!(register_simple(cage, callnum, 90, 1001, OP_ADD), 0);
+    assert_eq!(register_simple(cage, callnum, 91, 1002, OP_ADD), 0);
+    assert_eq!(register_simple(cage, callnum, 92, 1003, OP_ADD), 0);
+
+    assert_eq!(register_simple(cage, callnum, 90, 0, OP_REMOVE), 0);
 
     let mut m = mappings_for(cage, callnum);
     m.sort_unstable();
-    // Only the (2, 91) mapping should remain
-    assert_eq!(m, vec![(2, 91)]);
+    assert_eq!(m, vec![(91, 1002), (92, 1003)]);
 }
 
 #[test]
@@ -140,22 +118,19 @@ fn exiting_table_blocks_registration() {
 
     let cage = 7;
     let callnum = SYSCALL_FOO;
-    let handlefunc = 11;
-    let dest = 99;
+    let dest_grate = 99;
+    let addr = 11;
 
-    // Put source cage into EXITING state
     EXITING_TABLE.insert(cage);
-    let rc = register_simple(cage, callnum, handlefunc, dest, OP_ADD);
+    let rc = register_simple(cage, callnum, dest_grate, addr, OP_ADD);
     assert_eq!(rc, threei_const::ELINDESRCH as i32);
 
-    // Remove, then try blocking by destination exiting
     EXITING_TABLE.remove(&cage);
-    EXITING_TABLE.insert(dest);
+    EXITING_TABLE.insert(dest_grate);
 
-    let rc2 = register_simple(cage, callnum, handlefunc, dest, OP_ADD);
+    let rc2 = register_simple(cage, callnum, dest_grate, addr, OP_ADD);
     assert_eq!(rc2, threei_const::ELINDESRCH as i32);
 
-    // Ensure nothing was inserted
     assert!(mappings_for(cage, callnum).is_empty());
 }
 
@@ -166,22 +141,11 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
 
     let cage = 7;
 
-    // install entries under two callnums
-    assert_eq!(register_simple(cage, SYSCALL_FOO, 1, 90, OP_ADD), 0);
-    assert_eq!(register_simple(cage, SYSCALL_BAR, 2, 91, OP_ADD), 0);
+    assert_eq!(register_simple(cage, SYSCALL_FOO, 90, 1, OP_ADD), 0);
+    assert_eq!(register_simple(cage, SYSCALL_BAR, 91, 2, OP_ADD), 0);
 
-    // remove SYSCALL_FOO entirely
-    assert_eq!(
-        register_simple(
-            cage,
-            SYSCALL_FOO,
-            0,
-            threei_const::THREEI_DEREGISTER,
-            OP_REMOVE
-        ),
-        0
-    );
-    // cage still present because call_b remains
+    assert_eq!(register_simple(cage, SYSCALL_FOO, 90, 1, OP_REMOVE), 0);
+
     #[cfg(feature = "hashmap")]
     {
         let tbl = HANDLERTABLE.lock().unwrap();
@@ -192,13 +156,12 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
         assert!(HANDLERTABLE.get(&cage).is_some());
     }
 
-    // remove SYSCALL_BAR entirely -> cage should be cleaned up (optional cleanup branch)
     assert_eq!(
         register_simple(
             cage,
             SYSCALL_BAR,
-            0,
             threei_const::THREEI_DEREGISTER,
+            0,
             OP_REMOVE
         ),
         0
@@ -223,12 +186,11 @@ fn deregister_not_found_is_ok() {
     let cage = 123;
     let callnum = 456;
 
-    // Nothing exists, but deregister should still succeed (idempotent)
-    let rc = register_simple(cage, callnum, 0, threei_const::THREEI_DEREGISTER, OP_REMOVE);
+    let rc = register_simple(cage, callnum, threei_const::THREEI_DEREGISTER, 0, OP_REMOVE);
     assert_eq!(rc, 0);
 }
 
-// // ---------- [Copy_handlers] ----------
+// ---------- [Copy_handlers] ----------
 
 #[test]
 #[serial]
@@ -238,21 +200,19 @@ fn copy_into_empty_target_copies_all() {
     let src = 1001;
     let dst = 2001;
 
-    // src: callnum SYSCALL_FOO -> {(11->90), (12->91)}
-    assert_eq!(register_simple(src, SYSCALL_FOO, 11, 90, OP_ADD), 0);
-    assert_eq!(register_simple(src, SYSCALL_FOO, 12, 91, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_FOO, 90, 11, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_FOO, 91, 12, OP_ADD), 0);
 
     let rc = cpy(dst, src);
     assert_eq!(rc, 0);
 
     let mut got = mappings_for(dst, SYSCALL_FOO);
     got.sort_unstable();
-    assert_eq!(got, vec![(11, 90), (12, 91)]);
+    assert_eq!(got, vec![(90, 11), (91, 12)]);
 
-    // src unchanged
     let mut srcmap = mappings_for(src, SYSCALL_FOO);
     srcmap.sort_unstable();
-    assert_eq!(srcmap, vec![(11, 90), (12, 91)]);
+    assert_eq!(srcmap, vec![(90, 11), (91, 12)]);
 }
 
 #[test]
@@ -263,13 +223,13 @@ fn copy_is_idempotent() {
     let src = 1002;
     let dst = 2002;
 
-    assert_eq!(register_simple(src, SYSCALL_FOO, 11, 90, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_FOO, 90, 11, OP_ADD), 0);
     assert_eq!(cpy(dst, src), 0);
-    assert_eq!(cpy(dst, src), 0); // second time no changes
+    assert_eq!(cpy(dst, src), 0);
 
     let mut got = mappings_for(dst, SYSCALL_FOO);
     got.sort_unstable();
-    assert_eq!(got, vec![(11, 90)]);
+    assert_eq!(got, vec![(90, 11)]);
 }
 
 #[test]
@@ -280,28 +240,18 @@ fn copy_does_not_overwrite_existing_handlers() {
     let src = 1003;
     let dst = 2003;
 
-    // src has (11->99, 12->100)
-    assert_eq!(register_simple(src, SYSCALL_FOO, 11, 99, OP_ADD), 0);
-    assert_eq!(register_simple(src, SYSCALL_FOO, 12, 100, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_FOO, 99, 11, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_FOO, 100, 12, OP_ADD), 0);
 
-    // dst already has (11->77) under the same callnum
-    assert_eq!(register_simple(dst, SYSCALL_FOO, 11, 77, OP_ADD), 0);
+    assert_eq!(register_simple(dst, SYSCALL_FOO, 77, 11, OP_ADD), 0);
 
     assert_eq!(cpy(dst, src), 0);
 
-    // Expect (11->77) preserved, (12->100) added
     let mut got = mappings_for(dst, SYSCALL_FOO);
     got.sort_unstable();
-    assert_eq!(got, vec![(11, 77), (12, 100)]);
+    assert_eq!(got, vec![(77, 11), (99, 11), (100, 12)]);
 }
 
-// This test adds multiple callnums with different destinations
-// Verify that when copying handler tables:
-// - All callnums from the source cage are copied into the destination cage.
-// - Existing handlers in the destination are preserved (not overwritten).
-// - New handlers from the source are merged in alongside existing ones.
-// In this case: callnum 34 is newly added, and callnum 35's new entry is merged
-// without losing the old one.
 #[test]
 #[serial]
 fn copy_merges_multiple_callnums() {
@@ -310,41 +260,34 @@ fn copy_merges_multiple_callnums() {
     let src = 1004;
     let dst = 2004;
 
-    // src: two callnums (SYSCALL_FOO and SYSCALL_BAR)
-    assert_eq!(register_simple(src, SYSCALL_FOO, 11, 90, OP_ADD), 0);
-    assert_eq!(register_simple(src, SYSCALL_BAR, 21, 190, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_FOO, 90, 11, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_BAR, 190, 21, OP_ADD), 0);
 
-    // dst already has one handler under callnum SYSCALL_BAR
-    assert_eq!(register_simple(dst, SYSCALL_BAR, 22, 191, OP_ADD), 0);
+    assert_eq!(register_simple(dst, SYSCALL_BAR, 191, 22, OP_ADD), 0);
 
     assert_eq!(cpy(dst, src), 0);
 
     let mut got34 = mappings_for(dst, SYSCALL_FOO);
     got34.sort_unstable();
-    assert_eq!(got34, vec![(11, 90)]);
+    assert_eq!(got34, vec![(90, 11)]);
 
     let mut got35 = mappings_for(dst, SYSCALL_BAR);
     got35.sort_unstable();
-    // (22,191) preserved; (21,190) added
-    assert_eq!(got35, vec![(21, 190), (22, 191)]);
+    assert_eq!(got35, vec![(190, 21), (191, 22)]);
 }
 
-// Ensure that if the source cage does not have a handler table,
-// attempting to copy from it fails with ELINDAPIABORTED.
-// Also verify that the destination cage remains unaffected (still empty).
 #[test]
 #[serial]
 fn copy_returns_error_if_src_missing_table() {
     clear_globals();
 
-    let src = 1005; // no table for src
+    let src = 1005;
     let dst = 2005;
 
     let rc = cpy(dst, src);
 
     assert_eq!(rc, threei_const::ELINDAPIABORTED as u64);
 
-    // Ensure dst stays empty.
     #[cfg(feature = "hashmap")]
     {
         let tbl = HANDLERTABLE.lock().unwrap();
@@ -356,10 +299,6 @@ fn copy_returns_error_if_src_missing_table() {
     }
 }
 
-// Validate that copying fails with ELINDESRCH if either the source or the
-// destination cage is marked as "exiting".
-// The test covers both cases separately (src exiting, then dst exiting).
-// After each case, the EXITING_TABLE is restored to keep tests independent.
 #[test]
 #[serial]
 fn copy_returns_elindesrch_if_either_src_or_dst_exiting() {
@@ -368,16 +307,13 @@ fn copy_returns_elindesrch_if_either_src_or_dst_exiting() {
     let src = 1006;
     let dst = 2006;
 
-    // Prepare a valid source table
-    assert_eq!(register_simple(src, SYSCALL_FOO, 11, 90, OP_ADD), 0);
+    assert_eq!(register_simple(src, SYSCALL_FOO, 90, 11, OP_ADD), 0);
 
-    // Case 1: src exiting
     EXITING_TABLE.insert(src);
     let rc1 = cpy(dst, src);
     assert_eq!(rc1, threei_const::ELINDESRCH as u64);
     EXITING_TABLE.remove(&src);
 
-    // Case 2: dst exiting
     EXITING_TABLE.insert(dst);
     let rc2 = cpy(dst, src);
     assert_eq!(rc2, threei_const::ELINDESRCH as u64);

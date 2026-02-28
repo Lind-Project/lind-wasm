@@ -199,9 +199,9 @@ fn register_wasmtime_syscall_entry() -> bool {
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         56,                                  // clone syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                                   // register
         WASMTIME_CAGEID,                     // handler function is in the 3i
         clone_call_u64,
+        0,
         0,
         0,
         0,
@@ -219,9 +219,9 @@ fn register_wasmtime_syscall_entry() -> bool {
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         59,                                  // exec syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                                   // register
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exec_call_u64,
+        0,
         0,
         0,
         0,
@@ -239,9 +239,9 @@ fn register_wasmtime_syscall_entry() -> bool {
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         60,                                  // exit syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                                   // register
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exit_call_u64,
+        0,
         0,
         0,
         0,
@@ -582,6 +582,13 @@ fn make_wasmtime_config(backtrace: bool) -> wasmtime::Config {
     };
 
     wt_config.wasm_backtrace_details(details);
+
+    // Enable compilation cache — compiled .wasm artifacts are stored on disk
+    // so subsequent runs skip compilation. Best-effort: if config loading
+    // fails (e.g. no home dir), caching is simply disabled.
+    if let Err(e) = wt_config.cache_config_load_default() {
+        eprintln!("[lind-boot] warning: failed to enable wasm cache: {e}");
+    }
 
     wt_config
 }

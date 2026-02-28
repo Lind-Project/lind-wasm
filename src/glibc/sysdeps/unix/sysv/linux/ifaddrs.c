@@ -141,7 +141,9 @@ __netlink_request (struct netlink_handle *h, int type)
   if (buf == NULL)
     goto out_fail;
 
-  struct iovec iov = { buf, buf_size };
+  /* Lind: use designated initializers — struct iovec has padding fields
+     for wasm32-to-host layout matching, so positional init is wrong.  */
+  struct iovec iov = { .iov_base = buf, .iov_len = buf_size };
 
   if (__netlink_sendreq (h, type) < 0)
     goto out_fail;

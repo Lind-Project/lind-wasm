@@ -681,7 +681,9 @@ impl VmmapOps for Vmmap {
             .overlapping(ie(new_region_start_page, new_region_end_page))
         {
             let ent_start = overlap_interval.start();
-            let ent_end = overlap_interval.end();
+            // .end() returns the inclusive end; convert to exclusive to match
+            // new_region_end_page (which is page_num + npages, i.e. exclusive)
+            let ent_end = overlap_interval.end() + 1;
 
             // Clone the entry to work with
             let original_entry = entry.clone();

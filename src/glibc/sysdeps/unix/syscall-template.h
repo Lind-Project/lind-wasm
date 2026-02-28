@@ -35,7 +35,7 @@
             (syscall_num), \
             (syscall_name), \
             __self, /* self_cageid */ \
-            __self, /* target_cageid: same as self for traditional syscalls */ \
+            __self, /* target_cageid: set to same as self_cageid */ \
             (uint64_t)(arg1), __self, \
             (uint64_t)(arg2), __self, \
             (uint64_t)(arg3), __self, \

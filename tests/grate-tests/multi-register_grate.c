@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <assert.h>
 
 // Dispatcher function
 int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
@@ -14,7 +15,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg6, uint64_t arg6cage) {
   if (fn_ptr_uint == 0) {
     fprintf(stderr, "[Grate|multi-register_grate] Invalid function ptr\n");
-    return -1;
+    assert(0);
   }
 
   printf("[Grate|multi-register_grate] Handling function ptr: %llu from cage: %llu\n",
@@ -25,16 +26,11 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
   return fn(cageid);
 }
 
-// Function ptr and signatures of this grate
-int geteuid_grate(uint64_t);
-
 int geteuid_grate(uint64_t cageid) {
   printf("[Grate|multi-register_grate] In multi-register_grate %d handler for cage: %llu\n",
          getpid(), cageid);
   return 10;
 }
-
-int getuid_grate(uint64_t);
 
 int getuid_grate(uint64_t cageid) {
   printf("[Grate|multi-register_grate] In multi-register_grate %d handler for cage: %llu\n",
@@ -48,7 +44,7 @@ int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "Usage: %s <cage_file> <grate_file> <cage_file> [...]\n",
             argv[0]);
-    exit(EXIT_FAILURE);
+    assert(0);
   }
 
   int grateid = getpid();
@@ -65,7 +61,7 @@ int main(int argc, char *argv[]) {
     pid_t pid = fork();
     if (pid < 0) {
       perror("fork failed");
-      exit(EXIT_FAILURE);
+      assert(0);
     } else if (pid == 0) {
       // According to input format, the odd-numbered positions will always be
       // grate, and even-numbered positions will always be cage.
@@ -73,47 +69,49 @@ int main(int argc, char *argv[]) {
         // Next one is cage, only set the register_handler when next one is cage
         int cageid = getpid();
         // Set the geteuid (syscallnum=107) of this cage to call this grate
-        // function geteuid_grate (func index=0) Syntax of register_handler:
-        // <targetcage, targetcallnum, handlefunc_flag (deregister(0) or register
-        // (non-zero), this_grate_id, fn_ptr_u64)>
+        // function geteuid_grate 
+        // Syntax of register_handler:
+        // <targetcage, targetcallnum, this_grate_id, fn_ptr_u64)>
         uint64_t fn_ptr_addr_geteuid = (uint64_t)(uintptr_t)&geteuid_grate;
         printf("[Grate|multi-register_grate] Registering geteuid handler for cage %d in "
                "grate %d with fn ptr addr: %llu\n",
                cageid, grateid, fn_ptr_addr_geteuid);
         // geteuid syscallnum=107
-        register_handler(cageid, 107, 1, grateid, fn_ptr_addr_geteuid);
-        // Set the geteuid (syscallnum=107) of this cage to call this grate
-        // function geteuid_grate (func index=0) Syntax of register_handler:
-        // <targetcage, targetcallnum, handlefunc_flag (deregister(0) or register
-        // (non-zero), this_grate_id, fn_ptr_u64)>
+        int ret_geteuid = register_handler(cageid, 107, grateid, fn_ptr_addr_geteuid);
+        // Set the getuid (syscallnum=102) of this cage to call this grate
+        // function getuid_grate 
+        // Syntax of register_handler:
+        // <targetcage, targetcallnum, this_grate_id, fn_ptr_u64)>
         uint64_t fn_ptr_addr_getuid = (uint64_t)(uintptr_t)&getuid_grate;
-        printf("[Grate|multi-register_grate] Registering geteuid handler for cage %d in "
+        printf("[Grate|multi-register_grate] Registering getuid handler for cage %d in "
                "grate %d with fn ptr addr: %llu\n",
                cageid, grateid, fn_ptr_addr_getuid);
         // getuid syscallnum=102
-        register_handler(cageid, 102, 1, grateid, fn_ptr_addr_getuid);
+        int ret_getuid = register_handler(cageid, 102, grateid, fn_ptr_addr_getuid);
+
+        if (ret_geteuid !=0 || ret_getuid != 0) {
+          fprintf(stderr, "[Grate|multi-register_grate] FAIL: register_handler returned %d for geteuid and %d for getuid\n",
+                  ret_geteuid, ret_getuid);
+          assert(0);
+        }
       }
 
       if (execv(argv[i], &argv[i]) == -1) {
         perror("execv failed");
-        exit(EXIT_FAILURE);
+        assert(0);
       }
     }
   }
 
   int status;
-  int failed = 0;
+
   while (wait(&status) > 0) {
     if (status != 0) {
       fprintf(stderr, "[Grate|multi-register] FAIL: child exited with status %d\n", status);
-      failed = 1;
+      assert(0);
     }
   }
 
-  if (failed) {
-    fprintf(stderr, "[Grate|multi-register] FAIL\n");
-    return EXIT_FAILURE;
-  }
   printf("[Grate|multi-register] PASS\n");
   return 0;
 }

@@ -88,6 +88,7 @@ cd $BUILD
   --prefix=$GLIBC/target \
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
+  libc_cv_complocaledir='/usr/lib/locale' \
   CFLAGS=" -matomics -mbulk-memory -O2 -g" \
   CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 

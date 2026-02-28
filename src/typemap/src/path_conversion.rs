@@ -10,6 +10,7 @@ pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
+use sysdefs::constants::err_const::Errno;
 pub use sysdefs::constants::lind_platform_const::PATH_MAX;
 pub use sysdefs::constants::{err_const, fs_const};
 
@@ -111,28 +112,34 @@ pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
 ///
 /// ## Returns:
 /// A `CString` representing the absolute path in the host perspective (kernel perspective).
-pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64) -> CString {
+pub fn sc_convert_path_to_host(
+    path_arg: u64,
+    path_arg_cageid: u64,
+    cageid: u64,
+) -> Result<CString, Errno> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(path_arg_cageid, cageid) {
             panic!("Invalid Cage ID");
         }
     }
-    let cage = get_cage(path_arg_cageid).unwrap();
 
     let path = match get_cstr(path_arg) {
         Ok(path) => path,
-        Err(e) => panic!("{:?}", e),
+        Err(_) => return Err(Errno::EFAULT),
     };
     // We will create a new variable in host process to handle the path value
     let relpath = normpath(convpath(path), path_arg_cageid);
-    let relative_path = relpath.to_str().unwrap();
+    let relative_path = match relpath.to_str() {
+        Some(s) => s,
+        None => return Err(Errno::EINVAL),
+    };
 
     // Check if exceeds the max path
     #[cfg(feature = "secure")]
     {
         if relative_path.len() >= PATH_MAX {
-            panic!("Path exceeds PATH_MAX (4096)");
+            return Err(Errno::ENAMETOOLONG);
         }
     }
 
@@ -140,7 +147,7 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     // contained within the string.
     let full_path = relative_path.to_string();
     match CString::new(full_path) {
-        Ok(c_path) => c_path,
-        Err(_) => panic!("String contains internal null byte"),
+        Ok(c_path) => Ok(c_path),
+        Err(_) => return Err(Errno::EINVAL),
     }
 }

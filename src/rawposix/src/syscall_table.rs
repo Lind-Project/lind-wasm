@@ -11,17 +11,17 @@ use super::fs_calls::{
     ioctl_syscall, link_syscall, lseek_syscall, mkdir_syscall, mmap_syscall, mprotect_syscall,
     munmap_syscall, nanosleep_time64_syscall, open_syscall, pipe2_syscall, pipe_syscall,
     pread_syscall, pwrite_syscall, read_syscall, readlink_syscall, readlinkat_syscall,
-    rename_syscall, rmdir_syscall, shmat_syscall, shmctl_syscall, shmdt_syscall, shmget_syscall,
-    stat_syscall, statfs_syscall, sync_file_range_syscall, truncate_syscall, unlink_syscall,
-    unlinkat_syscall, write_syscall, writev_syscall,
+    readv_syscall, rename_syscall, rmdir_syscall, shmat_syscall, shmctl_syscall, shmdt_syscall,
+    shmget_syscall, stat_syscall, statfs_syscall, sync_file_range_syscall, truncate_syscall,
+    unlink_syscall, unlinkat_syscall, write_syscall, writev_syscall,
 };
 use super::init::RawCallFunc;
 use super::net_calls::{
     accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall, epoll_create_syscall,
     epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall, getpeername_syscall,
     getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall,
-    select_syscall, sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall,
-    socketpair_syscall,
+    recvmsg_syscall, select_syscall, sendmsg_syscall, sendto_syscall, setsockopt_syscall,
+    shutdown_syscall, socket_syscall, socketpair_syscall,
 };
 use super::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
@@ -47,6 +47,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (16, ioctl_syscall),
     (17, pread_syscall),
     (18, pwrite_syscall),
+    (19, readv_syscall),
     (20, writev_syscall),
     (21, access_syscall),
     (22, pipe_syscall),
@@ -65,6 +66,8 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (43, accept_syscall),
     (44, sendto_syscall),
     (45, recvfrom_syscall),
+    (46, sendmsg_syscall),
+    (47, recvmsg_syscall),
     (48, shutdown_syscall),
     (49, bind_syscall),
     (50, listen_syscall),

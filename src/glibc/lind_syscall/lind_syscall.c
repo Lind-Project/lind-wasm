@@ -118,22 +118,20 @@ int make_threei_call (unsigned int callnumber,
 // in_grate_fn_ptr_u64: the function pointer (cast to uint64_t) of the syscall handler in the grate, only used when register_flag is non-0
 int register_handler (int64_t targetcage, 
     uint64_t targetcallnum, 
-    uint64_t register_flag, 
     uint64_t this_grate_id,
     uint64_t in_grate_fn_ptr_u64)
 {
     return make_threei_call(
         REGISTER_HANDLER_SYSCALL, 
         0, // callname is not used in the trampoline, set to 0
-        this_grate_id, // pass this_grate_id as self_cageid
-        999999, // pass THREEI_GRATE_CAGE_ID as target_cageid
+        targetcage, // pass targetcage as self_cageid
+        targetcage, // pass targetcage as target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         targetcage, 
         targetcallnum, 
         0, // runtime_id currently not used, set to 0
-        register_flag, // is_register flag: 0 for deregister, non-0 for register
         this_grate_id, // handlefunccage is the grate id of the handler function, which is the same as this_grate_id
         in_grate_fn_ptr_u64,
-        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0,
         0 /* translate_errno=0: we want to return the raw result without errno translation */
     );
 }
@@ -154,13 +152,37 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t src
     return make_threei_call(
         COPY_DATA_BETWEEN_CAGES_SYSCALL, 
         0, // callname is not used in the trampoline, set to 0
-        thiscage, 
-        targetcage,
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
         TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
         len, 0,
         copytype, 0,
         0, 0, 0, 0,
+        0 /* translate_errno=0: we want to return the raw result without errno translation */
+    );
+}
+
+// 3i function call to copy handler table to a target cage
+// typically used when a new cage is created and we need to copy the syscall handler 
+// table from another cage (has the handlers different than default rawposix registration) 
+// to the new cage
+// thiscage: the cage id of the caller cage
+// targetcage: the cage id of the target cage
+int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
+{
+    return make_threei_call(
+        COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, 
+        0, // callname is not used in the trampoline, set to 0
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        thiscage, 
+        targetcage,
+        0, 0,
+        0, 0,
+        0, 0,
+        0, 0,
+        0, 0,
         0 /* translate_errno=0: we want to return the raw result without errno translation */
     );
 }
