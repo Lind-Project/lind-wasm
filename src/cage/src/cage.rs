@@ -75,7 +75,12 @@ pub struct Cage {
     pub vmmap: RwLock<Vmmap>,
 }
 
+/// CageSnapshot can be used to create and rollback to snapshots of a Cage's state.
+///
+/// This is useful for exec_syscall in case we need to restore the cage's threads and memory
+/// information if the exec fails in the child cage.
 pub struct CageSnapshot {
+    cageid: u64,
     rev_shm: Vec<(u64, i32)>,
     vmmap: Vmmap,
     signal_handlers: Vec<(i32, SigactionStruct)>,
@@ -85,8 +90,10 @@ pub struct CageSnapshot {
 }
 
 impl CageSnapshot {
+    /// Create a new snapshot for the cage.
     pub fn create(cage: &Cage) -> CageSnapshot {
         CageSnapshot {
+            cageid: cage.cageid,
             rev_shm: cage.rev_shm.lock().clone(),
             vmmap: cage.vmmap.read().clone(),
             signal_handlers: cage
@@ -104,7 +111,11 @@ impl CageSnapshot {
         }
     }
 
+    /// Restore a snapshot for a given cage.
     pub fn restore(self, cage: &Cage) {
+        if (self.cageid != cage.cageid) {
+            panic!("Snapshot being applied to a cage that did not generate it.");
+        }
         *cage.rev_shm.lock() = self.rev_shm;
         *cage.vmmap.write() = self.vmmap;
 
@@ -231,15 +242,6 @@ pub fn alloc_cage_id() -> Option<u64> {
         Ok(v) => Some(v + 1),
         Err(_) => None,
     }
-}
-
-pub fn clear_cage_for_exec(cage: &Cage) {
-    cage.rev_shm.lock().clear();
-    cage.vmmap.write().clear();
-    cage.signalhandler.clear();
-    cage.sigset.store(0, Ordering::Relaxed);
-    cage.epoch_handler.clear();
-    *cage.main_threadid.write() = 0;
 }
 
 mod tests {

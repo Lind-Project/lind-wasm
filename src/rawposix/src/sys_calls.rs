@@ -248,8 +248,31 @@ pub extern "C" fn exec_syscall(
     // Copy necessary data from current cage
     let selfcage = get_cage(self_cageid).unwrap();
 
+    // Before clearing information about the cage, store it as a snapshot.
+    // This is required because in case the exec fails, we need the cage's threads and memory
+    // to be non-empty in order for that thread to exit.
     let rollback_snapshot = cage::CageSnapshot::create(&selfcage);
-    clear_cage_for_exec(&selfcage);
+
+    selfcage.rev_shm.lock().clear();
+
+    // ensures that all old mappings and states are discarded, allowing the new cage to
+    // run in a clean virtual address space, while reusing the existing `Vmmap` container
+    // to avoid extra allocations.
+    let mut vmmap = selfcage.vmmap.write();
+    vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+
+    // perform signal related clean up
+    // all the signal handler becomes default after exec
+    // pending signals should be perserved though
+    selfcage.signalhandler.clear();
+    // the sigset will be reset after exec
+    selfcage.sigset.store(0, Relaxed);
+    // we also clean up epoch handler and main thread id
+    // since they will be re-established from wasmtime
+    selfcage.epoch_handler.clear();
+    let mut threadid_guard = selfcage.main_threadid.write();
+    *threadid_guard = 0;
+    drop(threadid_guard);
 
     let ret = threei::make_syscall(
         RAWPOSIX_CAGEID,
