@@ -20,3 +20,5 @@ results.json
 #Ignore local files
 .DS_Store
 target/
+#Ignore python cache
+__pycache__/

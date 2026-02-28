@@ -1,5 +1,5 @@
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
 use std::ffi::c_void;
@@ -13,8 +13,8 @@ use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Linker, Module, Precompiled, Store, Val, ValType,
     WasmBacktraceDetails,
 };
-use wasmtime_lind_3i::{init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread, VmCtxWrapper};
-use wasmtime_lind_multi_process::{LindCtx, CAGE_START_ID, THREAD_START_ID};
+use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
+use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID};
 use wasmtime_lind_utils::LindCageManager;
 use wasmtime_wasi_threads::WasiThreadsCtx;
 
