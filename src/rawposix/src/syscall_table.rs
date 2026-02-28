@@ -77,7 +77,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (54, setsockopt_syscall),
     (55, getsockopt_syscall),
     (56, fork_syscall),
-    (57, fork_syscall),
     (59, exec_syscall),
     (60, exit_syscall),
     (61, waitpid_syscall),
