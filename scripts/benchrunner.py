@@ -75,7 +75,6 @@ def compile_native(c_file: Path) -> Path:
         [
             "cc",
             str(c_file),
-            str(BENCH_DIR / "imfs.c"),
             str(BENCH_DIR / "bench.c"),
             "-o",
             str(out_path),
