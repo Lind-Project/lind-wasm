@@ -104,19 +104,21 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Build lind-boot
 FROM base as build-lind-boot
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/lind-boot src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
+COPY --parents src/lind-boot src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs src/lind-perf Makefile rust-toolchain.toml .
 RUN rm -f src/wasmtime/crates/cage \
     src/wasmtime/crates/threei \
     src/wasmtime/crates/fdtables \
     src/wasmtime/crates/typemap \
     src/wasmtime/crates/sysdefs \
     src/wasmtime/crates/rawposix \
+    src/wasmtime/crates/lind-perf \
  && ln -s ../../cage src/wasmtime/crates/cage \
  && ln -s ../../threei src/wasmtime/crates/threei \
  && ln -s ../../fdtables src/wasmtime/crates/fdtables \
  && ln -s ../../typemap src/wasmtime/crates/typemap \
  && ln -s ../../sysdefs src/wasmtime/crates/sysdefs \
- && ln -s ../../rawposix src/wasmtime/crates/rawposix
+ && ln -s ../../rawposix src/wasmtime/crates/rawposix \
+ && ln -s ../../lind-perf src/wasmtime/crates/lind-perf
 RUN make lind-boot
 
 
@@ -151,8 +153,13 @@ RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
 FROM base AS test
+ENV LIND_WASM_ROOT=/
 COPY --parents scripts tests tools skip_test_cases.txt Makefile .
-RUN chmod 0755 /scripts/wasmtestreport.py /scripts/lind_compile /scripts/lind_run
+RUN chmod 0755 /scripts/wasmtestreport.py /scripts/test_runner.py /scripts/lind_compile /scripts/lind_run \
+ && install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
+ && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run \
+ && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
 # Create symlink so hardcoded paths in wasmtime match Docker environment
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
@@ -161,10 +168,11 @@ RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lin
     --mount=from=build-lind-boot,source=build/lind-boot,destination=/build/lind-boot \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
     make test && \
-    OUT_DIR=/ REPORT_PATH=/report.html make md_generation
+    make md_generation OUT=/ REPORT=/report.html
 
 
 FROM scratch AS artifacts
 COPY --from=test /report.html /wasm-e2e-report.html
+COPY --from=test /reports /reports
 COPY --from=test /e2e_comment.md /e2e_comment.md
 COPY --from=test /e2e_status /e2e_status

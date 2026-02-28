@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // Not a precompile command, chroot to lindfs
     chroot_to_lindfs();
-  
+
     // Check if --perf is enabled and avaible to decide whether to run in benchmarking mode.
     if let Some(kind) = lindboot_cli.perf_timer_kind() {
         // Initialize all counters.
