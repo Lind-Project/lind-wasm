@@ -330,6 +330,10 @@ pub fn sc_convert_addr_to_epollevent<'a>(
     arg_cageid: u64,
     cageid: u64,
 ) -> Result<&'a mut libc::epoll_event, Errno> {
+    if arg == 0 {
+        return Err(Errno::EFAULT);
+    }
+
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {

@@ -5,8 +5,46 @@ use crate::{
     cli::CliOptions,
     lind_wasmtime::{execute_wasmtime, precompile_module},
 };
+
 use clap::Parser;
+use libc;
+use std::ffi::CString;
+use std::path::Path;
+
 use rawposix::init::{rawposix_shutdown, rawposix_start};
+use sysdefs::constants::LINDFS_ROOT;
+
+/// Helper function which `chroot`s to `lindfs`.
+///
+/// - check if LINDFS_ROOT exists
+/// - chroot to LINDFS_ROOT
+/// - chdir to new '/'
+fn chroot_to_lindfs() {
+    unsafe {
+        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
+
+        if !Path::new(LINDFS_ROOT).is_dir() {
+            panic!("The configured lindfs does not exist: {}", LINDFS_ROOT);
+        }
+
+        let ret = libc::chroot(lindfs_path.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chroot to {}: {}",
+                LINDFS_ROOT,
+                std::io::Error::last_os_error()
+            );
+        }
+        let root = CString::new("/").unwrap();
+        let ret = libc::chdir(root.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chdir to / after chroot: {}",
+                std::io::Error::last_os_error()
+            )
+        }
+    }
+}
 
 /// Entry point of the lind-boot executable.
 ///
@@ -26,6 +64,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         precompile_module(&lindboot_cli)?;
         return Ok(());
     }
+
+    // Not a precompile command, chroot to lindfs
+    chroot_to_lindfs();
 
     // Initialize RawPOSIX and register RawPOSIX syscalls with 3i
     rawposix_start(0);

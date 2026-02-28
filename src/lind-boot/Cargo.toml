@@ -28,3 +28,4 @@ anyhow = { version = "1.0.66", default-features = false }
 cap-std = { version = "3.4.2", default-features = false }
 clap = { version = "4", features = ["derive"] }
 cfg-if = "1.0"
+libc = "0.2"
