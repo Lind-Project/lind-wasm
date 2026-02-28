@@ -682,6 +682,14 @@ pub extern "C" fn mmap_syscall(
     let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
+    // Due to 3i syscall interposition, `target_cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `mmap`, the operation must be performed on the
+    // address space of the originating cage. Therefore, we derive the
+    // semantic operation cage from the argument metadata (`addr_cageid`)
+    // instead of using `target_cageid`.
     let operation_cageid = addr_cageid;
     let cage = get_cage(operation_cageid).unwrap();
 
@@ -939,6 +947,14 @@ pub extern "C" fn munmap_syscall(
         return syscall_error(Errno::EINVAL, "munmap", "length cannot be zero");
     }
 
+    // Due to 3i syscall interposition, `target_cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `munmap`, the operation must be performed on the
+    // address space of the originating cage. Therefore, we derive the
+    // semantic operation cage from the argument metadata (`addr_cageid`)
+    // instead of using `target_cageid`.
     let operation_cageid = addr_cageid;
     let cage = get_cage(operation_cageid).unwrap();
 
@@ -1039,8 +1055,15 @@ pub extern "C" fn brk_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `target_cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `brk`, the operation must be performed on the
+    // address space of the originating cage. Therefore, we derive the
+    // semantic operation cage from the argument metadata (`brk_cageid`)
+    // instead of using `target_cageid`.
     let operation_cageid = brk_cageid;
-
     let cage = get_cage(operation_cageid).unwrap();
 
     let mut vmmap = cage.vmmap.write();
