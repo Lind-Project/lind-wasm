@@ -75,6 +75,63 @@ pub struct Cage {
     pub vmmap: RwLock<Vmmap>,
 }
 
+pub struct CageSnapshot {
+    rev_shm: Vec<(u64, i32)>,
+    vmmap: Vmmap,
+    signal_handlers: Vec<(i32, SigactionStruct)>,
+    sigset: u64,
+    main_threadid: i32,
+    epoch_handlers: Vec<(i32, *mut u64)>,
+}
+
+impl CageSnapshot {
+    pub fn create(cage: &Cage) -> CageSnapshot {
+        CageSnapshot {
+            rev_shm: cage.rev_shm.lock().clone(),
+            vmmap: cage.vmmap.read().clone(),
+            signal_handlers: cage
+                .signalhandler
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value()))
+                .collect(),
+            sigset: cage.sigset.load(Ordering::Relaxed),
+            main_threadid: *cage.main_threadid.read(),
+            epoch_handlers: cage
+                .epoch_handler
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value().read()))
+                .collect(),
+        }
+    }
+
+    pub fn clear_for_exec(cage: &Cage) {
+        cage.rev_shm.lock().clear();
+        cage.vmmap.write().clear();
+        cage.signalhandler.clear();
+        cage.sigset.store(0, Ordering::Relaxed);
+        cage.epoch_handler.clear();
+        *cage.main_threadid.write() = 0;
+    }
+
+    pub fn restore(self, cage: &Cage) {
+        *cage.rev_shm.lock() = self.rev_shm;
+        *cage.vmmap.write() = self.vmmap;
+
+        cage.signalhandler.clear();
+        for (signo, action) in self.signal_handlers {
+            cage.signalhandler.insert(signo, action);
+        }
+
+        cage.sigset.store(self.sigset, Ordering::Relaxed);
+        *cage.main_threadid.write() = self.main_threadid;
+
+        cage.epoch_handler.clear();
+        for (threadid, epoch_ptr) in self.epoch_handlers {
+            cage.epoch_handler.insert(threadid, RwLock::new(epoch_ptr));
+        }
+    }
+}
+
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
 ///
 /// Direct Indexing with `cageid`:
@@ -235,5 +292,80 @@ mod tests {
             2,
             "Retrieved cage should have correct ID"
         );
+    }
+
+    #[test]
+    fn test_exec_rollback_snapshot_round_trip() {
+        let mut vmmap = crate::memory::vmmap::Vmmap::new();
+        vmmap.set_program_break(42);
+        vmmap.set_base_address(0x1000);
+        let expected_vmmap = vmmap.clone();
+
+        let mut epoch_main = 11_u64;
+        let mut epoch_thread = 22_u64;
+
+        let cage = Cage {
+            cageid: 3,
+            parent: 1,
+            cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+            rev_shm: Mutex::new(vec![(0x4000, 7)]),
+            signalhandler: DashMap::new(),
+            sigset: AtomicU64::new(0x55aa),
+            pending_signals: RwLock::new(vec![]),
+            epoch_handler: DashMap::new(),
+            main_threadid: RwLock::new(1),
+            interval_timer: crate::timer::IntervalTimer::new(3),
+            zombies: RwLock::new(vec![]),
+            child_num: AtomicU64::new(0),
+            vmmap: RwLock::new(vmmap),
+        };
+
+        cage.signalhandler.insert(
+            2,
+            SigactionStruct {
+                sa_handler: 1234,
+                sa_mask: 0x3,
+                sa_flags: 1,
+            },
+        );
+        cage.epoch_handler
+            .insert(1, RwLock::new(&mut epoch_main as *mut u64));
+        cage.epoch_handler
+            .insert(2, RwLock::new(&mut epoch_thread as *mut u64));
+
+        let snapshot = CageSnapshot::create(&cage);
+        CageSnapshot::clear_for_exec(&cage);
+
+        assert!(cage.rev_shm.lock().is_empty());
+        {
+            let cleared_vmmap = cage.vmmap.read();
+            assert_eq!(cleared_vmmap.program_break, 0);
+            assert_eq!(cleared_vmmap.base_address, None);
+        }
+        assert!(cage.signalhandler.is_empty());
+        assert_eq!(cage.sigset.load(Ordering::Relaxed), 0);
+        assert!(cage.epoch_handler.is_empty());
+        assert_eq!(*cage.main_threadid.read(), 0);
+
+        snapshot.restore(&cage);
+
+        assert_eq!(*cage.rev_shm.lock(), vec![(0x4000, 7)]);
+        assert_eq!(*cage.vmmap.read(), expected_vmmap);
+
+        let action = cage.signalhandler.get(&2).unwrap();
+        assert_eq!(action.sa_handler, 1234);
+        assert_eq!(action.sa_mask, 0x3);
+        assert_eq!(action.sa_flags, 1);
+
+        assert_eq!(cage.sigset.load(Ordering::Relaxed), 0x55aa);
+        assert_eq!(*cage.main_threadid.read(), 1);
+        assert_eq!(cage.epoch_handler.len(), 2);
+
+        let main_epoch_ptr = *cage.epoch_handler.get(&1).unwrap().read();
+        let thread_epoch_ptr = *cage.epoch_handler.get(&2).unwrap().read();
+        unsafe {
+            assert_eq!(*main_epoch_ptr, 11);
+            assert_eq!(*thread_epoch_ptr, 22);
+        }
     }
 }

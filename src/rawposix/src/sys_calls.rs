@@ -4,7 +4,7 @@
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
-use cage::{add_cage, get_cage, remove_cage, Cage, Zombie};
+use cage::{add_cage, get_cage, remove_cage, Cage, CageSnapshot, Zombie};
 use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
@@ -248,28 +248,10 @@ pub extern "C" fn exec_syscall(
     // Copy necessary data from current cage
     let selfcage = get_cage(self_cageid).unwrap();
 
-    selfcage.rev_shm.lock().clear();
+    let rollback_snapshot = cage::CageSnapshot::create(&selfcage);
+    cage::CageSnapshot::clear_for_exec(&selfcage);
 
-    // ensures that all old mappings and states are discarded, allowing the new cage to
-    // run in a clean virtual address space, while reusing the existing `Vmmap` container
-    // to avoid extra allocations.
-    let mut vmmap = selfcage.vmmap.write();
-    vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
-
-    // perform signal related clean up
-    // all the signal handler becomes default after exec
-    // pending signals should be perserved though
-    selfcage.signalhandler.clear();
-    // the sigset will be reset after exec
-    selfcage.sigset.store(0, Relaxed);
-    // we also clean up epoch handler and main thread id
-    // since they will be re-established from wasmtime
-    selfcage.epoch_handler.clear();
-    let mut threadid_guard = selfcage.main_threadid.write();
-    *threadid_guard = 0;
-    drop(threadid_guard);
-
-    threei::make_syscall(
+    let ret = threei::make_syscall(
         RAWPOSIX_CAGEID,
         59, // exec syscall number
         UNUSED_NAME,
@@ -286,7 +268,14 @@ pub extern "C" fn exec_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    );
+
+    if ret < 0 {
+        // If exec fails, control continues in the original image.
+        rollback_snapshot.restore(&selfcage);
+    }
+
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
