@@ -260,6 +260,7 @@ pub extern "C" fn exec_syscall(
     // to avoid extra allocations.
     let mut vmmap = selfcage.vmmap.write();
     vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+    drop(vmmap);
 
     // perform signal related clean up
     // all the signal handler becomes default after exec
