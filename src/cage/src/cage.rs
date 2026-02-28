@@ -104,15 +104,6 @@ impl CageSnapshot {
         }
     }
 
-    pub fn clear_for_exec(cage: &Cage) {
-        cage.rev_shm.lock().clear();
-        cage.vmmap.write().clear();
-        cage.signalhandler.clear();
-        cage.sigset.store(0, Ordering::Relaxed);
-        cage.epoch_handler.clear();
-        *cage.main_threadid.write() = 0;
-    }
-
     pub fn restore(self, cage: &Cage) {
         *cage.rev_shm.lock() = self.rev_shm;
         *cage.vmmap.write() = self.vmmap;
@@ -240,6 +231,15 @@ pub fn alloc_cage_id() -> Option<u64> {
         Ok(v) => Some(v + 1),
         Err(_) => None,
     }
+}
+
+pub fn clear_cage_for_exec(cage: &Cage) {
+    cage.rev_shm.lock().clear();
+    cage.vmmap.write().clear();
+    cage.signalhandler.clear();
+    cage.sigset.store(0, Ordering::Relaxed);
+    cage.epoch_handler.clear();
+    *cage.main_threadid.write() = 0;
 }
 
 mod tests {
