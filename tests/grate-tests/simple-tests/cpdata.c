@@ -1,20 +1,14 @@
-// Tests copy_data_between_cages by writing a string through an interposed
-// write() syscall.  The grate intercepts write(), copies the buffer from the
-// cage into a malloc'd destination, and verifies the contents.
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <fcntl.h>
 #include <unistd.h>
-#include <assert.h>
+#include <stdio.h>
 
-int main(int argc, char *argv[]) {
-    const char *msg = "hello";
-    // write() to stdout — the grate intercepts this and validates via copy_data
-    ssize_t ret = write(STDOUT_FILENO, msg, strlen(msg));
-    if (ret < 0) {
-        perror("write");
-        assert(0);
-    }
-    printf("[Cage | cpdata] PASS: write returned %zd\n", ret);
-    return 0;
+int main() {
+	int fd = open("random", O_CREAT | O_RDONLY, 0544);
+
+    // We don't test redirecting the open call. We just want 
+    // to make sure that the open call goes through and the data 
+    // is copied correctly, so the return value here should be 
+    // arbitrary number defined in grate, not the actual fd for 
+    // "random".
+	printf("[cage] fd=%d\n", fd);
 }
