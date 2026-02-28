@@ -4,7 +4,7 @@
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
-use cage::{add_cage, clear_cage_for_exec, get_cage, remove_cage, Cage, CageSnapshot, Zombie};
+use cage::{add_cage, get_cage, remove_cage, Cage, CageSnapshot, Zombie};
 use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
