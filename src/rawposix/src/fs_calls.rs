@@ -407,6 +407,21 @@ pub extern "C" fn mkdir_syscall(
     ret
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/mknod.2.html
+///
+/// The system call mknod() creates a filesystem node (file, device, special file, or named pipe)
+/// named path, with attributes specified by mode and dev. RawPOSIX converts to host path, filters
+/// for error in arguments and calls the glibc system call.
+///
+/// ## Arguments:
+///     - cageid: current cageid
+///     - path_arg: This argument points to a pathname naming the file. User's perspective.
+///     - mode_arg: This represents both the file mode to use and the type of node to be created
+///     - dev_arg: If the file type is S_IFCHR or S_IFBLK, dev specifies the major and minor numbers
+///                of the newly created device special file; otherwise it is ignored.
+///
+/// ## Returns:
+///     - 0 on success, or a negative errno value (e.g., -EINVAL, -EPERM) on error.
 pub extern "C" fn mknod_syscall(
     cageid: u64,
     path_arg: u64,
