@@ -10,17 +10,17 @@ In traditional Linux systems, extending or intercepting system calls typically r
 
 Grates allow this functionality to be implemented entirely in user space. Because they are ordinary cages, grates can implement services that are impractical or impossible to build using kernel hooks alone, such as an in-memory filesystem, custom networking stacks, or rich virtualization layers, while remaining outside the trusted runtime.
 
-3i makes this possible by allowing cages to register handlers for other cages’ system calls. Since writing such interception logic is lightweight and common, Lind gives these cages the special name “grates.”
+3i makes this possible by allowing cages to register handlers for other cages' system calls. Since writing such interception logic is lightweight and common, Lind gives these cages the special name "grates."
 
 ## Inheritance properties
 
-When a cage forks, the child inherits the parent’s system call handler table.
+When a cage forks, the child inherits the parent's system call handler table.
 
 Inheritance is a fundamental property of Unix process semantics. In Linux, a child process inherits open file descriptors, signal handlers, credentials, and namespace membership. This ensures that the child continues execution within the same environment and policy context as the parent.
 
 In Lind, the system call handler table is part of that execution context. If Cage A is subject to a namespace grate or policy grate, a forked child must remain subject to the same routing structure. Without handler inheritance, the child would execute with a different routing configuration and could bypass intended behavior.
 
-3i implements this using `copy_handler_table_to_cage`. During `fork`, the parent’s handler table is copied to the newly created cage so that the child begins with identical routing behavior.
+3i implements this using `copy_handler_table_to_cage`. During `fork`, the parent's handler table is copied to the newly created cage so that the child begins with identical routing behavior.
 
 In addition to inheritance across fork, an ancestor grate may modify the system call tables of its descendants. This capability is used in several patterns, including clamping, but is not limited to it. It allows structural control over how routing evolves as new cages are created.
 
@@ -38,7 +38,7 @@ Suppose Cage A invokes `fork`, and the call is intercepted by Grate G. If G simp
 
 Instead, G issues `make_syscall` and specifies Cage A as the target cage. The new process state is therefore associated with A, not G.
 
-Similarly, if Cage A invokes `mmap` and Grate G modifies the arguments before forwarding the call, the resulting memory mapping must be installed in A’s address space rather than G’s. By specifying the target cage explicitly, G ensures that the operation affects A’s state rather than its own.
+Similarly, if Cage A invokes `mmap` and Grate G modifies the arguments before forwarding the call, the resulting memory mapping must be installed in A's address space rather than G's. By specifying the target cage explicitly, G ensures that the operation affects A's state rather than its own.
 
 This mechanism allows grates to interpose on system calls while preserving correct POSIX behavior.
 
@@ -87,20 +87,31 @@ Here, `clang` executes as an application cage. When it issues system calls, they
 
 ## Clamping
 
-Clamping is used when an ancestor grate needs structural control over how a descendant handles system calls. Clamping allows an ancestor to ensure that certain checks, routing decisions, or transformations occur before a descendant's handler executes. Often this is used to divide a namespace, but it is more general than that.
+Clamping is a composition mechanism that allows an ancestor grate to selectively route system calls to a descendant grate based on a routing predicate. This is more general than stacking: where stacking routes all calls through each grate unconditionally, clamping routes calls conditionally based on criteria such as path prefix or system call type.
 
 For example:
 
 ```
-lind namespace-grate imfs-grate --path /tmp -- python script.py
+lind namespace-grate --prefix /tmp %{ imfs-grate %} python
 ```
 
-Here, the namespace grate controls filesystem routing for the python cage. Paths under `/tmp` are routed to the IMFS grate, which implements an in-memory filesystem, while other paths continue through normal routing toward RawPOSIX.
+Here, the namespace grate routes filesystem calls conditionally. Paths under `/tmp` are routed to the IMFS grate, which implements an in-memory filesystem. Other paths skip IMFS entirely and continue through normal routing toward RawPOSIX. The `%{` and `%}` delimiters mark the boundary of the clamp on the command line, indicating which grates are conditionally applied.
 
-Clamping is made possible by interposing on `register_handler`. Because `register_handler` is itself dispatched through 3i, it can be intercepted like any other call. When the IMFS grate attempts to register a handler for a system call such as `write` on the python cage, the namespace grate intercepts that registration. Instead of allowing IMFS to install its handler directly, the namespace grate installs itself as the handler for `write` on the python cage. The namespace grate then registers the IMFS handler under a new internal syscall number, such as `write_imfs`.
+This reads as a conditional stack:
 
-At call time, this means system calls issued by the python cage are always routed through the namespace grate first. When python invokes `write`, the call is routed to the namespace grate, which examines the arguments and decides how to route the call. If the path falls under `/tmp`, the namespace grate issues a new 3i call using the internal `write_imfs` number, directing the operation to the IMFS grate. If the path falls elsewhere, the namespace grate issues a 3i call using the original `write` number, allowing the call to continue through normal routing toward RawPOSIX.
+```
+python
+if --prefix /tmp
+    imfs-grate
+endif
+```
 
-As a result, the call path for a write to `/tmp` is: python issues `write` → namespace grate examines the path and issues `write_imfs` → IMFS grate handles the operation in memory. For a write outside `/tmp`: python issues `write` → namespace grate examines the path and reissues `write` → RawPOSIX executes the call against the host kernel.
+Clamping is made possible by interposing on two 3i operations: `register_handler` and `exec`. Because both are dispatched through 3i, they can be intercepted like any other call.
 
-Clamping is not a special primitive. It emerges naturally from the fact that `register_handler` is a 3i-dispatched operation that can be interposed on. The ancestor interposes on handler registration to guarantee that it remains in the routing path, giving it the ability to perform checks, modify arguments, or make routing decisions before any downstream grate executes.
+When a clamped grate such as IMFS attempts to register a handler for a system call such as `open`, the namespace grate intercepts that registration. Instead of allowing IMFS to install its handler directly, the namespace grate installs itself as the handler for `open` on the application cage. It then registers the IMFS handler under a new internal system call number, such as `alt_open`. This gives the namespace grate a forwarding path to IMFS that it controls.
+
+At call time, when python invokes `open`, the call is routed to the namespace grate, which examines the arguments and decides how to proceed. If the path falls under `/tmp`, the namespace grate issues a call using `alt_open`, directing the operation to IMFS. If the path falls elsewhere, the namespace grate passes the call through normal routing toward RawPOSIX.
+
+The `exec` interposition handles the structural setup. The `%}` delimiter is part of the command line that flows through successive execs. When a cage attempts to exec `%}`, the namespace grate intercepts it, strips the delimiter, and rewrites the exec to whatever follows. This boundary tells the namespace grate which descendants are inside the clamp and which are above it.
+
+Clamping is not a special primitive. It emerges naturally from the fact that `register_handler` and `exec` are 3i-dispatched operations that can be interposed on. Clamps can be nested, placed in series, or combined with unconditional stacking. The full mechanism, including fd table management and multi-grate examples, is described in the clamping mechanism document.
