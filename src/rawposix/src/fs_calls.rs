@@ -427,7 +427,7 @@ pub extern "C" fn mknod_syscall(
         Err(e) => return syscall_error(e, "mknod", "path conversion failed"),
     };
     let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
-    let dev = sc_convert_sysarg_to_u64(dev_arg, dev_arg_cageid, cageid);
+    let dev = dev_arg;
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
