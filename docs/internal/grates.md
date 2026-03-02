@@ -87,7 +87,7 @@ Here, `clang` executes as an application cage. When it issues system calls, they
 
 ## Clamping
 
-Clamping is a composition mechanism that allows an ancestor grate to selectively route system calls to a descendant grate based on a routing predicate. This is more general than stacking: where stacking routes all calls through each grate unconditionally, clamping routes calls conditionally based on criteria such as path prefix or system call type.
+Clamping is a composition mechanism that allows a grate to selectively route system calls to other grates based on some condition. Rather than all calls flowing through every grate in the stack unconditionally (as with stacking), a clamping grate evaluates a routing rule and only sends matching calls through the clamped grates. Non-matching calls bypass them entirely.
 
 For example:
 
@@ -106,12 +106,6 @@ if --prefix /tmp
 endif
 ```
 
-Clamping is made possible by interposing on two 3i operations: `register_handler` and `exec`. Because both are dispatched through 3i, they can be intercepted like any other call.
+Clamping is made possible by interposing on 3i operations such as `register_handler` and `exec`. When a clamped grate attempts to register a handler for a system call, the clamping grate intercepts that registration, installs itself as the handler, and sets up a forwarding path to the clamped grate under an internal system call number. This ensures that the clamping grate remains in the routing path and can evaluate its condition before dispatching. Clamps can be nested, placed in series, or combined with unconditional stacking.
 
-When a clamped grate such as IMFS attempts to register a handler for a system call such as `open`, the namespace grate intercepts that registration. Instead of allowing IMFS to install its handler directly, the namespace grate installs itself as the handler for `open` on the application cage. It then registers the IMFS handler under a new internal system call number, such as `alt_open`. This gives the namespace grate a forwarding path to IMFS that it controls.
-
-At call time, when python invokes `open`, the call is routed to the namespace grate, which examines the arguments and decides how to proceed. If the path falls under `/tmp`, the namespace grate issues a call using `alt_open`, directing the operation to IMFS. If the path falls elsewhere, the namespace grate passes the call through normal routing toward RawPOSIX.
-
-The `exec` interposition handles the structural setup. The `%}` delimiter is part of the command line that flows through successive execs. When a cage attempts to exec `%}`, the namespace grate intercepts it, strips the delimiter, and rewrites the exec to whatever follows. This boundary tells the namespace grate which descendants are inside the clamp and which are above it.
-
-Clamping is not a special primitive. It emerges naturally from the fact that `register_handler` and `exec` are 3i-dispatched operations that can be interposed on. Clamps can be nested, placed in series, or combined with unconditional stacking. The full mechanism, including fd table management and multi-grate examples, is described in the clamping mechanism document.
+The full mechanism, including command-line syntax, exec and register_handler interposition, fd table management, and worked examples, is described in [Clamping](clamping.md).

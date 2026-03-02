@@ -20,6 +20,7 @@ nav:
     - Wasmtime: internal/wasmtime.md
     - Threei: internal/3i.md
     - Grates: internal/grates.md
+    - Clamping: internal/clamping.md
     - RawPOSIX: internal/rawposix.md
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
