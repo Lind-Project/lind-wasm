@@ -10,7 +10,7 @@ use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const;
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{
-    AsContextMut, Engine, Func, InstantiateType, Linker, Module, Precompiled, Store, Val, ValType,
+    AsContextMut, Engine, Func, InstantiateType, Linker, Module, Store, Val, ValType,
     WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
@@ -45,7 +45,7 @@ use wasmtime_wasi_threads::WasiThreadsCtx;
 /// starting cage, and runs the program's entrypoint. On successful completion it
 /// waits for all cages to exit before shutting down RawPOSIX, ensuring runtime-wide
 /// cleanup happens only after the last process terminates.
-pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
+pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // -- Initialize the Wasmtime execution environment --
     let wasm_file_path = Path::new(lindboot_cli.wasm_file());
     let args = lindboot_cli.args.clone();
@@ -102,19 +102,25 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     });
 
     match result {
-        Ok(ref _res) => {
+        Ok(ref ret_vals) => {
             // we wait until all other cage exits
             lind_manager.wait();
+            // Interpret the first return value of the Wasm entry point
+            // as the process exit code. If the module does not explicitly
+            // return an i32, we treat it as a successful exit (code = 0).
+            let exit_code = match ret_vals.first() {
+                Some(Val::I32(code)) => *code,
+                _ => 0,
+            };
+            // Propagate the exit code to the main, which will translate it
+            // into the host process exit status.
+            Ok(exit_code)
         }
         Err(e) => {
-            // Exit the process if Wasmtime understands the error;
-            // otherwise, fall back on Rust's default error printing/return
-            // code.
-            return Err(wasi_common::maybe_exit_on_error(e));
+            // Exit the process
+            return Err(e);
         }
     }
-
-    result
 }
 
 /// Executes a Wasm program *within an existing Lind runtime* as part of an `exec()` path.
