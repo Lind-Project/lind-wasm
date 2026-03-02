@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
-    EXIT_SUCCESS, FDKIND_KERNEL, RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
-    THREEI_CAGEID, VERBOSE,
+    EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
+    STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, VERBOSE,
 };
 use threei::{
     copy_data_between_cages, copy_handler_table_to_cage, register_handler,
@@ -208,13 +208,11 @@ pub fn rawposix_start(verbosity: isize) {
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
 
     // register syscalls for init cage
-    register_rawposix_syscall(1);
+    register_rawposix_syscall(INIT_CAGEID);
 
-    register_threei_syscall(1);
+    register_threei_syscall(INIT_CAGEID);
 
     // Set up standard file descriptors for the init cage
-    // TODO:
-    // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
     let dev_null = CString::new("/dev/null").unwrap();
 
     // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
@@ -229,12 +227,12 @@ pub fn rawposix_start(verbosity: isize) {
 
     //init cage is its own parent
     let initcage = Cage {
-        cageid: 1,
+        cageid: INIT_CAGEID,
         cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-        parent: 1,
+        parent: INIT_CAGEID,
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(1),
+        interval_timer: IntervalTimer::new(INIT_CAGEID),
         epoch_handler: DashMap::new(),
         signalhandler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
@@ -246,16 +244,16 @@ pub fn rawposix_start(verbosity: isize) {
 
     // Add cage to cagetable
     add_cage(
-        1, // cageid
+        INIT_CAGEID, // cageid
         initcage,
     );
 
-    // init fdtables for cageid 1
-    fdtables::init_empty_cage(1);
+    // init fdtables for init cage
+    fdtables::init_empty_cage(INIT_CAGEID);
     // Set the first 3 fd to STDIN / STDOUT / STDERR
     // STDIN
     fdtables::get_specific_virtual_fd(
-        1,
+        INIT_CAGEID,
         STDIN_FILENO as u64,
         FDKIND_KERNEL,
         STDIN_FILENO as u64,
@@ -265,7 +263,7 @@ pub fn rawposix_start(verbosity: isize) {
     .unwrap();
     // STDOUT
     fdtables::get_specific_virtual_fd(
-        1,
+        INIT_CAGEID,
         STDOUT_FILENO as u64,
         FDKIND_KERNEL,
         STDOUT_FILENO as u64,
@@ -275,7 +273,7 @@ pub fn rawposix_start(verbosity: isize) {
     .unwrap();
     // STDERR
     fdtables::get_specific_virtual_fd(
-        1,
+        INIT_CAGEID,
         STDERR_FILENO as u64,
         FDKIND_KERNEL,
         STDERR_FILENO as u64,
@@ -301,7 +299,7 @@ pub fn rawposix_shutdown() {
             cageid as u64,       // target cageid
             EXIT_SUCCESS as u64, // status arg
             cageid as u64,       // status arg's cageid
-            1,                   // always main thread
+            MAIN_THREADID,       // always main thread
             0,
             0,
             0,

@@ -2,6 +2,7 @@
 #include <stdint.h> // For uint64_t definition
 #include "addr_translation.h"
 #include "lind_syscall_num.h"
+#include "lind_constants.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __lind_make_syscall_trampoline(unsigned int callnumber, 
@@ -87,7 +88,7 @@ int make_threei_call (unsigned int callnumber,
         arg5, arg5cageid,
         arg6, arg6cageid);
     // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
-    if(translate_errno == 0) return ret;
+    if(translate_errno == TRANSLATE_ERRNO_OFF) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
     // but this may cause some issues for mmap syscall, because mmap syscall
@@ -96,7 +97,7 @@ int make_threei_call (unsigned int callnumber,
     // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
     // the errno and mmap result by simply checking if the return value is
     // within the valid errno range
-    if(ret < 0 && ret > -256)
+    if(ret < 0 && ret > -MAX_ERRNO)
     {
         errno = -ret;
         return -1;
@@ -132,7 +133,7 @@ int register_handler (int64_t targetcage,
         this_grate_id, // handlefunccage is the grate id of the handler function, which is the same as this_grate_id
         in_grate_fn_ptr_u64,
         0, 0, 0, 0, 0, 0, 0,
-        0 /* translate_errno=0: we want to return the raw result without errno translation */
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
     );
 }
 
@@ -159,7 +160,7 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t src
         len, 0,
         copytype, 0,
         0, 0, 0, 0,
-        0 /* translate_errno=0: we want to return the raw result without errno translation */
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
     );
 }
 
@@ -183,6 +184,6 @@ int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
         0, 0,
         0, 0,
         0, 0,
-        0 /* translate_errno=0: we want to return the raw result without errno translation */
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
     );
 }

@@ -82,3 +82,7 @@ pub const WASMTIME_CAGEID: u64 = 888888;
 ///   the call through its internal control-layer logic rather than
 ///   forwarding it to RawPOSIX or Wasmtime.
 pub const THREEI_CAGEID: u64 = 999999;
+/// Cage ID for the initial (bootstrap) cage created during `rawposix_start`.
+pub const INIT_CAGEID: u64 = 1;
+/// Thread ID for the main thread of a cage.
+pub const MAIN_THREADID: u64 = 1;
