@@ -20,17 +20,16 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <sysdep.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
+
 
 int
 __mknodat (int fd, const char *path, mode_t mode, dev_t dev)
 {
-  /* The user-exported dev_t is 64-bit while the kernel interface is
-     32-bit.  */
-  unsigned int k_dev = dev;
-  if (k_dev != dev)
-    return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);
-
-  return INLINE_SYSCALL_CALL (mknodat, fd, path, mode, k_dev);
+  return MAKE_LEGACY_SYSCALL(MKNOD_SYSCALL, "syscall|mknod",
+     (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(path), (uint64_t) mode, (uint64_t) dev, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__mknodat)
 weak_alias (__mknodat, mknodat)
