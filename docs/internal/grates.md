@@ -36,7 +36,7 @@ A grate may perform system calls on behalf of another cage so that the system be
 
 Suppose Cage A invokes `fork`, and the call is intercepted by Grate G. If G simply executes `fork` using its own identity, then G, not A, would be duplicated. This would break process semantics.
 
-Instead, G issues `make_syscall` and specifies Cage A as the target cage. The new process state is therefore associated with A, not G.
+Instead, G issues `make_syscall` to invoke `fork`, specifying Cage A as the target cage. The new process state is therefore associated with A, not G.
 
 Similarly, if Cage A invokes `mmap` and Grate G modifies the arguments before forwarding the call, the resulting memory mapping must be installed in A's address space rather than G's. By specifying the target cage explicitly, G ensures that the operation affects A's state rather than its own.
 

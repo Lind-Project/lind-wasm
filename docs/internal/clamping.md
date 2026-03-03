@@ -49,7 +49,7 @@ The clamping grate also interposes on `exit` to clean up state associated with c
 
 ### register_handler interposition
 
-The clamping grate intercepts `register_handler` calls from clamped grates and builds its routing table incrementally.
+The clamping grate intercepts `register_handler` calls from clamped grates and builds its routing table incrementally, as is described below.
 
 When a clamped grate calls `register_handler(open, handler)` for its child, the clamping grate intercepts this and instead:
 
