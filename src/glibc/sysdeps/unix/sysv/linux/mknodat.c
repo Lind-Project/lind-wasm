@@ -25,6 +25,10 @@
 #include <addr_translation.h>
 
 
+/* We modify mknodat.c instead of mknod.c because mknod() delegates to
+   __mknodat(AT_FDCWD, path, mode, dev) (see io/mknod.c).  The legacy
+   compatibility wrappers xmknod.c and xmknodat.c also call __mknodat
+   under the hood, so this single change covers all entry points.  */
 int
 __mknodat (int fd, const char *path, mode_t mode, dev_t dev)
 {
