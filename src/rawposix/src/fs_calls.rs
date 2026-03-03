@@ -407,6 +407,61 @@ pub extern "C" fn mkdir_syscall(
     ret
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/mknod.2.html
+///
+/// The system call mknod() creates a filesystem node (file, device, special file, or named pipe)
+/// named path, with attributes specified by mode and dev. RawPOSIX converts to host path, filters
+/// for error in arguments and calls the glibc system call.
+///
+/// ## Arguments:
+///     - cageid: current cageid
+///     - path_arg: This argument points to a pathname naming the file. User's perspective.
+///     - mode_arg: This represents both the file mode to use and the type of node to be created
+///     - dev_arg: If the file type is S_IFCHR or S_IFBLK, dev specifies the major and minor numbers
+///                of the newly created device special file; otherwise it is ignored.
+///
+/// ## Returns:
+///     - 0 on success, or a negative errno value (e.g., -EINVAL, -EPERM) on error.
+pub extern "C" fn mknod_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_arg_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    dev_arg: u64,
+    dev_arg_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let path = match sc_convert_path_to_host(path_arg, path_arg_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "mknod", "path conversion failed"),
+    };
+    let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
+    let dev = dev_arg;
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "mknod_syscall"
+        );
+    }
+
+    let ret = unsafe { libc::mknod(path.as_ptr(), mode, dev) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "mknod");
+    }
+    ret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/pipe.2.html
 ///
 /// Linux `pipe()` syscall is equivalent to calling `pipe2()` with flags set to zero.
