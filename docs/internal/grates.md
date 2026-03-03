@@ -1,6 +1,6 @@
 # Grates
 
-A grate is a cage whose primary role is to intercept and handle system calls issued by other cages. Lind makes no architectural distinction between cages and grates; any cage may register system call handlers and thereby act as a grate.
+A grate is a cage whose primary role is to intercept and handle system calls issued by other cages. Lind makes no architectural distinction between cages and grates; any cage may register system call handlers and thereby act as a grate.  However, legacy programs will of course be unaware of these system calls and so will not make them.
 
 Grates allow policy and system services to be implemented outside the trusted runtime, without kernel modifications or special privileges.
 

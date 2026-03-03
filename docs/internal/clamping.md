@@ -33,7 +33,7 @@ The `%}` is literally part of the command line that gets passed down through exe
 
 Everything before the `%}` exec is inside the clamp. Everything after is above the clamp. Once the clamping grate sees the `%}`, it sets a flag to stop intercepting register_handler calls from subsequent descendants. Grates outside the delimiters register normally.
 
-If a clamped grate dynamically registers new handlers later, the clamping grate still intercepts those, since its register_handler interposition remains active for descendants of cages inside the clamp.
+There is also a rare corner case that happens for grates that fork and exec new grates.  If a clamped grate dynamically registers new handlers later, the clamping grate still intercepts those, since its register_handler interposition remains active for descendants of cages inside the clamp.
 
 ### fork and exit interposition
 
