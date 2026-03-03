@@ -75,6 +75,65 @@ pub struct Cage {
     pub vmmap: RwLock<Vmmap>,
 }
 
+/// CageSnapshot can be used to create and rollback to snapshots of a Cage's state.
+///
+/// This is useful for exec_syscall in case we need to restore the cage's threads and memory
+/// information if the exec fails in the child cage.
+pub struct CageSnapshot {
+    cageid: u64,
+    rev_shm: Vec<(u64, i32)>,
+    vmmap: Vmmap,
+    signal_handlers: Vec<(i32, SigactionStruct)>,
+    sigset: u64,
+    main_threadid: i32,
+    epoch_handlers: Vec<(i32, *mut u64)>,
+}
+
+impl CageSnapshot {
+    /// Create a new snapshot for the cage.
+    pub fn create(cage: &Cage) -> CageSnapshot {
+        CageSnapshot {
+            cageid: cage.cageid,
+            rev_shm: cage.rev_shm.lock().clone(),
+            vmmap: cage.vmmap.read().clone(),
+            signal_handlers: cage
+                .signalhandler
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value()))
+                .collect(),
+            sigset: cage.sigset.load(Ordering::Relaxed),
+            main_threadid: *cage.main_threadid.read(),
+            epoch_handlers: cage
+                .epoch_handler
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value().read()))
+                .collect(),
+        }
+    }
+
+    /// Restore a snapshot for a given cage.
+    pub fn restore(self, cage: &Cage) {
+        if (self.cageid != cage.cageid) {
+            panic!("Snapshot being applied to a cage that did not generate it.");
+        }
+        *cage.rev_shm.lock() = self.rev_shm;
+        *cage.vmmap.write() = self.vmmap;
+
+        cage.signalhandler.clear();
+        for (signo, action) in self.signal_handlers {
+            cage.signalhandler.insert(signo, action);
+        }
+
+        cage.sigset.store(self.sigset, Ordering::Relaxed);
+        *cage.main_threadid.write() = self.main_threadid;
+
+        cage.epoch_handler.clear();
+        for (threadid, epoch_ptr) in self.epoch_handlers {
+            cage.epoch_handler.insert(threadid, RwLock::new(epoch_ptr));
+        }
+    }
+}
+
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
 ///
 /// Direct Indexing with `cageid`:

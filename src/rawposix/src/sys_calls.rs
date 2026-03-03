@@ -4,7 +4,7 @@
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
-use cage::{add_cage, get_cage, remove_cage, Cage, Zombie};
+use cage::{add_cage, get_cage, remove_cage, Cage, CageSnapshot, Zombie};
 use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
@@ -248,6 +248,11 @@ pub extern "C" fn exec_syscall(
     // Copy necessary data from current cage
     let selfcage = get_cage(self_cageid).unwrap();
 
+    // Before clearing information about the cage, store it as a snapshot.
+    // This is required because in case the exec fails, we need the cage's threads and memory
+    // to be non-empty in order for that thread to exit.
+    let rollback_snapshot = cage::CageSnapshot::create(&selfcage);
+
     selfcage.rev_shm.lock().clear();
 
     // ensures that all old mappings and states are discarded, allowing the new cage to
@@ -255,6 +260,7 @@ pub extern "C" fn exec_syscall(
     // to avoid extra allocations.
     let mut vmmap = selfcage.vmmap.write();
     vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+    drop(vmmap);
 
     // perform signal related clean up
     // all the signal handler becomes default after exec
@@ -269,7 +275,7 @@ pub extern "C" fn exec_syscall(
     *threadid_guard = 0;
     drop(threadid_guard);
 
-    threei::make_syscall(
+    let ret = threei::make_syscall(
         RAWPOSIX_CAGEID,
         59, // exec syscall number
         UNUSED_NAME,
@@ -286,7 +292,14 @@ pub extern "C" fn exec_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    );
+
+    if ret < 0 {
+        // If exec fails, control continues in the original image.
+        rollback_snapshot.restore(&selfcage);
+    }
+
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
