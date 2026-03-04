@@ -4032,8 +4032,17 @@ pub extern "C" fn shmat_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `shmat`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`shmid_cageid`).
+    let operation_cageid = shmid_cageid;
+
     // Get the cage reference.
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(operation_cageid).unwrap();
 
     // If SHM_RDONLY is set in shmflag, then use read-only protection,
     // otherwise default to read–write.
@@ -4093,7 +4102,7 @@ pub extern "C" fn shmat_syscall(
     drop(vmmap);
 
     // Call the raw shmat helper to attach the shared memory segment.
-    let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
+    let result = shmat_helper(operation_cageid, sysaddr as *mut u8, shmflag, shmid);
 
     // Check for error BEFORE sys_to_user conversion
     if is_mmap_error(result) {
@@ -4128,7 +4137,7 @@ pub extern "C" fn shmat_syscall(
                 backing,
                 0, // Offset is not applicable for shared memory
                 len as i64,
-                cageid,
+                operation_cageid,
             )
             .expect("shmat: failed to add vmmap entry");
     } else {
@@ -4192,8 +4201,17 @@ pub extern "C" fn shmdt_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `shmdt`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`shmaddr_cageid`).
+    let operation_cageid = shmaddr_cageid;
+
     // Retrieve the cage reference.
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(operation_cageid).unwrap();
 
     // Check that the provided address is aligned on a page boundary.
     let rounded_addr = round_up_page(useraddr as u64) as usize;
@@ -4207,7 +4225,7 @@ pub extern "C" fn shmdt_syscall(
     drop(vmmap);
 
     // Call shmdt_helper which returns length of the detached segment
-    let length = shmdt_helper(cageid, sysaddr as *mut u8);
+    let length = shmdt_helper(operation_cageid, sysaddr as *mut u8);
     if length < 0 {
         return length;
     }
