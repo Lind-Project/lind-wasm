@@ -3635,6 +3635,15 @@ pub extern "C" fn mprotect_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `mprotect`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`addr_cageid`).
+    let operation_cageid = addr_cageid;
+
     // Validate protection flags
     let valid_prot = PROT_READ | PROT_WRITE | PROT_EXEC | PROT_NONE;
     if prot & !valid_prot != 0 {
@@ -3659,7 +3668,7 @@ pub extern "C" fn mprotect_syscall(
     // Update vmmap to reflect the new protection flags
     // Skip if length is zero (no pages to update) — Linux treats len=0 as a no-op
     if rounded_length > 0 {
-        let cage = get_cage(cageid).unwrap();
+        let cage = get_cage(operation_cageid).unwrap();
         let mut vmmap = cage.vmmap.write();
         let user_addr = vmmap.sys_to_user(addr as usize) as u32;
         vmmap.change_prot(
@@ -3724,9 +3733,18 @@ pub extern "C" fn ioctl_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `ioctl`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`vfd_cageid`).
+    let operation_cageid = vfd_cageid;
+
     // handle FIOCLEX, set close_on_exec flag for the file descriptor
     if req as u64 == FIOCLEX {
-        let ret = match fdtables::set_cloexec(cageid, vfd_arg, true) {
+        let ret = match fdtables::set_cloexec(operation_cageid, vfd_arg, true) {
             Ok(_) => 0,
             Err(_) => syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor"),
         };
@@ -3740,7 +3758,7 @@ pub extern "C" fn ioctl_syscall(
         lind_debug_panic("Lind unsupported ioctl request");
     }
 
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
+    let wrappedvfd = fdtables::translate_virtual_fd(operation_cageid, vfd_arg);
     if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor");
     }

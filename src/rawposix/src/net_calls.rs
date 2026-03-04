@@ -1006,6 +1006,15 @@ pub extern "C" fn socket_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `socket`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`domain_cageid`).
+    let operation_cageid = domain_cageid;
+
     let kernel_fd = unsafe { libc::socket(domain, socktype, protocol) };
 
     if kernel_fd < 0 {
@@ -1023,8 +1032,14 @@ pub extern "C" fn socket_syscall(
     // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
     // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
     // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
-    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0).unwrap()
-        as i32
+    fdtables::get_unused_virtual_fd(
+        operation_cageid,
+        FDKIND_KERNEL,
+        kernel_fd as u64,
+        cloexec,
+        0,
+    )
+    .unwrap() as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/connect.2.html
@@ -1248,6 +1263,15 @@ pub extern "C" fn accept_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `accept`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`fd_cageid`).
+    let operation_cageid = fd_cageid;
+
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret_kernelfd = unsafe { libc::accept(fd, finalsockaddr, &mut addrlen as *mut u32) };
@@ -1258,9 +1282,14 @@ pub extern "C" fn accept_syscall(
     }
 
     // We need to register this new kernel fd in fdtables
-    let ret_virtualfd =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, false, 0)
-            .unwrap();
+    let ret_virtualfd = fdtables::get_unused_virtual_fd(
+        operation_cageid,
+        FDKIND_KERNEL,
+        ret_kernelfd as u64,
+        false,
+        0,
+    )
+    .unwrap();
 
     ret_virtualfd as i32
 }
