@@ -3900,6 +3900,15 @@ pub extern "C" fn shmget_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `shmget`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`key_cageid`).
+    let operation_cageid = key_cageid;
+
     if key == IPC_PRIVATE {
         lind_debug_panic("shmget key IPC_PRIVATE is not allowed in Lind");
     }
@@ -3944,7 +3953,7 @@ pub extern "C" fn shmget_syscall(
             let segment = new_shm_segment(
                 key,
                 rounded_size,
-                cageid as u32,
+                operation_cageid as u32,
                 DEFAULT_UID,
                 DEFAULT_GID,
                 mode,

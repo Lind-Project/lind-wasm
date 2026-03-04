@@ -461,8 +461,17 @@ pub extern "C" fn waitpid_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `waitpid`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`status_cageid`).
+    let operation_cageid = status_cageid;
+
     // get the cage instance
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(operation_cageid).unwrap();
 
     let mut zombies = cage.zombies.write();
     let child_num = cage.child_num.load(Relaxed);
