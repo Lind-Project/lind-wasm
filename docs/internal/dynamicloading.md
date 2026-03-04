@@ -1,37 +1,52 @@
-# Dynamic Loading in wasmtime
+# Dynamic Linking and Dynamic Loading in wasmtime
 
-## Motivation
-Dynamic loading reduces the memory footprint by allowing shared libraries to be loaded only when they are actually needed at runtime, rather than being statically linked into the application at compile time. This leads to more efficient memory usage, especially when multiple programs share the same libraries. It also avoids code duplication across binaries, reducing overall storage requirements.
+## Overview
 
-Another important advantage is improved maintainability and flexibility. When a dependent library is updated, the application does not need to be recompiled, as long as the library’s interface (ABI) remains compatible. This simplifies deployment, enables independent updates, and facilitates security patches without rebuilding the entire application.
+### Dynamic Linking
+**Dynamic linking** refers to the process of loading the dependent libraries that an application needs at runtime, as opposed to linking them statically when the application is compiled. 
 
-Dynamic loading also supports modular and extensible system design. Applications can load optional components, plugins, or backends at runtime based on configuration or environment, making it possible to extend functionality without modifying the core executable. In the applications we evaluate, libraries are explicitly loaded at runtime using `dlopen()` and symbol resolution is performed via `dlsym()`. Therefore, proper support for dynamic loading is a functional requirement to ensure correctness and compatibility with these applications.
 
-## Design Decisions
+If a C program invokes `printf()`, in case of static linking, when the program is compiled and linked, the code corresponding to `printf` is a part of the final program executable and hence when the program runs, there is nothing to be explicitly loaded or resolved.
 
-### The Linux Native Execution Model
+While in case of dynamically linked program, when the program is compiled and linked, the call to `printf` is left as unresolved and also the final program executable only contains the code and data of the program. The dependent libraries that this program depends on is added to the metadata of the binary. When the program is run, at the beginning, the dynamic linker is given control and it determines the paths of all dependent libraries and loads them to the memory as well as resolve all references to data and code to these libraries.
+
+### Why Use Dynamic Linking
+1. It reduces memory and storage footprints by loading shared libraries at runtime. Multiple programs can share the exact same library in memory, eliminating code duplication across binaries.
+
+2. It allows shared libraries to be updated or patched for security without requiring the applications to be recompiled, provided the application binary interface (ABI) remains compatible.
+
+
+### Dynamic loading
+**Dynamic loading** refers to the loading of dependent libraries on the fly only when the application explicitly requests them (eg., via `dlopen()`) and resolving the symbols using `dlsym`
+
+
+### Why Use Dynamic Loading
+It enables applications to load optional components, plugins, or backends at runtime based on configuration or environment, making it possible to extend functionality without modifying the core executable. This supports modular and extensible system design of applications.
+
+**In a traditional Linux system, both of these responsibilities are managed by the dynamic linker/loader, `ld.so`.**
+
+
+
+## Motivation for adding dynamic linking/loading in wasmtime
+
+In case of Lind, we implement dynamic loading for wasmtime to support applications like scripting language interpreters (eg: python), web servers (Apache HTTP, Nginx) that load modules at runtime using `dlopen/dlsym`. Additionally, we also extend wasmtime to support dynamic linking so as to reduce the memory footprint of our webassembly binaries and to eliminate the overhead of recompiling entire applications whenever underlying libraries are updated.
+
+
+## The Linux Native Execution Model
 
 When a program is executed on Linux, the kernel creates a new process image using `execve()` and maps the ELF executable into the process’s virtual address space. For statically linked binaries, the kernel sets up the stack and auxiliary data structures, then transfers control directly to the program’s entry point.
 
 For dynamically linked binaries, the execution model splits responsibilities: the trusted kernel handles the initial loading, but dynamic loading is managed in user space. The ELF header contains a `PT_INTERP` segment specifying an external dynamic loader (typically `/lib64/ld-linux-x86-64.so.2`). The kernel maps this loader into the same process and transfers control to it. The loader then pulls in required shared libraries, resolves symbols, and performs relocations before finally jumping to the program's entry point. Crucially, this dynamic loader operates entirely within the untrusted user-space environment, sharing the same virtual address space as the main executable.
 
-### The WebAssembly Execution Model
+## Design Decisions
 
-In contrast, WebAssembly (WASM) binaries are not executed directly by the operating system. They run inside a trusted host runtime, such as Wasmtime, which parses and validates the module, JIT-compiles the code, and instantiates it.
+Unlike traditional Linux systems that rely on a standalone dynamic linker/loader (like `ld.so`), we have extended the wasmtime WebAssembly runtime to handle dynamic loading internally. We chose this design strategy for the following reasons.
 
-Instantiation involves allocating linear memory - a contiguous, sandboxed memory region - initializing globals and tables, and copying data segments into memory. Unlike native ELF binaries, WASM modules do not rely on OS-level virtual memory mapping. Instead, execution, memory management, and boundary mediation are handled entirely by the runtime, which enforces strict isolation and memory safety.
+Beyond determining paths and loading dependent libraries into memory, a primary responsibility of a dynamic linker/loader is resolving symbol references - mapping the program's imported functions and data to the correct memory addresses (exports) within the external modules. To accomplish this, the loader must have the privilege to read and modify the memory of both the executing program and the loaded libraries. In Linux, this is achieved by mapping the dynamic loader and the shared libraries into the same virtual address space as the executing process.
 
-### Dynamic Loading within the Lind System
+WebAssembly (WASM) binaries, however, operate under a different paradigm. They run inside a trusted host runtime (such as Wasmtime) that parses and validates the module, JIT-compiles the code, and instantiates it by allocating a contiguous, sandboxed linear memory region. WASM modules do not rely on OS-level virtual memory mapping. Instead, execution, memory management, and boundary mediation are handled entirely by the runtime to enforce strict isolation and memory safety.
 
-In the Lind system, dynamic loading support is implemented by fundamentally extending Wasmtime’s parsing and instantiation mechanisms. Calls from `glibc`, such as dlopen, dlsym, and dlclose, are redirected to runtime-provided implementations. The runtime then loads additional WASM modules, allocates memory, resolves symbols, and handles relocations natively.
-
-Unlike the traditional Linux model where dynamic linking is delegated to an external, untrusted user-space process, Lind integrates the dynamic loader directly into the trusted Wasmtime runtime. This architectural shift is necessary for several reasons:
-
-1. Architectural Consistency: An essential requirement of any dynamic loader is the ability to read memory contents, resolve symbols, and modify relocation targets. Because the WebAssembly runtime already maintains absolute control over module memory, function tables, and instantiation state, extending it to handle dynamic loading is a natural fit.
-
-2. Performance and Efficiency: WebAssembly linking requires direct, synchronous modification of internal runtime state, such as indirect function tables and memory bounds. Relying on an external loader process to manipulate these structures would introduce prohibitive overhead from inter-process communication (IPC) latency, data marshaling, and serialization.
-
-3. Security: By internalizing the dynamic loader, the system avoids context-switching to an untrusted environment, ensuring that the entire module instantiation and linking process remains fast, secure, and securely isolated within the trusted computing base.
+Because the WebAssembly runtime already maintains absolute, privileged control over module memory, function tables, and instantiation state, extending the runtime itself to handle dynamic loading is the most secure and natural fit.
 
 ## Current Implementation Status
 We have implemented dynamic loading support in Wasmtime. For applications that are compiled as dynamically linked executables or shared libraries, we are able to support both capabilities below:
@@ -42,6 +57,7 @@ We have implemented dynamic loading support in Wasmtime. For applications that a
 	  
 ## Additional Features to be added:
 1. Support for fork, threads, and signals within the shared libraries.
+2. As of now, the dependent libraries have to be explicitly specified using `--preload` option. The compiler (`clang`) is supposed to add metadata about the required libraries when `--shared` or `-fPIC` option is used. Currently this is not working. This has to be fixed so that compiled adds the metadata and the dynamic loader can parse the metadata to determine the libraries required at runtime.
 
 ## Changes made to implement dynamic loading:
 
