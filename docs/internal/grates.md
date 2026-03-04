@@ -4,6 +4,7 @@ A grate is a cage whose primary role is to intercept and handle system calls iss
 
 Grates allow policy and system services to be implemented outside the trusted runtime, without kernel modifications or special privileges.
 
+
 ## Why grates exist
 
 In traditional Linux systems, extending or intercepting system calls typically requires kernel modifications, kernel modules, or mechanisms such as eBPF. These approaches are privileged, restricted in what they can safely do, and difficult to compose into larger systems.
@@ -11,6 +12,7 @@ In traditional Linux systems, extending or intercepting system calls typically r
 Grates allow this functionality to be implemented entirely in user space. Because they are ordinary cages, grates can implement services that are impractical or impossible to build using kernel hooks alone, such as an in-memory filesystem, custom networking stacks, or rich virtualization layers, while remaining outside the trusted runtime.
 
 3i makes this possible by allowing cages to register handlers for other cages' system calls. Since writing such interception logic is lightweight and common, Lind gives these cages the special name "grates."
+
 
 ## Inheritance properties
 
@@ -24,11 +26,13 @@ In Lind, the system call handler table is part of that execution context. If Cag
 
 In addition to inheritance across fork, an ancestor grate may modify the system call tables of its descendants. This capability is used in several patterns, including clamping, but is not limited to it. It allows structural control over how routing evolves as new cages are created.
 
+
 ## Cross-cage buffers
 
 3i allows system call arguments to specify which cage owns a referenced buffer. This enables grates to safely inspect, modify, or forward memory arguments without unnecessary copying.
 
 For example, if Cage A calls `write` and passes a pointer to a buffer, a grate can explicitly reference that buffer as belonging to A. This allows the grate to examine or adjust the data before forwarding the call, without incorrectly accessing its own memory space.
+
 
 ## Acting on behalf of other cages
 
@@ -41,6 +45,7 @@ Instead, G issues `make_syscall` to invoke `fork`, specifying Cage A as the targ
 Similarly, if Cage A invokes `mmap` and Grate G modifies the arguments before forwarding the call, the resulting memory mapping must be installed in A's address space rather than G's. By specifying the target cage explicitly, G ensures that the operation affects A's state rather than its own.
 
 This mechanism allows grates to interpose on system calls while preserving correct POSIX behavior.
+
 
 ## Composability
 
@@ -71,6 +76,7 @@ Grates follow the same pattern. Each grate performs a specific function, and sys
 
 In practice, grates are composed using two patterns: stacking and clamping.
 
+
 ## Stacking
 
 Stacking is the most common form of grate composition. Grates are arranged in a linear chain, and system calls flow through them sequentially. This is analogous to how output flows through a Unix pipeline from one process's stdout to another process's stdin. In a Unix pipeline, a program may log or observe the input, modify it, filter it, or block it entirely before passing it along. Changing the order of commands changes the overall behavior.
@@ -84,6 +90,21 @@ lind strace-grate -- clang hello.c -o hello
 ```
 
 Here, `clang` executes as an application cage. When it issues system calls, they flow first through the strace grate, which logs each call and forwards it onward. The call then continues to RawPOSIX, which executes it against the host kernel. The strace grate observes but does not modify or block the call.
+
+For example, to also accelerate inter-process communication:
+
+```
+lind strace-grate ipc-grate -- clang hello.c -o hello
+```
+
+System calls flow through strace first, then ipc. However, IPC calls are handled by the ipc grate and never forwarded onward — strace does not see them. Reversing the order changes this:
+
+```
+lind ipc-grate strace-grate -- clang hello.c -o hello
+```
+
+Now strace sits above ipc in the stack. All calls — including IPC calls — flow through strace first before reaching the ipc grate. Strace sees everything; ipc still handles IPC calls, but only after strace has logged them.
+
 
 ## Clamping
 
@@ -109,3 +130,18 @@ endif
 Clamping is made possible by interposing on 3i operations such as `register_handler` and `exec`. When a clamped grate attempts to register a handler for a system call, the clamping grate intercepts that registration, installs itself as the handler, and sets up a forwarding path to the clamped grate under an internal system call number. This ensures that the clamping grate remains in the routing path and can evaluate its condition before dispatching. Clamps can be nested, placed in series, or combined with unconditional stacking.
 
 The full mechanism, including command-line syntax, exec and register_handler interposition, fd table management, and worked examples, is described in [Clamping](clamping.md).
+
+
+## Teeing
+
+Teeing is a composition mechanism that duplicates a syscall across two or more independent stacks. Where clamping routes a call to one path or another based on a condition, teeing sends it through both.
+
+The tee grate interposes on `register_handler` to capture handler registrations from both stacks and builds two independent routing tables. When a syscall arrives, it dispatches to both chains via `make_syscall` and reconciles the return values. The reconciliation strategy is up to the tee grate — it might take the first success, wait for both, or fail if either fails.
+
+Calls with process-level side effects like `fork` are forwarded only once to avoid duplicating the originating cage.
+
+For example:
+
+`tee-grate %{ imfs-grate %} %{ remote-store-grate %} python`
+
+Every `write` from python goes to both IMFS and the remote store. Neither stack is aware of the other.
