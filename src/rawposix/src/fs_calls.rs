@@ -103,8 +103,7 @@ pub extern "C" fn open_syscall(
     //
     // For syscalls like `open`, the operation must be performed on the
     // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`path_cageid`)
-    // instead of using `target_cageid`.
+    // cage from the argument metadata (`path_cageid`).
     let operation_cageid = path_cageid;
 
     // Get the kernel fd first
@@ -233,7 +232,16 @@ pub extern "C" fn close_syscall(
         );
     }
 
-    match fdtables::close_virtualfd(cageid, vfd_arg) {
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `close`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`vfd_cageid`).
+    let operation_cageid = vfd_cageid;
+
+    match fdtables::close_virtualfd(operation_cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADFD as u64 {
