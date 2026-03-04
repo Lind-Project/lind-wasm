@@ -354,13 +354,22 @@ pub extern "C" fn write_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `write`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`vfd_cageid`).
+    let operation_cageid = vfd_cageid;
+
     let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
 
     if ret < 0 {
         let errno = get_errno();
         // Linux delivers SIGPIPE before returning EPIPE on broken pipe writes
         if errno == Errno::EPIPE as i32 {
-            lind_send_signal(cageid, SIGPIPE);
+            lind_send_signal(operation_cageid, SIGPIPE);
         }
         return handle_errno(errno, "write");
     }
@@ -526,6 +535,15 @@ pub extern "C" fn pipe_syscall(
         Err(e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
     };
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `pipe`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`pipefd_cageid`).
+    let operation_cageid = pipefd_cageid;
+
     // Create an array to hold the two kernel file descriptors
     let mut kernel_fds: [i32; 2] = [0; 2];
     let ret = unsafe { libc::pipe(kernel_fds.as_mut_ptr()) };
@@ -535,7 +553,7 @@ pub extern "C" fn pipe_syscall(
 
     // Get virtual fd for read end
     let read_vfd = match fdtables::get_unused_virtual_fd(
-        cageid,
+        operation_cageid,
         FDKIND_KERNEL,
         kernel_fds[0] as u64,
         false,
@@ -557,7 +575,7 @@ pub extern "C" fn pipe_syscall(
 
     // Get virtual fd for write end
     let write_vfd = match fdtables::get_unused_virtual_fd(
-        cageid,
+        operation_cageid,
         FDKIND_KERNEL,
         kernel_fds[1] as u64,
         false,
@@ -642,6 +660,16 @@ pub extern "C" fn pipe2_syscall(
         Ok(p) => p,
         Err(e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
     };
+
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `pipe2`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`pipefd_cageid`).
+    let operation_cageid = pipefd_cageid;
+
     // Create an array to hold the two kernel file descriptors
     let mut kernel_fds: [i32; 2] = [0; 2];
     let ret = unsafe { libc::pipe2(kernel_fds.as_mut_ptr(), flags) };
@@ -654,7 +682,7 @@ pub extern "C" fn pipe2_syscall(
 
     // Get virtual fd for read end
     let read_vfd = match fdtables::get_unused_virtual_fd(
-        cageid,
+        operation_cageid,
         FDKIND_KERNEL,
         kernel_fds[0] as u64,
         should_cloexec,
@@ -678,7 +706,7 @@ pub extern "C" fn pipe2_syscall(
 
     // Get virtual fd for write end
     let write_vfd = match fdtables::get_unused_virtual_fd(
-        cageid,
+        operation_cageid,
         FDKIND_KERNEL,
         kernel_fds[1] as u64,
         should_cloexec,
@@ -1325,6 +1353,15 @@ pub extern "C" fn fcntl_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `fcntl`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`vfd_cageid`).
+    let operation_cageid = vfd_cageid;
+
     match (cmd, arg) {
         // Duplicate the file descriptor `vfd_arg` using the lowest-numbered
         // available file descriptor greater than or equal to `arg`. The operation here
@@ -1332,13 +1369,13 @@ pub extern "C" fn fcntl_syscall(
         // comments on `dup_syscall`.
         (F_DUPFD, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, vfd_arg) {
+            let vfd = match _fcntl_helper(operation_cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
             // Get lowest-numbered available file descriptor greater than or equal to `arg`
             match fdtables::get_unused_virtual_fd_from_startfd(
-                cageid,
+                operation_cageid,
                 vfd.fdkind,
                 vfd.underfd,
                 false,
@@ -1353,14 +1390,14 @@ pub extern "C" fn fcntl_syscall(
         // for the duplicate file descriptor.
         (F_DUPFD_CLOEXEC, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, vfd_arg) {
+            let vfd = match _fcntl_helper(operation_cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
             // Get lowest-numbered available file descriptor greater than or equal to `arg`
             // and set the `O_CLOEXEC` flag
             match fdtables::get_unused_virtual_fd_from_startfd(
-                cageid,
+                operation_cageid,
                 vfd.fdkind,
                 vfd.underfd,
                 true,
@@ -1374,7 +1411,7 @@ pub extern "C" fn fcntl_syscall(
         // Return (as the function result) the file descriptor flags.
         (F_GETFD, ..) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, vfd_arg) {
+            let vfd = match _fcntl_helper(operation_cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1383,7 +1420,7 @@ pub extern "C" fn fcntl_syscall(
         // Set the file descriptor flags to the value specified by arg.
         (F_SETFD, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, vfd_arg) {
+            let vfd = match _fcntl_helper(operation_cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1395,7 +1432,7 @@ pub extern "C" fn fcntl_syscall(
             }
             // Set virtual fd flag
             let cloexec_flag: bool = arg != 0;
-            match fdtables::set_cloexec(cageid, vfd_arg as u64, cloexec_flag) {
+            match fdtables::set_cloexec(operation_cageid, vfd_arg as u64, cloexec_flag) {
                 Ok(_) => return 0,
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
@@ -1405,7 +1442,7 @@ pub extern "C" fn fcntl_syscall(
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, vfd_arg) {
+            let vfd = match _fcntl_helper(operation_cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -2164,6 +2201,15 @@ pub extern "C" fn unlinkat_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `unlinkat`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`dirfd_cageid`).
+    let operation_cageid = dirfd_cageid;
+
     let mut c_path;
     // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
     let kernel_fd = if dirfd == AT_FDCWD {
@@ -2178,7 +2224,7 @@ pub extern "C" fn unlinkat_syscall(
     } else {
         // Case 2: When a specific directory fd is provided.
         // Translate the virtual file descriptor to the corresponding kernel file descriptor.
-        let wrappedvfd = fdtables::translate_virtual_fd(cageid, dirfd as u64);
+        let wrappedvfd = fdtables::translate_virtual_fd(operation_cageid, dirfd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
         }
@@ -2358,15 +2404,29 @@ pub extern "C" fn dup_syscall(
             "dup_syscall"
         );
     }
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `dup`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`vfd_cageid`).
+    let operation_cageid = vfd_cageid;
 
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg as u64);
+    let wrappedvfd = fdtables::translate_virtual_fd(operation_cageid, vfd_arg as u64);
     if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
     }
     let vfd = wrappedvfd.unwrap();
     let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
-    let ret_vfd =
-        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
+    let ret_vfd = fdtables::get_unused_virtual_fd(
+        operation_cageid,
+        vfd.fdkind,
+        ret_kernelfd as u64,
+        false,
+        0,
+    )
+    .unwrap();
     return ret_vfd as i32;
 }
 
@@ -2415,10 +2475,19 @@ pub extern "C" fn dup2_syscall(
         return new_vfd_arg as i32;
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `dup2`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`old_vfd_cageid`).
+    let operation_cageid = old_vfd_cageid;
+
     // If the file descriptor newfd was previously open, it is closed before being reused; the
     // close is performed silently (i.e., any errors during the close are not reported by dup2()).
     // This step is handled inside `fdtables`
-    match fdtables::translate_virtual_fd(cageid, old_vfd_arg) {
+    match fdtables::translate_virtual_fd(operation_cageid, old_vfd_arg) {
         Ok(old_vfd) => {
             // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
             // from input.
@@ -2426,7 +2495,7 @@ pub extern "C" fn dup2_syscall(
             // close-on-exec flag).  The close-on-exec flag (FD_CLOEXEC; see fcntl_syscall())
             // for the duplicate descriptor is off
             let _ = fdtables::get_specific_virtual_fd(
-                cageid,
+                operation_cageid,
                 new_vfd_arg,
                 old_vfd.fdkind,
                 old_vfd.underfd,
@@ -2494,6 +2563,15 @@ pub extern "C" fn dup3_syscall(
         return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `dup3`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`old_vfd_cageid`).
+    let operation_cageid = old_vfd_cageid;
+
     let ret = dup2_syscall(
         cageid,
         old_vfd_arg,
@@ -2514,7 +2592,7 @@ pub extern "C" fn dup3_syscall(
     }
 
     if flags == O_CLOEXEC {
-        let _ = fdtables::set_cloexec(cageid, new_vfd_arg, true);
+        let _ = fdtables::set_cloexec(operation_cageid, new_vfd_arg, true);
     }
 
     return new_vfd_arg as i32;
@@ -2569,6 +2647,15 @@ pub extern "C" fn fchdir_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `fchdir`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`vfd_cageid`).
+    let operation_cageid = vfd_cageid;
+
     let ret = unsafe { libc::fchdir(kernel_fd) };
     if ret < 0 {
         return handle_errno(get_errno(), "fchdir");
@@ -2579,7 +2666,7 @@ pub extern "C" fn fchdir_syscall(
     let mut cwd_buf = [0u8; PATH_MAX as usize];
     let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut i8, cwd_buf.len()) };
     if !cwd_ptr.is_null() {
-        if let Some(cage) = get_cage(cageid) {
+        if let Some(cage) = get_cage(operation_cageid) {
             let host_path = unsafe { std::ffi::CStr::from_ptr(cwd_ptr) }.to_string_lossy();
             let user_path = PathBuf::from(host_path.as_ref());
             let mut cwd = cage.cwd.write();
@@ -3190,6 +3277,15 @@ pub extern "C" fn chdir_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `chdir`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`path_cageid`).
+    let operation_cageid = path_cageid;
+
     // Call the kernel chdir function
     let ret = unsafe { libc::chdir(path.as_ptr()) };
 
@@ -3200,7 +3296,7 @@ pub extern "C" fn chdir_syscall(
     }
 
     // Update the cage's current working directory
-    if let Some(cage) = get_cage(cageid) {
+    if let Some(cage) = get_cage(operation_cageid) {
         let user_path = PathBuf::from(path.to_string_lossy().as_ref());
         let mut cwd = cage.cwd.write();
         *cwd = Arc::new(user_path);
@@ -3449,7 +3545,16 @@ pub extern "C" fn getcwd_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `getcwd`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`buf_cageid`).
+    let operation_cageid = buf_cageid;
+
+    let cage = get_cage(operation_cageid).unwrap();
     let cwd_container = cage.cwd.read();
     let path = cwd_container.to_str().unwrap();
     // The required size includes the null terminator
