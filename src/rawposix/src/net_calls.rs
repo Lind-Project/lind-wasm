@@ -1953,6 +1953,15 @@ pub extern "C" fn socketpair_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `socketpair`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`domain_cageid`).
+    let operation_cageid = domain_cageid;
+
     let mut kernel_socket_vector: [i32; 2] = [0, 0];
 
     let ret = unsafe { libc::socketpair(domain, typ, protocol, kernel_socket_vector.as_mut_ptr()) };
@@ -1975,9 +1984,11 @@ pub extern "C" fn socketpair_syscall(
     // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
     // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
     let vsv_1 =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0).unwrap();
+        fdtables::get_unused_virtual_fd(operation_cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0)
+            .unwrap();
     let vsv_2 =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0).unwrap();
+        fdtables::get_unused_virtual_fd(operation_cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0)
+            .unwrap();
 
     // Update virtual socketpair struct
     virtual_socket_vector.sock1 = vsv_1 as i32;
