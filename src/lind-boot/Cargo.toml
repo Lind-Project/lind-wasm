@@ -7,6 +7,12 @@ edition = "2024"
 disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_signals"]
 secure = ["typemap/secure"]
 lind_debug = ["wasmtime-lind-common/lind_debug"]
+lind_perf = [
+    "lind-perf/enabled",
+    "threei/lind_perf",
+    "rawposix/lind_perf",
+    "wasmtime-lind-common/lind_perf",
+]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
@@ -22,6 +28,7 @@ wasmtime-lind-3i = { path = "../wasmtime/crates/lind-3i" }
 wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads", "demangle", "addr2line", "cache"], default-features = false }
 wasmtime-wasi-threads = { path = "../wasmtime/crates/wasi-threads" }
 wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
+lind-perf = { path = "../wasmtime/crates/lind-perf" }
 
 wiggle = { version = "23.0.0", default-features = false }
 anyhow = { version = "1.0.66", default-features = false }

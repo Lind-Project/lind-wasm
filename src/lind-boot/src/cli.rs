@@ -1,5 +1,13 @@
 use clap::*;
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum PerfTimer {
+    /// Use `clock_gettime(CLOCK_MONOTONIC_RAW)` based timing.
+    Clock,
+    /// Use RDTSC/RDTSCP cycle counter timing.
+    Tsc,
+}
+
 #[derive(Debug, Parser, Clone)]
 #[command(name = "lind-boot")]
 pub struct CliOptions {
@@ -39,6 +47,23 @@ pub struct CliOptions {
     /// cause the environment variable `FOO` to be inherited.
     #[arg(long = "env", number_of_values = 1, value_name = "NAME[=VAL]", value_parser = parse_env_var)]
     pub vars: Vec<(String, Option<String>)>,
+
+    /// Get performance information for the running module.
+    ///
+    /// `--perf` defaults to `clock`; pass `--perf=tsc` for cycle-based timing.
+    ///
+    /// `--perf` is always accepted by the CLI, but execution only proceeds when
+    /// lind-boot is compiled with the crate feature `lind_perf` (which wires
+    /// `lind-perf/enabled`).
+    #[arg(
+        long,
+        value_enum,
+        default_missing_value = "clock",
+        value_name = "clock|tsc",
+        num_args = 0..=1,
+        require_equals = true,
+    )]
+    pub perf: Option<PerfTimer>,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
@@ -52,5 +77,26 @@ pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
 impl CliOptions {
     pub fn wasm_file(&self) -> &str {
         &self.args[0]
+    }
+
+    pub fn perf_timer_kind(&self) -> Option<lind_perf::TimerKind> {
+        // Runtime gate for the perf CLI path:
+        // - if lind-boot was compiled without `lind_perf`, reject `--perf` early
+        //   with a clear error.
+        // - otherwise map the CLI timer selection to lind-perf's timer backend.
+        match lind_perf::ENABLED {
+            false => match self.perf {
+                Some(_) => {
+                    eprintln!("--perf needs compilation with the feature `lind_perf` enabled.");
+                    std::process::exit(1);
+                }
+                None => None,
+            },
+            true => match self.perf {
+                Some(PerfTimer::Clock) => Some(lind_perf::TimerKind::Clock),
+                Some(PerfTimer::Tsc) => Some(lind_perf::TimerKind::Rdtsc),
+                None => None,
+            },
+        }
     }
 }

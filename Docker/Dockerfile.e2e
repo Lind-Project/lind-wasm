@@ -104,19 +104,21 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Build lind-boot
 FROM base as build-lind-boot
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/lind-boot src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
+COPY --parents src/lind-boot src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs src/lind-perf Makefile rust-toolchain.toml .
 RUN rm -f src/wasmtime/crates/cage \
     src/wasmtime/crates/threei \
     src/wasmtime/crates/fdtables \
     src/wasmtime/crates/typemap \
     src/wasmtime/crates/sysdefs \
     src/wasmtime/crates/rawposix \
+    src/wasmtime/crates/lind-perf \
  && ln -s ../../cage src/wasmtime/crates/cage \
  && ln -s ../../threei src/wasmtime/crates/threei \
  && ln -s ../../fdtables src/wasmtime/crates/fdtables \
  && ln -s ../../typemap src/wasmtime/crates/typemap \
  && ln -s ../../sysdefs src/wasmtime/crates/sysdefs \
- && ln -s ../../rawposix src/wasmtime/crates/rawposix
+ && ln -s ../../rawposix src/wasmtime/crates/rawposix \
+ && ln -s ../../lind-perf src/wasmtime/crates/lind-perf
 RUN make lind-boot
 
 
