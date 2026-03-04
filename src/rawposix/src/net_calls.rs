@@ -1618,7 +1618,7 @@ pub extern "C" fn recvfrom_syscall(
         // Copy peer address back to user’s src_addr / addrlen
         if ret >= 0 {
             unsafe {
-                copy_out_sockaddr(addr, src_len as *mut u32, &src_storage);
+                copy_out_sockaddr(addr, addrlen_arg as *mut u32, &src_storage);
             }
         }
 
