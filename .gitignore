@@ -17,5 +17,8 @@ e2e_status
 report.html
 results.json
 
+#Ignore local files
+.DS_Store
+target/
 #Ignore python cache
 __pycache__/
