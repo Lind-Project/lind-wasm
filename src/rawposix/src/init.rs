@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
     EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
-    STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, VERBOSE,
+    STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
 };
 use threei::{
     copy_data_between_cages, copy_handler_table_to_cage, register_handler,
@@ -65,20 +65,20 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
         let impl_fn_ptr = func as *const () as u64;
         // Register to handler table in 3i
         ret = register_handler(
-            0,
+            UNUSED_ID,
             RAWPOSIX_CAGEID,       // target cageid for this syscall handler
             self_cageid,           // cage to modify: current cageid
             sysno,                 // target callnum
             RUNTIME_TYPE_WASMTIME, // runtime id
             RAWPOSIX_CAGEID,       // handler function is in the RawPOSIX
             impl_fn_ptr,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
         );
         if ret != 0 {
             panic!(
@@ -116,58 +116,58 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
     // Register `register_handler` syscall for this cage
     let fp_register = register_handler as *const () as usize as u64;
     let register_ret = register_handler(
-        0,
+        UNUSED_ID,
         THREEI_CAGEID, // target cageid for this syscall handler
         self_cageid,   // cage to modify: current cageid
         REGISTER_HANDLER_SYSCALL,
         RUNTIME_TYPE_WASMTIME, // runtime id
         THREEI_CAGEID,         // handler function is in the 3i
         fp_register,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Register `copy_data_between_cages` syscall for this cage
     let fp_copy_data = copy_data_between_cages as *const () as usize as u64;
     let copy_data_ret = register_handler(
-        0,
+        UNUSED_ID,
         THREEI_CAGEID, // target cageid for this syscall handler
         self_cageid,   // cage to modify: current cageid
         COPY_DATA_BETWEEN_CAGES_SYSCALL,
         RUNTIME_TYPE_WASMTIME, // runtime id
         THREEI_CAGEID,         // handler function is in the 3i
         fp_copy_data,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Register `copy_handler_table_to_cage` syscall for this cage
     let fp_copy_handler_table = copy_handler_table_to_cage as *const () as usize as u64;
     let copy_handler_table_ret = register_handler(
-        0,
+        UNUSED_ID,
         THREEI_CAGEID, // target cageid for this syscall handler
         self_cageid,   // cage to modify: current cageid
         COPY_HANDLER_TABLE_TO_CAGE_SYSCALL,
         RUNTIME_TYPE_WASMTIME, // runtime id
         THREEI_CAGEID,         // handler function is in the 3i
         fp_copy_handler_table,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Check registration results and panic if either fails
