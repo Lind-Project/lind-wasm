@@ -168,28 +168,29 @@ pub fn add_to_linker<
         },
     )?;
 
-    #[cfg(feature = "lind_debug")]
-    {
-        linker.func_wrap(
-            "debug",
-            "lind_debug_num",
-            move |_caller: Caller<'_, T>, num: u32| -> u32 {
-                eprintln!("[LIND DEBUG NUM]: {}", num);
-                num // Return the value to the WASM stack
-            },
-        )?;
+    // Always register debug host functions so that glibc binaries compiled
+    // with -DLIND_DEBUG can resolve their imports regardless of whether
+    // lind-boot was built with --features lind_debug.  Zero cost when the
+    // guest never calls them.
+    linker.func_wrap(
+        "debug",
+        "lind_debug_num",
+        move |_caller: Caller<'_, T>, num: u32| -> u32 {
+            eprintln!("[LIND DEBUG NUM]: {}", num);
+            num
+        },
+    )?;
 
-        linker.func_wrap(
-            "debug",
-            "lind_debug_str",
-            move |caller: Caller<'_, T>, ptr: i32| -> i32 {
-                let mem_base = get_memory_base(&caller);
-                if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
-                    eprintln!("[LIND DEBUG STR]: {}", msg);
-                }
-                ptr // Return the pointer to the WASM stack
-            },
-        )?;
-    }
+    linker.func_wrap(
+        "debug",
+        "lind_debug_str",
+        move |caller: Caller<'_, T>, ptr: i32| -> i32 {
+            let mem_base = get_memory_base(&caller);
+            if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
+                eprintln!("[LIND DEBUG STR]: {}", msg);
+            }
+            ptr
+        },
+    )?;
     Ok(())
 }
