@@ -320,31 +320,16 @@ for linking")
    past the last element in SET.  */
 #define symbol_set_end_p(set, ptr) ((ptr) >= (void *const *) &__stop_##set)
 
-#ifdef SHARED
-# define symbol_version(real, name, version) \
-  symbol_version_reference(real, name, version)
-# define default_symbol_version(real, name, version) \
-     _default_symbol_version(real, name, version)
-/* See <libc-symver.h>.  */
-# ifdef __ASSEMBLER__
-#  define _default_symbol_version(real, name, version) \
-  _set_symbol_version (real, name@@version)
-# else
-#  define _default_symbol_version(real, name, version) \
-  _set_symbol_version (real, #name "@@" #version)
-# endif
-
-/* Evaluates to a string literal for VERSION in LIB.  */
-# define symbol_version_string(lib, version) \
-  _symbol_version_stringify_1 (VERSION_##lib##_##version)
-# define _symbol_version_stringify_1(arg) _symbol_version_stringify_2 (arg)
-# define _symbol_version_stringify_2(arg) #arg
-
-#else /* !SHARED */
-# define symbol_version(real, name, version)
-# define default_symbol_version(real, name, version) \
+/* Completely disable ELF symbol versioning for all builds */
+#define symbol_version(real, name, version)
+#define default_symbol_version(real, name, version) \
   strong_alias(real, name)
-#endif
+
+/* Provide dummy fallbacks for internal macros to prevent undefined macro errors */
+#define _default_symbol_version(real, name, version) \
+  strong_alias(real, name)
+#define symbol_version_string(lib, version) #version
+
 
 #if defined SHARED || defined LIBC_NONSHARED \
   || (BUILD_PIE_DEFAULT && IS_IN (libc))
