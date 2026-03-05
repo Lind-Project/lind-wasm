@@ -974,7 +974,7 @@ impl<
                 );
             }
             // Decrement the global cage count
-            self.lind_manager.decrement();
+            // self.lind_manager.decrement();
         }
         // get the base address of the memory
         let address = get_memory_base(&mut caller) as *mut u8;

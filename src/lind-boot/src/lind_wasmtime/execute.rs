@@ -124,7 +124,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
 
         // Allocate the main module's indirect function table with
         // the minimal required size.
-        // #[cfg(feature = "debug-dylink")]
+        #[cfg(feature = "debug-dylink")]
         println!("[debug] main module table size: {}", main_module_table_size);
         let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
         table = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
@@ -253,7 +253,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         // to relocate/interpret the library's function references into the
         // shared table. GOT entries are patched through the shared LindGOT.
         {
-            println!("[debug] library {} instantiate", name);
+            // println!("[debug] library {} instantiate", name);
             let mut guard = lind_got.lock().unwrap();
             lib_linker
                 .module(
@@ -295,6 +295,8 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         )
         .with_context(|| format!("failed to run main module"))
     });
+
+    lind_manager.decrement();
 
     match result {
         Ok(ref _res) => {
@@ -720,16 +722,18 @@ fn load_main_module(
             let index = table.grow(&mut store, 1, wasmtime::Ref::Func(Some(func))).unwrap();
             let mut guard = got.lock().unwrap();
             if (*guard).update_entry_if_unresolved(&name, index) {
-                println!("[debug] update GOT.func.{} to {}", name, index);
+                // println!("[debug] update GOT.func.{} to {}", name, index);
             }
         }
         for (name, global) in globals {
             let val = global.get(&mut store);
+            // println!("[debug]: GOT global {} has value {:?}", name, val);
+
             // relocate the variable
             let val = val.i32().unwrap() as u32 + 1024 + 8388608 + 1024; // 0 stands for memory base for main module
             let mut guard = got.lock().unwrap();
             if (*guard).update_entry_if_unresolved(&name, val) {
-                println!("[debug] main update GOT.mem.{} to {}", name, val);
+                // println!("[debug] main update GOT.mem.{} to {}", name, val);
             }
         }
 

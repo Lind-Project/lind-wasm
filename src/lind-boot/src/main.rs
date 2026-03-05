@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     execute_wasmtime(lindboot_cli)?;
 
     // after all cage exits, finalize the lind
-    rawposix_shutdown();
+    // rawposix_shutdown();
 
     Ok(())
 }
