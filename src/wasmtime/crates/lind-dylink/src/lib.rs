@@ -71,7 +71,7 @@ pub fn dlsym_call<
     } else {
         caller.find_library_symbol_from_local(handle, symbol).unwrap()
     };
-    println!("[debug] dlsym resolves {} to {}", symbol, val);
+    // println!("[debug] dlsym resolves {} to {}", symbol, val);
     val as i32
 }
 

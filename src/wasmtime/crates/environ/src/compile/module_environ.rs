@@ -782,10 +782,10 @@ and for re-adding support for interface types you can see this issue:
                             });
                         },
                         wasmparser::Dylink0Subsection::Needed(needed) => {
-                            eprintln!("Warning: Dylink.0 Needed Section not handled");
+                            // eprintln!("Warning: Dylink.0 Needed Section not handled");
                         },
                         wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
-                            eprintln!("Warning: Dylink.0 Export Section not handled");
+                            // eprintln!("Warning: Dylink.0 Export Section not handled");
                         },
                         wasmparser::Dylink0Subsection::ImportInfo(importinfo) => {
                             let mut imports = vec![];

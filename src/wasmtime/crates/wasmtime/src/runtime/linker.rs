@@ -245,7 +245,7 @@ impl<T> Linker<T> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
-                    // #[cfg(feature = "debug-dylink")]
+                    #[cfg(feature = "debug-dylink")]
                     println!("[debug] Warning: link undefined symbol \"{}\" to trap", import.name());
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
@@ -279,7 +279,7 @@ impl<T> Linker<T> {
                     if !weak_imports.is_weak_symbol(import.module(), import.name()) {
                         continue;
                     }
-                    // #[cfg(feature = "debug-dylink")]
+                    #[cfg(feature = "debug-dylink")]
                     println!("[debug] define weak symbol {}.{} into trap", import.module(), import.name());
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
