@@ -20,3 +20,4 @@
 ./locale/Versions
 ./signal/Versions
 ./dlfcn/Versions
+./sysdeps/i386/Versions

@@ -3110,6 +3110,7 @@ wasm-ld \
     --export-if-defined=dlopen \
     --export-if-defined=dlsym \
     --export-if-defined=dlvsym \
+    --export-if-defined=backtrace \
     --export-if-defined=__libc_setup_tls \
     --export-if-defined=__wasi_init_tp \
     --export-if-defined=__ctype_init \
