@@ -2,8 +2,6 @@
 
 use std::sync::{Condvar, Mutex};
 
-pub mod lind_syscall_numbers;
-
 // used to manage global active cage count. Used to determine when wasmtime can exit
 // (i.e. only after all the cages exited, we can exit the process)
 // this class may be used by many crates (e.g. lind-commmon, lind-multi-process)
