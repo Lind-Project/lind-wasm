@@ -23,7 +23,7 @@ use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
-use wasmtime_lind_utils::lind_syscall_numbers::{
+use sysdefs::constants::syscall_const::{
     CLONE_SYSCALL, EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL,
 };
 
