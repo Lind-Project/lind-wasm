@@ -18,12 +18,12 @@ use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
 use sysdefs::constants::lind_platform_const;
+use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
-use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
 
