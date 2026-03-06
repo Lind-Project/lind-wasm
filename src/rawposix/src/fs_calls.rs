@@ -164,7 +164,7 @@ pub extern "C" fn read_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "read");
+        return handle_errno(-kernel_fd, "read");
     }
 
     // Convert the user buffer and count.
@@ -338,7 +338,7 @@ pub extern "C" fn write_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "write");
+        return handle_errno(-kernel_fd, "write");
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
@@ -1725,7 +1725,7 @@ pub extern "C" fn fsync_syscall(
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
     // convert_fd_to_host returns negative errno values on error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "read");
+        return handle_errno(-kernel_fd, "read");
     }
 
     let ret = unsafe { libc::fsync(kernel_fd) };
@@ -1787,7 +1787,7 @@ pub extern "C" fn fdatasync_syscall(
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "read");
+        return handle_errno(-kernel_fd, "read");
     }
 
     let ret = unsafe { libc::fdatasync(kernel_fd) };
@@ -1850,7 +1850,7 @@ pub extern "C" fn sync_file_range_syscall(
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "read");
+        return handle_errno(-kernel_fd, "read");
     }
 
     let ret = unsafe { libc::sync_file_range(kernel_fd, offset, nbytes, flags) };
@@ -1998,7 +1998,7 @@ pub extern "C" fn readlinkat_syscall(
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
         // Return error
         if kernel_fd < 0 {
-            return handle_errno(kernel_fd, "readlinkat");
+            return handle_errno(-kernel_fd, "readlinkat");
         }
 
         let raw_path = match get_cstr(path_arg) {
@@ -2632,7 +2632,7 @@ pub extern "C" fn fchdir_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "fchdir");
+        return handle_errno(-kernel_fd, "fchdir");
     }
 
     if !(sc_unusedarg(arg2, arg2_cageid)
@@ -2714,7 +2714,7 @@ pub extern "C" fn writev_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "writev");
+        return handle_errno(-kernel_fd, "writev");
     }
 
     let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
@@ -2830,7 +2830,7 @@ pub extern "C" fn fstat_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "fstat");
+        return handle_errno(-kernel_fd, "fstat");
     }
 
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -2896,7 +2896,7 @@ pub extern "C" fn ftruncate_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "ftruncate");
+        return handle_errno(-kernel_fd, "ftruncate");
     }
 
     let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
@@ -2955,7 +2955,7 @@ pub extern "C" fn fstatfs_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "fstatfs");
+        return handle_errno(-kernel_fd, "fstatfs");
     }
 
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -3023,7 +3023,7 @@ pub extern "C" fn getdents_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "getdents");
+        return handle_errno(-kernel_fd, "getdents");
     }
 
     let dirp = sc_convert_buf(dirp_arg, dirp_cageid, cageid);
@@ -3082,7 +3082,7 @@ pub extern "C" fn lseek_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "lseek");
+        return handle_errno(-kernel_fd, "lseek");
     }
 
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
@@ -3144,7 +3144,7 @@ pub extern "C" fn pread_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "pread");
+        return handle_errno(-kernel_fd, "pread");
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
@@ -3204,7 +3204,7 @@ pub extern "C" fn pwrite_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "pwrite");
+        return handle_errno(-kernel_fd, "pwrite");
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
@@ -3467,7 +3467,7 @@ pub extern "C" fn fchmod_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "fchmod");
+        return handle_errno(-kernel_fd, "fchmod");
     }
 
     let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
@@ -3918,7 +3918,7 @@ pub extern "C" fn flock_syscall(
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
-        return handle_errno(kernel_fd, "flock");
+        return handle_errno(-kernel_fd, "flock");
     }
 
     let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
