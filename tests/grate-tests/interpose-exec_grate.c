@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <lind_syscall.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -47,7 +48,7 @@ int exec_grate(uint64_t cageid,
     59, // syscallnum for exec
     0,    // callname is not used in the trampoline, set to 0
     self_grate_id,    // self_grate_id is not used in the trampoline, set to 0
-    self_grate_id,    // target_cageid is not used in the trampoline, set to 0
+    777777,    // target_cageid is not used in the trampoline, set to 0
     arg1, arg1cage, 
     arg2, arg2cage,
     arg3, arg3cage, 
