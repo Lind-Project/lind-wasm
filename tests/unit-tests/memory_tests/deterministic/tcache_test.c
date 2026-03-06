@@ -7,11 +7,6 @@
 /*
  * Test that malloc's tcache (thread-local cache) works correctly.
  * Tcache caches recently freed small chunks per-thread for fast reuse.
- * This test:
- *   1. Allocates and frees small chunks (triggers tcache fill)
- *   2. Re-allocates same sizes (should hit tcache)
- *   3. Does this from multiple threads (each thread has its own tcache)
- *   4. Verifies memory contents are correct (no corruption)
  */
 
 #define NALLOCS 32
@@ -19,11 +14,22 @@
 
 static const size_t sizes[SIZES_COUNT] = {16, 32, 64, 128};
 
+/* write a tag like "[T1:P1]\n" without malloc */
+static void tag(int id, int phase) {
+    char buf[] = "[T0:P0]\n";
+    buf[2] = '0' + id;
+    buf[5] = '0' + phase;
+    write(2, buf, 8);
+}
+
 void *thread_fn(void *arg) {
     int id = *(int *)arg;
     void *ptrs[NALLOCS];
 
+    tag(id, 0); /* entered thread_fn */
+
     /* Phase 1: alloc + write */
+    tag(id, 1);
     for (int i = 0; i < NALLOCS; i++) {
         size_t sz = sizes[i % SIZES_COUNT];
         ptrs[i] = malloc(sz);
@@ -35,11 +41,13 @@ void *thread_fn(void *arg) {
     }
 
     /* Phase 2: free all (populates tcache) */
+    tag(id, 2);
     for (int i = 0; i < NALLOCS; i++) {
         free(ptrs[i]);
     }
 
     /* Phase 3: re-alloc same sizes (should hit tcache) + verify clean use */
+    tag(id, 3);
     for (int i = 0; i < NALLOCS; i++) {
         size_t sz = sizes[i % SIZES_COUNT];
         ptrs[i] = malloc(sz);
@@ -59,10 +67,12 @@ void *thread_fn(void *arg) {
     }
 
     /* Cleanup */
+    tag(id, 4);
     for (int i = 0; i < NALLOCS; i++) {
         free(ptrs[i]);
     }
 
+    tag(id, 5); /* done */
     return NULL;
 }
 
@@ -72,10 +82,8 @@ int main(void) {
     void *p2 = malloc(48);
     free(p1);
     free(p2);
-    /* These should come from tcache (same size bin) */
     void *p3 = malloc(48);
     void *p4 = malloc(48);
-    /* With tcache, freed chunks are reused LIFO */
     if (p3 == p2 && p4 == p1) {
         write(1, "tcache reuse: yes\n", 18);
     } else {
