@@ -3275,8 +3275,28 @@ tcache_init(void)
 }
 
 # define MAYBE_INIT_TCACHE() \
-  if (__glibc_unlikely (tcache == NULL)) \
-    tcache_init();
+  do { \
+    if (__glibc_unlikely (tcache == NULL)) \
+      tcache_init(); \
+  } while (0)
+
+/* DEBUG: one-shot check for garbage tcache pointer per thread */
+static __thread int __dbg_tcache_checked = 0;
+static inline void __dbg_check_tcache(void) {
+  if (__dbg_tcache_checked) return;
+  __dbg_tcache_checked = 1;
+  if (tcache != NULL) {
+    char buf[80];
+    int n = 0;
+    const char *hx = "0123456789abcdef";
+    const char *m = "[BUG] tcache non-null before init: 0x";
+    while (*m) buf[n++] = *m++;
+    uintptr_t v = (uintptr_t)tcache;
+    for (int s = 28; s >= 0; s -= 4) buf[n++] = hx[(v >> s) & 0xF];
+    buf[n++] = '\n';
+    write(2, buf, n);
+  }
+}
 
 #else  /* !USE_TCACHE */
 # define MAYBE_INIT_TCACHE()
@@ -3311,6 +3331,7 @@ __libc_malloc (size_t bytes)
     }
   size_t tc_idx = csize2tidx (tbytes);
 
+  __dbg_check_tcache();
   MAYBE_INIT_TCACHE ();
 
   DIAG_PUSH_NEEDS_COMMENT;

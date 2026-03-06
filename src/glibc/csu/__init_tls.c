@@ -210,13 +210,48 @@ void *__copy_tls(unsigned char *mem)
 	return td;
 #else
 	size_t tls_align = __builtin_wasm_tls_align();
+	size_t tls_sz = __builtin_wasm_tls_size();
 	volatile void* tls_base = __builtin_wasm_tls_base();
+	unsigned char *orig_mem = mem;
 	mem += tls_align;
 	mem -= (uintptr_t)mem & (tls_align-1);
 	__wasm_init_tls(mem);
   	__asm__("local.get %0\n"
 			"global.set __tls_base\n"
 			:: "r"(tls_base));
+
+	/* DEBUG: print alignment shift and TLS info */
+	{
+		char buf[160];
+		int n = 0;
+		const char *h = "0123456789abcdef";
+		const char *m1 = "[copy_tls] orig=0x";
+		while (*m1) buf[n++] = *m1++;
+		for (int s = 28; s >= 0; s -= 4) buf[n++] = h[(((uintptr_t)orig_mem) >> s) & 0xF];
+		const char *m2 = " aligned=0x";
+		while (*m2) buf[n++] = *m2++;
+		for (int s = 28; s >= 0; s -= 4) buf[n++] = h[(((uintptr_t)mem) >> s) & 0xF];
+		const char *m3 = " shift=";
+		while (*m3) buf[n++] = *m3++;
+		int shift = (int)(mem - orig_mem);
+		if (shift >= 100) buf[n++] = '0' + (shift / 100);
+		if (shift >= 10) buf[n++] = '0' + ((shift / 10) % 10);
+		buf[n++] = '0' + (shift % 10);
+		const char *m4 = " sz=";
+		while (*m4) buf[n++] = *m4++;
+		if (tls_sz >= 10000) buf[n++] = '0' + ((tls_sz / 10000) % 10);
+		if (tls_sz >= 1000) buf[n++] = '0' + ((tls_sz / 1000) % 10);
+		if (tls_sz >= 100) buf[n++] = '0' + ((tls_sz / 100) % 10);
+		if (tls_sz >= 10) buf[n++] = '0' + ((tls_sz / 10) % 10);
+		buf[n++] = '0' + (tls_sz % 10);
+		const char *m5 = " align=";
+		while (*m5) buf[n++] = *m5++;
+		if (tls_align >= 10) buf[n++] = '0' + ((tls_align / 10) % 10);
+		buf[n++] = '0' + (tls_align % 10);
+		buf[n++] = '\n';
+		write(2, buf, n);
+	}
+
 	return mem;
 #endif
 }

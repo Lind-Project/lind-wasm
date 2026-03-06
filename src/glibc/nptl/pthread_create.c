@@ -405,6 +405,26 @@ start_thread (void *arg)
     "global.set __tls_base\n"
     :: "r"(tls_base));
 
+  /* DEBUG: dump tls_base and first 32 bytes of TLS area */
+  {
+    char buf[200];
+    int n = 0;
+    const char *hx = "0123456789abcdef";
+    const char *m1 = "[start_thread] tls_base=0x";
+    while (*m1) buf[n++] = *m1++;
+    uintptr_t tb = (uintptr_t)tls_base;
+    for (int s = 28; s >= 0; s -= 4) buf[n++] = hx[(tb >> s) & 0xF];
+    const char *m2 = " first32=";
+    while (*m2) buf[n++] = *m2++;
+    unsigned char *p = (unsigned char *)tls_base;
+    for (int i = 0; i < 32 && n < 190; i++) {
+      buf[n++] = hx[(p[i] >> 4) & 0xF];
+      buf[n++] = hx[p[i] & 0xF];
+    }
+    buf[n++] = '\n';
+    write(2, buf, n);
+  }
+
   /* We are either in (a) or (b), and in either case we either own PD already
      (2) or are about to own PD (1), and so our only restriction would be that
      we can't free PD until we know we have ownership (see CONCURRENCY NOTES
