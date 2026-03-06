@@ -69,7 +69,7 @@ int register_grate(uint64_t cageid,
         1001, // syscallnum for register_handler
         0,    // callname is not used in the trampoline, set to 0
         self_grate_id,    // self_grate_id is used in the 3i
-        777777,    // target_cageid is used in the 3i
+        self_grate_id,    // target_cageid is used in the 3i
         arg1, arg1cage, 
         arg2, arg2cage,
         fn_ptr_addr, arg3cage, 
