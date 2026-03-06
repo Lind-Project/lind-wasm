@@ -325,14 +325,19 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
         ----------- <--- stack_bottom
   */
   size_t tls_size = __builtin_wasm_tls_size();
+  size_t tls_align = __builtin_wasm_tls_align();
+  // __copy_tls aligns mem UP by up to tls_align bytes before writing tls_size
+  // bytes of TLS data.  Reserve the extra alignment padding so TLS doesn't
+  // overflow into the pthread struct above it.
+  size_t tls_alloc = tls_size + tls_align;
   // stack bottom = stack top + stack size
   unsigned char *stack_bottom = (void *)pd->stackblock + pd->stackblock_size;
   // calculate the offset for each field based on the above diagram
 
   // Reserve space for the pthread struct just below the stack
   unsigned char *pthread_addr = stack_bottom - TLS_TCB_SIZE;
-  // Allocate space for TLS data below pthread struct
-  unsigned char *TLS_addr = pthread_addr - tls_size;
+  // Allocate space for TLS data (+ alignment padding) below pthread struct
+  unsigned char *TLS_addr = pthread_addr - tls_alloc;
   // Allocate space for clone_args below TLS data
   struct clone_args *args = (struct clone_args *)(TLS_addr - sizeof(struct clone_args));
   // Reserve 8 bytes below clone_args for the TLS base pointer
@@ -344,7 +349,7 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   memset(args, 0, sizeof(struct clone_args));
   args->flags = clone_flags;
   args->stack = real_stack_bottom;
-  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
+  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_alloc - 8;
   args->child_tid = &pd->tid;
 
   // initialize TLS data
@@ -397,7 +402,9 @@ start_thread (void *arg)
 
   // retrieve the TLS data address
   size_t tls_size = __builtin_wasm_tls_size();
-  uintptr_t* tls_base_addr = pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
+  size_t tls_align = __builtin_wasm_tls_align();
+  size_t tls_alloc = tls_size + tls_align;
+  uintptr_t* tls_base_addr = pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_alloc - 8;
   void* tls_base = (void*)(*tls_base_addr);
 
   // set __tls_base wasm global
