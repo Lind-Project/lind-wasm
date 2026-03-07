@@ -27,7 +27,12 @@
    function call or loop back-edge fires the epoch callback which
    delivers all pending unblocked signals synchronously.  So we
    implement sigsuspend by swapping the mask, yielding (to trigger
-   epoch-based delivery), and restoring the original mask.  */
+   epoch-based delivery), and restoring the original mask.
+
+   TODO: This only handles the case where signals are already pending
+   when sigsuspend is called (e.g., kill then sigsuspend).  A real
+   sigsuspend should block until a signal arrives, which would require
+   a condvar in the Cage struct that lind_send_signal notifies.  */
 int
 __sigsuspend (const sigset_t *set)
 {
