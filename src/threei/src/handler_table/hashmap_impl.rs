@@ -102,6 +102,17 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         )
     });
 
+    if target_cageid == lind_platform_const::RAWPOSIX_CAGEID {
+        if let Some(addr) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
+            return Some((lind_platform_const::RAWPOSIX_CAGEID, *addr));
+        } else {
+            panic!(
+                "RAWPOSIX handler not found for self_cageid={} syscall_num={}",
+                self_cageid, syscall_num
+            );
+        }
+    }
+
     // When target_cageid == self_cageid, this means the call is supposed to be handled
     // within the same cage or this is a cage call, so we first check if a RAWPOSIX handler exists.
     // More details on scenarios and the reason we use this check in the comments
