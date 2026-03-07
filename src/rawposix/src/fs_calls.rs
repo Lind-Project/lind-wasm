@@ -9,7 +9,7 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    FIOASYNC, FIONBIO, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_POPULATE,
+    FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_POPULATE,
     MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ,
     PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
     TIOCGWINSZ,
@@ -3857,9 +3857,9 @@ pub extern "C" fn ioctl_syscall(
         return ret;
     }
 
-    // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, and TIOCGWINSZ right now.
+    // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, FIONREAD, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
-    if req != FIONBIO && req != FIOASYNC && req != TIOCGWINSZ {
+    if req != FIONBIO && req != FIOASYNC && req != FIONREAD && req != TIOCGWINSZ {
         lind_debug_panic("Lind unsupported ioctl request");
     }
 

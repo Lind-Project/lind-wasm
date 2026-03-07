@@ -81,6 +81,7 @@ pub const F_NOTIFY: i32 = 1026;
 pub const FIONBIO: u32 = 21537;
 pub const FIOASYNC: u32 = 21586;
 pub const TIOCGWINSZ: u32 = 21523;
+pub const FIONREAD: u32 = 21531;
 
 //File types for open/stat etc.
 // Source: include/linux/stat.h
