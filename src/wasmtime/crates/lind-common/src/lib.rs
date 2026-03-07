@@ -76,22 +76,14 @@ unsafe fn write_bytes(base: *mut u8, offset: usize, src: &[u8]) {
     }
 }
 
-/// Register all Lind host functions under the `"lind"` linker module.
-///
-/// This includes both the core syscall/debug/signal functions and the 4
-/// argv/environ functions that glibc's `_start()` calls to initialize
-/// `argc`, `argv`, and `environ` before entering `main()`.
-///
-/// The `get_environ` closure extracts the `LindEnviron` from the store data
-/// so that the argv/environ functions can read args and env vars.
-pub fn add_to_linker<
+/// Register the `make-syscall` host function: the unified syscall entry point
+/// from guest glibc into 3i.
+fn add_syscall_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
-    get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
 ) -> anyhow::Result<()> {
-    // attach make_syscall to wasmtime
     linker.func_wrap(
         "lind",
         "make-syscall",
@@ -172,19 +164,23 @@ pub fn add_to_linker<
             )
         },
     )?;
+    Ok(())
+}
 
-    // export lind-get-memory-base for libc to query base address
+/// Register runtime introspection functions: memory base address, cage ID,
+/// setjmp/longjmp, epoch callback, and debug panic.
+fn add_runtime_to_linker<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    linker: &mut wasmtime::Linker<T>,
+) -> anyhow::Result<()> {
     linker.func_wrap(
         "lind",
         "lind-get-memory-base",
-        move |caller: Caller<'_, T>| -> u64 {
-            // Return the base address of memory[0] for the calling instance
-            let base = get_memory_base(&caller);
-            base
-        },
+        move |caller: Caller<'_, T>| -> u64 { get_memory_base(&caller) },
     )?;
 
-    // export lind-get-cage-id for libc to query the current cage id
     linker.func_wrap(
         "lind",
         "lind-get-cage-id",
@@ -193,14 +189,11 @@ pub fn add_to_linker<
         },
     )?;
 
-    // attach lind-debug-panic to wasmtime
     linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
         let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
-
         sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
     })?;
 
-    // attach setjmp to wasmtime
     linker.func_wrap(
         "lind",
         "lind-setjmp",
@@ -209,7 +202,6 @@ pub fn add_to_linker<
         },
     )?;
 
-    // attach longjmp to wasmtime
     linker.func_wrap(
         "lind",
         "lind-longjmp",
@@ -218,7 +210,6 @@ pub fn add_to_linker<
         },
     )?;
 
-    // epoch callback function
     linker.func_wrap(
         "lind",
         "epoch_callback",
@@ -227,36 +218,50 @@ pub fn add_to_linker<
         },
     )?;
 
-    #[cfg(feature = "lind_debug")]
-    {
-        linker.func_wrap(
-            "debug",
-            "lind_debug_num",
-            move |_caller: Caller<'_, T>, num: u32| -> u32 {
-                eprintln!("[LIND DEBUG NUM]: {}", num);
-                num // Return the value to the WASM stack
-            },
-        )?;
+    Ok(())
+}
 
-        linker.func_wrap(
-            "debug",
-            "lind_debug_str",
-            move |caller: Caller<'_, T>, ptr: i32| -> i32 {
-                let mem_base = get_memory_base(&caller);
-                if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
-                    eprintln!("[LIND DEBUG STR]: {}", msg);
-                }
-                ptr // Return the pointer to the WASM stack
-            },
-        )?;
-    }
+/// Register debug-only host functions under the `"debug"` module.
+#[cfg(feature = "lind_debug")]
+fn add_debug_to_linker<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    linker: &mut wasmtime::Linker<T>,
+) -> anyhow::Result<()> {
+    linker.func_wrap(
+        "debug",
+        "lind_debug_num",
+        move |_caller: Caller<'_, T>, num: u32| -> u32 {
+            eprintln!("[LIND DEBUG NUM]: {}", num);
+            num
+        },
+    )?;
 
-    // -- argv/environ host functions --
-    // glibc's _start() calls these 4 functions to initialize argc, argv, and
-    // environ before entering main(). Each writes directly into guest linear
-    // memory at offsets provided by the caller.
+    linker.func_wrap(
+        "debug",
+        "lind_debug_str",
+        move |caller: Caller<'_, T>, ptr: i32| -> i32 {
+            let mem_base = get_memory_base(&caller);
+            if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
+                eprintln!("[LIND DEBUG STR]: {}", msg);
+            }
+            ptr
+        },
+    )?;
 
-    // args_sizes_get: write argc and the total NUL-terminated argv buffer size.
+    Ok(())
+}
+
+/// Register the 4 argv/environ host functions that glibc's `_start()` calls
+/// to initialize `argc`, `argv`, and `environ` before entering `main()`.
+fn add_environ_to_linker<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    linker: &mut wasmtime::Linker<T>,
+    get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
+) -> anyhow::Result<()> {
     linker.func_wrap(
         "lind",
         "args_sizes_get",
@@ -273,7 +278,6 @@ pub fn add_to_linker<
         },
     )?;
 
-    // args_get: write the argv pointer array and NUL-terminated argument strings.
     linker.func_wrap(
         "lind",
         "args_get",
@@ -296,7 +300,6 @@ pub fn add_to_linker<
         },
     )?;
 
-    // environ_sizes_get: write the env var count and total "KEY=VALUE\0" buffer size.
     linker.func_wrap(
         "lind",
         "environ_sizes_get",
@@ -317,7 +320,6 @@ pub fn add_to_linker<
         },
     )?;
 
-    // environ_get: write the env pointer array and NUL-terminated "KEY=VALUE" strings.
     linker.func_wrap(
         "lind",
         "environ_get",
@@ -341,5 +343,27 @@ pub fn add_to_linker<
         },
     )?;
 
+    Ok(())
+}
+
+/// Register all Lind host functions with the linker.
+///
+/// Groups:
+/// - **syscall**: the unified `make-syscall` entry point
+/// - **runtime**: memory base, cage ID, setjmp/longjmp, epoch callback, debug panic
+/// - **debug** (lind_debug feature only): `lind_debug_num`, `lind_debug_str`
+/// - **environ**: argv/environ functions for glibc `_start()`
+pub fn add_to_linker<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    linker: &mut wasmtime::Linker<T>,
+    get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
+) -> anyhow::Result<()> {
+    add_syscall_to_linker(linker)?;
+    add_runtime_to_linker(linker)?;
+    #[cfg(feature = "lind_debug")]
+    add_debug_to_linker(linker)?;
+    add_environ_to_linker(linker, get_environ)?;
     Ok(())
 }
