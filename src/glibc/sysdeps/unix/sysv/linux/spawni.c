@@ -348,7 +348,8 @@ __spawnix (int *pid, const char *file,
 	return errno;
       }
 
-  // lind-wasm: disallow PROC_EXEC
+  // lind-wasm: disable PROC_EXEC
+  // since wasm doesn't allow PROT_EXEC mapping in linear memory
   int prot = (PROT_READ | PROT_WRITE);
 
   /* Add a slack area for child's stack.  */
