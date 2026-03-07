@@ -82,6 +82,15 @@ pub extern "C" fn poll_syscall(
         return syscall_error(Errno::EFAULT, "poll_syscall", "Invalid Cage ID");
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `poll`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`fds_cageid`).
+    let operation_cageid = fds_cageid;
+
     // Basic bounds checking - validate arguments before conversion - FD_PER_PROCESS_MAX is defined in fdtables constants
     if nfds_arg > fdtables::FD_PER_PROCESS_MAX {
         return syscall_error(Errno::EINVAL, "poll_syscall", "Too many file descriptors");
@@ -130,7 +139,7 @@ pub extern "C" fn poll_syscall(
 
     // Convert virtual fds to kernel fds by fdkind using fdtables API
     let (poll_data_by_fdkind, fdtables_mapping_table) =
-        fdtables::convert_virtualfds_for_poll(cageid, virtual_fds);
+        fdtables::convert_virtualfds_for_poll(operation_cageid, virtual_fds);
 
     // Process kernel-backed FDs and handle invalid FDs
     let mut all_kernel_pollfds: Vec<libc::pollfd> = Vec::new();
@@ -211,7 +220,7 @@ pub extern "C" fn poll_syscall(
             // This implements POSIX signal semantics where poll() should return EINTR
             // if interrupted by a signal before any file descriptors become ready or timeout occurs.
             // The signal checking happens in the retry loop to ensure we don't block indefinitely
-            if signal_check_trigger(cageid) {
+            if signal_check_trigger(operation_cageid) {
                 return syscall_error(Errno::EINTR, "poll_syscall", "interrupted");
             }
         }
@@ -298,6 +307,15 @@ pub extern "C" fn select_syscall(
         return syscall_error(Errno::EFAULT, "select_syscall", "Invalid Cage ID");
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `select`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`nfds_cageid`).
+    let operation_cageid = nfds_cageid;
+
     // Convert arguments
     let nfds = sc_convert_sysarg_to_i32(nfds_arg, nfds_cageid, cageid);
 
@@ -334,7 +352,7 @@ pub extern "C" fn select_syscall(
     // Prepare bitmasks for select using fdtables
     let (selectbittables, unparsedtables, mappingtable) =
         match fdtables::prepare_bitmasks_for_select(
-            cageid,
+            operation_cageid,
             nfds as u64,
             readfds_ptr.map(|ptr| unsafe { *ptr }),
             writefds_ptr.map(|ptr| unsafe { *ptr }),
@@ -458,7 +476,7 @@ pub extern "C" fn select_syscall(
         // This implements POSIX signal semantics where select() should return EINTR
         // if interrupted by a signal before any file descriptors become ready or timeout occurs.
         // The signal checking happens in the retry loop to ensure we don't block indefinitely
-        if signal_check_trigger(cageid) {
+        if signal_check_trigger(operation_cageid) {
             return syscall_error(Errno::EINTR, "select_syscall", "interrupted");
         }
     }
@@ -570,6 +588,15 @@ pub extern "C" fn epoll_create_syscall(
     // Convert size argument
     let size = sc_convert_sysarg_to_i32(size_arg, size_cageid, cageid);
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `epoll_create`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`size_cageid`).
+    let operation_cageid = size_cageid;
+
     // Create the kernel epoll instance
     let kernel_fd = unsafe { libc::epoll_create(size) };
 
@@ -579,8 +606,13 @@ pub extern "C" fn epoll_create_syscall(
     }
 
     // Get the virtual epfd and register to fdtables
-    let virtual_epfd = fdtables::epoll_create_empty(cageid, false).unwrap();
-    fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
+    let virtual_epfd = fdtables::epoll_create_empty(operation_cageid, false).unwrap();
+    fdtables::epoll_add_underfd(
+        operation_cageid,
+        virtual_epfd,
+        FDKIND_KERNEL,
+        kernel_fd as u64,
+    );
 
     // Return virtual epfd
     virtual_epfd as i32
@@ -639,6 +671,15 @@ pub extern "C" fn epoll_create1_syscall(
     // Convert size argument
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `epoll_create1`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`flags_cageid`).
+    let operation_cageid = flags_cageid;
+
     //Validates that the flags argument contains only allowed bits (EPOLL_CLOEXEC),
     //returning EINVAL if any unknown flags are detected.
     if (flags & !EPOLL_CLOEXEC) != 0 {
@@ -656,7 +697,7 @@ pub extern "C" fn epoll_create1_syscall(
     let should_cloexec = (flags & EPOLL_CLOEXEC) != 0;
 
     // Get the virtual epfd and register to fdtables
-    let virtual_epfd = fdtables::epoll_create_empty(cageid, should_cloexec).unwrap();
+    let virtual_epfd = fdtables::epoll_create_empty(operation_cageid, should_cloexec).unwrap();
     fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
 
     // Return virtual epfd
@@ -710,9 +751,18 @@ pub extern "C" fn epoll_ctl_syscall(
         return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID");
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `epoll_ctl`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`epfd_cageid`).
+    let operation_cageid = epfd_cageid;
+
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
     // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
-    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg)
+    let epfd = *fdtables::epoll_get_underfd_hashmap(operation_cageid, epfd_arg)
         .unwrap()
         .get(&FDKIND_KERNEL)
         .unwrap();
@@ -724,7 +774,7 @@ pub extern "C" fn epoll_ctl_syscall(
 
     // Translate virtual FDs to kernel FDs. We only need to translate this since this is a
     // normal fd, not epfd
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, fd_arg);
+    let wrappedvfd = fdtables::translate_virtual_fd(operation_cageid, fd_arg);
     if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
     }
@@ -859,9 +909,18 @@ pub extern "C" fn epoll_wait_syscall(
         return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid Cage ID");
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `epoll_wait`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`epfd_cageid`).
+    let operation_cageid = epfd_cageid;
+
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
     // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
-    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg)
+    let epfd = *fdtables::epoll_get_underfd_hashmap(operation_cageid, epfd_arg)
         .unwrap()
         .get(&FDKIND_KERNEL)
         .unwrap();
@@ -935,7 +994,7 @@ pub extern "C" fn epoll_wait_syscall(
             // This implements POSIX signal semantics where epoll() should return EINTR
             // if interrupted by a signal before any file descriptors become ready or timeout occurs.
             // The signal checking happens in the retry loop to ensure we don't block indefinitely
-            if signal_check_trigger(cageid) {
+            if signal_check_trigger(operation_cageid) {
                 return syscall_error(Errno::EINTR, "epoll", "interrupted");
             }
         }
@@ -1006,6 +1065,15 @@ pub extern "C" fn socket_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `socket`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`domain_cageid`).
+    let operation_cageid = domain_cageid;
+
     let kernel_fd = unsafe { libc::socket(domain, socktype, protocol) };
 
     if kernel_fd < 0 {
@@ -1023,8 +1091,14 @@ pub extern "C" fn socket_syscall(
     // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
     // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
     // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
-    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0).unwrap()
-        as i32
+    fdtables::get_unused_virtual_fd(
+        operation_cageid,
+        FDKIND_KERNEL,
+        kernel_fd as u64,
+        cloexec,
+        0,
+    )
+    .unwrap() as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/connect.2.html
@@ -1248,6 +1322,15 @@ pub extern "C" fn accept_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `accept`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`fd_cageid`).
+    let operation_cageid = fd_cageid;
+
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret_kernelfd = unsafe { libc::accept(fd, finalsockaddr, &mut addrlen as *mut u32) };
@@ -1258,9 +1341,14 @@ pub extern "C" fn accept_syscall(
     }
 
     // We need to register this new kernel fd in fdtables
-    let ret_virtualfd =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, false, 0)
-            .unwrap();
+    let ret_virtualfd = fdtables::get_unused_virtual_fd(
+        operation_cageid,
+        FDKIND_KERNEL,
+        ret_kernelfd as u64,
+        false,
+        0,
+    )
+    .unwrap();
 
     ret_virtualfd as i32
 }
@@ -1618,7 +1706,7 @@ pub extern "C" fn recvfrom_syscall(
         // Copy peer address back to user’s src_addr / addrlen
         if ret >= 0 {
             unsafe {
-                copy_out_sockaddr(addr, src_len as *mut u32, &src_storage);
+                copy_out_sockaddr(addr, addrlen_arg as *mut u32, &src_storage);
             }
         }
 
@@ -1669,6 +1757,51 @@ pub extern "C" fn recvmsg_syscall(
     let ret = unsafe { libc::recvmsg(fd, msg_ptr, flags) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "recvmsg");
+    }
+    ret
+}
+
+/// sendmsg syscall: send message on socket (wasm32 guest to host pointer translation).
+/// Reads guest msghdr/iovec (ILP32 32-bit layout), translates pointers to host,
+/// calls libc::sendmsg.
+/// Returns: bytes sent on success, negative errno on failure.
+/// Reference: https://man7.org/linux/man-pages/man2/sendmsg.2.html
+pub extern "C" fn sendmsg_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    msg_arg: u64,
+    msg_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sendmsg_syscall", "Invalid Cage ID");
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    if fd < 0 {
+        return handle_errno(-fd, "sendmsg");
+    }
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // glibc sendmsg.c already translated all guest pointers (msghdr, iov, buffers)
+    // to host layout using the split-pointer trick, so msg_arg is a host pointer
+    // to a host-layout msghdr ready for libc::sendmsg.
+    let msg_ptr = sc_convert_buf(msg_arg, msg_cageid, cageid) as *const libc::msghdr;
+
+    let ret = unsafe { libc::sendmsg(fd, msg_ptr, flags) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "sendmsg");
     }
     ret
 }
@@ -1908,6 +2041,15 @@ pub extern "C" fn socketpair_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `socketpair`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`domain_cageid`).
+    let operation_cageid = domain_cageid;
+
     let mut kernel_socket_vector: [i32; 2] = [0, 0];
 
     let ret = unsafe { libc::socketpair(domain, typ, protocol, kernel_socket_vector.as_mut_ptr()) };
@@ -1930,9 +2072,11 @@ pub extern "C" fn socketpair_syscall(
     // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
     // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
     let vsv_1 =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0).unwrap();
+        fdtables::get_unused_virtual_fd(operation_cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0)
+            .unwrap();
     let vsv_2 =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0).unwrap();
+        fdtables::get_unused_virtual_fd(operation_cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0)
+            .unwrap();
 
     // Update virtual socketpair struct
     virtual_socket_vector.sock1 = vsv_1 as i32;

@@ -25,3 +25,4 @@ wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features
 anyhow = { version = "1.0.66", default-features = false }
 clap = { version = "4", features = ["derive"] }
 cfg-if = "1.0"
+libc = "0.2"
