@@ -638,13 +638,18 @@ _dl_deallocate_tls (void *tcb, bool dealloc_tcb)
 {
   dtv_t *dtv = GET_DTV (tcb);
 
-  /* We need to free the memory allocated for non-static TLS.  */
-  for (size_t cnt = 0; cnt < dtv[-1].counter; ++cnt)
-    free (dtv[1 + cnt].pointer.to_free);
+  /* In WASM, glibc's DTV is unused (TLS managed by __builtin_wasm_tls_*),
+     so dtv is NULL.  Skip DTV cleanup to avoid dereferencing NULL.  */
+  if (dtv != NULL)
+    {
+      /* We need to free the memory allocated for non-static TLS.  */
+      for (size_t cnt = 0; cnt < dtv[-1].counter; ++cnt)
+	free (dtv[1 + cnt].pointer.to_free);
 
-  /* The array starts with dtv[-1].  */
-  if (dtv != GL(dl_initial_dtv))
-    free (dtv - 1);
+      /* The array starts with dtv[-1].  */
+      if (dtv != GL(dl_initial_dtv))
+	free (dtv - 1);
+    }
 
   if (dealloc_tcb)
     free (*tcb_to_pointer_to_free_location (tcb));
