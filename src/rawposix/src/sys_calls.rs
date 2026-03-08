@@ -461,17 +461,8 @@ pub extern "C" fn waitpid_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `waitpid`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`status_cageid`).
-    let operation_cageid = status_cageid;
-
     // get the cage instance
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     let mut zombies = cage.zombies.write();
     let child_num = cage.child_num.load(Relaxed);
@@ -643,16 +634,7 @@ pub extern "C" fn getpid_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `getpid`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`arg1_cageid`).
-    let operation_cageid = arg1_cageid;
-
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     return cage.cageid as i32;
 }
@@ -690,16 +672,7 @@ pub extern "C" fn getppid_syscall(
         return syscall_error(Errno::EFAULT, "getppid", "invalid Cage ID");
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `getppid`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`arg1_cageid`).
-    let operation_cageid = arg1_cageid;
-
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     return cage.parent as i32;
 }
@@ -904,17 +877,8 @@ pub extern "C" fn sigaction_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `sigaction`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`sig_arg_cageid`).
-    let operation_cageid = sig_arg_cageid;
-
     // Retrieve the cage.
-    let cage = match get_cage(operation_cageid) {
+    let cage = match get_cage(cageid) {
         Some(c) => c,
         None => return syscall_error(Errno::ECHILD, "sigaction", "Cage not found"),
     };
@@ -1087,16 +1051,7 @@ pub extern "C" fn sigprocmask_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `sigprocmask`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`how_cageid`).
-    let operation_cageid = how_cageid;
-
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     let mut res = 0;
 
@@ -1246,17 +1201,8 @@ pub extern "C" fn setitimer_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `setitimer`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`which_arg_cageid`).
-    let operation_cageid = which_arg_cageid;
-
     // get the cage instance
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     match which {
         ITIMER_REAL => {
