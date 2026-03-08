@@ -36,6 +36,32 @@ export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="\
 WASM_OPT_BIN="${WASM_OPT_BIN:-wasm-opt}"
 WASMTIME_BIN="${WASMTIME_BIN:-wasmtime}"
 
+# Lind wasi crate path (allow override via environment variable)
+LIND_WASI_CRATE="${LIND_WASI_CRATE:-/home/lind/lind-wasm/src/lind-wasi-crate}"
+
+# Auto-inject [patch.crates-io] to redirect the wasi crate to lind's fork.
+# This makes Rust std import from the "lind" wasm module instead of
+# "wasi_snapshot_preview1".
+CARGO_TOML="Cargo.toml"
+PATCHED=0
+if [ -f "$CARGO_TOML" ] && [ -d "$LIND_WASI_CRATE" ]; then
+    cp "$CARGO_TOML" "$CARGO_TOML.lind-backup"
+    PATCHED=1
+    cat >> "$CARGO_TOML" << PATCH
+
+[patch.crates-io]
+wasi = { path = "$LIND_WASI_CRATE" }
+PATCH
+fi
+
+# Ensure Cargo.toml is restored on exit (success or failure)
+cleanup() {
+    if [ "$PATCHED" = "1" ] && [ -f "$CARGO_TOML.lind-backup" ]; then
+        mv "$CARGO_TOML.lind-backup" "$CARGO_TOML"
+    fi
+}
+trap cleanup EXIT
+
 echo "Building with profile: $PROFILE"
 cargo +nightly build -Z build-std=std,panic_abort "${CARGO_ARGS[@]}"
 

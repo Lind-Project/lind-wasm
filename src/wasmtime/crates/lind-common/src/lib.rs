@@ -218,6 +218,20 @@ fn add_runtime_to_linker<
         },
     )?;
 
+    linker.func_wrap(
+        "lind",
+        "random_get",
+        move |caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
+            let base = get_memory_base(&caller) as *mut u8;
+            let slice = unsafe {
+                std::slice::from_raw_parts_mut(base.add(buf as usize), buf_len as usize)
+            };
+            let mut file = std::fs::File::open("/dev/urandom").unwrap();
+            std::io::Read::read_exact(&mut file, slice).unwrap();
+            0 // __WASI_ERRNO_SUCCESS
+        },
+    )?;
+
     Ok(())
 }
 
