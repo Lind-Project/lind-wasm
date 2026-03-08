@@ -58,18 +58,30 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// 1. The lookup path is:
 ///        HANDLERTABLE[self_cageid][syscall_num][target_cageid]
 ///
-/// 2. If `target_cageid == self_cageid` (i.e., RAWPOSIX lookup):
-///        - If an explicit RAWPOSIX handler exists, return it.
-///        - Otherwise, fallback to ANY registered handler under
-///          (self_cageid, syscall_num).
-///          This allows RAWPOSIX to behave as a default dispatch target
-///          when no explicit RAWPOSIX entry was installed.
-///    Note: theoretically there could be only one **grate** handlers for each cage
-///           Execeptions should only happen for fork/exec/exit calls (having WASMTIME_CAGEID entries)
+/// 2. When `target_cageid == self_cageid`
+///    This corresponds to a syscall issued from glibc inside the cage.
+///    In this case the call should either:
+///      - be handled by RawPOSIX (normal syscall path), or
+///      - be intercepted by a registered grate handler.
+///    If a RAWPOSIX handler exists, it is preferred.
+///    Otherwise, any registered handler (typically a grate interposition)
+///    will be selected as a fallback.
 ///
-/// 3. If `target_cageid != self_cageid`:
-///        - An exact match is REQUIRED.
-///        - If not found, panic (this is considered a logic error).
+/// 3. When `target_cageid != self_cageid`
+///    The call is issued from a grate or from RawPOSIX and explicitly targets
+///    another execution context. There are four possible scenarios:
+///
+///      (1) grate -> RawPOSIX of the source cage
+///      (2) grate -> 3i internal functions
+///      (3) grate -> another grate
+///      (4) RawPOSIX -> Wasmtime / another cage
+///
+///    Resolution priority:
+///      - RAWPOSIX_CAGEID handler (scenario 1)
+///      - THREEI_CAGEID handler (scenario 2)
+///      - exact match on `target_cageid` (scenarios 3 and 4)
+///
+/// The function panics if no handler can be resolved.
 ///
 /// ## Arguments:
 /// - `self_cageid`: The ID of the calling cage (the one executing the syscall).
@@ -102,38 +114,37 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         )
     });
 
-    if target_cageid == lind_platform_const::RAWPOSIX_CAGEID {
-        if let Some(addr) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
-            return Some((lind_platform_const::RAWPOSIX_CAGEID, *addr));
-        } else {
-            panic!(
-                "RAWPOSIX handler not found for self_cageid={} syscall_num={}",
-                self_cageid, syscall_num
-            );
-        }
-    }
-
-    // When target_cageid == self_cageid, this means the call is supposed to be handled
-    // within the same cage or this is a cage call, so we first check if a RAWPOSIX handler exists.
-    // More details on scenarios and the reason we use this check in the comments
-    // in `register_handler_impl`.
-    // If it does, we return it. If not, we fallback to any handler registered for this
-    // (self_cageid, syscall_num) pair,
+    // Only glibc issues syscalls with target_cageid set to self_cageid
+    // It should be either a rawposix syscall or be dispatched to a specific grate handler,
+    // but never both
     if target_cageid == self_cageid {
         // Prefer exact RAWPOSIX or THREEI handler if registered
         if let Some(addr) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
             return Some((lind_platform_const::RAWPOSIX_CAGEID, *addr));
-        } else if let Some(addr) = target_map.get(&lind_platform_const::THREEI_CAGEID) {
-            return Some((lind_platform_const::THREEI_CAGEID, *addr));
+        } else {
+            let grateid = target_map.keys().next().copied()?;
+            let addr = target_map.values().next().copied()?;
+            // Otherwise fallback to any registered handler
+            return Some((grateid, addr));
         }
-
-        let grateid = target_map.keys().next().copied()?;
-        let addr = target_map.values().next().copied()?;
-        // Otherwise fallback to any registered handler
-        return Some((grateid, addr));
     }
 
-    // Non-RAWPOSIX: exact match required
+    // If target_cageid is different from self_cageid, there are 4 scenarios:
+    // (1) this call is issued from grate and wants to be handled inside the rawposix for source cage
+    // (2) this call is issued from grate and wants to be handled in 3i
+    // (3) this call is issued from grate and wants to be handled in another grate
+    // (4) this call is issued from rawposix and wants to be handled in wasmtime
+    if target_cageid != self_cageid {
+        if let Some(addr) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
+            // In (1), we check the handler registered for RAWPOSIX_CAGEID
+            return Some((lind_platform_const::RAWPOSIX_CAGEID, *addr));
+        } else if let Some(addr) = target_map.get(&lind_platform_const::THREEI_CAGEID) {
+            // In (2), we check the handler registered for THREEI_CAGEID
+            return Some((lind_platform_const::THREEI_CAGEID, *addr));
+        }
+    }
+
+    // In (3) and (4), Non-RAWPOSIX: exact match required
     match target_map.get(&target_cageid) {
         Some(addr) => Some((target_cageid, *addr)),
         None => panic!(
