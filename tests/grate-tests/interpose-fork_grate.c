@@ -47,7 +47,7 @@ int fork_grate(uint64_t cageid,
     56, // syscallnum for clone
     0,    // callname is not used in the trampoline, set to 0
     self_grate_id,    // self_grate_id is not used in the trampoline, set to 0
-    self_grate_id,    // target_cageid is not used in the trampoline, set to 0
+    777777,    // target_cageid is not used in the trampoline, set to 0
     arg1, arg1cage, 
     arg2, arg2cage,
     arg3, arg3cage, 
