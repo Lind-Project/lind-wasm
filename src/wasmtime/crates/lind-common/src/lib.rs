@@ -218,6 +218,20 @@ fn add_runtime_to_linker<
         },
     )?;
 
+    linker.func_wrap(
+        "lind",
+        "random_get",
+        move |caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
+            let base = get_memory_base(&caller) as *mut u8;
+            let slice = unsafe {
+                std::slice::from_raw_parts_mut(base.add(buf as usize), buf_len as usize)
+            };
+            let mut file = std::fs::File::open("/dev/urandom").unwrap();
+            std::io::Read::read_exact(&mut file, slice).unwrap();
+            0 // __WASI_ERRNO_SUCCESS
+        },
+    )?;
+
     Ok(())
 }
 
@@ -346,13 +360,125 @@ fn add_environ_to_linker<
     Ok(())
 }
 
+/// Register WASI snapshot preview1 compatibility functions for Rust programs.
+///
+/// Rust std compiled with `wasm32-wasip1` imports `args_sizes_get`, `args_get`,
+/// `environ_sizes_get`, `environ_get`, and `random_get` from the
+/// `"wasi_snapshot_preview1"` module. We register these under that module name
+/// so Rust binaries work out of the box without any crate patching.
+fn add_wasi_compat_to_linker<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    linker: &mut wasmtime::Linker<T>,
+    get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
+) -> anyhow::Result<()> {
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "args_sizes_get",
+        move |caller: Caller<'_, T>, ptr_argc: i32, ptr_buf_size: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let argc = cx.args.len() as u32;
+            let buf_size: u32 = cx.args.iter().map(|a| a.len() as u32 + 1).sum();
+            let base = get_memory_base(&caller) as *mut u8;
+            unsafe {
+                write_u32(base, ptr_argc as usize, argc);
+                write_u32(base, ptr_buf_size as usize, buf_size);
+            }
+            0
+        },
+    )?;
+
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "args_get",
+        move |caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let args: Vec<String> = cx.args.clone();
+            let base = get_memory_base(&caller) as *mut u8;
+            let mut buf_offset = argv_buf as u32;
+            for (i, arg) in args.iter().enumerate() {
+                let ptr_slot = argv_ptrs as usize + i * 4;
+                let bytes = arg.as_bytes();
+                unsafe {
+                    write_u32(base, ptr_slot, buf_offset);
+                    write_bytes(base, buf_offset as usize, bytes);
+                    *base.add(buf_offset as usize + bytes.len()) = 0;
+                }
+                buf_offset += bytes.len() as u32 + 1;
+            }
+            0
+        },
+    )?;
+
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "environ_sizes_get",
+        move |caller: Caller<'_, T>, ptr_count: i32, ptr_buf_size: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let count = cx.env.len() as u32;
+            let buf_size: u32 = cx
+                .env
+                .iter()
+                .map(|(k, v)| k.len() as u32 + 1 + v.len() as u32 + 1)
+                .sum();
+            let base = get_memory_base(&caller) as *mut u8;
+            unsafe {
+                write_u32(base, ptr_count as usize, count);
+                write_u32(base, ptr_buf_size as usize, buf_size);
+            }
+            0
+        },
+    )?;
+
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "environ_get",
+        move |caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
+            let cx = get_environ(caller.data());
+            let env: Vec<(String, String)> = cx.env.clone();
+            let base = get_memory_base(&caller) as *mut u8;
+            let mut buf_offset = env_buf as u32;
+            for (i, (key, val)) in env.iter().enumerate() {
+                let ptr_slot = env_ptrs as usize + i * 4;
+                let entry = format!("{}={}", key, val);
+                let bytes = entry.as_bytes();
+                unsafe {
+                    write_u32(base, ptr_slot, buf_offset);
+                    write_bytes(base, buf_offset as usize, bytes);
+                    *base.add(buf_offset as usize + bytes.len()) = 0;
+                }
+                buf_offset += bytes.len() as u32 + 1;
+            }
+            0
+        },
+    )?;
+
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "random_get",
+        move |caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
+            let base = get_memory_base(&caller) as *mut u8;
+            let slice = unsafe {
+                std::slice::from_raw_parts_mut(base.add(buf as usize), buf_len as usize)
+            };
+            let mut file = std::fs::File::open("/dev/urandom").unwrap();
+            std::io::Read::read_exact(&mut file, slice).unwrap();
+            0
+        },
+    )?;
+
+    Ok(())
+}
+
 /// Register all Lind host functions with the linker.
 ///
 /// Groups:
 /// - **syscall**: the unified `make-syscall` entry point
-/// - **runtime**: memory base, cage ID, setjmp/longjmp, epoch callback, debug panic
+/// - **runtime**: memory base, cage ID, setjmp/longjmp, epoch callback, debug panic, random_get
 /// - **debug** (lind_debug feature only): `lind_debug_num`, `lind_debug_str`
 /// - **environ**: argv/environ functions for glibc `_start()`
+/// - **wasi_compat**: WASI snapshot preview1 aliases for Rust std compatibility
 pub fn add_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
@@ -365,5 +491,6 @@ pub fn add_to_linker<
     #[cfg(feature = "lind_debug")]
     add_debug_to_linker(linker)?;
     add_environ_to_linker(linker, get_environ)?;
+    add_wasi_compat_to_linker(linker, get_environ)?;
     Ok(())
 }
