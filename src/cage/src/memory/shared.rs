@@ -228,7 +228,7 @@ pub fn get_shm_length(shmid: i32) -> Option<usize> {
 }
 
 pub fn unmap_shm_mappings(cageid: u64) {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return; };
     //unmap shm mappings on exit or exec
     for rev_mapping in cage.rev_shm.lock().iter() {
         let shmid = rev_mapping.1;
@@ -339,7 +339,9 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
     let metadata = &SHM_METADATA;
     let prot: i32;
 
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else {
+        return syscall_error(Errno::ESRCH, "shmat", "cage not found") as usize;
+    };
 
     if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
         if 0 != (shmflg & SHM_RDONLY) {
@@ -374,7 +376,9 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
 pub fn shmdt_helper(cageid: u64, shmaddr: *mut u8) -> i32 {
     let metadata = &SHM_METADATA;
     let mut rm = false;
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else {
+        return syscall_error(Errno::ESRCH, "shmdt", "cage not found");
+    };
     let mut rev_shm = cage.rev_shm.lock();
     let rev_shm_index = rev_shm_find_index_by_addr(&rev_shm, shmaddr as u64);
 

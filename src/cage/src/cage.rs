@@ -93,7 +93,13 @@ pub struct Cage {
 ///
 /// Pre-allocate MAX_CAGEID elements, all initialized to None.
 
-pub static mut CAGE_MAP: Vec<Option<Arc<Cage>>> = Vec::new();
+static CAGE_MAP: Lazy<Vec<Mutex<Option<Arc<Cage>>>>> = Lazy::new(|| {
+    let mut v = Vec::with_capacity(MAX_CAGEID);
+    for _ in 0..MAX_CAGEID {
+        v.push(Mutex::new(None));
+    }
+    v
+});
 
 pub fn check_cageid(cageid: u64) {
     if cageid >= MAX_CAGEID as u64 {
@@ -101,54 +107,35 @@ pub fn check_cageid(cageid: u64) {
     }
 }
 
-#[allow(static_mut_refs)]
-// SAFETY: This code is single-threaded during initialization, and no other
-// mutable or immutable references to `CAGE_MAP` exist while this call executes.
 pub fn cagetable_init() {
-    unsafe {
-        for _cage in 0..MAX_CAGEID {
-            CAGE_MAP.push(None);
-        }
-    }
+    // Force Lazy initialization. The actual allocation happens in the Lazy closure.
+    let _ = CAGE_MAP.len();
 }
 
 pub fn add_cage(cageid: u64, cage: Cage) {
     check_cageid(cageid);
-    let _insertret = unsafe { CAGE_MAP[cageid as usize].insert(Arc::new(cage)) };
+    CAGE_MAP[cageid as usize].lock().replace(Arc::new(cage));
 }
 
 pub fn remove_cage(cageid: u64) {
     check_cageid(cageid);
-    unsafe { CAGE_MAP[cageid as usize].take() };
+    CAGE_MAP[cageid as usize].lock().take();
 }
 
 pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
     if cageid >= MAX_CAGEID as u64 {
         return None;
     }
-    unsafe {
-        match CAGE_MAP[cageid as usize].as_ref() {
-            Some(cage) => Some(cage.clone()),
-            None => None,
-        }
-    }
+    CAGE_MAP[cageid as usize].lock().as_ref().cloned()
 }
 
-#[allow(static_mut_refs)]
-// SAFETY: This code is single-threaded during teardown, and no other
-// mutable or immutable references to `CAGE_MAP` exist while this call executes.
 pub fn cagetable_clear() -> Vec<usize> {
     let mut exitvec = Vec::new();
-
-    unsafe {
-        for (cageid, cage) in CAGE_MAP.iter_mut().enumerate() {
-            let cageopt = cage.take();
-            if !cageopt.is_none() {
-                exitvec.push(cageid)
-            }
+    for (cageid, slot) in CAGE_MAP.iter().enumerate() {
+        if slot.lock().take().is_some() {
+            exitvec.push(cageid);
         }
     }
-
     exitvec
 }
 

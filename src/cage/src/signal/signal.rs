@@ -15,7 +15,7 @@ pub fn signal_epoch_trigger(cageid: u64) {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let cage = get_cage(cageid).unwrap();
+        let Some(cage) = get_cage(cageid) else { return; };
 
         let threadid_guard = cage.main_threadid.read();
         let main_threadid = *threadid_guard;
@@ -44,7 +44,7 @@ pub fn epoch_kill_all(cageid: u64) {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let cage = get_cage(cageid).unwrap();
+        let Some(cage) = get_cage(cageid) else { return; };
 
         let threadid_guard = cage.main_threadid.read();
         let main_threadid = *threadid_guard;
@@ -74,7 +74,7 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let cage = get_cage(cageid).unwrap();
+        let Some(cage) = get_cage(cageid) else { return EPOCH_NORMAL; };
         let epoch_handler = cage
             .epoch_handler
             .get(&(thread_id as i32))
@@ -94,7 +94,7 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let cage = get_cage(cageid).unwrap();
+        let Some(cage) = get_cage(cageid) else { return false; };
         // this method should not be invoked if the thread is already killed (i.e. thread is removed from epoch_handler)
         let epoch_handler = cage.epoch_handler.get(&(thread_id as i32)).unwrap();
         let guard = epoch_handler.write();
@@ -113,7 +113,7 @@ pub fn signal_epoch_reset(cageid: u64) {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let cage = get_cage(cageid).unwrap();
+        let Some(cage) = get_cage(cageid) else { return; };
 
         let threadid_guard = cage.main_threadid.read();
         let main_threadid = *threadid_guard;
@@ -136,7 +136,7 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let cage = get_cage(cageid).unwrap();
+        let Some(cage) = get_cage(cageid) else { return false; };
 
         let threadid_guard = cage.main_threadid.read();
         let main_threadid = *threadid_guard;
@@ -153,7 +153,7 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
 // thread safety: this function will only be invoked by main thread of the cage
 //                but should still work fine if accessed by multiple threads
 pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return false; };
     let sigset = cage.sigset.load(Ordering::Relaxed);
 
     // check if the corresponding signal bit is set in sigset
@@ -164,7 +164,7 @@ pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
 // if the signal handler does not exist, then return SIG_DFL
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return SIG_DFL as u32; };
     let handler = match cage.signalhandler.get(&signo) {
         Some(action_struct) => {
             action_struct.sa_handler // if we have a handler and its not blocked return it
@@ -228,7 +228,7 @@ pub fn convert_signal_mask(signo: i32) -> u64 {
 // and the third element is the signal mask restore callback function
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)> {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return None; };
     let mut pending_signals = cage.pending_signals.write();
     let sigset = cage.sigset.load(Ordering::Relaxed);
 
@@ -262,8 +262,9 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
 
                 // restorer is called when the signal handler finishes. It should restore the signal mask
                 let restorer = Box::new(move |cageid| {
-                    let cage = get_cage(cageid).unwrap();
-                    cage.sigset.store(sigset, Ordering::Relaxed);
+                    if let Some(cage) = get_cage(cageid) {
+                        cage.sigset.store(sigset, Ordering::Relaxed);
+                    }
                 });
                 Some((signo, signal_handler, restorer))
             }
@@ -272,8 +273,9 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
                 // if no signal handler is found, SIG_DFL will be returned
                 let signal_handler = signal_get_handler(cageid, signo);
                 let restorer = Box::new(move |cageid| {
-                    let cage = get_cage(cageid).unwrap();
-                    cage.sigset.store(sigset, Ordering::Relaxed);
+                    if let Some(cage) = get_cage(cageid) {
+                        cage.sigset.store(sigset, Ordering::Relaxed);
+                    }
                 });
                 Some((signo, signal_handler, restorer))
             }
@@ -288,7 +290,7 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
 // return true if no pending unblocked signals are found
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return true; };
     let pending_signals = cage.pending_signals.read();
 
     // iterate through each pending signal
@@ -305,7 +307,7 @@ pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
 // initialize the signal for a new thread
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_mainthread: bool) {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return; };
 
     // if this is specified as the main thread, then replace the main_threadid field in cage
     if is_mainthread {
@@ -319,7 +321,7 @@ pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_
 // clean up signal stuff for an exited thread
 // return true if this is the last thread in the cage, otherwise return false
 pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return true; };
     // lock the main threadid until all the related fields including epoch_handler finishes its updating
     let mut threadid_guard = cage.main_threadid.write();
     let main_threadid = *threadid_guard as u64;
@@ -379,7 +381,7 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
 // As a result, the new process may receive signals that were
 // pending in the previous process right after it starts.
 pub fn signal_may_trigger(cageid: u64) {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return; };
     let pending_signals = cage.pending_signals.read();
     if !pending_signals.is_empty() {
         signal_epoch_trigger(cageid);

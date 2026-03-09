@@ -83,8 +83,8 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// * `child_cageid` - caegid of child
 pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     // first retrieve corresponding vmmaps
-    let parent_cage = get_cage(parent_cageid).unwrap();
-    let child_cage = get_cage(child_cageid).unwrap();
+    let Some(parent_cage) = get_cage(parent_cageid) else { return; };
+    let Some(child_cage) = get_cage(child_cageid) else { return; };
     let parent_vmmap = parent_cage.vmmap.read();
     let child_vmmap = child_cage.vmmap.read();
 
@@ -147,7 +147,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
 
 // set the wasm linear memory base address to vmmap
 pub fn init_vmmap(cageid: u64, base_address: usize, program_break: Option<u32>) {
-    let cage = get_cage(cageid).unwrap();
+    let Some(cage) = get_cage(cageid) else { return; };
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
     if program_break.is_some() {
@@ -184,7 +184,7 @@ pub fn check_and_convert_addr_ext(
     prot: i32,
 ) -> Result<u64, Errno> {
     // search from the table and get the item from
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(cageid).ok_or(Errno::EFAULT)?;
 
     // Get read lock on virtual memory map
     let mut vmmap = cage.vmmap.write();

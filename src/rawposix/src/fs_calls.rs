@@ -792,7 +792,7 @@ pub extern "C" fn mmap_syscall(
     // semantic operation cage from the argument metadata (`addr_cageid`)
     // instead of using `target_cageid`.
     let operation_cageid = addr_cageid;
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 
@@ -1057,7 +1057,7 @@ pub extern "C" fn munmap_syscall(
     // semantic operation cage from the argument metadata (`addr_cageid`)
     // instead of using `target_cageid`.
     let operation_cageid = addr_cageid;
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64) as usize;
@@ -1165,7 +1165,7 @@ pub extern "C" fn brk_syscall(
     // semantic operation cage from the argument metadata (`brk_cageid`)
     // instead of using `target_cageid`.
     let operation_cageid = brk_cageid;
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     let mut vmmap = cage.vmmap.write();
     let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
@@ -3554,7 +3554,7 @@ pub extern "C" fn getcwd_syscall(
     // cage from the argument metadata (`buf_cageid`).
     let operation_cageid = buf_cageid;
 
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
     let cwd_container = cage.cwd.read();
     let path = cwd_container.to_str().unwrap();
     // The required size includes the null terminator
@@ -3773,7 +3773,7 @@ pub extern "C" fn mprotect_syscall(
     // Update vmmap to reflect the new protection flags
     // Skip if length is zero (no pages to update) — Linux treats len=0 as a no-op
     if rounded_length > 0 {
-        let cage = get_cage(operation_cageid).unwrap();
+        let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
         let mut vmmap = cage.vmmap.write();
         let user_addr = vmmap.sys_to_user(addr as usize) as u32;
         vmmap.change_prot(
@@ -4174,7 +4174,7 @@ pub extern "C" fn shmat_syscall(
     let operation_cageid = shmid_cageid;
 
     // Get the cage reference.
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     // If SHM_RDONLY is set in shmflag, then use read-only protection,
     // otherwise default to read–write.
@@ -4343,7 +4343,7 @@ pub extern "C" fn shmdt_syscall(
     let operation_cageid = shmaddr_cageid;
 
     // Retrieve the cage reference.
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     // Check that the provided address is aligned on a page boundary.
     let rounded_addr = round_up_page(useraddr as u64) as usize;

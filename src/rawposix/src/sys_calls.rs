@@ -120,7 +120,7 @@ pub extern "C" fn fork_syscall(
         fdtables::copy_fdtable_for_cage(parent_cageid, child_cageid).unwrap();
 
         // Get the self cage
-        let selfcage = get_cage(parent_cageid).unwrap();
+        let Some(selfcage) = get_cage(parent_cageid) else { return -(libc::ESRCH as i32); };
 
         // Clone the parent's virtual memory map
         let parent_vmmap = selfcage.vmmap.read();
@@ -246,7 +246,7 @@ pub extern "C" fn exec_syscall(
     fdtables::empty_fds_for_exec(self_cageid);
 
     // Copy necessary data from current cage
-    let selfcage = get_cage(self_cageid).unwrap();
+    let Some(selfcage) = get_cage(self_cageid) else { return -(libc::ESRCH as i32); };
 
     selfcage.rev_shm.lock().clear();
 
@@ -471,7 +471,7 @@ pub extern "C" fn waitpid_syscall(
     let operation_cageid = status_cageid;
 
     // get the cage instance
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     let mut zombies = cage.zombies.write();
     let child_num = cage.child_num.load(Relaxed);
@@ -652,7 +652,7 @@ pub extern "C" fn getpid_syscall(
     // cage from the argument metadata (`arg1_cageid`).
     let operation_cageid = arg1_cageid;
 
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     return cage.cageid as i32;
 }
@@ -699,7 +699,7 @@ pub extern "C" fn getppid_syscall(
     // cage from the argument metadata (`arg1_cageid`).
     let operation_cageid = arg1_cageid;
 
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     return cage.parent as i32;
 }
@@ -1096,7 +1096,7 @@ pub extern "C" fn sigprocmask_syscall(
     // cage from the argument metadata (`how_cageid`).
     let operation_cageid = how_cageid;
 
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     let mut res = 0;
 
@@ -1256,7 +1256,7 @@ pub extern "C" fn setitimer_syscall(
     let operation_cageid = which_arg_cageid;
 
     // get the cage instance
-    let cage = get_cage(operation_cageid).unwrap();
+    let Some(cage) = get_cage(operation_cageid) else { return -(libc::ESRCH as i32); };
 
     match which {
         ITIMER_REAL => {
