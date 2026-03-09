@@ -60,6 +60,15 @@ extern "C"
 #define TRANSLATE_UADDR_TO_HOST(uaddr, cageid)                                \
   __lind_translate_uaddr_to_host ((uaddr), (cageid))
 
+// Per-argument translation signaling for threei calls.
+#define LIND_ARG_TRANSLATE_FLAG (1ULL << 63)
+#define LIND_ARG_CAGEID_MASK (~LIND_ARG_TRANSLATE_FLAG)
+#define LIND_ARG_SHOULD_TRANSLATE(arg_cageid)                                 \
+  (((arg_cageid) & LIND_ARG_TRANSLATE_FLAG) != 0)
+#define LIND_ARG_CAGEID_STRIP(arg_cageid) ((arg_cageid) & LIND_ARG_CAGEID_MASK)
+#define LIND_ARG_CAGEID_TRANSLATE(cageid)                                     \
+  ((uint64_t)(cageid) | LIND_ARG_TRANSLATE_FLAG)
+
 /* Translate an array of guest iovec structures to host layout.
    Each iov_base is a wasm32 guest pointer; we split the translated
    64-bit host address across iov_base (low32) and __padding1 (high32).
