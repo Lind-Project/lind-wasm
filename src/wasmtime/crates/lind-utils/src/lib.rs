@@ -33,6 +33,7 @@ impl LindCageManager {
 
     pub fn decrement(&self) {
         let mut cage_count = self.cage_count.lock().unwrap();
+        debug_assert!(*cage_count > 0, "Cage count should never be negative");
         *cage_count -= 1;
         if *cage_count == 0 {
             self.condvar.notify_all();

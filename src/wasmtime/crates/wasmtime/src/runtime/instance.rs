@@ -46,7 +46,7 @@ use super::Val;
 pub enum InstantiateType {
     InstantiateFirst(u64),
     InstantiateChild { parent_cageid: u64, child_cageid: u64 },
-    InstantiateLib(*mut u32),
+    InstantiateLib{ needs_init: bool, memory_base: *mut u32 },
 }
 
 /// An instantiated WebAssembly module.
@@ -66,6 +66,7 @@ pub enum InstantiateType {
 #[repr(transparent)]
 pub struct Instance(Stored<InstanceData>);
 
+#[derive(Clone)]
 pub(crate) struct InstanceData {
     /// The id of the instance within the store, used to find the original
     /// `InstanceHandle`.
@@ -296,6 +297,20 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
+        println!("[debug] new_started_impl_with_lind start");
+        match instantiate_type {
+            InstantiateType::InstantiateLib{
+                needs_init,
+                memory_base,
+            } => {
+                if !needs_init {
+                    let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+                    return Ok((instance, instanceid));
+                }
+            }
+            _ => {}
+        }
+
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
@@ -315,7 +330,7 @@ impl Instance {
         let module_rounded_size = round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
         let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
 
-        #[cfg(feature = "debug-dylink")]
+        // #[cfg(feature = "debug-dylink")]
         println!("[debug] module memory size round to {}", module_rounded_size);
 
         // initialize the memory
@@ -346,7 +361,7 @@ impl Instance {
                 // todo: heap guard page?
                 init_vmmap(cageid, memory_base, Some(minimal_pages as u32 + module_page));
 
-                #[cfg(feature = "debug-dylink")]
+                // #[cfg(feature = "debug-dylink")]
                 println!("[debug] main module allocate {} + {} bytes", module_rounded_size as u64, (minimal_pages << PAGESHIFT));
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -384,19 +399,22 @@ impl Instance {
                 // 2. fork the memory space from parent
                 let mut memory_iter = store.0.all_memories();
                 let memory = memory_iter.next().expect("no defined memory found").clone();
-                assert!(memory_iter.next().is_none(), "multiple defined memory found");
+                // assert!(memory_iter.next().is_none(), "multiple defined memory found");
                 drop(memory_iter);
                 let child_address = memory.data_ptr(&mut *store) as usize;
 
                 init_vmmap(child_cageid, child_address, None);
                 fork_vmmap(parent_cageid as u64, child_cageid);
             }
-            InstantiateType::InstantiateLib(memory_base) => {
+            InstantiateType::InstantiateLib{
+                needs_init,
+                memory_base,
+            } => {
                 let dylink_meminfo = module.dylink_meminfo().unwrap();
 
                 let rounded_size = round_up_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
                 let rounded_size = round_up_size(rounded_size, PAGESIZE);
-                #[cfg(feature = "debug-dylink")]
+                // #[cfg(feature = "debug-dylink")]
                 println!("[debug] library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
@@ -425,7 +443,7 @@ impl Instance {
                     *memory_base = addr;
                 }
                 
-                #[cfg(feature = "debug-dylink")]
+                // #[cfg(feature = "debug-dylink")]
                 println!("[debug] library memory starts at {}", addr);
             }
         }
@@ -458,18 +476,18 @@ impl Instance {
 
                 // apply data relocations
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
-                #[cfg(feature = "debug-dylink")]
+                // #[cfg(feature = "debug-dylink")]
                 println!("[debug] child start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                 // apply tls relocations if any
                 if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
-                    #[cfg(feature = "debug-dylink")]
+                    // #[cfg(feature = "debug-dylink")]
                     println!("[debug] child module start __wasm_apply_tls_relocs");
                     let _ = init.call(store.as_context_mut(), ()).unwrap();
                 }
             },
-            InstantiateType::InstantiateLib(_) => {
+            InstantiateType::InstantiateLib{needs_init, memory_base} => {
                 // for library instance, we have to update the GOT entries before relocation happens
                 // so relocation is moved to linker.rs
             }
@@ -957,6 +975,7 @@ impl Instance {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct OwnedImports {
     functions: PrimaryMap<FuncIndex, VMFunctionImport>,
     tables: PrimaryMap<TableIndex, VMTableImport>,
@@ -1224,6 +1243,7 @@ impl<T> InstancePre<T> {
             self.host_funcs,
             &self.func_refs,
         )?;
+        // println!("[debug] instantiate_with_lind: import: {:?}", imports);
 
         // This unsafety should be handled by the type-checking performed by the
         // constructor of `InstancePre` to assert that all the imports we're passing

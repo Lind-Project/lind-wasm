@@ -186,6 +186,24 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         drop(got_guard);
     }
 
+    {
+        let mut linker = linker.lock().unwrap();
+        let __asyncify_state = wasmtime::Global::new(
+            &mut wstore,
+            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
+            Val::I32(0),
+        )
+        .unwrap();
+        let __asyncify_data = wasmtime::Global::new(
+            &mut wstore,
+            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
+            Val::I32(0),
+        )
+        .unwrap();
+        linker.define(&mut wstore, "env", "__asyncify_state", __asyncify_state);
+        linker.define(&mut wstore, "env", "__asyncify_data", __asyncify_data);
+    }
+
     attach_api(
         &mut wstore,
         &mut linker,
@@ -223,6 +241,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
 
     // Add the module's functions to the linker.
     for (name, module) in modules.iter().skip(1) {
+        println!("[debug] link module {}", name);
         let mut lib_linker = linker.lock().unwrap();
 
         // Read dylink metadata for this preloaded (library) module.
@@ -262,7 +281,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
                     &module,
                     &mut table,
                     table_start,
-                    &*guard,
+                    Some(&*guard),
                 )
                 .context(format!("failed to process preload `{}`", name,))?;
         }
@@ -282,6 +301,13 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         guard.warning_undefined();
     }
 
+    {
+        let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
+        let mut linker = linker.lock().unwrap();
+        ctx.update_linker(linker.clone());
+        ctx.update_modules(modules.clone());
+    }
+
     // -- Run the first module in the first cage --
     let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
         load_main_module(
@@ -295,6 +321,8 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         )
         .with_context(|| format!("failed to run main module"))
     });
+
+    println!("[debug] main module returned with result: {:?}", result);
 
     match result {
         Ok(ref _res) => {
@@ -565,7 +593,7 @@ fn attach_api(
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
-        module.clone(),
+        Vec::<(String, Module)>::new(),
         linker_guard.clone(),
         lind_manager.clone(),
         lindboot_cli.clone(),
@@ -633,8 +661,8 @@ fn load_main_module(
 
     // let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
     // let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
-    let stack_low = 0;
-    let stack_pointer = 0;
+    let stack_low = 1024;
+    let stack_pointer = 1024 + 8388608;
     store.as_context_mut().set_stack_base(stack_pointer as u64);
     store.as_context_mut().set_stack_top(stack_low as u64);
 

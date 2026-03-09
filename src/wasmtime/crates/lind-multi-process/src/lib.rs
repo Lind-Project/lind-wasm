@@ -57,7 +57,7 @@ pub struct LindCtx<T, U> {
     // linker used by the module
     linker: Linker<T>,
     // the module associated with the ctx
-    module: Module,
+    modules: Vec<(String, Module)>,
 
     // cage id
     cageid: i32,
@@ -112,7 +112,7 @@ impl<
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
     pub fn new(
-        module: Module,
+        modules: Vec<(String, Module)>,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
@@ -144,7 +144,7 @@ impl<
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
             linker,
-            module: module.clone(),
+            modules: modules.clone(),
             cageid,
             tid,
             next_threadid,
@@ -154,6 +154,14 @@ impl<
             fork_host,
             exec_host,
         })
+    }
+
+    pub fn update_linker(&mut self, linker: Linker<T>) {
+        self.linker = linker;
+    }
+
+    pub fn update_modules(&mut self, modules: Vec<(String, Module)>) {
+        self.modules = modules;
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -236,10 +244,12 @@ impl<
     // 6. start the rewind for both parent and child
     pub fn fork_call(&self, mut caller: &mut Caller<'_, T>, child_cageid: u64) -> Result<i32> {
         // get the base address of the memory
-        let handle = caller.as_context().0.instance(InstanceId::from_index(0));
+        let handle = caller.as_context().0.instance(InstanceId::from_index(1));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let address = defined_memory.base;
         let parent_addr_len = defined_memory.current_length();
+
+        let main_module = &self.modules.get(0).unwrap().1;
 
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
@@ -279,6 +289,18 @@ impl<
             *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
 
+        let get_cx = self.get_cx.clone();
+        // retrieve the child host
+        let mut child_host = (self.fork_host)(caller.data());
+
+        let mut snapshot = {
+            let child_ctx = get_cx(&mut child_host);
+            let mut child_linker = child_ctx.linker.clone();
+            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
+            let snapshot = child_linker.get_global_define_snapshot(&mut caller, main_module).unwrap();
+            snapshot
+        };
+
         // mark the start of unwind
         let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
 
@@ -290,15 +312,10 @@ impl<
         // we want to send this address to child thread
         let cloned_address = address as u64;
 
-        // retrieve the child host
-        let mut child_host = (self.fork_host)(caller.data());
-
         let parent_cageid = self.cageid;
 
         // use the same engine for parent and child
-        let engine = self.module.engine().clone();
-
-        let get_cx = self.get_cx.clone();
+        let engine = main_module.engine().clone();
 
         let parent_stack_snapshots = caller.as_context_mut().get_stack_snapshots();
         let parent_stack_low = caller.as_context().get_stack_top();
@@ -308,6 +325,7 @@ impl<
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
         let is_parent_thread = store.is_thread();
+
         store.set_on_called(Box::new(move |mut store| {
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -322,20 +340,90 @@ impl<
                 .spawn(move || {
                     // create a new instance
                     let store_inner = Store::<T>::new_inner(&engine);
+                    // println!("[debug]: store id: {:?}", store_inner.id());
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
                     child_ctx.cageid = child_cageid as i32;
-
+                    
                     // create a new memory area for child
                     child_ctx.fork_memory(&store_inner, parent_addr_len);
-                    let instance_pre =
-                        Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
+                    let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
+                    // let instance_pre =
+                    //     Arc::new(child_ctx.linker.instantiate_pre(main_module).unwrap());
 
                     let lind_manager = child_ctx.lind_manager.clone();
-                    let linker = child_ctx.linker.clone();
-                    let module = child_ctx.module.clone();
+                    let mut linker = child_ctx.linker.clone();
+                    linker.allow_shadowing(true);
+                    let module = main_module.clone();
+                    let modules = child_ctx.modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+
+                    // println!("[debug] deepclone_global_imports");
+                    // linker.deepclone_global_imports(&mut store, &module);
+                    linker.set_global_define_snapshot(&mut store, &snapshot).unwrap();
+
+                    // println!("[debug] create child table");
+                    let mut child_table = {
+                        let mut main_module_table_size = None;
+                        for import in module.imports() {
+                            if let wasmtime::ExternType::Table(table) = import.ty() {
+                                main_module_table_size = Some(table.minimum());
+                            }
+                        }
+                        let main_module_table_size = main_module_table_size.unwrap();
+                        let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
+                        wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
+                    };
+                    linker.define(&mut store, "env", "__indirect_function_table", child_table);
+
+                    for (name, module) in modules.iter().skip(1) {
+                        // println!("[debug] link module {}", name);
+
+                        // Read dylink metadata for this preloaded (library) module.
+                        // This contains the module's declared table/memory requirements.
+                        let dylink_info = module.dylink_meminfo();
+                        let dylink_info = dylink_info.as_ref().unwrap();
+                        // Append this library's function table region to the shared table.
+                        // `table_start` is the starting index of the library's reserved range
+                        // within the global indirect function table.
+                        let table_start = child_table.size(&mut store) as i32;
+
+                        #[cfg(feature = "debug-dylink")]
+                        println!(
+                            "[debug] library table_start: {}, grow: {}",
+                            table_start, dylink_info.table_size
+                        );
+                        // Grow the shared indirect function table by the amount requested by the
+                        // library (as recorded in its dylink section). New slots are initialized
+                        // to null funcref.
+                        child_table.grow(
+                            &mut store,
+                            dylink_info.table_size,
+                            wasmtime::Ref::Func(None),
+                        );
+
+                        let module_memory_base = linker.get_memory_base_from_snapshot(&mut store, &snapshot, module.name().unwrap()).unwrap();
+                        // println!("[debug] module_memory_base: {}", module_memory_base);
+
+                        // Link the library instance into the main linker namespace.
+                        // The linker records the module under `name` and uses `table_start`
+                        // to relocate/interpret the library's function references into the
+                        // shared table. GOT entries are patched through the shared LindGOT.
+                        {
+                            // println!("[debug] library {} instantiate", name);
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base
+                                ).unwrap();
+                        }
+                    }
+
                     store.set_stack_snapshots(parent_stack_snapshots);
 
                     // if parent is a thread, so does the child
@@ -344,33 +432,47 @@ impl<
                     }
 
                     // instantiate the module
-                    let (instance, grate_instanceid) = instance_pre
+                    // let (instance, grate_instanceid) = instance_pre
+                    //     .instantiate_with_lind(
+                    //         &mut store,
+                    //         InstantiateType::InstantiateChild {
+                    //             parent_cageid: parent_cageid as u64,
+                    //             child_cageid: child_cageid,
+                    //         },
+                    //     )
+                    //     .unwrap();
+                    {
+                    }
+
+                    let (instance, grate_instanceid) = linker
                         .instantiate_with_lind(
                             &mut store,
+                            &module,
                             InstantiateType::InstantiateChild {
                                 parent_cageid: parent_cageid as u64,
                                 child_cageid: child_cageid,
                             },
-                        )
-                        .unwrap();
+                        ).unwrap();
 
-                    cfg_if! {
-                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
-                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
-                        // This is intended for debugging only and should not be used in production.
-                        if #[cfg(feature = "disable_signals")] {
-                            let pointer: *mut u64 = &mut 0;
-                        } else {
-                            // retrieve the epoch global
-                            let lind_epoch = instance
-                                .get_export(&mut store, "epoch")
-                                .and_then(|export| export.into_global())
-                                .expect("Failed to find epoch global export!");
+                    // cfg_if! {
+                    //     // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                    //     // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                    //     // This is intended for debugging only and should not be used in production.
+                    //     if #[cfg(feature = "disable_signals")] {
+                    //         let pointer: *mut u64 = &mut 0;
+                    //     } else {
+                    //         // retrieve the epoch global
+                    //         let lind_epoch = instance
+                    //             .get_export(&mut store, "epoch")
+                    //             .and_then(|export| export.into_global())
+                    //             .expect("Failed to find epoch global export!");
 
-                            // retrieve the handler (underlying pointer) for the epoch global
-                            let pointer = lind_epoch.get_handler_as_u64(&mut store);
-                        }
-                    }
+                    //         // retrieve the handler (underlying pointer) for the epoch global
+                    //         let pointer = lind_epoch.get_handler_as_u64(&mut store);
+                    //     }
+                    // }
+
+                    let pointer: *mut u64 = &mut 0;
 
                     // initialize the signal for the main thread of forked cage
                     lind_signal_init(
@@ -423,6 +525,9 @@ impl<
                     }
 
                     barrier_clone.wait();
+                    let mut new_child_host = store.data_mut();
+                    let new_child_ctx = get_cx(&mut new_child_host);
+                    new_child_ctx.update_linker(linker);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -530,6 +635,8 @@ impl<
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let parent_address = defined_memory.base;
 
+        let main_module = self.modules.get(0).unwrap().1.clone();
+
         // get the wasm stack top address
         let parent_stack_low_usr = caller.as_context().get_stack_top();
 
@@ -570,7 +677,7 @@ impl<
         let child_cageid = self.cageid;
 
         // use the same engine for parent and child
-        let engine = self.module.engine().clone();
+        let engine = main_module.engine().clone();
 
         let get_cx = self.get_cx.clone();
 
@@ -637,7 +744,7 @@ impl<
                     child_ctx.tid = next_tid as i32;
 
                     let instance_pre =
-                        Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
+                        Arc::new(child_ctx.linker.instantiate_pre(&main_module).unwrap());
                     let lind_manager = child_ctx.lind_manager.clone();
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
@@ -1226,13 +1333,14 @@ impl<
     fn fork_memory(&mut self, store: &StoreOpaque, size: usize) {
         // allow shadowing means defining a symbol that already exits would replace the old one
         self.linker.allow_shadowing(true);
-        for import in self.module.imports() {
+        let main_module = &self.modules.get(0).unwrap().1;
+        for import in main_module.imports() {
             if let Some(m) = import.ty().memory() {
                 if m.is_shared() {
                     // define a new shared memory for the child
                     let mut plan = m.clone();
 
-                    let mem = SharedMemory::new(self.module.engine(), plan.clone()).unwrap();
+                    let mem = SharedMemory::new(main_module.engine(), plan.clone()).unwrap();
                     self.linker
                         .define_with_inner(store, import.module(), import.name(), mem.clone())
                         .unwrap();
@@ -1247,7 +1355,7 @@ impl<
     pub fn fork(&self) -> Self {
         let forked_ctx = Self {
             linker: self.linker.clone(),
-            module: self.module.clone(),
+            modules: self.modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1

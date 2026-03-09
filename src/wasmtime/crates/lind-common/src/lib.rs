@@ -144,7 +144,8 @@ pub fn add_to_linker<
         "lind",
         "lind-get-cage-id",
         move |mut caller: Caller<'_, T>| -> u64 {
-            wasmtime_lind_multi_process::current_cageid(&mut caller) as u64
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
+            cageid
         },
     )?;
 
@@ -223,8 +224,8 @@ pub fn add_to_linker<
         linker.func_wrap(
             "debug",
             "lind_debug_str",
-            move |caller: Caller<'_, T>, ptr: i32| -> i32 {
-                let mem_base = get_memory_base(&caller);
+            move |mut caller: Caller<'_, T>, ptr: i32| -> i32 {
+                let mem_base = get_memory_base(&mut caller);
                 if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
                     eprintln!("[LIND DEBUG STR]: {}", msg);
                 }
