@@ -101,17 +101,16 @@ pub fn signal_epoch_reset(cageid: u64) {
 // useful if we want to do our own epoch check in host
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_check_trigger(cageid: u64) -> bool {
-    // let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
-    // let threadid_guard = cage.main_threadid.read();
-    // let main_threadid = *threadid_guard;
+    let threadid_guard = cage.main_threadid.read();
+    let main_threadid = *threadid_guard;
 
-    // let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
-    // let guard = epoch_handler.write();
-    // let epoch = *guard;
-    // // SAFETY: see comment at `signal_epoch_trigger`
-    // unsafe { *epoch > EPOCH_NORMAL }
-    return false;
+    let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
+    let guard = epoch_handler.write();
+    let epoch = *guard;
+    // SAFETY: see comment at `signal_epoch_trigger`
+    unsafe { *epoch > EPOCH_NORMAL }
 }
 
 // check if the signal of the cage is in blocked state

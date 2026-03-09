@@ -218,7 +218,7 @@ pub fn execute_with_lind(
         let table_base = wasmtime::Global::new(
             &mut wstore,
             wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Const),
-            Val::I32(0),
+            Val::I32(1),
         )
         .unwrap();
         linker.define(&mut wstore, "env", "__memory_base", memory_base);
@@ -231,7 +231,7 @@ pub fn execute_with_lind(
         drop(got_guard);
     }
 
-    {
+    let epoch_handler = {
         let mut linker = linker.lock().unwrap();
         let __asyncify_state = wasmtime::Global::new(
             &mut wstore,
@@ -245,9 +245,18 @@ pub fn execute_with_lind(
             Val::I32(0),
         )
         .unwrap();
+        let lind_epoch = wasmtime::Global::new(
+            &mut wstore,
+            wasmtime::GlobalType::new(ValType::I64, wasmtime::Mutability::Var),
+            Val::I64(0),
+        )
+        .unwrap();
         linker.define(&mut wstore, "env", "__asyncify_state", __asyncify_state);
         linker.define(&mut wstore, "env", "__asyncify_data", __asyncify_data);
-    }
+        linker.define(&mut wstore, "lind", "epoch", lind_epoch);
+
+        lind_epoch.get_handler_as_u64(&mut wstore) as u64
+    };
 
     attach_api(
         &mut wstore,
@@ -363,6 +372,7 @@ pub fn execute_with_lind(
             &args,
             lind_got,
             &mut table,
+            epoch_handler,
         )
         .with_context(|| format!("failed to run main module"))
     });
@@ -597,6 +607,7 @@ fn load_main_module(
     args: &[String],
     got: Arc<Mutex<LindGOT>>,
     table: &mut wasmtime::Table,
+    epoch_handler: u64,
 ) -> Result<Vec<Val>> {
     let mut linker_guard = linker.lock().unwrap();
 
@@ -639,14 +650,15 @@ fn load_main_module(
         if #[cfg(feature = "disable_signals")] {
             let pointer = 0;
         } else {
-            // retrieve the epoch global
-            let lind_epoch = instance
-                .get_export(&mut *store, "epoch")
-                .and_then(|export| export.into_global())
-                .expect("Failed to find epoch global export!");
+            // // retrieve the epoch global
+            // let lind_epoch = instance
+            //     .get_export(&mut *store, "epoch")
+            //     .and_then(|export| export.into_global())
+            //     .expect("Failed to find epoch global export!");
 
-            // retrieve the handler (underlying pointer) for the epoch global
-            let pointer = lind_epoch.get_handler_as_u64(&mut *store);
+            // // retrieve the handler (underlying pointer) for the epoch global
+            // let pointer = lind_epoch.get_handler_as_u64(&mut *store);
+            let pointer = epoch_handler;
         }
     }
 

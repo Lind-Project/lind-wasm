@@ -629,7 +629,7 @@ impl<
         child_tid: u64,
     ) -> Result<i32> {
         // get the base address of the memory
-        let handle = caller.as_context().0.instance(InstanceId::from_index(0));
+        let handle = caller.as_context().0.instance(InstanceId::from_index(1));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let parent_address = defined_memory.base;
 
