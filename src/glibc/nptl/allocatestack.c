@@ -132,14 +132,20 @@ get_cached_stack (size_t *sizep, void **memp)
   __libc_lock_init (result->exit_lock);
   memset (&result->tls_state, 0, sizeof result->tls_state);
 
-  /* Clear the DTV.  */
+  /* Clear the DTV.  In WASM, glibc's DTV mechanism is unused (TLS is
+     managed by __builtin_wasm_tls_*), so the dtv pointer in tcbhead_t
+     is never set and remains NULL.  Skip the DTV cleanup to avoid
+     dereferencing NULL (dtv[-1] would access address 0xfffffff8).  */
   dtv_t *dtv = GET_DTV (TLS_TPADJ (result));
-  for (size_t cnt = 0; cnt < dtv[-1].counter; ++cnt)
-    free (dtv[1 + cnt].pointer.to_free);
-  memset (dtv, '\0', (dtv[-1].counter + 1) * sizeof (dtv_t));
+  if (dtv != NULL)
+    {
+      for (size_t cnt = 0; cnt < dtv[-1].counter; ++cnt)
+	free (dtv[1 + cnt].pointer.to_free);
+      memset (dtv, '\0', (dtv[-1].counter + 1) * sizeof (dtv_t));
 
-  /* Re-initialize the TLS.  */
-  _dl_allocate_tls_init (TLS_TPADJ (result), true);
+      /* Re-initialize the TLS.  */
+      _dl_allocate_tls_init (TLS_TPADJ (result), true);
+    }
 
   return result;
 }

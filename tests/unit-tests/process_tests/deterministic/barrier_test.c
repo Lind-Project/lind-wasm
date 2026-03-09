@@ -16,25 +16,22 @@
 #include <string.h>
 
 pthread_barrier_t barrier;
+volatile int thread_passed[2] = {0, 0};
 
 void *thread_fn(void *arg) {
     int id = *(int *)arg;
-    char buf[64];
-    int len;
-
-    len = snprintf(buf, sizeof(buf), "thread %d: before barrier\n", id);
-    write(1, buf, len);
 
     int ret = pthread_barrier_wait(&barrier);
-
-    len = snprintf(buf, sizeof(buf), "thread %d: past barrier (ret=%d)\n", id, ret);
-    write(1, buf, len);
+    if (ret != 0 && ret != PTHREAD_BARRIER_SERIAL_THREAD) {
+        _exit(1);
+    }
+    thread_passed[id] = 1;
 
     return NULL;
 }
 
 int main(void) {
-    int ids[2] = {1, 2};
+    int ids[2] = {0, 1};
     pthread_t t1, t2;
 
     pthread_barrier_init(&barrier, NULL, 2);
@@ -43,6 +40,11 @@ int main(void) {
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
     pthread_barrier_destroy(&barrier);
+
+    if (!thread_passed[0] || !thread_passed[1]) {
+        write(2, "thread did not pass barrier\n", 27);
+        return 1;
+    }
 
     write(1, "done\n", 5);
     return 0;

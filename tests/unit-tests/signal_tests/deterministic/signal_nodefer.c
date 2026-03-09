@@ -10,7 +10,7 @@ static void handler(int sig) {
     depth++;
     if (depth == 1 && !raised) {
         raised = 1;
-        raise(SIGUSR1);
+        kill(getpid(), SIGUSR1);
     }
 }
 
