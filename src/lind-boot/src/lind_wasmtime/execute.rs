@@ -47,14 +47,6 @@ use wasmtime_wasi_threads::WasiThreadsCtx;
 /// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
 /// last process terminates.
 pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
-    // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(lindboot_cli.wasm_file());
-    let args = lindboot_cli.args.clone();
-    let wt_config = make_wasmtime_config(lindboot_cli.wasmtime_backtrace);
-    let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
-    let host = HostCtx::default();
-    let mut wstore = Store::new(&engine, host);
-
     // -- Initialize Lind + RawPOSIX + 3i runtime --
     // Initialize the Lind cage counter
     let lind_manager = Arc::new(LindCageManager::new(0));
@@ -75,30 +67,8 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         panic!("[lind-boot] egister syscall handlers (clone/exec/exit) with 3i failed");
     }
 
-    // -- Load module and attach host APIs --
-    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
-    let mut linker = Linker::new(&engine);
-
-    attach_api(
-        &mut wstore,
-        &mut linker,
-        &module,
-        lind_manager.clone(),
-        lindboot_cli.clone(),
-        None,
-    )?;
-
     // -- Run the first module in the first cage --
-    let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-        load_main_module(
-            &mut wstore,
-            &mut linker,
-            &module,
-            CAGE_START_ID as u64,
-            &args,
-        )
-        .with_context(|| format!("failed to run main module"))
-    });
+    let result = execute_with_lind(lindboot_cli, lind_manager.clone(), CAGE_START_ID as u64);
 
     match result {
         Ok(ref _res) => {
@@ -149,7 +119,7 @@ pub fn execute_with_lind(
         &module,
         lind_manager.clone(),
         lind_boot.clone(),
-        Some(cageid as i32),
+        cageid as i32,
     )?;
 
     // -- Run the module in the cage --
@@ -271,7 +241,7 @@ fn attach_api(
     module: &Module,
     lind_manager: Arc<LindCageManager>,
     lindboot_cli: CliOptions,
-    cageid: Option<i32>,
+    cageid: i32,
 ) -> Result<()> {
     // Initialize argv/environ data and attach all Lind host functions
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
