@@ -75,6 +75,11 @@ pub struct Cage {
     pub vmmap: RwLock<Vmmap>,
 }
 
+// SAFETY: Cage contains *mut u64 inside epoch_handler (DashMap<i32, RwLock<*mut u64>>).
+// These raw pointers are always accessed under RwLock guards, ensuring proper synchronization.
+unsafe impl Send for Cage {}
+unsafe impl Sync for Cage {}
+
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
 ///
 /// Direct Indexing with `cageid`:
@@ -94,7 +99,7 @@ pub struct Cage {
 /// Pre-allocate MAX_CAGEID elements, all initialized to None.
 
 static CAGE_MAP: Lazy<Vec<Mutex<Option<Arc<Cage>>>>> = Lazy::new(|| {
-    let mut v = Vec::with_capacity(MAX_CAGEID);
+    let mut v = Vec::with_capacity(MAX_CAGEID as usize);
     for _ in 0..MAX_CAGEID {
         v.push(Mutex::new(None));
     }
