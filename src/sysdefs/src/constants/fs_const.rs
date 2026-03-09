@@ -156,6 +156,9 @@ pub const MAP_PRIVATE: u32 = 0x02; // Changes are private to this process
 pub const MAP_SHARING_MASK: u32 = 0x03; // Mask to isolate sharing bits
 pub const MAP_POPULATE: u32 = 0x8000; // Override lazy loading of pages
 pub const MAP_ANON: u32 = 0x20; // Don't use a file descriptor
+pub const MAP_NORESERVE: u32 = 0x4000;
+pub const MAP_STACK: u32 = 0x20000;
+pub const MAP_DENYWRITE: u32 = 0x0800;
 
 // ===== Page Size Constants =====
 // Note: These values are architecture-dependent
