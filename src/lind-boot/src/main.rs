@@ -82,12 +82,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // This design keeps the runtime backend pluggable (e.g., Wasmtime,
     // MPK-based runtime, SGX-enclosed runtime) while preserving a
     // consistent host process contract: exit(code) on success,
-    // exit(1) on unrecoverable runtime error.
+    // If the runtime backend fails before producing a normalized
+    // program exit code, terminate with EX_SOFTWARE (70) to signal
+    // a runtime-level failure rather than a cage-provided exit code.
     match execute_wasmtime(lindboot_cli) {
         Ok(code) => std::process::exit(code),
         Err(e) => {
             eprintln!("{:?}", e);
-            std::process::exit(1);
+            std::process::exit(sysdefs::constants::EX_SOFTWARE);
         }
     }
 
