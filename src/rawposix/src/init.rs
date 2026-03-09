@@ -242,6 +242,7 @@ pub fn rawposix_start(verbosity: isize) {
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),
+        final_exit_status: RwLock::new(None),
     };
 
     // Add cage to cagetable

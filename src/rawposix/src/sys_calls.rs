@@ -4,7 +4,7 @@
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
-use cage::{add_cage, get_cage, remove_cage, Cage, Zombie};
+use cage::{add_cage, encode_wait_status, get_cage, remove_cage, Cage, ExitStatus, Zombie};
 use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
@@ -141,6 +141,7 @@ pub extern "C" fn fork_syscall(
             zombies: RwLock::new(vec![]),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(new_vmmap),
+            final_exit_status: RwLock::new(None),
         };
 
         // increment child counter for parent
@@ -346,6 +347,9 @@ pub extern "C" fn exit_syscall(
     // in the cage (0 = no, 1 = yes).
     let mut is_last_thread = 0;
 
+    // Only the low 8 bits of the exit code are observable via wait()
+    let exit_st = ExitStatus::Exited(status & 0xff);
+
     // Perform thread exit inside RawPOSIX.
     //
     // `lind_thread_exit` returns true if this thread was the last
@@ -371,9 +375,22 @@ pub extern "C" fn exit_syscall(
                 if let Some(parent) = parent_cage {
                     parent.child_num.fetch_sub(1, SeqCst);
                     let mut zombie_vec = parent.zombies.write();
+                    // Determine the final termination status for this cage.
+                    //
+                    // If a termination status was previously recorded (e.g., due to
+                    // signal-based termination), use that value. Otherwise fall back
+                    // to the normal exit status derived from the `exit()` syscall.
+                    //
+                    // This ensures that signal-triggered termination (which may have
+                    // recorded `ExitStatus::Signaled`) is not overwritten by the
+                    // default exit status path.
+                    let zombie_status = {
+                        let recorded = *selfcage.final_exit_status.read();
+                        recorded.unwrap_or(exit_st)
+                    };
                     zombie_vec.push(Zombie {
                         cageid: selfcageid,
-                        exit_code: status,
+                        exit_code: zombie_status,
                     });
                 } else {
                     // if parent already exited
@@ -596,7 +613,7 @@ pub extern "C" fn waitpid_syscall(
     let zombie = zombie_opt.unwrap();
     // update the status
     if let Some(status) = status {
-        *status = zombie.exit_code;
+        *status = encode_wait_status(zombie.exit_code);
     }
 
     // return child's cageid
