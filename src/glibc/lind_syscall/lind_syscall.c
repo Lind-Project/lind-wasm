@@ -77,41 +77,16 @@ int make_threei_call (unsigned int callnumber,
     uint64_t arg6, uint64_t arg6cageid,
     int translate_errno)
 {
-    if (LIND_ARG_SHOULD_TRANSLATE(arg1cageid)) {
-        arg1 = TRANSLATE_GUEST_POINTER_TO_HOST((const void *)(uintptr_t)arg1);
-    }
-    if (LIND_ARG_SHOULD_TRANSLATE(arg2cageid)) {
-        arg2 = TRANSLATE_GUEST_POINTER_TO_HOST((const void *)(uintptr_t)arg2);
-    }
-    if (LIND_ARG_SHOULD_TRANSLATE(arg3cageid)) {
-        arg3 = TRANSLATE_GUEST_POINTER_TO_HOST((const void *)(uintptr_t)arg3);
-    }
-    if (LIND_ARG_SHOULD_TRANSLATE(arg4cageid)) {
-        arg4 = TRANSLATE_GUEST_POINTER_TO_HOST((const void *)(uintptr_t)arg4);
-    }
-    if (LIND_ARG_SHOULD_TRANSLATE(arg5cageid)) {
-        arg5 = TRANSLATE_GUEST_POINTER_TO_HOST((const void *)(uintptr_t)arg5);
-    }
-    if (LIND_ARG_SHOULD_TRANSLATE(arg6cageid)) {
-        arg6 = TRANSLATE_GUEST_POINTER_TO_HOST((const void *)(uintptr_t)arg6);
-    }
-
-    arg1cageid = LIND_ARG_CAGEID_STRIP(arg1cageid);
-    arg2cageid = LIND_ARG_CAGEID_STRIP(arg2cageid);
-    arg3cageid = LIND_ARG_CAGEID_STRIP(arg3cageid);
-    arg4cageid = LIND_ARG_CAGEID_STRIP(arg4cageid);
-    arg5cageid = LIND_ARG_CAGEID_STRIP(arg5cageid);
-    arg6cageid = LIND_ARG_CAGEID_STRIP(arg6cageid);
-
     int ret = __lind_make_syscall_trampoline(callnumber, 
         callname, 
         self_cageid, target_cageid,
-        arg1, arg1cageid,
-        arg2, arg2cageid,
-        arg3, arg3cageid,
-        arg4, arg4cageid,
-        arg5, arg5cageid,
-        arg6, arg6cageid);
+        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
+        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
+        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
+        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
+        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
+        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid);
+
     // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
     if(translate_errno == 0) return ret;
     // handle the errno
