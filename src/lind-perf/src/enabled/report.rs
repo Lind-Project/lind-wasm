@@ -72,14 +72,14 @@ pub fn report(counters: &[&Counter], header: String) {
         return;
     }
 
-    eprintln!(
+    println!(
         "{:<NAME_W$} {:>CALLS_W$} {:>NUM_W$} {:>NUM_W$}",
         "name", "calls", "total", "avg",
     );
-    eprintln!("{}", "-".repeat(NAME_W + CALLS_W + NUM_W * 2 + 3));
+    println!("{}", "-".repeat(NAME_W + CALLS_W + NUM_W * 2 + 3));
 
     for row in rows {
-        eprintln!("{}", row);
+        println!("{}", row);
     }
 
     println!("");
