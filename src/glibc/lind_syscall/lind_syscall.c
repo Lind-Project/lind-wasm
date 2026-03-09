@@ -199,7 +199,7 @@ int
 libc_syscall ()
 {
   uint64_t __self = __lind_cageid;
-  make_threei_call (LIBC_SYSCALL, NULL, 
+  return make_threei_call (LIBC_SYSCALL, NULL,
 		    __self, __self,
 		    0, __self, 0, __self,
 		    0, __self, 0, __self,
@@ -219,7 +219,7 @@ int
 fdtables_syscall ()
 {
   uint64_t __self = __lind_cageid;
-  make_threei_call (FDTABLES_SYSCALL, NULL, 
+  return make_threei_call (FDTABLES_SYSCALL, NULL,
 		    __self, __self,
 		    -1, __self, // Set fd argument to -1.
 		    0, __self, 0, __self, 
