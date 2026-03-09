@@ -116,7 +116,7 @@ impl<
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
-        cageid: Option<i32>,
+        cageid: i32,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
@@ -138,8 +138,6 @@ impl<
         let fork_host = Arc::new(fork_host);
         let exec_host = Arc::new(exec);
 
-        // cage id starts from 1
-        let cageid = cageid.unwrap_or(CAGE_START_ID);
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
