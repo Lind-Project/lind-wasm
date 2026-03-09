@@ -40,7 +40,7 @@ pub extern "C" fn libc_syscall(
     {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
-            "geteuid_syscall"
+            "libc_syscall"
         );
     }
 
@@ -80,10 +80,11 @@ pub extern "C" fn fdtables_syscall(
     {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
-            "close_syscall"
+            "fdtables_syscall"
         );
     }
 
+    // Call close(-1)
     match fdtables::close_virtualfd(cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
