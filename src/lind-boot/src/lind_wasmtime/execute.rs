@@ -64,10 +64,6 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     // new cage is created
     lind_manager.increment();
 
-    // create Global Offset Table for dynamic loading
-    // #[cfg(feature = "dylink-support")]
-    let mut lind_got = Arc::new(Mutex::new(LindGOT::new()));
-
     // Initialize vmctx pool
     init_vmctx_pool();
     // Initialize trampoline entry function pointer for wasmtime runtime.
@@ -81,6 +77,55 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     if !register_wasmtime_syscall_entry() {
         panic!("[lind-boot] egister syscall handlers (clone/exec/exit) with 3i failed");
     }
+
+    // -- Run the first module in the first cage --
+    let result = execute_with_lind(lindboot_cli, lind_manager.clone(), CAGE_START_ID as u64);
+
+    match result {
+        Ok(ref _res) => {
+            // we wait until all other cage exits
+            lind_manager.wait();
+        }
+        Err(e) => {
+            // Exit the process if Wasmtime understands the error;
+            // otherwise, fall back on Rust's default error printing/return
+            // code.
+            return Err(wasi_common::maybe_exit_on_error(e));
+        }
+    }
+
+    result
+}
+
+/// Executes a Wasm program *within an existing Lind runtime* as part of an `exec()` path.
+///
+/// This function is not used for the initial launch. Instead, it is invoked only when
+/// the guest issues `exec`, at which point the runtime must load a new Wasm module
+/// (or the same module with different args/env) into a target cage while keeping the
+/// global Lind/RawPOSIX runtime alive.
+///
+/// Unlike `execute()`, this function does not call `rawposix_start`, does not create
+/// the initial cage manager, and does not register 3i handlers. The handler table is
+/// already present: forked processes inherit it via RawPOSIX table cloning, and exec
+/// does not require mutating it. The goal here is to perform the minimal work needed
+/// to re-create a Wasmtime engine/store, attach host APIs, instantiate the module
+/// inside the provided `cageid`, and transfer control to the new guest entrypoint.
+pub fn execute_with_lind(
+    lind_boot: CliOptions,
+    lind_manager: Arc<LindCageManager>,
+    cageid: u64,
+) -> Result<Vec<Val>> {
+    // -- Initialize the Wasmtime execution environment --
+    let wasm_file_path = Path::new(lind_boot.wasm_file());
+    let args = lind_boot.args.clone();
+    let wt_config = make_wasmtime_config(lind_boot.wasmtime_backtrace);
+    let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
+    let host = HostCtx::default();
+    let mut wstore = Store::new(&engine, host);
+
+    // create Global Offset Table for dynamic loading
+    // #[cfg(feature = "dylink-support")]
+    let mut lind_got = Arc::new(Mutex::new(LindGOT::new()));
 
     // -- Load module and Attach host APIs --
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
@@ -209,15 +254,15 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         &mut linker,
         &module,
         lind_manager.clone(),
-        lindboot_cli.clone(),
-        None,
-        lind_got.clone()
+        lind_boot.clone(),
+        cageid as i32,
+        lind_got.clone(),
     )?;
 
     // Load the preload wasm modules.
     let mut modules = Vec::new();
     modules.push((String::new(), module.clone()));
-    for (name, path) in lindboot_cli.preloads.iter() {
+    for (name, path) in lind_boot.preloads.iter() {
         // Read the wasm module binary either as `*.wat` or a raw binary
         let module = read_wasm_or_cwasm(&engine, path)?;
         modules.push((name.clone(), module.clone()));
@@ -307,85 +352,6 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         ctx.update_linker(linker.clone());
         ctx.update_modules(modules.clone());
     }
-
-    // -- Run the first module in the first cage --
-    let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-        load_main_module(
-            &mut wstore,
-            &mut linker,
-            &module,
-            CAGE_START_ID as u64,
-            &args,
-            lind_got.clone(),
-            &mut table,
-        )
-        .with_context(|| format!("failed to run main module"))
-    });
-
-    println!("[debug] main module returned with result: {:?}", result);
-
-    match result {
-        Ok(ref _res) => {
-            // we wait until all other cage exits
-            lind_manager.wait();
-        }
-        Err(e) => {
-            // Exit the process if Wasmtime understands the error;
-            // otherwise, fall back on Rust's default error printing/return
-            // code.
-            return Err(wasi_common::maybe_exit_on_error(e));
-        }
-    }
-
-    result
-}
-
-/// Executes a Wasm program *within an existing Lind runtime* as part of an `exec()` path.
-///
-/// This function is not used for the initial launch. Instead, it is invoked only when
-/// the guest issues `exec`, at which point the runtime must load a new Wasm module
-/// (or the same module with different args/env) into a target cage while keeping the
-/// global Lind/RawPOSIX runtime alive.
-///
-/// Unlike `execute()`, this function does not call `rawposix_start`, does not create
-/// the initial cage manager, and does not register 3i handlers. The handler table is
-/// already present: forked processes inherit it via RawPOSIX table cloning, and exec
-/// does not require mutating it. The goal here is to perform the minimal work needed
-/// to re-create a Wasmtime engine/store, attach host APIs, instantiate the module
-/// inside the provided `cageid`, and transfer control to the new guest entrypoint.
-pub fn execute_with_lind(
-    lind_boot: CliOptions,
-    lind_manager: Arc<LindCageManager>,
-    cageid: u64,
-) -> Result<Vec<Val>> {
-    // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(lind_boot.wasm_file());
-    let args = lind_boot.args.clone();
-    let wt_config = make_wasmtime_config(lind_boot.wasmtime_backtrace);
-    let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
-    let host = HostCtx::default();
-    let mut wstore = Store::new(&engine, host);
-
-    // -- Load module and Attach host APIs --
-    // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
-    // so we manually add them to the linker without checking the input
-    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
-    let mut linker = Arc::new(Mutex::new(Linker::new(&engine)));
-    // create Global Offset Table for dynamic loading
-    // #[cfg(feature = "dylink-support")]
-    let mut lind_got = Arc::new(Mutex::new(LindGOT::new()));
-    let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, 0, None);
-    let mut table = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
-
-    attach_api(
-        &mut wstore,
-        &mut linker,
-        &module,
-        lind_manager.clone(),
-        lind_boot.clone(),
-        Some(cageid as i32),
-        lind_got.clone(),
-    )?;
 
     // -- Run the module in the cage --
     let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
@@ -516,7 +482,7 @@ fn attach_api(
     module: &Module,
     lind_manager: Arc<LindCageManager>,
     lindboot_cli: CliOptions,
-    cageid: Option<i32>,
+    cageid: i32,
     got: Arc<Mutex<LindGOT>>,
 ) -> Result<()> {
     // Setup WASI-p1
