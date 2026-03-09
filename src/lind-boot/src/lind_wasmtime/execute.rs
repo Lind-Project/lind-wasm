@@ -46,7 +46,7 @@ use wasmtime_wasi_threads::WasiThreadsCtx;
 /// entrypoint. On successful completion it waits for all cages to exit before
 /// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
 /// last process terminates.
-pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
+pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // -- Initialize Lind + RawPOSIX + 3i runtime --
     // Initialize the Lind cage counter
     let lind_manager = Arc::new(LindCageManager::new(0));
