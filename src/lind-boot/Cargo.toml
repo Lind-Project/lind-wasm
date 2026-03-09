@@ -23,16 +23,13 @@ cage = { path = "../wasmtime/crates/cage" }
 threei = { path = "../wasmtime/crates/threei" }
 sysdefs = { path = "../wasmtime/crates/sysdefs" }
 typemap = { path = "../wasmtime/crates/typemap" }
-wasi-common = { path = "../wasmtime/crates/wasi-common", features = ["sync"] ,default-features = false }
 wasmtime-lind-3i = { path = "../wasmtime/crates/lind-3i" }
 wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads", "demangle", "addr2line", "cache"], default-features = false }
 wasmtime-wasi-threads = { path = "../wasmtime/crates/wasi-threads" }
 wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
 lind-perf = { path = "../wasmtime/crates/lind-perf" }
 
-wiggle = { version = "23.0.0", default-features = false }
 anyhow = { version = "1.0.66", default-features = false }
-cap-std = { version = "3.4.2", default-features = false }
 clap = { version = "4", features = ["derive"] }
 cfg-if = "1.0"
 libc = "0.2"

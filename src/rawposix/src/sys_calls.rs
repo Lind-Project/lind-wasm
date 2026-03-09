@@ -461,8 +461,17 @@ pub extern "C" fn waitpid_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `waitpid`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`status_cageid`).
+    let operation_cageid = status_cageid;
+
     // get the cage instance
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(operation_cageid).unwrap();
 
     let mut zombies = cage.zombies.write();
     let child_num = cage.child_num.load(Relaxed);
@@ -496,12 +505,17 @@ pub extern "C" fn waitpid_syscall(
                 unsafe {
                     sched_yield();
                 }
-                // Check for pending signals after yielding (only if WNOHANG is not set)
+                // Check for pending signals after yielding (only if WNOHANG is not set).
+                // Re-acquire the zombie lock first: the child's exit may have both
+                // added a zombie AND sent SIGCHLD, so the zombie could already be
+                // available. Prefer completing the wait over returning EINTR.
+                zombies = cage.zombies.write();
+                if zombies.len() > 0 {
+                    continue;
+                }
                 if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
                     return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
                 }
-                // after sleep, get the write access of zombies list back
-                zombies = cage.zombies.write();
                 continue;
             } else {
                 // there are zombies avaliable
@@ -552,11 +566,10 @@ pub extern "C" fn waitpid_syscall(
                 unsafe {
                     sched_yield();
                 }
-                // Check for pending signals after yielding (only if WNOHANG is not set)
-                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
-                }
-                // after sleep, get the write access of zombies list back
+                // Re-acquire the zombie lock before checking signals: the child's
+                // exit may have both added a zombie AND sent SIGCHLD atomically,
+                // so the zombie could already be available. Prefer completing the
+                // wait over returning EINTR.
                 zombies = cage.zombies.write();
 
                 // let's check if the zombie list contains the cage
@@ -567,6 +580,11 @@ pub extern "C" fn waitpid_syscall(
                     // find the cage in zombie list, remove it from the list and break
                     zombie_opt = Some(zombies.remove(index));
                     break;
+                }
+
+                // Check for pending signals after yielding (only if WNOHANG is not set)
+                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
+                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
                 }
 
                 continue;
@@ -625,7 +643,16 @@ pub extern "C" fn getpid_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `getpid`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`arg1_cageid`).
+    let operation_cageid = arg1_cageid;
+
+    let cage = get_cage(operation_cageid).unwrap();
 
     return cage.cageid as i32;
 }
@@ -663,7 +690,16 @@ pub extern "C" fn getppid_syscall(
         return syscall_error(Errno::EFAULT, "getppid", "invalid Cage ID");
     }
 
-    let cage = get_cage(cageid).unwrap();
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `getppid`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`arg1_cageid`).
+    let operation_cageid = arg1_cageid;
+
+    let cage = get_cage(operation_cageid).unwrap();
 
     return cage.parent as i32;
 }
@@ -868,8 +904,17 @@ pub extern "C" fn sigaction_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `sigaction`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`sig_arg_cageid`).
+    let operation_cageid = sig_arg_cageid;
+
     // Retrieve the cage.
-    let cage = match get_cage(cageid) {
+    let cage = match get_cage(operation_cageid) {
         Some(c) => c,
         None => return syscall_error(Errno::ECHILD, "sigaction", "Cage not found"),
     };
@@ -1042,7 +1087,16 @@ pub extern "C" fn sigprocmask_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `sigprocmask`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`how_cageid`).
+    let operation_cageid = how_cageid;
+
+    let cage = get_cage(operation_cageid).unwrap();
 
     let mut res = 0;
 
@@ -1192,8 +1246,17 @@ pub extern "C" fn setitimer_syscall(
         );
     }
 
+    // Due to 3i syscall interposition, `cageid` refers to the
+    // current execution context (possibly a forwarding grate), not
+    // necessarily the original caller.
+    //
+    // For syscalls like `setitimer`, the operation must be performed on the
+    // the originating cage. Therefore, we derive the semantic operation
+    // cage from the argument metadata (`which_arg_cageid`).
+    let operation_cageid = which_arg_cageid;
+
     // get the cage instance
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(operation_cageid).unwrap();
 
     match which {
         ITIMER_REAL => {

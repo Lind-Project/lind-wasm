@@ -12,6 +12,7 @@ void lind_debug_panic (const char* msg)
     __lind_debug_panic(TRANSLATE_GUEST_POINTER_TO_HOST(msg));
 }
 
+#ifdef LIND_DEBUG
 // These functions returns the input value to ensure the operand
 // remains on the WASM stack for potential debugging
 
@@ -36,3 +37,4 @@ void __lind_debug_import(void) {
     __lind_debug_num(0);
     __lind_debug_str("LIND DEGUG INIT");
 }
+#endif // LIND_DEBUG
