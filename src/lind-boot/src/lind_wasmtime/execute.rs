@@ -46,7 +46,7 @@ use wasmtime_wasi_threads::WasiThreadsCtx;
 /// entrypoint. On successful completion it waits for all cages to exit before
 /// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
 /// last process terminates.
-pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
+pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // -- Initialize Lind + RawPOSIX + 3i runtime --
     // Initialize the Lind cage counter
     let lind_manager = Arc::new(LindCageManager::new(0));
@@ -71,16 +71,25 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     let result = execute_with_lind(lindboot_cli, lind_manager.clone(), CAGE_START_ID as u64);
 
     match result {
-        Ok(ref _res) => {
+        Ok(ref ret_vals) => {
             // we wait until all other cage exits
             lind_manager.wait();
+            // Interpret the first return value of the Wasm entry point
+            // as the process exit code. If the module does not explicitly
+            // return an i32, we treat it as a successful exit (code = 0).
+            let exit_code = match ret_vals.first() {
+                Some(Val::I32(code)) => *code,
+                _ => 0,
+            };
+            // Propagate the exit code to the main, which will translate it
+            // into the host process exit status.
+            Ok(exit_code)
         }
         Err(e) => {
+            // Exit the process
             return Err(e);
         }
     }
-
-    result
 }
 
 /// Executes a Wasm program *within an existing Lind runtime* as part of an `exec()` path.
