@@ -10,7 +10,7 @@ use threei::threei::{
 };
 use threei::threei_const;
 use typemap::path_conversion::get_cstr;
-use wasmtime::Caller;
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
@@ -126,6 +126,19 @@ fn add_syscall_to_linker<
                 }
             }
 
+            // If we are reaching here at rewind state, that means fork was called within
+            // a syscall-interrupted signal handler. We should restore the saved return value
+            // of the syscall that was interrupted, rather than re-executing it.
+            if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
+                let retval = caller
+                    .as_context_mut()
+                    .get_current_syscall_rewind_data()
+                    .unwrap();
+                // let signal handler finish rest of the rewinding process
+                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                return retval;
+            }
+
             // Some thread-related operations must be executed against a specific thread's
             // VMContext (e.g., pthread_create/exit). Because syscalls may be interposed/routed
             // through 3i functionality and the effective thread instance cannot be reliably derived
@@ -144,7 +157,7 @@ fn add_syscall_to_linker<
                 arg2
             };
 
-            make_syscall(
+            let retval = make_syscall(
                 self_cageid,
                 call_number as u64,
                 call_name,
@@ -161,7 +174,23 @@ fn add_syscall_to_linker<
                 arg5cageid,
                 arg6,
                 arg6cageid,
-            )
+            );
+
+            // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
+            // If fork is called within the signal handler, asyncify will unwind the stack;
+            // we save the syscall return value so it can be restored on rewind.
+            if -retval == sysdefs::constants::Errno::EINTR as i32 {
+                caller.as_context_mut().append_syscall_asyncify_data(retval);
+                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+
+                if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
+                    return 0;
+                } else {
+                    caller.as_context_mut().pop_syscall_asyncify_data();
+                }
+            }
+
+            retval
         },
     )?;
     Ok(())
