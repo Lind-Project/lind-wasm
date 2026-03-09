@@ -1,0 +1,3128 @@
+{
+  "deterministic": {
+    "total_test_cases": 187,
+    "number_of_success": 184,
+    "success": [
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/memcpy.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_multiple_times.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/brk.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_shared.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/vtable.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_same_value.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_end_region.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/fork_large_memory.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/segfault.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/malloc.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/malloc_large.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/sbrk.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_boundary.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/shmtest.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_complicated.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_aligned.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/thread_malloc_sequential.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_spanning_regions.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_file.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/shm.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/memory_error_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmaptest.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_middle_region.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/setitimer.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_int_ignored.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_SIGCHLD.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_sa_mask.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal-simple.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigprocmask.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_fork.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigpipe.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/alarm.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_recursive.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigchld.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal-fork.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigalrm.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_procmask.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/math_tests/deterministic/math_tests.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/math_tests/deterministic/math_link_smoke.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/exit.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getegid_syscall.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/flockfile_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/ctor_syscall_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getgid_syscall.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/chain_thread.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_syscall.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getpid_syscall.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/setsid.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkmalloc.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/waitpid_syscall.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/function-ptr.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/template.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/exit_failure.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getuid_syscall.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/longjmp.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecv-arg.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/sem_forks.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/waitpid_anychild.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/barrier_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/thread-test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_tls_ctype.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/thread.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/wait.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/uname.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getpid.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_select.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/printf_thread_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/waitpid_wnohang.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkandopen.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/test_unlink_open_file.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkfiles.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork2malloc.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkdup.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/hello.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecv.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_simple.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/tls_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forknodup.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getppid_syscall.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/thread_cageid_race.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/mutex.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/test_exec_nofork.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/printf_deadlock_smoke.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/cxa_atexit_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/hello-arg.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getppid.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/flock.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readlink.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/etc_conf.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readlinkat.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/clock_gettime_simple.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fchdir.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/lseek.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/writev.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/chartests.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/doubleclose.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/read.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dupwrite.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/filetest.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/truncate.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/pread_pwrite.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/writeloop.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dup2.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/ftruncate.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readv_writev_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/creat_access.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fstatfs.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dup3.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/nocancel_io.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fcntl.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fsync.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fdatasync.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/mkfifo_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/getcwd.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/unlink.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/rename.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/mkdir_rmdir.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/writepartial.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readbytes.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/sync_file_range.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/link.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/sc-writev.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/cloexec.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/chdir_getcwd.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/mknod.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/close.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fchmod.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/stat.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/open.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/clock_gettime_highlevel.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/printf.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/path_conversion_safety.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dup.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fstat.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/chmod.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/locale_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/getrandom.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/unlinkat.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/write.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/statfs.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/filetest1000.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/ioctl.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/udp_send_recv.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/dnstest.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/epoll_edge_triggered.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-serverclient.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/sendmsg_recvmsg_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socketepoll.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/ipv6_basic.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/error_handling_net.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getifaddrs.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socket_cloexec.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/simple_epoll.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/epollcreate1.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipepong.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipeonestring.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/nonblocking_eagain.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/shutdown_fork.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/shutdown.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getaddrinfo_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getsockname.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipe2.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socket.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipeinput2.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socket_options_advanced.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/tcp_connect_single.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipewrite.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/makepipe.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socketpair.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipeinput.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/simple-select.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipe.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/writev_socket.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socketselect.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/gethostname.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/poll.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-nb-select.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/recvfrom-sendto.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-getsockname.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getsockopt.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-socketselect.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/serverclient.c"
+    ],
+    "number_of_failures": 3,
+    "failures": [
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/tcache_test.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getuid.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecuid.c"
+    ],
+    "test_cases": {
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/memcpy.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Hello, World!",
+        "native_time": 0.051544,
+        "wasm_time": 1.389391,
+        "timing": {
+          "native_compile_time_sec": 0.050545,
+          "native_run_time_sec": 0.000999,
+          "wasm_compile_time_sec": 1.380185,
+          "wasm_run_time_sec": 0.009206,
+          "native_time_sec": 0.051544,
+          "wasm_time_sec": 1.389391
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_multiple_times.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mprotect_multiple_times test: PASS\n",
+        "native_time": 0.033162,
+        "wasm_time": 1.54095,
+        "timing": {
+          "native_compile_time_sec": 0.031964,
+          "native_run_time_sec": 0.001198,
+          "wasm_compile_time_sec": 1.53092,
+          "wasm_run_time_sec": 0.01003,
+          "native_time_sec": 0.033162,
+          "wasm_time_sec": 1.54095
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/brk.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "PASS\n",
+        "native_time": 0.029710999999999998,
+        "wasm_time": 1.5355750000000001,
+        "timing": {
+          "native_compile_time_sec": 0.028709,
+          "native_run_time_sec": 0.001002,
+          "wasm_compile_time_sec": 1.525738,
+          "wasm_run_time_sec": 0.009837,
+          "native_time_sec": 0.029710999999999998,
+          "wasm_time_sec": 1.5355750000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_shared.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.114677,
+        "wasm_time": 1.5362900000000002,
+        "timing": {
+          "native_compile_time_sec": 0.113481,
+          "native_run_time_sec": 0.001196,
+          "wasm_compile_time_sec": 1.526053,
+          "wasm_run_time_sec": 0.010237,
+          "native_time_sec": 0.114677,
+          "wasm_time_sec": 1.5362900000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/vtable.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.048304,
+        "wasm_time": 1.395365,
+        "timing": {
+          "native_compile_time_sec": 0.047157,
+          "native_run_time_sec": 0.001147,
+          "wasm_compile_time_sec": 1.385378,
+          "wasm_run_time_sec": 0.009987,
+          "native_time_sec": 0.048304,
+          "wasm_time_sec": 1.395365
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mmap test: PASS\n",
+        "native_time": 0.030275999999999997,
+        "wasm_time": 1.520336,
+        "timing": {
+          "native_compile_time_sec": 0.02923,
+          "native_run_time_sec": 0.001046,
+          "wasm_compile_time_sec": 1.510597,
+          "wasm_run_time_sec": 0.009739,
+          "native_time_sec": 0.030275999999999997,
+          "wasm_time_sec": 1.520336
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_same_value.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mprotect_same_value test: PASS\n",
+        "native_time": 0.030948,
+        "wasm_time": 1.51994,
+        "timing": {
+          "native_compile_time_sec": 0.029756,
+          "native_run_time_sec": 0.001192,
+          "wasm_compile_time_sec": 1.510769,
+          "wasm_run_time_sec": 0.009171,
+          "native_time_sec": 0.030948,
+          "wasm_time_sec": 1.51994
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_end_region.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mprotect_end_region test: PASS\n",
+        "native_time": 0.028718999999999998,
+        "wasm_time": 1.5145190000000002,
+        "timing": {
+          "native_compile_time_sec": 0.027877,
+          "native_run_time_sec": 0.000842,
+          "wasm_compile_time_sec": 1.505778,
+          "wasm_run_time_sec": 0.008741,
+          "native_time_sec": 0.028718999999999998,
+          "wasm_time_sec": 1.5145190000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/fork_large_memory.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Test 1 PASS: large heap survives fork\nTest 2 PASS: mmap region survives fork\nTest 3 PASS: nested fork with heap growth\nTest 4 PASS: guard page + mprotect survives fork\nTest 5 PASS: fragmented mmaps survive fork\nTest 6 PASS: socket + large buffer survives fork\nTest 7 PASS: mmap/munmap holes survive fork\nAll tests passed.\n",
+        "native_time": 0.161374,
+        "wasm_time": 1.603876,
+        "timing": {
+          "native_compile_time_sec": 0.144527,
+          "native_run_time_sec": 0.016847,
+          "wasm_compile_time_sec": 1.55982,
+          "wasm_run_time_sec": 0.044056,
+          "native_time_sec": 0.161374,
+          "wasm_time_sec": 1.603876
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/segfault.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032013,
+        "wasm_time": 1.6544489999999998,
+        "timing": {
+          "native_compile_time_sec": 0.030839,
+          "native_run_time_sec": 0.001174,
+          "wasm_compile_time_sec": 1.644124,
+          "wasm_run_time_sec": 0.010325,
+          "native_time_sec": 0.032013,
+          "wasm_time_sec": 1.6544489999999998
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/malloc.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.029924,
+        "wasm_time": 1.3688989999999999,
+        "timing": {
+          "native_compile_time_sec": 0.028807,
+          "native_run_time_sec": 0.001117,
+          "wasm_compile_time_sec": 1.359411,
+          "wasm_run_time_sec": 0.009488,
+          "native_time_sec": 0.029924,
+          "wasm_time_sec": 1.3688989999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/malloc_large.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.035438,
+        "wasm_time": 1.519821,
+        "timing": {
+          "native_compile_time_sec": 0.034053,
+          "native_run_time_sec": 0.001385,
+          "wasm_compile_time_sec": 1.508909,
+          "wasm_run_time_sec": 0.010912,
+          "native_time_sec": 0.035438,
+          "wasm_time_sec": 1.519821
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/sbrk.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Content in allocated memory: Hello, sbrk memory!\n",
+        "native_time": 0.031376,
+        "wasm_time": 1.54144,
+        "timing": {
+          "native_compile_time_sec": 0.030278,
+          "native_run_time_sec": 0.001098,
+          "wasm_compile_time_sec": 1.53127,
+          "wasm_run_time_sec": 0.01017,
+          "native_time_sec": 0.031376,
+          "wasm_time_sec": 1.54144
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_boundary.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mprotect_boundary test: PASS\n",
+        "native_time": 0.031142,
+        "wasm_time": 1.580474,
+        "timing": {
+          "native_compile_time_sec": 0.029922,
+          "native_run_time_sec": 0.00122,
+          "wasm_compile_time_sec": 1.571253,
+          "wasm_run_time_sec": 0.009221,
+          "native_time_sec": 0.031142,
+          "wasm_time_sec": 1.580474
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/shmtest.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.059181,
+        "wasm_time": 1.502791,
+        "timing": {
+          "native_compile_time_sec": 0.057894,
+          "native_run_time_sec": 0.001287,
+          "wasm_compile_time_sec": 1.493313,
+          "wasm_run_time_sec": 0.009478,
+          "native_time_sec": 0.059181,
+          "wasm_time_sec": 1.502791
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_complicated.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032668,
+        "wasm_time": 1.553456,
+        "timing": {
+          "native_compile_time_sec": 0.031398,
+          "native_run_time_sec": 0.00127,
+          "wasm_compile_time_sec": 1.54321,
+          "wasm_run_time_sec": 0.010246,
+          "native_time_sec": 0.032668,
+          "wasm_time_sec": 1.553456
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/tcache_test.c": {
+        "status": "Failure",
+        "error_type": "Unknown_Failure",
+        "output": "tcache reuse: yes\n",
+        "native_time": 0.0383,
+        "wasm_time": 1.637869,
+        "timing": {
+          "native_compile_time_sec": 0.036912,
+          "native_run_time_sec": 0.001388,
+          "wasm_compile_time_sec": 1.574081,
+          "wasm_run_time_sec": 0.063788,
+          "native_time_sec": 0.0383,
+          "wasm_time_sec": 1.637869
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_aligned.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mmap_aligned test: PASS\n",
+        "native_time": 0.035885999999999994,
+        "wasm_time": 1.532946,
+        "timing": {
+          "native_compile_time_sec": 0.034695,
+          "native_run_time_sec": 0.001191,
+          "wasm_compile_time_sec": 1.52355,
+          "wasm_run_time_sec": 0.009396,
+          "native_time_sec": 0.035885999999999994,
+          "wasm_time_sec": 1.532946
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/thread_malloc_sequential.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "done\n",
+        "native_time": 0.031523,
+        "wasm_time": 1.5922759999999998,
+        "timing": {
+          "native_compile_time_sec": 0.030445,
+          "native_run_time_sec": 0.001078,
+          "wasm_compile_time_sec": 1.581546,
+          "wasm_run_time_sec": 0.01073,
+          "native_time_sec": 0.031523,
+          "wasm_time_sec": 1.5922759999999998
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_spanning_regions.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mprotect_spanning_regions test: PASS\n",
+        "native_time": 0.030442,
+        "wasm_time": 1.516375,
+        "timing": {
+          "native_compile_time_sec": 0.029359,
+          "native_run_time_sec": 0.001083,
+          "wasm_compile_time_sec": 1.507038,
+          "wasm_run_time_sec": 0.009337,
+          "native_time_sec": 0.030442,
+          "wasm_time_sec": 1.516375
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmap_file.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Data written to memory-mapped file: Hello, mmap!\nData read back from memory-mapped file: Hello, mmap!\n",
+        "native_time": 0.040320999999999996,
+        "wasm_time": 1.571936,
+        "timing": {
+          "native_compile_time_sec": 0.039088,
+          "native_run_time_sec": 0.001233,
+          "wasm_compile_time_sec": 1.562693,
+          "wasm_run_time_sec": 0.009243,
+          "native_time_sec": 0.040320999999999996,
+          "wasm_time_sec": 1.571936
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/shm.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032283,
+        "wasm_time": 1.538905,
+        "timing": {
+          "native_compile_time_sec": 0.031066,
+          "native_run_time_sec": 0.001217,
+          "wasm_compile_time_sec": 1.529706,
+          "wasm_run_time_sec": 0.009199,
+          "native_time_sec": 0.032283,
+          "wasm_time_sec": 1.538905
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/memory_error_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "=== Memory Error Handling Test (mmap + shmat) ===\n\nTest 1: mmap with invalid file descriptor (should fail)... PASSED\nTest 2: mmap with unaligned address (should fail with EINVAL)... PASSED\nTest 3: mmap with unaligned offset (should fail with EINVAL)... PASSED\nTest 4: mmap with both MAP_PRIVATE and MAP_SHARED (should fail with EINVAL)... PASSED\nTest 5: mmap with neither MAP_PRIVATE nor MAP_SHARED (should fail with EINVAL)... PASSED\nTest 6: Successful mmap returns page-aligned address... PASSED\nTest 7: shmat with invalid shmid -1 (should fail with EINVAL)... PASSED\nTest 8: shmat with non-existent shmid (should fail with EINVAL)... PASSED\n",
+        "native_time": 0.037799000000000006,
+        "wasm_time": 1.5194910000000001,
+        "timing": {
+          "native_compile_time_sec": 0.0367,
+          "native_run_time_sec": 0.001099,
+          "wasm_compile_time_sec": 1.509613,
+          "wasm_run_time_sec": 0.009878,
+          "native_time_sec": 0.037799000000000006,
+          "wasm_time_sec": 1.5194910000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Mprotect write test text\n",
+        "native_time": 0.033994,
+        "wasm_time": 1.522191,
+        "timing": {
+          "native_compile_time_sec": 0.032766,
+          "native_run_time_sec": 0.001228,
+          "wasm_compile_time_sec": 1.512356,
+          "wasm_run_time_sec": 0.009835,
+          "native_time_sec": 0.033994,
+          "wasm_time_sec": 1.522191
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mmaptest.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Testfile for mmaptest\n",
+        "native_time": 0.031886,
+        "wasm_time": 1.503122,
+        "timing": {
+          "native_compile_time_sec": 0.030794,
+          "native_run_time_sec": 0.001092,
+          "wasm_compile_time_sec": 1.493548,
+          "wasm_run_time_sec": 0.009574,
+          "native_time_sec": 0.031886,
+          "wasm_time_sec": 1.503122
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/mprotect_middle_region.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "mprotect_middle_region test: PASS\n",
+        "native_time": 0.028768,
+        "wasm_time": 1.495341,
+        "timing": {
+          "native_compile_time_sec": 0.027673,
+          "native_run_time_sec": 0.001095,
+          "wasm_compile_time_sec": 1.485335,
+          "wasm_run_time_sec": 0.010006,
+          "native_time_sec": 0.028768,
+          "wasm_time_sec": 1.495341
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/setitimer.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Timer started! SIGALRM will fire every 3 seconds.\nTimer expired! Signal received: 14\nTimer expired! Signal received: 14\nTimer expired! Signal received: 14\n",
+        "native_time": 7.036734,
+        "wasm_time": 8.413675,
+        "timing": {
+          "native_compile_time_sec": 0.035599,
+          "native_run_time_sec": 7.001135,
+          "wasm_compile_time_sec": 1.37661,
+          "wasm_run_time_sec": 7.037065,
+          "native_time_sec": 7.036734,
+          "wasm_time_sec": 8.413675
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_int_ignored.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Test Passed\n",
+        "native_time": 2.033632,
+        "wasm_time": 3.542244,
+        "timing": {
+          "native_compile_time_sec": 0.032113,
+          "native_run_time_sec": 2.001519,
+          "wasm_compile_time_sec": 1.532171,
+          "wasm_run_time_sec": 2.010073,
+          "native_time_sec": 2.033632,
+          "wasm_time_sec": 3.542244
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_SIGCHLD.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033363,
+        "wasm_time": 1.5435699999999999,
+        "timing": {
+          "native_compile_time_sec": 0.032247,
+          "native_run_time_sec": 0.001116,
+          "wasm_compile_time_sec": 1.533111,
+          "wasm_run_time_sec": 0.010459,
+          "native_time_sec": 0.033363,
+          "wasm_time_sec": 1.5435699999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_sa_mask.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.029724,
+        "wasm_time": 1.385245,
+        "timing": {
+          "native_compile_time_sec": 0.028689,
+          "native_run_time_sec": 0.001035,
+          "wasm_compile_time_sec": 1.375151,
+          "wasm_run_time_sec": 0.010094,
+          "native_time_sec": 0.029724,
+          "wasm_time_sec": 1.385245
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal-simple.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Successfully changed the signal handler for Signal 12\nSignal Handler Test!\n",
+        "native_time": 0.032281000000000004,
+        "wasm_time": 1.3859780000000002,
+        "timing": {
+          "native_compile_time_sec": 0.031185,
+          "native_run_time_sec": 0.001096,
+          "wasm_compile_time_sec": 1.376745,
+          "wasm_run_time_sec": 0.009233,
+          "native_time_sec": 0.032281000000000004,
+          "wasm_time_sec": 1.3859780000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigprocmask.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "blocking SIGUSR2\nSending SIGUSR2\nSleeping 1 second\nunblocking signal\nSignal Handler!\nExiting program\n",
+        "native_time": 1.032141,
+        "wasm_time": 2.401009,
+        "timing": {
+          "native_compile_time_sec": 0.030935,
+          "native_run_time_sec": 1.001206,
+          "wasm_compile_time_sec": 1.390704,
+          "wasm_run_time_sec": 1.010305,
+          "native_time_sec": 1.032141,
+          "wasm_time_sec": 2.401009
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_fork.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032498,
+        "wasm_time": 1.536773,
+        "timing": {
+          "native_compile_time_sec": 0.031246,
+          "native_run_time_sec": 0.001252,
+          "wasm_compile_time_sec": 1.526567,
+          "wasm_run_time_sec": 0.010206,
+          "native_time_sec": 0.032498,
+          "wasm_time_sec": 1.536773
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigpipe.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Signal Pipe Test!\n",
+        "native_time": 1.038938,
+        "wasm_time": 2.5503780000000003,
+        "timing": {
+          "native_compile_time_sec": 0.03759,
+          "native_run_time_sec": 1.001348,
+          "wasm_compile_time_sec": 1.539334,
+          "wasm_run_time_sec": 1.011044,
+          "native_time_sec": 1.038938,
+          "wasm_time_sec": 2.5503780000000003
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/alarm.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Setting an alarm to trigger in 1 seconds...\nAlarm triggered! Signal received: 14\nAlarm triggered! Signal received: 14\nAlarm triggered! Signal received: 14\n",
+        "native_time": 7.033222,
+        "wasm_time": 8.394993,
+        "timing": {
+          "native_compile_time_sec": 0.032101,
+          "native_run_time_sec": 7.001121,
+          "wasm_compile_time_sec": 1.376351,
+          "wasm_run_time_sec": 7.018642,
+          "native_time_sec": 7.033222,
+          "wasm_time_sec": 8.394993
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_recursive.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.031765,
+        "wasm_time": 1.382363,
+        "timing": {
+          "native_compile_time_sec": 0.030801,
+          "native_run_time_sec": 0.000964,
+          "wasm_compile_time_sec": 1.372744,
+          "wasm_run_time_sec": 0.009619,
+          "native_time_sec": 0.031765,
+          "wasm_time_sec": 1.382363
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigchld.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Signal Child Test!\n",
+        "native_time": 1.032421,
+        "wasm_time": 2.407629,
+        "timing": {
+          "native_compile_time_sec": 0.030848,
+          "native_run_time_sec": 1.001573,
+          "wasm_compile_time_sec": 1.398145,
+          "wasm_run_time_sec": 1.009484,
+          "native_time_sec": 1.032421,
+          "wasm_time_sec": 2.407629
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal-fork.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Successfully changed the signal handler for Signal 12\nKilling Child\nSignal Handler Test!\nExiting Child\n",
+        "native_time": 4.050689,
+        "wasm_time": 5.41785,
+        "timing": {
+          "native_compile_time_sec": 0.049149,
+          "native_run_time_sec": 4.00154,
+          "wasm_compile_time_sec": 1.406813,
+          "wasm_run_time_sec": 4.011037,
+          "native_time_sec": 4.050689,
+          "wasm_time_sec": 5.41785
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/sigalrm.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "SIGALRM signals blocked\nAlarm Handled. Exiting\n",
+        "native_time": 2.030022,
+        "wasm_time": 3.440183,
+        "timing": {
+          "native_compile_time_sec": 0.028998,
+          "native_run_time_sec": 2.001024,
+          "wasm_compile_time_sec": 1.415956,
+          "wasm_run_time_sec": 2.024227,
+          "native_time_sec": 2.030022,
+          "wasm_time_sec": 3.440183
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/deterministic/signal_procmask.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.031018,
+        "wasm_time": 1.532581,
+        "timing": {
+          "native_compile_time_sec": 0.029941,
+          "native_run_time_sec": 0.001077,
+          "wasm_compile_time_sec": 1.523093,
+          "wasm_run_time_sec": 0.009488,
+          "native_time_sec": 0.031018,
+          "wasm_time_sec": 1.532581
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/math_tests/deterministic/math_tests.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "=== Math Library Test Suite ===\n\nTesting basic operations...\n  sqrt(16.0)                expected: 4.000000000  observed: 4.000000000   \u2705 OK\n  pow(2.0, 3.0)             expected: 8.000000000  observed: 8.000000000   \u2705 OK\n  fabs(-5.5)                expected: 5.500000000  observed: 5.500000000   \u2705 OK\n  ceil(3.2)                 expected: 4.000000000  observed: 4.000000000   \u2705 OK\n  floor(3.8)                expected: 3.000000000  observed: 3.000000000   \u2705 OK\n  \u2714 basic operations passed\nTesting trigonometric functions...\n  sin(pi/4)                 expected: 0.707106781  observed: 0.707106781   \u2705 OK\n  cos(pi/4)                 expected: 0.707106781  observed: 0.707106781   \u2705 OK\n  tan(pi/4)                 expected: 1.000000000  observed: 1.000000000   \u2705 OK\n  asin(0.5)                 expected: 0.523598776  observed: 0.523598776   \u2705 OK\n  acos(0.5)                 expected: 1.047197551  observed: 1.047197551   \u2705 OK\n  atan(1.0)                 expected: 0.785398163  observed: 0.785398163   \u2705 OK\n  \u2714 trigonometric functions passed\nTesting logarithmic and exponential functions...\n  exp(1.0)                  expected: 2.718281828  observed: 2.718281828   \u2705 OK\n  log(e)                    expected: 1.000000000  observed: 1.000000000   \u2705 OK\n  log10(100)                expected: 2.000000000  observed: 2.000000000   \u2705 OK\n  log2(8)                   expected: 3.000000000  observed: 3.000000000   \u2705 OK\n  \u2714 logarithmic/exponential functions passed\nTesting special functions...\n  sinh(0)                   expected: 0.000000000  observed: 0.000000000   \u2705 OK\n  cosh(0)                   expected: 1.000000000  observed: 1.000000000   \u2705 OK\n  tanh(0)                   expected: 0.000000000  observed: 0.000000000   \u2705 OK\n  fmod(10.5, 3.0)           expected: 1.500000000  observed: 1.500000000   \u2705 OK\n  round(3.5)                expected: 4.000000000  observed: 4.000000000   \u2705 OK\n  round(3.4)                expected: 3.000000000  observed: 3.000000000   \u2705 OK\n  \u2714 special functions passed\n\n=== ALL TESTS PASSED ===\n",
+        "native_time": 0.035784,
+        "wasm_time": 1.449969,
+        "timing": {
+          "native_compile_time_sec": 0.034582,
+          "native_run_time_sec": 0.001202,
+          "wasm_compile_time_sec": 1.440841,
+          "wasm_run_time_sec": 0.009128,
+          "native_time_sec": 0.035784,
+          "wasm_time_sec": 1.449969
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/math_tests/deterministic/math_link_smoke.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "math_link_smoke: ok\n",
+        "native_time": 0.034893,
+        "wasm_time": 1.4019320000000002,
+        "timing": {
+          "native_compile_time_sec": 0.033701,
+          "native_run_time_sec": 0.001192,
+          "wasm_compile_time_sec": 1.391979,
+          "wasm_run_time_sec": 0.009953,
+          "native_time_sec": 0.034893,
+          "wasm_time_sec": 1.4019320000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/exit.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Exiting...\n\n",
+        "native_time": 0.029742,
+        "wasm_time": 1.3765159999999999,
+        "timing": {
+          "native_compile_time_sec": 0.028629,
+          "native_run_time_sec": 0.001113,
+          "wasm_compile_time_sec": 1.366893,
+          "wasm_run_time_sec": 0.009623,
+          "native_time_sec": 0.029742,
+          "wasm_time_sec": 1.3765159999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getegid_syscall.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032921,
+        "wasm_time": 1.558209,
+        "timing": {
+          "native_compile_time_sec": 0.030567,
+          "native_run_time_sec": 0.002354,
+          "wasm_compile_time_sec": 1.544792,
+          "wasm_run_time_sec": 0.013417,
+          "native_time_sec": 0.032921,
+          "wasm_time_sec": 1.558209
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getuid.c": {
+        "status": "Failure",
+        "error_type": "Failure_native_running",
+        "output": "Native execution: getuid.o: /tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getuid.c:18: int main(void): Assertion `getgid() == ROOT_GID && \"gid should be root after exec\"' failed.\n",
+        "native_time": 0.083427,
+        "wasm_time": null,
+        "timing": {
+          "native_compile_time_sec": 0.032076,
+          "native_run_time_sec": 0.051351,
+          "wasm_compile_time_sec": null,
+          "wasm_run_time_sec": null,
+          "native_time_sec": 0.083427,
+          "wasm_time_sec": null
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/flockfile_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "done\n",
+        "native_time": 0.035183000000000006,
+        "wasm_time": 1.598576,
+        "timing": {
+          "native_compile_time_sec": 0.033862,
+          "native_run_time_sec": 0.001321,
+          "wasm_compile_time_sec": 1.588578,
+          "wasm_run_time_sec": 0.009998,
+          "native_time_sec": 0.035183000000000006,
+          "wasm_time_sec": 1.598576
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/ctor_syscall_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.026455000000000003,
+        "wasm_time": 1.5198740000000002,
+        "timing": {
+          "native_compile_time_sec": 0.025378,
+          "native_run_time_sec": 0.001077,
+          "wasm_compile_time_sec": 1.509983,
+          "wasm_run_time_sec": 0.009891,
+          "native_time_sec": 0.026455000000000003,
+          "wasm_time_sec": 1.5198740000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getgid_syscall.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033053,
+        "wasm_time": 1.560282,
+        "timing": {
+          "native_compile_time_sec": 0.03063,
+          "native_run_time_sec": 0.002423,
+          "wasm_compile_time_sec": 1.545855,
+          "wasm_run_time_sec": 0.014427,
+          "native_time_sec": 0.033053,
+          "wasm_time_sec": 1.560282
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/chain_thread.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Outer thread running...\nInner thread running...\nInner thread done.\nOuter thread done.\nMain thread done.\n",
+        "native_time": 1.034201,
+        "wasm_time": 2.568146,
+        "timing": {
+          "native_compile_time_sec": 0.032436,
+          "native_run_time_sec": 1.001765,
+          "wasm_compile_time_sec": 1.557635,
+          "wasm_run_time_sec": 1.010511,
+          "native_time_sec": 1.034201,
+          "wasm_time_sec": 2.568146
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_syscall.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033785,
+        "wasm_time": 1.558875,
+        "timing": {
+          "native_compile_time_sec": 0.029966,
+          "native_run_time_sec": 0.003819,
+          "wasm_compile_time_sec": 1.542444,
+          "wasm_run_time_sec": 0.016431,
+          "native_time_sec": 0.033785,
+          "wasm_time_sec": 1.558875
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getpid_syscall.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.034837,
+        "wasm_time": 1.57328,
+        "timing": {
+          "native_compile_time_sec": 0.032155,
+          "native_run_time_sec": 0.002682,
+          "wasm_compile_time_sec": 1.556134,
+          "wasm_run_time_sec": 0.017146,
+          "native_time_sec": 0.034837,
+          "wasm_time_sec": 1.57328
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/setsid.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "setsid() succeeded.\n",
+        "native_time": 0.030482,
+        "wasm_time": 1.3727289999999999,
+        "timing": {
+          "native_compile_time_sec": 0.029491,
+          "native_run_time_sec": 0.000991,
+          "wasm_compile_time_sec": 1.364717,
+          "wasm_run_time_sec": 0.008012,
+          "native_time_sec": 0.030482,
+          "wasm_time_sec": 1.3727289999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkmalloc.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.039496,
+        "wasm_time": 1.5487000000000002,
+        "timing": {
+          "native_compile_time_sec": 0.038336,
+          "native_run_time_sec": 0.00116,
+          "wasm_compile_time_sec": 1.539446,
+          "wasm_run_time_sec": 0.009254,
+          "native_time_sec": 0.039496,
+          "wasm_time_sec": 1.5487000000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/waitpid_syscall.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 1.033555,
+        "wasm_time": 2.541697,
+        "timing": {
+          "native_compile_time_sec": 0.031124,
+          "native_run_time_sec": 1.002431,
+          "wasm_compile_time_sec": 1.529127,
+          "wasm_run_time_sec": 1.01257,
+          "native_time_sec": 1.033555,
+          "wasm_time_sec": 2.541697
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/function-ptr.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Hello, World!\n",
+        "native_time": 0.029304,
+        "wasm_time": 1.5310489999999999,
+        "timing": {
+          "native_compile_time_sec": 0.028298,
+          "native_run_time_sec": 0.001006,
+          "wasm_compile_time_sec": 1.52128,
+          "wasm_run_time_sec": 0.009769,
+          "native_time_sec": 0.029304,
+          "wasm_time_sec": 1.5310489999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/template.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.029920000000000002,
+        "wasm_time": 1.539028,
+        "timing": {
+          "native_compile_time_sec": 0.028372,
+          "native_run_time_sec": 0.001548,
+          "wasm_compile_time_sec": 1.529322,
+          "wasm_run_time_sec": 0.009706,
+          "native_time_sec": 0.029920000000000002,
+          "wasm_time_sec": 1.539028
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/exit_failure.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Child exited with non-zero as expected (1)\n",
+        "native_time": 0.032553,
+        "wasm_time": 1.395672,
+        "timing": {
+          "native_compile_time_sec": 0.0313,
+          "native_run_time_sec": 0.001253,
+          "wasm_compile_time_sec": 1.385356,
+          "wasm_run_time_sec": 0.010316,
+          "native_time_sec": 0.032553,
+          "wasm_time_sec": 1.395672
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getuid_syscall.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033802,
+        "wasm_time": 1.54006,
+        "timing": {
+          "native_compile_time_sec": 0.03226,
+          "native_run_time_sec": 0.001542,
+          "wasm_compile_time_sec": 1.528153,
+          "wasm_run_time_sec": 0.011907,
+          "native_time_sec": 0.033802,
+          "wasm_time_sec": 1.54006
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/longjmp.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "In main: Calling first_function...\nIn first_function: Calling second_function...\nIn second_function: Performing a long jump...\nBack in main: long jump returned with value = 42\n",
+        "native_time": 0.030018999999999997,
+        "wasm_time": 1.401711,
+        "timing": {
+          "native_compile_time_sec": 0.028976,
+          "native_run_time_sec": 0.001043,
+          "wasm_compile_time_sec": 1.393174,
+          "wasm_run_time_sec": 0.008537,
+          "native_time_sec": 0.030018999999999997,
+          "wasm_time_sec": 1.401711
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecv-arg.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Received argument: hello-arg\n",
+        "native_time": 0.033232,
+        "wasm_time": 1.5485849999999999,
+        "timing": {
+          "native_compile_time_sec": 0.031644,
+          "native_run_time_sec": 0.001588,
+          "wasm_compile_time_sec": 1.537972,
+          "wasm_run_time_sec": 0.010613,
+          "native_time_sec": 0.033232,
+          "wasm_time_sec": 1.5485849999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/sem_forks.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.040171,
+        "wasm_time": 1.5480710000000002,
+        "timing": {
+          "native_compile_time_sec": 0.038937,
+          "native_run_time_sec": 0.001234,
+          "wasm_compile_time_sec": 1.537516,
+          "wasm_run_time_sec": 0.010555,
+          "native_time_sec": 0.040171,
+          "wasm_time_sec": 1.5480710000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/waitpid_anychild.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Test Passed: waitpid(-1) correctly waited for child\n",
+        "native_time": 0.031365,
+        "wasm_time": 1.531798,
+        "timing": {
+          "native_compile_time_sec": 0.030046,
+          "native_run_time_sec": 0.001319,
+          "wasm_compile_time_sec": 1.521272,
+          "wasm_run_time_sec": 0.010526,
+          "native_time_sec": 0.031365,
+          "wasm_time_sec": 1.531798
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/barrier_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "done\n",
+        "native_time": 0.031575,
+        "wasm_time": 1.575081,
+        "timing": {
+          "native_compile_time_sec": 0.030322,
+          "native_run_time_sec": 0.001253,
+          "wasm_compile_time_sec": 1.565675,
+          "wasm_run_time_sec": 0.009406,
+          "native_time_sec": 0.031575,
+          "wasm_time_sec": 1.575081
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/thread-test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Hello from the thread!\nThread has finished execution\n",
+        "native_time": 0.032446,
+        "wasm_time": 1.583569,
+        "timing": {
+          "native_compile_time_sec": 0.031182,
+          "native_run_time_sec": 0.001264,
+          "wasm_compile_time_sec": 1.573334,
+          "wasm_run_time_sec": 0.010235,
+          "native_time_sec": 0.032446,
+          "wasm_time_sec": 1.583569
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_tls_ctype.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033736999999999996,
+        "wasm_time": 1.529884,
+        "timing": {
+          "native_compile_time_sec": 0.032579,
+          "native_run_time_sec": 0.001158,
+          "wasm_compile_time_sec": 1.520132,
+          "wasm_run_time_sec": 0.009752,
+          "native_time_sec": 0.033736999999999996,
+          "wasm_time_sec": 1.529884
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/thread.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Hello from thread\n",
+        "native_time": 0.029865,
+        "wasm_time": 1.548583,
+        "timing": {
+          "native_compile_time_sec": 0.028645,
+          "native_run_time_sec": 0.00122,
+          "wasm_compile_time_sec": 1.538376,
+          "wasm_run_time_sec": 0.010207,
+          "native_time_sec": 0.029865,
+          "wasm_time_sec": 1.548583
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/wait.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Parent detected child finished.\nChild exited with status 0\n",
+        "native_time": 2.032545,
+        "wasm_time": 3.4351200000000004,
+        "timing": {
+          "native_compile_time_sec": 0.030642,
+          "native_run_time_sec": 2.001903,
+          "wasm_compile_time_sec": 1.42438,
+          "wasm_run_time_sec": 2.01074,
+          "native_time_sec": 2.032545,
+          "wasm_time_sec": 3.4351200000000004
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/uname.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "uname test PASS\n",
+        "native_time": 0.040081,
+        "wasm_time": 1.523692,
+        "timing": {
+          "native_compile_time_sec": 0.03899,
+          "native_run_time_sec": 0.001091,
+          "wasm_compile_time_sec": 1.513847,
+          "wasm_run_time_sec": 0.009845,
+          "native_time_sec": 0.040081,
+          "wasm_time_sec": 1.523692
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getpid.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.030313999999999997,
+        "wasm_time": 1.503982,
+        "timing": {
+          "native_compile_time_sec": 0.029316,
+          "native_run_time_sec": 0.000998,
+          "wasm_compile_time_sec": 1.494095,
+          "wasm_run_time_sec": 0.009887,
+          "native_time_sec": 0.030313999999999997,
+          "wasm_time_sec": 1.503982
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_select.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.03151,
+        "wasm_time": 1.56195,
+        "timing": {
+          "native_compile_time_sec": 0.030315,
+          "native_run_time_sec": 0.001195,
+          "wasm_compile_time_sec": 1.551541,
+          "wasm_run_time_sec": 0.010409,
+          "native_time_sec": 0.03151,
+          "wasm_time_sec": 1.56195
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/printf_thread_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "done\n",
+        "native_time": 0.032035,
+        "wasm_time": 1.575072,
+        "timing": {
+          "native_compile_time_sec": 0.030866,
+          "native_run_time_sec": 0.001169,
+          "wasm_compile_time_sec": 1.564789,
+          "wasm_run_time_sec": 0.010283,
+          "native_time_sec": 0.032035,
+          "wasm_time_sec": 1.575072
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/waitpid_wnohang.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032395,
+        "wasm_time": 1.423708,
+        "timing": {
+          "native_compile_time_sec": 0.030407,
+          "native_run_time_sec": 0.001988,
+          "wasm_compile_time_sec": 1.411372,
+          "wasm_run_time_sec": 0.012336,
+          "native_time_sec": 0.032395,
+          "wasm_time_sec": 1.423708
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkandopen.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033963,
+        "wasm_time": 1.532336,
+        "timing": {
+          "native_compile_time_sec": 0.032767,
+          "native_run_time_sec": 0.001196,
+          "wasm_compile_time_sec": 1.521485,
+          "wasm_run_time_sec": 0.010851,
+          "native_time_sec": 0.033963,
+          "wasm_time_sec": 1.532336
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/test_unlink_open_file.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.031148,
+        "wasm_time": 1.376948,
+        "timing": {
+          "native_compile_time_sec": 0.030095,
+          "native_run_time_sec": 0.001053,
+          "wasm_compile_time_sec": 1.36654,
+          "wasm_run_time_sec": 0.010408,
+          "native_time_sec": 0.031148,
+          "wasm_time_sec": 1.376948
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkfiles.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.031518,
+        "wasm_time": 1.5402,
+        "timing": {
+          "native_compile_time_sec": 0.030233,
+          "native_run_time_sec": 0.001285,
+          "wasm_compile_time_sec": 1.529462,
+          "wasm_run_time_sec": 0.010738,
+          "native_time_sec": 0.031518,
+          "wasm_time_sec": 1.5402
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork2malloc.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.037746,
+        "wasm_time": 1.5317399999999999,
+        "timing": {
+          "native_compile_time_sec": 0.036484,
+          "native_run_time_sec": 0.001262,
+          "wasm_compile_time_sec": 1.521221,
+          "wasm_run_time_sec": 0.010519,
+          "native_time_sec": 0.037746,
+          "wasm_time_sec": 1.5317399999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkdup.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "I'm the parent\nback to stdout\nall done\n",
+        "native_time": 0.036109999999999996,
+        "wasm_time": 1.397367,
+        "timing": {
+          "native_compile_time_sec": 0.034765,
+          "native_run_time_sec": 0.001345,
+          "wasm_compile_time_sec": 1.38693,
+          "wasm_run_time_sec": 0.010437,
+          "native_time_sec": 0.036109999999999996,
+          "wasm_time_sec": 1.397367
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/hello.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "wark\n",
+        "native_time": 0.028064,
+        "wasm_time": 1.372986,
+        "timing": {
+          "native_compile_time_sec": 0.027072,
+          "native_run_time_sec": 0.000992,
+          "wasm_compile_time_sec": 1.36303,
+          "wasm_run_time_sec": 0.009956,
+          "native_time_sec": 0.028064,
+          "wasm_time_sec": 1.372986
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecv.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "wark\n",
+        "native_time": 0.03107,
+        "wasm_time": 1.543747,
+        "timing": {
+          "native_compile_time_sec": 0.029362,
+          "native_run_time_sec": 0.001708,
+          "wasm_compile_time_sec": 1.533021,
+          "wasm_run_time_sec": 0.010726,
+          "native_time_sec": 0.03107,
+          "wasm_time_sec": 1.543747
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/fork_simple.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033333,
+        "wasm_time": 1.536133,
+        "timing": {
+          "native_compile_time_sec": 0.032137,
+          "native_run_time_sec": 0.001196,
+          "wasm_compile_time_sec": 1.526226,
+          "wasm_run_time_sec": 0.009907,
+          "native_time_sec": 0.033333,
+          "wasm_time_sec": 1.536133
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/tls_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.031080999999999998,
+        "wasm_time": 1.58238,
+        "timing": {
+          "native_compile_time_sec": 0.029788,
+          "native_run_time_sec": 0.001293,
+          "wasm_compile_time_sec": 1.572117,
+          "wasm_run_time_sec": 0.010263,
+          "native_time_sec": 0.031080999999999998,
+          "wasm_time_sec": 1.58238
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forknodup.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032009,
+        "wasm_time": 1.552311,
+        "timing": {
+          "native_compile_time_sec": 0.030747,
+          "native_run_time_sec": 0.001262,
+          "wasm_compile_time_sec": 1.541798,
+          "wasm_run_time_sec": 0.010513,
+          "native_time_sec": 0.032009,
+          "wasm_time_sec": 1.552311
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getppid_syscall.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032153,
+        "wasm_time": 1.537986,
+        "timing": {
+          "native_compile_time_sec": 0.0295,
+          "native_run_time_sec": 0.002653,
+          "wasm_compile_time_sec": 1.52356,
+          "wasm_run_time_sec": 0.014426,
+          "native_time_sec": 0.032153,
+          "wasm_time_sec": 1.537986
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecuid.c": {
+        "status": "Failure",
+        "error_type": "Failure_native_running",
+        "output": "Native execution: forkexecuid.o: /tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecuid.c:15: int main(void): Assertion `getgid() == ROOT_GID && \"parent gid should be 0\"' failed.\n",
+        "native_time": 0.079839,
+        "wasm_time": null,
+        "timing": {
+          "native_compile_time_sec": 0.029858,
+          "native_run_time_sec": 0.049981,
+          "wasm_compile_time_sec": null,
+          "wasm_run_time_sec": null,
+          "native_time_sec": 0.079839,
+          "wasm_time_sec": null
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/thread_cageid_race.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "done\n",
+        "native_time": 0.036642999999999995,
+        "wasm_time": 1.553244,
+        "timing": {
+          "native_compile_time_sec": 0.035133,
+          "native_run_time_sec": 0.00151,
+          "wasm_compile_time_sec": 1.541992,
+          "wasm_run_time_sec": 0.011252,
+          "native_time_sec": 0.036642999999999995,
+          "wasm_time_sec": 1.553244
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/mutex.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "locked child\nunlocked parent\n",
+        "native_time": 2.036044,
+        "wasm_time": 3.6168440000000004,
+        "timing": {
+          "native_compile_time_sec": 0.034371,
+          "native_run_time_sec": 2.001673,
+          "wasm_compile_time_sec": 1.606263,
+          "wasm_run_time_sec": 2.010581,
+          "native_time_sec": 2.036044,
+          "wasm_time_sec": 3.6168440000000004
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/test_exec_nofork.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032421,
+        "wasm_time": 1.546915,
+        "timing": {
+          "native_compile_time_sec": 0.031121,
+          "native_run_time_sec": 0.0013,
+          "wasm_compile_time_sec": 1.536653,
+          "wasm_run_time_sec": 0.010262,
+          "native_time_sec": 0.032421,
+          "wasm_time_sec": 1.546915
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/printf_deadlock_smoke.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "done\n",
+        "native_time": 0.036315,
+        "wasm_time": 1.609547,
+        "timing": {
+          "native_compile_time_sec": 0.035134,
+          "native_run_time_sec": 0.001181,
+          "wasm_compile_time_sec": 1.598991,
+          "wasm_run_time_sec": 0.010556,
+          "native_time_sec": 0.036315,
+          "wasm_time_sec": 1.609547
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/cxa_atexit_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "main returning, handler should run during exit\ncxa_atexit handler called: test_arg\n",
+        "native_time": 0.031568,
+        "wasm_time": 1.367001,
+        "timing": {
+          "native_compile_time_sec": 0.030501,
+          "native_run_time_sec": 0.001067,
+          "wasm_compile_time_sec": 1.356993,
+          "wasm_run_time_sec": 0.010008,
+          "native_time_sec": 0.031568,
+          "wasm_time_sec": 1.367001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/hello-arg.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Received argument: hello-arg\n",
+        "native_time": 0.028310000000000002,
+        "wasm_time": 1.381541,
+        "timing": {
+          "native_compile_time_sec": 0.027213,
+          "native_run_time_sec": 0.001097,
+          "wasm_compile_time_sec": 1.371775,
+          "wasm_run_time_sec": 0.009766,
+          "native_time_sec": 0.028310000000000002,
+          "wasm_time_sec": 1.381541
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getppid.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "getppid() succeeded\n",
+        "native_time": 0.031467,
+        "wasm_time": 1.546141,
+        "timing": {
+          "native_compile_time_sec": 0.03012,
+          "native_run_time_sec": 0.001347,
+          "wasm_compile_time_sec": 1.536131,
+          "wasm_run_time_sec": 0.01001,
+          "native_time_sec": 0.031467,
+          "wasm_time_sec": 1.546141
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/flock.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Obtained exclusive lock on file\nReleased exclusive lock on file\nObtained shared lock on file\nObtained shared lock on file\nReleased shared lock on file\nReleased shared lock on file\n",
+        "native_time": 0.047574,
+        "wasm_time": 1.5403159999999998,
+        "timing": {
+          "native_compile_time_sec": 0.046148,
+          "native_run_time_sec": 0.001426,
+          "wasm_compile_time_sec": 1.529783,
+          "wasm_run_time_sec": 0.010533,
+          "native_time_sec": 0.047574,
+          "wasm_time_sec": 1.5403159999999998
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readlink.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "\n=== Test Case 1: Valid symbolic link ===\nSymbolic link points to: readlinkfile.txt\n\n=== Test Case 2: Path is not a symbolic link ===\nExpected failure: Invalid argument\n\n=== Test Case 3: Symbolic link with buffer too small ===\nSymbolic link truncated result: readl\n\n=== Test Case 4: Non-existent path ===\nExpected failure: No such file or directory\n",
+        "native_time": 0.0317,
+        "wasm_time": 1.499794,
+        "timing": {
+          "native_compile_time_sec": 0.030569,
+          "native_run_time_sec": 0.001131,
+          "wasm_compile_time_sec": 1.490788,
+          "wasm_run_time_sec": 0.009006,
+          "native_time_sec": 0.0317,
+          "wasm_time_sec": 1.499794
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/etc_conf.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.027521999999999998,
+        "wasm_time": 1.497829,
+        "timing": {
+          "native_compile_time_sec": 0.02643,
+          "native_run_time_sec": 0.001092,
+          "wasm_compile_time_sec": 1.489432,
+          "wasm_run_time_sec": 0.008397,
+          "native_time_sec": 0.027521999999999998,
+          "wasm_time_sec": 1.497829
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readlinkat.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Test Case 1: PASS\nTest Case 2: PASS\nTest Case 3: PASS\nTest Case 4: PASS\n",
+        "native_time": 0.031905,
+        "wasm_time": 1.510096,
+        "timing": {
+          "native_compile_time_sec": 0.030903,
+          "native_run_time_sec": 0.001002,
+          "wasm_compile_time_sec": 1.499883,
+          "wasm_run_time_sec": 0.010213,
+          "native_time_sec": 0.031905,
+          "wasm_time_sec": 1.510096
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/clock_gettime_simple.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.029677,
+        "wasm_time": 1.519512,
+        "timing": {
+          "native_compile_time_sec": 0.028686,
+          "native_run_time_sec": 0.000991,
+          "wasm_compile_time_sec": 1.509714,
+          "wasm_run_time_sec": 0.009798,
+          "native_time_sec": 0.029677,
+          "wasm_time_sec": 1.519512
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fchdir.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "fchdir test: PASS\n",
+        "native_time": 0.036119,
+        "wasm_time": 1.538205,
+        "timing": {
+          "native_compile_time_sec": 0.035015,
+          "native_run_time_sec": 0.001104,
+          "wasm_compile_time_sec": 1.528667,
+          "wasm_run_time_sec": 0.009538,
+          "native_time_sec": 0.036119,
+          "wasm_time_sec": 1.538205
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/lseek.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Testing lseek() syscall\nAll lseek() tests passed successfully\n",
+        "native_time": 0.03408,
+        "wasm_time": 1.537634,
+        "timing": {
+          "native_compile_time_sec": 0.032846,
+          "native_run_time_sec": 0.001234,
+          "wasm_compile_time_sec": 1.527452,
+          "wasm_run_time_sec": 0.010182,
+          "native_time_sec": 0.03408,
+          "wasm_time_sec": 1.537634
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/writev.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "writev wrote 25 bytes\nRead back: Hello world from writev!\n",
+        "native_time": 0.038800999999999995,
+        "wasm_time": 1.515953,
+        "timing": {
+          "native_compile_time_sec": 0.037644,
+          "native_run_time_sec": 0.001157,
+          "wasm_compile_time_sec": 1.505872,
+          "wasm_run_time_sec": 0.010081,
+          "native_time_sec": 0.038800999999999995,
+          "wasm_time_sec": 1.515953
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/chartests.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "PASS: alphabetic character tests\nPASS: digit character tests\nPASS: hexadecimal digit tests\nPASS: whitespace and blank tests\nPASS: control character tests\nPASS: punctuation tests\nPASS: negative sanity checks\n\nALL CTYPE TESTS PASSED\n",
+        "native_time": 0.029674,
+        "wasm_time": 1.546575,
+        "timing": {
+          "native_compile_time_sec": 0.028619,
+          "native_run_time_sec": 0.001055,
+          "wasm_compile_time_sec": 1.536543,
+          "wasm_run_time_sec": 0.010032,
+          "native_time_sec": 0.029674,
+          "wasm_time_sec": 1.546575
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/doubleclose.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.027538,
+        "wasm_time": 1.388842,
+        "timing": {
+          "native_compile_time_sec": 0.026459,
+          "native_run_time_sec": 0.001079,
+          "wasm_compile_time_sec": 1.378534,
+          "wasm_run_time_sec": 0.010308,
+          "native_time_sec": 0.027538,
+          "wasm_time_sec": 1.388842
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/read.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.031039,
+        "wasm_time": 1.531107,
+        "timing": {
+          "native_compile_time_sec": 0.029987,
+          "native_run_time_sec": 0.001052,
+          "wasm_compile_time_sec": 1.521534,
+          "wasm_run_time_sec": 0.009573,
+          "native_time_sec": 0.031039,
+          "wasm_time_sec": 1.531107
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dupwrite.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "write succeeded\n",
+        "native_time": 0.030798,
+        "wasm_time": 1.383914,
+        "timing": {
+          "native_compile_time_sec": 0.029826,
+          "native_run_time_sec": 0.000972,
+          "wasm_compile_time_sec": 1.374187,
+          "wasm_run_time_sec": 0.009727,
+          "native_time_sec": 0.030798,
+          "wasm_time_sec": 1.383914
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/filetest.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        "native_time": 0.04068,
+        "wasm_time": 1.393466,
+        "timing": {
+          "native_compile_time_sec": 0.039565,
+          "native_run_time_sec": 0.001115,
+          "wasm_compile_time_sec": 1.38446,
+          "wasm_run_time_sec": 0.009006,
+          "native_time_sec": 0.04068,
+          "wasm_time_sec": 1.393466
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/truncate.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Test truncate(const char *, off_t)\nTruncating testfiles/truncatefile.txt from 32 to 155\nSuccess\nTruncating testfiles/truncatefile.txt from 155 to 32\nSuccess\nTest ftruncate(int, off_t)\nTruncating testfiles/truncatefile.txt from 32 to 155\nSuccess\nTruncating testfiles/truncatefile.txt from 155 to 32\nSuccess\n",
+        "native_time": 0.035752,
+        "wasm_time": 1.522186,
+        "timing": {
+          "native_compile_time_sec": 0.034608,
+          "native_run_time_sec": 0.001144,
+          "wasm_compile_time_sec": 1.512342,
+          "wasm_run_time_sec": 0.009844,
+          "native_time_sec": 0.035752,
+          "wasm_time_sec": 1.522186
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/pread_pwrite.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "[file is opened]\n[succeeded write(1) process]\n[reading(1) data] from pwrite.txt\n[Lind is amazing!]\n-----------------------------------\n[succeeded write(2) process]\n[reading(2) data] from pwrite.txt\n[NYU is amazing!]\n[succeeded in close]\n",
+        "native_time": 0.032288,
+        "wasm_time": 1.5231590000000002,
+        "timing": {
+          "native_compile_time_sec": 0.031118,
+          "native_run_time_sec": 0.00117,
+          "wasm_compile_time_sec": 1.513851,
+          "wasm_run_time_sec": 0.009308,
+          "native_time_sec": 0.032288,
+          "wasm_time_sec": 1.5231590000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/writeloop.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "write succeeded\n",
+        "native_time": 0.034874,
+        "wasm_time": 1.3954980000000001,
+        "timing": {
+          "native_compile_time_sec": 0.033726,
+          "native_run_time_sec": 0.001148,
+          "wasm_compile_time_sec": 1.387048,
+          "wasm_run_time_sec": 0.00845,
+          "native_time_sec": 0.034874,
+          "wasm_time_sec": 1.3954980000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dup2.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Testing dup2\nI should be printed before the file contents!\nI will be printed in the file dup2test.txt\n",
+        "native_time": 0.033017,
+        "wasm_time": 1.391721,
+        "timing": {
+          "native_compile_time_sec": 0.031833,
+          "native_run_time_sec": 0.001184,
+          "wasm_compile_time_sec": 1.381685,
+          "wasm_run_time_sec": 0.010036,
+          "native_time_sec": 0.033017,
+          "wasm_time_sec": 1.391721
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/ftruncate.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Testing ftruncate() syscall\nAll ftruncate() tests passed successfully\n",
+        "native_time": 0.034412000000000005,
+        "wasm_time": 1.5372620000000001,
+        "timing": {
+          "native_compile_time_sec": 0.033084,
+          "native_run_time_sec": 0.001328,
+          "wasm_compile_time_sec": 1.526971,
+          "wasm_run_time_sec": 0.010291,
+          "native_time_sec": 0.034412000000000005,
+          "wasm_time_sec": 1.5372620000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readv_writev_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "readv_writev_test passed\n",
+        "native_time": 0.037195,
+        "wasm_time": 1.5389130000000002,
+        "timing": {
+          "native_compile_time_sec": 0.035921,
+          "native_run_time_sec": 0.001274,
+          "wasm_compile_time_sec": 1.528879,
+          "wasm_run_time_sec": 0.010034,
+          "native_time_sec": 0.037195,
+          "wasm_time_sec": 1.5389130000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/creat_access.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Created file\nFile exists\nFile has the right permissions\n",
+        "native_time": 0.031258,
+        "wasm_time": 1.531495,
+        "timing": {
+          "native_compile_time_sec": 0.03021,
+          "native_run_time_sec": 0.001048,
+          "wasm_compile_time_sec": 1.521744,
+          "wasm_run_time_sec": 0.009751,
+          "native_time_sec": 0.031258,
+          "wasm_time_sec": 1.531495
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fstatfs.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.030867,
+        "wasm_time": 1.5096150000000002,
+        "timing": {
+          "native_compile_time_sec": 0.029828,
+          "native_run_time_sec": 0.001039,
+          "wasm_compile_time_sec": 1.500396,
+          "wasm_run_time_sec": 0.009219,
+          "native_time_sec": 0.030867,
+          "wasm_time_sec": 1.5096150000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dup3.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "dup3 basic test passed.\n",
+        "native_time": 0.030832000000000002,
+        "wasm_time": 1.53001,
+        "timing": {
+          "native_compile_time_sec": 0.029701,
+          "native_run_time_sec": 0.001131,
+          "wasm_compile_time_sec": 1.519778,
+          "wasm_run_time_sec": 0.010232,
+          "native_time_sec": 0.030832000000000002,
+          "wasm_time_sec": 1.53001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/nocancel_io.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.038884999999999996,
+        "wasm_time": 1.961807,
+        "timing": {
+          "native_compile_time_sec": 0.037674,
+          "native_run_time_sec": 0.001211,
+          "wasm_compile_time_sec": 1.951526,
+          "wasm_run_time_sec": 0.010281,
+          "native_time_sec": 0.038884999999999996,
+          "wasm_time_sec": 1.961807
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fcntl.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Original FD: 3\nF_DUPFD duplicated FD: 100\nF_DUPFD_CLOEXEC duplicated FD: 101\nOriginal FD flags: FD flags = 0x0\nF_DUPFD duplicated FD flags: FD flags = 0x0\nF_DUPFD_CLOEXEC duplicated FD flags: FD flags = 0x1\nAfter F_SETFD on F_DUPFD duplicated FD: FD flags = 0x1\nTest completed successfully.\n",
+        "native_time": 0.033683,
+        "wasm_time": 1.5069329999999999,
+        "timing": {
+          "native_compile_time_sec": 0.032562,
+          "native_run_time_sec": 0.001121,
+          "wasm_compile_time_sec": 1.497712,
+          "wasm_run_time_sec": 0.009221,
+          "native_time_sec": 0.033683,
+          "wasm_time_sec": 1.5069329999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fsync.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.035262,
+        "wasm_time": 1.5183170000000001,
+        "timing": {
+          "native_compile_time_sec": 0.030833,
+          "native_run_time_sec": 0.004429,
+          "wasm_compile_time_sec": 1.504034,
+          "wasm_run_time_sec": 0.014283,
+          "native_time_sec": 0.035262,
+          "wasm_time_sec": 1.5183170000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fdatasync.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032209999999999996,
+        "wasm_time": 1.5091700000000001,
+        "timing": {
+          "native_compile_time_sec": 0.030409,
+          "native_run_time_sec": 0.001801,
+          "wasm_compile_time_sec": 1.493443,
+          "wasm_run_time_sec": 0.015727,
+          "native_time_sec": 0.032209999999999996,
+          "wasm_time_sec": 1.5091700000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/mkfifo_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "All FIFO tests passed\n",
+        "native_time": 0.043356,
+        "wasm_time": 1.552441,
+        "timing": {
+          "native_compile_time_sec": 0.042074,
+          "native_run_time_sec": 0.001282,
+          "wasm_compile_time_sec": 1.541957,
+          "wasm_run_time_sec": 0.010484,
+          "native_time_sec": 0.043356,
+          "wasm_time_sec": 1.552441
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/getcwd.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "getcwd test: PASS\n",
+        "native_time": 0.031551,
+        "wasm_time": 1.5339850000000002,
+        "timing": {
+          "native_compile_time_sec": 0.030438,
+          "native_run_time_sec": 0.001113,
+          "wasm_compile_time_sec": 1.524806,
+          "wasm_run_time_sec": 0.009179,
+          "native_time_sec": 0.031551,
+          "wasm_time_sec": 1.5339850000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/unlink.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Testing unlink() syscall\nAll unlink() tests passed successfully\n",
+        "native_time": 0.032809000000000005,
+        "wasm_time": 1.5768950000000002,
+        "timing": {
+          "native_compile_time_sec": 0.03146,
+          "native_run_time_sec": 0.001349,
+          "wasm_compile_time_sec": 1.566588,
+          "wasm_run_time_sec": 0.010307,
+          "native_time_sec": 0.032809000000000005,
+          "wasm_time_sec": 1.5768950000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/rename.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "SUCCESS WITH RENAMING\n",
+        "native_time": 0.030625,
+        "wasm_time": 1.531307,
+        "timing": {
+          "native_compile_time_sec": 0.029601,
+          "native_run_time_sec": 0.001024,
+          "wasm_compile_time_sec": 1.521935,
+          "wasm_run_time_sec": 0.009372,
+          "native_time_sec": 0.030625,
+          "wasm_time_sec": 1.531307
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/mkdir_rmdir.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Created directory successfully\nRemoved directory successfully\n",
+        "native_time": 0.038276000000000004,
+        "wasm_time": 1.531637,
+        "timing": {
+          "native_compile_time_sec": 0.037114,
+          "native_run_time_sec": 0.001162,
+          "wasm_compile_time_sec": 1.521545,
+          "wasm_run_time_sec": 0.010092,
+          "native_time_sec": 0.038276000000000004,
+          "wasm_time_sec": 1.531637
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/writepartial.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "write",
+        "native_time": 0.030321,
+        "wasm_time": 1.390587,
+        "timing": {
+          "native_compile_time_sec": 0.029342,
+          "native_run_time_sec": 0.000979,
+          "wasm_compile_time_sec": 1.381199,
+          "wasm_run_time_sec": 0.009388,
+          "native_time_sec": 0.030321,
+          "wasm_time_sec": 1.390587
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/readbytes.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "This is a test of the wonderful fork call in lind.\u0000",
+        "native_time": 0.040596,
+        "wasm_time": 1.3725699999999998,
+        "timing": {
+          "native_compile_time_sec": 0.039407,
+          "native_run_time_sec": 0.001189,
+          "wasm_compile_time_sec": 1.363376,
+          "wasm_run_time_sec": 0.009194,
+          "native_time_sec": 0.040596,
+          "wasm_time_sec": 1.3725699999999998
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/sync_file_range.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "sync_file_range test completed successfully.\n",
+        "native_time": 0.032827,
+        "wasm_time": 1.496125,
+        "timing": {
+          "native_compile_time_sec": 0.031674,
+          "native_run_time_sec": 0.001153,
+          "wasm_compile_time_sec": 1.485933,
+          "wasm_run_time_sec": 0.010192,
+          "native_time_sec": 0.032827,
+          "wasm_time_sec": 1.496125
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/link.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Testing link() syscall\nAll link() tests passed successfully\n",
+        "native_time": 0.038221,
+        "wasm_time": 1.532225,
+        "timing": {
+          "native_compile_time_sec": 0.037015,
+          "native_run_time_sec": 0.001206,
+          "wasm_compile_time_sec": 1.522475,
+          "wasm_run_time_sec": 0.00975,
+          "native_time_sec": 0.038221,
+          "wasm_time_sec": 1.532225
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/sc-writev.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.02997,
+        "wasm_time": 1.513348,
+        "timing": {
+          "native_compile_time_sec": 0.029067,
+          "native_run_time_sec": 0.000903,
+          "wasm_compile_time_sec": 1.503266,
+          "wasm_run_time_sec": 0.010082,
+          "native_time_sec": 0.02997,
+          "wasm_time_sec": 1.513348
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/cloexec.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "fstat on fd1 returns 0, should succeed\nfstat on fd2 returns -1, should fail\n",
+        "native_time": 0.032554,
+        "wasm_time": 1.417604,
+        "timing": {
+          "native_compile_time_sec": 0.031138,
+          "native_run_time_sec": 0.001416,
+          "wasm_compile_time_sec": 1.406592,
+          "wasm_run_time_sec": 0.011012,
+          "native_time_sec": 0.032554,
+          "wasm_time_sec": 1.417604
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/chdir_getcwd.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "chdir test: PASS\n",
+        "native_time": 0.030191,
+        "wasm_time": 1.5001,
+        "timing": {
+          "native_compile_time_sec": 0.029115,
+          "native_run_time_sec": 0.001076,
+          "wasm_compile_time_sec": 1.490918,
+          "wasm_run_time_sec": 0.009182,
+          "native_time_sec": 0.030191,
+          "wasm_time_sec": 1.5001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/mknod.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Created regular file successfully\nCreated FIFO successfully\nEEXIST error handled correctly\nENOENT error handled correctly\nAll mknod tests passed successfully\n",
+        "native_time": 0.035608999999999995,
+        "wasm_time": 1.50932,
+        "timing": {
+          "native_compile_time_sec": 0.034473,
+          "native_run_time_sec": 0.001136,
+          "wasm_compile_time_sec": 1.500033,
+          "wasm_run_time_sec": 0.009287,
+          "native_time_sec": 0.035608999999999995,
+          "wasm_time_sec": 1.50932
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/close.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "File opened and closed 2000 times successfully.\n",
+        "native_time": 0.03279,
+        "wasm_time": 1.520025,
+        "timing": {
+          "native_compile_time_sec": 0.029035,
+          "native_run_time_sec": 0.003755,
+          "wasm_compile_time_sec": 1.498908,
+          "wasm_run_time_sec": 0.021117,
+          "native_time_sec": 0.03279,
+          "wasm_time_sec": 1.520025
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fchmod.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Mode changed successfully\n",
+        "native_time": 0.035124,
+        "wasm_time": 1.528403,
+        "timing": {
+          "native_compile_time_sec": 0.034004,
+          "native_run_time_sec": 0.00112,
+          "wasm_compile_time_sec": 1.519242,
+          "wasm_run_time_sec": 0.009161,
+          "native_time_sec": 0.035124,
+          "wasm_time_sec": 1.528403
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/stat.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "running stat(\"testfiles/statfile.txt\")\nsize: 18\n",
+        "native_time": 0.037150999999999997,
+        "wasm_time": 1.534814,
+        "timing": {
+          "native_compile_time_sec": 0.036021,
+          "native_run_time_sec": 0.00113,
+          "wasm_compile_time_sec": 1.5261,
+          "wasm_run_time_sec": 0.008714,
+          "native_time_sec": 0.037150999999999997,
+          "wasm_time_sec": 1.534814
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/open.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "File opened successfully with fd = 3\n",
+        "native_time": 0.031946,
+        "wasm_time": 1.505771,
+        "timing": {
+          "native_compile_time_sec": 0.030882,
+          "native_run_time_sec": 0.001064,
+          "wasm_compile_time_sec": 1.495972,
+          "wasm_run_time_sec": 0.009799,
+          "native_time_sec": 0.031946,
+          "wasm_time_sec": 1.505771
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/clock_gettime_highlevel.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.06711500000000001,
+        "wasm_time": 1.681466,
+        "timing": {
+          "native_compile_time_sec": 0.026734,
+          "native_run_time_sec": 0.040381,
+          "wasm_compile_time_sec": 1.503444,
+          "wasm_run_time_sec": 0.178022,
+          "native_time_sec": 0.06711500000000001,
+          "wasm_time_sec": 1.681466
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/printf.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Hello, World!",
+        "native_time": 0.029262,
+        "wasm_time": 1.384859,
+        "timing": {
+          "native_compile_time_sec": 0.028128,
+          "native_run_time_sec": 0.001134,
+          "wasm_compile_time_sec": 1.375048,
+          "wasm_run_time_sec": 0.009811,
+          "native_time_sec": 0.029262,
+          "wasm_time_sec": 1.384859
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/path_conversion_safety.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Test 1 PASS: open(NULL) returned -1\nTest 2 PASS: stat(NULL) returned -1\nTest 3 PASS: access(NULL) returned -1\nTest 4 PASS: mkdir(NULL) returned -1\nTest 5 PASS: unlink(NULL) returned -1\nTest 6 PASS: link(NULL, NULL) returned -1\nTest 7 PASS: rename(NULL, NULL) returned -1\nTest 8 PASS: open(path > PATH_MAX) returned -1 with ENAMETOOLONG\nTest 9 PASS: open(path with embedded null) returned -1 with ENOENT\n",
+        "native_time": 0.035676,
+        "wasm_time": 1.525855,
+        "timing": {
+          "native_compile_time_sec": 0.034567,
+          "native_run_time_sec": 0.001109,
+          "wasm_compile_time_sec": 1.515895,
+          "wasm_run_time_sec": 0.00996,
+          "native_time_sec": 0.035676,
+          "wasm_time_sec": 1.525855
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/dup.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.026914999999999998,
+        "wasm_time": 1.5053340000000002,
+        "timing": {
+          "native_compile_time_sec": 0.025959,
+          "native_run_time_sec": 0.000956,
+          "wasm_compile_time_sec": 1.495521,
+          "wasm_run_time_sec": 0.009813,
+          "native_time_sec": 0.026914999999999998,
+          "wasm_time_sec": 1.5053340000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/fstat.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "running fstat(\"testfiles/fstatfile.txt\")\nsize: 19\n",
+        "native_time": 0.03156,
+        "wasm_time": 1.511698,
+        "timing": {
+          "native_compile_time_sec": 0.030503,
+          "native_run_time_sec": 0.001057,
+          "wasm_compile_time_sec": 1.501717,
+          "wasm_run_time_sec": 0.009981,
+          "native_time_sec": 0.03156,
+          "wasm_time_sec": 1.511698
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/chmod.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Mode changed successfully\n",
+        "native_time": 0.030919000000000002,
+        "wasm_time": 1.537815,
+        "timing": {
+          "native_compile_time_sec": 0.029804,
+          "native_run_time_sec": 0.001115,
+          "wasm_compile_time_sec": 1.527783,
+          "wasm_run_time_sec": 0.010032,
+          "native_time_sec": 0.030919000000000002,
+          "wasm_time_sec": 1.537815
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/locale_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "done\n",
+        "native_time": 0.039401000000000005,
+        "wasm_time": 2.28187,
+        "timing": {
+          "native_compile_time_sec": 0.038212,
+          "native_run_time_sec": 0.001189,
+          "wasm_compile_time_sec": 2.271617,
+          "wasm_run_time_sec": 0.010253,
+          "native_time_sec": 0.039401000000000005,
+          "wasm_time_sec": 2.28187
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/getrandom.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "getrandom basic test: PASS\n",
+        "native_time": 0.036989,
+        "wasm_time": 1.520015,
+        "timing": {
+          "native_compile_time_sec": 0.035821,
+          "native_run_time_sec": 0.001168,
+          "wasm_compile_time_sec": 1.510705,
+          "wasm_run_time_sec": 0.00931,
+          "native_time_sec": 0.036989,
+          "wasm_time_sec": 1.520015
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/unlinkat.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "\n=== Test Case 1: Remove valid file ===\nTest Case 1: Successfully removed testfiles/unlinkatfile.txt\n\n=== Test Case 2: Remove non-existent file ===\nTest Case 2: Expected failure: No such file or directory\n\n=== Test Case 3: Remove file in a subdirectory ===\nTest Case 3: Successfully removed file in subdirectory\n\n=== Test Case 4: Remove a directory with AT_REMOVEDIR ===\nTest Case 4: Successfully removed directory testfiles/unlinkatsubdir\n\n=== Test Case 5: Remove a directory without AT_REMOVEDIR ===\nTest Case 5: Expected failure: Is a directory\n",
+        "native_time": 0.030556999999999997,
+        "wasm_time": 1.543242,
+        "timing": {
+          "native_compile_time_sec": 0.02933,
+          "native_run_time_sec": 0.001227,
+          "wasm_compile_time_sec": 1.532874,
+          "wasm_run_time_sec": 0.010368,
+          "native_time_sec": 0.030556999999999997,
+          "wasm_time_sec": 1.543242
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/write.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Hello world from Coulson's WASM\n",
+        "native_time": 0.033324999999999994,
+        "wasm_time": 1.392265,
+        "timing": {
+          "native_compile_time_sec": 0.032267,
+          "native_run_time_sec": 0.001058,
+          "wasm_compile_time_sec": 1.38266,
+          "wasm_run_time_sec": 0.009605,
+          "native_time_sec": 0.033324999999999994,
+          "wasm_time_sec": 1.392265
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/statfs.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.03113,
+        "wasm_time": 1.5183149999999999,
+        "timing": {
+          "native_compile_time_sec": 0.03003,
+          "native_run_time_sec": 0.0011,
+          "wasm_compile_time_sec": 1.509364,
+          "wasm_run_time_sec": 0.008951,
+          "native_time_sec": 0.03113,
+          "wasm_time_sec": 1.5183149999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/filetest1000.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        "native_time": 0.036412,
+        "wasm_time": 1.411703,
+        "timing": {
+          "native_compile_time_sec": 0.03182,
+          "native_run_time_sec": 0.004592,
+          "wasm_compile_time_sec": 1.391668,
+          "wasm_run_time_sec": 0.020035,
+          "native_time_sec": 0.036412,
+          "wasm_time_sec": 1.411703
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/file_tests/deterministic/ioctl.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "[For 0 = False and <any_other_int> = True]\n[The answers should be F, T, F]\n\n(0) Is the socket set for non-blocking I/O?: 0\n[Setting socket for non_blocking I/O]\n(1) Is the socket set for non-blocking I/O?: 2048\n[Clearing socket for non-blocking I/O]\n(2) Is the socket set for non-blocking I/O?: 0\n",
+        "native_time": 0.042134,
+        "wasm_time": 1.527927,
+        "timing": {
+          "native_compile_time_sec": 0.041092,
+          "native_run_time_sec": 0.001042,
+          "wasm_compile_time_sec": 1.519003,
+          "wasm_run_time_sec": 0.008924,
+          "native_time_sec": 0.042134,
+          "wasm_time_sec": 1.527927
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/udp_send_recv.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "All UDP tests passed\n",
+        "native_time": 0.137824,
+        "wasm_time": 1.684455,
+        "timing": {
+          "native_compile_time_sec": 0.036249,
+          "native_run_time_sec": 0.101575,
+          "wasm_compile_time_sec": 1.574082,
+          "wasm_run_time_sec": 0.110373,
+          "native_time_sec": 0.137824,
+          "wasm_time_sec": 1.684455
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/dnstest.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "dnstest ok\n",
+        "native_time": 0.033753,
+        "wasm_time": 1.537217,
+        "timing": {
+          "native_compile_time_sec": 0.032692,
+          "native_run_time_sec": 0.001061,
+          "wasm_compile_time_sec": 1.526983,
+          "wasm_run_time_sec": 0.010234,
+          "native_time_sec": 0.033753,
+          "wasm_time_sec": 1.537217
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/epoll_edge_triggered.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "1a. ET: first epoll_wait fired (1 event)\n1b. ET: second epoll_wait without read -> 0 events (correct)\n1c. ET: partial read, no new write -> 0 events\n1d. ET: new write -> edge fires again\n2a. ONESHOT: first fire OK\n2b. ONESHOT: second write -> 0 events (disabled)\n2c. ONESHOT: re-armed via MOD -> fires again\n3. EPOLL_CTL_DEL: deleted FD not reported, remaining FD works\n4. Multi-event: epoll_wait returned 2 events with maxevents=4\n5. EPOLL_CTL_ADD duplicate -> EEXIST\n6. EPOLL_CTL_MOD on unadded FD -> ENOENT\n7. epoll_create1(EPOLL_CLOEXEC) sets FD_CLOEXEC\nAll advanced epoll tests passed\n",
+        "native_time": 0.185376,
+        "wasm_time": 1.687831,
+        "timing": {
+          "native_compile_time_sec": 0.033834,
+          "native_run_time_sec": 0.151542,
+          "wasm_compile_time_sec": 1.527817,
+          "wasm_run_time_sec": 0.160014,
+          "native_time_sec": 0.185376,
+          "wasm_time_sec": 1.687831
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-serverclient.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.042864,
+        "wasm_time": 1.577323,
+        "timing": {
+          "native_compile_time_sec": 0.041477,
+          "native_run_time_sec": 0.001387,
+          "wasm_compile_time_sec": 1.566789,
+          "wasm_run_time_sec": 0.010534,
+          "native_time_sec": 0.042864,
+          "wasm_time_sec": 1.577323
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/sendmsg_recvmsg_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "sendmsg_recvmsg_test passed\n",
+        "native_time": 0.031382,
+        "wasm_time": 1.553939,
+        "timing": {
+          "native_compile_time_sec": 0.030307,
+          "native_run_time_sec": 0.001075,
+          "wasm_compile_time_sec": 1.543863,
+          "wasm_run_time_sec": 0.010076,
+          "native_time_sec": 0.031382,
+          "wasm_time_sec": 1.553939
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socketepoll.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.038048,
+        "wasm_time": 1.382023,
+        "timing": {
+          "native_compile_time_sec": 0.036905,
+          "native_run_time_sec": 0.001143,
+          "wasm_compile_time_sec": 1.373423,
+          "wasm_run_time_sec": 0.0086,
+          "native_time_sec": 0.038048,
+          "wasm_time_sec": 1.382023
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/ipv6_basic.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "All IPv6 tests passed\n",
+        "native_time": 0.033421,
+        "wasm_time": 1.538136,
+        "timing": {
+          "native_compile_time_sec": 0.032219,
+          "native_run_time_sec": 0.001202,
+          "wasm_compile_time_sec": 1.528899,
+          "wasm_run_time_sec": 0.009237,
+          "native_time_sec": 0.033421,
+          "wasm_time_sec": 1.538136
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/error_handling_net.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "1. EBADF on all operations with fd=-1\n2. recv on unconnected socket \u2192 ENOTCONN\n3. connect to closed port \u2192 ECONNREFUSED\n4. send after peer close \u2192 EPIPE\n5. bind same port twice \u2192 EADDRINUSE\n6. shutdown with invalid 'how' \u2192 EINVAL\n7. recv after peer SHUT_WR \u2192 0 (EOF)\n8. send after own SHUT_WR \u2192 EPIPE\nAll network error handling tests passed\n",
+        "native_time": 0.039127,
+        "wasm_time": 1.5416269999999999,
+        "timing": {
+          "native_compile_time_sec": 0.037972,
+          "native_run_time_sec": 0.001155,
+          "wasm_compile_time_sec": 1.532433,
+          "wasm_run_time_sec": 0.009194,
+          "native_time_sec": 0.039127,
+          "wasm_time_sec": 1.5416269999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getifaddrs.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "getifaddrs ok\n",
+        "native_time": 0.038091,
+        "wasm_time": 1.554803,
+        "timing": {
+          "native_compile_time_sec": 0.036964,
+          "native_run_time_sec": 0.001127,
+          "wasm_compile_time_sec": 1.54469,
+          "wasm_run_time_sec": 0.010113,
+          "native_time_sec": 0.038091,
+          "wasm_time_sec": 1.554803
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socket_cloexec.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "SOCK_CLOEXEC is set.\n",
+        "native_time": 0.033706,
+        "wasm_time": 1.4971940000000001,
+        "timing": {
+          "native_compile_time_sec": 0.032639,
+          "native_run_time_sec": 0.001067,
+          "wasm_compile_time_sec": 1.487257,
+          "wasm_run_time_sec": 0.009937,
+          "native_time_sec": 0.033706,
+          "wasm_time_sec": 1.4971940000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/simple_epoll.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "waiting for epoll event...\ngot data: hello epoll!\n\n",
+        "native_time": 0.032138,
+        "wasm_time": 1.518103,
+        "timing": {
+          "native_compile_time_sec": 0.031205,
+          "native_run_time_sec": 0.000933,
+          "wasm_compile_time_sec": 1.509333,
+          "wasm_run_time_sec": 0.00877,
+          "native_time_sec": 0.032138,
+          "wasm_time_sec": 1.518103
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/epollcreate1.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Running epoll_create1 tests...\n-------------------------------\n[TEST] Basic epoll_create1(0)... PASSED (fd=3)\n[TEST] epoll_create1(EPOLL_CLOEXEC)... \nTesting 524288 1PASSED (FD_CLOEXEC bit is set)\n[TEST] epoll_create1(INVALID_FLAG)... PASSED (Correctly returned EINVAL)\n-------------------------------\nAll tests passed successfully.\n",
+        "native_time": 0.034362000000000004,
+        "wasm_time": 1.512563,
+        "timing": {
+          "native_compile_time_sec": 0.033355,
+          "native_run_time_sec": 0.001007,
+          "wasm_compile_time_sec": 1.502526,
+          "wasm_run_time_sec": 0.010037,
+          "native_time_sec": 0.034362000000000004,
+          "wasm_time_sec": 1.512563
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipepong.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Parent sending 1\nChild received 1\nChild sends 2\nParent received 2\nParent sending 3\nChild received 3\nChild sends 4\nParent received 4\nParent sending 5\nChild received 5\nChild sends 6\nParent received 6\nParent sending 7\nChild received 7\nChild sends 8\nParent received 8\nParent sending 9\nChild received 9\nChild sends 10\nParent received 10\nParent sending 11\nChild received 11\nChild sends 12\nParent received 12\nParent sending 13\nChild received 13\nChild sends 14\nParent received 14\nParent sending 15\nChild received 15\nChild sends 16\nParent received 16\nParent sending 17\nChild received 17\nChild sends 18\nParent received 18\nParent sending 19\nChild received 19\nChild sends 20\nParent received 20\nParent sending 21\nChild received 21\nChild sends 22\nParent received 22\nParent sending 23\nChild received 23\nChild sends 24\nParent received 24\nParent sending 25\nChild received 25\nChild sends 26\nParent received 26\nParent sending 27\nChild received 27\nChild sends 28\nParent received 28\nParent sending 29\nChild received 29\nChild sends 30\nParent received 30\nParent sending 31\nChild received 31\nChild sends 32\nParent received 32\nParent sending 33\nChild received 33\nChild sends 34\nParent received 34\nParent sending 35\nChild received 35\nChild sends 36\nParent received 36\nParent sending 37\nChild received 37\nChild sends 38\nParent received 38\nParent sending 39\nChild received 39\nChild sends 40\nParent received 40\nParent sending 41\nChild received 41\nChild sends 42\nParent received 42\nParent sending 43\nChild received 43\nChild sends 44\nParent received 44\nParent sending 45\nChild received 45\nChild sends 46\nParent received 46\nParent sending 47\nChild received 47\nChild sends 48\nParent received 48\nParent sending 49\nChild received 49\nChild sends 50\nParent received 50\nParent sending 51\nChild received 51\nChild sends 52\nParent received 52\nParent sending 53\nChild received 53\nChild sends 54\nParent received 54\nParent sending 55\nChild received 55\nChild sends 56\nParent received 56\nParent sending 57\nChild received 57\nChild sends 58\nParent received 58\nParent sending 59\nChild received 59\nChild sends 60\nParent received 60\nParent sending 61\nChild received 61\nChild sends 62\nParent received 62\nParent sending 63\nChild received 63\nChild sends 64\nParent received 64\nParent sending 65\nChild received 65\nChild sends 66\nParent received 66\nParent sending 67\nChild received 67\nChild sends 68\nParent received 68\nParent sending 69\nChild received 69\nChild sends 70\nParent received 70\nParent sending 71\nChild received 71\nChild sends 72\nParent received 72\nParent sending 73\nChild received 73\nChild sends 74\nParent received 74\nParent sending 75\nChild received 75\nChild sends 76\nParent received 76\nParent sending 77\nChild received 77\nChild sends 78\nParent received 78\nParent sending 79\nChild received 79\nChild sends 80\nParent received 80\nParent sending 81\nChild received 81\nChild sends 82\nParent received 82\nParent sending 83\nChild received 83\nChild sends 84\nParent received 84\nParent sending 85\nChild received 85\nChild sends 86\nParent received 86\nParent sending 87\nChild received 87\nChild sends 88\nParent received 88\nParent sending 89\nChild received 89\nChild sends 90\nParent received 90\nParent sending 91\nChild received 91\nChild sends 92\nParent received 92\nParent sending 93\nChild received 93\nChild sends 94\nParent received 94\nParent sending 95\nChild received 95\nChild sends 96\nParent received 96\nParent sending 97\nChild received 97\nChild sends 98\nParent received 98\nParent sending 99\nChild received 99\nChild sends 100\nParent received 100\nPipe Pong complete.\nFinal value: 100\n",
+        "native_time": 0.039434,
+        "wasm_time": 1.546037,
+        "timing": {
+          "native_compile_time_sec": 0.03773,
+          "native_run_time_sec": 0.001704,
+          "wasm_compile_time_sec": 1.535879,
+          "wasm_run_time_sec": 0.010158,
+          "native_time_sec": 0.039434,
+          "wasm_time_sec": 1.546037
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipeonestring.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032168999999999996,
+        "wasm_time": 1.5396759999999998,
+        "timing": {
+          "native_compile_time_sec": 0.030951,
+          "native_run_time_sec": 0.001218,
+          "wasm_compile_time_sec": 1.529432,
+          "wasm_run_time_sec": 0.010244,
+          "native_time_sec": 0.032168999999999996,
+          "wasm_time_sec": 1.5396759999999998
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/nonblocking_eagain.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "1. SOCK_NONBLOCK flag set at creation\n2. O_NONBLOCK set via fcntl\n3. recv on empty non-blocking socket \u2192 EAGAIN\n4. Non-blocking accept with no client \u2192 EAGAIN\n5. SOCK_NONBLOCK | SOCK_CLOEXEC both set\n6. Non-blocking send filled buffer (8064 bytes), then EAGAIN\nAll non-blocking I/O tests passed\n",
+        "native_time": 0.032665,
+        "wasm_time": 1.524615,
+        "timing": {
+          "native_compile_time_sec": 0.031535,
+          "native_run_time_sec": 0.00113,
+          "wasm_compile_time_sec": 1.514736,
+          "wasm_run_time_sec": 0.009879,
+          "native_time_sec": 0.032665,
+          "wasm_time_sec": 1.524615
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/shutdown_fork.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.035803,
+        "wasm_time": 1.539815,
+        "timing": {
+          "native_compile_time_sec": 0.03468,
+          "native_run_time_sec": 0.001123,
+          "wasm_compile_time_sec": 1.529595,
+          "wasm_run_time_sec": 0.01022,
+          "native_time_sec": 0.035803,
+          "wasm_time_sec": 1.539815
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/shutdown.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.033226,
+        "wasm_time": 1.406285,
+        "timing": {
+          "native_compile_time_sec": 0.032132,
+          "native_run_time_sec": 0.001094,
+          "wasm_compile_time_sec": 1.395991,
+          "wasm_run_time_sec": 0.010294,
+          "native_time_sec": 0.033226,
+          "wasm_time_sec": 1.406285
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getaddrinfo_test.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "1. Numeric 192.168.1.1:80 OK\n2. Numeric [::1]:443 OK\n3. AI_PASSIVE \u2192 0.0.0.0:8080\n4. AI_NUMERICHOST + non-numeric \u2192 error -2 (Name or service not known)\n5. gai_strerror OK\n6. localhost \u2192 127.0.0.1\n7. Port 12345 resolved OK\nAll getaddrinfo tests passed\n",
+        "native_time": 0.041519,
+        "wasm_time": 2.103072,
+        "timing": {
+          "native_compile_time_sec": 0.04022,
+          "native_run_time_sec": 0.001299,
+          "wasm_compile_time_sec": 2.094131,
+          "wasm_run_time_sec": 0.008941,
+          "native_time_sec": 0.041519,
+          "wasm_time_sec": 2.103072
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getsockname.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.04379,
+        "wasm_time": 1.528947,
+        "timing": {
+          "native_compile_time_sec": 0.042791,
+          "native_run_time_sec": 0.000999,
+          "wasm_compile_time_sec": 1.519052,
+          "wasm_run_time_sec": 0.009895,
+          "native_time_sec": 0.04379,
+          "wasm_time_sec": 1.528947
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipe2.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.034136,
+        "wasm_time": 1.491924,
+        "timing": {
+          "native_compile_time_sec": 0.033095,
+          "native_run_time_sec": 0.001041,
+          "wasm_compile_time_sec": 1.483018,
+          "wasm_run_time_sec": 0.008906,
+          "native_time_sec": 0.034136,
+          "wasm_time_sec": 1.491924
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socket.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Socket opened succesfully.",
+        "native_time": 0.032352,
+        "wasm_time": 1.3906949999999998,
+        "timing": {
+          "native_compile_time_sec": 0.031286,
+          "native_run_time_sec": 0.001066,
+          "wasm_compile_time_sec": 1.380996,
+          "wasm_run_time_sec": 0.009699,
+          "native_time_sec": 0.032352,
+          "wasm_time_sec": 1.3906949999999998
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipeinput2.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.031913,
+        "wasm_time": 1.5467009999999999,
+        "timing": {
+          "native_compile_time_sec": 0.030691,
+          "native_run_time_sec": 0.001222,
+          "wasm_compile_time_sec": 1.536695,
+          "wasm_run_time_sec": 0.010006,
+          "native_time_sec": 0.031913,
+          "wasm_time_sec": 1.5467009999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socket_options_advanced.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "1. TCP_NODELAY round-trip OK\n2. SO_LINGER round-trip OK (linger=5s)\n3a. SO_SNDBUF default = 16384\n3b. SO_RCVBUF default = 131072\n3c. SO_SNDBUF set 32768 \u2192 got 65536\n3d. SO_RCVBUF set 32768 \u2192 got 65536\n4. SO_REUSEPORT round-trip OK\n5. SO_ERROR = 0 (no error)\n6. SO_ACCEPTCONN: 0 before listen, 1 after\nAll advanced socket option tests passed\n",
+        "native_time": 0.044041,
+        "wasm_time": 1.5564300000000002,
+        "timing": {
+          "native_compile_time_sec": 0.042959,
+          "native_run_time_sec": 0.001082,
+          "wasm_compile_time_sec": 1.546998,
+          "wasm_run_time_sec": 0.009432,
+          "native_time_sec": 0.044041,
+          "wasm_time_sec": 1.5564300000000002
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/tcp_connect_single.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.034588999999999995,
+        "wasm_time": 1.5398269999999998,
+        "timing": {
+          "native_compile_time_sec": 0.033502,
+          "native_run_time_sec": 0.001087,
+          "wasm_compile_time_sec": 1.530865,
+          "wasm_run_time_sec": 0.008962,
+          "native_time_sec": 0.034588999999999995,
+          "wasm_time_sec": 1.5398269999999998
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipewrite.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.035612,
+        "wasm_time": 1.5297779999999999,
+        "timing": {
+          "native_compile_time_sec": 0.03456,
+          "native_run_time_sec": 0.001052,
+          "wasm_compile_time_sec": 1.520039,
+          "wasm_run_time_sec": 0.009739,
+          "native_time_sec": 0.035612,
+          "wasm_time_sec": 1.5297779999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/makepipe.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032994,
+        "wasm_time": 1.39581,
+        "timing": {
+          "native_compile_time_sec": 0.032023,
+          "native_run_time_sec": 0.000971,
+          "wasm_compile_time_sec": 1.385804,
+          "wasm_run_time_sec": 0.010006,
+          "native_time_sec": 0.032994,
+          "wasm_time_sec": 1.39581
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socketpair.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "-->In Xanadu, did Kublai Khan . . .\n-->A stately pleasure dome decree . . .\n",
+        "native_time": 0.032393,
+        "wasm_time": 1.5334349999999999,
+        "timing": {
+          "native_compile_time_sec": 0.031107,
+          "native_run_time_sec": 0.001286,
+          "wasm_compile_time_sec": 1.523145,
+          "wasm_run_time_sec": 0.01029,
+          "native_time_sec": 0.032393,
+          "wasm_time_sec": 1.5334349999999999
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipeinput.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.036809,
+        "wasm_time": 1.5544040000000001,
+        "timing": {
+          "native_compile_time_sec": 0.035557,
+          "native_run_time_sec": 0.001252,
+          "wasm_compile_time_sec": 1.544634,
+          "wasm_run_time_sec": 0.00977,
+          "native_time_sec": 0.036809,
+          "wasm_time_sec": 1.5544040000000001
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/simple-select.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.03174,
+        "wasm_time": 1.545397,
+        "timing": {
+          "native_compile_time_sec": 0.030388,
+          "native_run_time_sec": 0.001352,
+          "wasm_compile_time_sec": 1.535075,
+          "wasm_run_time_sec": 0.010322,
+          "native_time_sec": 0.03174,
+          "wasm_time_sec": 1.545397
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/pipe.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.04171,
+        "wasm_time": 1.540811,
+        "timing": {
+          "native_compile_time_sec": 0.040685,
+          "native_run_time_sec": 0.001025,
+          "wasm_compile_time_sec": 1.531281,
+          "wasm_run_time_sec": 0.00953,
+          "native_time_sec": 0.04171,
+          "wasm_time_sec": 1.540811
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/writev_socket.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "1. writev on socketpair: \"Hello, World!\" (13 bytes)\n2. writev on pipe: \"foobar\"\n3. writev with zero-length iov: \"startend\"\n4. writev single iovec: \"only\"\nAll writev tests passed\n",
+        "native_time": 0.035408999999999996,
+        "wasm_time": 1.520233,
+        "timing": {
+          "native_compile_time_sec": 0.03428,
+          "native_run_time_sec": 0.001129,
+          "wasm_compile_time_sec": 1.51112,
+          "wasm_run_time_sec": 0.009113,
+          "native_time_sec": 0.035408999999999996,
+          "wasm_time_sec": 1.520233
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/socketselect.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.036906,
+        "wasm_time": 1.53081,
+        "timing": {
+          "native_compile_time_sec": 0.035776,
+          "native_run_time_sec": 0.00113,
+          "wasm_compile_time_sec": 1.521704,
+          "wasm_run_time_sec": 0.009106,
+          "native_time_sec": 0.036906,
+          "wasm_time_sec": 1.53081
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/gethostname.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Hostname: a097e96cd59b\n",
+        "native_time": 0.031761,
+        "wasm_time": 1.369136,
+        "timing": {
+          "native_compile_time_sec": 0.030581,
+          "native_run_time_sec": 0.00118,
+          "wasm_compile_time_sec": 1.359171,
+          "wasm_run_time_sec": 0.009965,
+          "native_time_sec": 0.031761,
+          "wasm_time_sec": 1.369136
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/poll.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "stdout is ready for writing.\n",
+        "native_time": 0.038506,
+        "wasm_time": 1.520763,
+        "timing": {
+          "native_compile_time_sec": 0.037401,
+          "native_run_time_sec": 0.001105,
+          "wasm_compile_time_sec": 1.510868,
+          "wasm_run_time_sec": 0.009895,
+          "native_time_sec": 0.038506,
+          "wasm_time_sec": 1.520763
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-nb-select.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Client: Hello message sent\nHello from client\nServer: Hello message sent\nClient: recv() returned 17:  [Hello from server]\nTCP Connection severed!\n",
+        "native_time": 2.037119,
+        "wasm_time": 3.628045,
+        "timing": {
+          "native_compile_time_sec": 0.035461,
+          "native_run_time_sec": 2.001658,
+          "wasm_compile_time_sec": 1.616864,
+          "wasm_run_time_sec": 2.011181,
+          "native_time_sec": 2.037119,
+          "wasm_time_sec": 3.628045
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/recvfrom-sendto.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Client sent: Hello recvfrom!\n",
+        "native_time": 0.033332999999999995,
+        "wasm_time": 1.503357,
+        "timing": {
+          "native_compile_time_sec": 0.032212,
+          "native_run_time_sec": 0.001121,
+          "wasm_compile_time_sec": 1.4936,
+          "wasm_run_time_sec": 0.009757,
+          "native_time_sec": 0.033332999999999995,
+          "wasm_time_sec": 1.503357
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-getsockname.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "sun_path = unix_sock.tmp\n",
+        "native_time": 0.029967999999999998,
+        "wasm_time": 1.52296,
+        "timing": {
+          "native_compile_time_sec": 0.028897,
+          "native_run_time_sec": 0.001071,
+          "wasm_compile_time_sec": 1.512985,
+          "wasm_run_time_sec": 0.009975,
+          "native_time_sec": 0.029967999999999998,
+          "wasm_time_sec": 1.52296
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/getsockopt.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Testing getsockopt() syscall\nTest 1 passed: Default SO_REUSEADDR is 0\nTest 2 passed: Set and get SO_REUSEADDR works correctly\nTest 3 passed: SO_TYPE is SOCK_STREAM\nTest 4 passed: Default SO_KEEPALIVE is 0\nTest 5 passed: Set and get SO_KEEPALIVE works correctly\nTest 6 passed: Invalid FD correctly returns EBADF\nTest 7 passed: Invalid option name correctly returns ENOPROTOOPT\nTest 8 passed: Invalid protocol level correctly returns EOPNOTSUPP\nTest 9 passed: SO_TYPE on UDP socket is SOCK_DGRAM\nAll getsockopt() tests passed successfully\n",
+        "native_time": 0.032984,
+        "wasm_time": 1.52343,
+        "timing": {
+          "native_compile_time_sec": 0.031903,
+          "native_run_time_sec": 0.001081,
+          "wasm_compile_time_sec": 1.51354,
+          "wasm_run_time_sec": 0.00989,
+          "native_time_sec": 0.032984,
+          "wasm_time_sec": 1.52343
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/uds-socketselect.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.032407000000000005,
+        "wasm_time": 1.409714,
+        "timing": {
+          "native_compile_time_sec": 0.031412,
+          "native_run_time_sec": 0.000995,
+          "wasm_compile_time_sec": 1.400193,
+          "wasm_run_time_sec": 0.009521,
+          "native_time_sec": 0.032407000000000005,
+          "wasm_time_sec": 1.409714
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/networking_tests/deterministic/serverclient.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "",
+        "native_time": 0.03126,
+        "wasm_time": 1.3887699999999998,
+        "timing": {
+          "native_compile_time_sec": 0.030301,
+          "native_run_time_sec": 0.000959,
+          "wasm_compile_time_sec": 1.379565,
+          "wasm_run_time_sec": 0.009205,
+          "native_time_sec": 0.03126,
+          "wasm_time_sec": 1.3887699999999998
+        }
+      }
+    },
+    "number_of_Failure_native_compiling": 0,
+    "Failure_native_compiling": [],
+    "number_of_Failure_native_running": 2,
+    "Failure_native_running": [
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/getuid.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/process_tests/deterministic/forkexecuid.c"
+    ],
+    "number_of_Native_Segmentation_Fault": 0,
+    "Native_Segmentation_Fault": [],
+    "number_of_Native_Timeout": 0,
+    "Native_Timeout": [],
+    "number_of_Lind_wasm_compiling": 0,
+    "Lind_wasm_compiling": [],
+    "number_of_Lind_wasm_runtime": 0,
+    "Lind_wasm_runtime": [],
+    "number_of_Lind_wasm_Segmentation_Fault": 0,
+    "Lind_wasm_Segmentation_Fault": [],
+    "number_of_Lind_wasm_Timeout": 0,
+    "Lind_wasm_Timeout": [],
+    "number_of_Unknown_Failure": 1,
+    "Unknown_Failure": [
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/deterministic/tcache_test.c"
+    ],
+    "number_of_Output_mismatch": 0,
+    "Output_mismatch": [],
+    "number_of_Fail_native_succeeded": 0,
+    "Fail_native_succeeded": [],
+    "number_of_Fail_wasm_succeeded": 0,
+    "Fail_wasm_succeeded": [],
+    "number_of_Fail_both_succeeded": 0,
+    "Fail_both_succeeded": [],
+    "number_of_Fail_native_compiling": 0,
+    "Fail_native_compiling": [],
+    "number_of_Fail_wasm_compiling": 0,
+    "Fail_wasm_compiling": []
+  },
+  "fail": {
+    "total_test_cases": 3,
+    "number_of_success": 3,
+    "success": [
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/fail/mmap-negative2.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/fail/mmap-negative1.c",
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/fail/signal_resethand.c"
+    ],
+    "number_of_failures": 0,
+    "failures": [],
+    "test_cases": {
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/fail/mmap-negative2.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Native exit code: -11\nWasm exit code: 70\nBoth failed as expected.",
+        "native_time": 0.206976,
+        "wasm_time": 1.381689,
+        "timing": {
+          "native_compile_time_sec": 0.135973,
+          "native_run_time_sec": 0.071003,
+          "wasm_compile_time_sec": 1.371583,
+          "wasm_run_time_sec": 0.010106,
+          "native_time_sec": 0.206976,
+          "wasm_time_sec": 1.381689
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/memory_tests/fail/mmap-negative1.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Native exit code: -11\nWasm exit code: 70\nBoth failed as expected.",
+        "native_time": 0.08335899999999999,
+        "wasm_time": 1.363745,
+        "timing": {
+          "native_compile_time_sec": 0.030499,
+          "native_run_time_sec": 0.05286,
+          "wasm_compile_time_sec": 1.354834,
+          "wasm_run_time_sec": 0.008911,
+          "native_time_sec": 0.08335899999999999,
+          "wasm_time_sec": 1.363745
+        }
+      },
+      "/tmp/wasmtest_artifacts_tayc93pt/signal_tests/fail/signal_resethand.c": {
+        "status": "Success",
+        "error_type": null,
+        "output": "Native exit code: -2\nWasm exit code: timeout\nBoth failed as expected.",
+        "native_time": 1.031472,
+        "wasm_time": 1.39985,
+        "timing": {
+          "native_compile_time_sec": 0.030024,
+          "native_run_time_sec": 1.001448,
+          "wasm_compile_time_sec": 1.39985,
+          "wasm_run_time_sec": null,
+          "native_time_sec": 1.031472,
+          "wasm_time_sec": 1.39985
+        }
+      }
+    },
+    "number_of_Failure_native_compiling": 0,
+    "Failure_native_compiling": [],
+    "number_of_Failure_native_running": 0,
+    "Failure_native_running": [],
+    "number_of_Native_Segmentation_Fault": 0,
+    "Native_Segmentation_Fault": [],
+    "number_of_Native_Timeout": 0,
+    "Native_Timeout": [],
+    "number_of_Lind_wasm_compiling": 0,
+    "Lind_wasm_compiling": [],
+    "number_of_Lind_wasm_runtime": 0,
+    "Lind_wasm_runtime": [],
+    "number_of_Lind_wasm_Segmentation_Fault": 0,
+    "Lind_wasm_Segmentation_Fault": [],
+    "number_of_Lind_wasm_Timeout": 0,
+    "Lind_wasm_Timeout": [],
+    "number_of_Unknown_Failure": 0,
+    "Unknown_Failure": [],
+    "number_of_Output_mismatch": 0,
+    "Output_mismatch": [],
+    "number_of_Fail_native_succeeded": 0,
+    "Fail_native_succeeded": [],
+    "number_of_Fail_wasm_succeeded": 0,
+    "Fail_wasm_succeeded": [],
+    "number_of_Fail_both_succeeded": 0,
+    "Fail_both_succeeded": [],
+    "number_of_Fail_native_compiling": 0,
+    "Fail_native_compiling": [],
+    "number_of_Fail_wasm_compiling": 0,
+    "Fail_wasm_compiling": []
+  }
+}

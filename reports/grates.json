@@ -1,0 +1,72 @@
+{
+  "total_test_cases": 9,
+  "number_of_success": 9,
+  "success": [
+    "concurrent-request/geteuid_grate.c",
+    "interpose-exec_grate.c",
+    "interpose-exit_grate.c",
+    "interpose-fork_grate.c",
+    "interpose-mmap_grate.c",
+    "interpose-register_grate.c",
+    "multi-register_grate.c",
+    "simple-tests/cpdata_grate.c",
+    "simple-tests/geteuid_grate.c"
+  ],
+  "number_of_failures": 0,
+  "failures": [],
+  "number_of_compile_failures": 0,
+  "compile_failures": [],
+  "number_of_runtime_failures": 0,
+  "runtime_failures": [],
+  "number_of_timeout_failures": 0,
+  "timeout_failures": [],
+  "number_of_missing_pair_failures": 0,
+  "missing_pair_failures": [],
+  "test_cases": {
+    "concurrent-request/geteuid_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|geteuid] Registering geteuid handler for cage 2 in grate 1 with fn ptr addr: 2\n[Cage | geteuid] PASS: 1000000 calls returned 10\n[Grate|geteuid] PASS\n\nSTDERR:\n"
+    },
+    "interpose-exec_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|interpose-exec] Registering exec handler for cage 2 in grate 1 with fn ptr addr: 2\n[Grate|interpose-exec] Handling function ptr: 2 from cage: 1\n[Grate|interpose-exec] In exec_grate 1 handler for cage: 1\n[Grate|interpose-exec] Handling function ptr: 2 from cage: 1\n[Grate|interpose-exec] In exec_grate 1 handler for cage: 1\nExec successful, argv[1]: --execd\n[Grate|interpose-exec] PASS\n\nSTDERR:\n"
+    },
+    "interpose-exit_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|interpose-exit] Registering exit handler for cage 2 in grate 1 with fn ptr addr: 2\nExiting...\n\n[Grate|interpose-exit] Handling function ptr: 2 from cage: 1\n[Grate|interpose-exit] In exit_grate 1 handler for cage: 1\n[Grate|interpose-exit] PASS\n\nSTDERR:\n"
+    },
+    "interpose-fork_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|interpose-fork] Registering fork handler for cage 2 in grate 1 with fn ptr addr: 2\n[Grate|interpose-fork] Handling function ptr: 2 from cage: 1\n[Grate|interpose-fork] In fork_grate 1 handler for cage: 1\n[Grate|interpose-fork] PASS\n\nSTDERR:\n"
+    },
+    "interpose-mmap_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|interpose-mmap] Registering mmap handler for cage 2 in grate 1 with fn ptr addr: 2\n[Grate|interpose-mmap] Handling function ptr: 2 from cage: 1\n[Grate|interpose-mmap] In mmap_grate 1 handler for cage: 1\n[Grate|interpose-mmap] Handling function ptr: 2 from cage: 1\n[Grate|interpose-mmap] In mmap_grate 1 handler for cage: 1\nmmap test: PASS\n[Grate|interpose-mmap] PASS\n\nSTDERR:\n"
+    },
+    "interpose-register_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|interpose-register] Registering register_handler for cage 2 in grate 1 with fn ptr addr: 3\n[Cage|interpose-register] In cage 2, about to register handler for geteuid\n[Grate|interpose-register] Handling function ptr: 3 from cage: 1\n[Grate|interpose-register] In register_grate 1 handler for cage: 1\n[Grate|geteuid] Registering geteuid handler for cage 1 in grate 0 with fn ptr addr: 7021753225191620609\n[Grate|interpose-register] Handling function ptr: 2 from cage: 1\n[Grate|interpose-register] In register_grate 1 handler for cage: 1\n[Cage|interpose-register] PASS: geteuid ret = 10\n[Grate|interpose-register] PASS\n\nSTDERR:\n"
+    },
+    "multi-register_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|multi-register_grate] Registering geteuid handler for cage 2 in grate 1 with fn ptr addr: 2\n[Grate|multi-register_grate] Registering getuid handler for cage 2 in grate 1 with fn ptr addr: 3\n[Grate|multi-register_grate] Handling function ptr: 2 from cage: 1\n[Grate|multi-register_grate] In multi-register_grate 1 handler for cage: 1\n[Grate|multi-register_grate] Handling function ptr: 3 from cage: 1\n[Grate|multi-register_grate] In multi-register_grate 1 handler for cage: 1\n[Cage | multi-register] PASS: geteuid=10, getuid=20\n[Grate|multi-register] PASS\n\nSTDERR:\n"
+    },
+    "simple-tests/cpdata_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|open] intercepts open call: thiscage=1, arg1cage=2\n[Grate|open] copied pathname: random\n[cage] fd=10\n\nSTDERR:\n"
+    },
+    "simple-tests/geteuid_grate.c": {
+      "status": "Success",
+      "error_type": null,
+      "output": "STDOUT:\n[Grate|geteuid] Registering geteuid handler for cage 2 in grate 1 with fn ptr addr: 2\n[Grate|geteuid] Handling function ptr: 2 from cage: 1\n[Grate|geteuid] In geteuid_grate 1 handler for cage: 1\n[Cage | geteuid] PASS: geteuid ret = 10\n[Grate|geteuid] PASS\n\nSTDERR:\n"
+    }
+  }
+}
