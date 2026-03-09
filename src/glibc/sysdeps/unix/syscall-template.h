@@ -3,14 +3,7 @@
 #include <unistd.h>
 #include <lind_syscall.h>
 #include <addr_translation.h>
-
-// Define NOTUSED for unused arguments
-#define NOTUSED 0xdeadbeefdeadbeefULL
-
-// Define flags for errno translation
-// See comments in [`lind_syscall/lind_syscall.c`] for details
-#define TRANSLATE_ERRNO_ON 1
-#define TRANSLATE_ERRNO_OFF 0
+#include <lind_constants.h>
 
 /*
  * MAKE_LEGACY_SYSCALL:
