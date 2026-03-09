@@ -330,9 +330,9 @@ impl<T> Linker<T> {
     }
 
     pub fn deepclone_global_imports(&mut self, mut store: impl AsContextMut<Data = T>, module: &Module) -> anyhow::Result<()> {
-        println!("[debug] deepclone_global_imports start");
+        // println!("[debug] deepclone_global_imports start");
         for import in module.imports() {
-            println!("[debug] deepclone_global_imports start");
+            // println!("[debug] deepclone_global_imports start");
             if let Ok(definition) = self._get_by_import(&import) {
                 let name = import.name();
                 match definition {
@@ -343,9 +343,9 @@ impl<T> Linker<T> {
                                 let value = global.get(&mut store);
                                 let cloned_value = value.clone();
                                 let cloned_global = Global::new(&mut store, global_ty, cloned_value)?;
-                                println!("[debug] deepclone_global_imports: before define");
+                                // println!("[debug] deepclone_global_imports: before define");
                                 self.define(&mut store, import.module(), name, cloned_global)?;
-                                println!("[debug] deepclone_global_imports: after define");
+                                // println!("[debug] deepclone_global_imports: after define");
                             },
                             _ => {}
                         }
@@ -372,22 +372,31 @@ impl<T> Linker<T> {
                 _ => {}
             }
         }
+
+        // println!("[debug]: get_global_define_snapshot: store id: {:?}", store.as_context().0.id());
         for (module, name, global) in collected {
+            // println!("[debug] get_global_define_snapshot: clone definition of {} (store id: {:?})", name, global.store_id());
             let global_ty = global.ty(&store);
             let value = global.get(&mut store);
             let cloned_value = value.clone();
             globals.push((module.to_string(), name.to_string(), global_ty.clone(), cloned_value));
+            // println!("[debug] get_global_define_snapshot: clone definition of {name} done");
         }
         Ok(globals)
     }
 
-    pub fn set_global_define_snapshot(&mut self, mut store: impl AsContextMut<Data = T>, globals: &Vec<(String, String, GlobalType, Val)>) -> anyhow::Result<()> {
+    pub fn set_global_define_snapshot(&mut self, mut store: impl AsContextMut<Data = T>, globals: &Vec<(String, String, GlobalType, Val)>) -> anyhow::Result<Option<u64>> {
+        let mut epoch_handler = None;
         for (module, name, ty, val) in globals {
             let cloned_global = Global::new(&mut store, ty.clone(), val.clone())?;
-            println!("[debug] set_global_define_snapshot: clone definition of {name}");
+            // println!("[debug] set_global_define_snapshot: clone definition of {} (store id: {:?})", name, cloned_global.store_id());
             self.define(&mut store, &module, &name, cloned_global)?;
+
+            if module == "lind" && name == "epoch" {
+                epoch_handler = Some(cloned_global.get_handler_as_u64(&mut store) as u64);
+            }
         }
-        Ok(())
+        Ok(epoch_handler)
     }
 
     pub fn get_memory_base_from_snapshot(&self, mut store: impl AsContextMut<Data = T>, globals: &Vec<(String, String, GlobalType, Val)>, name: &str) -> Option<i32> {
@@ -1783,7 +1792,7 @@ impl<T> Linker<T> {
             .map(|import| {
                 // println!("[debug] _instantiate_pre import name: {:?}", import.name());
                 let definition = self._get_by_import(&import);
-                let def = definition.clone();
+                // let def = definition.clone();
                 // if let Ok(d) = def {
                 //     println!("[debug] store id = {:?}", d.get_store_id());
                 // } else {

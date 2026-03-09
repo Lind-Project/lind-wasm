@@ -359,7 +359,7 @@ impl<
 
                     // println!("[debug] deepclone_global_imports");
                     // linker.deepclone_global_imports(&mut store, &module);
-                    linker.set_global_define_snapshot(&mut store, &snapshot).unwrap();
+                    let epoch_handler = linker.set_global_define_snapshot(&mut store, &snapshot).unwrap();
 
                     // println!("[debug] create child table");
                     let mut child_table = {
@@ -470,7 +470,8 @@ impl<
                     //     }
                     // }
 
-                    let pointer: *mut u64 = &mut 0;
+                    // let pointer: *mut u64 = &mut 0;
+                    let pointer = epoch_handler.unwrap() as *mut u64;
 
                     // initialize the signal for the main thread of forked cage
                     lind_signal_init(
@@ -656,6 +657,31 @@ impl<
             *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
 
+        // set up child_tid
+        let next_tid = match self.next_thread_id() {
+            Some(val) => val,
+            None => {
+                println!("running out of thread id!");
+                0
+            }
+        };
+        let child_tid = child_tid as *mut u32;
+        unsafe {
+            *child_tid = next_tid;
+        }
+        
+        let get_cx = self.get_cx.clone();
+        // retrieve the child host
+        let mut child_host = caller.data().clone();
+
+        let mut snapshot = {
+            let child_ctx = get_cx(&mut child_host);
+            let mut child_linker = child_ctx.linker.clone();
+            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
+            let snapshot = child_linker.get_global_define_snapshot(&mut caller, main_module).unwrap();
+            snapshot
+        };
+
         // mark the start of unwind
         let _res =
             asyncify_start_unwind_func.call(&mut caller, parent_unwind_data_start_usr as i32);
@@ -669,28 +695,11 @@ impl<
         let parent_address_u64 = parent_address as u64;
         let parent_stack_high_usr = caller.as_context().get_stack_base();
 
-        // retrieve the child host
-        let mut child_host = caller.data().clone();
         // get current cageid, child should have the same cageid
         let child_cageid = self.cageid;
 
         // use the same engine for parent and child
         let engine = main_module.engine().clone();
-
-        let get_cx = self.get_cx.clone();
-
-        // set up child_tid
-        let next_tid = match self.next_thread_id() {
-            Some(val) => val,
-            None => {
-                println!("running out of thread id!");
-                0
-            }
-        };
-        let child_tid = child_tid as *mut u32;
-        unsafe {
-            *child_tid = next_tid;
-        }
 
         // set up unwind callback function
         let store = caller.as_context_mut().0;
@@ -729,7 +738,8 @@ impl<
                     child_unwind_data_start_usr + rewind_total_size as u64;
             }
 
-            let builder = thread::Builder::new().name(format!("lind-thread-{}", next_tid));
+            let thread_id = format!("lind-thread-{}", next_tid);
+            let builder = thread::Builder::new().name(thread_id);
             builder
                 .spawn(move || {
                     // create a new instance
@@ -741,19 +751,85 @@ impl<
                     child_ctx.cageid = child_cageid;
                     child_ctx.tid = next_tid as i32;
 
-                    let instance_pre =
-                        Arc::new(child_ctx.linker.instantiate_pre(&main_module).unwrap());
+                    let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
                     let lind_manager = child_ctx.lind_manager.clone();
 
+                    let mut linker = child_ctx.linker.clone();
+                    linker.allow_shadowing(true);
+                    let module = main_module.clone();
+                    let modules = child_ctx.modules.clone();
+                    
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+
+                    let epoch_handler = linker.set_global_define_snapshot(&mut store, &snapshot).unwrap();
+
+                    let mut child_table = {
+                        let mut main_module_table_size = None;
+                        for import in module.imports() {
+                            if let wasmtime::ExternType::Table(table) = import.ty() {
+                                main_module_table_size = Some(table.minimum());
+                            }
+                        }
+                        let main_module_table_size = main_module_table_size.unwrap();
+                        let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
+                        wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
+                    };
+                    linker.define(&mut store, "env", "__indirect_function_table", child_table);
+
+                    for (name, module) in modules.iter().skip(1) {
+                        // println!("[debug] link module {}", name);
+
+                        // Read dylink metadata for this preloaded (library) module.
+                        // This contains the module's declared table/memory requirements.
+                        let dylink_info = module.dylink_meminfo();
+                        let dylink_info = dylink_info.as_ref().unwrap();
+                        // Append this library's function table region to the shared table.
+                        // `table_start` is the starting index of the library's reserved range
+                        // within the global indirect function table.
+                        let table_start = child_table.size(&mut store) as i32;
+
+                        #[cfg(feature = "debug-dylink")]
+                        println!(
+                            "[debug] library table_start: {}, grow: {}",
+                            table_start, dylink_info.table_size
+                        );
+                        // Grow the shared indirect function table by the amount requested by the
+                        // library (as recorded in its dylink section). New slots are initialized
+                        // to null funcref.
+                        child_table.grow(
+                            &mut store,
+                            dylink_info.table_size,
+                            wasmtime::Ref::Func(None),
+                        );
+
+                        let module_memory_base = linker.get_memory_base_from_snapshot(&mut store, &snapshot, module.name().unwrap()).unwrap();
+                        // println!("[debug] module_memory_base: {}", module_memory_base);
+
+                        // Link the library instance into the main linker namespace.
+                        // The linker records the module under `name` and uses `table_start`
+                        // to relocate/interpret the library's function references into the
+                        // shared table. GOT entries are patched through the shared LindGOT.
+                        {
+                            // println!("[debug] library {} instantiate", name);
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base
+                                ).unwrap();
+                        }
+                    }
 
                     // mark as thread
                     store.set_is_thread(true);
 
                     // instantiate the module
                     // let instance = instance_pre.instantiate(&mut store).unwrap();
-                    let (instance, grate_instanceid) = instance_pre
-                        .instantiate_with_lind_thread(&mut store)
+                    let (instance, grate_instanceid) = linker
+                        .instantiate_with_lind_thread(&mut store, &module)
                         .unwrap();
 
                     // we might also want to perserve the offset of current stack pointer to stack bottom
@@ -763,24 +839,27 @@ impl<
                         .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
                         .unwrap();
                     let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
+                    // todo: set up __stack_low and __stack_high
+                    // todo: should share the imported wasm global
 
-                    cfg_if! {
-                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
-                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
-                        // This is intended for debugging only and should not be used in production.
-                        if #[cfg(feature = "disable_signals")] {
-                            let pointer: *mut u64 = &mut 0;
-                        } else {
-                            // retrieve the epoch global
-                            let lind_epoch = instance
-                                .get_export(&mut store, "epoch")
-                                .and_then(|export| export.into_global())
-                                .expect("Failed to find epoch global export!");
+                    // cfg_if! {
+                    //     // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                    //     // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                    //     // This is intended for debugging only and should not be used in production.
+                    //     if #[cfg(feature = "disable_signals")] {
+                    //         let pointer: *mut u64 = &mut 0;
+                    //     } else {
+                    //         // retrieve the epoch global
+                    //         let lind_epoch = instance
+                    //             .get_export(&mut store, "epoch")
+                    //             .and_then(|export| export.into_global())
+                    //             .expect("Failed to find epoch global export!");
 
-                            // retrieve the handler (underlying pointer) for the epoch global
-                            let pointer = lind_epoch.get_handler_as_u64(&mut store);
-                        }
-                    }
+                    //         // retrieve the handler (underlying pointer) for the epoch global
+                    //         let pointer = lind_epoch.get_handler_as_u64(&mut store);
+                    //     }
+                    // }
+                    let pointer = epoch_handler.unwrap() as *mut u64;
 
                     // initialize the signal for the thread of the cage
                     lind_signal_init(
@@ -807,6 +886,10 @@ impl<
 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid as u64, next_tid as u64, vmctx_wrapper);
+
+                    let mut new_child_host = store.data_mut();
+                    let new_child_ctx = get_cx(&mut new_child_host);
+                    new_child_ctx.update_linker(linker);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -1137,8 +1220,9 @@ impl<
     // retrieved from hashmap, and continue the rewind. This approach allows the wasm process to restore to its
     // previous state
     pub fn setjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: u32) -> Result<i32> {
+        return Ok(0);
         // get the base address of the memory
-        let handle = caller.as_context().0.instance(InstanceId::from_index(0));
+        let handle = caller.as_context().0.instance(InstanceId::from_index(1));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let address = defined_memory.base;
 
@@ -1218,8 +1302,9 @@ impl<
         jmp_buf: u32,
         retval: i32,
     ) -> Result<i32> {
+        return Ok(0);
         // get the base address of the memory
-        let handle = caller.as_context().0.instance(InstanceId::from_index(0));
+        let handle = caller.as_context().0.instance(InstanceId::from_index(1));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let address = defined_memory.base;
 
