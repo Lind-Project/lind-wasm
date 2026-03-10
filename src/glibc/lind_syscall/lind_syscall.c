@@ -80,12 +80,12 @@ int make_threei_call (unsigned int callnumber,
     int ret = __lind_make_syscall_trampoline(callnumber, 
         callname, 
         self_cageid, target_cageid,
-        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
-        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
-        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
-        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
-        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid,
-        TRANSLATE_UADDR_TO_HOST(arg1, arg1cageid), arg1cageid);
+        TRANSLATE_ARG_TO_HOST(arg1, arg1cageid),
+        TRANSLATE_ARG_TO_HOST(arg2, arg2cageid),
+        TRANSLATE_ARG_TO_HOST(arg3, arg3cageid),
+        TRANSLATE_ARG_TO_HOST(arg4, arg4cageid),
+        TRANSLATE_ARG_TO_HOST(arg5, arg5cageid),
+        TRANSLATE_ARG_TO_HOST(arg6, arg6cageid));
 
     // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
     if(translate_errno == 0) return ret;
@@ -155,8 +155,8 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t src
         0, // callname is not used in the trampoline, set to 0
         thiscage, // self_cageid
         thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
-        TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
-        TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
+        TRANSLATE_UADDR_TO_HOST(srcaddr, srccage),
+        TRANSLATE_UADDR_TO_HOST(destaddr, destcage),
         len, 0,
         copytype, 0,
         0, 0, 0, 0,

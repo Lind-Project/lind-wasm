@@ -5,6 +5,11 @@
 #include <stddef.h>
 #include <errno.h>
 
+// When we want the argument to be translated, the cageid supplied must have the MSB set to 1. 
+// These masks help check this.
+#define LIND_ARG_TRANSLATE_FLAG (1ULL << 63)
+#define LIND_ARG_CAGEID_MASK (~LIND_ARG_TRANSLATE_FLAG)
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -59,12 +64,16 @@ extern "C"
 
 // Converts (uaddr, cageid) pair to host address.
 // Useful when address space (cage vs host) is ambigious.
+//
+// This is called by copy data where the arguments are already addresses
+// so we implicitly update the cageid argument before passing it to the helper.
 #define TRANSLATE_UADDR_TO_HOST(uaddr, cageid)                                \
-  __lind_translate_uaddr_to_host ((uaddr), (cageid))
+  __lind_translate_uaddr_to_host ((uaddr), (cageid | LIND_ARG_TRANSLATE_FLAG)), (cageid)
 
-// Per-argument translation signaling for threei calls.
-#define LIND_ARG_TRANSLATE_FLAG (1ULL << 63)
-#define LIND_ARG_CAGEID_MASK (~LIND_ARG_TRANSLATE_FLAG)
+// This is used by make_threei_call, we do not modify the flag before checking if translation
+// is needed. We do modify the cage on output so that other threei/lind calls see a correct cageid
+#define TRANSLATE_ARG_TO_HOST(uaddr, cageid)                                  \
+  __lind_translate_uaddr_to_host ((uaddr), (cageid)), (cageid & LIND_ARG_CAGEID_MASK)
 
 /* Translate an array of guest iovec structures to host layout.
    Each iov_base is a wasm32 guest pointer; we split the translated
