@@ -71,9 +71,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize RawPOSIX and register RawPOSIX syscalls with 3i
     rawposix_start(0);
 
-    // Execute with user-selected runtime. Can be switched to other runtime implementation
-    // in the future (e.g.: MPK).
-    execute_wasmtime(lindboot_cli)?;
+    // Execute the selected runtime backend and translate its unified
+    // execution result into a host-level process exit status.
+    //
+    // At this layer, we intentionally do NOT interpret Wasm return
+    // conventions or runtime-specific details. All exit semantics
+    // (e.g., proc_exit, return values, traps) are already normalized
+    // inside `execute_wasmtime` into a single `i32` exit code.
+    //
+    // This design keeps the runtime backend pluggable (e.g., Wasmtime,
+    // MPK-based runtime, SGX-enclosed runtime) while preserving a
+    // consistent host process contract: exit(code) on success,
+    // If the runtime backend fails before producing a normalized
+    // program exit code, terminate with EX_SOFTWARE (70) to signal
+    // a runtime-level failure rather than a cage-provided exit code.
+    match execute_wasmtime(lindboot_cli) {
+        Ok(code) => std::process::exit(code),
+        Err(e) => {
+            eprintln!("{:?}", e);
+            std::process::exit(sysdefs::constants::EX_SOFTWARE);
+        }
+    }
 
     // after all cage exits, finalize the lind
     rawposix_shutdown();

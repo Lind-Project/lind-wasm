@@ -67,6 +67,9 @@ pub fn signal_handler<
             // look up the signal's default handler
             match sysdefs::constants::signal_default_handler_dispatcher(signo) {
                 sysdefs::constants::SignalDefaultHandler::Terminate => {
+                    // Set the exit status of the cage to signaled with the signal number and core dump flag
+                    // (currently set to false)
+                    cage::cage_record_exit_status(cageid, cage::ExitStatus::Signaled(signo, false));
                     // if we are supposed to be terminated, switch the epoch state of all other threads
                     // to "killed" state and perform a suicide
                     cage::signal::epoch_kill_all(cageid);
