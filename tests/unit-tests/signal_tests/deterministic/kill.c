@@ -13,7 +13,9 @@ int main(void) {
 
     if (pid == 0) {
         // child: wait for parent to kill us
-        sleep(10);
+        while (1) {
+            
+        }
         _exit(123);
     }
 
