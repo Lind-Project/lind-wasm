@@ -282,17 +282,21 @@ fn add_debug_to_linker<
     Ok(())
 }
 
-/// Register the 4 argv/environ host functions that glibc's `_start()` calls
-/// to initialize `argc`, `argv`, and `environ` before entering `main()`.
-fn add_environ_to_linker<
+/// Register the 5 environ/args/random host functions under a given module name.
+///
+/// glibc's `_start()` imports these from `"lind"`, while Rust std compiled with
+/// `wasm32-wasip1` imports them from `"wasi_snapshot_preview1"`. We call this
+/// function twice to register under both module names, avoiding duplication.
+fn add_environ_funcs_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
+    module: &str,
     get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
 ) -> anyhow::Result<()> {
     linker.func_wrap(
-        "lind",
+        module,
         "args_sizes_get",
         move |caller: Caller<'_, T>, ptr_argc: i32, ptr_buf_size: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -308,7 +312,7 @@ fn add_environ_to_linker<
     )?;
 
     linker.func_wrap(
-        "lind",
+        module,
         "args_get",
         move |caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -330,7 +334,7 @@ fn add_environ_to_linker<
     )?;
 
     linker.func_wrap(
-        "lind",
+        module,
         "environ_sizes_get",
         move |caller: Caller<'_, T>, ptr_count: i32, ptr_buf_size: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -350,7 +354,7 @@ fn add_environ_to_linker<
     )?;
 
     linker.func_wrap(
-        "lind",
+        module,
         "environ_get",
         move |caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -372,6 +376,19 @@ fn add_environ_to_linker<
         },
     )?;
 
+    linker.func_wrap(
+        module,
+        "random_get",
+        move |caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
+            let base = get_memory_base(&caller) as *mut u8;
+            let slice =
+                unsafe { std::slice::from_raw_parts_mut(base.add(buf as usize), buf_len as usize) };
+            let mut file = std::fs::File::open("/dev/urandom").unwrap();
+            std::io::Read::read_exact(&mut file, slice).unwrap();
+            0
+        },
+    )?;
+
     Ok(())
 }
 
@@ -381,7 +398,7 @@ fn add_environ_to_linker<
 /// - **syscall**: the unified `make-syscall` entry point
 /// - **runtime**: memory base, cage ID, setjmp/longjmp, epoch callback, debug panic
 /// - **debug** (lind_debug feature only): `lind_debug_num`, `lind_debug_str`
-/// - **environ**: argv/environ functions for glibc `_start()`
+/// - **environ**: argv/environ/random_get under both `"lind"` and `"wasi_snapshot_preview1"`
 pub fn add_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
@@ -393,6 +410,7 @@ pub fn add_to_linker<
     add_runtime_to_linker(linker)?;
     #[cfg(feature = "lind_debug")]
     add_debug_to_linker(linker)?;
-    add_environ_to_linker(linker, get_environ)?;
+    add_environ_funcs_to_linker(linker, "lind", get_environ)?;
+    add_environ_funcs_to_linker(linker, "wasi_snapshot_preview1", get_environ)?;
     Ok(())
 }
