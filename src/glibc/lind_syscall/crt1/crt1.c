@@ -186,6 +186,13 @@ int __unused_function_pointer() {
 // explicitly marked this as "used" so it will not be optimized by compiler
 void *___dummy_reference __attribute__((used)) = __unused_function_pointer;
 
+// Force-link signal_callback (defined in libc_sigaction.c) so that it is
+// always exported from the wasm binary.  The epoch-based signal delivery
+// mechanism in wasmtime looks up this export at runtime; without it, any
+// program that receives a signal but never called sigaction() would trap.
+extern void signal_callback(void (*)(int), int);
+void *__force_signal_callback __attribute__((used)) = (void *)signal_callback;
+
 int _start() {
     __lind_init_addr_translation(); // iniatilize cageids before anything else executes
     __libc_setup_tls();
