@@ -31,7 +31,7 @@ In addition to inheritance across fork, an ancestor grate may modify the system 
 
 3i allows system call arguments to specify which cage owns a referenced buffer. This enables grates to safely inspect, modify, or forward memory arguments without unnecessary copying.
 
-For example, if Cage A calls `write` and passes a pointer to a buffer, a grate can explicitly reference that buffer as belonging to A. This allows the grate to examine or adjust the data before forwarding the call, without incorrectly accessing its own memory space.
+For example, if Cage A calls write and passes a pointer to a buffer, a grate can explicitly reference that buffer as belonging to A. This allows the grate to examine or adjust the data before forwarding the call. Without this, the pointer would be interpreted relative to the grate's own address space, which is incorrect — cages have separate address spaces, and A's pointer is only valid in A's context.
 
 
 ## Acting on behalf of other cages
