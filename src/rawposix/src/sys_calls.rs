@@ -347,8 +347,8 @@ pub extern "C" fn exit_syscall(
     // in the cage (0 = no, 1 = yes).
     let mut is_last_thread = 0;
 
-    // Only the low 8 bits of the exit code are observable via wait()
-    let exit_st = ExitStatus::Exited(status & 0xff);
+    // Set the normal exit code
+    let exit_st = ExitStatus::Exited(status);
 
     // Perform thread exit inside RawPOSIX.
     //
