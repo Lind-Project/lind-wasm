@@ -239,12 +239,11 @@ pub extern "C" fn exec_syscall(
         );
     }
 
-    let self_cageid = path_cageid;
     // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(self_cageid);
+    fdtables::empty_fds_for_exec(cageid);
 
     // Copy necessary data from current cage
-    let selfcage = get_cage(self_cageid).unwrap();
+    let selfcage = get_cage(cageid).unwrap();
 
     selfcage.rev_shm.lock().clear();
 
