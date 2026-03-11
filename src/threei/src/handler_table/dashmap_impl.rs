@@ -63,31 +63,22 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// 1. The lookup path is:
 ///        HANDLERTABLE[self_cageid][syscall_num][target_cageid]
 ///
-/// 2. If `target_cageid == self_cageid` (i.e., RAWPOSIX lookup):
-///        - If an explicit RAWPOSIX handler exists, return it.
-///        - Otherwise, fallback to ANY registered handler under
-///          (self_cageid, syscall_num).
-///          This allows RAWPOSIX to behave as a default dispatch target
-///          when no explicit RAWPOSIX entry was installed.
-///    Note: theoretically there could be only one **grate** handlers for each cage
-///           Execeptions should only happen for fork/exec/exit calls (having WASMTIME_CAGEID entries)
-///
-/// 3. If `target_cageid != self_cageid`:
-///        - An exact match is REQUIRED.
-///        - If not found, panic (this is considered a logic error).
+/// 2. The registration logic guarantees that for a given (cageid, syscall_num)
+/// pair there will be only one handler stored in the map. Thus we can
+/// directly retrieve the first entry here.
 ///
 /// ## Arguments:
-/// - self_cageid: The ID of the calling cage (the one executing the syscall).
-/// - syscall_num: The number of the syscall being invoked.
-/// - target_cageid: The ID of the target cage for the syscall.
+/// - `self_cageid`: The ID of the calling cage (the one executing the syscall).
+/// - `syscall_num`: The number of the syscall being invoked.
+/// - `target_cageid`: The ID of the target cage for the syscall.
 ///
 /// ## Returns:
-///     Some((target_cageid, addr)) if a handler is found according to the lookup rules.
+///     Some((actual_target_cageid, handler_addr))
 ///
 /// ## Panics:
-///     - If no entry exists for self_cageid.
-///     - If no entry exists for syscall_num.
-///     - If non-RAWPOSIX lookup misses.
+///     - If no entry exists for `self_cageid`.
+///     - If no entry exists for `syscall_num`.
+///    - If no handler entry exists for the given `target_cageid` (or any fallback) under this syscall.
 pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
     // Grab the per-cage map guard.
     let self_entry = HANDLERTABLE.get(&self_cageid).unwrap_or_else(|| {
@@ -107,51 +98,14 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
 
     let target_map = call_entry.value();
 
-    if target_cageid == lind_platform_const::RAWPOSIX_CAGEID {
-        if let Some(addr_ref) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
-            let addr = *addr_ref.value();
-            return Some((lind_platform_const::RAWPOSIX_CAGEID, addr));
-        } else {
-            panic!(
-                "RAWPOSIX handler not found for self_cageid={} syscall_num={}",
-                self_cageid, syscall_num
-            );
-        }
-    }
-
-    // When target_cageid == self_cageid, this means the call is supposed to be handled
-    // within the same cage or this is a cage call, so we first check if a RAWPOSIX/THREEI
-    // handler exists.
-    // More details on scenarios and the reason we use this check in the comments
-    // in `register_handler_impl`.
-    // If it does, we return it. If not, we fallback to any handler registered for this
-    // (self_cageid, syscall_num) pair,
-    if target_cageid == self_cageid {
-        if let Some(addr_ref) = target_map.get(&lind_platform_const::RAWPOSIX_CAGEID) {
-            let addr = *addr_ref.value();
-            return Some((lind_platform_const::RAWPOSIX_CAGEID, addr));
-        } else if let Some(addr_ref) = target_map.get(&lind_platform_const::THREEI_CAGEID) {
-            let addr = *addr_ref.value();
-            return Some((lind_platform_const::THREEI_CAGEID, addr));
-        }
-
-        // Best-effort fallback: pick any registered handler.
-        if let Some(any) = target_map.iter().next() {
-            let gid = *any.key();
-            let addr = *any.value();
-            return Some((gid, addr));
-        }
-        return None;
-    }
-
-    // Non-RAWPOSIX requires exact match.
-    if let Some(addr_ref) = target_map.get(&target_cageid) {
-        let addr = *addr_ref.value();
-        return Some((target_cageid, addr));
+    if let Some(any) = target_map.iter().next() {
+        let gid = *any.key();
+        let addr = *any.value();
+        return Some((gid, addr));
     }
 
     panic!(
-        "Handler not found for (self_cageid={}, syscall_num={}, target_cageid={})",
+        "No handlers for self_cageid={} syscall_num={} (target_cageid={})",
         self_cageid, syscall_num, target_cageid
     );
 }
@@ -219,11 +173,9 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 /// In all other cases, the function performs registration or overwrite. The
 /// `(srccage, targetcallnum)` containers are created if they do not already
 /// exist. The handler is then inserted into the innermost map, replacing any
-/// previous handler registered for the same `handlefunccage`. If a RAWPOSIX
-/// fallback handler exists under the same syscall, it is removed before the
-/// new handler is inserted. This ensures that RAWPOSIX behaves strictly as a
-/// fallback dispatch target and does not shadow a more specific interposed
-/// grate handler.
+/// previous handler registered for the same `handlefunccage`. This ensures that RAWPOSIX
+/// behaves strictly as a fallback dispatch target and does not shadow a more specific
+/// interposed grate handler.
 ///
 /// At the moment, all glibc-originated cage syscalls issued through
 /// `MAKE_LEGACY_SYSCALL` unconditionally set the target cage ID to
@@ -244,13 +196,10 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 ///
 /// To reduce complexity and avoid ambiguous runtime inference, we adopt
 /// a simpler registration policy. Whenever a specific grate handler is
-/// registered for a `(srccage, syscall)` pair and a RAWPOSIX entry already
-/// exists, the RAWPOSIX entry is removed and replaced. This ensures that
-/// RAWPOSIX remains strictly a fallback target and cannot coexist in a
-/// misleading way with a more specific handler. By enforcing this rule
-/// at registration time, we eliminate the need for complicated dispatch
-/// disambiguation logic later in 3i and keep the runtime decision path
-/// deterministic and structurally clean.
+/// registered for a `(srccage, syscall)` pair any entry is removed and
+/// replaced. By enforcing this rule at registration time, we eliminate
+/// the need for complicated dispatch disambiguation logic later in 3i
+/// and keep the runtime decision path deterministic and structurally clean.
 pub fn register_handler_impl(
     srccage: u64,
     targetcallnum: u64,
@@ -262,12 +211,6 @@ pub fn register_handler_impl(
         if let Some(self_entry) = HANDLERTABLE.get(&srccage) {
             let call_map: &CallnumMap = self_entry.value();
             call_map.remove(&targetcallnum);
-
-            // If the per-cage map is now empty, remove the cage entry.
-            if call_map.is_empty() {
-                drop(self_entry);
-                HANDLERTABLE.remove(&srccage);
-            }
         }
         return 0;
     }
@@ -279,10 +222,9 @@ pub fn register_handler_impl(
     let target_map_ref = call_map.entry(targetcallnum).or_insert_with(DashMap::new);
     let target_map: &TargetCageMap = &*target_map_ref;
 
-    // If RAWPOSIX fallback exists, remove it so it does not shadow the new handler.
-    target_map.remove(&lind_platform_const::RAWPOSIX_CAGEID);
-    // If THREEI fallback exists, remove it so it does not shadow the new handler.
-    target_map.remove(&lind_platform_const::THREEI_CAGEID);
+    // Each (srccage, targetcallnum) pair keeps only one handler entry,
+    // so we clear any existing mapping and replace it directly.
+    target_map.clear();
 
     target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
 

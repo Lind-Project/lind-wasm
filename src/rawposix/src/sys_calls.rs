@@ -105,10 +105,7 @@ pub extern "C" fn fork_syscall(
     let isthread = flags & (sys_const::CLONE_VM);
 
     // Effective parent cage ID.
-    //
-    // Since fork may be interposed by a grate, we treat the argument's
-    // cageid as the operation's identity.
-    let parent_cageid = clone_arg_cageid;
+    let parent_cageid = cageid;
     let mut child_cageid = 0;
 
     // Fork path: create a new cage
@@ -242,12 +239,11 @@ pub extern "C" fn exec_syscall(
         );
     }
 
-    let self_cageid = path_cageid;
     // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(self_cageid);
+    fdtables::empty_fds_for_exec(cageid);
 
     // Copy necessary data from current cage
-    let selfcage = get_cage(self_cageid).unwrap();
+    let selfcage = get_cage(cageid).unwrap();
 
     selfcage.rev_shm.lock().clear();
 
@@ -276,7 +272,7 @@ pub extern "C" fn exec_syscall(
         UNUSED_NAME,
         WASMTIME_CAGEID,
         path,
-        path_cageid,
+        cageid, // Pass cageid as the second argument to identify the execing cage in wasmtime
         argv,
         argv_cageid,
         envs,
@@ -340,9 +336,6 @@ pub extern "C" fn exit_syscall(
         );
     }
 
-    // Since `exit_syscall` may be interposed by a grate, we treat the
-    // argument's cageid as the effective operation cage.
-    let selfcageid = status_cageid;
     // Indicates whether the exiting thread is the last live thread
     // in the cage (0 = no, 1 = yes).
     let mut is_last_thread = 0;
@@ -354,12 +347,12 @@ pub extern "C" fn exit_syscall(
     //
     // `lind_thread_exit` returns true if this thread was the last
     // remaining thread of the cage.
-    if cage::lind_thread_exit(selfcageid, tid) {
+    if cage::lind_thread_exit(cageid, tid) {
         // Need to perform cage-level resource cleanup
         is_last_thread = 1;
 
         // Cleanup fdtable
-        fdtables::remove_cage_from_fdtable(selfcageid);
+        fdtables::remove_cage_from_fdtable(cageid);
 
         // Cleanup cage table and process hierarchy state.
         //
@@ -369,8 +362,8 @@ pub extern "C" fn exit_syscall(
         //   - Send SIGCHLD to the parent
         //
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-        if let Some(selfcage) = get_cage(selfcageid) {
-            if selfcage.parent != selfcageid {
+        if let Some(selfcage) = get_cage(cageid) {
+            if selfcage.parent != cageid {
                 let parent_cage = get_cage(selfcage.parent);
                 if let Some(parent) = parent_cage {
                     parent.child_num.fetch_sub(1, SeqCst);
@@ -389,7 +382,7 @@ pub extern "C" fn exit_syscall(
                         recorded.unwrap_or(exit_st)
                     };
                     zombie_vec.push(Zombie {
-                        cageid: selfcageid,
+                        cageid: cageid,
                         exit_code: zombie_status,
                     });
                 } else {
@@ -399,13 +392,13 @@ pub extern "C" fn exit_syscall(
             }
 
             // if the cage has parent (i.e. it is not the "root" cage)
-            if selfcageid != selfcage.parent {
+            if cageid != selfcage.parent {
                 // Notify parent via SIGCHLD if this is not the root cage.
                 lind_send_signal(selfcage.parent, SIGCHLD);
             }
 
             // Remove the cage from the global cage table.
-            remove_cage(selfcageid);
+            remove_cage(cageid);
         }
     }
 
@@ -417,7 +410,7 @@ pub extern "C" fn exit_syscall(
         UNUSED_NAME,
         WASMTIME_CAGEID,
         status_arg,
-        status_cageid,
+        cageid, // Pass cageid as the second argument to identify the exiting cage in wasmtime
         tid,
         is_last_thread, // represent the last thread exiting
         UNUSED_ARG,
@@ -478,17 +471,8 @@ pub extern "C" fn waitpid_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `waitpid`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`status_cageid`).
-    let operation_cageid = status_cageid;
-
     // get the cage instance
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     let mut zombies = cage.zombies.write();
     let child_num = cage.child_num.load(Relaxed);
@@ -660,16 +644,7 @@ pub extern "C" fn getpid_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `getpid`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`arg1_cageid`).
-    let operation_cageid = arg1_cageid;
-
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     return cage.cageid as i32;
 }
@@ -707,16 +682,7 @@ pub extern "C" fn getppid_syscall(
         return syscall_error(Errno::EFAULT, "getppid", "invalid Cage ID");
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `getppid`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`arg1_cageid`).
-    let operation_cageid = arg1_cageid;
-
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     return cage.parent as i32;
 }
@@ -921,17 +887,8 @@ pub extern "C" fn sigaction_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `sigaction`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`sig_arg_cageid`).
-    let operation_cageid = sig_arg_cageid;
-
     // Retrieve the cage.
-    let cage = match get_cage(operation_cageid) {
+    let cage = match get_cage(cageid) {
         Some(c) => c,
         None => return syscall_error(Errno::ECHILD, "sigaction", "Cage not found"),
     };
@@ -1104,16 +1061,7 @@ pub extern "C" fn sigprocmask_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `sigprocmask`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`how_cageid`).
-    let operation_cageid = how_cageid;
-
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     let mut res = 0;
 
@@ -1263,17 +1211,8 @@ pub extern "C" fn setitimer_syscall(
         );
     }
 
-    // Due to 3i syscall interposition, `cageid` refers to the
-    // current execution context (possibly a forwarding grate), not
-    // necessarily the original caller.
-    //
-    // For syscalls like `setitimer`, the operation must be performed on the
-    // the originating cage. Therefore, we derive the semantic operation
-    // cage from the argument metadata (`which_arg_cageid`).
-    let operation_cageid = which_arg_cageid;
-
     // get the cage instance
-    let cage = get_cage(operation_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
 
     match which {
         ITIMER_REAL => {

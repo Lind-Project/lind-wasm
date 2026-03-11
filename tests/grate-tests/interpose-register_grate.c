@@ -62,14 +62,14 @@ int register_grate(uint64_t cageid,
             getpid(), cageid);
     int self_grate_id = getpid();
     uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&geteuid_grate;
-    printf("[Grate|geteuid] Registering geteuid handler for cage %d in "
+    printf("[Grate|geteuid] Registering geteuid handler for cage %llu in "
             "grate %d with fn ptr addr: %llu\n",
             cageid, self_grate_id, fn_ptr_addr);
     int ret = make_threei_call(
         1001, // syscallnum for register_handler
         0,    // callname is not used in the trampoline, set to 0
         self_grate_id,    // self_grate_id is used in the 3i
-        self_grate_id,    // target_cageid is used in the 3i
+        arg1cage,    // target_cageid is used in the 3i
         arg1, arg1cage, 
         arg2, arg2cage,
         fn_ptr_addr, arg3cage, 
