@@ -10,6 +10,7 @@ permissions: {}
 jobs:
   docker:
     runs-on: ubuntu-22.04
+    environment: dockerhub
     steps:
       - name: Login to Docker Hub
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
