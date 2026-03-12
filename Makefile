@@ -74,13 +74,20 @@ sync-sysroot:
 .PHONY: test
 test: lindfs
 	# Unified harness entry point (run all discovered harnesses for e2e signal)
-	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
-	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \;; \
-	if python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); total=sum(int(json.load(open(p)).get('number_of_failures', 0)) for p in paths); print(f'total_failures={total}'); sys.exit(1 if total else 0)"; then \
+	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
+	python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); total=sum(int(json.load(open(p)).get('number_of_failures', 0)) for p in paths) if paths else 1; print(f'total_failures={total}'); sys.exit(1 if total else 0)"; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
 	else \
 	  echo "E2E_STATUS=fail" > e2e_status; \
+	  mkdir -p reports; \
+	  if [ ! -f report.html ]; then \
+	    printf '%s\n' '<!DOCTYPE html><html><body><h1>E2E failed before report generation</h1></body></html>' > report.html; \
+	  fi; \
+	  if [ ! -f reports/report.html ]; then cp report.html reports/report.html; fi; \
+	  if [ ! -f reports/wasm.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing wasm report"}' > reports/wasm.json; fi; \
+	  if [ ! -f reports/grates.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing grate report"}' > reports/grates.json; fi; \
 	fi; \
 	exit 0
 
