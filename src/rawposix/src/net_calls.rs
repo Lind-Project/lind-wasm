@@ -897,9 +897,8 @@ pub extern "C" fn epoll_wait_syscall(
     //   kernel to host buffer (underfd) --> translate to guest buffer (vfd).
     let mut events = unsafe { std::slice::from_raw_parts_mut(events_ptr, maxevents as usize) };
 
-    let mut kernel_events: Vec<libc::epoll_event> = Vec::with_capacity(maxevents as usize);
-    // Should always be null value before we call libc::epoll_wait
-    kernel_events.push(libc::epoll_event { events: 0, u64: 0 });
+    let mut kernel_events: Vec<libc::epoll_event> =
+        vec![libc::epoll_event { events: 0, u64: 0 }; maxevents as usize];
 
     if maxevents != 0 {
         let start_time = starttimer();
@@ -1619,7 +1618,7 @@ pub extern "C" fn recvfrom_syscall(
         // Copy peer address back to user’s src_addr / addrlen
         if ret >= 0 {
             unsafe {
-                copy_out_sockaddr(addr, src_len as *mut u32, &src_storage);
+                copy_out_sockaddr(addr, addrlen_arg as *mut u32, &src_storage);
             }
         }
 
@@ -1627,6 +1626,96 @@ pub extern "C" fn recvfrom_syscall(
     }
 
     0
+}
+
+/// recvmsg syscall: receive message from socket (wasm32 guest to host pointer translation).
+/// Reads guest msghdr/iovec (ILP32 32-bit layout), translates pointers to host,
+/// calls libc::recvmsg, copies back output fields.
+/// Returns: bytes received on success, negative errno on failure.
+/// Reference: https://man7.org/linux/man-pages/man2/recvmsg.2.html
+pub extern "C" fn recvmsg_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    msg_arg: u64,
+    msg_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "recvmsg_syscall", "Invalid Cage ID");
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    if fd < 0 {
+        return handle_errno(-fd, "recvmsg");
+    }
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // glibc recvmsg.c already translated all guest pointers (msghdr, iov, buffers)
+    // to host layout using the split-pointer trick, so msg_arg is a host pointer
+    // to a host-layout msghdr ready for libc::recvmsg.
+    let msg_ptr = sc_convert_buf(msg_arg, msg_cageid, cageid) as *mut libc::msghdr;
+
+    let ret = unsafe { libc::recvmsg(fd, msg_ptr, flags) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "recvmsg");
+    }
+    ret
+}
+
+/// sendmsg syscall: send message on socket (wasm32 guest to host pointer translation).
+/// Reads guest msghdr/iovec (ILP32 32-bit layout), translates pointers to host,
+/// calls libc::sendmsg.
+/// Returns: bytes sent on success, negative errno on failure.
+/// Reference: https://man7.org/linux/man-pages/man2/sendmsg.2.html
+pub extern "C" fn sendmsg_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    msg_arg: u64,
+    msg_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sendmsg_syscall", "Invalid Cage ID");
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    if fd < 0 {
+        return handle_errno(-fd, "sendmsg");
+    }
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // glibc sendmsg.c already translated all guest pointers (msghdr, iov, buffers)
+    // to host layout using the split-pointer trick, so msg_arg is a host pointer
+    // to a host-layout msghdr ready for libc::sendmsg.
+    let msg_ptr = sc_convert_buf(msg_arg, msg_cageid, cageid) as *const libc::msghdr;
+
+    let ret = unsafe { libc::sendmsg(fd, msg_ptr, flags) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "sendmsg");
+    }
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/gethostname.2.html
@@ -1758,8 +1847,8 @@ pub extern "C" fn getpeername_syscall(
     fd_cageid: u64,
     addr_arg: u64,
     addr_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
+    addrlen_arg: u64,
+    addrlen_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -1768,12 +1857,12 @@ pub extern "C" fn getpeername_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = addr_arg as *mut u8;
+    let user_addr = addr_arg as *mut SockAddr;
+    let lenp = addrlen_arg as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -1783,12 +1872,32 @@ pub extern "C" fn getpeername_syscall(
         );
     }
 
-    let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
-    let ret = unsafe { libc::getpeername(fd, finalsockaddr, &mut addrlen as *mut u32) };
+    if lenp.is_null() {
+        return syscall_error(Errno::EFAULT, "getpeername_syscall", "len is null");
+    }
+
+    let mut len: socklen_t = unsafe { *lenp };
+    let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
+    if len > max_len {
+        len = max_len;
+    }
+
+    let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
+    let ret = unsafe {
+        libc::getpeername(
+            fd as i32,
+            &mut storage as *mut _ as *mut sockaddr,
+            &mut len as *mut socklen_t,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getpeername");
+    }
+
+    unsafe {
+        copy_out_sockaddr(user_addr, lenp, &storage);
     }
 
     ret

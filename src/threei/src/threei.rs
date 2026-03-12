@@ -271,22 +271,21 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// - in_grate_fn_ptr_u64: Pointer to the function inside the grate that will handle this syscall.
 /// - targetcage: The ID of the cage whose syscall table is being modified (i.e., the source of the syscall).
 /// - targetcallnum: The syscall number to interpose on (can be treated as a match-all in some configurations).
-/// - is_register: The operation flag to indicate whether to register or deregister.
 /// - handlefunccage: The cage (typically a grate) that owns the destination function to be called.
 ///
 /// ## Returns:
 /// 0 on success.
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
-pub extern "C" fn register_handler(
+pub fn register_handler(
     _self_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
     _target_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
     targetcage: u64,
     targetcallnum: u64,  // Syscall number or match-all indicator. todo: Match-all.
     _runtime_id: u64,    // Currently unused, reserved for future potential use
-    is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     in_grate_fn_ptr_u64: u64,
+    _arg3cageid: u64,
     _arg4: u64,
     _arg4cageid: u64,
     _arg5: u64,
@@ -303,7 +302,6 @@ pub extern "C" fn register_handler(
     register_handler_impl(
         targetcage,
         targetcallnum,
-        is_register,
         handlefunccage,
         in_grate_fn_ptr_u64,
     )
@@ -324,7 +322,7 @@ pub extern "C" fn register_handler(
 /// - 0 on success.
 /// - `ELINDESRCH` if either source or target cage is in the EXITING state.
 /// - `ELINDAPIABORTED` if srccage has no existing handler table.
-pub extern "C" fn copy_handler_table_to_cage(
+pub fn copy_handler_table_to_cage(
     _callnum: u64,
     targetcage: u64,
     srccage: u64,
@@ -423,58 +421,17 @@ pub fn make_syscall(
     // TODO:
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
-    if _check_cage_handler_exists(self_cageid) {
-        if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
-            // RawPOSIX special case: directly call the function pointer
-            if grateid == lind_platform_const::RAWPOSIX_CAGEID
-                || grateid == lind_platform_const::WASMTIME_CAGEID
-            {
-                let func: RawCallFunc =
-                    unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
-                return func(
-                    target_cageid,
-                    arg1,
-                    arg1_cageid,
-                    arg2,
-                    arg2_cageid,
-                    arg3,
-                    arg3_cageid,
-                    arg4,
-                    arg4_cageid,
-                    arg5,
-                    arg5_cageid,
-                    arg6,
-                    arg6_cageid,
-                );
-            }
-            // Threei special case: if the call is an interposed 3i call
-            if grateid == lind_platform_const::THREEI_CAGEID {
-                // threei special case: directly call the function pointer
-                let func: GrateTrampolineFn =
-                    unsafe { std::mem::transmute::<u64, GrateTrampolineFn>(in_grate_fn_ptr_u64) };
-                return func(
-                    self_cageid,
-                    target_cageid,
-                    arg1,
-                    arg1_cageid,
-                    arg2,
-                    arg2_cageid,
-                    arg3,
-                    arg3_cageid,
-                    arg4,
-                    arg4_cageid,
-                    arg5,
-                    arg5_cageid,
-                    arg6,
-                    arg6_cageid,
-                );
-            }
-            // Grate case: call into the corresponding grate function
-            // <targetcage, targetcallnum, in_grate_fn_ptr_u64, this_grate_id>
-            // Theoretically, the complexity is O(1), shouldn't affect performance a lot
-            if let Some(ret) = _call_grate_func(
-                grateid,
-                in_grate_fn_ptr_u64,
+    if let Some((grateid, in_grate_fn_ptr_u64)) =
+        _get_handler(self_cageid, syscall_num, target_cageid)
+    {
+        // RawPOSIX special case: directly call the function pointer
+        if grateid == lind_platform_const::RAWPOSIX_CAGEID
+            || grateid == lind_platform_const::WASMTIME_CAGEID
+        {
+            let func: RawCallFunc =
+                unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
+            return func(
+                target_cageid,
                 arg1,
                 arg1_cageid,
                 arg2,
@@ -487,18 +444,60 @@ pub fn make_syscall(
                 arg5_cageid,
                 arg6,
                 arg6_cageid,
-            ) {
-                return ret;
-            } else {
-                // syscall has been registered to register_handler but grate's entry function
-                // doesn't provide
-                // Panic here because this indicates error happens in wasmtime side when attaching
-                // the module closure, which is a system-level error
-                panic!(
-                    "[3i|make_syscall] grate call not found! grateid: {}",
-                    grateid
-                );
-            }
+            );
+        }
+        // Threei special case: if the call is an interposed 3i call
+        if grateid == lind_platform_const::THREEI_CAGEID {
+            // threei special case: directly call the function pointer
+            let func: GrateTrampolineFn =
+                unsafe { std::mem::transmute::<u64, GrateTrampolineFn>(in_grate_fn_ptr_u64) };
+            return func(
+                self_cageid,
+                target_cageid,
+                arg1,
+                arg1_cageid,
+                arg2,
+                arg2_cageid,
+                arg3,
+                arg3_cageid,
+                arg4,
+                arg4_cageid,
+                arg5,
+                arg5_cageid,
+                arg6,
+                arg6_cageid,
+            );
+        }
+
+        // Grate case: call into the corresponding grate function
+        // <targetcage, targetcallnum, in_grate_fn_ptr_u64, this_grate_id>
+        // Theoretically, the complexity is O(1), shouldn't affect performance a lot
+        if let Some(ret) = _call_grate_func(
+            grateid,
+            in_grate_fn_ptr_u64,
+            arg1,
+            arg1_cageid,
+            arg2,
+            arg2_cageid,
+            arg3,
+            arg3_cageid,
+            arg4,
+            arg4_cageid,
+            arg5,
+            arg5_cageid,
+            arg6,
+            arg6_cageid,
+        ) {
+            return ret;
+        } else {
+            // syscall has been registered to register_handler but grate's entry function
+            // doesn't provide
+            // Panic here because this indicates error happens in wasmtime side when attaching
+            // the module closure, which is a system-level error
+            panic!(
+                "[3i|make_syscall] grate call not found! grateid: {}",
+                grateid
+            );
         }
     }
 

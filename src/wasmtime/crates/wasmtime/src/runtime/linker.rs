@@ -1965,21 +1965,21 @@ impl Definition {
         }
     }
 
-    pub(crate) fn get_store_id(&self) -> Option<StoreId> {
-        /*
-            Extern::Func(f) => f.comes_from_same_store(store),
-            Extern::Global(g) => store.store_data().contains(g.0),
-            Extern::Memory(m) => m.comes_from_same_store(store),
-            Extern::SharedMemory(m) => Engine::same(m.engine(), store.engine()),
-            Extern::Table(t) => store.store_data().contains(t.0),
-         */
-        match self {
-            Definition::Extern(e, _) => {
-                e.get_id()
-            }
-            Definition::HostFunc(_func) => None,
-        }
-    }
+    // pub(crate) fn get_store_id(&self) -> Option<StoreId> {
+    //     /*
+    //         Extern::Func(f) => f.comes_from_same_store(store),
+    //         Extern::Global(g) => store.store_data().contains(g.0),
+    //         Extern::Memory(m) => m.comes_from_same_store(store),
+    //         Extern::SharedMemory(m) => Engine::same(m.engine(), store.engine()),
+    //         Extern::Table(t) => store.store_data().contains(t.0),
+    //      */
+    //     match self {
+    //         Definition::Extern(e, _) => {
+    //             e.get_id()
+    //         }
+    //         Definition::HostFunc(_func) => None,
+    //     }
+    // }
 
     fn update_size(&mut self, store: &StoreOpaque) {
         match self {

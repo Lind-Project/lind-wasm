@@ -1,8 +1,10 @@
 #include <unistd.h>
+#include <lind_debug.h>
 
 int
 __GI___sched_getscheduler (__pid_t __pid)
 {
+  lind_debug_panic("sched_getscheduler called but not supported!");
   return -1;
 }
 

@@ -25,6 +25,7 @@ import logging
 import tempfile
 import sys
 import time
+from typing import Any, Callable
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -44,7 +45,7 @@ SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will 
 RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
 CC = os.environ.get("CC", "clang")  # C compiler, defaults to clang
@@ -1537,6 +1538,47 @@ def main():
                 logger.warning(f"Failed to clean up temporary artifacts directory {artifacts_root}: {e}")
         else:
             logger.info(f"Artifacts retained at: {artifacts_root}")
+
+def run_harness(
+    forward_args: list[str] | None = None,
+    execute_with_echo: Callable[[list[str], Path, str], tuple[int, str]] | None = None,
+) -> dict[str, Any]:
+    """Execute duplicated harness as a standalone subprocess for the unified runner."""
+    args = ["python3", str(Path(__file__).resolve())]
+    if forward_args:
+        args.extend(forward_args)
+
+    with tempfile.TemporaryDirectory(prefix="harness_wasmtestreport_") as tmpdir:
+        tmp_path = Path(tmpdir)
+        json_out = tmp_path / "wasm.json"
+        html_out = tmp_path / "report.html"
+        args.extend(["--output", str(json_out), "--report", str(html_out)])
+
+        if execute_with_echo is not None:
+            return_code, combined_output = execute_with_echo(args, REPO_ROOT, "wasmtestreport")
+            if return_code != 0:
+                raise RuntimeError(
+                    "scripts/harnesses/wasmtestreport.py failed "
+                    f"with exit code {return_code}.\nCombined output:\n{combined_output}"
+                )
+        else:
+            proc = subprocess.run(args, capture_output=True, text=True, cwd=REPO_ROOT)
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "scripts/harnesses/wasmtestreport.py failed "
+                    f"with exit code {proc.returncode}.\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+                )
+
+        report_data = json.loads(json_out.read_text(encoding="utf-8"))
+        html_data = html_out.read_text(encoding="utf-8")
+
+    return {
+        "name": "wasm",
+        "json_filename": "wasm.json",
+        "html_filename": "report.html",
+        "report": report_data,
+        "html": html_data,
+    }
 
 if __name__ == "__main__":
     main()

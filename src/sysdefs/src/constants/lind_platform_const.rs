@@ -87,3 +87,8 @@ pub const THREEI_CAGEID: u64 = 999999;
 pub const DEFAULT_STACKSIZE: u32 = 8388608; // 8 MB
 /// Size of guard pages
 pub const GUARD_SIZE: u32 = 1024; // 1 KB
+
+/// Cage ID for the initial (bootstrap) cage created during `rawposix_start`.
+pub const INIT_CAGEID: u64 = 1;
+/// Thread ID for the main thread of a cage.
+pub const MAIN_THREADID: u64 = 1;

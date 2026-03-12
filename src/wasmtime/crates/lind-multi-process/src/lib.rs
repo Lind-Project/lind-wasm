@@ -322,6 +322,7 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
+        let syscall_asyncify_data = store.get_syscall_asyncify_data();
         let is_parent_thread = store.is_thread();
 
         store.set_on_called(Box::new(move |mut store| {
@@ -568,6 +569,9 @@ impl<
                         store
                             .as_context_mut()
                             .set_signal_asyncify_data(signal_asyncify_data);
+                        store
+                            .as_context_mut()
+                            .set_syscall_asyncify_data(syscall_asyncify_data);
 
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
 

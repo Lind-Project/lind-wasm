@@ -2,6 +2,7 @@ use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampo
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
+use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use std::os::unix::fs::MetadataExt;
@@ -12,7 +13,6 @@ use std::{ffi::c_void, sync::Mutex};
 use sysdefs::constants::{DEFAULT_STACKSIZE, GUARD_SIZE, LINDFS_ROOT};
 use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const;
-use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, Store, Val,
     ValType, WasmBacktraceDetails,
@@ -44,20 +44,13 @@ use wasmtime_wasi_threads::WasiThreadsCtx;
 /// rebuilding the handler table. Special needs will be handled per user request in
 /// their implementation through `register_handler` via glibc.
 ///
-/// After initialization, the function attaches all host-side APIs (WASI preview1,
-/// WASI threads, and Lind contexts) to the wasmtime linker, instantiates the module into the
-/// starting cage, and runs the program's entrypoint. On successful completion it
-/// waits for all cages to exit before shutting down RawPOSIX, ensuring runtime-wide
-/// cleanup happens only after the last process terminates.
-pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
-    // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(lindboot_cli.wasm_file());
-    let args = lindboot_cli.args.clone();
-    let wt_config = make_wasmtime_config(lindboot_cli.wasmtime_backtrace);
-    let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
-    let host = HostCtx::default();
-    let mut wstore = Store::new(&engine, host);
-
+/// After initialization, the function attaches all host-side APIs (Lind common,
+/// WASI threads, and Lind multi-process contexts) to the wasmtime linker,
+/// instantiates the module into the starting cage, and runs the program's
+/// entrypoint. On successful completion it waits for all cages to exit before
+/// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
+/// last process terminates.
+pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // -- Initialize Lind + RawPOSIX + 3i runtime --
     // Initialize the Lind cage counter
     let lind_manager = Arc::new(LindCageManager::new(0));
@@ -82,19 +75,25 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     let result = execute_with_lind(lindboot_cli, lind_manager.clone(), CAGE_START_ID as u64);
 
     match result {
-        Ok(ref _res) => {
+        Ok(ref ret_vals) => {
             // we wait until all other cage exits
             lind_manager.wait();
+            // Interpret the first return value of the Wasm entry point
+            // as the process exit code. If the module does not explicitly
+            // return an i32, we treat it as a successful exit (code = 0).
+            let exit_code = match ret_vals.first() {
+                Some(Val::I32(code)) => *code,
+                _ => 0,
+            };
+            // Propagate the exit code to the main, which will translate it
+            // into the host process exit status.
+            Ok(exit_code)
         }
         Err(e) => {
-            // Exit the process if Wasmtime understands the error;
-            // otherwise, fall back on Rust's default error printing/return
-            // code.
-            return Err(wasi_common::maybe_exit_on_error(e));
+            // Exit the process
+            return Err(e);
         }
     }
-
-    result
 }
 
 /// Executes a Wasm program *within an existing Lind runtime* as part of an `exec()` path.
@@ -128,8 +127,6 @@ pub fn execute_with_lind(
     let mut lind_got = Arc::new(Mutex::new(LindGOT::new()));
 
     // -- Load module and Attach host APIs --
-    // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
-    // so we manually add them to the linker without checking the input
     let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
     let mut linker = Arc::new(Mutex::new(Linker::new(&engine)));
 
@@ -412,9 +409,9 @@ fn register_wasmtime_syscall_entry() -> bool {
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         56,                                  // clone syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                                   // register
         WASMTIME_CAGEID,                     // handler function is in the 3i
         clone_call_u64,
+        0,
         0,
         0,
         0,
@@ -432,9 +429,9 @@ fn register_wasmtime_syscall_entry() -> bool {
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         59,                                  // exec syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                                   // register
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exec_call_u64,
+        0,
         0,
         0,
         0,
@@ -452,9 +449,9 @@ fn register_wasmtime_syscall_entry() -> bool {
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
         60,                                  // exit syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                                   // register
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exit_call_u64,
+        0,
         0,
         0,
         0,
@@ -473,19 +470,17 @@ fn register_wasmtime_syscall_entry() -> bool {
 
 /// Attaches all host-side APIs and Lind runtime contexts to the linker and store.
 ///
-/// This function constructs the host interface that the guest expects and stores it
-/// inside `HostCtx`. It wires three major subsystems into the Wasmtime instance.
+/// This function constructs the host interface that the guest expects and stores
+/// it inside `HostCtx`. It wires three subsystems into the Wasmtime instance:
 ///
-/// It first installs WASI Preview1 support and initializes a per-process WASI context
-/// (used for args/env and libc-facing interfaces). It then installs WASI threads support,
-/// enabling pthread-like execution within the guest.
+/// 1. **Lind common** — syscall dispatch, debug helpers, signal hooks, and the
+///    4 argv/environ functions that glibc's `_start()` needs.
+/// 2. **WASI threads** — pthread-like thread creation within the guest.
+/// 3. **Lind multi-process** (`LindCtx`) — fork/exec semantics.
 ///
-/// Next, it attaches Lind common APIs (for our glibc implementation) and initializes the
-/// Lind multi-process context (`LindCtx`) that implements fork/exec semantics.
-///
-/// The `cageid` parameter allows this function to be used both for the initial boot
-/// (where no cage override is needed) and for exec-ed cages (where the target cage is
-/// explicitly specified).
+/// The `cageid` parameter allows this function to be used both for the initial
+/// boot (where no cage override is needed) and for exec-ed cages (where the
+/// target cage is explicitly specified).
 fn attach_api(
     wstore: &mut Store<HostCtx>,
     mut linker: &mut Arc<Mutex<Linker<HostCtx>>>,
@@ -495,65 +490,12 @@ fn attach_api(
     cageid: i32,
     got: Arc<Mutex<LindGOT>>,
 ) -> Result<()> {
-    // Setup WASI-p1
-    // --- Why we still attach a WASI preview1 context (WasiCtx) even though we don't use wasi-libc ---
-    //
-    // Our guest is linked with our customized glibc, whose startup path still follows a WASI-style ABI
-    // for *process metadata* (argv/environ). Concretely, our glibc crt1 `_start` expands to:
-    //
-    //   _start()
-    //     -> __wasi_initialize_environ()
-    //          -> __wasi_environ_sizes_get()
-    //          -> __wasi_environ_get()
-    //     -> __main_void()
-    //          -> __wasi_args_sizes_get()
-    //          -> __wasi_args_get()
-    //     -> main(argc, argv, environ)
-    //
-    // The functions __wasi_* above are thin wrappers around imported WASI preview1 symbols:
-    //
-    //   __imported_wasi_snapshot_preview1_args_sizes_get  (import "wasi_snapshot_preview1" "args_sizes_get")
-    //   __imported_wasi_snapshot_preview1_args_get        (import "wasi_snapshot_preview1" "args_get")
-    //   __imported_wasi_snapshot_preview1_environ_sizes_get (import "wasi_snapshot_preview1" "environ_sizes_get")
-    //   __imported_wasi_snapshot_preview1_environ_get       (import "wasi_snapshot_preview1" "environ_get")
-    //
-    // Therefore, even if we bypass wasi-libc and implement syscalls via glibc/RawPOSIX,
-    // the guest still expects the *WASI preview1 argument and environment APIs* to exist,
-    // otherwise argc/argv/environ cannot be initialized during crt startup (argv[i] becomes NULL,
-    // environ becomes empty, or the module traps if the imports are missing).
-    //
-    // The following two steps are required:
-    //   1) Add WASI preview1 functions to the Wasmtime linker (so the imports resolve).
-    //   2) Populate a WasiCtx as the backing store for argv/env/std{in,out,err}, so that
-    //      args_get/environ_get return meaningful data.
-    //
-    // Note: This is about process metadata plumbing. Our "real" syscalls are still handled
-    // by glibc/RawPOSIX.
-    let mut linker_guard = linker.lock().unwrap();
-
-    let _ = wasi_common::sync::add_to_linker(&mut linker_guard, |s: &mut HostCtx| {
-        AsMut::<wasi_common::WasiCtx>::as_mut(s)
-    });
-    drop(linker_guard);
-
-    let mut builder = WasiCtxBuilder::new();
-    let _ = builder.inherit_stdio().args(&lindboot_cli.args);
-    builder.inherit_stdin();
-    builder.inherit_stderr();
-    wstore.data_mut().preview1_ctx = Some(builder.build());
-
-    let mut linker_guard = linker.lock().unwrap();
-    // Setup WASI-thread
-    let _ = wasmtime_wasi_threads::add_to_linker(
-        &mut linker_guard,
-        &wstore,
-        &module,
-        |s: &mut HostCtx| s.wasi_threads.as_ref().unwrap(),
-    );
+    // Initialize argv/environ data and attach all Lind host functions
+    // (syscall dispatch, debug, signals, and argv/environ) to the linker.
+    wstore.data_mut().lind_environ = Some(LindEnviron::new(&lindboot_cli.args, &lindboot_cli.vars));
 
     let cloned_linker = linker.clone();
     let cloned_got = got.clone();
-    
     let dynamic_loader: DynamicLoader<HostCtx> = Arc::new(move |caller, library_name, mode| {
         load_library_module(
             caller,
@@ -564,8 +506,21 @@ fn attach_api(
         )
     });
 
-    // attach Lind common APIs to the linker
-    let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(&mut linker_guard, dynamic_loader)?;
+    let mut linker_guard = linker.lock().unwrap();
+    let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(&mut linker_guard, |s: &HostCtx| {
+        s.lind_environ
+            .as_ref()
+            .expect("lind_environ must be initialized")
+    },
+    dynamic_loader)?;
+
+    // Setup WASI-thread
+    let _ = wasmtime_wasi_threads::add_to_linker(
+        &mut linker_guard,
+        &wstore,
+        &module,
+        |s: &mut HostCtx| s.wasi_threads.as_ref().unwrap(),
+    );
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
@@ -943,6 +898,13 @@ fn make_wasmtime_config(backtrace: bool) -> wasmtime::Config {
     };
 
     wt_config.wasm_backtrace_details(details);
+
+    // Enable compilation cache — compiled .wasm artifacts are stored on disk
+    // so subsequent runs skip compilation. Best-effort: if config loading
+    // fails (e.g. no home dir), caching is simply disabled.
+    if let Err(e) = wt_config.cache_config_load_default() {
+        eprintln!("[lind-boot] warning: failed to enable wasm cache: {e}");
+    }
 
     wt_config
 }

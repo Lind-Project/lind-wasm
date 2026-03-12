@@ -7,7 +7,7 @@ use crate::cage::{get_cage, Cage};
 use crate::memory::VmmapOps;
 use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::fs_const::{
-    MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_READ, PROT_WRITE,
+    MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 use sysdefs::logging::lind_debug_panic;
 
@@ -90,6 +90,12 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
 
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
+        // PROT_NONE regions are already configured with PROT_NONE by default,
+        // and reading from a host PROT_NONE page would cause a SIGSEGV
+        if entry.prot == PROT_NONE {
+            continue;
+        }
+
         // translate page number to user address
         let addr_st = (entry.page_num << PAGESHIFT) as u32;
         let addr_len = (entry.npages << PAGESHIFT) as usize;

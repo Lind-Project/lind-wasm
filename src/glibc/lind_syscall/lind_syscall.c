@@ -2,6 +2,7 @@
 #include <stdint.h> // For uint64_t definition
 #include "addr_translation.h"
 #include "lind_syscall_num.h"
+#include "lind_constants.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __lind_make_syscall_trampoline(unsigned int callnumber, 
@@ -87,7 +88,7 @@ int make_threei_call (unsigned int callnumber,
         arg5, arg5cageid,
         arg6, arg6cageid);
     // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
-    if(translate_errno == 0) return ret;
+    if(translate_errno == TRANSLATE_ERRNO_OFF) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
     // but this may cause some issues for mmap syscall, because mmap syscall
@@ -96,7 +97,7 @@ int make_threei_call (unsigned int callnumber,
     // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
     // the errno and mmap result by simply checking if the return value is
     // within the valid errno range
-    if(ret < 0 && ret > -256)
+    if(ret < 0 && ret > -MAX_ERRNO)
     {
         errno = -ret;
         return -1;
@@ -118,23 +119,21 @@ int make_threei_call (unsigned int callnumber,
 // in_grate_fn_ptr_u64: the function pointer (cast to uint64_t) of the syscall handler in the grate, only used when register_flag is non-0
 int register_handler (int64_t targetcage, 
     uint64_t targetcallnum, 
-    uint64_t register_flag, 
     uint64_t this_grate_id,
     uint64_t in_grate_fn_ptr_u64)
 {
     return make_threei_call(
         REGISTER_HANDLER_SYSCALL, 
-        0, // callname is not used in the trampoline, set to 0
-        this_grate_id, // pass this_grate_id as self_cageid
-        999999, // pass THREEI_GRATE_CAGE_ID as target_cageid
+        NOTUSED, // callname is not used in the trampoline
+        targetcage, // pass targetcage as self_cageid
+        targetcage, // pass targetcage as target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         targetcage, 
         targetcallnum, 
-        0, // runtime_id currently not used, set to 0
-        register_flag, // is_register flag: 0 for deregister, non-0 for register
+        NOTUSED, // runtime_id currently not used
         this_grate_id, // handlefunccage is the grate id of the handler function, which is the same as this_grate_id
         in_grate_fn_ptr_u64,
-        0, 0, 0, 0, 0, 0,
-        0 /* translate_errno=0: we want to return the raw result without errno translation */
+        NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
     );
 }
 
@@ -153,14 +152,38 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t src
 {
     return make_threei_call(
         COPY_DATA_BETWEEN_CAGES_SYSCALL, 
-        0, // callname is not used in the trampoline, set to 0
-        thiscage, 
-        targetcage,
+        NOTUSED, // callname is not used in the trampoline
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
         TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
-        len, 0,
-        copytype, 0,
-        0, 0, 0, 0,
-        0 /* translate_errno=0: we want to return the raw result without errno translation */
+        len, NOTUSED,
+        copytype, NOTUSED,
+        NOTUSED, NOTUSED, NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
+    );
+}
+
+// 3i function call to copy handler table to a target cage
+// typically used when a new cage is created and we need to copy the syscall handler 
+// table from another cage (has the handlers different than default rawposix registration) 
+// to the new cage
+// thiscage: the cage id of the caller cage
+// targetcage: the cage id of the target cage
+int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
+{
+    return make_threei_call(
+        COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, 
+        NOTUSED, // callname is not used in the trampoline
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        thiscage, 
+        targetcage,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
     );
 }

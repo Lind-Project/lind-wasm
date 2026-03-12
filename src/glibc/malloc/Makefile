@@ -294,9 +294,6 @@ tst-malloc-usable-tunables-ENV = GLIBC_TUNABLES=glibc.malloc.check=3 \
 tst-mxfast-ENV = GLIBC_TUNABLES=glibc.malloc.tcache_count=0:glibc.malloc.mxfast=0
 
 CPPFLAGS-malloc-debug.c += -DUSE_TCACHE=0
-# lind-wasm: disable TCACHE for now; TCACHE is used to cache freed memory chunks using thread local storage
-# It seems not work for some reason, so we need to TODO: fix TCACHE in the future
-CPPFLAGS-malloc.c += -DUSE_TCACHE=0
 # Uncomment this for test releases.  For public releases it is too expensive.
 #CPPFLAGS-malloc.o += -DMALLOC_DEBUG=1
 

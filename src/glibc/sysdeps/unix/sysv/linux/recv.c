@@ -32,7 +32,7 @@ __libc_recv (int fd, void *buf, size_t len, int flags)
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
   return MAKE_LEGACY_SYSCALL (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
-		       host_buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+		       host_buf, (uint64_t) len, (uint64_t) flags, 0, 0, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__libc_recv, recv)
 weak_alias (__libc_recv, __recv)

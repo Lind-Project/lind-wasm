@@ -10,12 +10,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
-    EXIT_SUCCESS, FDKIND_KERNEL, LINDFS_ROOT, RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO,
-    STDOUT_FILENO, THREEI_CAGEID, VERBOSE,
+    EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
+    STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
 };
 use threei::{
-    copy_data_between_cages, register_handler, COPY_DATA_BETWEEN_CAGES_SYSCALL,
-    REGISTER_HANDLER_SYSCALL, RUNTIME_TYPE_WASMTIME,
+    copy_data_between_cages, copy_handler_table_to_cage, register_handler,
+    COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, REGISTER_HANDLER_SYSCALL,
+    RUNTIME_TYPE_WASMTIME,
 };
 
 /// Function signature for a RawPOSIX syscall handler.
@@ -64,20 +65,20 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
         let impl_fn_ptr = func as *const () as u64;
         // Register to handler table in 3i
         ret = register_handler(
-            0,
+            UNUSED_ID,
             RAWPOSIX_CAGEID,       // target cageid for this syscall handler
             self_cageid,           // cage to modify: current cageid
             sysno,                 // target callnum
             RUNTIME_TYPE_WASMTIME, // runtime id
-            1,                     // register
             RAWPOSIX_CAGEID,       // handler function is in the RawPOSIX
             impl_fn_ptr,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
         );
         if ret != 0 {
             panic!(
@@ -98,6 +99,7 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
 /// Specifically, this includes meta-level operations such as:
 /// - `register_handler`
 /// - `copy_data_between_cages`
+/// - `copy_handler_table_to_cage`
 ///
 /// By registering them under `THREEI_CAGEID`, those syscalls can be
 /// interposed and routed through 3i's internal logic, allowing for
@@ -114,46 +116,65 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
     // Register `register_handler` syscall for this cage
     let fp_register = register_handler as *const () as usize as u64;
     let register_ret = register_handler(
-        0,
+        UNUSED_ID,
         THREEI_CAGEID, // target cageid for this syscall handler
         self_cageid,   // cage to modify: current cageid
         REGISTER_HANDLER_SYSCALL,
         RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                     // register
         THREEI_CAGEID,         // handler function is in the 3i
         fp_register,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Register `copy_data_between_cages` syscall for this cage
-    let fp_copy = copy_data_between_cages as *const () as usize as u64;
-    let copy_ret = register_handler(
-        0,
+    let fp_copy_data = copy_data_between_cages as *const () as usize as u64;
+    let copy_data_ret = register_handler(
+        UNUSED_ID,
         THREEI_CAGEID, // target cageid for this syscall handler
         self_cageid,   // cage to modify: current cageid
         COPY_DATA_BETWEEN_CAGES_SYSCALL,
         RUNTIME_TYPE_WASMTIME, // runtime id
-        1,                     // register
         THREEI_CAGEID,         // handler function is in the 3i
-        fp_copy,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        fp_copy_data,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    // Register `copy_handler_table_to_cage` syscall for this cage
+    let fp_copy_handler_table = copy_handler_table_to_cage as *const () as usize as u64;
+    let copy_handler_table_ret = register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
+        COPY_HANDLER_TABLE_TO_CAGE_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_copy_handler_table,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Check registration results and panic if either fails
-    if register_ret != 0 || copy_ret != 0 {
+    if register_ret != 0 || copy_data_ret != 0 || copy_handler_table_ret != 0 {
         panic!(
-            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_ret {}",
-            register_ret, copy_ret
+            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_data_ret {}, copy_handler_table_ret {}",
+            register_ret, copy_data_ret, copy_handler_table_ret
         );
     }
     0
@@ -180,27 +201,6 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
 
-    unsafe {
-        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
-        libc::mkdir(lindfs_path.as_ptr(), 0o775);
-        let ret = libc::chroot(lindfs_path.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chroot to {}: {}",
-                LINDFS_ROOT,
-                std::io::Error::last_os_error()
-            );
-        }
-        let root = CString::new("/").unwrap();
-        let ret = libc::chdir(root.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chdir to / after chroot: {}",
-                std::io::Error::last_os_error()
-            )
-        }
-    }
-
     // init cage table
     cagetable_init();
 
@@ -208,13 +208,11 @@ pub fn rawposix_start(verbosity: isize) {
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
 
     // register syscalls for init cage
-    register_rawposix_syscall(1);
+    register_rawposix_syscall(INIT_CAGEID);
 
-    register_threei_syscall(1);
+    register_threei_syscall(INIT_CAGEID);
 
     // Set up standard file descriptors for the init cage
-    // TODO:
-    // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
     let dev_null = CString::new("/dev/null").unwrap();
 
     // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
@@ -229,12 +227,12 @@ pub fn rawposix_start(verbosity: isize) {
 
     //init cage is its own parent
     let initcage = Cage {
-        cageid: 1,
+        cageid: INIT_CAGEID,
         cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-        parent: 1,
+        parent: INIT_CAGEID,
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(1),
+        interval_timer: IntervalTimer::new(INIT_CAGEID),
         epoch_handler: DashMap::new(),
         signalhandler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
@@ -242,20 +240,21 @@ pub fn rawposix_start(verbosity: isize) {
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),
+        final_exit_status: RwLock::new(None),
     };
 
     // Add cage to cagetable
     add_cage(
-        1, // cageid
+        INIT_CAGEID, // cageid
         initcage,
     );
 
-    // init fdtables for cageid 1
-    fdtables::init_empty_cage(1);
+    // init fdtables for init cage
+    fdtables::init_empty_cage(INIT_CAGEID);
     // Set the first 3 fd to STDIN / STDOUT / STDERR
     // STDIN
     fdtables::get_specific_virtual_fd(
-        1,
+        INIT_CAGEID,
         STDIN_FILENO as u64,
         FDKIND_KERNEL,
         STDIN_FILENO as u64,
@@ -265,7 +264,7 @@ pub fn rawposix_start(verbosity: isize) {
     .unwrap();
     // STDOUT
     fdtables::get_specific_virtual_fd(
-        1,
+        INIT_CAGEID,
         STDOUT_FILENO as u64,
         FDKIND_KERNEL,
         STDOUT_FILENO as u64,
@@ -275,7 +274,7 @@ pub fn rawposix_start(verbosity: isize) {
     .unwrap();
     // STDERR
     fdtables::get_specific_virtual_fd(
-        1,
+        INIT_CAGEID,
         STDERR_FILENO as u64,
         FDKIND_KERNEL,
         STDERR_FILENO as u64,
@@ -301,7 +300,7 @@ pub fn rawposix_shutdown() {
             cageid as u64,       // target cageid
             EXIT_SUCCESS as u64, // status arg
             cageid as u64,       // status arg's cageid
-            1,                   // always main thread
+            MAIN_THREADID,       // always main thread
             0,
             0,
             0,

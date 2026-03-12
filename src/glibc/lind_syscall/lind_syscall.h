@@ -31,9 +31,8 @@ int make_threei_call (unsigned int callnumber,
 
 int register_handler(uint64_t targetcage, 
     uint64_t targetcallnum, 
-    uint64_t handlefunc_flag,
     uint64_t this_grate_id,
-    uint64_t optional_arg);
+    uint64_t in_grate_fn_ptr_u64);
     
 int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, 
     uint64_t srcaddr, uint64_t srccage, 
