@@ -6,10 +6,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#define LOOP_COUNT(size) ((size) > 4096 ? 10000 : 1000000)
-
 void write_size(size_t count) {
-	char *buf = malloc(count); // [MAX];
+	char *buf = malloc(count);
 	if (buf == NULL) {
 		perror("malloc");
 		exit(1);
@@ -19,7 +17,7 @@ void write_size(size_t count) {
 
 	int fd = open("fs_write.txt", O_CREAT | O_WRONLY, 0644);
 
-	int loops = LOOP_COUNT(count);
+	int loops = IO_LOOP_COUNT(count);
 
 	long long start_time = gettimens();
 	for (int i = 0; i < loops; i++) {
@@ -38,10 +36,9 @@ void write_size(size_t count) {
 }
 
 int main(int argc, char *argv[]) {
-	int sizes[4] = {1, KiB(4), KiB(10), MiB(1)}; // , MiB(10)};
-
-	for (int i = 0; i < 4; i++) {
-		write_size(sizes[i]);
+	// Run benchmarks.
+	for (int i = 0; i < FS_SIZE_COUNT; i++) {
+		write_size(fs_sizes[i]);
 	}
 
 	unlink("fs_write.txt");

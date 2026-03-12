@@ -8,12 +8,10 @@
 #include <string.h>
 #include <sys/wait.h>
 
-#define LOOP_COUNT(size) ((size) > 4096 ? 10000 : 1000000)
-
 void bench_pipe(int msg_size) {
 	int p2c[2], c2p[2];
 
-	int loops = LOOP_COUNT(msg_size);
+	int loops = IO_LOOP_COUNT(msg_size);
 
 	if (pipe(p2c) || pipe(c2p)) {
 		perror("pipe");
@@ -31,7 +29,6 @@ void bench_pipe(int msg_size) {
 		close(p2c[1]);
 		close(c2p[0]);
 
-		// char buf[msg_size];
 		char *buf = malloc(msg_size);
 		if (buf == NULL) {
 			exit(0);
@@ -55,7 +52,6 @@ void bench_pipe(int msg_size) {
 	// Parent
 	close(p2c[0]);
 	close(c2p[1]);
-	// char buf[msg_size];
 	char *buf = malloc(msg_size);
 	if (buf == NULL) {
 		exit(0);
@@ -79,9 +75,7 @@ void bench_pipe(int msg_size) {
 }
 
 int main() {
-	int sizes[] = {1, 10, 512, KiB(1)};
-
-	for (int i = 0; i < 4; i++) {
-		bench_pipe(sizes[i]);
+	for (int i = 0; i < IPC_SIZE_COUNT; i++) {
+		bench_pipe(ipc_sizes[i]);
 	}
 }

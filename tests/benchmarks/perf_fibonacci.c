@@ -2,6 +2,7 @@
 #include "bench.h"
 
 #define LOOP_COUNT 10000
+#define FIB_INPUT 1000
 
 unsigned long long fibonacci(int n) {
 	if (n <= 1)
@@ -20,7 +21,7 @@ int main() {
 
 	long long start_time = gettimens();
 	for (int i = 0; i < LOOP_COUNT; i++) {
-		sum += fibonacci(1000);
+		sum += fibonacci(FIB_INPUT);
 	}
 	long long end_time = gettimens();
 

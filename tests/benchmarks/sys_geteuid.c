@@ -17,5 +17,5 @@ int main(int argc, char *argv[]) {
 
 	long long avg = (end - start) / LOOP_COUNT;
 
-	emit_result("geteuid", 0, avg, LOOP_COUNT);
+	emit_result_string("geteuid", "-", avg, LOOP_COUNT);
 }

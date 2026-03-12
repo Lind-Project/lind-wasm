@@ -269,6 +269,9 @@ def build_display_rows(res):
                 ]
             )
 
+    # Sort results by (test, param):
+    # Ensures all tests from the same benchmark and clubbed together,
+    # and wherever possible are sorted in increasing order of param.
     rows.sort(key=lambda r: (r[0], try_int(r[1])))
 
     last_test = None

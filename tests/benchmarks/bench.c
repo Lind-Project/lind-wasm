@@ -2,6 +2,10 @@
 #include <time.h>
 #include <stdio.h>
 
+// Shared sizes for FS and IPC read/writes.
+int fs_sizes[4] = {1, KiB(1), KiB(4), KiB(10)};
+int ipc_sizes[4] = {1, 512, KiB(1), KiB(4)};
+
 // Returns a monotonic timestamp in nanoseconds.
 long long gettimens() {
 	struct timespec tp;
@@ -15,6 +19,7 @@ void emit_result(char *test, int param, long long average, int loops) {
 	printf("%s\t%d\t%d\t%lld\n", test, param, loops, average);
 }
 
+// Emits benchmark row with a string param.
 void emit_result_string(char *test, char *param, long long average, int loops) {
 	printf("%s\t%s\t%d\t%lld\n", test, param, loops, average);
 }

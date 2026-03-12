@@ -9,8 +9,6 @@
 #include <sys/wait.h>
 #include <sys/socket.h>
 
-#define LOOP_COUNT(size) ((size) > 4096 ? 10000 : 100000)
-
 void uds_dgram(int msg_size) {
 	int sv[2];
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv)) {
@@ -18,7 +16,7 @@ void uds_dgram(int msg_size) {
 		exit(1);
 	}
 
-	int loops = LOOP_COUNT(msg_size);
+	int loops = IO_LOOP_COUNT(msg_size);
 
 	pid_t pid = fork();
 
@@ -128,13 +126,11 @@ void uds_stream(int msg_size) {
 }
 
 int main() {
-	int sizes[] = {1, KiB(4), KiB(16), KiB(32)};
-
-	for (int i = 0; i < 4; i++) {
-		uds_stream(sizes[i]);
+	for (int i = 0; i < IPC_SIZE_COUNT; i++) {
+		uds_stream(ipc_sizes[i]);
 	}
 
-	for (int i = 0; i < 4; i++) {
-		uds_dgram(sizes[i]);
+	for (int i = 0; i < IPC_SIZE_COUNT; i++) {
+		uds_dgram(ipc_sizes[i]);
 	}
 }
