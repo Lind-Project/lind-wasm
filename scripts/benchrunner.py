@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def repo_root() -> Path:
-    """Return repo root (scripts/..)."""
+    """Return the root of the lind-wasm repo."""
     return Path(__file__).resolve().parent.parent
 
 

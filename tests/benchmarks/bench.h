@@ -3,11 +3,13 @@
 #define MiB(x) ((size_t)(x) << 20)
 
 // Iteration constants
-#define IO_LOOPS_SMALL 10000
-#define IO_LOOPS_LARGE 1000000
+#define LOOPS_SMALL 10000
+#define LOOPS_LARGE 1000000
 #define IO_THRESHOLD 4096
 
-#define IO_LOOP_COUNT(size) ((size) > IO_THRESHOLD ? IO_LOOPS_SMALL : IO_LOOPS_LARGE)
+// For payloads of larger sizes, running larger loops slows down the benchmarking without providing any meaningful improvement of data. 
+// Dynamically pick a smaller loop count for larger payloads.
+#define IO_LOOP_COUNT(size) ((size) > IO_THRESHOLD ? LOOPS_SMALL : LOOPS_LARGE)
 
 #define FS_SIZE_COUNT	(sizeof(fs_sizes)/sizeof(fs_sizes[0]))
 #define IPC_SIZE_COUNT	(sizeof(ipc_sizes)/sizeof(ipc_sizes[0]))

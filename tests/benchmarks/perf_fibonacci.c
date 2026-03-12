@@ -1,4 +1,4 @@
-// DESCRIPTION: CPU-only Fibonacci(1000) loop to measure compute overhead.
+// DESCRIPTION: Compute Fibonacci(1000) to measure compute overhead.
 #include "bench.h"
 
 #define LOOP_COUNT 10000

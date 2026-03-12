@@ -35,7 +35,6 @@ void uds_dgram(int msg_size) {
 		for (int i = 0; i < loops; i++) {
 			ssize_t n = recv(sv[1], buf, msg_size, 0);
 			if (n <= 0) {
-				fprintf(stderr, "Received 0 bytes\n");
 				exit(1);
 			}
 			send(sv[1], buf, n, 0);
@@ -74,7 +73,7 @@ void uds_stream(int msg_size) {
 		exit(1);
 	}
 
-	int loops = LOOP_COUNT(msg_size);
+	int loops = IO_LOOP_COUNT(msg_size);
 	pid_t pid = fork();
 
 	if (pid < 0) {
@@ -92,7 +91,6 @@ void uds_stream(int msg_size) {
 		for (int i = 0; i < loops; i++) {
 			ssize_t n = recv(sv[1], buf, msg_size, 0);
 			if (n <= 0) {
-				fprintf(stderr, "Received 0 bytes\n");
 				exit(1);
 			}
 			send(sv[1], buf, n, 0);

@@ -34,12 +34,16 @@ void bench_pipe(int msg_size) {
 			exit(0);
 		}
 		for (int i = 0; i < loops; i++) {
-			ssize_t n = read(p2c[0], buf, msg_size);
-			if (n <= 0) {
-				fprintf(stderr, "0 bytes read\n");
-				exit(1);
+			ssize_t off = 0;
+			while (off < msg_size) {
+				ssize_t n = read(p2c[0], buf, msg_size);
+				off += n;
 			}
-			write(c2p[1], buf, n);
+			off = 0;
+			while (off < msg_size) {
+				ssize_t n = write(c2p[1], buf, msg_size);
+				off += n;
+			}
 		}
 
 		free(buf);
@@ -60,8 +64,16 @@ void bench_pipe(int msg_size) {
 
 	long long t0 = gettimens();
 	for (int i = 0; i < loops; i++) {
-		write(p2c[1], buf, msg_size);
-		read(c2p[0], buf, msg_size);
+		ssize_t off = 0;
+		while (off < msg_size) {
+			ssize_t n = write(p2c[1], buf, msg_size);
+			off += n;
+		}
+		off = 0;
+		while (off < msg_size) {
+			ssize_t n = read(c2p[0], buf, msg_size);
+			off += n;
+		}
 	}
 	long long t1 = gettimens();
 

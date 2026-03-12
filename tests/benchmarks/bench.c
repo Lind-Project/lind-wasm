@@ -4,7 +4,7 @@
 
 // Shared sizes for FS and IPC read/writes.
 int fs_sizes[4] = {1, KiB(1), KiB(4), KiB(10)};
-int ipc_sizes[4] = {1, 512, KiB(1), KiB(4)};
+int ipc_sizes[4] = {1, KiB(1), KiB(4), KiB(10)};
 
 // Returns a monotonic timestamp in nanoseconds.
 long long gettimens() {

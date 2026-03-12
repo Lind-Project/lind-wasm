@@ -38,7 +38,7 @@ Each benchmark uses `bench.c/bench.h` and prints exactly one line per data point
 
 Fields:
 - `test`: human-readable label (string)
-- `param`: an integer parameter for the test (size, id, etc.)
+- `param`: parameter for the test (size, id, etc.)
 - `loops`: number of iterations used to compute the average
 - `avg_ns`: average time per iteration in **nanoseconds**
 
@@ -69,7 +69,7 @@ python3 scripts/benchrunner.py
 ```
 
 Optional:
-- `python3 scripts/benchrunner.py fs_ imfs_` runs only tests whose filename starts with `fs_` or `imfs_`
+- `python3 scripts/benchrunner.py fs_ sys_` runs only tests whose filename starts with `fs_` or `sys_`
 - `python3 scripts/benchrunner.py --out results.csv` writes CSV instead of a table
 
 ## Benchmark Types
@@ -83,20 +83,10 @@ Examples: `fs_read.c`, `fs_write.c`
 These vary the operation size (`param` is bytes) and adjust loop counts
 to keep runtimes reasonable.
 
-### IMFS Tests
-Example: `imfs_read.c`
-These call IMFS functions directly to estimate in-memory FS overhead
-without routing through a grate.
-
 ### IPC Tests
 Examples: `ipc_pipe.c`, `ipc_uds.c`
 These measure round-trip time (RTT) for different message sizes.
 `param` is message size in bytes.
-
-### Microbench Harnesses
-Directory: `tests/benchmarks/microbenches/`
-These are low-level syscall routing tests used with `lind-boot --perf`.
-They do not emit `emit_result()` lines and are not parsed by `benchrunner.py`.
 
 ## Grate Tests
 
@@ -112,7 +102,7 @@ This means:
 - fetch `examples/imfs-grate/` from the [lind-wasm-example-grates](https://github.com/Lind-Project/lind-wasm-example-grates) repo  
 - compile the grate via `compile_grate.sh`
 - compile `tests/benchmarks/fs_read.c` as a cage
-- run `lind-boot imfs_grate fs_read` so the syscall is interposed by the grate
+- run `lind_run imfs_grate fs_read` so the syscall is interposed by the grate
 
 The `.grate` tests files are used to encode the expected order to launch grates and cages,
 and can optionally include a `// DESCRIPTION:` line to describe the intended workflow being benchmarked. 
