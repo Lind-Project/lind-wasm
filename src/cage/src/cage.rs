@@ -9,9 +9,11 @@ pub use once_cell::sync::Lazy;
 /// interaction and increases efficiency.
 pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
-pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
+use sysdefs::constants::sys_const::EXIT_SUCCESS;
+use sysdefs::constants::SIGCHLD;
 use sysdefs::data::fs_struct::SigactionStruct;
 
 /// Represents how a cage terminated, mirroring the two primary POSIX
@@ -95,15 +97,29 @@ pub fn encode_wait_status(st: ExitStatus) -> i32 {
 /// the signal number.
 ///
 /// # Panics
+/// Returns true if the cage exists and has been marked dead (exit_group
+/// or signal termination initiated).  Returns false if the cage is alive
+/// or does not exist.
+pub fn is_cage_dead(cageid: u64) -> bool {
+    match get_cage(cageid) {
+        Some(c) => c.is_dead.load(Ordering::Acquire),
+        None => false,
+    }
+}
+
 ///
 /// Panics if the specified cage does not exist in the cage table.
 pub fn cage_record_exit_status(cageid: u64, status: ExitStatus) {
-    let cage = get_cage(cageid).unwrap_or_else(|| {
-        panic!(
-            "Attempted to record exit status for non-existent cage ID {}",
-            cageid
-        )
-    });
+    // Cage may already be removed by cage_finalize (called by the last
+    // thread's OnCalledAction).  A late thread can reach exit_syscall
+    // after the cage is gone if it was between futex_wake (signaling
+    // pthread_join) and _exit(0) when epoch_kill_all fired — the epoch
+    // doesn't take effect until the thread re-enters WASM, which may
+    // not happen before the rawposix exit_syscall path runs.
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => return,
+    };
     let mut final_status = cage.final_exit_status.write();
     if final_status.is_none() {
         *final_status = Some(status);
@@ -139,6 +155,11 @@ pub struct Cage {
     // address of the wasm thread. The epoch is a u64 value that guest thread is frequently checking for
     // and just to host once the value is changed
     pub epoch_handler: DashMap<i32, RwLock<*mut u64>>,
+    // os_tid_map maps Lind thread IDs (key: i32) to OS thread IDs from
+    // gettid (value: i64). Used by epoch_kill_all to send SIGUSR2 to
+    // threads blocked in host syscalls, interrupting them so they can
+    // re-enter wasm and see the epoch kill.
+    pub os_tid_map: DashMap<i32, i64>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals,
     // we want to send to the main thread
     pub main_threadid: RwLock<i32>,
@@ -185,6 +206,40 @@ pub struct Cage {
     // store its final termination status until the zombie entry is
     // generated.
     pub final_exit_status: RwLock<Option<ExitStatus>>,
+    // Atomic flag to ensure only one thread wins the exit_group race.
+    // When multiple threads call exit_syscall simultaneously, only the
+    // first one (CAS false→true) does epoch_kill_all + wait. Others
+    // just clean up their own thread and return.
+    pub exit_group_initiated: AtomicBool,
+    /// Set to true when the cage enters a terminal state (exit_group or
+    /// signal termination).  Checked by make_syscall so that
+    /// grate-forwarded calls to this cage return -ESRCH immediately
+    /// instead of reaching rawposix.  The cage struct remains in
+    /// CAGE_MAP until the actual last thread exits.
+    ///
+    /// Note: this is NOT redundant with EXITING_TABLE in threei.
+    /// is_dead is a fast atomic on the Cage struct, available while
+    /// the cage still exists in CAGE_MAP.  EXITING_TABLE persists
+    /// after remove_cage() deletes the cage from CAGE_MAP, catching
+    /// calls where is_cage_dead() would return false (cage gone, not
+    /// "dead").  is_dead is also used by the grate_inflight
+    /// double-check which needs an atomic on the cage struct.
+    /// TODO: evaluate whether we can consolidate is_dead and
+    /// EXITING_TABLE into a single mechanism.
+    pub is_dead: AtomicBool,
+    /// Number of in-flight grate dispatches executing on this cage's
+    /// backup VMContexts.  Incremented before _call_grate_func,
+    /// decremented after it returns.  cage_finalize() spins until this
+    /// reaches 0 to avoid removing a cage while a grate call is still
+    /// accessing it.
+    ///
+    /// TODO: add a mechanism to actively kill running grate instances
+    /// (backup VMContexts) when the main instance exits, rather than
+    /// just waiting for in-flight calls to drain.  This would likely
+    /// require epoch-based interruption of backup VMContext instances.
+    /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
+    /// tracking is considered a VMContext-level concern.
+    pub grate_inflight: AtomicU64,
 }
 
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
@@ -297,6 +352,47 @@ pub fn alloc_cage_id() -> Option<u64> {
     }
 }
 
+/// Final cage teardown.  Called from exit_call's OnCalledAction when
+/// the actual last thread finishes its asyncify unwind.
+///
+/// 1. Spins until `grate_inflight` reaches 0 (all grate dispatches on
+///    backup VMContexts have returned).
+/// 2. Records a zombie entry in the parent cage and sends SIGCHLD so
+///    waitpid() in the parent unblocks.
+/// 3. Removes the cage from the fd table and global cage table.
+pub fn cage_finalize(cageid: u64) {
+    if let Some(cage) = get_cage(cageid) {
+        // Wait for all in-flight grate dispatches to drain.
+        while cage.grate_inflight.load(Ordering::Acquire) > 0 {
+            std::hint::spin_loop();
+        }
+    }
+
+    // Record zombie and notify parent.
+    if let Some(selfcage) = get_cage(cageid) {
+        if selfcage.parent != cageid {
+            if let Some(parent) = get_cage(selfcage.parent) {
+                parent.child_num.fetch_sub(1, Ordering::SeqCst);
+                let mut zombie_vec = parent.zombies.write();
+                let zombie_status = {
+                    let recorded = *selfcage.final_exit_status.read();
+                    recorded.unwrap_or(ExitStatus::Exited(EXIT_SUCCESS))
+                };
+                zombie_vec.push(Zombie {
+                    cageid,
+                    exit_code: zombie_status,
+                });
+            }
+        }
+        if cageid != selfcage.parent {
+            crate::signal::signal::lind_send_signal(selfcage.parent, SIGCHLD);
+        }
+    }
+
+    fdtables::remove_cage_from_fdtable(cageid);
+    remove_cage(cageid);
+}
+
 mod tests {
     use super::*;
 
@@ -332,12 +428,16 @@ mod tests {
             sigset: AtomicU64::new(0),
             pending_signals: RwLock::new(vec![]),
             epoch_handler: DashMap::new(),
+            os_tid_map: DashMap::new(),
             main_threadid: RwLock::new(0),
             interval_timer: crate::timer::IntervalTimer::new(2),
             zombies: RwLock::new(vec![]),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
             final_exit_status: RwLock::new(None),
+            exit_group_initiated: AtomicBool::new(false),
+            is_dead: AtomicBool::new(false),
+            grate_inflight: AtomicU64::new(0),
         };
 
         add_cage(2, test_cage);

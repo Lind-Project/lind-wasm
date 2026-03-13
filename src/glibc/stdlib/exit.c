@@ -29,6 +29,10 @@ void __lind_exit(int status) {
 	MAKE_LEGACY_SYSCALL(EXIT_SYSCALL, "syscall|exit", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
+static void __lind_exit_group(int status) {
+	MAKE_LEGACY_SYSCALL(EXIT_GROUP_SYSCALL, "syscall|exit_group", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+}
+
 void
 _exit (int status)
 {
@@ -151,7 +155,9 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
   if (run_list_atexit)
     call_function_static_weak (_IO_cleanup);
 
-	_exit(status);
+	// Use exit_group (syscall 231) to terminate all threads in the
+	// process.  _exit (syscall 60) only exits the calling thread.
+	__lind_exit_group(status);
 }
 
 

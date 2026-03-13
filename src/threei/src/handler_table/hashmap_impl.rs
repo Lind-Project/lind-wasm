@@ -76,26 +76,22 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
     let handler_table = HANDLERTABLE.lock().unwrap();
 
-    // self_cageid -> callnum map
     let call_map = handler_table.get(&self_cageid).unwrap_or_else(|| {
         panic!(
-            "No handler table for self_cageid={} (syscall_num={}, dest_grateid={})",
-            self_cageid, syscall_num, target_cageid
+            "[3i|_get_handler] no handler table for self_cageid: {}",
+            self_cageid
         )
     });
-
-    // callnum -> target map
     let target_map = call_map.get(&syscall_num).unwrap_or_else(|| {
         panic!(
-            "No handlers for self_cageid={} syscall_num={} (dest_grateid={})",
-            self_cageid, syscall_num, target_cageid
+            "[3i|_get_handler] no handler for syscall_num: {} in self_cageid: {}",
+            syscall_num, self_cageid
         )
     });
 
     let grateid = target_map.keys().next().copied()?;
     let addr = target_map.values().next().copied()?;
-    // Otherwise fallback to any registered handler
-    return Some((grateid, addr));
+    Some((grateid, addr))
 }
 
 /// Removes **ALL** handler entries across all cages that point to a specific grateid.

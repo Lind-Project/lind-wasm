@@ -248,28 +248,18 @@ where
             )
         });
 
+    // Lind-WASM: the previous implementation special-cased Trap::Interrupt
+    // (epoch interrupts) by printing "Terminated" and returning Ok(()).
+    // That is removed because thread/process termination is now handled via
+    // asyncify-based exit (exit_call + OnCalledAction), so epoch interrupts
+    // no longer need special trap-level handling here.
     return match result {
         Ok(x) => Ok(x),
-        Err((UnwindReason::Trap(reason), backtrace, coredumpstack)) => {
-            if let TrapReason::Wasm(trap) = reason {
-                if let wasmtime_environ::Trap::Interrupt = trap {
-                    // if the trap type is Interrupt, then the trap must be invoked by epoch
-                    // we should treat it as a normal termination without printing any
-                    // error messages
-
-                    // print a short notification message
-                    // TODO: Linux has different notification message for termination caused by different signals
-                    // we need to try to mimic that behavior
-                    println!("Terminated");
-                    return Ok(());
-                }
-            }
-            Err(Box::new(Trap {
-                reason,
-                backtrace,
-                coredumpstack,
-            }))
-        }
+        Err((UnwindReason::Trap(reason), backtrace, coredumpstack)) => Err(Box::new(Trap {
+            reason,
+            backtrace,
+            coredumpstack,
+        })),
         #[cfg(all(feature = "std", panic = "unwind"))]
         Err((UnwindReason::Panic(panic), _, _)) => std::panic::resume_unwind(panic),
     };

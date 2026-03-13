@@ -964,20 +964,15 @@ impl<
     // exit syscall
     // actual exit syscall that would kill other threads is not supported yet
     // TODO: exit_call should be switched to epoch interrupt method later
-    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, is_last_thread: u64) {
-        if is_last_thread == 1 {
-            // Clean up the context from the global table
-            // If not last thread, cleanup will be handled after each call.
-            // For example: in fork_call or main execution routine in lind-boot
-            if !rm_vmctx(self.cageid as u64) {
-                panic!(
-                    "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
-                    self.cageid
-                );
-            }
-            // Decrement the global cage count
-            self.lind_manager.decrement();
-        }
+    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, _is_last_thread: u64) {
+        // Capture values for the deferred OnCalledAction closure.
+        // Every thread defers lind_thread_exit to OnCalledAction so that
+        // the epoch_handler entry stays alive until the asyncify unwind
+        // fully completes.  The actual last thread to finish handles
+        // cage_finalize (zombie, SIGCHLD, rm_vmctx, cage removal).
+        let deferred_cageid = self.cageid as u64;
+        let deferred_tid = self.tid as u64;
+        let deferred_lind_manager = self.lind_manager.clone();
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -1018,7 +1013,26 @@ impl<
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            // after unwind, just continue returning
+            // Remove this thread from epoch_handler.  If this was the
+            // actual last thread in the cage, lind_thread_exit returns
+            // true and we handle full cage teardown.
+            let is_last = cage::signal::lind_thread_exit(deferred_cageid, deferred_tid);
+            if is_last {
+                // cage_finalize waits for grate_inflight to drain,
+                // records zombie/SIGCHLD, removes fdtable + cage.
+                cage::cage_finalize(deferred_cageid);
+
+                // Remove the VMContext pool (backup instances).
+                if !rm_vmctx(deferred_cageid) {
+                    eprintln!(
+                        "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
+                        deferred_cageid
+                    );
+                }
+
+                // Decrement the global cage count.
+                deferred_lind_manager.decrement();
+            }
 
             return Ok(OnCalledAction::Finish(vec![Val::I32(code)]));
         }));
