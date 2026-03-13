@@ -116,7 +116,7 @@ impl<
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
-        cageid: Option<i32>,
+        cageid: i32,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
@@ -138,8 +138,6 @@ impl<
         let fork_host = Arc::new(fork_host);
         let exec_host = Arc::new(exec);
 
-        // cage id starts from 1
-        let cageid = cageid.unwrap_or(CAGE_START_ID);
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
@@ -307,6 +305,7 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
+        let syscall_asyncify_data = store.get_syscall_asyncify_data();
         let is_parent_thread = store.is_thread();
         store.set_on_called(Box::new(move |mut store| {
             // unwind finished and we need to stop the unwind
@@ -464,6 +463,9 @@ impl<
                         store
                             .as_context_mut()
                             .set_signal_asyncify_data(signal_asyncify_data);
+                        store
+                            .as_context_mut()
+                            .set_syscall_asyncify_data(syscall_asyncify_data);
 
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
 

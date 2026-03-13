@@ -10,7 +10,7 @@ use threei::threei::{
 };
 use threei::threei_const;
 use typemap::path_conversion::get_cstr;
-use wasmtime::Caller;
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
@@ -126,6 +126,19 @@ fn add_syscall_to_linker<
                 }
             }
 
+            // If we are reaching here at rewind state, that means fork was called within
+            // a syscall-interrupted signal handler. We should restore the saved return value
+            // of the syscall that was interrupted, rather than re-executing it.
+            if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
+                let retval = caller
+                    .as_context_mut()
+                    .get_current_syscall_rewind_data()
+                    .unwrap();
+                // let signal handler finish rest of the rewinding process
+                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                return retval;
+            }
+
             // Some thread-related operations must be executed against a specific thread's
             // VMContext (e.g., pthread_create/exit). Because syscalls may be interposed/routed
             // through 3i functionality and the effective thread instance cannot be reliably derived
@@ -144,7 +157,7 @@ fn add_syscall_to_linker<
                 arg2
             };
 
-            make_syscall(
+            let retval = make_syscall(
                 self_cageid,
                 call_number as u64,
                 call_name,
@@ -161,7 +174,23 @@ fn add_syscall_to_linker<
                 arg5cageid,
                 arg6,
                 arg6cageid,
-            )
+            );
+
+            // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
+            // If fork is called within the signal handler, asyncify will unwind the stack;
+            // we save the syscall return value so it can be restored on rewind.
+            if -retval == sysdefs::constants::Errno::EINTR as i32 {
+                caller.as_context_mut().append_syscall_asyncify_data(retval);
+                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+
+                if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
+                    return 0;
+                } else {
+                    caller.as_context_mut().pop_syscall_asyncify_data();
+                }
+            }
+
+            retval
         },
     )?;
     Ok(())
@@ -253,17 +282,21 @@ fn add_debug_to_linker<
     Ok(())
 }
 
-/// Register the 4 argv/environ host functions that glibc's `_start()` calls
-/// to initialize `argc`, `argv`, and `environ` before entering `main()`.
-fn add_environ_to_linker<
+/// Register the 5 environ/args/random host functions under a given module name.
+///
+/// glibc's `_start()` imports these from `"lind"`, while Rust std compiled with
+/// `wasm32-wasip1` imports them from `"wasi_snapshot_preview1"`. We call this
+/// function twice to register under both module names, avoiding duplication.
+fn add_environ_funcs_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
+    module: &str,
     get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
 ) -> anyhow::Result<()> {
     linker.func_wrap(
-        "lind",
+        module,
         "args_sizes_get",
         move |caller: Caller<'_, T>, ptr_argc: i32, ptr_buf_size: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -279,7 +312,7 @@ fn add_environ_to_linker<
     )?;
 
     linker.func_wrap(
-        "lind",
+        module,
         "args_get",
         move |caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -301,7 +334,7 @@ fn add_environ_to_linker<
     )?;
 
     linker.func_wrap(
-        "lind",
+        module,
         "environ_sizes_get",
         move |caller: Caller<'_, T>, ptr_count: i32, ptr_buf_size: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -321,7 +354,7 @@ fn add_environ_to_linker<
     )?;
 
     linker.func_wrap(
-        "lind",
+        module,
         "environ_get",
         move |caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
@@ -343,6 +376,19 @@ fn add_environ_to_linker<
         },
     )?;
 
+    linker.func_wrap(
+        module,
+        "random_get",
+        move |caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
+            let base = get_memory_base(&caller) as *mut u8;
+            let slice =
+                unsafe { std::slice::from_raw_parts_mut(base.add(buf as usize), buf_len as usize) };
+            let mut file = std::fs::File::open("/dev/urandom").unwrap();
+            std::io::Read::read_exact(&mut file, slice).unwrap();
+            0
+        },
+    )?;
+
     Ok(())
 }
 
@@ -352,7 +398,7 @@ fn add_environ_to_linker<
 /// - **syscall**: the unified `make-syscall` entry point
 /// - **runtime**: memory base, cage ID, setjmp/longjmp, epoch callback, debug panic
 /// - **debug** (lind_debug feature only): `lind_debug_num`, `lind_debug_str`
-/// - **environ**: argv/environ functions for glibc `_start()`
+/// - **environ**: argv/environ/random_get under both `"lind"` and `"wasi_snapshot_preview1"`
 pub fn add_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
@@ -364,6 +410,7 @@ pub fn add_to_linker<
     add_runtime_to_linker(linker)?;
     #[cfg(feature = "lind_debug")]
     add_debug_to_linker(linker)?;
-    add_environ_to_linker(linker, get_environ)?;
+    add_environ_funcs_to_linker(linker, "lind", get_environ)?;
+    add_environ_funcs_to_linker(linker, "wasi_snapshot_preview1", get_environ)?;
     Ok(())
 }
