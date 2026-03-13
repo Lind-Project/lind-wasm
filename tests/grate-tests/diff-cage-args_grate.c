@@ -16,11 +16,11 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		    uint64_t arg6, uint64_t arg6cage) {
 	if (fn_ptr_uint == 0) {
 		fprintf(stderr,
-			"[Grate|interpose-exec] Invalid function ptr\n");
+			"[Grate|diff-cage-args] Invalid function ptr\n");
 		assert(0);
 	}
 
-	printf("[Grate|interpose-exec] Handling function ptr: %llu from cage: "
+	printf("[Grate|diff-cage-args] Handling function ptr: %llu from cage: "
 	       "%llu\n",
 	       fn_ptr_uint, cageid);
 
@@ -64,7 +64,7 @@ int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	       uint64_t arg4, uint64_t arg4cage, uint64_t arg5,
 	       uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
 	printf(
-	    "[Grate|interpose-exec] In exec_grate %d handler for cage: %llu\n",
+	    "[Grate|diff-cage-args] In open_grate %d handler for cage: %llu\n",
 	    getpid(), cageid);
 
 	int self_grate_id = getpid();
@@ -124,13 +124,13 @@ int main(int argc, char *argv[]) {
 	while (wait(&status) > 0) {
 		if (status != 0) {
 			fprintf(stderr,
-				"[Grate|interpose-exec] FAIL: child exited "
+				"[Grate|diff-cage-args] FAIL: child exited "
 				"with status %d\n",
 				status);
 			assert(0);
 		}
 	}
 
-	printf("[Grate|interpose-exec] PASS\n");
+	printf("[Grate|diff-cage-args] PASS\n");
 	return 0;
 }
