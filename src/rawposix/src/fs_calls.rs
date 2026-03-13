@@ -738,13 +738,7 @@ pub extern "C" fn mmap_syscall(
     let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
-    let cage = get_cage(cageid).unwrap_or_else(|| {
-        panic!(
-            "[mmap_syscall] cage {} not found! is_dead={}",
-            cageid,
-            cage::is_cage_dead(cageid)
-        )
-    });
+    let cage = get_cage(cageid).unwrap();
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 

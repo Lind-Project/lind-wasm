@@ -341,7 +341,7 @@ pub extern "C" fn exit_syscall(
         status_arg,
         cageid,
         tid,
-        0u64, // is_last_thread: unused, determined dynamically in OnCalledAction
+        UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
         UNUSED_ARG,
         UNUSED_ID,
         UNUSED_ARG,
@@ -419,7 +419,7 @@ pub extern "C" fn exit_group_syscall(
         status_arg,
         cageid,
         tid,
-        0u64, // is_last_thread: unused, determined dynamically in OnCalledAction
+        UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
         UNUSED_ARG,
         UNUSED_ID,
         UNUSED_ARG,

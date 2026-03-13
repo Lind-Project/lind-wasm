@@ -91,7 +91,8 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
 
     let grateid = target_map.keys().next().copied()?;
     let addr = target_map.values().next().copied()?;
-    Some((grateid, addr))
+    // Otherwise fallback to any registered handler
+    return Some((grateid, addr));
 }
 
 /// Removes **ALL** handler entries across all cages that point to a specific grateid.

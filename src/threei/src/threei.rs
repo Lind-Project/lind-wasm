@@ -17,8 +17,7 @@ use crate::handler_table::{
 };
 use crate::threei_const;
 
-pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
-pub const EXIT_GROUP_SYSCALL: u64 = 231;
+pub use sysdefs::constants::sys_const::{EXIT_SYSCALL, EXIT_GROUP_SYSCALL};
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = extern "C" fn(
@@ -552,9 +551,11 @@ pub fn make_syscall(
     }
 
     // _get_handler returned None — the target_map for this
-    // (self_cageid, syscall_num) exists but has no dest_grateid entry,
-    // likely cleaned up by _rm_grate_from_handler during cage exit.
-    return -(Errno::ESRCH as i32);
+    // (self_cageid, syscall_num) exists but has no dest_grateid entry.
+    panic!(
+        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
+        self_cageid, syscall_num
+    );
 }
 
 /***************************** trigger_harsh_cage_exit & harsh_cage_exit *****************************/
