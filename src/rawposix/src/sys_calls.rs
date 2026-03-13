@@ -4,7 +4,7 @@
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
-use cage::{add_cage, get_cage, remove_cage, Cage, Zombie};
+use cage::{add_cage, encode_wait_status, get_cage, remove_cage, Cage, ExitStatus, Zombie};
 use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
@@ -105,10 +105,7 @@ pub extern "C" fn fork_syscall(
     let isthread = flags & (sys_const::CLONE_VM);
 
     // Effective parent cage ID.
-    //
-    // Since fork may be interposed by a grate, we treat the argument's
-    // cageid as the operation's identity.
-    let parent_cageid = clone_arg_cageid;
+    let parent_cageid = cageid;
     let mut child_cageid = 0;
 
     // Fork path: create a new cage
@@ -141,6 +138,7 @@ pub extern "C" fn fork_syscall(
             zombies: RwLock::new(vec![]),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(new_vmmap),
+            final_exit_status: RwLock::new(None),
         };
 
         // increment child counter for parent
@@ -241,12 +239,11 @@ pub extern "C" fn exec_syscall(
         );
     }
 
-    let self_cageid = path_cageid;
     // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(self_cageid);
+    fdtables::empty_fds_for_exec(cageid);
 
     // Copy necessary data from current cage
-    let selfcage = get_cage(self_cageid).unwrap();
+    let selfcage = get_cage(cageid).unwrap();
 
     selfcage.rev_shm.lock().clear();
 
@@ -275,7 +272,7 @@ pub extern "C" fn exec_syscall(
         UNUSED_NAME,
         WASMTIME_CAGEID,
         path,
-        path_cageid,
+        cageid, // Pass cageid as the second argument to identify the execing cage in wasmtime
         argv,
         argv_cageid,
         envs,
@@ -339,23 +336,23 @@ pub extern "C" fn exit_syscall(
         );
     }
 
-    // Since `exit_syscall` may be interposed by a grate, we treat the
-    // argument's cageid as the effective operation cage.
-    let selfcageid = status_cageid;
     // Indicates whether the exiting thread is the last live thread
     // in the cage (0 = no, 1 = yes).
     let mut is_last_thread = 0;
+
+    // Set the normal exit code
+    let exit_st = ExitStatus::Exited(status);
 
     // Perform thread exit inside RawPOSIX.
     //
     // `lind_thread_exit` returns true if this thread was the last
     // remaining thread of the cage.
-    if cage::lind_thread_exit(selfcageid, tid) {
+    if cage::lind_thread_exit(cageid, tid) {
         // Need to perform cage-level resource cleanup
         is_last_thread = 1;
 
         // Cleanup fdtable
-        fdtables::remove_cage_from_fdtable(selfcageid);
+        fdtables::remove_cage_from_fdtable(cageid);
 
         // Cleanup cage table and process hierarchy state.
         //
@@ -365,15 +362,28 @@ pub extern "C" fn exit_syscall(
         //   - Send SIGCHLD to the parent
         //
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-        if let Some(selfcage) = get_cage(selfcageid) {
-            if selfcage.parent != selfcageid {
+        if let Some(selfcage) = get_cage(cageid) {
+            if selfcage.parent != cageid {
                 let parent_cage = get_cage(selfcage.parent);
                 if let Some(parent) = parent_cage {
                     parent.child_num.fetch_sub(1, SeqCst);
                     let mut zombie_vec = parent.zombies.write();
+                    // Determine the final termination status for this cage.
+                    //
+                    // If a termination status was previously recorded (e.g., due to
+                    // signal-based termination), use that value. Otherwise fall back
+                    // to the normal exit status derived from the `exit()` syscall.
+                    //
+                    // This ensures that signal-triggered termination (which may have
+                    // recorded `ExitStatus::Signaled`) is not overwritten by the
+                    // default exit status path.
+                    let zombie_status = {
+                        let recorded = *selfcage.final_exit_status.read();
+                        recorded.unwrap_or(exit_st)
+                    };
                     zombie_vec.push(Zombie {
-                        cageid: selfcageid,
-                        exit_code: status,
+                        cageid: cageid,
+                        exit_code: zombie_status,
                     });
                 } else {
                     // if parent already exited
@@ -382,13 +392,13 @@ pub extern "C" fn exit_syscall(
             }
 
             // if the cage has parent (i.e. it is not the "root" cage)
-            if selfcageid != selfcage.parent {
+            if cageid != selfcage.parent {
                 // Notify parent via SIGCHLD if this is not the root cage.
                 lind_send_signal(selfcage.parent, SIGCHLD);
             }
 
             // Remove the cage from the global cage table.
-            remove_cage(selfcageid);
+            remove_cage(cageid);
         }
     }
 
@@ -400,7 +410,7 @@ pub extern "C" fn exit_syscall(
         UNUSED_NAME,
         WASMTIME_CAGEID,
         status_arg,
-        status_cageid,
+        cageid, // Pass cageid as the second argument to identify the exiting cage in wasmtime
         tid,
         is_last_thread, // represent the last thread exiting
         UNUSED_ARG,
@@ -587,7 +597,7 @@ pub extern "C" fn waitpid_syscall(
     let zombie = zombie_opt.unwrap();
     // update the status
     if let Some(status) = status {
-        *status = zombie.exit_code;
+        *status = encode_wait_status(zombie.exit_code);
     }
 
     // return child's cageid

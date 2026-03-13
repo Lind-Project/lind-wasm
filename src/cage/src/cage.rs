@@ -14,10 +14,100 @@ pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::data::fs_struct::SigactionStruct;
 
+/// Represents how a cage terminated, mirroring the two primary POSIX
+/// process termination modes.
+///
+/// A process may either:
+/// - exit normally via `exit()` with an exit code, or
+/// - be terminated by a signal.
+///
+/// This enum stores the termination information in a structured form
+/// before it is encoded into the traditional POSIX wait status returned
+/// by `waitpid`.
+///
+/// TODO: Currently, Lind-Wasm only supports normal exit and signal
+/// termination. Job-control states such as `Stopped` and `Continued`
+/// are not yet implemented.
+#[derive(Debug, Clone, Copy)]
+pub enum ExitStatus {
+    /// Process exited normally with the given exit code.
+    /// The exit code will later be truncated to 8 bits when encoded
+    /// into a POSIX wait status.
+    Exited(i32),
+    /// Process was terminated by a signal.
+    /// The boolean indicates whether a core dump occurred.
+    Signaled(i32, bool), // (signal, core_dump)
+}
+
+/// A zombie child process.
+///
+/// A zombie represents a child cage that has already terminated but whose
+/// termination status has not yet been collected by the parent via
+/// `waitpid` or a related wait syscall.
+///
+/// The runtime stores the cage identifier together with the termination
+/// status so the parent can later retrieve it.
 #[derive(Debug, Clone, Copy)]
 pub struct Zombie {
     pub cageid: u64,
-    pub exit_code: i32,
+    pub exit_code: ExitStatus,
+}
+
+/// Encode a structured `ExitStatus` into the traditional POSIX
+/// `waitpid` status integer.
+///
+/// The encoding follows the standard Unix wait status layout:
+///
+/// Normal exit:
+///     status = (exit_code & 0xff) << 8
+///
+/// Signal termination:
+///     bits 0–6   : signal number
+///     bit 7      : core dump flag
+///
+/// Exit codes are truncated to 8 bits to match POSIX semantics.
+/// This ensures that `WIFEXITED`, `WEXITSTATUS`, and related libc
+/// macros behave correctly.
+pub fn encode_wait_status(st: ExitStatus) -> i32 {
+    match st {
+        ExitStatus::Exited(code) => ((code & 0xff) << 8),
+        ExitStatus::Signaled(sig, core) => {
+            let mut s = sig & 0x7f;
+            if core {
+                s |= 0x80;
+            } // core dump flag in traditional encoding
+            s
+        }
+    }
+}
+
+/// Record the final termination status of a cage.
+///
+/// This function stores the exit status that will later be reported to the
+/// parent when the cage becomes a zombie (e.g., via `waitpid`). The status
+/// may represent either a normal exit (`Exited`) or signal-based termination
+/// (`Signaled`).
+///
+/// The recorded status is later consumed when inserting a `Zombie` entry
+/// into the parent's zombie list.
+///
+/// This function is currently used on signal-based termination to record
+/// the signal number.
+///
+/// # Panics
+///
+/// Panics if the specified cage does not exist in the cage table.
+pub fn cage_record_exit_status(cageid: u64, status: ExitStatus) {
+    let cage = get_cage(cageid).unwrap_or_else(|| {
+        panic!(
+            "Attempted to record exit status for non-existent cage ID {}",
+            cageid
+        )
+    });
+    let mut final_status = cage.final_exit_status.write();
+    if final_status.is_none() {
+        *final_status = Some(status);
+    }
 }
 
 #[derive(Debug)]
@@ -73,6 +163,28 @@ pub struct Cage {
     pub child_num: AtomicU64,
     // vmmap represents the virtual memory mapping for this cage. More details on `memory::vmmap`
     pub vmmap: RwLock<Vmmap>,
+    // final_exit_status stores the terminal status of the cage once a
+    // termination condition has been determined.
+    //
+    // This field is used as a temporary cache for the cage's final exit
+    // status (either `Exited(code)` or `Signaled(signo, core_dump)`).
+    // The status is recorded when the cage enters a terminal state
+    // (e.g., exit syscall or signal-triggered termination), but before
+    // the cage is fully cleaned up.
+    //
+    // The recorded value is later consumed when inserting a `Zombie`
+    // entry into the parent cage's `zombies` list, which is what the
+    // parent observes through `wait()` / `waitpid()`.
+    //
+    // This field cannot be replaced by the `exit_code` stored in
+    // `Zombie`. A `Zombie` object only exists in the parent's zombie
+    // list and is created during the final cleanup phase of the exiting
+    // cage. However, the cage's termination reason may need to be
+    // determined earlier (for example during signal handling), before
+    // the zombie entry is created. Therefore, the cage must temporarily
+    // store its final termination status until the zombie entry is
+    // generated.
+    pub final_exit_status: RwLock<Option<ExitStatus>>,
 }
 
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
@@ -225,6 +337,7 @@ mod tests {
             zombies: RwLock::new(vec![]),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
+            final_exit_status: RwLock::new(None),
         };
 
         add_cage(2, test_cage);
