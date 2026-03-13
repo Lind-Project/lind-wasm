@@ -1343,6 +1343,18 @@ def setup_test_file_in_artifacts(original_source, artifacts_root):
             
     return dest_source
 
+
+def get_test_mode(source_file):
+    """Infer the harness mode from any ancestor folder under tests/unit-tests."""
+    for parent in source_file.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == DETERMINISTIC_PARENT_NAME:
+            return "deterministic"
+        if parent.name == FAIL_PARENT_NAME:
+            return "fail"
+    return None
+
 # ----------------------------------------------------------------------
 # Function: run_tests
 #
@@ -1364,10 +1376,10 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         dest_source = setup_test_file_in_artifacts(original_source, artifacts_root)
         
         # Determine test type and run appropriate test
-        parent_name = original_source.parent.name
-        if parent_name == DETERMINISTIC_PARENT_NAME:
+        test_mode = get_test_mode(original_source)
+        if test_mode == "deterministic":
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
-        elif parent_name == FAIL_PARENT_NAME:
+        elif test_mode == "fail":
             test_single_file_fail(dest_source, results["fail"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         else:
             # Log warning for tests not in deterministic/fail folders

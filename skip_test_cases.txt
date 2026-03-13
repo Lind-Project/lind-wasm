@@ -4,3 +4,4 @@ signal_tests/deterministic/signal.c
 signal_tests/deterministic/signal_int_thread.c
 signal_tests/deterministic/signal_longjmp.c
 signal_tests/deterministic/signal_nodefer.c
+ci/deterministic/ci_intentional_failure_tmp.c
