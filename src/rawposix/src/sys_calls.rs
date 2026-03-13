@@ -399,10 +399,15 @@ pub extern "C" fn exit_group_syscall(
         // Mark cage as exiting BEFORE epoch_kill_all — killed threads
         // wake up and may make syscalls; EXITING_TABLE must be set so
         // make_syscall returns -ESRCH instead of dispatching.
-        // Note: we intentionally do NOT call trigger_harsh_cage_exit here
-        // because its harsh_cage_exit dispatch through the grate chain
-        // causes additional syscall traffic during exit, widening race
-        // windows and causing OOB crashes in concurrent exit scenarios.
+        //
+        // TODO: this cleanup (EXITING_TABLE insert, epoch_kill_all,
+        // _rm_grate_from_handler) should be moved into
+        // trigger_harsh_cage_exit / harsh_cage_exit so all exit paths
+        // go through a single cage teardown sequence.  We currently
+        // inline it here because trigger_harsh_cage_exit dispatches
+        // harsh_cage_exit through the grate chain, which causes
+        // additional syscall traffic during exit and widens race
+        // windows with concurrent threads.
         threei::EXITING_TABLE.insert(cageid);
 
         cage::signal::signal::epoch_kill_all(cageid, tid as i32);
