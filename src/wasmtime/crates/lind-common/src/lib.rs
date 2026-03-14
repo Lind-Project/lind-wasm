@@ -1,13 +1,9 @@
 #![allow(dead_code)]
 
-use anyhow::Result;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
-use typemap::path_conversion::get_cstr;
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
