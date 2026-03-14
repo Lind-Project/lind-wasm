@@ -818,7 +818,7 @@ pub fn epoll_wait_syscall(
     // using our (cage, underfd) to vfd reverse map, and only then write the
     // translated (events, vfd) into the user-provided events array. In short:
     //   kernel to host buffer (underfd) --> translate to guest buffer (vfd).
-    let mut events = unsafe { std::slice::from_raw_parts_mut(events_ptr, maxevents as usize) };
+    let events = unsafe { std::slice::from_raw_parts_mut(events_ptr, maxevents as usize) };
 
     let mut kernel_events: Vec<libc::epoll_event> = Vec::with_capacity(maxevents as usize);
     // Should always be null value before we call libc::epoll_wait
