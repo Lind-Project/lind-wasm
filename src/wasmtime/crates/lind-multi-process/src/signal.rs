@@ -55,10 +55,7 @@ pub fn signal_handler<
         // retrieve the signal function entered last time with its parameters.
         // If there's no signal rewind data, we're rewinding from an exit_call
         // (not a signal handler) — just return and let the rewind complete.
-        let data = match caller
-            .as_context_mut()
-            .get_current_signal_rewind_data()
-        {
+        let data = match caller.as_context_mut().get_current_signal_rewind_data() {
             Some(d) => d,
             None => return 0,
         };

@@ -17,7 +17,7 @@ use crate::handler_table::{
 };
 use crate::threei_const;
 
-pub use sysdefs::constants::sys_const::{EXIT_SYSCALL, EXIT_GROUP_SYSCALL};
+pub use sysdefs::constants::sys_const::{EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = extern "C" fn(

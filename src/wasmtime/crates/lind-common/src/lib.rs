@@ -134,10 +134,7 @@ fn add_syscall_to_linker<
             // If there's no syscall rewind data, we're rewinding from an exit_call —
             // let the rewind continue without re-executing the syscall.
             if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
-                let retval = match caller
-                    .as_context_mut()
-                    .get_current_syscall_rewind_data()
-                {
+                let retval = match caller.as_context_mut().get_current_syscall_rewind_data() {
                     Some(v) => v,
                     None => {
                         wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
