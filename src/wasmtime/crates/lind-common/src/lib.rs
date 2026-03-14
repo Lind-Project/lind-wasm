@@ -388,13 +388,29 @@ fn add_environ_funcs_to_linker<
     linker.func_wrap(
         module,
         "random_get",
-        move |caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
-            let base = get_memory_base(&caller) as *mut u8;
-            let slice =
-                unsafe { std::slice::from_raw_parts_mut(base.add(buf as usize), buf_len as usize) };
-            let mut file = std::fs::File::open("/dev/urandom").unwrap();
-            std::io::Read::read_exact(&mut file, slice).unwrap();
-            0
+        move |mut caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
+            // Route through 3i make_syscall (getrandom = syscall 318)
+            // instead of opening /dev/urandom which doesn't exist in
+            // the lindfs chroot.
+            make_syscall(
+                cageid,
+                318, // SYS_getrandom
+                0,
+                cageid,
+                buf as u64,
+                cageid,
+                buf_len as u64,
+                cageid,
+                0, // flags
+                cageid,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+            )
         },
     )?;
 
