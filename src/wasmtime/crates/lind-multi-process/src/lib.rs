@@ -12,7 +12,7 @@ use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::Path;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
 use wasmtime::{
@@ -331,7 +331,7 @@ impl<
         let asyncify_start_rewind_func = caller.get_asyncify_start_rewind().unwrap();
 
         // we want to send this address to child thread
-        let cloned_address = address as u64;
+        let _cloned_address = address as u64;
 
         // retrieve the child host
         let mut child_host = (self.fork_host)(caller.data());
@@ -1309,14 +1309,14 @@ impl<
     // memory to be imported memory, then share the imported memory to all the child thread.
     // Then when we want to fork a thread, we need to clone the Linker, then replace the
     // imported memory that it links to a new memory region.
-    fn fork_memory(&mut self, store: &StoreOpaque, size: usize) {
+    fn fork_memory(&mut self, store: &StoreOpaque, _size: usize) {
         // allow shadowing means defining a symbol that already exits would replace the old one
         self.linker.allow_shadowing(true);
         for import in self.module.imports() {
             if let Some(m) = import.ty().memory() {
                 if m.is_shared() {
                     // define a new shared memory for the child
-                    let mut plan = m.clone();
+                    let plan = m.clone();
 
                     let mem = SharedMemory::new(self.module.engine(), plan.clone()).unwrap();
                     self.linker
