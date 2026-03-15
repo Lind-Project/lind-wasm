@@ -217,7 +217,7 @@ impl Global {
     // retrieve the underlying pointer of the wasm Global
     pub fn get_handler(&self, mut store: impl AsContextMut) -> *mut u64 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
-        let global_ty = self._ty(&store);
+        let _global_ty = self._ty(&store);
         unsafe {
             let definition = &mut *store[self.0].definition;
             definition.as_u64_mut()

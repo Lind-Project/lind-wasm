@@ -16,7 +16,6 @@ use core::pin::Pin;
 use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
 
-use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
 
 /// Structure used to link wasm modules/instances together.
@@ -1251,7 +1250,7 @@ impl<T> Linker<T> {
     pub fn iter<'a: 'p, 'p>(
         &'a self,
         mut store: impl AsContextMut<Data = T> + 'p,
-    ) -> impl Iterator<Item = (&str, &str, Extern)> + 'p {
+    ) -> impl Iterator<Item = (&'a str, &'a str, Extern)> + 'p {
         self.map.iter().map(move |(key, item)| {
             let store = store.as_context_mut();
             (

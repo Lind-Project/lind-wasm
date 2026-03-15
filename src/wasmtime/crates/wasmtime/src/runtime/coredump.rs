@@ -190,10 +190,10 @@ impl WasmCoreDump {
                     Val::I32(x) => wasm_encoder::ConstExpr::i32_const(x),
                     Val::I64(x) => wasm_encoder::ConstExpr::i64_const(x),
                     Val::F32(x) => {
-                        wasm_encoder::ConstExpr::f32_const(unsafe { std::mem::transmute(x) })
+                        wasm_encoder::ConstExpr::f32_const(f32::from_bits(x))
                     }
                     Val::F64(x) => {
-                        wasm_encoder::ConstExpr::f64_const(unsafe { std::mem::transmute(x) })
+                        wasm_encoder::ConstExpr::f64_const(f64::from_bits(x))
                     }
                     Val::V128(x) => wasm_encoder::ConstExpr::v128_const(x.as_u128() as i128),
                     Val::FuncRef(_) => {

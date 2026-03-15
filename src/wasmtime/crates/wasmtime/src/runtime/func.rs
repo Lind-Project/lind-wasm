@@ -5,7 +5,6 @@ use crate::runtime::vm::{
 use crate::runtime::Uninhabited;
 use crate::store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored};
 use crate::type_registry::RegisteredType;
-use crate::vm::TrapReason;
 use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, CallHook, Engine, Extern, FuncType, Instance, Module, Ref,
@@ -1674,7 +1673,7 @@ fn enter_wasm<T>(store: &mut StoreContextMut<'_, T>) -> Option<usize> {
         return None;
     }
 
-    let stack_pointer = crate::runtime::vm::get_stack_pointer();
+    let _stack_pointer = crate::runtime::vm::get_stack_pointer();
 
     // Determine the stack pointer where, after which, any wasm code will
     // immediately trap. This is checked on the entry to all wasm functions.

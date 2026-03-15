@@ -219,7 +219,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
     ) -> Result<Instance> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+        let (instance, start, _instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
