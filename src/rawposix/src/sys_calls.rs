@@ -2,7 +2,7 @@
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
 use crate::fs_calls::kernel_close;
-use cage::memory::vmmap::{VmmapOps, *};
+use cage::memory::vmmap::*;
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
 use cage::{add_cage, cagetable_clear, cagetable_init, get_cage, remove_cage, Cage, Zombie};
@@ -13,17 +13,17 @@ use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::*;
-use std::sync::atomic::{AtomicI32, AtomicU64};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
+use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, LIND_ROOT};
 use sysdefs::constants::sys_const::{
-    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
+    EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
-use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
+use sysdefs::data::fs_struct::SigactionStruct;
 use typemap::datatype_conversion::*;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
@@ -40,7 +40,7 @@ use typemap::datatype_conversion::*;
 /// Actual operations of the address space is handled by wasmtime when creating a new
 /// instance for the child cage.
 pub fn fork_syscall(
-    cageid: u64,
+    _cageid: u64,
     child_arg: u64,        // Child's cage id
     child_arg_cageid: u64, // Child's cage id arguments cageid
     arg2: u64,
@@ -499,7 +499,7 @@ pub fn getppid_syscall(
 /// ## Returns
 /// These functions are always successful and never modify errno.
 pub fn getgid_syscall(
-    cageid: u64,
+    _cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
@@ -537,7 +537,7 @@ pub fn getgid_syscall(
 /// ## Returns
 /// These functions are always successful and never modify errno.
 pub fn getegid_syscall(
-    cageid: u64,
+    _cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
@@ -575,7 +575,7 @@ pub fn getegid_syscall(
 /// ## Returns
 /// These functions are always successful and never modify errno.
 pub fn getuid_syscall(
-    cageid: u64,
+    _cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
@@ -613,7 +613,7 @@ pub fn getuid_syscall(
 /// ## Returns
 /// These functions are always successful and never modify errno.
 pub fn geteuid_syscall(
-    cageid: u64,
+    _cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
@@ -931,7 +931,7 @@ pub fn sigprocmask_syscall(
 /// ## Returns
 /// On success, returns 0. On error, -1 is returned, and errno is set.
 pub fn sched_yield_syscall(
-    cageid: u64,
+    _cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,

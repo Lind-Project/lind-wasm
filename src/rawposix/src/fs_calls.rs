@@ -195,7 +195,7 @@ pub fn read_syscall(
 pub fn close_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -274,15 +274,15 @@ pub fn close_syscall(
 pub fn futex_syscall(
     cageid: u64,
     uaddr_arg: u64,
-    uaddr_cageid: u64,
+    _uaddr_cageid: u64,
     futex_op_arg: u64,
     futex_op_cageid: u64,
     val_arg: u64,
     val_cageid: u64,
     timeout_arg: u64,
-    timeout_cageid: u64,
+    _timeout_cageid: u64,
     uaddr2_arg: u64,
-    uaddr2_cageid: u64,
+    _uaddr2_cageid: u64,
     val3_arg: u64,
     val3_cageid: u64,
 ) -> i32 {
@@ -458,7 +458,7 @@ pub fn pipe_syscall(
     // Convert the u64 pointer into a mutable reference to PipeArray
     let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
         Ok(p) => p,
-        Err(e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
+        Err(_e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
     };
 
     // Create an array to hold the two kernel file descriptors
@@ -575,7 +575,7 @@ pub fn pipe2_syscall(
     // Convert the u64 pointer into a mutable reference to PipeArray
     let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
         Ok(p) => p,
-        Err(e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
+        Err(_e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
     };
     // Create an array to hold the two kernel file descriptors
     let mut kernel_fds: [i32; 2] = [0; 2];
@@ -677,18 +677,18 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = {
+    let addr = {
         if addr_arg == 0 {
             0 as *mut u8
         } else {
             sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
         }
     };
-    let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
-    let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
+    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
+    let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
     let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
-    let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
+    let off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
 
@@ -730,7 +730,7 @@ pub fn mmap_syscall(
     let mut useraddr = addr as u32;
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
-        let mut vmmap = cage.vmmap.write();
+        let vmmap = cage.vmmap.write();
         let result;
 
         // pick an address of appropriate size, anywhere
@@ -925,7 +925,7 @@ pub fn munmap_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -1203,13 +1203,13 @@ pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry
 pub fn fcntl_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     cmd_arg: u64,
     cmd_cageid: u64,
     int_arg: u64, // arg3: integer value (for F_DUPFD, F_SETFD, F_GETFL, etc.)
-    int_arg_cageid: u64,
+    _int_arg_cageid: u64,
     ptr_arg: u64, // arg4: translated host pointer (for F_GETLK, F_SETLK, etc.)
-    ptr_arg_cageid: u64,
+    _ptr_arg_cageid: u64,
     arg5: u64,
     arg5_cageid: u64,
     arg6: u64,
@@ -1494,7 +1494,7 @@ pub fn statfs_syscall(
     path_arg: u64,
     path_cageid: u64,
     statbuf_arg: u64,
-    statbuf_cageid: u64,
+    _statbuf_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -1752,7 +1752,7 @@ pub fn readlink_syscall(
     path_arg: u64,
     path_cageid: u64,
     buf_arg: u64,
-    buf_cageid: u64,
+    _buf_cageid: u64,
     buflen_arg: u64,
     buflen_cageid: u64,
     arg4: u64,
@@ -1863,7 +1863,7 @@ pub fn readlinkat_syscall(
     path_arg: u64,
     path_cageid: u64,
     buf_arg: u64,
-    buf_cageid: u64,
+    _buf_cageid: u64,
     buflen_arg: u64,
     buflen_cageid: u64,
     arg5: u64,
@@ -2111,7 +2111,7 @@ pub fn unlinkat_syscall(
         );
     }
 
-    let mut c_path;
+    let c_path;
     // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
     let kernel_fd = if dirfd == AT_FDCWD {
         // Case 1: When AT_FDCWD is used.
@@ -2227,7 +2227,7 @@ pub fn clock_gettime_syscall(
     clockid_arg: u64,
     clockid_cageid: u64,
     tp_arg: u64,
-    tp_cageid: u64,
+    _tp_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -2276,7 +2276,7 @@ pub fn clock_gettime_syscall(
 pub fn dup_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -2324,9 +2324,9 @@ pub fn dup_syscall(
 pub fn dup2_syscall(
     cageid: u64,
     old_vfd_arg: u64,
-    old_vfd_cageid: u64,
+    _old_vfd_cageid: u64,
     new_vfd_arg: u64,
-    new_vfd_cageid: u64,
+    _new_vfd_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -3294,7 +3294,7 @@ pub fn fchmod_syscall(
 pub fn getcwd_syscall(
     cageid: u64,
     buf_arg: u64,
-    buf_cageid: u64,
+    _buf_cageid: u64,
     size_arg: u64,
     size_cageid: u64,
     arg3: u64,
@@ -3479,7 +3479,7 @@ pub fn nanosleep_time64_syscall(
 pub fn mprotect_syscall(
     cageid: u64,
     addr_arg: u64,
-    addr_cageid: u64,
+    _addr_cageid: u64,
     len_arg: u64,
     len_cageid: u64,
     prot_arg: u64,
@@ -3553,11 +3553,11 @@ pub fn mprotect_syscall(
 pub fn ioctl_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     req_arg: u64,
-    req_cageid: u64,
+    _req_cageid: u64,
     ptrunion_arg: u64,
-    ptrunion_cageid: u64,
+    _ptrunion_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -3913,7 +3913,7 @@ pub fn shmat_syscall(
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
-    let mut vmmap = cage.vmmap.write();
+    let vmmap = cage.vmmap.write();
     let result;
     if useraddr == 0 {
         // Allocate a suitable space in the virtual memory map for the shared memory segment
@@ -4220,7 +4220,7 @@ pub fn shmctl_syscall(
 pub fn getrandom_syscall(
     cageid: u64,
     buf_arg: u64,
-    buf_arg_cageid: u64,
+    _buf_arg_cageid: u64,
     buflen_arg: u64,
     buflen_arg_cageid: u64,
     flags_arg: u64,
