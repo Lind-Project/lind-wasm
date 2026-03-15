@@ -162,14 +162,14 @@ pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
 ///
 /// ## Returns:
 /// A `CString` representing the absolute path in the host perspective (kernel perspective).
-pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64) -> CString {
+pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, _cageid: u64) -> CString {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(path_arg_cageid, cageid) {
             panic!("Invalide Cage ID");
         }
     }
-    let cage = get_cage(path_arg_cageid).unwrap();
+    let _cage = get_cage(path_arg_cageid).unwrap();
 
     let path = match get_cstr(path_arg) {
         Ok(path) => path,
