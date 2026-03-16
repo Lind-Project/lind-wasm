@@ -13,6 +13,8 @@ pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
+#[cfg(debug_assertions)]
+use sysdefs::logging::lind_debug_panic;
 use sysdefs::constants::SIGCHLD;
 use sysdefs::data::fs_struct::SigactionStruct;
 
@@ -118,7 +120,12 @@ pub fn cage_record_exit_status(cageid: u64, status: ExitStatus) {
     // not happen before the rawposix exit_syscall path runs.
     let cage = match get_cage(cageid) {
         Some(c) => c,
-        None => return,
+        None => {
+            #[cfg(debug_assertions)]
+            lind_debug_panic(&format!("cage_record_exit_status: cage {} not found", cageid));
+            #[cfg(not(debug_assertions))]
+            return;
+        }
     };
     let mut final_status = cage.final_exit_status.write();
     if final_status.is_none() {
@@ -366,16 +373,14 @@ pub fn cage_finalize(cageid: u64) {
         while cage.grate_inflight.load(Ordering::Acquire) > 0 {
             std::hint::spin_loop();
         }
-    }
 
-    // Record zombie and notify parent.
-    if let Some(selfcage) = get_cage(cageid) {
-        if selfcage.parent != cageid {
-            if let Some(parent) = get_cage(selfcage.parent) {
+        // Record zombie and notify parent.
+        if cage.parent != cageid {
+            if let Some(parent) = get_cage(cage.parent) {
                 parent.child_num.fetch_sub(1, Ordering::SeqCst);
                 let mut zombie_vec = parent.zombies.write();
                 let zombie_status = {
-                    let recorded = *selfcage.final_exit_status.read();
+                    let recorded = *cage.final_exit_status.read();
                     recorded.unwrap_or(ExitStatus::Exited(EXIT_SUCCESS))
                 };
                 zombie_vec.push(Zombie {
@@ -383,9 +388,7 @@ pub fn cage_finalize(cageid: u64) {
                     exit_code: zombie_status,
                 });
             }
-        }
-        if cageid != selfcage.parent {
-            crate::signal::signal::lind_send_signal(selfcage.parent, SIGCHLD);
+            crate::signal::signal::lind_send_signal(cage.parent, SIGCHLD);
         }
     }
 
