@@ -48,8 +48,7 @@ endif
 # the first 3 mm/xmm/ymm/zmm registers are used to pass vector parameters
 # which must be preserved.
 # With SSE disabled, ensure -fpmath is not set to use sse either.
-# Flags -mno-sse -mno-mmx -mfpmath=387 has been removed as they
-# are not supported by wasm
+rtld-CFLAGS += -mno-sse -mno-mmx -mfpmath=387
 ifeq ($(subdir),elf)
 CFLAGS-.os += $(if $(filter $(@F),$(patsubst %,%.os,$(all-rtld-routines))),\
 		   $(rtld-CFLAGS))

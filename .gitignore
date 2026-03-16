@@ -14,7 +14,8 @@ scripts/object_lists_final/
 
 #Ignore testing results
 e2e_status
-reports/
+report.html
+results.json
 
 #Ignore python cache
 __pycache__/

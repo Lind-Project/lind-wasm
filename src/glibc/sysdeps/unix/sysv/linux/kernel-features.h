@@ -63,9 +63,7 @@
 #define __ASSUME_PWRITEV	1
 
 /* Support for sendmmsg functionality was added in 3.0.  */
-/* Lind-WASM: sendmmsg is not implemented.  Undefine so glibc falls back
-   to individual send() calls in the DNS resolver (res_send.c).  */
-/* #define __ASSUME_SENDMMSG	1 */
+#define __ASSUME_SENDMMSG	1
 
 /* On most architectures, most socket syscalls are supported for all
    supported kernel versions, but on some socketcall architectures

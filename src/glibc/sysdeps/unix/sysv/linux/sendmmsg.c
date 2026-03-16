@@ -26,10 +26,11 @@
 int
 __sendmmsg (int fd, struct mmsghdr *vmessages, unsigned int vlen, int flags)
 {
-  /* Lind-WASM: sendmmsg is not implemented.  Return ENOSYS so callers
-     (e.g. res_send.c) fall back to individual send() calls.  */
-  __set_errno (ENOSYS);
-  return -1;
+#ifdef __ASSUME_SENDMMSG_SYSCALL
+  return SYSCALL_CANCEL (sendmmsg, fd, vmessages, vlen, flags);
+#else
+  return SOCKETCALL_CANCEL (sendmmsg, fd, vmessages, vlen, flags);
+#endif
 }
 libc_hidden_def (__sendmmsg)
 weak_alias (__sendmmsg, sendmmsg)
