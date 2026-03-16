@@ -121,6 +121,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (291, epoll_create1_syscall),
     (292, dup3_syscall),
     (293, pipe2_syscall),
-    (302, prlimit64_syscall),
     (318, getrandom_syscall),
+    (340, prlimit64_syscall),
 ];

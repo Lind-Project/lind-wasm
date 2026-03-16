@@ -1152,6 +1152,7 @@ pub extern "C" fn prlimit64_syscall(
         );
     }
 
+    eprintln!("PRLIMIT64 HIT: resource={} arg4={:#x}", arg2, arg4);
     // get resource numeber from arg2
     let resource = arg2;
 
@@ -1164,12 +1165,12 @@ pub extern "C" fn prlimit64_syscall(
         
         // match and fill in values
         match resource{
-            sys_const::RLIMIT_STACK => {
+            3 => {
                 // RLIMIT_STACK: 8MiB default
                 old_limit.rlim_cur = 8*1024*1024;
                 old_limit.rlim_max = 8*1024*1024;
             }
-            sys_const::RLIMIT_NOFILE => {
+            7 => {
                 // RLIMIT_NOFILE: 1024 file descriptors
                 old_limit.rlim_cur = 1024;
                 old_limit.rlim_max = 1024;
