@@ -1126,13 +1126,8 @@ pub extern "C" fn sigprocmask_syscall(
 ///
 /// ## Returns
 /// On success, returns 0. On error, -1 is returned, and errno is set.
-<<<<<<< HEAD
-pub fn sched_yield_syscall(
-    _cageid: u64,
-=======
 pub extern "C" fn sched_yield_syscall(
     cageid: u64,
->>>>>>> main
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
