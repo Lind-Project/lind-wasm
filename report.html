@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Unified Test Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .test-section { margin: 24px 0; border: 2px solid #333; border-radius: 8px; padding: 16px; }
+      .test-section h2 { margin-top: 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Unified Test Report</h1>
+    
+<section class="test-section"> 
+  <h2>grate harness</h2>
+  <div class="harness-content">
+<h1>Grate Test Report</h1>
+<table border='1' cellspacing='0' cellpadding='6'>
+<tr><th>Metric</th><th>Value</th></tr>
+<tr><td>Total</td><td>9</td></tr>
+<tr><td>Success</td><td>9</td></tr>
+<tr><td>Failures</td><td>0</td></tr>
+<tr><td>Compile Failures</td><td>0</td></tr>
+<tr><td>Runtime Failures</td><td>0</td></tr>
+<tr><td>Timeout Failures</td><td>0</td></tr>
+<tr><td>Missing Pair Failures</td><td>0</td></tr>
+</table>
+<h2>Cases</h2>
+<table border='1' cellspacing='0' cellpadding='6'>
+<tr><th>Test</th><th>Status</th><th>Error Type</th><th>Output</th></tr>
+<tr><td>concurrent-request/geteuid_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|geteuid] Registering geteuid handler for cage 2 in grate 1 with fn ptr addr: 3
+[Cage | geteuid] PASS: 1000000 calls returned 10
+[Grate|geteuid] PASS
+
+STDERR:
+</pre></td></tr>
+<tr><td>interpose-exec_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|interpose-exec] Registering exec handler for cage 2 in grate 1 with fn ptr addr: 3
+[Grate|interpose-exec] Handling function ptr: 3 from cage: 1
+[Grate|interpose-exec] In exec_grate 1 handler for cage: 1
+[Grate|interpose-exec] Handling function ptr: 3 from cage: 1
+[Grate|interpose-exec] In exec_grate 1 handler for cage: 1
+Exec successful, argv[1]: --execd
+[Grate|interpose-exec] PASS
+
+STDERR:
+</pre></td></tr>
+<tr><td>interpose-exit_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|interpose-exit] Registering exit handler for cage 2 in grate 1 with fn ptr addr: 3
+Exiting...
+
+[Grate|interpose-exit] Handling function ptr: 3 from cage: 1
+[Grate|interpose-exit] In exit_grate 1 handler for cage: 1
+[Grate|interpose-exit] PASS
+
+STDERR:
+</pre></td></tr>
+<tr><td>interpose-fork_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|interpose-fork] Registering fork handler for cage 2 in grate 1 with fn ptr addr: 3
+[Grate|interpose-fork] Handling function ptr: 3 from cage: 1
+[Grate|interpose-fork] In fork_grate 1 handler for cage: 1
+[Grate|interpose-fork] PASS
+
+STDERR:
+</pre></td></tr>
+<tr><td>interpose-mmap_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|interpose-mmap] Registering mmap handler for cage 2 in grate 1 with fn ptr addr: 3
+[Grate|interpose-mmap] Handling function ptr: 3 from cage: 1
+[Grate|interpose-mmap] In mmap_grate 1 handler for cage: 1
+[Grate|interpose-mmap] Handling function ptr: 3 from cage: 1
+[Grate|interpose-mmap] In mmap_grate 1 handler for cage: 1
+mmap test: PASS
+[Grate|interpose-mmap] PASS
+
+STDERR:
+</pre></td></tr>
+<tr><td>interpose-register_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|interpose-register] Registering register_handler for cage 2 in grate 1 with fn ptr addr: 4
+[Cage|interpose-register] In cage 2, about to register handler for geteuid
+[Grate|interpose-register] Handling function ptr: 4 from cage: 1
+[Grate|interpose-register] In register_grate 1 handler for cage: 1
+[Grate|geteuid] Registering geteuid handler for cage 1 in grate 1 with fn ptr addr: 3
+[Grate|interpose-register] Handling function ptr: 3 from cage: 1
+[Grate|interpose-register] In register_grate 1 handler for cage: 1
+[Cage|interpose-register] PASS: geteuid ret = 10
+[Grate|interpose-register] PASS
+
+STDERR:
+</pre></td></tr>
+<tr><td>multi-register_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|multi-register_grate] Registering geteuid handler for cage 2 in grate 1 with fn ptr addr: 3
+[Grate|multi-register_grate] Registering getuid handler for cage 2 in grate 1 with fn ptr addr: 4
+[Grate|multi-register_grate] Handling function ptr: 3 from cage: 1
+[Grate|multi-register_grate] In multi-register_grate 1 handler for cage: 1
+[Grate|multi-register_grate] Handling function ptr: 4 from cage: 1
+[Grate|multi-register_grate] In multi-register_grate 1 handler for cage: 1
+[Cage | multi-register] PASS: geteuid=10, getuid=20
+[Grate|multi-register] PASS
+
+STDERR:
+</pre></td></tr>
+<tr><td>simple-tests/cpdata_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|open] intercepts open call: thiscage=1, arg1cage=2
+[Grate|open] copied pathname: random
+[cage] fd=10
+
+STDERR:
+</pre></td></tr>
+<tr><td>simple-tests/geteuid_grate.c</td><td>Success</td><td></td><td><pre>STDOUT:
+[Grate|geteuid] Registering geteuid handler for cage 2 in grate 1 with fn ptr addr: 3
+[Grate|geteuid] Handling function ptr: 3 from cage: 1
+[Grate|geteuid] In geteuid_grate 1 handler for cage: 1
+[Cage | geteuid] PASS: geteuid ret = 10
+[Grate|geteuid] PASS
+
+STDERR:
+</pre></td></tr>
+</table>
+</div>
+</section>
+
+<section class="test-section"> 
+  <h2>wasm harness</h2>
+  <div class="harness-content">
+    <h1>Test Report</h1>
+    
+<div class="test-section">
+<h2>Deterministic Tests</h2>
+<h3>Summary</h3>
+<table class="summary-table">
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total Test Cases</td><td>191</td></tr>
+<tr><td>Number of Successes</td><td>188</td></tr>
+<tr><td>Number of Failures</td><td>3</td></tr>
+<tr><td>Number of Compilation Failure Native</td><td>0</td></tr>
+<tr><td>Number of Runtime Failure Native</td><td>2</td></tr>
+<tr><td>Number of Segmentation Fault Native</td><td>0</td></tr>
+<tr><td>Number of Timeout During Native</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Compile Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Runtime Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Segmentation Failure</td><td>0</td></tr>
+<tr><td>Number of Timeout During Lind Wasm run</td><td>0</td></tr>
+<tr><td>Number of Unknown Failure</td><td>0</td></tr>
+<tr><td>Number of C Compiler and Wasm Output mismatch</td><td>1</td></tr>
+<tr><td>Number of Fail Test: Native Succeeded (Should Fail)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Wasm Succeeded (Should Fail)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Both Native and Wasm Succeeded (Should Fail)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Native Compilation Failure (Should Succeed)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Wasm Compilation Failure (Should Succeed)</td><td>0</td></tr>
+</table>
+<h3>Test Results by Category</h3>
+<table class="test-results-table">
+<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Native Time</th><th>Wasm Time</th><th>Output</th></tr>
+<tr class="test-type-header"><td colspan="6">File Tests</td></tr>
+<tr class="success-row"><td>chartests.c</td><td>Success</td><td>None</td><td>0.034697s</td><td>2.132640s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>chdir_getcwd.c</td><td>Success</td><td>None</td><td>0.034107s</td><td>2.142976s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>chmod.c</td><td>Success</td><td>None</td><td>0.038447s</td><td>2.140206s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>clock_gettime_highlevel.c</td><td>Success</td><td>None</td><td>0.237670s</td><td>2.425244s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>clock_gettime_simple.c</td><td>Success</td><td>None</td><td>0.029879s</td><td>2.120831s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>cloexec.c</td><td>Success</td><td>None</td><td>0.036601s</td><td>1.952401s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>close.c</td><td>Success</td><td>None</td><td>0.038660s</td><td>2.149176s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>creat_access.c</td><td>Success</td><td>None</td><td>0.036678s</td><td>2.140229s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>doubleclose.c</td><td>Success</td><td>None</td><td>0.030575s</td><td>1.927770s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>dup.c</td><td>Success</td><td>None</td><td>0.030830s</td><td>2.121434s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>dup2.c</td><td>Success</td><td>None</td><td>0.035911s</td><td>1.943708s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>dup3.c</td><td>Success</td><td>None</td><td>0.034042s</td><td>2.166676s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>dupwrite.c</td><td>Success</td><td>None</td><td>0.036972s</td><td>1.937970s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>etc_conf.c</td><td>Success</td><td>None</td><td>0.033263s</td><td>2.145969s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fchdir.c</td><td>Success</td><td>None</td><td>0.038295s</td><td>2.140649s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fchmod.c</td><td>Success</td><td>None</td><td>0.038328s</td><td>2.132974s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fcntl.c</td><td>Success</td><td>None</td><td>0.036124s</td><td>2.123801s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fdatasync.c</td><td>Success</td><td>None</td><td>0.037476s</td><td>2.140420s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>filetest.c</td><td>Success</td><td>None</td><td>0.035953s</td><td>1.937540s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>filetest1000.c</td><td>Success</td><td>None</td><td>0.039082s</td><td>1.958353s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>flock.c</td><td>Success</td><td>None</td><td>0.043992s</td><td>2.171423s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fstat.c</td><td>Success</td><td>None</td><td>0.037932s</td><td>2.131458s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fstatfs.c</td><td>Success</td><td>None</td><td>0.031764s</td><td>2.134129s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fsync.c</td><td>Success</td><td>None</td><td>0.036429s</td><td>2.128814s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>ftruncate.c</td><td>Success</td><td>None</td><td>0.039427s</td><td>2.157015s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getcwd.c</td><td>Success</td><td>None</td><td>0.034502s</td><td>2.144371s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getrandom.c</td><td>Success</td><td>None</td><td>0.038154s</td><td>2.138471s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>ioctl.c</td><td>Success</td><td>None</td><td>0.036735s</td><td>2.142409s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>link.c</td><td>Success</td><td>None</td><td>0.038820s</td><td>2.133991s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>locale_test.c</td><td>Success</td><td>None</td><td>0.049654s</td><td>3.294089s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>lseek.c</td><td>Success</td><td>None</td><td>0.040144s</td><td>2.161643s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mkdir_rmdir.c</td><td>Success</td><td>None</td><td>0.037040s</td><td>2.142741s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mkfifo_test.c</td><td>Success</td><td>None</td><td>0.041125s</td><td>2.166849s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mknod.c</td><td>Success</td><td>None</td><td>0.035163s</td><td>2.133821s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>nocancel_io.c</td><td>Success</td><td>None</td><td>0.041564s</td><td>2.728111s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>open.c</td><td>Success</td><td>None</td><td>0.032335s</td><td>2.120678s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>path_conversion_safety.c</td><td>Success</td><td>None</td><td>0.039547s</td><td>2.139894s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pread_pwrite.c</td><td>Success</td><td>None</td><td>0.033912s</td><td>2.148231s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>printf.c</td><td>Success</td><td>None</td><td>0.030022s</td><td>1.933301s</td><td><pre>Success</pre></td></tr>
+<tr class="failure-row"><td>prlimit64.c</td><td>Failure</td><td>Output_mismatch</td><td>0.051267s</td><td>1.938565s</td><td><pre>=== Expected Output ===
+RLIMIT_NOFILE: cur=1048576 max=1048576
+RLIMIT_STACK: cur=8388608 max=18446744073709551615
+All prlimit64 tests passed
+
+=== WASM Output ===
+RLIMIT_NOFILE: cur=1024 max=1048576
+RLIMIT_STACK: cur=8388608 max=4294967295
+All prlimit64 tests passed
+</pre></td></tr>
+<tr class="success-row"><td>read.c</td><td>Success</td><td>None</td><td>0.037269s</td><td>2.149679s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>readbytes.c</td><td>Success</td><td>None</td><td>0.033688s</td><td>1.936888s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>readlink.c</td><td>Success</td><td>None</td><td>0.036871s</td><td>2.138855s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>readlinkat.c</td><td>Success</td><td>None</td><td>0.038106s</td><td>2.132072s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>readv_writev_test.c</td><td>Success</td><td>None</td><td>0.038135s</td><td>2.143738s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>rename.c</td><td>Success</td><td>None</td><td>0.040176s</td><td>2.134000s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sc-writev.c</td><td>Success</td><td>None</td><td>0.034623s</td><td>2.131695s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>stat.c</td><td>Success</td><td>None</td><td>0.037574s</td><td>2.134721s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>statfs.c</td><td>Success</td><td>None</td><td>0.031644s</td><td>2.123004s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sync_file_range.c</td><td>Success</td><td>None</td><td>0.034992s</td><td>2.139191s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>truncate.c</td><td>Success</td><td>None</td><td>0.036776s</td><td>2.148632s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>unlink.c</td><td>Success</td><td>None</td><td>0.038904s</td><td>2.163618s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>unlinkat.c</td><td>Success</td><td>None</td><td>0.037568s</td><td>2.152856s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>write.c</td><td>Success</td><td>None</td><td>0.031105s</td><td>1.926827s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>writeloop.c</td><td>Success</td><td>None</td><td>0.038694s</td><td>1.945882s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>writepartial.c</td><td>Success</td><td>None</td><td>0.037119s</td><td>1.956883s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>writev.c</td><td>Success</td><td>None</td><td>0.038844s</td><td>2.130141s</td><td><pre>Success</pre></td></tr>
+<tr class="test-type-header"><td colspan="6">Math Tests</td></tr>
+<tr class="success-row"><td>math_link_smoke.c</td><td>Success</td><td>None</td><td>0.039685s</td><td>1.955476s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>math_tests.c</td><td>Success</td><td>None</td><td>0.043789s</td><td>2.044118s</td><td><pre>Success</pre></td></tr>
+<tr class="test-type-header"><td colspan="6">Memory Tests</td></tr>
+<tr class="success-row"><td>brk.c</td><td>Success</td><td>None</td><td>0.035126s</td><td>2.158555s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fork_large_memory.c</td><td>Success</td><td>None</td><td>0.066060s</td><td>2.228263s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>malloc.c</td><td>Success</td><td>None</td><td>0.032726s</td><td>1.928382s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>malloc_large.c</td><td>Success</td><td>None</td><td>0.034102s</td><td>2.133396s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>memcpy.c</td><td>Success</td><td>None</td><td>0.033348s</td><td>1.937929s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>memory_error_test.c</td><td>Success</td><td>None</td><td>0.038425s</td><td>2.132462s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mmap.c</td><td>Success</td><td>None</td><td>0.031075s</td><td>2.132021s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mmap_aligned.c</td><td>Success</td><td>None</td><td>0.032134s</td><td>2.123472s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mmap_complicated.c</td><td>Success</td><td>None</td><td>0.035959s</td><td>2.160675s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mmap_file.c</td><td>Success</td><td>None</td><td>0.036802s</td><td>2.139694s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mmap_shared.c</td><td>Success</td><td>None</td><td>0.035701s</td><td>2.150195s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mmaptest.c</td><td>Success</td><td>None</td><td>0.032959s</td><td>2.201474s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mprotect.c</td><td>Success</td><td>None</td><td>0.032014s</td><td>2.132607s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mprotect_boundary.c</td><td>Success</td><td>None</td><td>0.031853s</td><td>2.134024s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mprotect_end_region.c</td><td>Success</td><td>None</td><td>0.031547s</td><td>2.113983s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mprotect_middle_region.c</td><td>Success</td><td>None</td><td>0.031967s</td><td>2.121399s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mprotect_multiple_times.c</td><td>Success</td><td>None</td><td>0.031897s</td><td>2.143379s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mprotect_same_value.c</td><td>Success</td><td>None</td><td>0.031761s</td><td>2.131229s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mprotect_spanning_regions.c</td><td>Success</td><td>None</td><td>0.032265s</td><td>2.136584s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sbrk.c</td><td>Success</td><td>None</td><td>0.044509s</td><td>2.149990s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>segfault.c</td><td>Success</td><td>None</td><td>0.039184s</td><td>2.155770s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>shm.c</td><td>Success</td><td>None</td><td>0.036471s</td><td>2.162376s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>shmtest.c</td><td>Success</td><td>None</td><td>0.032108s</td><td>2.128548s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>tcache_test.c</td><td>Success</td><td>None</td><td>0.039244s</td><td>2.226996s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>thread_malloc_sequential.c</td><td>Success</td><td>None</td><td>0.039398s</td><td>2.218079s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>vtable.c</td><td>Success</td><td>None</td><td>0.043519s</td><td>1.950834s</td><td><pre>Success</pre></td></tr>
+<tr class="test-type-header"><td colspan="6">Networking Tests</td></tr>
+<tr class="success-row"><td>dns_resolve_test.c</td><td>Success</td><td>None</td><td>0.036463s</td><td>2.963487s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>dnstest.c</td><td>Success</td><td>None</td><td>0.036792s</td><td>2.138834s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>epoll_edge_triggered.c</td><td>Success</td><td>None</td><td>0.198817s</td><td>2.409351s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>epollcreate1.c</td><td>Success</td><td>None</td><td>0.079176s</td><td>2.173913s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>error_handling_net.c</td><td>Success</td><td>None</td><td>0.042894s</td><td>2.150585s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getaddrinfo_test.c</td><td>Success</td><td>None</td><td>0.039848s</td><td>2.982384s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getaddrinfo_unspec.c</td><td>Success</td><td>None</td><td>0.040704s</td><td>8.025454s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>gethostname.c</td><td>Success</td><td>None</td><td>0.032723s</td><td>1.933775s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getifaddrs.c</td><td>Success</td><td>None</td><td>0.040893s</td><td>2.184536s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getsockname.c</td><td>Success</td><td>None</td><td>0.038739s</td><td>2.129780s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getsockopt.c</td><td>Success</td><td>None</td><td>0.040098s</td><td>2.162139s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>ipv6_basic.c</td><td>Success</td><td>None</td><td>0.040577s</td><td>2.157848s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>makepipe.c</td><td>Success</td><td>None</td><td>0.031897s</td><td>1.924092s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>nonblocking_eagain.c</td><td>Success</td><td>None</td><td>0.040713s</td><td>2.165169s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pipe.c</td><td>Success</td><td>None</td><td>0.041157s</td><td>2.154948s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pipe2.c</td><td>Success</td><td>None</td><td>0.038377s</td><td>2.128053s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pipeinput.c</td><td>Success</td><td>None</td><td>0.039689s</td><td>2.160836s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pipeinput2.c</td><td>Success</td><td>None</td><td>0.039396s</td><td>2.176934s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pipeonestring.c</td><td>Success</td><td>None</td><td>0.039415s</td><td>2.161556s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pipepong.c</td><td>Success</td><td>None</td><td>0.038177s</td><td>2.181334s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>pipewrite.c</td><td>Success</td><td>None</td><td>0.034362s</td><td>2.137254s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>poll.c</td><td>Success</td><td>None</td><td>0.039968s</td><td>2.131306s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>recvfrom-sendto.c</td><td>Success</td><td>None</td><td>0.037907s</td><td>2.160100s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sendmsg_recvmsg_test.c</td><td>Success</td><td>None</td><td>0.040071s</td><td>2.134906s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>serverclient.c</td><td>Success</td><td>None</td><td>0.038282s</td><td>1.945365s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>shutdown.c</td><td>Success</td><td>None</td><td>0.039258s</td><td>1.947463s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>shutdown_fork.c</td><td>Success</td><td>None</td><td>0.038163s</td><td>2.153464s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>simple-select.c</td><td>Success</td><td>None</td><td>0.042862s</td><td>2.149381s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>simple_epoll.c</td><td>Success</td><td>None</td><td>0.037419s</td><td>2.134039s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>socket.c</td><td>Success</td><td>None</td><td>0.038875s</td><td>1.962091s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>socket_cloexec.c</td><td>Success</td><td>None</td><td>0.036397s</td><td>2.128119s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>socket_options_advanced.c</td><td>Success</td><td>None</td><td>0.078947s</td><td>2.162528s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>socketepoll.c</td><td>Success</td><td>None</td><td>0.036396s</td><td>1.957178s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>socketpair.c</td><td>Success</td><td>None</td><td>0.035442s</td><td>2.167849s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>socketselect.c</td><td>Success</td><td>None</td><td>0.036764s</td><td>2.137747s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>tcp_connect_single.c</td><td>Success</td><td>None</td><td>0.038085s</td><td>2.136710s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>udp_send_recv.c</td><td>Success</td><td>None</td><td>0.143704s</td><td>2.308764s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>uds-getsockname.c</td><td>Success</td><td>None</td><td>0.038644s</td><td>2.152113s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>uds-nb-select.c</td><td>Success</td><td>None</td><td>2.044035s</td><td>4.255603s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>uds-serverclient.c</td><td>Success</td><td>None</td><td>0.040372s</td><td>2.167519s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>uds-socketselect.c</td><td>Success</td><td>None</td><td>0.038126s</td><td>1.950203s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>writev_socket.c</td><td>Success</td><td>None</td><td>0.040600s</td><td>2.154642s</td><td><pre>Success</pre></td></tr>
+<tr class="test-type-header"><td colspan="6">Process Tests</td></tr>
+<tr class="success-row"><td>barrier_test.c</td><td>Success</td><td>None</td><td>0.066075s</td><td>2.215484s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>chain_thread.c</td><td>Success</td><td>None</td><td>1.039234s</td><td>3.235755s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>ctor_syscall_test.c</td><td>Success</td><td>None</td><td>0.069099s</td><td>2.138165s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>cxa_atexit_test.c</td><td>Success</td><td>None</td><td>0.034486s</td><td>1.934186s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>exit.c</td><td>Success</td><td>None</td><td>0.035428s</td><td>1.941780s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>exit_failure.c</td><td>Success</td><td>None</td><td>0.036282s</td><td>1.958472s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>flockfile_test.c</td><td>Success</td><td>None</td><td>0.037665s</td><td>2.236330s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fork2malloc.c</td><td>Success</td><td>None</td><td>0.038565s</td><td>2.156939s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fork_select.c</td><td>Success</td><td>None</td><td>0.036241s</td><td>2.157118s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fork_simple.c</td><td>Success</td><td>None</td><td>0.036663s</td><td>2.156005s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fork_syscall.c</td><td>Success</td><td>None</td><td>0.040454s</td><td>2.161980s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>fork_tls_ctype.c</td><td>Success</td><td>None</td><td>0.050273s</td><td>2.179864s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>forkandopen.c</td><td>Success</td><td>None</td><td>0.046328s</td><td>2.155646s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>forkdup.c</td><td>Success</td><td>None</td><td>0.039737s</td><td>1.982471s</td><td><pre>Success</pre></td></tr>
+<tr class="failure-row"><td>forkexecuid.c</td><td>Failure</td><td>Failure_native_running</td><td>0.249940s</td><td>N/A</td><td><pre>Native execution: forkexecuid.o: /tmp/wasmtest_artifacts_j7952xa2/process_tests/deterministic/forkexecuid.c:15: int main(void): Assertion `getgid() == ROOT_GID && "parent gid should be 0"' failed.
+</pre></td></tr>
+<tr class="success-row"><td>forkexecv-arg.c</td><td>Success</td><td>None</td><td>0.035670s</td><td>2.152084s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>forkexecv.c</td><td>Success</td><td>None</td><td>0.035132s</td><td>2.160908s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>forkfiles.c</td><td>Success</td><td>None</td><td>0.038455s</td><td>2.173670s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>forkmalloc.c</td><td>Success</td><td>None</td><td>0.038172s</td><td>2.163993s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>forknodup.c</td><td>Success</td><td>None</td><td>0.037798s</td><td>2.145049s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>function-ptr.c</td><td>Success</td><td>None</td><td>0.033409s</td><td>2.124424s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getegid_syscall.c</td><td>Success</td><td>None</td><td>0.037259s</td><td>2.176997s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getgid_syscall.c</td><td>Success</td><td>None</td><td>0.038108s</td><td>2.174543s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getpid.c</td><td>Success</td><td>None</td><td>0.046216s</td><td>2.120949s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getpid_syscall.c</td><td>Success</td><td>None</td><td>0.038540s</td><td>2.207438s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getppid.c</td><td>Success</td><td>None</td><td>0.038004s</td><td>2.182543s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>getppid_syscall.c</td><td>Success</td><td>None</td><td>0.039658s</td><td>2.174650s</td><td><pre>Success</pre></td></tr>
+<tr class="failure-row"><td>getuid.c</td><td>Failure</td><td>Failure_native_running</td><td>0.103075s</td><td>N/A</td><td><pre>Native execution: getuid.o: /tmp/wasmtest_artifacts_j7952xa2/process_tests/deterministic/getuid.c:18: int main(void): Assertion `getgid() == ROOT_GID && "gid should be root after exec"' failed.
+</pre></td></tr>
+<tr class="success-row"><td>getuid_syscall.c</td><td>Success</td><td>None</td><td>0.036838s</td><td>2.174705s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>hello-arg.c</td><td>Success</td><td>None</td><td>0.029832s</td><td>1.938198s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>hello.c</td><td>Success</td><td>None</td><td>0.030930s</td><td>1.948500s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>longjmp.c</td><td>Success</td><td>None</td><td>0.031090s</td><td>1.943913s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mutex.c</td><td>Success</td><td>None</td><td>2.040649s</td><td>4.272134s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>printf_deadlock_smoke.c</td><td>Success</td><td>None</td><td>0.045367s</td><td>2.290713s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>printf_thread_test.c</td><td>Success</td><td>None</td><td>0.036814s</td><td>2.207484s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sem_forks.c</td><td>Success</td><td>None</td><td>0.042866s</td><td>2.182169s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>setsid.c</td><td>Success</td><td>None</td><td>0.031738s</td><td>1.950646s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>template.c</td><td>Success</td><td>None</td><td>0.037628s</td><td>2.154099s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>test_exec_nofork.c</td><td>Success</td><td>None</td><td>0.036653s</td><td>2.140379s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>test_unlink_open_file.c</td><td>Success</td><td>None</td><td>0.033459s</td><td>1.956360s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>thread-test.c</td><td>Success</td><td>None</td><td>0.035064s</td><td>2.232551s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>thread.c</td><td>Success</td><td>None</td><td>0.033685s</td><td>2.195989s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>thread_cageid_race.c</td><td>Success</td><td>None</td><td>0.033943s</td><td>2.355181s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>tls_test.c</td><td>Success</td><td>None</td><td>0.038959s</td><td>2.208819s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>uname.c</td><td>Success</td><td>None</td><td>0.032082s</td><td>2.144656s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>wait.c</td><td>Success</td><td>None</td><td>2.036640s</td><td>3.981014s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>waitpid_anychild.c</td><td>Success</td><td>None</td><td>0.038592s</td><td>2.160167s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>waitpid_syscall.c</td><td>Success</td><td>None</td><td>1.040113s</td><td>3.180623s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>waitpid_wnohang.c</td><td>Success</td><td>None</td><td>0.038907s</td><td>1.954259s</td><td><pre>Success</pre></td></tr>
+<tr class="test-type-header"><td colspan="6">Signal Tests</td></tr>
+<tr class="success-row"><td>alarm.c</td><td>Success</td><td>None</td><td>7.036520s</td><td>8.984963s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>eintr_fork_signal.c</td><td>Success</td><td>None</td><td>1.038851s</td><td>3.165951s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>setitimer.c</td><td>Success</td><td>None</td><td>7.038609s</td><td>8.969759s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sigalrm.c</td><td>Success</td><td>None</td><td>2.037009s</td><td>3.955434s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sigchld.c</td><td>Success</td><td>None</td><td>1.042598s</td><td>2.974478s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal-fork.c</td><td>Success</td><td>None</td><td>4.038705s</td><td>5.991726s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal-simple.c</td><td>Success</td><td>None</td><td>0.038072s</td><td>1.953266s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal_SIGCHLD.c</td><td>Success</td><td>None</td><td>0.035499s</td><td>2.151000s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal_fork.c</td><td>Success</td><td>None</td><td>0.034015s</td><td>2.158767s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal_int_ignored.c</td><td>Success</td><td>None</td><td>2.038053s</td><td>4.174334s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal_procmask.c</td><td>Success</td><td>None</td><td>0.033531s</td><td>2.118022s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal_recursive.c</td><td>Success</td><td>None</td><td>0.032683s</td><td>1.932842s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>signal_sa_mask.c</td><td>Success</td><td>None</td><td>0.032655s</td><td>1.927082s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sigpipe.c</td><td>Success</td><td>None</td><td>1.039735s</td><td>3.177393s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>sigprocmask.c</td><td>Success</td><td>None</td><td>1.039109s</td><td>2.965590s</td><td><pre>Success</pre></td></tr>
+</table>
+</div>
+<div class="test-section">
+<h2>Fail Tests</h2>
+<h3>Summary</h3>
+<table class="summary-table">
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total Test Cases</td><td>3</td></tr>
+<tr><td>Number of Successes</td><td>3</td></tr>
+<tr><td>Number of Failures</td><td>0</td></tr>
+<tr><td>Number of Compilation Failure Native</td><td>0</td></tr>
+<tr><td>Number of Runtime Failure Native</td><td>0</td></tr>
+<tr><td>Number of Segmentation Fault Native</td><td>0</td></tr>
+<tr><td>Number of Timeout During Native</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Compile Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Runtime Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Segmentation Failure</td><td>0</td></tr>
+<tr><td>Number of Timeout During Lind Wasm run</td><td>0</td></tr>
+<tr><td>Number of Unknown Failure</td><td>0</td></tr>
+<tr><td>Number of C Compiler and Wasm Output mismatch</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Native Succeeded (Should Fail)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Wasm Succeeded (Should Fail)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Both Native and Wasm Succeeded (Should Fail)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Native Compilation Failure (Should Succeed)</td><td>0</td></tr>
+<tr><td>Number of Fail Test: Wasm Compilation Failure (Should Succeed)</td><td>0</td></tr>
+</table>
+<h3>Test Results by Category</h3>
+<table class="test-results-table">
+<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Native Time</th><th>Wasm Time</th><th>Output</th></tr>
+<tr class="test-type-header"><td colspan="6">Memory Tests</td></tr>
+<tr class="success-row"><td>mmap-negative1.c</td><td>Success</td><td>None</td><td>0.095367s</td><td>1.936645s</td><td><pre>Success</pre></td></tr>
+<tr class="success-row"><td>mmap-negative2.c</td><td>Success</td><td>None</td><td>0.124580s</td><td>1.920680s</td><td><pre>Success</pre></td></tr>
+<tr class="test-type-header"><td colspan="6">Signal Tests</td></tr>
+<tr class="success-row"><td>signal_resethand.c</td><td>Success</td><td>None</td><td>1.036902s</td><td>1.956802s</td><td><pre>Success</pre></td></tr>
+</table>
+</div>
+</div>
+</section>
+
+  </body>
+</html>
