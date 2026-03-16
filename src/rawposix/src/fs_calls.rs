@@ -44,6 +44,65 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     }
 }
 
+pub extern "C" fn openat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    oflag_arg: u64,
+    oflag_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "open", "path conversion failed"),
+    };
+    let oflag = sc_convert_sysarg_to_i32(oflag_arg, oflag_cageid, cageid);
+    let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "openat_syscall"
+        );
+    }
+    let ret = if virtual_fd == libc::AT_FDCWD {
+        open_syscall(cageid, path_arg, path_cageid, oflag_arg, oflag_cageid, mode_arg, mode_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
+    } else {
+        // Case 2: Specific directory fd
+        let host_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+        // Return error
+        if host_fd < 0 {
+            return handle_errno(-host_fd, "openat");
+        }
+
+        let kernel_fd = unsafe { libc::openat_syscall(host_fd, path, oflag, mode) };
+        let should_cloexec = (oflag & O_CLOEXEC) != 0;
+
+        match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fd as u64,
+        should_cloexec,
+        0,
+        ) {
+        Ok(vfd) => vfd as i32,
+        Err(_) => syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened"),
+        }
+    }
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/open.2.html
 ///
 /// Linux `open()` syscall will open a file descriptor and set file status and permissions according to user needs. Since we
