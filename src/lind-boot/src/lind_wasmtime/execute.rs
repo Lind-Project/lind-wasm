@@ -166,7 +166,7 @@ pub fn execute_with_lind(
 
         // Allocate the main module's indirect function table with
         // the minimal required size.
-        // #[cfg(feature = "debug-dylink")]
+        #[cfg(feature = "debug-dylink")]
         println!("[debug] main module table size: {}", main_module_table_size);
         let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
         table = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
@@ -292,6 +292,7 @@ pub fn execute_with_lind(
 
     // Add the module's functions to the linker.
     for (name, module) in modules.iter().skip(1) {
+        #[cfg(feature = "debug-dylink")]
         println!("[debug] link module {}", name);
         let mut lib_linker = linker.lock().unwrap();
 
@@ -323,6 +324,7 @@ pub fn execute_with_lind(
         // to relocate/interpret the library's function references into the
         // shared table. GOT entries are patched through the shared LindGOT.
         {
+            #[cfg(feature = "debug-dylink")]
             println!("[debug] library {} instantiate", name);
             let mut guard = lind_got.lock().unwrap();
             lib_linker
@@ -681,6 +683,7 @@ fn load_main_module(
             let index = table.grow(&mut store, 1, wasmtime::Ref::Func(Some(func))).unwrap();
             let mut guard = got.lock().unwrap();
             if (*guard).update_entry_if_unresolved(&name, index) {
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] update GOT.func.{} to {}", name, index);
             }
         }
@@ -690,6 +693,7 @@ fn load_main_module(
             let val = val.i32().unwrap() as u32 + 1024 + 8388608 + 1024; // 0 stands for memory base for main module
             let mut guard = got.lock().unwrap();
             if (*guard).update_entry_if_unresolved(&name, val) {
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] main update GOT.mem.{} to {}", name, val);
             }
         }

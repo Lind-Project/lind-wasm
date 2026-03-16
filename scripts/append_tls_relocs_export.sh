@@ -26,7 +26,7 @@ if ! command -v wasm2wat >/dev/null 2>&1 || ! command -v wat2wasm >/dev/null 2>&
 fi
 
 # INSERT_LINE="  (export \"__wasm_apply_tls_relocs\" (func \$__wasm_apply_tls_relocs))"
-INSERT_LINE="  (export \"__wasm_apply_tls_relocs\" (func \$__wasm_apply_tls_relocs))\n  (export \"__wasm_apply_global_relocs\" (func \$__wasm_apply_global_relocs))"
+INSERT_LINE="  (export \"__wasm_apply_tls_relocs\" (func \$__wasm_apply_tls_relocs))\n  (export \"__wasm_apply_global_relocs\" (func \$__wasm_apply_global_relocs))\n  (export \"__stack_pointer\" (global \$__stack_pointer))"
 ANCHOR_LINE="  (export \"__wasm_apply_data_relocs\" (func \$__wasm_apply_data_relocs))"
 
 tmpdir="$(mktemp -d)"

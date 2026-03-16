@@ -353,8 +353,9 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   args->child_tid = &pd->tid;
 
   // initialize TLS data
-  void* tls_base = __copy_tls((void *)TLS_addr);
-  *tls_base_addr = (uintptr_t)tls_base;
+  // void* tls_base = __copy_tls((void *)TLS_addr);
+  // *tls_base_addr = (uintptr_t)tls_base;
+  *tls_base_addr = (uintptr_t)0;
 
   // do the clone call
   int ret = __clone_internal(args, &start_thread, pd);
@@ -408,9 +409,9 @@ start_thread (void *arg)
   void* tls_base = (void*)(*tls_base_addr);
 
   // set __tls_base wasm global
-	__asm__("local.get %0\n"
-    "global.set __tls_base\n"
-    :: "r"(tls_base));
+	// __asm__("local.get %0\n"
+  //   "global.set __tls_base\n"
+  //   :: "r"(tls_base));
 
   /* We are either in (a) or (b), and in either case we either own PD already
      (2) or are about to own PD (1), and so our only restriction would be that

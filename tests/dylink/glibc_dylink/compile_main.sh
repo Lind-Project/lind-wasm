@@ -1,3 +1,5 @@
+set -e
+
 clang \
     -pthread \
     -fPIC \
@@ -12,7 +14,12 @@ clang \
     -Wl,--export=__stack_low \
     -Wl,--allow-undefined \
     -Wl,--unresolved-symbols=import-dynamic \
-    main.c -g -O0 -o main.wasm
+    main.c /home/lind/lind-wasm/src/glibc/build/lind_debug.o /home/lind/lind-wasm/src/glibc/build/csu/set_stack_pointer.o -g -O0 -o main.wasm
+
+/home/lind/lind-wasm/scripts/append_stack_pointer_export.sh main.wasm main.wasm
+/home/lind/binaryen-epoch-injection/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo main.wasm -o main.wasm
+sudo /home/lind/lind-wasm/src/lind-boot/target/debug/lind-boot --precompile main.wasm
+cp ./main.cwasm ~/lind-wasm/lindfs/test
 
 # emscripten reference:
 # /home/lind/emscripten_dl/emsdk/upstream/bin/clang \

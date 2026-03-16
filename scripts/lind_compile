@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+set -x
 # Cross-compile C programs to wasm using the lind-wasm toolchain.
 #
 # Default pipeline:
@@ -84,7 +85,7 @@ run_cmd() {
     printf '%q ' "$@" >&2
     printf '\n' >&2
   fi
-  "$@"
+  sudo "$@"
 }
 
 # --- option parsing ---
@@ -315,11 +316,11 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
 fi
 
 # --- individual steps ---
-do_compile() {
+do_static_compile() {
   local -a mandatory_clang_flags=(
     "--sysroot=${SYSROOT}"
     --target=wasm32-unknown-wasi
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low
   )
   local -a default_clang_flags=(
     -pthread
@@ -339,8 +340,47 @@ do_compile() {
     "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
 }
 
+do_dynamic_compile() {
+  local -a mandatory_clang_flags=(
+    --target=wasm32-unknown-wasi
+    "--sysroot=${SYSROOT}"
+    -Wl,-pie
+    -Wl,--import-table
+    -Wl,--import-memory
+    -Wl,--export-memory
+    -Wl,--max-memory=67108864
+    -Wl,--export=__stack_pointer
+    -Wl,--export=__stack_low
+    -Wl,--allow-undefined
+    -Wl,--unresolved-symbols=import-dynamic
+  )
+  local -a default_clang_flags=(
+    -pthread
+    -g
+    -O0
+    -fPIC
+  )
+
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
+  fi
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "/home/lind/lind-wasm/src/glibc/build/csu/set_stack_pointer.o" -o "${OUT_WASM}"
+  
+  run_cmd /home/lind/lind-wasm/scripts/append_stack_pointer_export.sh "${OUT_WASM}" "${OUT_WASM}"
+}
+
+# do_optimize() {
+#   run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+# }
+
 do_optimize() {
-  run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+  run_cmd /home/lind/binaryen-epoch-injection/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals --pass-arg=epoch-main-module --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
 }
 
 do_precompile() {
@@ -359,13 +399,13 @@ cp_to_lindfs() {
 # --- run selected pipeline ---
 case "${MODE}" in
   full)
-    do_compile
+    do_dynamic_compile
     do_optimize
     do_precompile
     cp_to_lindfs
     ;;
   "compile-only")
-    do_compile
+    do_dynamic_compile
     cp_to_lindfs
     ;;
   "opt-only")

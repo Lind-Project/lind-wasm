@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use crate::runtime::vm::{GcRootsList, SendSyncPtr};
+use crate::store::StoreId;
 use crate::{
     store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored},
     trampoline::generate_global_export,
@@ -95,8 +96,13 @@ impl Global {
     }
 
     pub(crate) fn _ty(&self, store: &StoreOpaque) -> GlobalType {
+        // println!("[debug] global _ty: store id: {:?}", self.0.store_id);
         let ty = &store[self.0].global;
         GlobalType::from_wasmtime_global(store.engine(), &ty)
+    }
+
+    pub fn store_id(&self) -> StoreId {
+        self.0.store_id
     }
 
     /// Returns the current [`Val`] of this global.

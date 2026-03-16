@@ -1,17 +1,26 @@
 #include <stdio.h>
-#include <math.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+int main()
+{
 
-int main(void) {
-    double x = 12.8;
-    int exponent;
+    char buf = 0;
 
-    // frexp splits x into mantissa and exponent
-    // x = mantissa * 2^exponent
-    double mantissa = frexp(x, &exponent);
+    int fd = open("test.txt", O_RDWR | O_CREAT, 0777);
+    char writebuf[] = "This is a test of the wonderful fork call in lind.";
+    write(fd, writebuf, sizeof(writebuf));
+    close(fd);
 
-    printf("Original number: %f\n", x);
-    printf("Mantissa: %f\n", mantissa);
-    printf("Exponent: %d\n", exponent);
+
+
+    fd = open("test.txt", O_RDWR);
+    while (read(fd, &buf, 1) > 0)
+        write(STDOUT_FILENO, &buf, 1);
+
+    close(fd);
 
     return 0;
 }
+

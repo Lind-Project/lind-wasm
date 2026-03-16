@@ -174,6 +174,7 @@ static struct tls_module main_tls;
 extern void __wasm_init_tls(void*);
 #endif
 
+__attribute__((export_name("__lind_copy_tls")))
 void *__copy_tls(unsigned char *mem)
 {
 #ifdef __wasilibc_unmodified_upstream
@@ -210,13 +211,13 @@ void *__copy_tls(unsigned char *mem)
 	return td;
 #else
 	size_t tls_align = __builtin_wasm_tls_align();
-	volatile void* tls_base = __builtin_wasm_tls_base();
+	// volatile void* tls_base = __builtin_wasm_tls_base();
 	mem += tls_align;
 	mem -= (uintptr_t)mem & (tls_align-1);
 	__wasm_init_tls(mem);
-  	__asm__("local.get %0\n"
-			"global.set __tls_base\n"
-			:: "r"(tls_base));
+  	// __asm__("local.get %0\n"
+	// 		"global.set __tls_base\n"
+	// 		:: "r"(tls_base));
 	return mem;
 #endif
 }

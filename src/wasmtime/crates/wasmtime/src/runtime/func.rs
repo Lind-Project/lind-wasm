@@ -3,7 +3,7 @@ use crate::runtime::vm::{
     VMFunctionImport, VMOpaqueContext,
 };
 use crate::runtime::Uninhabited;
-use crate::store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored};
+use crate::store::{AutoAssertNoGc, StoreData, StoreId, StoreOpaque, Stored};
 use crate::type_registry::RegisteredType;
 use crate::vm::TrapReason;
 use crate::{prelude::*, OnCalledAction};
@@ -1374,6 +1374,10 @@ impl Func {
 
     pub(crate) fn comes_from_same_store(&self, store: &StoreOpaque) -> bool {
         store.store_data().contains(self.0)
+    }
+
+    pub fn get_id(&self) -> Option<StoreId> {
+        Some(self.0.store_id)
     }
 
     fn invoke_host_func_for_wasm<T>(

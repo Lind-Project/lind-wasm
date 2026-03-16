@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# set -x
+
 # Run passed (optionally precompiled) wasm file in wasmtime.
 #
 # Usage:
@@ -43,4 +45,6 @@ if [[ $EUID -ne 0 ]]; then
   exec sudo -E "$0" "$@"
 fi
 
-exec "${LINDBOOT_BIN}" "$@"
+exec "${LINDBOOT_BIN}" --preload env=/lib/libc.cwasm --preload env=lib/libm.so "$@"
+# "${LINDBOOT_BIN}" --preload env=/lib/libc.cwasm --preload env=lib/libm.cwasm "$@" 2>&1 | grep -a --line-buffered -v '^\[debug\]' || true
+# exit ${PIPESTATUS[0]}
