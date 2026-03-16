@@ -116,6 +116,7 @@
 #define EPOLL_CREATE1_SYSCALL 291
 #define DUP3_SYSCALL 292
 #define PIPE2_SYSCALL 293
+#define PRLIMIT64_SYSCALL 302
 #define GETRANDOM_SYSCALL 318
 
 /* Lind-specific syscalls (not part of the Linux syscall table) */

@@ -19,6 +19,9 @@
 #include <sys/resource.h>
 #include <sysdep.h>
 #include <shlib-compat.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #if !__RLIM_T_MATCHES_RLIM64_T
 
@@ -34,7 +37,11 @@
 int
 __new_getrlimit (enum __rlimit_resource resource, struct rlimit *rlim)
 {
-  return INLINE_SYSCALL_CALL (ugetrlimit, resource, rlim);
+  uint64_t pold = rlim ? TRANSLATE_GUEST_POINTER_TO_HOST(rlim) : 0;
+  return MAKE_LEGACY_SYSCALL(PRLIMIT64_SYSCALL, "syscall|prlimit64",
+      0, (uint64_t) resource,
+      0, pold,
+      NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__new_getrlimit, __getrlimit)
 hidden_weak (__getrlimit)
@@ -44,9 +51,13 @@ hidden_weak (__getrlimit)
 int
 __old_getrlimit (enum __rlimit_resource resource, struct rlimit *rlim)
 {
-  return INLINE_SYSCALL_CALL (getrlimit, resource, rlim);
+  uint64_t pold = rlim ? TRANSLATE_GUEST_POINTER_TO_HOST(rlim) : 0;
+  return MAKE_LEGACY_SYSCALL(PRLIMIT64_SYSCALL, "syscall|prlimit64",
+      0, (uint64_t) resource,
+      0, pold,
+      NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
-compat_symbol (libc, __old_getrlimit, getrlimit, GLIBC_2_0);
+symbol (libc, __old_getrlimit, getrlimit, GLIBC_2_0);
 versioned_symbol (libc, __new_getrlimit, getrlimit, GLIBC_2_2);
 # else
 weak_alias (__new_getrlimit, getrlimit)
