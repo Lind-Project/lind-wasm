@@ -7,7 +7,8 @@ int main() {
 	printf("Hello world. FD=%d\n", fd);
 
 	char buf[11];
-	int ret = read(1, buf, 10);
+	int ret = read(fd, buf, 10);
+	buf[ret] = '\0';
 
 	printf("Goodbye world! ret=%d buf=%s\n", ret, buf);
 }
