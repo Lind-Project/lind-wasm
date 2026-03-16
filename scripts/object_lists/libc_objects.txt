@@ -1648,6 +1648,7 @@ misc/tsearch.o
 misc/ttyslot.o
 misc/ualarm.o
 misc/unwind-link.o
+misc/unwind_def.o
 misc/usleep.o
 misc/ustat.o
 misc/utimes.o
