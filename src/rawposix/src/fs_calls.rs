@@ -44,6 +44,25 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     }
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/openat2.2.html
+///
+/// Linux `openat` opens the file specified by the path. If path is relative, then
+/// it is interpreted relative to the directory referred to by the file descriptor
+/// dirfd. If path is absolute, then dirfd is ignored. If dirfd is AT_FDCWD, then
+/// current working directory is used.
+/// ## Arguments:
+///     This call will only have one cageid indicates current cage, and three regular arguments same with Linux
+///     - cageid: current cage
+///     - dirfd_arg: This argument points to a file descriptor referring to the directory
+///     - path_arg: This argument points to a pathname naming the file. User's perspective.
+///     - oflag_arg: This argument contains the file status flags and file access modes which will be alloted to
+///                 the open file description. The flags are combined together using a bitwise-inclusive-OR and the
+///                 result is passed as an argument to the function. We need to check if `O_CLOEXEC` has been set.
+///     - mode_arg: This represents the permission of the newly created file. Directly passing to kernel.
+///
+/// ## Returns:
+/// On success, a new file descriptor is returned.  On error, -1 is
+/// returned, and errno is set to indicate the error.
 pub extern "C" fn openat_syscall(
     cageid: u64,
     dirfd_arg: u64,
