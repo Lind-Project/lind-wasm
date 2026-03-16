@@ -14,7 +14,7 @@ use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
-    FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
+    FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData, Rlimit
 };
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
@@ -613,6 +613,27 @@ pub fn sc_convert_addr_to_statdata<'a>(
     Ok(unsafe { &mut *pointer })
 }
 
+/// 'sc_convert_addr_to_rlimit' 
+/// converts a u64 argument to a mutable reference to a Rlimit struct.
+/// Used by prlimit64_syscall to write resource limit to the caller
+/// If secure feature is on, the function validates that the argument's cage id and the caller's cage id matches.
+/// function assumes pointer is not nullptr.
+pub fn sc_convert_addr_to_rlimit<'a>(
+    arg:u64,
+    arg_cageid: u64,
+    cageid: u64,
+)-> Result< &'a mut Rlimit, Errno>{
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid){
+            panic!("Invalid Cage ID");
+        }
+    }
+    let pointer = arg as *mut Rlimit;
+    Ok(unsafe { &mut *pointer})
+}
+
+
 /// Translates a user-provided address from the Cage's virtual memory into
 /// a mutable reference to an `FSData` structure.
 ///
@@ -707,3 +728,5 @@ pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
 
     (arg as *const u8).is_null()
 }
+
+
