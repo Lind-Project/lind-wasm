@@ -6,8 +6,12 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
+use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
-use sysdefs::constants::lind_platform_const::UNUSED_ID;
+use std::error::Error;
+use std::os::raw::c_char;
+use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
     FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
@@ -30,33 +34,12 @@ fn is_unused(val: u64, placeholder: u64) -> bool {
     val == 0 || val == placeholder
 }
 
-pub fn sc_unusedarg(_arg: u64, _arg_cageid: u64) -> bool {
+pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
+    #[cfg(feature = "secure")]
+    return is_unused(arg, UNUSED_ARG);
+
     #[cfg(feature = "fast")]
     return true;
-
-    #[cfg(feature = "secure")]
-    return is_unused(arg, UNUSED_ARG) && is_unused(arg_cageid, UNUSED_ID);
-}
-
-/// Validate whether two cage ids are in valid range. This is used for security mode in
-/// type conversion.
-///
-/// ## Arguments:
-/// cageid_1: first cage id
-/// cageid_2: second cage id
-///
-/// ## Returns:
-/// true: both of them are valid
-/// false: one of them or neither of them are valid
-pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
-    if is_unused(cageid_1, UNUSED_ID)
-        || is_unused(cageid_2, UNUSED_ID)
-        || cageid_1 < 0
-        || cageid_2 < 0
-    {
-        return false;
-    }
-    true
 }
 
 /// `sc_convert_sysarg_to_i32` is the type conversion function used to convert the
@@ -78,7 +61,7 @@ pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
 /// Fail: panic
 pub fn get_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
     if !validate_cageid(arg_cageid, cageid) {
-        panic!("Invalide Cage ID");
+        panic!("Invalid Cage ID");
     }
 
     // Check if the upper 32 bits are all 0,
@@ -88,7 +71,7 @@ pub fn get_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
         return (arg & 0xFFFFFFFF) as i32;
     }
 
-    panic!("Invalide argument");
+    panic!("Invalid argument");
 }
 
 /// ## Arguments:
@@ -99,12 +82,12 @@ pub fn get_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
 /// ## Returns:
 /// Success: A converted i32
 /// Fail: panic
-pub fn sc_convert_sysarg_to_i32(arg: u64, _arg_cageid: u64, _cageid: u64) -> i32 {
-    #[cfg(feature = "fast")]
-    return arg as i32;
-
+pub fn sc_convert_sysarg_to_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
     #[cfg(feature = "secure")]
     return get_i32(arg, arg_cageid, cageid);
+
+    #[cfg(feature = "fast")]
+    return arg as i32;
 }
 
 /// `sc_convert_sysarg_to_u32` is the type conversion function used to convert the
@@ -125,7 +108,7 @@ pub fn sc_convert_sysarg_to_i32(arg: u64, _arg_cageid: u64, _cageid: u64) -> i32
 /// Fail: panic
 pub fn get_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
     if !validate_cageid(arg_cageid, cageid) {
-        panic!("Invalide Cage ID");
+        panic!("Invalid Cage ID");
     }
 
     // Check if the upper 32 bits are all 0,
@@ -135,18 +118,37 @@ pub fn get_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
         return (arg & 0xFFFFFFFF) as u32;
     }
 
-    panic!("Invalide argument");
+    panic!("Invalid argument");
 }
 
 pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, _arg_cageid: u64, _cageid: u64) -> &'a mut i32 {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
     unsafe { &mut *(arg as *mut i32) }
+}
+
+/// Converts a u64 syscall argument to a mutable c_char pointer.
+/// ## Arguments:
+/// - `arg`: The u64 syscall argument (pointer value from WASM)
+/// - `arg_cageid`: The cage ID associated with the argument
+/// - `cageid`: The calling cage ID (used for validation in secure mode)
+///
+/// ## Returns:
+/// - `*mut c_char`: A mutable pointer to c_char
+pub fn sc_convert_to_cchar_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut c_char {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalid Cage ID");
+        }
+    }
+
+    arg as *mut c_char
 }
 
 /// ## Arguments:
@@ -157,12 +159,12 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, _arg_cageid: u64, _cageid: u64
 /// ## Returns:
 /// Success: A converted u32
 /// Fail: panic
-pub fn sc_convert_sysarg_to_u32(arg: u64, _arg_cageid: u64, _cageid: u64) -> u32 {
+pub fn sc_convert_sysarg_to_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
+    #[cfg(feature = "secure")]
+    return get_u32(arg, arg_cageid, cageid);
+
     #[cfg(feature = "fast")]
     return arg as u32;
-
-    #[cfg(feature = "secure")]
-    return get_u32(arg);
 }
 
 /// `sc_convert_sysarg_to_isize` is the type conversion function used to convert the
@@ -179,14 +181,14 @@ pub fn sc_convert_sysarg_to_u32(arg: u64, _arg_cageid: u64, _cageid: u64) -> u32
 /// ## Returns:
 /// Success: A converted isize
 /// Fail: panic
-pub fn sc_convert_sysarg_to_isize(arg: u64, _arg_cageid: u64, _cageid: u64) -> isize {
-    #[cfg(feature = "fast")]
-    return arg as isize;
-
+pub fn sc_convert_sysarg_to_isize(arg: u64, arg_cageid: u64, cageid: u64) -> isize {
     #[cfg(feature = "secure")]
     if !validate_cageid(arg_cageid, cageid) {
-        panic!("Invalide Cage ID");
+        panic!("Invalid Cage ID");
     }
+
+    #[cfg(feature = "fast")]
+    return arg as isize;
 }
 
 /// `sc_convert_sysarg_to_usize` is the type conversion function used to convert the
@@ -203,14 +205,14 @@ pub fn sc_convert_sysarg_to_isize(arg: u64, _arg_cageid: u64, _cageid: u64) -> i
 /// ## Returns:
 /// Success: A converted usize
 /// Fail: panic
-pub fn sc_convert_sysarg_to_usize(arg: u64, _arg_cageid: u64, _cageid: u64) -> usize {
-    #[cfg(feature = "fast")]
-    return arg as usize;
-
+pub fn sc_convert_sysarg_to_usize(arg: u64, arg_cageid: u64, cageid: u64) -> usize {
     #[cfg(feature = "secure")]
     if !validate_cageid(arg_cageid, cageid) {
-        panic!("Invalide Cage ID");
+        panic!("Invalid Cage ID");
     }
+
+    #[cfg(feature = "fast")]
+    return arg as usize;
 }
 
 /// `sc_convert_sysarg_to_i64` is the type conversion function used to convert the
@@ -227,14 +229,14 @@ pub fn sc_convert_sysarg_to_usize(arg: u64, _arg_cageid: u64, _cageid: u64) -> u
 /// ## Returns:
 /// Success: A converted i64
 /// Fail: panic
-pub fn sc_convert_sysarg_to_i64(arg: u64, _arg_cageid: u64, _cageid: u64) -> i64 {
-    #[cfg(feature = "fast")]
-    return arg as i64;
-
+pub fn sc_convert_sysarg_to_i64(arg: u64, arg_cageid: u64, cageid: u64) -> i64 {
     #[cfg(feature = "secure")]
     if !validate_cageid(arg_cageid, cageid) {
-        panic!("Invalide Cage ID");
+        panic!("Invalid Cage ID");
     }
+
+    #[cfg(feature = "fast")]
+    return arg as i64;
 }
 
 /// Convert a raw `u64` argument into a mutable `*mut u8` pointer, with optional
@@ -251,7 +253,7 @@ pub fn sc_convert_to_u8_mut(arg: u64, _arg_cageid: u64, _cageid: u64) -> *mut u8
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -328,10 +330,14 @@ pub fn sc_convert_addr_to_epollevent<'a>(
     _arg_cageid: u64,
     _cageid: u64,
 ) -> Result<&'a mut libc::epoll_event, Errno> {
+    if arg == 0 {
+        return Err(Errno::EFAULT);
+    }
+
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -420,7 +426,7 @@ pub fn sc_convert_sigset(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(set_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -517,7 +523,7 @@ pub fn sc_convert_itimerval(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(val_arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -557,7 +563,7 @@ pub fn sc_convert_itimerval_mut(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(val_arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -599,7 +605,7 @@ pub fn sc_convert_addr_to_statdata<'a>(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -622,7 +628,7 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -649,7 +655,7 @@ pub fn sc_convert_addr_to_pipearray<'a>(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -676,7 +682,7 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
 
@@ -695,7 +701,7 @@ pub fn sc_convert_arg_nullity(arg: u64, _arg_cageid: u64, _cageid: u64) -> bool 
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            return -1;
+            panic!("Invalid Cage ID");
         }
     }
 

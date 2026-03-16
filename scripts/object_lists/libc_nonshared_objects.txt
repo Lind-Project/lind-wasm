@@ -1,0 +1,4 @@
+stdlib/at_quick_exit.oS 
+stdlib/atexit.oS
+nptl/pthread_atfork.oS
+debug/stack_chk_fail_local.oS

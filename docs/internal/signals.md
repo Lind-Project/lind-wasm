@@ -25,10 +25,11 @@ During the execution of a signal handler, the epoch must be reset to the `normal
 
 Whenever a new signal is delivered, the following occurs:
 
-1. If the signal is not blocked, the epoch state is immediately set to the `signal` state, ensuring the signal is processed promptly.
-2. When the epoch is triggered, the host retrieves the first unblocked signal from the pending list and invokes the corresponding signal handler.
-3. The epoch state remains in the `signal` state until all pending (unblocked) signals are processed.
-4. New signals received during handler execution are appended to the pending list and will be processed before earlier signals, mirroring Linux’s behavior.
+1. If the signal has no disposition set and its default action is to ignore, the signal is dropped immediately and is not added to the pending signal list.
+2. If the signal is not blocked, the epoch state is immediately set to the `signal` state, ensuring the signal is processed promptly.
+3. When the epoch is triggered, the host retrieves the first unblocked signal from the pending list and invokes the corresponding signal handler.
+4. The epoch state remains in the `signal` state until all pending (unblocked) signals are processed.
+5. New signals received during handler execution are appended to the pending list and will be processed before earlier signals, mirroring Linux’s behavior.
 
 In case of a new signal delivered during the execution of the signal handler, we do not need to take any special consideration. It will be appended to the pending signal list normally and switch epoch to the `signal` state. This will always make the latest signal being handled first, similar to Linux’s behavior.
 

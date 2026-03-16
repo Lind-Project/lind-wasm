@@ -5,14 +5,9 @@
 /// Maximum allowed path length in Lind.  
 /// Used to validate path lengths during operations to prevent overflow.
 pub const PATH_MAX: usize = 4096;
-/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
-/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
-/// error will be emitted if the environment variable is not a valid Unicode string). If the environment
-/// variable is not present, then this will expand to None, and will be set to default path.
-pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
-    Some(path) => path,
-    None => "/home/lind/lind-wasm/src/tmp",
-};
+
+/// Root directory for lind filesystem used for chroot-based isolation.
+pub const LINDFS_ROOT: &str = "/home/lind/lind-wasm/lindfs";
 
 /// ===== Lind specific =====
 ///
@@ -41,3 +36,53 @@ pub const UNUSED_ARG: u64 = 0xDEADBEEF_DEADBEEF;
 pub const UNUSED_ID: u64 = 0xCAFEBABE_CAFEBABE;
 /// Placeholder for unused syscall name
 pub const UNUSED_NAME: u64 = 0xFEEDFACE_FEEDFACE;
+/// Logical target Cage ID representing RawPOSIX.
+///
+/// This constant is **not** a real cage ID. Instead, it is a  *semantic target
+/// identifier* used by 3i to route calls to the RawPOSIX syscall implementation layer.
+///
+/// ## Usage scenarios
+/// 1. During `lind-boot` initialization, syscalls that are expected to
+///    go through the RawPOSIX layer (i.e., normal POSIX syscalls)
+///    register their implementation functions into the 3i handler table
+///    with `target_cageid = RAWPOSIX_CAGEID`.
+/// 2. At dispatch time, 3i interprets this value as a request to invoke
+///    the RawPOSIX syscall handler rather than a concrete cage instance.
+pub const RAWPOSIX_CAGEID: u64 = 777777;
+/// Logical target Cage ID representing **Wasmtime runtime entry points**.
+///
+/// This constant is a *virtual target identifier*, used to distinguish
+/// calls that should be routed directly to Wasmtime-managed runtime
+/// entry functions.
+///
+/// ## Usage scenarios
+/// - Used during `lind-boot` initialization when registering Wasmtime
+///   runtime entry functions (e.g., `fork`, `exec`, `exit`) into the 3i
+///   handler table.
+/// - When `target_cageid` is set to `WASMTIME_CAGEID`, 3i dispatches the
+///   call to the corresponding Wasmtime entry function rather than
+///   treating it as a RawPOSIX syscall or grate calls.
+pub const WASMTIME_CAGEID: u64 = 888888;
+/// Logical target Cage ID representing the **3i control layer itself**.
+///
+/// This constant is a *virtual target identifier* used to route calls
+/// to 3i's own operations rather than to a concrete cage or the
+/// RawPOSIX/Wasmtime layers.
+///
+/// Unlike `RAWPOSIX_CAGEID` and `WASMTIME_CAGEID`, which represent
+/// execution backends, `THREEI_CAGEID` is intended for meta-level
+/// operations that modify or mediate the 3i dispatch system.
+///
+/// ## Usage scenarios
+/// - Used when interposing on 3i-specific management syscalls such as
+///   `register_handler` and `copy_data_between_cages`.
+/// - It will be registered as the `target_cageid` for these syscalls
+///   during `lind-boot` initialization in RawPOSIX.
+/// - At dispatch time, 3i interprets this value as a request to route
+///   the call through its internal control-layer logic rather than
+///   forwarding it to RawPOSIX or Wasmtime.
+pub const THREEI_CAGEID: u64 = 999999;
+/// Cage ID for the initial (bootstrap) cage created during `rawposix_start`.
+pub const INIT_CAGEID: u64 = 1;
+/// Thread ID for the main thread of a cage.
+pub const MAIN_THREADID: u64 = 1;

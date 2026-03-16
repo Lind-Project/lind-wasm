@@ -200,6 +200,7 @@ routines := \
   ttyslot \
   ualarm \
   unwind-link \
+  unwind_def \
   usleep \
   ustat \
   utimes \

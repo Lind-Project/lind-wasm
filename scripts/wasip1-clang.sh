@@ -1,7 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SYSROOT=/home/lind-wasm/src/glibc/sysroot
+# --- repo root discovery (env var -> script dir -> git) ---
+if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
+  REPO_ROOT="${LIND_WASM_ROOT}"
+else
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+  else
+    if command -v git >/dev/null 2>&1; then
+      REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    else
+      REPO_ROOT=""
+    fi
+  fi
+fi
+
+if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
+  echo "ERROR: Could not locate lind-wasm repo root." >&2
+  echo "Hint: export LIND_WASM_ROOT=/path/to/lind-wasm" >&2
+  exit 2
+fi
+
+SYSROOT="$REPO_ROOT/src/glibc/sysroot"
 LIBDIR="$SYSROOT/lib/wasm32-wasi"
 CRT1="$LIBDIR/crt1.o"
 

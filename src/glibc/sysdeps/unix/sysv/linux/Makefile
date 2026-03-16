@@ -67,6 +67,7 @@ sysdep_routines += \
   closefrom_fallback \
   convert_scm_timestamps \
   epoll_create \
+  epoll_create1 \
   epoll_pwait \
   epoll_pwait2 \
   epoll_wait \

@@ -41,7 +41,7 @@ __cxa_finalize (void *d)
 	if ((d == NULL || d == f->func.cxa.dso_handle) && f->flavor == ef_cxa)
 	  {
 	    const uint64_t check = __new_exitfn_called;
-	    void (*cxafn) (void *arg, int status) = f->func.cxa.fn;
+	    void (*cxafn) (void *arg) = f->func.cxa.fn;
 	    void *cxaarg = f->func.cxa.arg;
 
 	    /* We don't want to run this cleanup more than once.  The Itanium
@@ -79,7 +79,7 @@ __cxa_finalize (void *d)
 
 	    /* Unlock the list while we call a foreign function.  */
 	    __libc_lock_unlock (__exit_funcs_lock);
-	    cxafn (cxaarg, 0);
+	    cxafn (cxaarg);
 	    __libc_lock_lock (__exit_funcs_lock);
 
 	    /* It is possible that that last exit function registered

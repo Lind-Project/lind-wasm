@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <stdint.h> // For uint64_t definition
 #include "addr_translation.h"
+#include "lind_syscall_num.h"
+#include "lind_constants.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __lind_make_syscall_trampoline(unsigned int callnumber, 
@@ -86,7 +88,7 @@ int make_threei_call (unsigned int callnumber,
         arg5, arg5cageid,
         arg6, arg6cageid);
     // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
-    if(translate_errno == 0) return ret;
+    if(translate_errno == TRANSLATE_ERRNO_OFF) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
     // but this may cause some issues for mmap syscall, because mmap syscall
@@ -95,7 +97,7 @@ int make_threei_call (unsigned int callnumber,
     // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
     // the errno and mmap result by simply checking if the return value is
     // within the valid errno range
-    if(ret < 0 && ret > -256)
+    if(ret < 0 && ret > -MAX_ERRNO)
     {
         errno = -ret;
         return -1;
@@ -109,38 +111,33 @@ int make_threei_call (unsigned int callnumber,
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-// Entry point for wasmtime, lind_syscall is an imported function from wasmtime
-int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage, 
-    uint64_t targetcallnum, 
-    uint64_t handlefunc_flag, 
-    uint64_t this_grate_id,
-    uint64_t optional_arg) __attribute__((
-    __import_module__("lind"),
-    __import_name__("register-syscall")
-));
-
 // 3i function call to register or deregister a syscall handler in a target cage
 // targetcage: the cage id where the syscall will be registered
 // targetcallnum: the syscall number to be registered in the target cage
 // this_grate_id: the grate id of the syscall jump ends
 // register_flag: deregister(0) or register(non-0)
+// in_grate_fn_ptr_u64: the function pointer (cast to uint64_t) of the syscall handler in the grate, only used when register_flag is non-0
 int register_handler (int64_t targetcage, 
     uint64_t targetcallnum, 
-    uint64_t handlefunc_flag, 
     uint64_t this_grate_id,
-    uint64_t optional_arg)
+    uint64_t in_grate_fn_ptr_u64)
 {
-    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_flag, this_grate_id, optional_arg);
-    
-    return ret;
+    return make_threei_call(
+        REGISTER_HANDLER_SYSCALL, 
+        NOTUSED, // callname is not used in the trampoline
+        targetcage, // pass targetcage as self_cageid
+        targetcage, // pass targetcage as target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        targetcage, 
+        targetcallnum, 
+        NOTUSED, // runtime_id currently not used
+        this_grate_id, // handlefunccage is the grate id of the handler function, which is the same as this_grate_id
+        in_grate_fn_ptr_u64,
+        NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Entry point for wasmtime, lind_cp_data is an imported function from wasmtime
-int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype) __attribute__((
-    __import_module__("lind"),
-    __import_name__("cp-data-syscall")
-));
 
 // 3i function call to copy data between cages
 // thiscage: the cage id of the caller cage
@@ -153,16 +150,40 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
 // copytype: the type of copy, 0 for normal copy, 1 for string copy
 int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
-    int ret = __imported_lind_3i_trampoline_cp_data(
-		thiscage, 
-		targetcage,
-		TRANSLATE_UADDR_TO_HOST(srcaddr, srccage),
-		srccage,
-		TRANSLATE_UADDR_TO_HOST(destaddr, destcage),
-		destcage,
-		len,
-		copytype
+    return make_threei_call(
+        COPY_DATA_BETWEEN_CAGES_SYSCALL, 
+        NOTUSED, // callname is not used in the trampoline
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
+        TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
+        len, NOTUSED,
+        copytype, NOTUSED,
+        NOTUSED, NOTUSED, NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
     );
-    
-    return ret;
+}
+
+// 3i function call to copy handler table to a target cage
+// typically used when a new cage is created and we need to copy the syscall handler 
+// table from another cage (has the handlers different than default rawposix registration) 
+// to the new cage
+// thiscage: the cage id of the caller cage
+// targetcage: the cage id of the target cage
+int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
+{
+    return make_threei_call(
+        COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, 
+        NOTUSED, // callname is not used in the trampoline
+        thiscage, // self_cageid
+        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        thiscage, 
+        targetcage,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        NOTUSED, NOTUSED,
+        TRANSLATE_ERRNO_OFF /* do not translate errno: return the raw result */
+    );
 }

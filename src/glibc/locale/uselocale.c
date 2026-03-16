@@ -28,13 +28,29 @@
 locale_t
 __uselocale (locale_t newloc)
 {
-   // BUG: locale related stuff is not working currently
-   // this feature is not important so we might look into this later
-   // if we want to support it in the future - Qianxi Chen
+  locale_t oldloc = _NL_CURRENT_LOCALE;
 
-   // Lind-Wasm: Original glibc code removed for compatibility
-   // to find original source code refer to (2.39.9000) at (locale/uselocale.c):(LINE 31-72)
-   return _NL_CURRENT_LOCALE;
+  if (newloc != NULL)
+    {
+      const locale_t locobj
+	= newloc == LC_GLOBAL_LOCALE ? &_nl_global_locale : newloc;
+      __libc_tsd_set (locale_t, LOCALE, locobj);
+
+      /* Lind-WASM: NL_CURRENT_INDIRECT per-category TLS pointer update
+	 skipped.  wasm-ld cannot handle weak TLS references
+	 (R_WASM_MEMORY_ADDR_TLS_SLEB against undefined/weak symbols).
+	 The TSD update above is sufficient — _NL_CURRENT_LOCALE reads
+	 from TSD and functions using it will see the correct locale.  */
+
+      /* Update the special tsd cache of some locale data.  */
+      __libc_tsd_set (const uint16_t *, CTYPE_B, (void *) locobj->__ctype_b);
+      __libc_tsd_set (const int32_t *, CTYPE_TOLOWER,
+		      (void *) locobj->__ctype_tolower);
+      __libc_tsd_set (const int32_t *, CTYPE_TOUPPER,
+		      (void *) locobj->__ctype_toupper);
+    }
+
+  return oldloc == &_nl_global_locale ? LC_GLOBAL_LOCALE : oldloc;
 }
 libc_hidden_def (__uselocale)
 weak_alias (__uselocale, uselocale)
