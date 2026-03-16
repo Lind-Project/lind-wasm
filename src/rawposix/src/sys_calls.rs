@@ -12,8 +12,8 @@ use libc::sched_yield;
 use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering::*;
 use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering::*;
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
@@ -22,8 +22,8 @@ use sysdefs::constants::lind_platform_const::{
     RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
-    EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
-    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
+    EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK,
+    WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
 use sysdefs::{constants::sys_const, data::sys_struct};
