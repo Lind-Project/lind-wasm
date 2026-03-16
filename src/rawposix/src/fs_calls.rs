@@ -77,8 +77,23 @@ pub extern "C" fn openat_syscall(
             "openat_syscall"
         );
     }
-    let ret = if virtual_fd == libc::AT_FDCWD {
-        open_syscall(cageid, path_arg, path_cageid, oflag_arg, oflag_cageid, mode_arg, mode_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
+    if virtual_fd == libc::AT_FDCWD {
+        // delegate to open_syscall which handles path resolution from CWD
+        return open_syscall(
+            cageid,
+            path_arg,
+            path_cageid,
+            oflag_arg,
+            oflag_cageid,
+            mode_arg,
+            mode_cageid,
+            arg4,
+            arg4_cageid,
+            arg5,
+            arg5_cageid,
+            arg6,
+            arg6_cageid,
+        );
     } else {
         // Case 2: Specific directory fd
         let host_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
@@ -87,18 +102,22 @@ pub extern "C" fn openat_syscall(
             return handle_errno(-host_fd, "openat");
         }
 
-        let kernel_fd = unsafe { libc::openat_syscall(host_fd, path, oflag, mode) };
+        let kernel_fd =
+            unsafe { libc::openat(host_fd, path.as_ptr(), oflag, mode as libc::mode_t) };
+        if kernel_fd < 0 {
+            return handle_errno(get_errno(), "openat_syscall");
+        }
         let should_cloexec = (oflag & O_CLOEXEC) != 0;
 
         match fdtables::get_unused_virtual_fd(
-        cageid,
-        FDKIND_KERNEL,
-        kernel_fd as u64,
-        should_cloexec,
-        0,
+            cageid,
+            FDKIND_KERNEL,
+            kernel_fd as u64,
+            should_cloexec,
+            0,
         ) {
-        Ok(vfd) => vfd as i32,
-        Err(_) => syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened"),
+            Ok(vfd) => vfd as i32,
+            Err(_) => syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened"),
         }
     }
 }
