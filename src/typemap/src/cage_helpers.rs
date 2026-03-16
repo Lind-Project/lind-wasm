@@ -40,7 +40,7 @@ pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
 ///
 /// ## Returns:
 /// underlying kernel file descriptor
-pub fn convert_fd_to_host(virtual_fd: u64, arg_cageid: u64, _cageid: u64) -> i32 {
+pub fn convert_fd_to_host(virtual_fd: u64, arg_cageid: u64, cageid: u64) -> i32 {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {

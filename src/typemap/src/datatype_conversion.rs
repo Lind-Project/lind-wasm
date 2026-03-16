@@ -121,7 +121,7 @@ pub fn get_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
     panic!("Invalid argument");
 }
 
-pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, _arg_cageid: u64, _cageid: u64) -> &'a mut i32 {
+pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) -> &'a mut i32 {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
@@ -249,7 +249,7 @@ pub fn sc_convert_sysarg_to_i64(arg: u64, arg_cageid: u64, cageid: u64) -> i64 {
 ///
 /// ## Returns
 /// - A mutable pointer `*mut u8` corresponding to the given argument.
-pub fn sc_convert_to_u8_mut(arg: u64, _arg_cageid: u64, _cageid: u64) -> *mut u8 {
+pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
@@ -285,7 +285,7 @@ pub fn sc_convert_buf(buf_arg: u64, _arg_cageid: u64, _cageid: u64) -> *const u8
 pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, _cageid: u64) -> u64 {
     #[cfg(feature = "secure")]
     {
-        if !validate_cageid(addr_cageid, cageid) {
+        if !validate_cageid(addr_cageid, _cageid) {
             return 0;
         }
     }
@@ -327,8 +327,8 @@ pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, _cageid: u64) -> u
 /// - `u64: u64` - union data field (can represent fd, ptr, u32, or u64)
 pub fn sc_convert_addr_to_epollevent<'a>(
     arg: u64,
-    _arg_cageid: u64,
-    _cageid: u64,
+    arg_cageid: u64,
+    cageid: u64,
 ) -> Result<&'a mut libc::epoll_event, Errno> {
     if arg == 0 {
         return Err(Errno::EFAULT);
@@ -358,8 +358,8 @@ pub fn sc_convert_addr_to_epollevent<'a>(
 /// * `None` if `act_arg == 0`.
 pub fn sc_convert_sigactionStruct<'a>(
     act_arg: u64,
-    _act_arg_cageid: u64,
-    _cageid: u64,
+    act_arg_cageid: u64,
+    cageid: u64,
 ) -> Option<&'a SigactionStruct> {
     #[cfg(feature = "secure")]
     {
@@ -389,8 +389,8 @@ pub fn sc_convert_sigactionStruct<'a>(
 /// * `None` if `act_arg == 0`.
 pub fn sc_convert_sigactionStruct_mut<'a>(
     act_arg: u64,
-    _act_arg_cageid: u64,
-    _cageid: u64,
+    act_arg_cageid: u64,
+    cageid: u64,
 ) -> Option<&'a mut SigactionStruct> {
     #[cfg(feature = "secure")]
     {
@@ -420,8 +420,8 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
 /// * `None` if `set_arg == 0`.
 pub fn sc_convert_sigset(
     set_arg: u64,
-    _set_cageid: u64,
-    _cageid: u64,
+    set_cageid: u64,
+    cageid: u64,
 ) -> Option<&'static mut SigsetType> {
     #[cfg(feature = "secure")]
     {
@@ -517,8 +517,8 @@ pub fn get_constsigset(addr: u64) -> Result<SigsetType, i32> {
 /// * If conversion to `ITimerVal` fails.
 pub fn sc_convert_itimerval(
     val_arg: u64,
-    _val_arg_cageid: u64,
-    _cageid: u64,
+    val_arg_cageid: u64,
+    cageid: u64,
 ) -> Option<&'static ITimerVal> {
     #[cfg(feature = "secure")]
     {
@@ -557,8 +557,8 @@ pub fn sc_convert_itimerval(
 /// * If conversion to `ITimerVal` fails.
 pub fn sc_convert_itimerval_mut(
     val_arg: u64,
-    _val_arg_cageid: u64,
-    _cageid: u64,
+    val_arg_cageid: u64,
+    cageid: u64,
 ) -> Option<&'static mut ITimerVal> {
     #[cfg(feature = "secure")]
     {
@@ -599,8 +599,8 @@ pub fn sc_convert_itimerval_mut(
 ///  - `Ok(&mut StatData)` if the address translation succeeds.
 pub fn sc_convert_addr_to_statdata<'a>(
     arg: u64,
-    _arg_cageid: u64,
-    _cageid: u64,
+    arg_cageid: u64,
+    cageid: u64,
 ) -> Result<&'a mut StatData, Errno> {
     #[cfg(feature = "secure")]
     {
@@ -622,8 +622,8 @@ pub fn sc_convert_addr_to_statdata<'a>(
 /// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_fstatdata<'a>(
     arg: u64,
-    _arg_cageid: u64,
-    _cageid: u64,
+    arg_cageid: u64,
+    cageid: u64,
 ) -> Result<&'a mut FSData, Errno> {
     #[cfg(feature = "secure")]
     {
@@ -649,8 +649,8 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
 /// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_pipearray<'a>(
     arg: u64,
-    _arg_cageid: u64,
-    _cageid: u64,
+    arg_cageid: u64,
+    cageid: u64,
 ) -> Result<&'a mut PipeArray, Errno> {
     #[cfg(feature = "secure")]
     {
@@ -676,8 +676,8 @@ pub fn sc_convert_addr_to_pipearray<'a>(
 /// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_shmidstruct<'a>(
     arg: u64,
-    _arg_cageid: u64,
-    _cageid: u64,
+    arg_cageid: u64,
+    cageid: u64,
 ) -> Result<&'a mut ShmidsStruct, Errno> {
     #[cfg(feature = "secure")]
     {
@@ -697,7 +697,7 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
 ///
 /// Otherwise, the argument is cast to a pointer and checked for null,
 /// returning `true` if the argument is null and `false` if not.
-pub fn sc_convert_arg_nullity(arg: u64, _arg_cageid: u64, _cageid: u64) -> bool {
+pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
