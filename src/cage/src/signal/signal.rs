@@ -33,7 +33,10 @@ pub fn signal_epoch_trigger(cageid: u64) {
             Some(h) => h,
             None => {
                 #[cfg(debug_assertions)]
-                lind_debug_panic(&format!("signal_epoch_trigger: epoch_handler for thread {} not found", main_threadid));
+                lind_debug_panic(&format!(
+                    "signal_epoch_trigger: epoch_handler for thread {} not found",
+                    main_threadid
+                ));
                 #[cfg(not(debug_assertions))]
                 return;
             }
@@ -135,7 +138,10 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
             Some(h) => h,
             None => {
                 #[cfg(debug_assertions)]
-                lind_debug_panic(&format!("get_epoch_state: epoch_handler for thread {} not found", thread_id));
+                lind_debug_panic(&format!(
+                    "get_epoch_state: epoch_handler for thread {} not found",
+                    thread_id
+                ));
                 #[cfg(not(debug_assertions))]
                 return EPOCH_KILLED;
             }
@@ -168,7 +174,10 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
             Some(h) => h,
             None => {
                 #[cfg(debug_assertions)]
-                lind_debug_panic(&format!("thread_check_killed: epoch_handler for thread {} not found", thread_id));
+                lind_debug_panic(&format!(
+                    "thread_check_killed: epoch_handler for thread {} not found",
+                    thread_id
+                ));
                 #[cfg(not(debug_assertions))]
                 return true;
             }
@@ -195,7 +204,10 @@ pub fn wait_all_threads_exited(cageid: u64, _except_tid: u64) {
         Some(c) => c,
         None => {
             #[cfg(debug_assertions)]
-            lind_debug_panic(&format!("wait_all_threads_exited: cage {} not found", cageid));
+            lind_debug_panic(&format!(
+                "wait_all_threads_exited: cage {} not found",
+                cageid
+            ));
             #[cfg(not(debug_assertions))]
             return;
         }
@@ -248,7 +260,10 @@ pub fn signal_epoch_reset(cageid: u64) {
             Some(h) => h,
             None => {
                 #[cfg(debug_assertions)]
-                lind_debug_panic(&format!("signal_epoch_reset: epoch_handler for thread {} not found", main_threadid));
+                lind_debug_panic(&format!(
+                    "signal_epoch_reset: epoch_handler for thread {} not found",
+                    main_threadid
+                ));
                 #[cfg(not(debug_assertions))]
                 return;
             }
@@ -288,7 +303,10 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
             Some(h) => h,
             None => {
                 #[cfg(debug_assertions)]
-                lind_debug_panic(&format!("signal_check_trigger: epoch_handler for thread {} not found", main_threadid));
+                lind_debug_panic(&format!(
+                    "signal_check_trigger: epoch_handler for thread {} not found",
+                    main_threadid
+                ));
                 #[cfg(not(debug_assertions))]
                 return false;
             }
@@ -461,7 +479,10 @@ pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
         Some(c) => c,
         None => {
             #[cfg(debug_assertions)]
-            lind_debug_panic(&format!("lind_check_no_pending_signal: cage {} not found", cageid));
+            lind_debug_panic(&format!(
+                "lind_check_no_pending_signal: cage {} not found",
+                cageid
+            ));
             #[cfg(not(debug_assertions))]
             return true;
         }

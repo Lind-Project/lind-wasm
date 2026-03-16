@@ -13,10 +13,10 @@ pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
-#[cfg(debug_assertions)]
-use sysdefs::logging::lind_debug_panic;
 use sysdefs::constants::SIGCHLD;
 use sysdefs::data::fs_struct::SigactionStruct;
+#[cfg(debug_assertions)]
+use sysdefs::logging::lind_debug_panic;
 
 /// Represents how a cage terminated, mirroring the two primary POSIX
 /// process termination modes.
@@ -122,7 +122,10 @@ pub fn cage_record_exit_status(cageid: u64, status: ExitStatus) {
         Some(c) => c,
         None => {
             #[cfg(debug_assertions)]
-            lind_debug_panic(&format!("cage_record_exit_status: cage {} not found", cageid));
+            lind_debug_panic(&format!(
+                "cage_record_exit_status: cage {} not found",
+                cageid
+            ));
             #[cfg(not(debug_assertions))]
             return;
         }
