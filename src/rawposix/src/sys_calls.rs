@@ -1151,35 +1151,45 @@ pub extern "C" fn prlimit64_syscall(
             "prlimit64_syscall",
         );
     }
-
-    eprintln!("PRLIMIT64 HIT: resource={} arg4={:#x}", arg2, arg4);
     // get resource numeber from arg2
     let resource = arg2;
 
-    // handle getrlimit calls
+    //handle setrlimit calls (arg3 = new_limit, not null)
+    // when a program calls setrlimit glibc sends prlimit64 with arg3 pointing to new limit.
+    // We check the limit from WASM program's memory and calls the host's setrlimit to actually apply the limit.
+    if !sc_convert_arg_nullity(arg3,arg3_cageid, cageid){
+        let new_limit = match sc_convert_arg_nullity(arg3,arg3_cageid, cageid){
+            Ok(rlim) => rlim.
+            Err(e) => return syscall_error(e, "prlimit64", "bad new limit address"),
+        };
+
+        let mut host_rlimit: libc::Rlimit = unsafe{std::mem::zeroed()};
+        host_rlimit.rlim_cur = new_limit.rlimit_cur as u64;
+        host_rlimit.rlim_max = new_limit.rlimit_max as u64;
+        let ret = unsafe {libc::setrlimit(resource as i32, &host_rlimit)};
+        if ret<0{
+            let errno = get_errno();
+            return handle_errno(errno, "prlimit64");
+        }
+    }
+
+
+    // handle getrlimit calls 
     if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid){
         let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid){
             Ok(rlim) => rlim,
             Err(e) => return syscall_error(e, "prlimit64", "bad address"),
         };
-        
-        // match and fill in values
-        match resource{
-            3 => {
-                // RLIMIT_STACK: 8MiB default
-                old_limit.rlim_cur = 8*1024*1024;
-                old_limit.rlim_max = 8*1024*1024;
-            }
-            7 => {
-                // RLIMIT_NOFILE: 1024 file descriptors
-                old_limit.rlim_cur = 1024;
-                old_limit.rlim_max = 1024;
-            }
-            _ => {
-                // other resources
-                old_limit.rlim_cur = 1024 * 1024;
-                old_limit.rlim_max = 1024 * 1024;
-            }
+        let mut host_rlimit: libc::Rlimit = unsafe{std::mem::zeroed()};
+        let ret = unsafe {libc::getrlimit(resource as i32, &mut host_rlimit)};
+        if ret == 0{
+            old_limit.rlim_cur = host_rlimit.rlim_cur as u32;
+            old_limit.rlim_max = host_rlimit.rlim_max as u32;
+        } else{
+            // if host call fails default to 1024.
+            old_limit.rlim_cur = 1024;
+            old_limit.rlim_max = 1024;
+        }
 
         }
     }
