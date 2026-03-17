@@ -1159,6 +1159,7 @@ pub extern "C" fn prlimit64_syscall(
     //pid has to be zero
     let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
     if pid != 0 {
+        lind_debug_panic(&format!("prlimit64: unsupported pid {}", pid));
         return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
     }
 
