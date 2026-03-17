@@ -22,7 +22,9 @@ use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
-use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
+use wasmtime_lind_utils::lind_syscall_numbers::{
+    CLONE_SYSCALL, EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL,
+};
 
 /// Stores argv and environment variables for the guest program. During glibc's
 /// `_start()`, the guest calls 4 imported host functions (`args_sizes_get`,
@@ -129,11 +131,16 @@ fn add_syscall_to_linker<
             // If we are reaching here at rewind state, that means fork was called within
             // a syscall-interrupted signal handler. We should restore the saved return value
             // of the syscall that was interrupted, rather than re-executing it.
+            // If there's no syscall rewind data, we're rewinding from an exit_call —
+            // let the rewind continue without re-executing the syscall.
             if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
-                let retval = caller
-                    .as_context_mut()
-                    .get_current_syscall_rewind_data()
-                    .unwrap();
+                let retval = match caller.as_context_mut().get_current_syscall_rewind_data() {
+                    Some(v) => v,
+                    None => {
+                        wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                        return 0;
+                    }
+                };
                 // let signal handler finish rest of the rewinding process
                 wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
                 return retval;
@@ -150,8 +157,10 @@ fn add_syscall_to_linker<
             // to wasmtime, it can resolve the correct thread instance deterministically, independent of
             // interposition or cross-cage routing.
             let final_arg2 = if target_cageid == self_cageid
-                && matches!(call_number as i32, CLONE_SYSCALL | EXIT_SYSCALL)
-            {
+                && matches!(
+                    call_number as i32,
+                    CLONE_SYSCALL | EXIT_SYSCALL | EXIT_GROUP_SYSCALL
+                ) {
                 wasmtime_lind_multi_process::current_tid(&mut caller) as u64
             } else {
                 arg2

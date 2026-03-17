@@ -25,9 +25,10 @@ use super::net_calls::{
     shutdown_syscall, socket_syscall, socketpair_syscall,
 };
 use super::sys_calls::{
-    exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
-    getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, sched_yield_syscall,
-    setitimer_syscall, sigaction_syscall, sigprocmask_syscall, waitpid_syscall,
+    exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
+    getgid_syscall, getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall,
+    sched_yield_syscall, setitimer_syscall, sigaction_syscall, sigprocmask_syscall,
+    waitpid_syscall,
 };
 
 pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
@@ -113,6 +114,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (202, futex_syscall),
     (213, epoll_create_syscall),
     (228, clock_gettime_syscall),
+    (231, exit_group_syscall),
     (232, epoll_wait_syscall),
     (233, epoll_ctl_syscall),
     (263, unlinkat_syscall),

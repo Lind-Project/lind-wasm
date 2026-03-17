@@ -48,7 +48,10 @@ pub extern "C" fn grate_callback_trampoline(
     let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
         Some(v) => v,
         None => {
-            panic!("no VMContext found for cage_id {}", cageid);
+            panic!(
+                "[grate_trampoline] no VMContext found for cage_id {}",
+                cageid
+            );
         }
     };
 
