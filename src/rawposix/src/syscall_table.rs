@@ -25,15 +25,10 @@ use super::net_calls::{
     shutdown_syscall, socket_syscall, socketpair_syscall,
 };
 use super::sys_calls::{
-<<<<<<< HEAD
-    exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
-    getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, prlimit64_syscall,
-=======
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
     getgid_syscall, getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall,
->>>>>>> origin/main
-    sched_yield_syscall, setitimer_syscall, sigaction_syscall, sigprocmask_syscall,
-    waitpid_syscall,
+    prlimit64_syscall, sched_yield_syscall, setitimer_syscall, sigaction_syscall,
+    sigprocmask_syscall, waitpid_syscall,
 };
 
 pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[

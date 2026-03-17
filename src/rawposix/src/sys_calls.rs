@@ -25,6 +25,7 @@ use sysdefs::constants::sys_const::{
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
+use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
@@ -1156,9 +1157,9 @@ pub extern "C" fn prlimit64_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     //pid has to be zero
-    let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid)
-    if pid != 0{
-        return syscall_error(Errno: ESRCH, "prlimit64", "Only supports pid = 0")
+    let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
+    if pid != 0 {
+        return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
     }
 
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
@@ -1168,7 +1169,7 @@ pub extern "C" fn prlimit64_syscall(
         );
     }
     // get resource numeber from arg2
-    let resource = sc_convert_sysarg_to_u32(arg2, arg2_cageid, cage_id);
+    let resource = sc_convert_sysarg_to_u32(arg2, arg2_cageid, cageid);
 
     // setrlimit unsupported
     if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
@@ -1176,7 +1177,7 @@ pub extern "C" fn prlimit64_syscall(
         return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
     }
 
-    // handle getrlimit calls 
+    // handle getrlimit calls
     // default to 1024.
     if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
         let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid) {
@@ -1200,7 +1201,6 @@ pub extern "C" fn prlimit64_syscall(
                 old_limit.rlim_max = 0;
             }
         }
-
     }
 
     0 //success
