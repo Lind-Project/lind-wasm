@@ -52,9 +52,10 @@ pub fn signal_handler<
 
     // if we are reaching here under Asyncify rewinding process, we need to resume its callstack instead of doing the normal execution
     if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
-        // retrieve the signal function entered last time with its parameters.
-        // If there's no signal rewind data, we're rewinding from an exit_call
-        // (not a signal handler) — just return and let the rewind complete.
+        // Retrieve the signal function entered last time with its parameters.
+        // None is expected here: exit_call and syscall-level asyncify also
+        // trigger epoch rewind, but they don't push signal rewind data.
+        // In that case we just return 0 and let the non-signal rewind complete.
         let data = match caller.as_context_mut().get_current_signal_rewind_data() {
             Some(d) => d,
             None => return 0,

@@ -86,7 +86,21 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             Ok(exit_code)
         }
         Err(e) => {
-            // Exit the process
+            // Initial cage crashed.  Do the same cleanup as the
+            // fork-crash and signal-handler error paths so child
+            // cages see proper termination and resources are freed.
+            let cageid = CAGE_START_ID as u64;
+            cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+            if let Some(c) = cage::get_cage(cageid) {
+                c.is_dead
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+            threei::EXITING_TABLE.insert(cageid);
+            threei::handler_table::_rm_grate_from_handler(cageid);
+            cage::signal::lind_thread_exit(cageid, THREAD_START_ID as u64);
+            cage::cage_finalize(cageid);
+            lind_manager.decrement();
+            lind_manager.wait();
             return Err(e);
         }
     }

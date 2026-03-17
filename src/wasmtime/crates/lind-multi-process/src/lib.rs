@@ -469,10 +469,31 @@ impl<
 
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
 
-                        // print errors if any when running the child process
+                        // Wasm instance crashed — perform the same cleanup
+                        // as the signal-handler error path so the parent
+                        // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
                             let e = wasi_common::maybe_exit_on_error(err);
                             eprintln!("Error: {:?}", e);
+                            cage::cage_record_exit_status(
+                                child_cageid,
+                                cage::ExitStatus::Exited(1),
+                            );
+                            if let Some(c) = cage::get_cage(child_cageid) {
+                                c.is_dead
+                                    .store(true, std::sync::atomic::Ordering::Release);
+                            }
+                            threei::EXITING_TABLE.insert(child_cageid);
+                            threei::handler_table::_rm_grate_from_handler(child_cageid);
+                            cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
+                            cage::cage_finalize(child_cageid);
+                            if !rm_vmctx(child_cageid) {
+                                eprintln!(
+                                    "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
+                                    child_cageid
+                                );
+                            }
+                            lind_manager.decrement();
                             return 0;
                         }
 

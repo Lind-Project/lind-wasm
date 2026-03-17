@@ -311,6 +311,17 @@ pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
     }
 }
 
+/// Get a cage by ID, panicking in debug builds if the cage doesn't exist.
+/// Returns `None` in release builds so the caller can provide a fallback.
+pub fn get_cage_or_debug_panic(cageid: u64, caller: &str) -> Option<Arc<Cage>> {
+    let result = get_cage(cageid);
+    if result.is_none() {
+        #[cfg(debug_assertions)]
+        sysdefs::logging::lind_debug_panic(&format!("{}: cage {} not found", caller, cageid));
+    }
+    result
+}
+
 #[allow(static_mut_refs)]
 // SAFETY: This code is single-threaded during teardown, and no other
 // mutable or immutable references to `CAGE_MAP` exist while this call executes.
