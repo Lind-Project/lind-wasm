@@ -402,11 +402,12 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
 pub fn remove_cage_from_fdtable(cageid: u64) {
     let mut fdtable = GLOBALFDTABLE.lock().unwrap();
 
-    if !fdtable.contains_key(&cageid) {
-        panic!("Unknown cageid in fdtable access");
-    }
-
-    let cagetable = fdtable.remove(&cageid).unwrap();
+    // In multi-cage (grate) scenarios, concurrent exit paths may race to
+    // remove the same cage. If already removed, there's nothing to clean up.
+    let cagetable = match fdtable.remove(&cageid) {
+        Some(c) => c,
+        None => return,
+    };
     drop(fdtable);
 
     // decrement the reference to items in the fdtable appropriately...

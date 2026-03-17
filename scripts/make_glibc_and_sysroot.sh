@@ -17,7 +17,7 @@ SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Define common flags
-CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -fPIC"
+CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion  -DNO_HIDDEN -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -fPIC"
 WARNINGS="-Wall -Wwrite-strings -Wundef -Wstrict-prototypes -Wold-style-definition"
 EXTRA_FLAGS="-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common"
 EXTRA_FLAGS+=" -Wp,-U_FORTIFY_SOURCE -fmath-errno -fPIE -ftls-model=local-exec"
