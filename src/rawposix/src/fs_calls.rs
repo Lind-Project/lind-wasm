@@ -73,8 +73,6 @@ pub extern "C" fn openat_syscall(
     oflag_cageid: u64,
     mode_arg: u64,
     mode_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
     arg5: u64,
     arg5_cageid: u64,
     arg6: u64,
@@ -87,10 +85,7 @@ pub extern "C" fn openat_syscall(
     };
     let oflag = sc_convert_sysarg_to_i32(oflag_arg, oflag_cageid, cageid);
     let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
-    if !(sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
             "openat_syscall"
@@ -106,12 +101,12 @@ pub extern "C" fn openat_syscall(
             oflag_cageid,
             mode_arg,
             mode_cageid,
-            arg4,
-            arg4_cageid,
             arg5,
             arg5_cageid,
             arg6,
             arg6_cageid,
+            UNUSED_ARG,
+            UNUSED_ARG,
         );
     } else {
         // Case 2: Specific directory fd
