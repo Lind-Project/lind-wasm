@@ -20,9 +20,9 @@ options.
 
 ## Building the toolchain step by step
 
-1. __Install system dependencies__ *(see `apt` in [Dockerfile](https://github.com/Lind-Project/lind-wasm/blob/main/scripts/Dockerfile.e2e))*
+1. __Install system dependencies__ *(see `apt` in [Dockerfile](https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.e2e))*
 
-2. __Download *Clang* and install builtins__ *(see "Install clang" in [Dockerfile](https://github.com/Lind-Project/lind-wasm/blob/main/scripts/Dockerfile.e2e))*
+2. __Download *Clang* and install builtins__ *(see "Install clang" in [Dockerfile](https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.e2e))*
 
     *Clang* supports the *WASI* cross-compilation target out of
     the box, provided the necessary compiler runtime
@@ -41,6 +41,7 @@ options.
     2. Compile extra files:
         - `nptl/pthread_create.c`
         - `lind_syscall/lind_syscall.c`
+        - `lind_syscall/addr_translation.c`
         - `csu/wasm32/wasi_thread_start.s`
         - `csu/wasm32/set_stack_pointer.s`
 

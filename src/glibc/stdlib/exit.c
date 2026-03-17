@@ -23,9 +23,10 @@
 #include <set-freeres.h>
 #include "exit.h"
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 void __lind_exit(int status) {
-	MAKE_SYSCALL(30, "syscall|exit", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	MAKE_LEGACY_SYSCALL(EXIT_SYSCALL, "syscall|exit", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 void
@@ -33,8 +34,10 @@ _exit (int status)
 {
   while (1)
     {
-      // exit without doing any cleanup
-      __lind_exit(status);
+      /* lind-wasm: use exit_group (syscall 231) to match Linux _exit()
+         semantics — terminates all threads in the process.  Thread-only
+         exit (syscall 60) is done via __lind_exit() in start_thread. */
+      MAKE_LEGACY_SYSCALL(EXIT_GROUP_SYSCALL, "syscall|exit_group", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 
 #ifdef ABORT_INSTRUCTION
       ABORT_INSTRUCTION;
@@ -92,7 +95,7 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
 	    {
 	      void (*atfct) (void);
 	      void (*onfct) (int status, void *arg);
-	      void (*cxafct) (void *arg, int status);
+	      void (*cxafct) (void *arg);
 	      void *arg;
 
 	    case ef_free:
@@ -127,7 +130,7 @@ __run_exit_handlers (int status, struct exit_function_list **listp,
 
 	      /* Unlock the list while we call a foreign function.  */
 	      __libc_lock_unlock (__exit_funcs_lock);
-	      cxafct (arg, status);
+	      cxafct (arg);
 	      __libc_lock_lock (__exit_funcs_lock);
 	      break;
 	    }

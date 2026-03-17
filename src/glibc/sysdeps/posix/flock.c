@@ -24,13 +24,14 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Apply or remove an advisory lock, according to OPERATION,
    on the file FD refers to.  */
 int
 __flock (int fd, int operation)
 {
-  return MAKE_SYSCALL(54, "syscall|flock", (uint64_t) fd, (uint64_t) operation, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL(FLOCK_SYSCALL, "syscall|flock", (uint64_t) fd, (uint64_t) operation, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias (__flock, flock)

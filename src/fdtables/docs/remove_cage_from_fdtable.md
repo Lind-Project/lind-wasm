@@ -14,6 +14,7 @@ handlers.
 # use fdtables::*;
 # let src_cage_id = threei::TESTING_CAGEID;
 # let cage_id = threei::TESTING_CAGEID2;
+# init_empty_cage(src_cage_id);
 # copy_fdtable_for_cage(src_cage_id,cage_id).unwrap();
 let my_virt_fd = get_unused_virtual_fd(cage_id, 0, 10, false, 10).unwrap();
 remove_cage_from_fdtable(cage_id);

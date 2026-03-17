@@ -16,6 +16,7 @@ fdtable, for use in `fork()`.  Nothing complicated here.
 # use fdtables::*;
 # let src_cage_id = threei::TESTING_CAGEID;
 # let new_cage_id = threei::TESTING_CAGEID1;
+# init_empty_cage(src_cage_id);
 let my_virt_fd = get_unused_virtual_fd(src_cage_id, 0, 10, false, 10).unwrap();
 copy_fdtable_for_cage(src_cage_id,new_cage_id).unwrap();
 // Check that this entry exists under the new_cage_id...

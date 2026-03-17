@@ -20,6 +20,8 @@
 #define _LOWLEVELLOCK_FUTEX_H   1
 
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #ifndef __ASSEMBLER__
 # include <sysdep.h>
@@ -47,8 +49,8 @@
 #define FUTEX_BITSET_MATCH_ANY	0xffffffff
 
 /* Values for 'private' parameter of locking macros.  Yes, the
-   definition seems to be backwards.  But it is not.  The bit will be
-   reversed before passing to the system call.  */
+  definition seems to be backwards.  But it is not.  The bit will be
+  reversed before passing to the system call.  */
 #define LLL_PRIVATE	0
 #define LLL_SHARED	FUTEX_PRIVATE_FLAG
 
@@ -56,70 +58,82 @@
 # define __lll_private_flag(fl, private) \
   (((fl) | FUTEX_PRIVATE_FLAG) ^ (private))
 
-# define lll_futex_syscall(nargs, futexp, op, ...)                      \
-  ({                                                                    \
-    long int __ret = MAKE_RAW_SYSCALL##nargs (98, "syscall|futex", futexp, op, 	\
-				       __VA_ARGS__);                    \
-    (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))         	\
-     ? -INTERNAL_SYSCALL_ERRNO (__ret) : 0);                     	\
-  })
-
 /* For most of these macros, the return value is never really used.
-   Nevertheless, the protocol is that each one returns a negated errno
-   code for failure or zero for success.  (Note that the corresponding
-   Linux system calls can sometimes return positive values for success
-   cases too.  We never use those values.)  */
+  Nevertheless, the protocol is that each one returns a negated errno
+  code for failure or zero for success.  (Note that the corresponding
+  Linux system calls can sometimes return positive values for success
+  cases too.  We never use those values.)  */
 
 
 /* Wait while *FUTEXP == VAL for an lll_futex_wake call on FUTEXP.  */
 # define lll_futex_wait(futexp, val, private) \
   lll_futex_timed_wait (futexp, val, NULL, private)
 
-# define lll_futex_timed_wait(futexp, val, timeout, private)     \
-  lll_futex_syscall (4, futexp,                                 \
-		     __lll_private_flag (FUTEX_WAIT, private),  \
-		     val, timeout)
+# define lll_futex_timed_wait(futexp, val, timeout, private)            \
+  ({                                                                    \
+  uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
+  uint64_t __translated_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(timeout); \
+  MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
+        __lll_private_flag (FUTEX_WAIT, private), (uint64_t)(val), __translated_timeout, 0, (uint64_t)0, TRANSLATE_ERRNO_OFF); \
+  })
 
 /* Verify whether the supplied clockid is supported by
-   lll_futex_clock_wait_bitset.  */
-# define lll_futex_supported_clockid(clockid)			\
+  lll_futex_clock_wait_bitset.  */
+# define lll_futex_supported_clockid(clockid)            \
   ((clockid) == CLOCK_REALTIME || (clockid) == CLOCK_MONOTONIC)
 
 /* Wake up up to NR waiters on FUTEXP.  */
-# define lll_futex_wake(futexp, nr, private)                             \
-  lll_futex_syscall (4, futexp,                                         \
-		     __lll_private_flag (FUTEX_WAKE, private), nr, 0)
+# define lll_futex_wake(futexp, nr, private)                            \
+  ({                                                                    \
+  uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
+  MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
+        __lll_private_flag (FUTEX_WAKE, private), (uint64_t)(nr), 0, 0, (uint64_t)0, TRANSLATE_ERRNO_OFF); \
+  })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP.  Move up to NR_MOVE of the
-   rest from waiting on FUTEXP to waiting on MUTEX (a different futex).
-   Returns non-zero if error happened, zero if success.  */
+  rest from waiting on FUTEXP to waiting on MUTEX (a different futex).
+  Returns non-zero if error happened, zero if success.  */
 # define lll_futex_requeue(futexp, nr_wake, nr_move, mutex, val, private) \
-  lll_futex_syscall (6, futexp,                                         \
-		     __lll_private_flag (FUTEX_CMP_REQUEUE, private),   \
-		     nr_wake, nr_move, mutex, val)
+  ({                                                                    \
+  uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
+  uint64_t __translated_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex); \
+  MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp,                          \
+        __lll_private_flag (FUTEX_CMP_REQUEUE, private), \
+        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), TRANSLATE_ERRNO_OFF); \
+  })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP and NR_WAKE2 on FUTEXP2.
-   Returns non-zero if error happened, zero if success.  */
+  Returns non-zero if error happened, zero if success.  */
 # define lll_futex_wake_unlock(futexp, nr_wake, nr_wake2, futexp2, private) \
-  lll_futex_syscall (6, futexp,                                         \
-		     __lll_private_flag (FUTEX_WAKE_OP, private),       \
-		     nr_wake, nr_wake2, futexp2,                        \
-		     FUTEX_OP_CLEAR_WAKE_IF_GT_ONE)
+  ({                                                                    \
+  uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
+  uint64_t __translated_futexp2 = TRANSLATE_GUEST_POINTER_TO_HOST(futexp2); \             \
+  MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
+        __lll_private_flag (FUTEX_WAKE_OP, private),     \
+        (uint64_t)(nr_wake), (uint64_t)(nr_wake2), __translated_futexp2,         \
+        (uint64_t)(FUTEX_OP_CLEAR_WAKE_IF_GT_ONE));                  \
+  })
 
 
-#define lll_futex_timed_unlock_pi(futexp, private) 			\
-  lll_futex_syscall (4, futexp,						\
-		     __lll_private_flag (FUTEX_UNLOCK_PI, private),	\
-		     0, 0)
+#define lll_futex_timed_unlock_pi(futexp, private)             \
+  ({                                                                    \
+  uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
+  MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
+        __lll_private_flag (FUTEX_UNLOCK_PI, private),    \
+        0, 0, 0, 0, TRANSLATE_ERRNO_OFF); \
+  })
 
 /* Like lll_futex_requeue, but pairs with lll_futex_wait_requeue_pi
-   and inherits priority from the waiter.  */
+  and inherits priority from the waiter.  */
 # define lll_futex_cmp_requeue_pi(futexp, nr_wake, nr_move, mutex,       \
-                                 val, private)                          \
-  lll_futex_syscall (6, futexp,                                         \
-		     __lll_private_flag (FUTEX_CMP_REQUEUE_PI,          \
-					 private),                      \
-		     nr_wake, nr_move, mutex, val)
+                                val, private)                          \
+  ({                                                                    \
+  uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
+  uint64_t __translated_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex); \
+  MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp,                          \
+        __lll_private_flag (FUTEX_CMP_REQUEUE_PI, private), \
+        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), TRANSLATE_ERRNO_OFF); \
+  })
 
 /* Like lll_futex_wait, but acting as a cancellable entrypoint.  */
 # define lll_futex_wait_cancel(futexp, val, private) \

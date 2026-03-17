@@ -64,4 +64,79 @@ gdb --args ../wasmtime/target/debug/wasmtime run -D debug-info -O opt-level=0 ma
 
 ## Other Debugging Techniques
 
-Coming soon
+### Disabling Signals for Debugging
+
+The `signal-disable` feature added in this PR allows `lind-wasm` to run binaries without inserting Wasmtime epoch signals, which is useful for debugging purposes. When this feature is enabled, the signal handler is not set, and any unexpected signals (e.g., timeouts or faults) will cause the program to crash directly in RawPOSIX, making issues easier to trace.
+
+> ⚠️ **Warning:** This feature is intended for debugging only and should not be used in production environments.
+
+To use this feature, compile `lind-wasm` with the `signal-disable` feature enabled. Here’s how to do it:
+
+**Building with the Feature:**
+
+From the root of the repository, navigate to `src/wasmtime` and build with the `signal-disable` feature:
+
+```bash
+cd src/wasmtime
+
+# Build lind-wasm with the signal-disable feature
+cargo build --features signal-disable
+```
+
+### Debugging at WASM/WAT Level
+
+Two host-defined functions, `lind_debug_num()` and `lind_debug_str()`, are imported into the compiled WASM binary to support debugging at the WASM/WAT level. These functions facilitate debugging at the WASM/WAT level, allowing for the inspection of stack values and memory contents in environments where traditional debuggers (like GDB) cannot easily attach or provide visibility.
+
+**Building with the Feature:**
+
+Build the project from the root of the repository with `lind-debug`:
+
+```bash
+make lind-debug
+```
+
+**Usage:**
+
+1. Decompile the WASM binary
+
+Convert existing `.wasm` file to `.wat` format:
+
+ ```bash
+ wasm2wat <filename.wasm> --enable-all -o <filename.wat>
+```
+
+2. Add Debug Calls
+
+Open the `.wat` file and locate the area to inspect. Since these functions return their input back to the stack, you must either use the returned value or drop it to maintain stack integrity.
+
+Example: Debugging an Integer
+
+```wat
+;; Push a value or local onto the stack
+local.get 0
+;; Call the debugger (prints value to host stderr)
+call $__lind_debug_num
+;; Drop the returned value to keep the stack clean
+drop
+```
+
+Example: Debugging a String
+
+```wat
+;; Push the memory offset (pointer) where the string starts
+i32.const 1024
+;; Call the debugger (prints value to host stderr)
+call $__lind_debug_str
+;; Drop the returned value to keep the stack clean
+drop
+```
+
+> ⚠️ **Warning:** Use the offset of the pre-defined string in the binary. Defining a new string at an uncalculated offset might result in segmentation fault.
+
+3. Recompile to WASM
+
+After inserting debug calls, convert the file back to a binary:
+
+```bash
+wat2wasm <filename.wat> --enable-threads -o <filename.wasm>
+```

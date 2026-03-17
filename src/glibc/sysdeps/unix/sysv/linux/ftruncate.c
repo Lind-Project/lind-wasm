@@ -19,13 +19,14 @@
 #include <sysdep.h>
 #include <errno.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 /* Truncate the file FD refers to LENGTH bytes.  */
 int
 __ftruncate (int fd, off_t length)
 {
-	return MAKE_SYSCALL(18, "syscall|ftruncate", (uint64_t) fd, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_LEGACY_SYSCALL(FTRUNCATE_SYSCALL, "syscall|ftruncate", (uint64_t) fd, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__ftruncate, ftruncate)
 #endif

@@ -5,11 +5,13 @@
     allow(irrefutable_let_patterns, unreachable_patterns)
 )]
 
+use cfg_if::cfg_if;
+
 use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+pub use once_cell::sync::Lazy;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
@@ -19,12 +21,23 @@ use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
 };
-use wasmtime_lind_common::LindCommonCtx;
+
+use wasmtime::{Caller, Instance};
+
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
+use wasmtime_lind_3i::{get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx, VmCtxWrapper};
 use wasmtime_lind_utils::LindCageManager;
+
+use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
+use core::ffi::c_void;
+use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
+use std::ptr::NonNull;
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use threei::{make_syscall, threei_const};
+use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;
@@ -41,6 +54,119 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
         bail!("must contain exactly one equals character ('=')");
     }
     Ok((parts[0].into(), parts[1].into()))
+}
+
+/// The callback function registered with 3i uses a unified Wasm entry
+/// function as the single re-entry point into the Wasm executable.
+///
+/// When invoked, this function first uses the provided grateid to
+/// retrieve the corresponding `VMContext` pointer from lind-3i’s global
+/// runtime-state table. The `VMContext` identifies the Wasmtime store and
+/// instance associated with the target grate and allows execution to
+/// re-enter the correct runtime context.
+///
+/// This function receives an address inside grate that identifies the target handler.
+/// When invoked, the callback calls the entry function inside the Wasm
+/// module, passing this address as an argument. The entry function then
+/// dispatches control to the corresponding per-syscall implementation
+/// based on the address provided by `register_handler`.
+///
+/// To complete the bridge between host and guest, the system uses
+/// `Caller::with()` to re-enter the  Wasmtime runtime context from the
+/// host side.
+///
+/// This function is called by 3i when a syscall is routed to a grate.
+///
+/// todo: Currently this function is sent to 3i from [run::execute] function.
+/// This will be updated to be sent from lind-boot in the future.
+pub extern "C" fn grate_callback_trampoline(
+    in_grate_fn_ptr_u64: u64,
+    cageid: u64,
+    arg1: u64,
+    arg1cageid: u64,
+    arg2: u64,
+    arg2cageid: u64,
+    arg3: u64,
+    arg3cageid: u64,
+    arg4: u64,
+    arg4cageid: u64,
+    arg5: u64,
+    arg5cageid: u64,
+    arg6: u64,
+    arg6cageid: u64,
+) -> i32 {
+    let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
+        Some(v) => v,
+        None => {
+            panic!("no VMContext found for cage_id {}", cageid);
+        }
+    };
+
+    // Convert back to VMContext
+    let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
+
+    let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+
+    // Re-enter Wasmtime using the stored vmctx pointer
+    let grate_ret = unsafe {
+        Caller::with(vmctx_raw, |caller: Caller<'_, Host>| {
+            let Caller {
+                mut store,
+                caller: instance,
+            } = caller;
+
+            // Resolve the unified entry function once per call
+            let entry_func = instance
+                .host_state()
+                .downcast_ref::<Instance>()
+                .ok_or_else(|| anyhow!("bad host_state Instance"))?
+                .get_export(&mut store, "pass_fptr_to_wt")
+                .and_then(|f| f.into_func())
+                .ok_or_else(|| anyhow!("missing export `pass_fptr_to_wt`"))?;
+
+            let typed_func = entry_func.typed::<(
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+            ), i32>(&mut store)?;
+
+            // Call the entry function with all arguments and in grate function pointer
+            typed_func.call(
+                &mut store,
+                (
+                    in_grate_fn_ptr_u64,
+                    cageid,
+                    arg1,
+                    arg1cageid,
+                    arg2,
+                    arg2cageid,
+                    arg3,
+                    arg3cageid,
+                    arg4,
+                    arg4cageid,
+                    arg5,
+                    arg5cageid,
+                    arg6,
+                    arg6cageid,
+                ),
+            )
+        })
+        .unwrap_or(threei_const::GRATE_ERR)
+    };
+    // Push the vmctx back to the global pool
+    set_vmctx(cageid, vmctx_wrapper);
+    grate_ret
 }
 
 /// Runs a WebAssembly module
@@ -135,14 +261,7 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        self.populate_with_wasi(
-            &mut linker,
-            &mut store,
-            &main,
-            lind_manager.clone(),
-            None,
-            None,
-        )?;
+        self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), None)?;
 
         store.data_mut().limits = self.run.store_limits();
         store.limiter(|t| &mut t.limits);
@@ -189,9 +308,18 @@ impl RunCommand {
         }
 
         // Initialize Lind here
-        rawposix::safeposix::dispatcher::lindrustinit(0);
+        rawposix_start(0);
         // new cage is created
         lind_manager.increment();
+        // initialize vmctx pool
+        init_vmctx_pool();
+
+        // initialize trampoline entry function pointer for wasmtime runtime.
+        // todo: will remove to lind-boot in the future
+        threei::register_trampoline(
+            threei_const::RUNTIME_TYPE_WASMTIME,
+            grate_callback_trampoline,
+        );
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
@@ -226,13 +354,37 @@ impl RunCommand {
                     code = *res;
                 }
                 // exit the thread
-                if rawposix::interface::lind_thread_exit(
-                    CAGE_START_ID as u64,
-                    THREAD_START_ID as u64,
-                ) {
+                if lind_thread_exit(CAGE_START_ID as u64, THREAD_START_ID as u64) {
+                    // Clean up the context from the global table
+                    if !rm_vmctx(CAGE_START_ID as u64) {
+                        panic!(
+                            "[wasmtime|run] Failed to remove VMContext for cage_id {}",
+                            CAGE_START_ID
+                        );
+                    }
+
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
-                    lind_syscall_api(1, EXIT_SYSCALL as u32, 0, code as u64, 0, 0, 0, 0, 0);
+                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+                    make_syscall(
+                        1,                     // self cage id
+                        (EXIT_SYSCALL) as u64, // syscall num
+                        UNUSED_NAME,           // syscall name
+                        1,                     // target cage id, should be itself
+                        code as u64,           // Exit type
+                        1,                     // self cage id
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                    );
 
                     // main cage exits
                     lind_manager.decrement();
@@ -241,7 +393,7 @@ impl RunCommand {
                 // we wait until all other cage exits
                 lind_manager.wait();
                 // after all cage exits, finalize the lind
-                rawposix::safeposix::dispatcher::lindrustfinalize();
+                rawposix_shutdown();
             }
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
@@ -278,12 +430,11 @@ impl RunCommand {
     }
 
     // similar to `execute`` function above, except that this function is used by exec_syscall to execute a wasm module given the path
-    // the only big difference from `execute` function above is that pid and next_cageid are passed as argument instead of hard-coded
+    // the only big difference from `execute` function above is that cageid and next_cageid are passed as argument instead of hard-coded
     fn execute_with_lind(
         mut self,
         lind_manager: Arc<LindCageManager>,
-        pid: i32,
-        next_cageid: Arc<AtomicU64>,
+        cageid: i32,
     ) -> Result<Vec<Val>> {
         let mut config = self.run.common.config(None, None)?;
 
@@ -341,8 +492,7 @@ impl RunCommand {
             &mut store,
             &main,
             lind_manager.clone(),
-            Some(pid),
-            Some(next_cageid),
+            Some(cageid),
         )?;
 
         store.data_mut().limits = self.run.store_limits();
@@ -398,7 +548,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64)
+            self.load_main_module(&mut store, &mut linker, &main, modules, cageid as u64)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -541,7 +691,7 @@ impl RunCommand {
         linker: &mut CliLinker,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
-        pid: u64,
+        cageid: u64,
     ) -> Result<Vec<Val>> {
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
@@ -575,16 +725,73 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker
+                let (instance, cage_instanceid) = linker
                     .instantiate_with_lind(
                         &mut *store,
                         &module,
-                        InstantiateType::InstantiateFirst(pid),
+                        InstantiateType::InstantiateFirst(cageid),
                     )
                     .context(format!(
                         "failed to instantiate {:?}",
                         self.module_and_args[0]
                     ))?;
+
+                // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
+                // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
+                // instance boundaries particularly difficult. To overcome this, the design employs low-level context
+                // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
+                // structures. See more details in [lind-3i/src/lib.rs]
+                // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
+                let cage_storeopaque = store.inner_mut();
+                let cage_instancehandler = cage_storeopaque.instance(cage_instanceid);
+                let vmctx_ptr: *mut c_void = cage_instancehandler.vmctx().cast();
+
+                // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                let vmctx_wrapper = VmCtxWrapper {
+                    vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
+                };
+
+                // 3) Store the vmctx wrapper in the global table for later retrieval during grate calls
+                // This function will be called at either the first cage or exec-ed cages. If there is already
+                // a vmctx stored for this cage id, we remove it first to avoid stale vmctx pointer.
+                if cageid != CAGE_START_ID as u64 {
+                    if !rm_vmctx(cageid) {
+                        panic!(
+                            "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
+                            cageid
+                        );
+                    }
+                }
+                set_vmctx(cageid, vmctx_wrapper);
+
+                // 4) Notify threei of the cage runtime type
+                threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+
+                // 5) Create backup instances to populate the vmctx pool
+                // See more comments in lind-3i/lib.rs
+                for _ in 0..9 {
+                    let (_, backup_cage_instanceid) = linker
+                        .instantiate_with_lind_thread(&mut *store, &module)
+                        .context(format!(
+                            "failed to instantiate {:?}",
+                            self.module_and_args[0]
+                        ))?;
+
+                    // Extract vmctx pointer
+                    let backup_cage_storeopaque = store.inner_mut();
+                    let backup_cage_instancehandler =
+                        backup_cage_storeopaque.instance(backup_cage_instanceid);
+                    let backup_vmctx_ptr: *mut c_void = backup_cage_instancehandler.vmctx().cast();
+
+                    // Put vmctx in a Send+Sync wrapper
+                    let backup_vmctx_wrapper = VmCtxWrapper {
+                        vmctx: NonNull::new(backup_vmctx_ptr)
+                            .ok_or_else(|| anyhow!("null vmctx"))?,
+                    };
+
+                    // Store the vmctx wrapper in the global table for later retrieval during grate calls
+                    set_vmctx(cageid, backup_vmctx_wrapper);
+                }
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.
@@ -611,25 +818,34 @@ impl RunCommand {
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
-                // retrieve the epoch global
-                let lind_epoch = instance
-                    .get_export(&mut *store, "epoch")
-                    .and_then(|export| export.into_global())
-                    .expect("Failed to find epoch global export!");
+                cfg_if! {
+                    // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                    // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                    // This is intended for debugging only and should not be used in production.
+                    if #[cfg(feature = "disable_signals")] {
+                        let pointer = 0;
+                    } else {
+                        // retrieve the epoch global
+                        let lind_epoch = instance
+                            .get_export(&mut *store, "epoch")
+                            .and_then(|export| export.into_global())
+                            .expect("Failed to find epoch global export!");
 
-                // retrieve the handler (underlying pointer) for the epoch global
-                let pointer = lind_epoch.get_handler(&mut *store);
+                        // retrieve the handler (underlying pointer) for the epoch global
+                        let pointer = lind_epoch.get_handler(&mut *store);
+                    }
+                }
 
                 // initialize the signal for the main thread of the cage
-                rawposix::interface::lind_signal_init(
-                    pid,
+                lind_signal_init(
+                    cageid,
                     pointer as *mut u64,
                     THREAD_START_ID,
                     true, /* this is the main thread */
                 );
 
                 // see comments at signal_may_trigger for more details
-                rawposix::interface::signal_may_trigger(pid);
+                signal_may_trigger(cageid);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),
@@ -756,8 +972,7 @@ impl RunCommand {
         store: &mut Store<Host>,
         module: &RunTarget,
         lind_manager: Arc<LindCageManager>,
-        pid: Option<i32>,
-        next_cageid: Option<Arc<AtomicU64>>,
+        cageid: Option<i32>,
     ) -> Result<()> {
         let mut cli = self.run.common.wasi.cli;
 
@@ -880,26 +1095,13 @@ impl RunCommand {
             }
         }
 
-        // attach Lind-Common-Context to the host
-        let shared_next_cageid = Arc::new(AtomicU64::new(1));
-
+        // attach Lind common APIs to the linker
         {
             let linker = match linker {
                 CliLinker::Core(linker) => linker,
                 _ => bail!("lind does not support components yet"),
             };
-            wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker, |host| {
-                host.lind_common_ctx.as_ref().unwrap()
-            })?;
-            if let Some(pid) = pid {
-                store.data_mut().lind_common_ctx = Some(LindCommonCtx::new_with_pid(
-                    pid,
-                    next_cageid.clone().unwrap(),
-                )?);
-            } else {
-                store.data_mut().lind_common_ctx =
-                    Some(LindCommonCtx::new(shared_next_cageid.clone())?);
-            }
+            wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker)?;
         }
 
         // attach Lind-Multi-Process-Context to the host
@@ -910,62 +1112,26 @@ impl RunCommand {
             };
             let module = module.unwrap_core();
 
-            // if pid is set, that means this function is called by execute_with_lind (exec-ed wasm instance)
-            if let Some(pid) = pid {
-                store.data_mut().lind_fork_ctx = Some(LindCtx::new_with_pid(
-                    module.clone(),
-                    linker.clone(),
-                    lind_manager,
-                    self.clone(),
-                    pid,
-                    next_cageid.clone().unwrap(),
-                    |host| host.lind_fork_ctx.as_mut().unwrap(),
-                    |host| host.fork(),
-                    |run_command, path, args, pid, next_cageid, lind_manager, envs| {
-                        // entry point of exec call. Fork self and replace the argument, environment variables and
-                        // execution path and starts execution
-                        let mut new_run_command = run_command.clone();
-                        new_run_command.module_and_args = vec![OsString::from(path)];
-                        if let Some(envs) = envs {
-                            new_run_command.run.vars = envs.clone();
-                        }
-                        for arg in args.iter().skip(1) {
-                            new_run_command.module_and_args.push(OsString::from(arg));
-                        }
-                        new_run_command.execute_with_lind(
-                            lind_manager.clone(),
-                            pid,
-                            next_cageid.clone(),
-                        )
-                    },
-                )?);
-            // if pid is not set, then this function is called by the first wasm instance
-            } else {
-                store.data_mut().lind_fork_ctx = Some(LindCtx::new(
-                    module.clone(),
-                    linker.clone(),
-                    lind_manager,
-                    self.clone(),
-                    shared_next_cageid.clone(),
-                    |host| host.lind_fork_ctx.as_mut().unwrap(),
-                    |host| host.fork(),
-                    |run_command, path, args, pid, next_cageid, lind_manager, envs| {
-                        let mut new_run_command = run_command.clone();
-                        new_run_command.module_and_args = vec![OsString::from(path)];
-                        if let Some(envs) = envs {
-                            new_run_command.run.vars = envs.clone();
-                        }
-                        for arg in args.iter().skip(1) {
-                            new_run_command.module_and_args.push(OsString::from(arg));
-                        }
-                        new_run_command.execute_with_lind(
-                            lind_manager.clone(),
-                            pid,
-                            next_cageid.clone(),
-                        )
-                    },
-                )?);
-            }
+            store.data_mut().lind_fork_ctx = Some(LindCtx::new(
+                module.clone(),
+                linker.clone(),
+                lind_manager,
+                self.clone(),
+                cageid,
+                |host| host.lind_fork_ctx.as_mut().unwrap(),
+                |host| host.fork(),
+                |run_command, path, args, cageid, lind_manager, envs| {
+                    let mut new_run_command = run_command.clone();
+                    new_run_command.module_and_args = vec![OsString::from(path)];
+                    if let Some(envs) = envs {
+                        new_run_command.run.vars = envs.clone();
+                    }
+                    for arg in args.iter().skip(1) {
+                        new_run_command.module_and_args.push(OsString::from(arg));
+                    }
+                    new_run_command.execute_with_lind(lind_manager.clone(), cageid)
+                },
+            )?);
         }
 
         // must create wasi_threads context here, because pre_instance requires all
@@ -1072,7 +1238,6 @@ struct Host {
     // access.
     preview2_ctx: Option<Arc<Mutex<wasmtime_wasi::preview1::WasiP1Ctx>>>,
 
-    lind_common_ctx: Option<LindCommonCtx>,
     lind_fork_ctx: Option<LindCtx<Host, RunCommand>>,
 
     #[cfg(feature = "wasi-nn")]
@@ -1114,11 +1279,6 @@ impl Host {
             None => None,
         };
 
-        let forked_lind_common_ctx = match &self.lind_common_ctx {
-            Some(ctx) => Some(ctx.fork()),
-            None => None,
-        };
-
         // besides preview1_ctx, lind_common_ctx and forked_lind_fork_ctx, we do not
         // care about other context since they are not used by glibc so we can just share
         // them between processes
@@ -1126,7 +1286,6 @@ impl Host {
             preview1_ctx: forked_preview1_ctx,
             preview2_ctx: self.preview2_ctx.clone(),
             lind_fork_ctx: forked_lind_fork_ctx,
-            lind_common_ctx: forked_lind_common_ctx,
             #[cfg(feature = "wasi-nn")]
             wasi_nn: self.wasi_nn.clone(),
             #[cfg(feature = "wasi-threads")]

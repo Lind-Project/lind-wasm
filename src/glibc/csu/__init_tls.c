@@ -99,7 +99,7 @@ static inline struct stack_bounds get_stack_bounds()
 	struct stack_bounds bounds;
 
 	if (&__stack_high) {
-		bounds.base = &__stack_high;
+		bounds.base = &__stack_low;
 		bounds.size = &__stack_high - &__stack_low;
 	} else {
 		unsigned char *sp;

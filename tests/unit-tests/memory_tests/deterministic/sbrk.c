@@ -13,9 +13,6 @@ int main() {
         return 1;
     }
 
-    printf("Initial program break: %p\n", initial_brk);
-    printf("New program break after allocation: %p\n", sbrk(0));
-
     // Use the allocated memory
     char *buffer = (char *)new_brk;
     strcpy(buffer, "Hello, sbrk memory!");
@@ -26,8 +23,6 @@ int main() {
         perror("sbrk failed to deallocate");
         return 1;
     }
-
-    printf("Program break after deallocation: %p\n", sbrk(0));
 
     return 0;
 }

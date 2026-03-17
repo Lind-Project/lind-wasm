@@ -13,6 +13,7 @@ call needs to know which fds should be closed and which should be retained.
 ```
 # use fdtables::*;
 # let cage_id = threei::TESTING_CAGEID;
+# init_empty_cage(cage_id);
 # let fdkind: u32 = 0;
 # let underfd: u64 = 10;
 // Acquire a virtual fd...

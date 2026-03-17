@@ -18,10 +18,11 @@
 #include <sys/socket.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 listen (int fd, int backlog)
 {
-   return MAKE_SYSCALL(39, "syscall|listen", (uint64_t) fd, (uint64_t) backlog, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_LEGACY_SYSCALL(LISTEN_SYSCALL, "syscall|listen", (uint64_t) fd, (uint64_t) backlog, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (listen, __listen);

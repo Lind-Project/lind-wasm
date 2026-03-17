@@ -1,5 +1,20 @@
-clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/
+#Ignore both files and folders beginning with clang+llvm
+clang+llvm-*/
+clang+llvm-*
+
+#Ignore WebAssembly artifacts
 *.wasm
 *.cwasm
+
+#Ignore Build artifacts
 src/glibc/build/
-src/RawPOSIX/tmp/
+build/
+lindfs/
+scripts/object_lists_final/
+
+#Ignore testing results
+e2e_status
+reports/
+
+#Ignore python cache
+__pycache__/

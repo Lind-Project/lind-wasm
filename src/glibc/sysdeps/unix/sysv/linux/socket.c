@@ -18,19 +18,18 @@
 #include <sys/socket.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __socket (int fd, int type, int domain)
 {
-
 // #ifdef __ASSUME_SOCKET_SYSCALL
 //   return INLINE_SYSCALL_CALL (socket, fd, type, domain);
 // #else
 //   return SOCKETCALL (socket, fd, type, domain);
 // #endif
-
   // Dennis Edit
-  return MAKE_SYSCALL(136, "syscall|socket", (uint64_t) fd, (uint64_t) type, (uint64_t) domain, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL(SOCKET_SYSCALL, "syscall|socket", (uint64_t) fd, (uint64_t) type, (uint64_t) domain, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__socket)
 weak_alias (__socket, socket)

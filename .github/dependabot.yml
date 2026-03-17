@@ -1,0 +1,29 @@
+# Dependabot configuration for keeping GitHub Actions in '.github/workflows' up to date.
+# 
+# Schedule: Weekly, Wednesday 12:00 New York time
+#
+# labels: these labels will be applied to any PR made by dependabot
+#
+# Commit Message: 
+# This will create an automatic commit message for each commit.
+#
+# Example Message:
+# deps(gha): bump actions from v1.1.1 to v1.1.2
+#
+
+version: 2
+updates:
+- package-ecosystem: "github-actions" # See documentation for possible values
+  directory: "/.github/workflows" # Scanning for workflows only
+  schedule:
+    interval: "weekly"
+    day: "wednesday"
+    time: "12:00"
+    timezone: "America/New_York"
+  labels:
+      - "dependabot"
+      - "gha"
+      - "automated"
+  commit-message:
+    prefix: "deps(gha)"
+    include: "scope"

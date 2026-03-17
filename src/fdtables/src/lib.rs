@@ -1530,12 +1530,29 @@ mod tests {
 
         let arg_fd1 = 5; // fd1 should look for free fd starting from this arguments
         let arg_fd2 = 10; // fd2 should look for free fd starting from this arguments
-                          // Acquire a virtual fd...
-        let my_virt_fd =
-            get_unused_virtual_fd_from_arg(threei::TESTING_CAGEID, 1, 2, false, 3, arg_fd1)
-                .unwrap();
-        let my_virt_fd2 =
-            get_unused_virtual_fd_from_arg(threei::TESTING_CAGEID, 7, 8, true, 9, arg_fd2).unwrap();
+
+        // Acquire a virtual fd...
+        // NEW API CALLS (6 arguments now)
+        let my_virt_fd = get_unused_virtual_fd_from_startfd(
+            threei::TESTING_CAGEID,
+            1,       // fdkind
+            2,       // underfd
+            false,   // should_cloexec
+            3,       // perfdinfo
+            arg_fd1, // startfd
+        )
+        .unwrap();
+
+        let my_virt_fd2 = get_unused_virtual_fd_from_startfd(
+            threei::TESTING_CAGEID,
+            7,       // fdkind
+            8,       // underfd
+            true,    // should_cloexec
+            9,       // perfdinfo
+            arg_fd2, // startfd
+        )
+        .unwrap();
+
         // Check if fd and fd2 is starting from corresponding args
         assert_eq!(my_virt_fd, 5);
         assert_eq!(my_virt_fd2, 10);
@@ -1549,6 +1566,7 @@ mod tests {
             },
             translate_virtual_fd(threei::TESTING_CAGEID, my_virt_fd).unwrap()
         );
+
         assert_eq!(
             FDTableEntry {
                 fdkind: 7,

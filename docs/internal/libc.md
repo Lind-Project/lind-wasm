@@ -50,6 +50,18 @@ glibc automatically generates `.s` files for certain system calls. To address th
 - **Implement `BYTE_COPY_FWD` and `BYTE_COPY_BWD`**: These functions were implemented in C without relying on `memcpy` or `memmove` to ensure compatibility with the WASM environment.
 - **Disable `attribute_relro`**: The original C code places the vtable into the `relro` section in the binary. Since WebAssembly binaries do not have this section, the attribute was disabled.
 
+### 1.5 Replacing Auto-Generated Assembly in `i386` Sysdeps
+
+In upstream glibc, the `sysdeps/unix/sysv/linux/i386` directory (including `i686`) uses build-time rules to generate `.S` assembly files that implement syscall stubs and other low-level glue. This relies on a native assembler and does not work when targeting WebAssembly.
+
+In this tree, the syscall implementations that glibc normally provides via generated `.S` files are replaced with C implementations in the `i386` / `i686` sysdeps. These implementations use `MAKE_LEGACY_SYSCALL`, which is the syscall wrapper used in the current lind-glibc tree.
+
+System calls issued via `MAKE_LEGACY_SYSCALL` pass through the Wasmtime runtime layer and the 3i routing layer before being forwarded to `rawposix`, reflecting the intended Lind/WASM execution model.
+
+As a result of these changes, glibc no longer generates or compiles assembly for the `i386` sysdeps. The library is built using a Lind-specific glibc build configuration targeting WASM, with all changes localized to the `i386` Linux sysdeps.
+
+
+
 ## 2. Modifications and Additions to `crt1.c` for WASI
 
 ### 2.1 WASI-Specific Function Wrappers

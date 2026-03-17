@@ -338,8 +338,15 @@ pub struct StoreOpaque {
     host_globals: Vec<StoreBox<VMHostGlobalContext>>,
 
     asyncify_state: AsyncifyState,
+    // signal asyncify data, holds the sequence of the parameters for signal handler
     signal_asyncify_data: Vec<SignalAsyncifyData>,
     signal_asyncify_counter: u64,
+    // syscall asyncify data, holds the sequence of syscall return values
+    // used to preserve syscall results across asyncify unwind/rewind cycles
+    // (e.g., when fork is called within a signal handler that interrupted a syscall)
+    syscall_asyncify_data: Vec<i32>,
+    syscall_asyncify_counter: u64,
+
     // stack top
     stack_top: u64,
     // stack bottom
@@ -548,6 +555,8 @@ impl<T> Store<T> {
                 asyncify_state: super::AsyncifyState::Normal,
                 signal_asyncify_data: Vec::new(),
                 signal_asyncify_counter: 0,
+                syscall_asyncify_data: Vec::new(),
+                syscall_asyncify_counter: 0,
                 #[cfg(feature = "component-model")]
                 num_component_instances: 0,
                 signal_handler: None,
@@ -660,6 +669,8 @@ impl<T> Store<T> {
             asyncify_state: super::AsyncifyState::Normal,
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
+            syscall_asyncify_data: Vec::new(),
+            syscall_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
             num_component_instances: 0,
             signal_handler: None,
@@ -1426,6 +1437,39 @@ impl<'a, T> StoreContextMut<'a, T> {
     pub fn set_signal_asyncify_data(&mut self, data: Vec<SignalAsyncifyData>) {
         self.0.signal_asyncify_data = data;
         self.0.signal_asyncify_counter = 0;
+    }
+
+    // append the syscall retval information
+    pub fn append_syscall_asyncify_data(&mut self, retval: i32) {
+        self.0.syscall_asyncify_data.push(retval);
+    }
+
+    // pop the syscall retval information
+    pub fn pop_syscall_asyncify_data(&mut self) {
+        self.0.syscall_asyncify_data.pop();
+    }
+
+    // get the current syscall retval information
+    pub fn get_current_syscall_rewind_data(&mut self) -> Option<i32> {
+        let data = self
+            .0
+            .syscall_asyncify_data
+            .get(self.0.syscall_asyncify_counter as usize)
+            .cloned();
+        let length = self.0.syscall_asyncify_data.len();
+        if self.0.syscall_asyncify_counter == (length - 1) as u64 {
+            self.0.syscall_asyncify_counter = 0;
+        } else {
+            self.0.syscall_asyncify_counter += 1;
+        }
+        data
+    }
+
+    // set the syscall retval information
+    // used by fork to copy asyncify information
+    pub fn set_syscall_asyncify_data(&mut self, data: Vec<i32>) {
+        self.0.syscall_asyncify_data = data;
+        self.0.syscall_asyncify_counter = 0;
     }
 
     /// get stack top
@@ -2294,7 +2338,13 @@ impl StoreOpaque {
         let mut fault = None;
         for instance in self.instances.iter() {
             if let Some(f) = instance.handle.wasm_fault(addr) {
-                assert!(fault.is_none());
+                // Multiple instances may share the same linear memory (e.g.,
+                // backup VMContext pool instances import the same shared memory).
+                // Return the first match — all shared instances report identical
+                // fault info so subsequent matches can be skipped.
+                if fault.is_some() {
+                    continue;
+                }
                 fault = Some(f);
             }
         }
@@ -2980,6 +3030,10 @@ impl<T> StoreInner<T> {
     // get the signal asyncify information
     pub fn get_signal_asyncify_data(&mut self) -> Vec<SignalAsyncifyData> {
         self.signal_asyncify_data.clone()
+    }
+
+    pub fn get_syscall_asyncify_data(&mut self) -> Vec<i32> {
+        self.syscall_asyncify_data.clone()
     }
 
     pub fn is_thread(&self) -> bool {

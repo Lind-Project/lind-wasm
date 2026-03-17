@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <assert.h>
 
 const char* VALID_SYMBOLIC_PATH = "testfiles/readlinkfile";
 const char* NON_SYMBOLIC_PATH = "testfiles/fstatfile.txt";
@@ -15,43 +16,31 @@ void test_readlinkat() {
 
     // Test Case 1: Valid symbolic link with AT_FDCWD
     len = readlinkat(AT_FDCWD, VALID_SYMBOLIC_PATH, buf, sizeof(buf));
-    if (len != -1) {
-        buf[len] = '\0'; // Null-terminate the result
-        printf("Test Case 1: Symbolic link points to: %s\n", buf);
-    } else {
-        perror("Test Case 1 failed");
-    }
+    assert(len != -1 && "Test Case 1: readlinkat should succeed");
+    buf[len] = '\0';
+    assert(strcmp(buf, "readlinkfile.txt") == 0 && "Test Case 1: wrong symlink target");
+    printf("Test Case 1: PASS\n");
 
     // Test Case 2: Valid symbolic link with a file descriptor
     int dirfd = open("testfiles/", O_RDONLY);
-    if (dirfd == -1) {
-        perror("Failed to open directory");
-        return;
-    }
-    len = readlinkat(dirfd, VALID_SYMBOLIC_PATH, buf, sizeof(buf));
-    if (len != -1) {
-        buf[len] = '\0'; // Null-terminate the result
-        printf("Test Case 2: Symbolic link points to: %s\n", buf);
-    } else {
-        perror("Test Case 2 failed");
-    }
-    close(dirfd);
+    assert(dirfd != -1 && "Failed to open directory");
+
+    len = readlinkat(dirfd, "readlinkfile", buf, sizeof(buf));
+    assert(len != -1 && "Test Case 2: readlinkat should succeed");                                                                    
+    buf[len] = '\0';                                                                                                                  
+    assert(strcmp(buf, "readlinkfile.txt") == 0 && "Test Case 2: wrong symlink target");                                              
+    printf("Test Case 2: PASS\n");                                                                                                    
+    close(dirfd);  
 
     // Test Case 3: Non-existent symbolic link
     len = readlinkat(AT_FDCWD, NON_EXISTENT_PATH, buf, sizeof(buf));
-    if (len == -1) {
-        printf("Test Case 3: Expected failure: %s\n", strerror(errno));
-    } else {
-        printf("Test Case 3 failed: Unexpectedly succeeded\n");
-    }
+    assert(len == -1 && errno == ENOENT && "Test Case 3: should fail with ENOENT");                                                   
+    printf("Test Case 3: PASS\n"); 
 
     // Test Case 4: Invalid file descriptor
     len = readlinkat(-1, VALID_SYMBOLIC_PATH, buf, sizeof(buf));
-    if (len == -1) {
-        printf("Test Case 4: Expected failure: %s\n", strerror(errno));
-    } else {
-        printf("Test Case 4 failed: Unexpectedly succeeded\n");
-    }
+    assert(len == -1 && (errno == EBADF || errno == EINVAL) && "Test Case 4: should fail with EBADF/EINVAL");                         
+    printf("Test Case 4: PASS\n");
 }
 
 int main() {

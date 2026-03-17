@@ -1,0 +1,338 @@
+use crate::fs_calls::kernel_close;
+use crate::sys_calls::exit_group_syscall;
+use crate::syscall_table::*;
+use cage::{add_cage, cagetable_clear, cagetable_init, timer::IntervalTimer, Cage, Vmmap};
+use dashmap::DashMap;
+use fdtables;
+use parking_lot::{Mutex, RwLock};
+use std::ffi::CString;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
+use std::sync::Arc;
+use sysdefs::constants::{
+    EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
+    STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
+};
+use threei::{
+    copy_data_between_cages, copy_handler_table_to_cage, register_handler,
+    COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, REGISTER_HANDLER_SYSCALL,
+    RUNTIME_TYPE_WASMTIME,
+};
+
+/// Function signature for a RawPOSIX syscall handler.
+///
+/// This is the low-level ABI used by the 3i dispatcher to invoke
+/// RawPOSIX syscall implementations.
+///
+/// Semantics:
+/// - `target_cageid` identifies the cage whose syscall is being executed.
+/// - `argN` is the raw syscall argument value.
+/// - `argN_cageid` indicates where `argN` should be interpreted from.
+pub type RawCallFunc = extern "C" fn(
+    target_cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32;
+
+/// Register all RawPOSIX syscall handlers for a given cage.
+///
+/// This function walks the global `SYSCALL_TABLE` and registers each syscall
+/// implementation with the 3i dispatcher. This function first converts each
+/// RawPOSIX Rust function pointer into a raw `u64` address. Then, registers
+/// the handler with runtime metadata (runtime type, e.g. Wasmtime, cageid).
+///
+/// Parameters:
+/// - `self_cageid`: the cage for which syscalls are being registered.
+///
+/// Returns:
+/// - 0 on success (mirrors underlying registration API).
+/// - Panics on failure.
+pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
+    let mut ret = 0;
+    // Walk through the syscall table
+    for &(sysno, func) in SYSCALL_TABLE.iter() {
+        // Convert to u64 func ptr
+        let impl_fn_ptr = func as *const () as u64;
+        // Register to handler table in 3i
+        ret = register_handler(
+            UNUSED_ID,
+            RAWPOSIX_CAGEID,       // target cageid for this syscall handler
+            self_cageid,           // cage to modify: current cageid
+            sysno,                 // target callnum
+            RUNTIME_TYPE_WASMTIME, // runtime id
+            RAWPOSIX_CAGEID,       // handler function is in the RawPOSIX
+            impl_fn_ptr,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+        );
+        if ret != 0 {
+            panic!(
+                "register_rawposix_syscall: failed to register syscall {} handler, return code {}",
+                sysno, ret
+            );
+        }
+    }
+    ret
+}
+
+/// Register 3i-specific syscall handlers for a given cage.
+///
+/// Unlike `register_rawposix_syscall`, which registers POSIX-level
+/// syscall implementations under `RAWPOSIX_CAGEID`, this function
+/// registers *3i-specific operations* under `THREEI_CAGEID`.
+///
+/// Specifically, this includes meta-level operations such as:
+/// - `register_handler`
+/// - `copy_data_between_cages`
+/// - `copy_handler_table_to_cage`
+///
+/// By registering them under `THREEI_CAGEID`, those syscalls can be
+/// interposed and routed through 3i's internal logic, allowing for
+/// features like multiple interposition for all syscalls (ie: strace).
+///
+/// ## Parameters
+/// - `self_cageid`: the cage in which these 3i control handlers
+///   are being registered.
+///
+/// ## Returns
+/// - 0 on success.
+/// - Panics if registration of either handlers fails.
+pub fn register_threei_syscall(self_cageid: u64) -> i32 {
+    // Register `register_handler` syscall for this cage
+    let fp_register = register_handler as *const () as usize as u64;
+    let register_ret = register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
+        REGISTER_HANDLER_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_register,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    // Register `copy_data_between_cages` syscall for this cage
+    let fp_copy_data = copy_data_between_cages as *const () as usize as u64;
+    let copy_data_ret = register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
+        COPY_DATA_BETWEEN_CAGES_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_copy_data,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    // Register `copy_handler_table_to_cage` syscall for this cage
+    let fp_copy_handler_table = copy_handler_table_to_cage as *const () as usize as u64;
+    let copy_handler_table_ret = register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID, // target cageid for this syscall handler
+        self_cageid,   // cage to modify: current cageid
+        COPY_HANDLER_TABLE_TO_CAGE_SYSCALL,
+        RUNTIME_TYPE_WASMTIME, // runtime id
+        THREEI_CAGEID,         // handler function is in the 3i
+        fp_copy_handler_table,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    // Check registration results and panic if either fails
+    if register_ret != 0 || copy_data_ret != 0 || copy_handler_table_ret != 0 {
+        panic!(
+            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_data_ret {}, copy_handler_table_ret {}",
+            register_ret, copy_data_ret, copy_handler_table_ret
+        );
+    }
+    0
+}
+
+/// No-op signal handler for SIGUSR2. Its sole purpose is to interrupt
+/// blocking host syscalls (causing EINTR) so threads can re-enter wasm
+/// and notice they've been killed via epoch_kill_all.
+/// This is a host-process-level handler installed once — it is inherited
+/// by all OS threads, so it does not need per-cage installation.
+extern "C" fn noop_signal_handler(_sig: libc::c_int) {}
+
+/// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
+/// detailed error messages will be printed if set.
+///
+/// This function is called by the host runtime (e.g., Wasmtime) during startup
+/// to bootstrap the RawPOSIX environment.
+///
+/// This function will do following things:
+/// 1. Initialize global state (verbosity, cage table, virtual file descriptor tables).
+/// 2. Register syscall handlers for the init cage.
+/// 3. Ensure standard file descriptors (0, 1, 2) are always valid.
+/// 4. Create and register the init cage (cageid 1 equivalent).
+///
+/// - The init cage is self-parented.
+/// - STDIN/STDOUT/STDERR are force-initialized to avoid undefined behavior
+///   in guest programs.
+///
+/// Parameters:
+/// - `verbosity`: controls runtime logging verbosity.
+pub fn rawposix_start(verbosity: isize) {
+    let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
+
+    // Install a no-op SIGUSR2 handler at the host-process level (once).
+    // All OS threads inherit it. epoch_kill_all sends SIGUSR2 via tkill
+    // to threads blocked in host syscalls (futex_wait, read, etc.) so
+    // they return EINTR and re-enter wasm where the epoch kill is noticed.
+    unsafe {
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = noop_signal_handler as usize;
+        sa.sa_flags = 0;
+        libc::sigemptyset(&mut sa.sa_mask);
+        libc::sigaction(libc::SIGUSR2, &sa, std::ptr::null_mut());
+    }
+
+    // init cage table
+    cagetable_init();
+
+    // register kernel close to fdtables
+    fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
+
+    // register syscalls for init cage
+    register_rawposix_syscall(INIT_CAGEID);
+
+    register_threei_syscall(INIT_CAGEID);
+
+    // Set up standard file descriptors for the init cage
+    let dev_null = CString::new("/dev/null").unwrap();
+
+    // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
+    // Standard input (fd = 0) is redirected to /dev/null
+    // Standard output (fd = 1) is redirected to /dev/null
+    // Standard error (fd = 2) is set to copy of stdout
+    unsafe {
+        libc::open(dev_null.as_ptr(), libc::O_RDONLY);
+        libc::open(dev_null.as_ptr(), libc::O_WRONLY);
+        libc::dup(1);
+    }
+
+    //init cage is its own parent
+    let initcage = Cage {
+        cageid: INIT_CAGEID,
+        cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+        parent: INIT_CAGEID,
+        rev_shm: Mutex::new(Vec::new()),
+        main_threadid: RwLock::new(0),
+        interval_timer: IntervalTimer::new(INIT_CAGEID),
+        epoch_handler: DashMap::new(),
+        os_tid_map: DashMap::new(),
+        signalhandler: DashMap::new(),
+        pending_signals: RwLock::new(vec![]),
+        sigset: AtomicU64::new(0),
+        zombies: RwLock::new(vec![]),
+        child_num: AtomicU64::new(0),
+        vmmap: RwLock::new(Vmmap::new()),
+        final_exit_status: RwLock::new(None),
+        exit_group_initiated: AtomicBool::new(false),
+        is_dead: AtomicBool::new(false),
+        grate_inflight: AtomicU64::new(0),
+    };
+
+    // Add cage to cagetable
+    add_cage(
+        INIT_CAGEID, // cageid
+        initcage,
+    );
+
+    // init fdtables for init cage
+    fdtables::init_empty_cage(INIT_CAGEID);
+    // Set the first 3 fd to STDIN / STDOUT / STDERR
+    // STDIN
+    fdtables::get_specific_virtual_fd(
+        INIT_CAGEID,
+        STDIN_FILENO as u64,
+        FDKIND_KERNEL,
+        STDIN_FILENO as u64,
+        false,
+        0,
+    )
+    .unwrap();
+    // STDOUT
+    fdtables::get_specific_virtual_fd(
+        INIT_CAGEID,
+        STDOUT_FILENO as u64,
+        FDKIND_KERNEL,
+        STDOUT_FILENO as u64,
+        false,
+        0,
+    )
+    .unwrap();
+    // STDERR
+    fdtables::get_specific_virtual_fd(
+        INIT_CAGEID,
+        STDERR_FILENO as u64,
+        FDKIND_KERNEL,
+        STDERR_FILENO as u64,
+        false,
+        0,
+    )
+    .unwrap();
+}
+
+/// Shut down the RawPOSIX runtime.
+///
+/// This function will check the global cage table and issue an `exit` syscall
+/// for each remaining cage in the table.
+///
+/// Notes:
+/// - The exit syscall in shutdown function is always issued on the main
+/// thread (threadid = 1).
+pub fn rawposix_shutdown() {
+    let exitvec = cagetable_clear();
+
+    for cageid in exitvec {
+        exit_group_syscall(
+            cageid as u64,       // target cageid
+            EXIT_SUCCESS as u64, // status arg
+            cageid as u64,       // status arg's cageid
+            MAIN_THREADID,       // always main thread
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+    }
+}

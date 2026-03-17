@@ -4,60 +4,57 @@ id: Overview
 
 # Lind-Wasm
 
-Lind is a single-process sandbox that provides an option to safely execute programs. Lind executes applications using software fault isolation and a kernel microvisor to limit the potential of reaching bugs or security flaws in the application.
+Lind is a sandboxing system that runs multiple mutually untrusted applications within a single, unprivileged Linux process. Each application executes in an isolated execution context, called a cage, with its own memory, control flow, and system call behavior.
 
-In Old Norse, Old High German and Old English a "lind" is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which employs two technologies.
+Unlike traditional process isolation, Lind provides strong intra-process isolation while preserving POSIX semantics and avoiding kernel modifications or privileged execution.
 
-## Core Concepts
+In Old Norse, Old High German, and Old English, a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight and resistant to splitting — an appropriate metaphor for a sandboxing system built from layered isolation technologies.
 
-- **Cage**: Lightweight isolation boundary within a process
-    - Can run legacy code (may need recompilation)
-    - Protects and isolates memory
-- **Microvisor**: Small POSIX compliant kernel within a process
-    - Provides a POSIX interface
-    - Distinct isolation between cages
-- **3i (three eye)**: Capability-based POSIX interfaces between cages
+Lind-Wasm is a realization of Lind that uses WebAssembly for software fault isolation and a small trusted runtime to enforce isolation and mediate system calls.
 
 ## Technology Overview
 
 ### Cages
-Memory and bookkeeping that encapsulates the idea of a typical OS process, encompassing applications as well as grates.
+
+A cage is an isolated execution context within the Lind process. Conceptually, a cage is similar to a Linux process, but multiple cages coexist within a single host process.
+
+Applications are recompiled to WebAssembly and linked against a modified glibc so that all system calls are issued through 3i. Most applications require no source-level changes.
+
+Each cage has:
+- isolated memory and control flow
+- its own system call routing configuration
+- POSIX-like process and thread semantics
 
 ### Grates
-Can perform trusted operations on descendant cages without requiring code in the microvisor's TCB. Grates can run arbitrary code, with restrictions only placed by grates beneath them. The microvisor implements a grate with access to call into the Linux kernel.
 
-**Inheritance Properties**:
+A grate is a cage whose primary purpose is to intercept and handle system calls issued by other cages. Lind makes no distinction between cages and grates at the mechanism level; any cage may act as a grate by registering system call handlers.
 
-- A child inherits system calls from parent on fork
-- If cage A was forked by cage B, cage A will have the same system call handlers as cage B
-- If grate A was forkinterpose()'d by grate B, grate A inherits B's system call behavior changes
+Grates are commonly used to implement policy and system services outside the trusted runtime. They are lightweight, composable, and run entirely in user space.
 
-### 3i System
-The 3i system serves as:
+### 3i
 
-- Central point for all communication between cages
-- Table container for system call routing
-- Security control mechanism for system call interception
-- Privilege management system for blocking unnecessary calls
+The Intercage Interposition Interface (3i) provides a programmable system call routing mechanism between cages, grates, and the microvisor.
+
+Each cage has its own system call table, which may route system calls to:
+- another cage acting as a grate
+- or the microvisor
+
+3i enables interception, delegation, filtering, and mediation of system calls without modifying kernel code.
+
+### Microvisor (RawPOSIX)
+
+RawPOSIX is a small, trusted runtime component that provides POSIX-compatible system call implementations on behalf of cages. It runs entirely within the unprivileged Lind process and is responsible for interacting with the host kernel.
 
 ## Components
 
 ### Wasmtime
-Wasmtime is a fast and secure runtime for WebAssembly designed by Bytecode Alliance. Lind-wasm uses wasmtime as a runtime with added support for multi-processing via Asyncify.
+
+Lind-Wasm uses [Wasmtime](https://github.com/bytecodealliance/wasmtime) as the WebAssembly runtime responsible for executing cages. Wasmtime provides fast execution, memory isolation, and a well-defined embedding API.
 
 ### lind-glibc
 
-We’ve ported glibc so that it can be compiled to wasm bytecode and linked with any wasm binary. This includes minor changes like replacing assembly code, and add a mechansim to transfer system calls to the trusted runtime and microvisor.
-
-### RawPOSIX
-Provides normal POSIX system calls including:
-
-- Signals
-- Fork/exec
-- Threading
-- File system
-- Networking
-- Separate handling of cages' fds and threads
+Lind includes a modified glibc that can be compiled to WebAssembly. The modifications remove architecture-specific assembly and redirect system calls through 3i using a uniform 64-bit calling convention.
 
 ### 3i Implementation
-The iPC (intra-process call) interposable interface enables secure and efficient cage communication with function call-like speed. It provides POSIX interfaces between cages with interposition capabilities, enabling fine-grained security and access control while maintaining program behavior.
+
+The 3i implementation provides the core system call routing and interposition mechanism used by both application cages and grates.

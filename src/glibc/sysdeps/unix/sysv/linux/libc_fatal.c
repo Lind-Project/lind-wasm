@@ -24,12 +24,13 @@
 static bool
 writev_for_fatal (int fd, const struct iovec *iov, size_t niov, size_t total)
 {
+  // replaced INTERNAL_SYSCALL_CALL with writev()
+  // to resolve malloc_printerr() failure
   ssize_t cnt;
   do
-    cnt = INTERNAL_SYSCALL_CALL (writev, fd, iov, niov);
-  while (INTERNAL_SYSCALL_ERROR_P (cnt)
-         && INTERNAL_SYSCALL_ERRNO (cnt) == EINTR);
-  return cnt == total;
+    cnt = writev(fd, iov, niov);
+  while (cnt == -1 && errno == EINTR);
+  return cnt == (ssize_t)total;
 }
 #define WRITEV_FOR_FATAL	writev_for_fatal
 

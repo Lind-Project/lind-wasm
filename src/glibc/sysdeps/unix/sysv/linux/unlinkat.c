@@ -20,12 +20,16 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Remove the link named NAME in the directory referred to by DIRFD, using FLAGS.  */
 int
 __unlinkat (int dirfd, const char *name, int flags)
 {
-   return MAKE_SYSCALL(3, "syscall|unlinkat", (uint64_t) dirfd, (uint64_t) name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
+   uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
+   
+   return MAKE_LEGACY_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t) dirfd, host_name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias (__unlinkat, unlinkat)

@@ -1,82 +1,95 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-// Base vtable definition
+#define EPS 1e-6
+
 typedef struct ShapeVTable {
     double (*area)(void *self);
 } ShapeVTable;
 
-// Base structure definition
 typedef struct Shape {
     const ShapeVTable *vtable;
 } Shape;
 
-// Rectangle structure definition
 typedef struct {
     Shape base;
     double width;
     double height;
 } Rectangle;
 
-// Circle structure definition
 typedef struct {
     Shape base;
     double radius;
 } Circle;
 
-// Function implementations for Rectangle
 double rectangle_area(void *self) {
-    Rectangle *rectangle = (Rectangle *)self;
-    return rectangle->width * rectangle->height;
+    Rectangle *r = (Rectangle *)self;
+    return r->width * r->height;
 }
 
-// Function implementations for Circle
 double circle_area(void *self) {
-    Circle *circle = (Circle *)self;
-    return M_PI * circle->radius * circle->radius;
+    Circle *c = (Circle *)self;
+    return M_PI * c->radius * c->radius;
 }
 
-// Vtable instances
 ShapeVTable rectangle_vtable = { rectangle_area };
 ShapeVTable circle_vtable = { circle_area };
 
-// Helper functions to create shapes
 Rectangle *create_rectangle(double width, double height) {
-    Rectangle *rectangle = malloc(sizeof(Rectangle));
-    rectangle->base.vtable = &rectangle_vtable;
-    rectangle->width = width;
-    rectangle->height = height;
-    return rectangle;
+    Rectangle *r = malloc(sizeof(Rectangle));
+    r->base.vtable = &rectangle_vtable;
+    r->width = width;
+    r->height = height;
+    return r;
 }
 
 Circle *create_circle(double radius) {
-    Circle *circle = malloc(sizeof(Circle));
-    circle->base.vtable = &circle_vtable;
-    circle->radius = radius;
-    return circle;
+    Circle *c = malloc(sizeof(Circle));
+    c->base.vtable = &circle_vtable;
+    c->radius = radius;
+    return c;
 }
 
-// Function to calculate area using dynamic dispatch
 double shape_area(Shape *shape) {
     return shape->vtable->area(shape);
 }
 
-// Main function to demonstrate the usage
-int main() {
-    Shape *shapes[2];
-    shapes[0] = (Shape *)create_rectangle(3.0, 4.0);
-    shapes[1] = (Shape *)create_circle(2.5);
+int main(void) {
+    Rectangle *rect = create_rectangle(3.0, 4.0);
+    Circle *circ = create_circle(2.5);
 
-    for (int i = 0; i < 2; i++) {
-        printf("Shape %d area: %f\n", i, shape_area(shapes[i]));
+    if (rect->base.vtable->area != rectangle_area) {
+        fprintf(stderr, "vtable test failed: rectangle vtable does not dispatch to rectangle_area\n");
+        free(rect);
+        free(circ);
+        return 1;
+    }
+    if (circ->base.vtable->area != circle_area) {
+        fprintf(stderr, "vtable test failed: circle vtable does not dispatch to circle_area\n");
+        free(rect);
+        free(circ);
+        return 1;
     }
 
-    // Clean up
-    for (int i = 0; i < 2; i++) {
-        free(shapes[i]);
+    double rect_area = shape_area((Shape *)rect);
+    double circ_area = shape_area((Shape *)circ);
+
+    if (fabs(rect_area - 12.0) > EPS) {
+        fprintf(stderr, "vtable test failed: rectangle area mismatch\n");
+        free(rect);
+        free(circ);
+        return 1;
+    }
+    double expected_circ = M_PI * 2.5 * 2.5;
+    if (fabs(circ_area - expected_circ) > EPS) {
+        fprintf(stderr, "vtable test failed: circle area mismatch\n");
+        free(rect);
+        free(circ);
+        return 1;
     }
 
+    free(rect);
+    free(circ);
     return 0;
 }
-

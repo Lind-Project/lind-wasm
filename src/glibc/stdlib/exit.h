@@ -46,7 +46,7 @@ struct exit_function
 	  } on;
 	struct
 	  {
-	    void (*fn) (void *arg, int status);
+	    void (*fn) (void *arg);
 	    void *arg;
 	    void *dso_handle;
 	  } cxa;

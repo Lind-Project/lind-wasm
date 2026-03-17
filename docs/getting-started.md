@@ -12,11 +12,11 @@ Run the following commands in your terminal to download and shell into an enviro
 that comes with the Lind Sandbox. *You'll need [Docker installed](https://docs.docker.com/engine/install/).*
 
 ```
-docker pull --platform=linux/amd64 securesystemslab/lind-wasm  # this might take a while ...
-docker run --platform=linux/amd64 -it securesystemslab/lind-wasm /bin/bash
+docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev  # this might take a while ...
+docker run --platform=linux/amd64 -it securesystemslab/lind-wasm-dev /bin/bash
 ```
 
-There is a development environment with tooling and source code available, instructions to be found [here](contribute/dev-container.md)
+This is a development environment with tooling and source code available, additional instructions to be found [here](contribute/dev-container.md)
 
 **2. Write a program**
 
@@ -34,21 +34,35 @@ int main() {
 EOF
 ```
 
+**3. Compile Lind-Wasm Runtime**
+
+Lind-wasm runtime must be compiled before running the program. To compile the lind-wasm runtime, you will first go to the `lind-wasm/` directory. At there, you can choose:
+
+3.a. use `make all` to compile both lind-glibc and rust code at once.
+
+3.b. use `make lind-boot` to compile runtime(lind-boot/wasmtime/rawposix/3i/etc.), and `make sysroot` to compile lind-glibc.
+
+**NOTES: More options can be found in lind-wasm/Makefile**
+
 **3. Compile and run**
 
 Use lind scripts to compile and run your program in the Lind Sandbox.
 
 ```bash
-./scripts/lind_compile hello.c
-./scripts/lind_run hello.cwasm
+lind-clang hello.c
+lind-wasm hello.cwasm
 ```
 
 *Here is what happens under the hood:*
 
-1.  `lind_compile` compiles `hello.c` into a WebAssembly (WASM)
-binary using headers etc. from *lind-glibc*.
-1. `lind_run` runs the compiled wasm using *lind-wasm* runtime
+1.  `lind-clang`(aka `scripts/lind_compile`) compiles `hello.c` into a WebAssembly (WASM)
+binary that is linked against *lind-glibc*, and put into lind file system root(`lind-wasm/lindfs`).
+1. `lind-wasm`(aka `scripts/lind_run`) runs the compiled wasm using *lind-wasm* runtime
 and the *lind-posix* microvisor.
+
+--- 
+
+To compile a Rust crate into a *lind-glibc* linked WASM binary, follow this guide: [Compiling Rust Code with `lind-glibc`](./contribute/compile-with-rust.md)
 
 ## What's next!
 

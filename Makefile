@@ -1,33 +1,128 @@
+LINDFS_ROOT ?= lindfs
+BUILD_DIR ?= build
+SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
+LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
+LINDBOOT_DEBUG_BIN ?= $(BUILD_DIR)/lind-boot-debug
+LINDFS_DIRS := \
+	       bin \
+	       dev \
+	       etc \
+	       sbin \
+	       tmp \
+	       usr/bin \
+	       usr/lib \
+	       usr/lib/locale \
+	       usr/local/bin \
+	       usr/share/zoneinfo \
+	       var \
+	       var/log \
+	       var/run
 
 .PHONY: build 
-build: sysroot wasmtime
+build: sysroot lind-boot lindfs
 	@echo "Build complete"
 
 .PHONY: all
 all: build
 
 .PHONY: sysroot
-sysroot:
+sysroot: build-dir
 	./scripts/make_glibc_and_sysroot.sh
+	$(MAKE) sync-sysroot
 
-.PHONY: wasmtime
-wasmtime:
-	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/wasmtime/Cargo.toml --release
+.PHONY: lind-boot
+lind-boot: build-dir
+	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release
+	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
+
+.PHONY: lindfs
+lindfs:
+	@for d in $(LINDFS_DIRS); do \
+		mkdir -p $(LINDFS_ROOT)/$$d; \
+	done
+	touch $(LINDFS_ROOT)/dev/null
+	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
+	cp -rT scripts/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
+	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
+
+.PHONY: lind-debug
+lind-debug: build-dir
+	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
+	$(MAKE) build_glibc LIND_DEBUG=1
+	
+	# Build lind-boot with the lind_debug feature enabled
+	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
+	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
+build_glibc:
+	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
+	if [ "$(LIND_DEBUG)" = "1" ]; then \
+		echo "Building glibc with LIND_DEBUG enabled"; \
+		./scripts/make_glibc_and_sysroot.sh; \
+		$(MAKE) sync-sysroot; \
+	fi
+
+.PHONY: build-dir
+build-dir:
+	mkdir -p $(BUILD_DIR)
+
+.PHONY: sync-sysroot
+sync-sysroot:
+	$(RM) -r $(SYSROOT_DIR)
+	cp -R src/glibc/sysroot $(SYSROOT_DIR)
 
 .PHONY: test
-test:
-	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
-	LIND_WASM_BASE=. LIND_FS_ROOT=src/RawPOSIX/tmp \
-	./scripts/wasmtestreport.py && \
-	cat results.json && \
-	! grep '"number_of_failures": [^0]' results.json
+test: lindfs
+	# Unified harness entry point (run all discovered harnesses for e2e signal)
+	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	python3 ./scripts/test_runner.py --export-report report.html && \
+	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
+	python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); \
+def count_failures(node): \
+  if not isinstance(node, dict): \
+    return 0; \
+  direct=node.get('number_of_failures'); \
+  try: \
+    direct_val=int(direct) if direct is not None else None; \
+  except (TypeError, ValueError): \
+    direct_val=None; \
+  nested=sum(count_failures(v) for v in node.values() if isinstance(v, dict)); \
+  return nested if direct_val is None else max(direct_val, nested); \
+total=1 if not paths else 0; \
+for path in paths: \
+  with open(path, encoding='utf-8') as handle: \
+    total += count_failures(json.load(handle)); \
+print(f'total_failures={total}'); \
+sys.exit(1 if total else 0)"; then \
+	  echo "E2E_STATUS=pass" > e2e_status; \
+	else \
+	  echo "E2E_STATUS=fail" > e2e_status; \
+	  mkdir -p reports; \
+	  if [ ! -f report.html ]; then \
+	    printf '%s\n' '<!DOCTYPE html><html><body><h1>E2E failed before report generation</h1></body></html>' > report.html; \
+	  fi; \
+	  if [ ! -f reports/report.html ]; then cp report.html reports/report.html; fi; \
+	  if [ ! -f reports/wasm.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing wasm report"}' > reports/wasm.json; fi; \
+	  if [ ! -f reports/grates.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing grate report"}' > reports/grates.json; fi; \
+	fi; \
+	exit 0
+
+.PHONY: md_generation
+OUT ?= .
+REPORT ?= report.html
+
+md_generation:
+	python3 -m pip install --quiet jinja2
+	REPORT_PATH=$(REPORT) OUT_DIR=$(OUT) python3 scripts/render_e2e_templates.py
+	@echo "Wrote $(OUT)/e2e_comment.md"
+
 
 .PHONY: lint
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
+	cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
 	cargo clippy \
-	    --manifest-path src/wasmtime/Cargo.toml \
+	    --manifest-path src/lind-boot/Cargo.toml \
 	    --all-features \
 	    --keep-going \
 	    -- \
@@ -38,6 +133,7 @@ lint:
 .PHONY: format
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
+	cargo fmt --all --manifest-path src/lind-boot/Cargo.toml
  
 
 .PHONY: docs-serve
@@ -46,14 +142,32 @@ docs-serve:
 
 .PHONY: clean
 clean:
-	@echo "glibc artifacts"
-	$(RM) -r src/glibc/build src/glibc/sysroot src/glibc/target
-	@echo "cargo clean (wasmtime)"
-	cargo clean --manifest-path src/wasmtime/Cargo.toml
+	@echo "cleaning glibc artifacts"
+	# Remove only generated sysroot and intermediate .o files,
+	# but KEEP required objects used by subsequent builds.
+	$(RM) -r src/glibc/sysroot
+	@echo "removing build artifacts"
+	$(RM) -r $(BUILD_DIR)
+	@echo "removing lindfs root"
+	$(RM) -r $(LINDFS_ROOT)
+	@find src/glibc -type f -name '*.o' \
+	    ! -path 'src/glibc/csu/wasm32/wasi_thread_start.o' \
+	    ! -path 'src/glibc/target/lib/Mcrt1.o' \
+	    ! -path 'src/glibc/target/lib/Scrt1.o' \
+	    ! -path 'src/glibc/target/lib/crt1.o' \
+	    ! -path 'src/glibc/target/lib/crti.o' \
+	    ! -path 'src/glibc/target/lib/crtn.o' \
+	    ! -path 'src/glibc/target/lib/gcrt1.o' \
+	    ! -path 'src/glibc/target/lib/grcrt1.o' \
+	    ! -path 'src/glibc/target/lib/rcrt1.o' \
+	    -exec rm -f {} +
+	@echo "cargo clean (lind-boot)"
+	cargo clean --manifest-path src/lind-boot/Cargo.toml
 
 .PHONY: distclean
 distclean: clean
 	@echo "removing test outputs & temp files"
-	$(RM) -f results.json report.html
-	$(RM) -r src/RawPOSIX/tmp/testfiles || true
+	$(RM) -f results.json report.html e2e_status
+	$(RM) -r reports || true
+	$(RM) -r $(LINDFS_ROOT)/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete

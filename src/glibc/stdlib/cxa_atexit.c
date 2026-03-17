@@ -50,7 +50,7 @@ __internal_atexit (void (*func) (void *), void *arg, void *d,
     }
 
   PTR_MANGLE (func);
-  new->func.cxa.fn = (void (*) (void *, int)) func;
+  new->func.cxa.fn = func;
   new->func.cxa.arg = arg;
   new->func.cxa.dso_handle = d;
   new->flavor = ef_cxa;
