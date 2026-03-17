@@ -92,8 +92,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             let cageid = CAGE_START_ID as u64;
             cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
             if let Some(c) = cage::get_cage(cageid) {
-                c.is_dead
-                    .store(true, std::sync::atomic::Ordering::Release);
+                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
             }
             threei::EXITING_TABLE.insert(cageid);
             threei::handler_table::_rm_grate_from_handler(cageid);

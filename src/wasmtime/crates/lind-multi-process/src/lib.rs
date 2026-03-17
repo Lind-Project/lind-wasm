@@ -480,8 +480,7 @@ impl<
                                 cage::ExitStatus::Exited(1),
                             );
                             if let Some(c) = cage::get_cage(child_cageid) {
-                                c.is_dead
-                                    .store(true, std::sync::atomic::Ordering::Release);
+                                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
                             }
                             threei::EXITING_TABLE.insert(child_cageid);
                             threei::handler_table::_rm_grate_from_handler(child_cageid);
