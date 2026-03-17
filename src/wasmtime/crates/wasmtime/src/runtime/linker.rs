@@ -245,7 +245,7 @@ impl<T> Linker<T> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
-                    // #[cfg(feature = "debug-dylink")]
+                    #[cfg(feature = "debug-dylink")]
                     println!("[debug] Warning: link undefined symbol \"{}\" to trap", import.name());
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
@@ -279,7 +279,7 @@ impl<T> Linker<T> {
                     if !weak_imports.is_weak_symbol(import.module(), import.name()) {
                         continue;
                     }
-                    // #[cfg(feature = "debug-dylink")]
+                    #[cfg(feature = "debug-dylink")]
                     println!("[debug] define weak symbol {}.{} into trap", import.module(), import.name());
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
@@ -1019,8 +1019,9 @@ impl<T> Linker<T> {
                 // We therefore link a dummy `__memory_base` global (initialized to 0)
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
                 // `instantiate_with_lind` can patch the global once the real base is known.
+                self.allow_shadowing(true);
                 let mut module_linker = self.clone();
-                module_linker.allow_shadowing(true);
+                // module_linker.allow_shadowing(true);
                 let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0))?;
                 // Provide `__memory_base` for the library (used by data relocs).
                 module_linker.define(&mut store, "env", "__memory_base", memory_base);
@@ -1043,6 +1044,7 @@ impl<T> Linker<T> {
                         true
                     }
                 };
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library module instantiate");
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
@@ -1050,6 +1052,7 @@ impl<T> Linker<T> {
                     needs_init: needs_init,
                     memory_base: handler
                 })?;
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library module instantiate done");
 
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
@@ -1117,13 +1120,13 @@ impl<T> Linker<T> {
                 // Apply data relocations emitted by the toolchain after exports/GOT have been patched.
                 // This populates relocated pointers/data segments inside the library's memory.
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
-                // #[cfg(feature = "debug-dylink")]
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                 // Apply TLS relocations if present.
                 if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
-                    // #[cfg(feature = "debug-dylink")]
+                    #[cfg(feature = "debug-dylink")]
                     println!("[debug] library start __wasm_apply_tls_relocs");
                     let _ = init.call(store.as_context_mut(), ()).unwrap();
                 }
@@ -1190,6 +1193,7 @@ impl<T> Linker<T> {
                 // Resolve any remaining unknown imports to trap stubs so the library can
                 // instantiate even when it has optional/unused imports.
                 module_linker.define_unknown_imports_as_traps(module);
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library module instantiate");
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
@@ -1197,6 +1201,7 @@ impl<T> Linker<T> {
                     needs_init: false,
                     memory_base: handler
                 })?;
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library module instantiate done");
 
                 // Collect exports first to avoid mutating the store/linker while iterating exports.
@@ -1220,7 +1225,7 @@ impl<T> Linker<T> {
                 }
 
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_global_relocs")?;
-                // #[cfg(feature = "debug-dylink")]
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] child library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 

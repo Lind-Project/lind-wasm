@@ -781,7 +781,7 @@ impl<
                     linker.define(&mut store, "env", "__indirect_function_table", child_table);
 
                     for (name, module) in modules.iter().skip(1) {
-                        // println!("[debug] link module {}", name);
+                        println!("[debug] link module {}", name);
 
                         // Read dylink metadata for this preloaded (library) module.
                         // This contains the module's declared table/memory requirements.
@@ -1224,7 +1224,6 @@ impl<
     // retrieved from hashmap, and continue the rewind. This approach allows the wasm process to restore to its
     // previous state
     pub fn setjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: u32) -> Result<i32> {
-        return Ok(0);
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(1));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -1306,7 +1305,6 @@ impl<
         jmp_buf: u32,
         retval: i32,
     ) -> Result<i32> {
-        return Ok(0);
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(1));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
