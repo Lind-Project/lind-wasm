@@ -306,6 +306,7 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
+        #[cfg(feature = "debug-dylink")]
         println!("[debug] new_started_impl_with_lind start");
         match instantiate_type {
             InstantiateType::InstantiateLib{
@@ -339,7 +340,7 @@ impl Instance {
         let module_rounded_size = round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
         let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
 
-        // #[cfg(feature = "debug-dylink")]
+        #[cfg(feature = "debug-dylink")]
         println!("[debug] module memory size round to {}", module_rounded_size);
 
         // initialize the memory
@@ -370,7 +371,7 @@ impl Instance {
                 // todo: heap guard page?
                 init_vmmap(cageid, memory_base, Some(minimal_pages as u32 + module_page));
 
-                // #[cfg(feature = "debug-dylink")]
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] main module allocate {} + {} bytes", module_rounded_size as u64, (minimal_pages << PAGESHIFT));
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -423,7 +424,7 @@ impl Instance {
 
                 let rounded_size = round_up_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
                 let rounded_size = round_up_size(rounded_size, PAGESIZE);
-                // #[cfg(feature = "debug-dylink")]
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
@@ -452,7 +453,7 @@ impl Instance {
                     *memory_base = addr;
                 }
                 
-                // #[cfg(feature = "debug-dylink")]
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] library memory starts at {}", addr);
             }
         }
@@ -487,13 +488,13 @@ impl Instance {
 
                 // apply data relocations
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
-                // #[cfg(feature = "debug-dylink")]
+                #[cfg(feature = "debug-dylink")]
                 println!("[debug] child start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                 // apply tls relocations if any
                 if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
-                    // #[cfg(feature = "debug-dylink")]
+                    #[cfg(feature = "debug-dylink")]
                     println!("[debug] child module start __wasm_apply_tls_relocs");
                     let _ = init.call(store.as_context_mut(), ()).unwrap();
                 }
