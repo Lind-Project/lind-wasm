@@ -1143,6 +1143,12 @@ pub extern "C" fn prlimit64_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    //pid has to be zero
+    let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid)
+    if pid != 0{
+        return syscall_error(Errno: ESRCH, "prlimit64", "Only supports pid = 0")
+    }
+
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
@@ -1150,43 +1156,39 @@ pub extern "C" fn prlimit64_syscall(
         );
     }
     // get resource numeber from arg2
-    let resource = arg2;
+    let resource = sc_convert_sysarg_to_u32(arg2, arg2_cageid, cage_id);
 
-    //handle setrlimit calls (arg3 = new_limit, not null)
-    // when a program calls setrlimit glibc sends prlimit64 with arg3 pointing to new limit.
-    // We check the limit from WASM program's memory and calls the host's setrlimit to actually apply the limit.
+    // setrlimit unsupported
     if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
-        let new_limit = match sc_convert_addr_to_rlimit(arg3, arg3_cageid, cageid) {
-            Ok(rlim) => rlim,
-            Err(e) => return syscall_error(e, "prlimit64", "bad new limit address"),
-        };
-
-        let mut host_rlimit: libc::rlimit = unsafe { std::mem::zeroed() };
-        host_rlimit.rlim_cur = new_limit.rlim_cur as u64;
-        host_rlimit.rlim_max = new_limit.rlim_max as u64;
-        let ret = unsafe { libc::setrlimit(resource as u32, &host_rlimit) };
-        if ret < 0 {
-            let errno = get_errno();
-            return handle_errno(errno, "prlimit64");
-        }
+        lind_debug_panic("prlimit64: setrlimit not supported");
+        return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
     }
 
-    // handle getrlimit calls
+    // handle getrlimit calls 
+    // default to 1024.
     if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
         let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid) {
             Ok(rlim) => rlim,
             Err(e) => return syscall_error(e, "prlimit64", "bad address"),
         };
-        let mut host_rlimit: libc::rlimit = unsafe { std::mem::zeroed() };
-        let ret = unsafe { libc::getrlimit(resource as u32, &mut host_rlimit) };
-        if ret == 0 {
-            old_limit.rlim_cur = host_rlimit.rlim_cur as u32;
-            old_limit.rlim_max = host_rlimit.rlim_max as u32;
-        } else {
-            // if host call fails default to 1024.
-            old_limit.rlim_cur = 1024;
-            old_limit.rlim_max = 1024;
+        match resource {
+            3 => {
+                // RLIMIT_STACK: 8MiB
+                old_limit.rlim_cur = 8 * 1024 * 1024;
+                old_limit.rlim_max = 8 * 1024 * 1024;
+            }
+            7 => {
+                // RLIMIT_NOFILE: 1024
+                old_limit.rlim_cur = 1024;
+                old_limit.rlim_max = 1024;
+            }
+            _ => {
+                lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
+                old_limit.rlim_cur = 0;
+                old_limit.rlim_max = 0;
+            }
         }
+
     }
 
     0 //success
