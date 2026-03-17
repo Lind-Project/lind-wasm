@@ -116,8 +116,19 @@ pub extern "C" fn openat_syscall(
             return handle_errno(-host_fd, "openat");
         }
 
+        // Use raw path for dirfd case — sc_convert_path_to_host normalizes to
+        // an absolute path which would cause openat to ignore the dirfd.
+        let raw_path = match get_cstr(path_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EINVAL, "openat", "invalid path"),
+        };
+        let c_path = match CString::new(raw_path) {
+            Ok(c) => c,
+            Err(_) => return syscall_error(Errno::EINVAL, "openat", "invalid path"),
+        };
+
         let kernel_fd =
-            unsafe { libc::openat(host_fd, path.as_ptr(), oflag, mode as libc::mode_t) };
+            unsafe { libc::openat(host_fd, c_path.as_ptr(), oflag, mode as libc::mode_t) };
         if kernel_fd < 0 {
             return handle_errno(get_errno(), "openat_syscall");
         }
