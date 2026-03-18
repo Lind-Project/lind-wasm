@@ -9,10 +9,10 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED,
-    MAP_POPULATE, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE,
-    PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO,
-    STDOUT_FILENO, TIOCGWINSZ,
+    AT_FDCWD, FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS,
+    MAP_FIXED, MAP_POPULATE, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
+    PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
+    STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
@@ -73,10 +73,10 @@ pub extern "C" fn openat_syscall(
     oflag_cageid: u64,
     mode_arg: u64,
     mode_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
+    UNUSED_ARG: u64,
+    UNUSED_ARG: u64,
+    UNUSED_ARG: u64,
+    UNUSED_ARG: u64,
 ) -> i32 {
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
@@ -91,7 +91,7 @@ pub extern "C" fn openat_syscall(
             "openat_syscall"
         );
     }
-    if virtual_fd == libc::AT_FDCWD {
+    if virtual_fd == AT_FDCWD {
         // delegate to open_syscall which handles path resolution from CWD
         return open_syscall(
             cageid,
