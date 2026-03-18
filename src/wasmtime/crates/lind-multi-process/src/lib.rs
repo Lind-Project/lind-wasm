@@ -868,12 +868,14 @@ impl<
             // if shebang is present, we reconstruct the argv and path and call execve again with the interpreter specified by shebang
             let shebang = shebang_opt.unwrap();
 
-            let new_argv = match build_shebang_argv(&shebang, &path, &argv) {
+            let new_argv = match build_shebang_argv(&shebang, &argv) {
                 Ok(args) => args,
                 Err(_) => return Ok(-(Errno::ENOEXEC as i32)),
             };
             // it's safe to unwrap here since above build_shebang_argv already checks if the interpreter path is valid
             let new_path = shebang.interpreter.to_str().unwrap().to_string();
+
+            println!("new argv: {:?}", new_argv);
 
             return self.execve_call(caller, new_path, new_argv, environs, recursion_depth + 1);
         }

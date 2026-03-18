@@ -89,16 +89,9 @@ pub fn parse_shebang(path: &Path) -> Result<Option<Shebang>> {
 
 /// Build the argv that should be passed to the interpreter.
 ///
-/// `original_argv0` is usually the script path as invoked, but many runtimes
-/// just pass `script_path` itself here.
-///
 /// Resulting argv is:
-///   [interpreter, optional_arg, script_path, original_args...]
-pub fn build_shebang_argv(
-    shebang: &Shebang,
-    script_path: &String,
-    original_args: &Vec<String>,
-) -> Result<Vec<String>> {
+///   [interpreter, optional_arg, original_args...]
+pub fn build_shebang_argv(shebang: &Shebang, original_args: &Vec<String>) -> Result<Vec<String>> {
     let mut argv = Vec::with_capacity(2 + original_args.len() + usize::from(shebang.arg.is_some()));
 
     let interpreter = shebang.interpreter.to_str().ok_or_else(|| anyhow!(""))?;
@@ -109,7 +102,6 @@ pub fn build_shebang_argv(
         argv.push(arg_str.to_string());
     }
 
-    argv.push(script_path.clone());
     argv.extend(original_args.iter().cloned());
 
     Ok(argv)
