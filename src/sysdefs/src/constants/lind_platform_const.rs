@@ -86,5 +86,7 @@ pub const THREEI_CAGEID: u64 = 999999;
 pub const INIT_CAGEID: u64 = 1;
 /// Thread ID for the main thread of a cage.
 pub const MAIN_THREADID: u64 = 1;
+/// Number of instances to pre-allocate for the initial cage
+pub const INSTANCE_NUMBER: usize = 5000;
 /// Maximum execve recursion depth for shebang execution, 4 is the typical value used in Linux.
 pub const MAX_SHEBANG_DEPTH: i32 = 4;
