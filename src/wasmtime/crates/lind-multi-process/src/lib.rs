@@ -875,8 +875,6 @@ impl<
             // it's safe to unwrap here since above build_shebang_argv already checks if the interpreter path is valid
             let new_path = shebang.interpreter.to_str().unwrap().to_string();
 
-            println!("new argv: {:?}", new_argv);
-
             return self.execve_call(caller, new_path, new_argv, environs, recursion_depth + 1);
         }
         let exec_module = exec_module.unwrap();
@@ -1515,7 +1513,7 @@ where
             };
 
             let envs = match parse_env(envs) {
-                Ok(path) => path,
+                Ok(envs) => envs,
                 Err(_) => return -(Errno::EFAULT as i32),
             };
 
