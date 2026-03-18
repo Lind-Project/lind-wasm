@@ -73,10 +73,10 @@ pub extern "C" fn openat_syscall(
     oflag_cageid: u64,
     mode_arg: u64,
     mode_cageid: u64,
-    UNUSED_ARG: u64,
-    UNUSED_ARG: u64,
-    UNUSED_ARG: u64,
-    UNUSED_ARG: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
 ) -> i32 {
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
@@ -101,10 +101,10 @@ pub extern "C" fn openat_syscall(
             oflag_cageid,
             mode_arg,
             mode_cageid,
-            arg5,
-            arg5_cageid,
-            arg6,
-            arg6_cageid,
+            UNUSED_ARG,
+            UNUSED_ARG,
+            UNUSED_ARG,
+            UNUSED_ARG,
             UNUSED_ARG,
             UNUSED_ARG,
         );
