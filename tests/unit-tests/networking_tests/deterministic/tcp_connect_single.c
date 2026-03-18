@@ -50,6 +50,7 @@ int main(void) {
         perror("accept");
         exit(EXIT_FAILURE);
     }
+    
 
     // ---- 4) send ----
     static const char msg1[] = "ping";

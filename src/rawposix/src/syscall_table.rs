@@ -120,6 +120,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (263, unlinkat_syscall),
     (267, readlinkat_syscall),
     (277, sync_file_range_syscall),
+    (288, accept4_syscall),
     (291, epoll_create1_syscall),
     (292, dup3_syscall),
     (293, pipe2_syscall),
