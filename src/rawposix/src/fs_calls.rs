@@ -102,11 +102,11 @@ pub extern "C" fn openat_syscall(
             mode_arg,
             mode_cageid,
             UNUSED_ARG,
+            UNUSED_ID,
             UNUSED_ARG,
+            UNUSED_ID,
             UNUSED_ARG,
-            UNUSED_ARG,
-            UNUSED_ARG,
-            UNUSED_ARG,
+            UNUSED_ID,
         );
     } else {
         // Case 2: Specific directory fd
