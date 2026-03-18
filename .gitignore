@@ -1,3 +1,8 @@
+#ignore IDE
+/.vscode
+/.vscode/*
+/.vscode-test/
+
 #Ignore both files and folders beginning with clang+llvm
 clang+llvm-*/
 clang+llvm-*
@@ -19,3 +24,16 @@ results.json
 
 #Ignore python cache
 __pycache__/
+
+# ignore llvm-project source code, which is large and we don't want to accidentally commit changes to it (although we totally make changes to it for things like clang++ compilation)
+/llvm-project
+/llvm-project/*
+
+# ignore experimental toolchain files such as Toolchain-WASI.cmake.
+Toolchain-Linux.cmake
+Toolchain-WASI.cmake
+build-compiler-rt.sh
+
+# ignore runtime-built dirs and files spwan by the build scripts
+/compiler-rt-*
+/compiler-rt-*/*
