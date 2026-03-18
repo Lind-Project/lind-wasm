@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::Errno;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
@@ -13,7 +14,7 @@ use wasmtime_lind_3i::{
     VmCtxWrapper,
 };
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
-use wasmtime_lind_utils::{parse_env_var, LindCageManager};
+use wasmtime_lind_utils::LindCageManager;
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -23,15 +24,21 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
-    AsContext, AsContextMut, AsyncifyState, Caller, ExternType, InstanceId, InstantiateType,
-    Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val,
+    AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId,
+    InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val,
 };
 
 use cage::alloc_cage_id;
 use cage::signal::{lind_signal_init, lind_thread_exit};
 use wasmtime_environ::MemoryIndex;
 
+use crate::shebang::{build_shebang_argv, parse_shebang};
+use crate::utils::{parse_argv, parse_env, parse_path};
+
 pub mod signal;
+
+mod shebang;
+mod utils;
 
 pub const CAGE_START_ID: i32 = 1; // cage id starts from 1
 pub const THREAD_START_ID: i32 = 1; // thread id starts from 1
@@ -86,6 +93,8 @@ pub struct LindCtx<T, U> {
                 &U,
                 &str,
                 &Vec<String>,
+                Engine,
+                Module,
                 i32,
                 &Arc<LindCageManager>,
                 &Option<Vec<(String, Option<String>)>>,
@@ -123,6 +132,8 @@ impl<
                 &U,
                 &str,
                 &Vec<String>,
+                Engine,
+                Module,
                 i32,
                 &Arc<LindCageManager>,
                 &Option<Vec<(String, Option<String>)>>,
@@ -818,10 +829,55 @@ impl<
     pub fn execve_call(
         &self,
         mut caller: &mut Caller<'_, T>,
-        path: i64,
-        argv: i64,
-        envs: Option<i64>,
+        path: String,
+        argv: Vec<String>,
+        environs: Option<Vec<(String, Option<String>)>>,
+        recursion_depth: i32,
     ) -> Result<i32> {
+        // limit enforcing the maximum recursion depth of shebang
+        // it's typical value is 4, so let's use the same value
+        if recursion_depth > 4 {
+            return Ok(-(Errno::ELOOP as i32));
+        }
+
+        // if the file to exec does not exist
+        if !std::path::Path::new(&path).exists() {
+            // return ENOENT
+            return Ok(-(Errno::ENOENT as i32));
+        }
+
+        // parse the wasm module as soon as possible to catch the error before unwinding, which is hard to unwind back if exec file has some problems
+        let engine = self.module.engine().clone();
+        let exec_file_path = Path::new(&path);
+        let exec_module = match engine.detect_precompiled_file(exec_file_path) {
+            Ok(_) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
+            Err(_) => Module::from_file(&engine, exec_file_path),
+        };
+        if exec_module.is_err() {
+            let shebang_res = parse_shebang(exec_file_path);
+
+            if shebang_res.is_err() {
+                return Ok(-(Errno::ENOEXEC as i32));
+            }
+
+            let shebang_opt = shebang_res.unwrap();
+            if shebang_opt.is_none() {
+                return Ok(-(Errno::ENOEXEC as i32));
+            }
+
+            // if shebang is present, we reconstruct the argv and path and call execve again with the interpreter specified by shebang
+            let shebang = shebang_opt.unwrap();
+
+            let new_argv = match build_shebang_argv(&shebang, &path, &argv) {
+                Ok(args) => args,
+                Err(_) => return Ok(-(Errno::ENOEXEC as i32)),
+            };
+            let new_path = shebang.interpreter.to_str().unwrap().to_string();
+
+            return self.execve_call(caller, new_path, new_argv, environs, recursion_depth + 1);
+        }
+        let exec_module = exec_module.unwrap();
+
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -833,89 +889,6 @@ impl<
         // we store the unwind at the top of the user stack
         let parent_unwind_data_start_usr = parent_stack_low_usr;
         let parent_unwind_data_start_sys = address as u64 + parent_unwind_data_start_usr;
-
-        // parse the path and argv
-        let path_ptr = path as *const u8;
-        let path_str;
-
-        // NOTE: the address passed from wasm module is 32-bit address
-        let argv_ptr = argv as *const u64;
-        let mut args = Vec::new();
-        let mut environs = None;
-
-        // convert the address into a list of argument string
-        unsafe {
-            // Manually find the null terminator
-            let mut len = 0;
-            while *path_ptr.add(len) != 0 {
-                len += 1;
-            }
-
-            // Create a byte slice from the pointer
-            let byte_slice = std::slice::from_raw_parts(path_ptr, len);
-
-            // Convert the byte slice to a Rust string slice
-            path_str = std::str::from_utf8(byte_slice).unwrap();
-
-            let mut i = 0;
-
-            // parse the arg pointers
-            // Iterate over argv until we encounter a NULL pointer
-            loop {
-                let c_str = *(argv_ptr.add(i));
-
-                if c_str == 0 {
-                    break; // Stop if we encounter NULL
-                }
-
-                let arg_ptr = c_str as *const c_char;
-
-                // Convert it to a Rust String
-                let arg = CStr::from_ptr(arg_ptr).to_string_lossy().into_owned();
-                args.push(arg);
-
-                i += 1; // Move to the next argument
-            }
-        }
-
-        // Use the path as-is from the user
-        let real_path = PathBuf::from(path_str);
-        let real_path_str = String::from(real_path.to_str().unwrap());
-
-        // if the file to exec does not exist
-        if !std::path::Path::new(&real_path_str).exists() {
-            // return ENOENT
-            return Ok(-2);
-        }
-
-        // parse the environment variables
-        if let Some(envs_addr) = envs {
-            let env_ptr = envs_addr as *const u64;
-            let mut env_vec = Vec::new();
-
-            unsafe {
-                let mut i = 0;
-
-                // Iterate over argv until we encounter a NULL pointer
-                loop {
-                    let c_str = *(env_ptr.add(i));
-
-                    if c_str == 0 {
-                        break; // Stop if we encounter NULL
-                    }
-
-                    let env_ptr = c_str as *const c_char;
-
-                    // Convert it to a Rust String
-                    let env = CStr::from_ptr(env_ptr).to_string_lossy().into_owned();
-                    let parsed = parse_env_var(&env);
-                    env_vec.push(parsed);
-
-                    i += 1; // Move to the next argument
-                }
-            }
-            environs = Some(env_vec);
-        }
 
         // get the current stack pointer
         let stack_pointer = caller.get_stack_pointer().unwrap();
@@ -964,8 +937,10 @@ impl<
 
             let ret = exec_call(
                 &cloned_lindboot_cli,
-                &real_path_str,
-                &args,
+                &path,
+                &argv,
+                engine,
+                exec_module,
                 cloned_cageid,
                 &cloned_lind_manager,
                 &environs,
@@ -1525,7 +1500,23 @@ where
             let host = caller.data().clone();
             let ctx = host.get_ctx();
 
-            match ctx.execve_call(&mut caller, path as i64, argv as i64, Some(envs as i64)) {
+            // parse the arguments from the caller's memory space
+            let path = match parse_path(path) {
+                Ok(path) => path,
+                Err(_) => return -(Errno::EFAULT as i32),
+            };
+
+            let argv = match parse_argv(argv) {
+                Ok(argv) => argv,
+                Err(_) => return -(Errno::EFAULT as i32),
+            };
+
+            let envs = match parse_env(envs) {
+                Ok(path) => path,
+                Err(_) => return -(Errno::EFAULT as i32),
+            };
+
+            match ctx.execve_call(&mut caller, path, argv, envs, 1) {
                 Ok(ret) => ret,
                 Err(e) => {
                     log::error!("failed to exec: {}", e);
