@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use sysdefs::constants::Errno;
+use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH};
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
@@ -836,7 +836,7 @@ impl<
     ) -> Result<i32> {
         // linux enforcing the maximum recursion depth of shebang
         // it's typical value is 4, so let's use the same value
-        if recursion_depth > 4 {
+        if recursion_depth > MAX_SHEBANG_DEPTH {
             return Ok(-(Errno::ELOOP as i32));
         }
 
