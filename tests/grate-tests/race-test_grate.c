@@ -53,9 +53,8 @@ int mmap_handler(uint64_t cageid,
                  uint64_t arg4, uint64_t arg4cage,
                  uint64_t arg5, uint64_t arg5cage,
                  uint64_t arg6, uint64_t arg6cage) {
-    int thiscage = getpid();
     return make_threei_call(MMAP_SYSCALL, 0,
-                            thiscage, arg1cage,
+                            cageid, arg1cage,
                             arg1, arg1cage, arg2, arg2cage,
                             arg3, arg3cage, arg4, arg4cage,
                             arg5, arg5cage, arg6, arg6cage, 0);
@@ -69,9 +68,8 @@ int futex_handler(uint64_t cageid,
                   uint64_t arg4, uint64_t arg4cage,
                   uint64_t arg5, uint64_t arg5cage,
                   uint64_t arg6, uint64_t arg6cage) {
-    int thiscage = getpid();
     return make_threei_call(FUTEX_SYSCALL, 0,
-                            thiscage, arg1cage,
+                            cageid, arg1cage,
                             arg1, arg1cage, arg2, arg2cage,
                             arg3, arg3cage, arg4, arg4cage,
                             arg5, arg5cage, arg6, arg6cage, 0);

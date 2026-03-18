@@ -24,7 +24,8 @@ use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
-use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
+use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
+use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
@@ -1128,6 +1129,82 @@ pub extern "C" fn sigprocmask_syscall(
         }
     }
     res
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/prlimit.2.html
+///
+/// Reads or sets resource limits.
+/// Each resource has an associated soft and hard limit defined by rlimit struct.
+/// soft limit is the value that kernel enforces for the reponse. Hard limit the ceiling for how high the soft limit can be set.
+/// An unprevileged process may set only the soft limit and irreversibly lower hard limit.
+/// A previleged process may make arbitrary changes to either hard/soft values.
+/// ## Returns
+/// On success, returns 0. On error, -1 is returned, and errno is set.
+
+pub extern "C" fn prlimit64_syscall(
+    cageid: u64,
+    arg1: u64, //arg1: pid (0 = current process)
+    arg1_cageid: u64,
+    arg2: u64, //arg2: which resource( RLIMIT_NOFILE, etc)
+    arg2_cageid: u64,
+    arg3: u64, //arg3: pointer to new limit (Null for getrlimit)
+    arg3_cageid: u64,
+    arg4: u64, //arg4: pointer to receive current limit (NULL for setrlimit)
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    //pid has to be zero
+    let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
+    if pid != 0 {
+        lind_debug_panic(&format!("prlimit64: unsupported pid {}", pid));
+        return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
+    }
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "prlimit64_syscall",
+        );
+    }
+    // get resource numeber from arg2
+    let resource = sc_convert_sysarg_to_u32(arg2, arg2_cageid, cageid);
+
+    // setrlimit unsupported
+    if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
+        lind_debug_panic("prlimit64: setrlimit not supported");
+        return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
+    }
+
+    // handle getrlimit calls
+    // default to 1024.
+    if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
+        let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid) {
+            Ok(rlim) => rlim,
+            Err(e) => return syscall_error(e, "prlimit64", "bad address"),
+        };
+        match resource {
+            3 => {
+                // RLIMIT_STACK: 8MiB
+                old_limit.rlim_cur = 8 * 1024 * 1024;
+                old_limit.rlim_max = 8 * 1024 * 1024;
+            }
+            7 => {
+                // RLIMIT_NOFILE: 1024
+                old_limit.rlim_cur = 1024;
+                old_limit.rlim_max = 1024;
+            }
+            _ => {
+                lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
+                old_limit.rlim_cur = 0;
+                old_limit.rlim_max = 0;
+            }
+        }
+    }
+
+    0 //success
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sched_yield.2.html

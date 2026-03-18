@@ -176,3 +176,5 @@ pub const MREMAP_FIXED: u32 = 0x02; // New address is specified exactly
 // ===== File Access Modes =====
 // Source: include/uapi/asm-generic/fcntl.h
 pub const O_ACCMODE: i32 = 0o003; // Mask for file access modes
+
+pub const AT_FDCWD: i32 = -100;

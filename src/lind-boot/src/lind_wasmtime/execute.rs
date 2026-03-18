@@ -6,7 +6,7 @@ use std::ffi::c_void;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
+use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Linker, Module, Store, Val, ValType,
@@ -403,7 +403,7 @@ fn load_main_module(
 
     // 5) Create backup instances to populate the vmctx pool
     // See more comments in lind-3i/lib.rs
-    for _ in 0..9 {
+    for _ in 0..INSTANCE_NUMBER {
         let (_, backup_cage_instanceid) = linker
             .instantiate_with_lind_thread(&mut *store, &module)
             .context(format!("failed to instantiate"))?;

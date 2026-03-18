@@ -111,6 +111,7 @@
 #define CLOCK_GETTIME_SYSCALL 228
 #define EPOLL_WAIT_SYSCALL 232
 #define EPOLL_CTL_SYSCALL 233
+#define OPENAT_SYSCALL 257
 #define UNLINKAT_SYSCALL 263
 #define READLINKAT_SYSCALL 267
 #define SYNC_FILE_RANGE 277
@@ -118,6 +119,7 @@
 #define EPOLL_CREATE1_SYSCALL 291
 #define DUP3_SYSCALL 292
 #define PIPE2_SYSCALL 293
+#define PRLIMIT64_SYSCALL 302
 #define GETRANDOM_SYSCALL 318
 
 /* Lind-specific syscalls (not part of the Linux syscall table) */

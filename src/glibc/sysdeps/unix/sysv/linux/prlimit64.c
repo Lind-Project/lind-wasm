@@ -20,13 +20,22 @@
 #include <sys/resource.h>
 #undef prlimit
 #include <sysdep.h>
-
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 int
 __prlimit64 (pid_t pid, enum __rlimit_resource resource,
 	     const struct rlimit64 *new_rlimit, struct rlimit64 *old_rlimit)
 {
-  return INLINE_SYSCALL_CALL (prlimit64, pid, resource, new_rlimit,
-			      old_rlimit);
+   uint64_t pnew = new_rlimit ? //null for getrlimit
+   TRANSLATE_GUEST_POINTER_TO_HOST(new_rlimit) : 0; 
+   uint64_t pold = old_rlimit ? //null for setrlimit
+   TRANSLATE_GUEST_POINTER_TO_HOST(old_rlimit) : 0;
+
+  return MAKE_LEGACY_SYSCALL(PRLIMIT64_SYSCALL, "syscall|prlimit64",
+        (uint64_t) pid, (uint64_t) resource,
+        pnew, pold,
+        NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 #ifdef VERSION_prlimit64
 # include <shlib-compat.h>
