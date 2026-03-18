@@ -834,7 +834,7 @@ impl<
         environs: Option<Vec<(String, Option<String>)>>,
         recursion_depth: i32,
     ) -> Result<i32> {
-        // limit enforcing the maximum recursion depth of shebang
+        // linux enforcing the maximum recursion depth of shebang
         // it's typical value is 4, so let's use the same value
         if recursion_depth > 4 {
             return Ok(-(Errno::ELOOP as i32));
@@ -872,6 +872,7 @@ impl<
                 Ok(args) => args,
                 Err(_) => return Ok(-(Errno::ENOEXEC as i32)),
             };
+            // it's safe to unwrap here since above build_shebang_argv already checks if the interpreter path is valid
             let new_path = shebang.interpreter.to_str().unwrap().to_string();
 
             return self.execve_call(caller, new_path, new_argv, environs, recursion_depth + 1);
@@ -1516,6 +1517,7 @@ where
                 Err(_) => return -(Errno::EFAULT as i32),
             };
 
+            // exec depth starts from 1
             match ctx.execve_call(&mut caller, path, argv, envs, 1) {
                 Ok(ret) => ret,
                 Err(e) => {
