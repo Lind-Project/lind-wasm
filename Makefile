@@ -73,39 +73,10 @@ sync-sysroot:
 
 .PHONY: test
 test: lindfs
-	# Unified harness entry point (run all discovered harnesses for e2e signal)
-	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	@if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
-	python3 -c "import glob,json,sys,pprint; paths=sorted(glob.glob('reports/*.json')); \
-print('DEBUG: report paths =', paths); \
-def count_failures(node): \
-  if isinstance(node, list): \
-    return sum(count_failures(x) for x in node); \
-  if not isinstance(node, dict): \
-    return 0; \
-  direct=node.get('number_of_failures'); \
-  try: \
-    direct_val=int(direct) if direct is not None else None; \
-  except (TypeError, ValueError): \
-    direct_val=None; \
-  nested=sum(count_failures(v) for v in node.values()); \
-  return nested if direct_val is None else max(direct_val, nested); \
-total=1 if not paths else 0; \
-for path in paths: \
-  print('\\n===== DEBUG REPORT:', path, '====='); \
-  with open(path, encoding='utf-8') as handle: \
-    data=json.load(handle); \
-  print('top-level keys =', list(data.keys()) if isinstance(data, dict) else type(data).__name__); \
-  if isinstance(data, dict): \
-    print('top-level number_of_failures =', data.get('number_of_failures')); \
-    print('top-level error =', data.get('error')); \
-    print('top-level results type =', type(data.get('results')).__name__ if 'results' in data else 'MISSING'); \
-  failures=count_failures(data); \
-  print('computed failures =', failures); \
-  total += failures; \
-print('\\nDEBUG: total_failures=%d' % total); \
-sys.exit(1 if total else 0)"; then \
+	python3 ./scripts/check_reports.py; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
 	else \
 	  echo "E2E_STATUS=fail" > e2e_status; \
