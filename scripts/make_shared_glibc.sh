@@ -3325,6 +3325,9 @@ wasm-ld \
 
 mkdir -p /home/lind/lind-wasm/lindfs/lib
 
-sudo ./scripts/append_tls_relocs_export.sh "$SYSROOT/lib/wasm32-wasi/libc.so" /home/lind/lind-wasm/lindfs/lib/libc.wasm
-sudo /home/lind/binaryen-epoch-injection/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo /home/lind/lind-wasm/lindfs/lib/libc.wasm -o /home/lind/lind-wasm/lindfs/lib/libc.wasm
+# sudo ./scripts/append_tls_relocs_export.sh "$SYSROOT/lib/wasm32-wasi/libc.so" /home/lind/lind-wasm/lindfs/lib/libc.wasm
+sudo /home/lind/lind-wasm/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" /home/lind/lind-wasm/lindfs/lib/libc.wasm __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
+sudo /home/lind/lind-wasm/tools/add-export-tool/add-export-tool /home/lind/lind-wasm/lindfs/lib/libc.wasm /home/lind/lind-wasm/lindfs/lib/libc.wasm __wasm_apply_global_relocs func __wasm_apply_global_relocs
+sudo /home/lind/lind-wasm/tools/add-export-tool/add-export-tool /home/lind/lind-wasm/lindfs/lib/libc.wasm /home/lind/lind-wasm/lindfs/lib/libc.wasm __stack_pointer global __stack_pointer
+sudo /home/lind/lind-wasm/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo /home/lind/lind-wasm/lindfs/lib/libc.wasm -o /home/lind/lind-wasm/lindfs/lib/libc.wasm
 sudo /home/lind/lind-wasm/scripts/lind_compile --precompile-only /home/lind/lind-wasm/lindfs/lib/libc.wasm

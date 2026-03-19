@@ -36,7 +36,7 @@ wat_in="$tmpdir/in.wat"
 wat_out="$tmpdir/out.wat"
 
 # 1) Convert wasm -> wat
-/home/lind/wabt-1.0.37/bin/wasm2wat --enable-all "$IN_WASM" -o "$wat_in"
+wasm2wat --enable-all "$IN_WASM" -o "$wat_in"
 
 # 2) If export already present, keep as-is
 if grep -Fqx "$INSERT_LINE" "$wat_in"; then
@@ -70,6 +70,6 @@ else
 fi
 
 # 3) Convert wat -> wasm
-/home/lind/wabt-1.0.37/bin/wat2wasm --enable-all "$wat_out" -o "$OUT_WASM"
+wat2wasm --enable-all "$wat_out" -o "$OUT_WASM"
 
 echo "Patched wasm written to: $OUT_WASM"

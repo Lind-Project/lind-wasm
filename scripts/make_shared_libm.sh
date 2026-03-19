@@ -1058,7 +1058,10 @@ wasm-ld \
     --export-if-defined=ynl \
     -o "$SYSROOT/lib/wasm32-wasi/libm.so" /home/lind/lind-wasm/src/glibc/build/csu/errno.o
 
-# ./scripts/append_tls_relocs_export.sh "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so"
+sudo /home/lind/lind-wasm/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __wasm_apply_global_relocs func __wasm_apply_global_relocs
+sudo /home/lind/lind-wasm/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __stack_pointer global __stack_pointer
 
 mkdir -p /home/lind/lind-wasm/lindfs/lib
-cp "$SYSROOT/lib/wasm32-wasi/libm.so" /home/lind/lind-wasm/lindfs/lib/
+
+sudo /home/lind/lind-wasm/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o /home/lind/lind-wasm/lindfs/lib/libm.wasm
+sudo /home/lind/lind-wasm/scripts/lind_compile --precompile-only /home/lind/lind-wasm/lindfs/lib/libm.wasm

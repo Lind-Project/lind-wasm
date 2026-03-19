@@ -26,6 +26,7 @@ if ! command -v wasm2wat >/dev/null 2>&1 || ! command -v wat2wasm >/dev/null 2>&
 fi
 
 # INSERT_LINE="  (export \"__wasm_apply_tls_relocs\" (func \$__wasm_apply_tls_relocs))"
+# INSERT_LINE="  (export \"__wasm_apply_global_relocs\" (func \$__wasm_apply_global_relocs))\n  (export \"__stack_pointer\" (global \$__stack_pointer))"
 INSERT_LINE="  (export \"__wasm_apply_tls_relocs\" (func \$__wasm_apply_tls_relocs))\n  (export \"__wasm_apply_global_relocs\" (func \$__wasm_apply_global_relocs))\n  (export \"__stack_pointer\" (global \$__stack_pointer))"
 ANCHOR_LINE="  (export \"__wasm_apply_data_relocs\" (func \$__wasm_apply_data_relocs))"
 
@@ -37,7 +38,7 @@ wat_in="$tmpdir/in.wat"
 wat_out="$tmpdir/out.wat"
 
 # 1) Convert wasm -> wat
-/home/lind/wabt-1.0.37/bin/wasm2wat --enable-all "$IN_WASM" -o "$wat_in"
+wasm2wat --enable-all "$IN_WASM" -o "$wat_in"
 
 # 2) If export already present, keep as-is
 if grep -Fqx "$INSERT_LINE" "$wat_in"; then
@@ -71,6 +72,6 @@ else
 fi
 
 # 3) Convert wat -> wasm
-/home/lind/wabt-1.0.37/bin/wat2wasm --enable-all "$wat_out" -o "$OUT_WASM"
+wat2wasm --enable-all "$wat_out" -o "$OUT_WASM"
 
 echo "Patched wasm written to: $OUT_WASM"

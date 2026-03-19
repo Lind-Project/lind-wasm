@@ -70,9 +70,9 @@ DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
 # Check if LIND_DEBUG is defined (set by build.rs when `lind_debug` is enabled)
-# if [ "$LIND_DEBUG" ]; then
+if [ "$LIND_DEBUG" ]; then
 DEFINES="$DEFINES -DLIND_DEBUG"
-# fi
+fi
 
 # Build glibc
 rm -rf $BUILD
@@ -164,6 +164,10 @@ rm -rf "$SYSROOT"
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
 "$SCRIPT_DIR/make_archive.sh"
+cd $SCRIPT_DIR
+cd ../
+"$SCRIPT_DIR/make_shared_glibc.sh"
+"$SCRIPT_DIR/make_shared_libm.sh"
 
 # Copy all files from the external include directory to the new sysroot include directory
 cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
