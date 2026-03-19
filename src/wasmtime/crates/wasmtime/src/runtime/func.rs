@@ -13,7 +13,6 @@ use crate::{
 };
 use alloc::sync::Arc;
 use cage::DashMap;
-use wasmtime_lind_utils::symbol_table::SymbolMap;
 use core::ffi::c_void;
 use core::future::Future;
 use core::mem::{self, MaybeUninit};
@@ -21,6 +20,7 @@ use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
 use wasmtime_environ::{TableIndex, VMSharedTypeIndex};
+use wasmtime_lind_utils::symbol_table::SymbolMap;
 
 /// A reference to the abstract `nofunc` heap value.
 ///
@@ -1376,10 +1376,6 @@ impl Func {
         store.store_data().contains(self.0)
     }
 
-    pub fn get_id(&self) -> Option<StoreId> {
-        Some(self.0.store_id)
-    }
-
     fn invoke_host_func_for_wasm<T>(
         mut caller: Caller<'_, T>,
         ty: &FuncType,
@@ -2378,12 +2374,17 @@ impl<T> Caller<'_, T> {
     /// - Or the grow operation fails.
     pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> u32 {
         let lib_ty = crate::TableType::new(crate::RefType::FUNCREF, 0, None);
-        let lib_init = init_value.into_table_element(self.store.0, lib_ty.element()).unwrap();
-        let res = self.caller.table_grow(TableIndex::from_u32(0), delta, lib_init).unwrap();
+        let lib_init = init_value
+            .into_table_element(self.store.0, lib_ty.element())
+            .unwrap();
+        let res = self
+            .caller
+            .table_grow(TableIndex::from_u32(0), delta, lib_init)
+            .unwrap();
 
         res.unwrap()
     }
-    
+
     /// Return the current size of the library's function table (table index 0).
     ///
     /// This directly accesses the underlying VM table structure and queries its size.

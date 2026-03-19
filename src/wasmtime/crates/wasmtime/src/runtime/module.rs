@@ -18,7 +18,8 @@ use core::ptr::NonNull;
 use std::path::Path;
 use wasmparser::{Parser, ValidPayload, Validator};
 use wasmtime_environ::{
-    CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex
+    CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, EntityIndex, HostPtr, ModuleTypes,
+    ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex,
 };
 mod registry;
 
@@ -751,7 +752,7 @@ impl Module {
             ExportType::new(name, module.type_of(*entity_index), types, engine)
         })
     }
-    
+
     /// Return a raw iterator over the module's export table.
     ///
     /// This exposes the underlying `(name, EntityIndex)` pairs directly from
@@ -772,9 +773,10 @@ impl Module {
         let module = self.compiled_module().module();
         let types = self.types();
         let engine = self.engine();
-        module.exports.iter().map(move |(name, entity_index)| {
-            (name, entity_index)
-        })
+        module
+            .exports
+            .iter()
+            .map(move |(name, entity_index)| (name, entity_index))
     }
 
     /// Looks up an export in this [`Module`] by name.
@@ -1041,7 +1043,7 @@ impl Module {
             }
         })
     }
-    
+
     // lind-wasm: retrieve dynamic loading memory information
     pub fn dylink_meminfo<'a>(&'a self) -> Option<&DylinkMemInfo> {
         self.compiled_module().dylink_mem_info()

@@ -3,9 +3,12 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use sysdefs::{constants::{RTLD_DEFAULT, RTLD_NEXT}, logging::lind_debug_panic};
+use sysdefs::{
+    constants::{RTLD_DEFAULT, RTLD_NEXT},
+    logging::lind_debug_panic,
+};
 use wasmtime::Caller;
-use wasmtime_lind_multi_process::{LindHost, get_memory_base};
+use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 
 /// Type alias for the dynamic loader callback used by `dlopen`.
 ///
@@ -34,9 +37,8 @@ pub fn dlopen_call<
     mut caller: &mut Caller<'_, T>,
     file: i32,
     mode: i32,
-    loader: DynamicLoader<T>
-) -> i32
-{
+    loader: DynamicLoader<T>,
+) -> i32 {
     let base = get_memory_base(&mut caller);
     let path = typemap::get_cstr(base + file as u64).unwrap();
 
@@ -69,7 +71,9 @@ pub fn dlsym_call<
     } else if handle == RTLD_NEXT {
         lind_debug_panic("[lind-dylink] dlsym RTLD_NEXT encountered but not supported");
     } else {
-        caller.find_library_symbol_from_local(handle, symbol).unwrap()
+        caller
+            .find_library_symbol_from_local(handle, symbol)
+            .unwrap()
     };
     #[cfg(feature = "debug-dylink")]
     println!("[debug] dlsym resolves {} to {}", symbol, val);

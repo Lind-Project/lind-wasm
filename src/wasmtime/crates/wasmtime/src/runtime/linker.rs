@@ -1,15 +1,13 @@
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::{StoreId, StoreOpaque};
-use crate::{Global, GlobalType, IntoFunc, Table, prelude::*};
+use crate::{prelude::*, Global, GlobalType, IntoFunc, Table};
 use crate::{
     AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
 };
 use alloc::sync::Arc;
 use cage::DashMap;
-use wasmtime_lind_utils::LindGOT;
-use wasmtime_lind_utils::symbol_table::SymbolMap;
 use core::fmt;
 #[cfg(feature = "async")]
 use core::future::Future;
@@ -18,6 +16,8 @@ use core::marker;
 use core::pin::Pin;
 use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
+use wasmtime_lind_utils::symbol_table::SymbolMap;
+use wasmtime_lind_utils::LindGOT;
 
 use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
@@ -246,7 +246,10 @@ impl<T> Linker<T> {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
                     #[cfg(feature = "debug-dylink")]
-                    println!("[debug] Warning: link undefined symbol \"{}\" to trap", import.name());
+                    println!(
+                        "[debug] Warning: link undefined symbol \"{}\" to trap",
+                        import.name()
+                    );
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
                     })?;
@@ -280,7 +283,11 @@ impl<T> Linker<T> {
                         continue;
                     }
                     #[cfg(feature = "debug-dylink")]
-                    println!("[debug] define weak symbol {}.{} into trap", import.module(), import.name());
+                    println!(
+                        "[debug] define weak symbol {}.{} into trap",
+                        import.module(),
+                        import.name()
+                    );
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
                     })?;
@@ -291,16 +298,25 @@ impl<T> Linker<T> {
     }
 
     /// redirect all GOT functions/symbols into a centralized dispatcher function
-    /// 
+    ///
     /// We create mutable global "slots" as placeholders for GOT entries so they can be
     /// patched after instantiation (once exports and relocation targets are known).
     /// This enables dynamic updates of symbol addresses/indices without re-instantiating
     /// the module.
-    pub fn define_GOT_dispatcher(&mut self, mut store: impl AsContextMut<Data = T>, module: &Module, got: &mut LindGOT) -> anyhow::Result<()> {
+    pub fn define_GOT_dispatcher(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+        got: &mut LindGOT,
+    ) -> anyhow::Result<()> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 #[cfg(feature = "debug-dylink")]
-                println!("[debug]: define_GOT_dispatcher: import module: {}, name: {}", import.module(), import.name());
+                println!(
+                    "[debug]: define_GOT_dispatcher: import module: {}, name: {}",
+                    import.module(),
+                    import.name()
+                );
                 if import.module() == "GOT.func" || import.module() == "GOT.mem" {
                     // ASSUMPTION: all GOT imports are represented as `mut i32` globals.
                     // If the module's import type does not match this representation,
@@ -316,7 +332,12 @@ impl<T> Linker<T> {
                     //   to instantiate successfully, then patch the globals to the final
                     //   resolved values (e.g., function indices or memory addresses)
                     //   during/after relocation.
-                    let got_placeholder = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Var), Val::I32(0)).unwrap();
+                    let got_placeholder = Global::new(
+                        &mut store,
+                        GlobalType::new(ValType::I32, crate::Mutability::Var),
+                        Val::I32(0),
+                    )
+                    .unwrap();
                     self.define(&mut store, import.module(), import.name(), got_placeholder);
 
                     // Record the backing address of the placeholder slot in LindGOT so
@@ -329,67 +350,44 @@ impl<T> Linker<T> {
         Ok(())
     }
 
-    pub fn deepclone_global_imports(&mut self, mut store: impl AsContextMut<Data = T>, module: &Module) -> anyhow::Result<()> {
-        // println!("[debug] deepclone_global_imports start");
-        for import in module.imports() {
-            // println!("[debug] deepclone_global_imports start");
-            if let Ok(definition) = self._get_by_import(&import) {
-                let name = import.name();
-                match definition {
-                    Definition::Extern(ext, def_ty) => {
-                        match ext {
-                            Extern::Global(global) => {
-                                let global_ty = global.ty(&store);
-                                let value = global.get(&mut store);
-                                let cloned_value = value.clone();
-                                let cloned_global = Global::new(&mut store, global_ty, cloned_value)?;
-                                // println!("[debug] deepclone_global_imports: before define");
-                                self.define(&mut store, import.module(), name, cloned_global)?;
-                                // println!("[debug] deepclone_global_imports: after define");
-                            },
-                            _ => {}
-                        }
-                    },
-                    _ => {}
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn get_global_define_snapshot(&mut self, mut store: impl AsContextMut<Data = T>, module: &Module) -> anyhow::Result<Vec<(String, String, GlobalType, Val)>> {
+    pub fn get_global_define_snapshot(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+    ) -> anyhow::Result<Vec<(String, String, GlobalType, Val)>> {
         let mut collected = vec![];
         let mut globals = vec![];
         for (module, name, ext) in self.iter(&mut store) {
             match ext {
                 Extern::Global(global) => {
                     collected.push((module.to_string(), name.to_string(), global.clone()));
-                    // let global_ty = global.ty(&store);
-                    // let value = global.get(&mut store);
-                    // let cloned_value = value.clone();
-                    // globals.push((module.to_string(), name.to_string(), global_ty.clone(), cloned_value));
-                },
+                }
                 _ => {}
             }
         }
 
-        // println!("[debug]: get_global_define_snapshot: store id: {:?}", store.as_context().0.id());
         for (module, name, global) in collected {
-            // println!("[debug] get_global_define_snapshot: clone definition of {} (store id: {:?})", name, global.store_id());
             let global_ty = global.ty(&store);
             let value = global.get(&mut store);
             let cloned_value = value.clone();
-            globals.push((module.to_string(), name.to_string(), global_ty.clone(), cloned_value));
-            // println!("[debug] get_global_define_snapshot: clone definition of {name} done");
+            globals.push((
+                module.to_string(),
+                name.to_string(),
+                global_ty.clone(),
+                cloned_value,
+            ));
         }
         Ok(globals)
     }
 
-    pub fn set_global_define_snapshot(&mut self, mut store: impl AsContextMut<Data = T>, globals: &Vec<(String, String, GlobalType, Val)>) -> anyhow::Result<Option<u64>> {
+    pub fn set_global_define_snapshot(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        globals: &Vec<(String, String, GlobalType, Val)>,
+    ) -> anyhow::Result<Option<u64>> {
         let mut epoch_handler = None;
         for (module, name, ty, val) in globals {
             let cloned_global = Global::new(&mut store, ty.clone(), val.clone())?;
-            // println!("[debug] set_global_define_snapshot: clone definition of {} (store id: {:?})", name, cloned_global.store_id());
             self.define(&mut store, &module, &name, cloned_global)?;
 
             if module == "lind" && name == "epoch" {
@@ -399,7 +397,12 @@ impl<T> Linker<T> {
         Ok(epoch_handler)
     }
 
-    pub fn get_memory_base_from_snapshot(&self, mut store: impl AsContextMut<Data = T>, globals: &Vec<(String, String, GlobalType, Val)>, name: &str) -> Option<i32> {
+    pub fn get_memory_base_from_snapshot(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        globals: &Vec<(String, String, GlobalType, Val)>,
+        name: &str,
+    ) -> Option<i32> {
         for (module, global_name, ty, val) in globals {
             let expected_name = format!("{}.{}", "__memory_base", name);
             if global_name == &expected_name {
@@ -1022,15 +1025,24 @@ impl<T> Linker<T> {
                 self.allow_shadowing(true);
                 let mut module_linker = self.clone();
                 // module_linker.allow_shadowing(true);
-                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0))?;
+                let memory_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(0),
+                )?;
                 // Provide `__memory_base` for the library (used by data relocs).
                 module_linker.define(&mut store, "env", "__memory_base", memory_base);
-                let library_memory_base_name = format!("{}.{}", "__memory_base", module.name().unwrap());
+                let library_memory_base_name =
+                    format!("{}.{}", "__memory_base", module.name().unwrap());
                 self.define(&mut store, "env", &library_memory_base_name, memory_base);
                 let handler = memory_base.get_handler_as_u32(&mut store);
 
                 // Provide `__table_base` for the library (used by indirect calls / table relocs).
-                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base))?;
+                let table_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(table_base),
+                )?;
                 module_linker.define(&mut store, "env", "__table_base", table_base);
 
                 // Resolve any remaining unknown imports to trap stubs so the library can
@@ -1048,10 +1060,14 @@ impl<T> Linker<T> {
                 println!("[debug] library module instantiate");
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib{
-                    needs_init: needs_init,
-                    memory_base: handler
-                })?;
+                let (instance, _) = module_linker.instantiate_with_lind(
+                    &mut store,
+                    &module,
+                    InstantiateType::InstantiateLib {
+                        needs_init: needs_init,
+                        memory_base: handler,
+                    },
+                )?;
                 #[cfg(feature = "debug-dylink")]
                 println!("[debug] library module instantiate done");
 
@@ -1076,10 +1092,10 @@ impl<T> Linker<T> {
                         match export.into_extern() {
                             Extern::Func(func) => {
                                 funcs.push((name, func));
-                            },
+                            }
                             Extern::Global(global) => {
                                 globals.push((name, global));
-                            },
+                            }
                             _ => {}
                         }
                     }
@@ -1119,13 +1135,16 @@ impl<T> Linker<T> {
 
                 // Apply data relocations emitted by the toolchain after exports/GOT have been patched.
                 // This populates relocated pointers/data segments inside the library's memory.
-                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
+                let reloc = instance
+                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
                 #[cfg(feature = "debug-dylink")]
                 println!("[debug] library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                 // Apply TLS relocations if present.
-                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                if let Ok(init) = instance
+                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
+                {
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] library start __wasm_apply_tls_relocs");
                     let _ = init.call(store.as_context_mut(), ()).unwrap();
@@ -1181,13 +1200,21 @@ impl<T> Linker<T> {
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
                 // `instantiate_with_lind` can patch the global once the real base is known.
                 let mut module_linker = self.clone();
-                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(memory_base))?;
+                let memory_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(memory_base),
+                )?;
                 // Provide `__memory_base` for the library (used by data relocs).
                 module_linker.define(&mut store, "env", "__memory_base", memory_base);
                 let handler = memory_base.get_handler_as_u32(&mut store);
 
                 // Provide `__table_base` for the library (used by indirect calls / table relocs).
-                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base))?;
+                let table_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(table_base),
+                )?;
                 module_linker.define(&mut store, "env", "__table_base", table_base);
 
                 // Resolve any remaining unknown imports to trap stubs so the library can
@@ -1197,10 +1224,14 @@ impl<T> Linker<T> {
                 println!("[debug] library module instantiate");
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib{
-                    needs_init: false,
-                    memory_base: handler
-                })?;
+                let (instance, _) = module_linker.instantiate_with_lind(
+                    &mut store,
+                    &module,
+                    InstantiateType::InstantiateLib {
+                        needs_init: false,
+                        memory_base: handler,
+                    },
+                )?;
                 #[cfg(feature = "debug-dylink")]
                 println!("[debug] library module instantiate done");
 
@@ -1212,7 +1243,7 @@ impl<T> Linker<T> {
                     match export.into_extern() {
                         Extern::Func(func) => {
                             funcs.push((name, func));
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -1224,7 +1255,11 @@ impl<T> Linker<T> {
                     let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
                 }
 
-                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_global_relocs")?;
+                // we should and only should apply global relocs for child libraries
+                let reloc = instance.get_typed_func::<(), ()>(
+                    store.as_context_mut(),
+                    "__wasm_apply_global_relocs",
+                )?;
                 #[cfg(feature = "debug-dylink")]
                 println!("[debug] child library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
@@ -1279,12 +1314,20 @@ impl<T> Linker<T> {
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
                 // `instantiate_with_lind` can patch the global once the real base is known.
                 let mut module_linker = self.clone();
-                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0))?;
+                let memory_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(0),
+                )?;
                 // Provide `__memory_base` for the library (used by data relocs).
                 module_linker.define(&mut store, "env", "__memory_base", memory_base);
                 let handler = memory_base.get_handler_as_u32(&mut store);
                 // Provide `__table_base` for the library (used by indirect calls / table relocs).
-                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base))?;
+                let table_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(table_base),
+                )?;
                 module_linker.define(&mut store, "env", "__table_base", table_base);
 
                 // Resolve any remaining unknown imports to trap stubs so the library can
@@ -1293,10 +1336,14 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib{
-                    needs_init: true,
-                    memory_base: handler
-                })?;
+                let (instance, _) = module_linker.instantiate_with_lind(
+                    &mut store,
+                    &module,
+                    InstantiateType::InstantiateLib {
+                        needs_init: true,
+                        memory_base: handler,
+                    },
+                )?;
 
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };
@@ -1318,10 +1365,10 @@ impl<T> Linker<T> {
                     match export.into_extern() {
                         Extern::Func(func) => {
                             funcs.push((name, func));
-                        },
+                        }
                         Extern::Global(global) => {
                             globals.push((name, global));
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -1361,13 +1408,16 @@ impl<T> Linker<T> {
 
                 // Apply data relocations emitted by the toolchain after exports/GOT have been patched.
                 // This populates relocated pointers/data segments inside the library's memory.
-                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
+                let reloc = instance
+                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
                 #[cfg(feature = "debug-dylink")]
                 println!("[debug] library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ())?;
 
                 // Apply TLS relocations if present.
-                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                if let Ok(init) = instance
+                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
+                {
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] library start __wasm_apply_tls_relocs");
                     let _ = init.call(store.as_context_mut(), ())?;
@@ -1795,14 +1845,7 @@ impl<T> Linker<T> {
         let mut imports = module
             .imports()
             .map(|import| {
-                // println!("[debug] _instantiate_pre import name: {:?}", import.name());
                 let definition = self._get_by_import(&import);
-                // let def = definition.clone();
-                // if let Ok(d) = def {
-                //     println!("[debug] store id = {:?}", d.get_store_id());
-                // } else {
-                //     println!("undefined");
-                // }
                 definition
             })
             .collect::<Result<Vec<_>, _>>()
@@ -1969,22 +2012,6 @@ impl Definition {
             Definition::HostFunc(_func) => true,
         }
     }
-
-    // pub(crate) fn get_store_id(&self) -> Option<StoreId> {
-    //     /*
-    //         Extern::Func(f) => f.comes_from_same_store(store),
-    //         Extern::Global(g) => store.store_data().contains(g.0),
-    //         Extern::Memory(m) => m.comes_from_same_store(store),
-    //         Extern::SharedMemory(m) => Engine::same(m.engine(), store.engine()),
-    //         Extern::Table(t) => store.store_data().contains(t.0),
-    //      */
-    //     match self {
-    //         Definition::Extern(e, _) => {
-    //             e.get_id()
-    //         }
-    //         Definition::HostFunc(_func) => None,
-    //     }
-    // }
 
     fn update_size(&mut self, store: &StoreOpaque) {
         match self {

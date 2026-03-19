@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use wasmtime_lind_dylink::DynamicLoader;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const;
@@ -12,6 +11,7 @@ use threei::threei::{
 use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
+use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
@@ -84,9 +84,7 @@ fn add_syscall_to_linker<
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
-) -> anyhow::Result<()>
-{
-    // attach make_syscall to wasmtime
+) -> anyhow::Result<()> {
     linker.func_wrap(
         "lind",
         "make-syscall",
@@ -266,7 +264,7 @@ fn add_debug_to_linker<
         "debug",
         "lind_debug_num",
         move |_caller: Caller<'_, T>, num: u32| -> u32 {
-            // eprintln!("[LIND DEBUG NUM]: {}", num);
+            eprintln!("[LIND DEBUG NUM]: {}", num);
             num
         },
     )?;
@@ -277,7 +275,7 @@ fn add_debug_to_linker<
         move |mut caller: Caller<'_, T>, ptr: i32| -> i32 {
             let mem_base = get_memory_base(&mut caller);
             if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
-                // eprintln!("[LIND DEBUG STR]: {}", msg);
+                eprintln!("[LIND DEBUG STR]: {}", msg);
             }
             ptr
         },
@@ -408,7 +406,12 @@ pub fn add_dylink_to_linker<
         "lind",
         "dlopen",
         move |mut caller: wasmtime::Caller<'_, T>, file: i32, mode: i32| -> i32 {
-            wasmtime_lind_dylink::dlopen_call(&mut caller, file, mode, cloned_dynamic_loader.clone())
+            wasmtime_lind_dylink::dlopen_call(
+                &mut caller,
+                file,
+                mode,
+                cloned_dynamic_loader.clone(),
+            )
         },
     )?;
 

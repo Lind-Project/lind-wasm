@@ -507,9 +507,8 @@ pub struct Module {
     pub dylink_mem_info: Option<DylinkMemInfo>,
 
     /// dylink import information
-    pub dylink_import_info: Option<DylinkImportInfo>
+    pub dylink_import_info: Option<DylinkImportInfo>,
 }
-
 
 /// lind-wasm addition: dylink memory information
 #[derive(Debug, Serialize, Deserialize)]
@@ -546,7 +545,7 @@ pub struct DylinkImport {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DylinkImportInfo {
     /// import info consist of a list of imports
-    pub imports: Vec<DylinkImport>
+    pub imports: Vec<DylinkImport>,
 }
 
 impl DylinkImportInfo {

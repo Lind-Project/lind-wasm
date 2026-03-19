@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
-use std::sync::{Condvar, Mutex, atomic::{AtomicU32, Ordering}};
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Condvar, Mutex,
+};
 
 use dashmap::DashMap;
 
@@ -96,14 +99,14 @@ pub struct LindGOT {
     ///
     /// We store the pointer as `u64` instead of `*mut u32` so this struct can be shared across
     /// threads without Rust's raw-pointer `Send/Sync` friction.
-    global_offset_table: DashMap<String, u64>
+    global_offset_table: DashMap<String, u64>,
 }
 
 impl LindGOT {
     /// Create an empty GOT table.
     pub fn new() -> Self {
         Self {
-            global_offset_table: DashMap::new()
+            global_offset_table: DashMap::new(),
         }
     }
 
@@ -170,7 +173,7 @@ impl LindGOT {
             Ordering::AcqRel,  // success ordering
             Ordering::Acquire, // failure ordering
         ) {
-            Ok(_) => true, // we updated from 0 -> val
+            Ok(_) => true,   // we updated from 0 -> val
             Err(_) => false, // either already resolved or raced and lost
         }
     }
@@ -187,7 +190,7 @@ impl LindGOT {
     /// print unresolved symbols.
     ///
     /// Convention: a GOT cell value of 0 means "unresolved".
-    /// 
+    ///
     /// This is safe in Lind because:
     /// - A memory address of `0` is never a valid resolved target.
     /// - A function index of `0` is also not used as a valid callable entry.

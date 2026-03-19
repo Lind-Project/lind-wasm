@@ -94,7 +94,6 @@ use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
 use alloc::sync::Arc;
 use cage::DashMap;
-use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
@@ -110,6 +109,7 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 mod context;
 pub use self::context::*;
@@ -1454,7 +1454,9 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     // find library symbol from local scope
     pub fn find_library_symbol_from_local(&self, handler: i32, name: &str) -> Option<u32> {
-        self.0.library_symbols.find_symbol_from_handler(handler, name)
+        self.0
+            .library_symbols
+            .find_symbol_from_handler(handler, name)
     }
 
     // find library symbol from global scope
@@ -1471,7 +1473,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     pub fn check_library_loaded(&self, inode: u64) -> Option<i32> {
         self.0.library_symbols.check_library_loaded(inode)
     }
-    
+
     // append the syscall retval information
     pub fn append_syscall_asyncify_data(&mut self, retval: i32) {
         self.0.syscall_asyncify_data.push(retval);

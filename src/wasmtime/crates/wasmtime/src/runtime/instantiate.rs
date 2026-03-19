@@ -9,7 +9,9 @@ use crate::{code_memory::CodeMemory, profiling_agent::ProfilingAgent};
 use alloc::sync::Arc;
 use core::str;
 use wasmtime_environ::{
-    CompiledFunctionInfo, CompiledModuleInfo, DefinedFuncIndex, DylinkImportInfo, DylinkMemInfo, FuncIndex, FunctionLoc, FunctionName, Metadata, Module, ModuleInternedTypeIndex, PrimaryMap, StackMapInformation, WasmFunctionInfo
+    CompiledFunctionInfo, CompiledModuleInfo, DefinedFuncIndex, DylinkImportInfo, DylinkMemInfo,
+    FuncIndex, FunctionLoc, FunctionName, Metadata, Module, ModuleInternedTypeIndex, PrimaryMap,
+    StackMapInformation, WasmFunctionInfo,
 };
 
 /// A compiled wasm module, ready to be instantiated.

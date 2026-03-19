@@ -98,13 +98,16 @@ impl SymbolMap {
     /// Relaxed ordering is sufficient since ref_count is only used
     /// for lifetime management.
     pub fn increment_ref(&self) {
-        self.ref_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.ref_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Decrement reference count.
     /// Returns true if this was the last reference.
     pub fn decrement_ref(&self) -> bool {
-        let curr = self.ref_count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        let curr = self
+            .ref_count
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
 
         // Ensure ref_count never goes negative.
         debug_assert!(curr > 0);
@@ -168,9 +171,12 @@ impl SymbolTable {
         let target = SymbolMap::new_rm_target(handler);
 
         // Locate library in ordered skiplist.
-        let index = self.symbol_table.index_of(&target).ok_or(anyhow::anyhow!("handler does not exist"))?;
+        let index = self
+            .symbol_table
+            .index_of(&target)
+            .ok_or(anyhow::anyhow!("handler does not exist"))?;
         let mut symbol_map = self.symbol_table.get(index as usize).unwrap();
-        
+
         // Only remove if:
         // 1) reference count drops to zero
         // 2) library is not marked RTLD_NODELETE
@@ -188,7 +194,7 @@ impl SymbolTable {
     pub fn find_symbol_from_global_scope(&self, name: &str) -> Option<u32> {
         for symbol_map in &self.symbol_table {
             // Skip libraries that are not globally visible.
-            if !symbol_map.is_local() {
+            if symbol_map.is_local() {
                 continue;
             }
 
@@ -243,6 +249,7 @@ impl SymbolTable {
     /// Allocate the next unique library handler.
     /// Relaxed ordering is sufficient because handlers only need uniqueness.
     fn get_next_handler(&self) -> i32 {
-        self.next_handler.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.next_handler
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }

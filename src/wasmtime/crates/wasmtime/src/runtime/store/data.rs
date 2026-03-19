@@ -94,7 +94,6 @@ impl StoreData {
     where
         T: StoredData,
     {
-        // println!("[debug]: contains: store id: {:?}, self id: {:?}", id.store_id, self.id);
         if id.store_id != self.id {
             return false;
         }
@@ -252,7 +251,7 @@ impl StoreId {
 
 #[repr(C)] // used by reference in the C API, also in `wasmtime_func_t`.
 pub struct Stored<T> {
-    pub store_id: StoreId,
+    store_id: StoreId,
     index: usize,
     _marker: marker::PhantomData<fn() -> T>,
 }

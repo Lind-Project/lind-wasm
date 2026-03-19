@@ -2,23 +2,23 @@ use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampo
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
-use wasmtime_lind_common::LindEnviron;
-use wasmtime_lind_dylink::DynamicLoader;
-use wasmtime_lind_utils::symbol_table::SymbolMap;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
-use sysdefs::constants::{DEFAULT_STACKSIZE, GUARD_SIZE, LINDFS_ROOT};
 use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
+use sysdefs::constants::{DEFAULT_STACKSIZE, GUARD_SIZE, LINDFS_ROOT};
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, Store, Val,
     ValType, WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
+use wasmtime_lind_common::LindEnviron;
+use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID, get_memory_base};
+use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
 use wasmtime_wasi_threads::WasiThreadsCtx;
 
@@ -509,12 +509,15 @@ fn attach_api(
     });
 
     let mut linker_guard = linker.lock().unwrap();
-    let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(&mut linker_guard, |s: &HostCtx| {
-        s.lind_environ
-            .as_ref()
-            .expect("lind_environ must be initialized")
-    },
-    dynamic_loader)?;
+    let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(
+        &mut linker_guard,
+        |s: &HostCtx| {
+            s.lind_environ
+                .as_ref()
+                .expect("lind_environ must be initialized")
+        },
+        dynamic_loader,
+    )?;
 
     // Setup WASI-thread
     let _ = wasmtime_wasi_threads::add_to_linker(
@@ -671,7 +674,7 @@ fn load_main_module(
                 // I don't think main module should update GOT functions?
                 wasmtime::Extern::Func(func) => {
                     funcs.push((name, func));
-                },
+                }
                 wasmtime::Extern::Global(global) => {
                     globals.push((name, global));
                 }
@@ -680,7 +683,9 @@ fn load_main_module(
         }
 
         for (name, func) in funcs {
-            let index = table.grow(&mut store, 1, wasmtime::Ref::Func(Some(func))).unwrap();
+            let index = table
+                .grow(&mut store, 1, wasmtime::Ref::Func(Some(func)))
+                .unwrap();
             let mut guard = got.lock().unwrap();
             if (*guard).update_entry_if_unresolved(&name, index) {
                 #[cfg(feature = "debug-dylink")]
@@ -804,10 +809,7 @@ fn load_library_module(
             &*got_guard,
             symbol_map,
         )
-        .context(format!(
-            "failed to process library `{}`",
-            library_name
-        ))
+        .context(format!("failed to process library `{}`", library_name))
         .unwrap() as i32
 }
 
