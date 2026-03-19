@@ -32,6 +32,11 @@ pub const RLIMIT_NOFILE: u64 = 1; // Limit type for number of files
 pub const EXIT_SUCCESS: i32 = 0; // Successful termination
 pub const EXIT_FAILURE: i32 = 1; // Unsuccessful termination
 
+// ===== Syscall Numbers =====
+// Source: include/uapi/asm-generic/unistd.h
+pub const EXIT_SYSCALL: u64 = 60; // exit — terminate calling thread
+pub const EXIT_GROUP_SYSCALL: u64 = 231; // exit_group — terminate all threads
+
 // ===== Waitpid Options =====
 // Source: include/uapi/linux/wait.h
 pub const WNOHANG: i32 = 1; // Don't block waiting

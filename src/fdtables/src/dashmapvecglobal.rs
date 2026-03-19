@@ -294,16 +294,13 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
 #[doc = include_str!("../docs/remove_cage_from_fdtable.md")]
 pub fn remove_cage_from_fdtable(cageid: u64) {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
-
-
-    // remove the item first and then we clean up and call their close
-    // handlers.
-    let myfdrow = FDTABLE.remove(&cageid).unwrap().1;
-
-    // Take only the Some items in here (clippy suggested)
-    for entry in myfdrow.into_iter().flatten() {
-        _decrement_fdcount(entry);
+    // In multi-cage (grate) scenarios, concurrent exit paths may race to
+    // remove the same cage. If already removed, there's nothing to clean up.
+    if let Some((_, myfdrow)) = FDTABLE.remove(&cageid) {
+        // Take only the Some items in here (clippy suggested)
+        for entry in myfdrow.into_iter().flatten() {
+            _decrement_fdcount(entry);
+        }
     }
 
 }

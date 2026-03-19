@@ -92,3 +92,5 @@ pub const GUARD_SIZE: u32 = 1024; // 1 KB
 pub const INIT_CAGEID: u64 = 1;
 /// Thread ID for the main thread of a cage.
 pub const MAIN_THREADID: u64 = 1;
+/// Number of instances to pre-allocate for the initial cage
+pub const INSTANCE_NUMBER: usize = 5000;
