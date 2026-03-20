@@ -528,8 +528,10 @@ impl<
         // set asyncify state to unwind
         store.set_asyncify_state(AsyncifyState::Unwind);
 
-        // after returning from here, unwind process should start
-        return Ok(0);
+        // The "dual" return from fork is handled directly in the wasm modules through asyncify.
+        // We return the newly forked child_cageid so that callers invoking this path through
+        // `make_threei_call` are aware of the cageid of the forked process.
+        return Ok(child_cageid as i32);
     }
 
     // shared-memory version of fork syscall, used to create a new thread
