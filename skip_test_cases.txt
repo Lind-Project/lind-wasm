@@ -1,4 +1,3 @@
-file_tests/deterministic/popen.c
 signal_tests/deterministic/signal.c
 signal_tests/deterministic/signal_int_thread.c
 signal_tests/deterministic/signal_longjmp.c
