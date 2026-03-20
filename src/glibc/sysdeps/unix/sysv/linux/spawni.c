@@ -348,8 +348,7 @@ __spawnix (int *pid, const char *file,
 	return errno;
       }
 
-  // lind-wasm: disable PROC_EXEC
-  // since wasm doesn't allow PROT_EXEC mapping in linear memory
+  // lind-wasm: removed PROT_EXEC — WASM linear memory cannot be executable.
   int prot = (PROT_READ | PROT_WRITE);
 
   /* Add a slack area for child's stack.  */
@@ -362,7 +361,7 @@ __spawnix (int *pid, const char *file,
      where it might use about 1k extra stack space).  */
   argv_size += (32 * 1024);
   size_t stack_size = ALIGN_UP (argv_size, GLRO(dl_pagesize));
-  // lind-wasm: remove MAP_STACK
+  // lind-wasm: removed MAP_STACK — unsupported by RawPOSIX mmap (no-op on Linux).
   void *stack = __mmap (NULL, stack_size, prot,
 			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (__glibc_unlikely (stack == MAP_FAILED))
@@ -403,7 +402,9 @@ __spawnix (int *pid, const char *file,
       .flags = (set_cgroup ? CLONE_INTO_CGROUP : 0)
 	       | (use_pidfd ? CLONE_PIDFD : 0)
 	       | CLONE_CLEAR_SIGHAND
-	       | CLONE_VFORK, // lind-wasm: removed CLONE_VM flag
+	       // lind-wasm: removed CLONE_VM — fork needs separate memory for
+	       // parent and child (shared WASM linear memory would corrupt parent).
+	       | CLONE_VFORK,
       .exit_signal = SIGCHLD,
       .stack = (uintptr_t) stack,
       .stack_size = stack_size,
