@@ -18,7 +18,7 @@ use super::fs_calls::{
 };
 use super::init::RawCallFunc;
 use super::net_calls::{
-    accept_syscall, accept4_syscall bind_syscall, connect_syscall, epoll_create1_syscall, epoll_create_syscall,
+    accept_syscall, accept4_syscall, bind_syscall, connect_syscall, epoll_create1_syscall, epoll_create_syscall,
     epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall, getpeername_syscall,
     getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall,
     recvmsg_syscall, select_syscall, sendmsg_syscall, sendto_syscall, setsockopt_syscall,
