@@ -455,7 +455,7 @@ impl<
                             // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
                             // This is intended for debugging only and should not be used in production.
                             if #[cfg(feature = "disable_signals")] {
-                                &mut 0 as *mut u64
+                                &mut 0
                             } else {
                                 // retrieve the epoch global
                                 let lind_epoch = instance
@@ -871,7 +871,7 @@ impl<
                             // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
                             // This is intended for debugging only and should not be used in production.
                             if #[cfg(feature = "disable_signals")] {
-                                &mut 0 as *mut u64
+                                &mut 0
                             } else {
                                 // retrieve the epoch global
                                 let lind_epoch = instance

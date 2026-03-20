@@ -14,3 +14,6 @@ log = { workspace = true }
 dashmap = { version = "5.1", features=["serde"] }
 skiplist = "0.6.0"
 sysdefs = { path = "../sysdefs" }
+
+[features]
+debug-dylink = []

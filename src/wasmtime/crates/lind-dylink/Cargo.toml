@@ -23,4 +23,4 @@ cage = { path = "../cage" }
 typemap = { path = "../typemap" }
 
 [features]
-lind_debug = []
+debug-dylink = []
