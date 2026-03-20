@@ -173,4 +173,5 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$BUILD/csu/set_stack_pointer.o" "$SYSROOT/lib/wasm32-wasi/"
 cp "$GLIBC/lind_syscall/lind_syscall.h" "$SYSROOT/include/wasm32-wasi/"

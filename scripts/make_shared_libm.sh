@@ -10,6 +10,7 @@
 set -e
 
 CC="clang"
+REPO_ROOT="$PWD"
 GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
@@ -1056,12 +1057,12 @@ wasm-ld \
     --export-if-defined=ynf64 \
     --export-if-defined=ynf64x \
     --export-if-defined=ynl \
-    -o "$SYSROOT/lib/wasm32-wasi/libm.so" /home/lind/lind-wasm/src/glibc/build/csu/errno.o
+    -o "$SYSROOT/lib/wasm32-wasi/libm.so" $REPO_ROOT/src/glibc/build/csu/errno.o
 
-/home/lind/lind-wasm/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __wasm_apply_global_relocs func __wasm_apply_global_relocs
-/home/lind/lind-wasm/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __stack_pointer global __stack_pointer
+$REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __wasm_apply_global_relocs func __wasm_apply_global_relocs
+$REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __stack_pointer global __stack_pointer
 
-mkdir -p /home/lind/lind-wasm/lindfs/lib
+mkdir -p $REPO_ROOT/lindfs/lib
 
-/home/lind/lind-wasm/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o /home/lind/lind-wasm/lindfs/lib/libm.wasm
-/home/lind/lind-wasm/scripts/lind_compile --precompile-only /home/lind/lind-wasm/lindfs/lib/libm.wasm
+$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.wasm
+$REPO_ROOT/scripts/lind_compile --precompile-only $REPO_ROOT/lindfs/lib/libm.wasm

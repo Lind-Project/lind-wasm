@@ -369,9 +369,9 @@ do_dynamic_compile() {
   fi
 
   run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
-    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "/home/lind/lind-wasm/src/glibc/build/csu/set_stack_pointer.o" -o "${OUT_WASM}"
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/set_stack_pointer.o" -o "${OUT_WASM}"
   
-  run_cmd /home/lind/lind-wasm/scripts/append_stack_pointer_export.sh "${OUT_WASM}" "${OUT_WASM}"
+  run_cmd $REPO_ROOT/scripts/append_stack_pointer_export.sh "${OUT_WASM}" "${OUT_WASM}"
 }
 
 # do_optimize() {

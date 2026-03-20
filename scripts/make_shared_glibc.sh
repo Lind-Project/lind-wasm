@@ -10,6 +10,7 @@
 set -e
 
 CC="clang"
+REPO_ROOT="$PWD"
 GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
@@ -3323,11 +3324,11 @@ wasm-ld \
     --export-if-defined=environ \
     -o "$SYSROOT/lib/wasm32-wasi/libc.so"
 
-mkdir -p /home/lind/lind-wasm/lindfs/lib
+mkdir -p $REPO_ROOT/lindfs/lib
 
-# sudo ./scripts/append_tls_relocs_export.sh "$SYSROOT/lib/wasm32-wasi/libc.so" /home/lind/lind-wasm/lindfs/lib/libc.wasm
-/home/lind/lind-wasm/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" /home/lind/lind-wasm/lindfs/lib/libc.wasm __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
-/home/lind/lind-wasm/tools/add-export-tool/add-export-tool /home/lind/lind-wasm/lindfs/lib/libc.wasm /home/lind/lind-wasm/lindfs/lib/libc.wasm __wasm_apply_global_relocs func __wasm_apply_global_relocs
-/home/lind/lind-wasm/tools/add-export-tool/add-export-tool /home/lind/lind-wasm/lindfs/lib/libc.wasm /home/lind/lind-wasm/lindfs/lib/libc.wasm __stack_pointer global __stack_pointer
-/home/lind/lind-wasm/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo /home/lind/lind-wasm/lindfs/lib/libc.wasm -o /home/lind/lind-wasm/lindfs/lib/libc.wasm
-/home/lind/lind-wasm/scripts/lind_compile --precompile-only /home/lind/lind-wasm/lindfs/lib/libc.wasm
+# sudo ./scripts/append_tls_relocs_export.sh "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/lindfs/lib/libc.wasm
+$REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/lindfs/lib/libc.wasm __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
+$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm $REPO_ROOT/lindfs/lib/libc.wasm __wasm_apply_global_relocs func __wasm_apply_global_relocs
+$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm $REPO_ROOT/lindfs/lib/libc.wasm __stack_pointer global __stack_pointer
+$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $REPO_ROOT/lindfs/lib/libc.wasm -o $REPO_ROOT/lindfs/lib/libc.wasm
+$REPO_ROOT/scripts/lind_compile --precompile-only $REPO_ROOT/lindfs/lib/libc.wasm
