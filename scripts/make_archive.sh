@@ -4,7 +4,6 @@
 # IMPORTANT NOTES:
 # - expects `clang` and other llvm binaries on $PATH
 #
-set -x
 
 CC="clang"
 # 1. Get the directory where this script is located

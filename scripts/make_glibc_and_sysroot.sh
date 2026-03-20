@@ -7,7 +7,6 @@
 # - expects `clang` and other llvm binaries on $PATH
 # - expects GLIBC source in $PWD/src/glibc
 #
-set -x
 
 CC="clang"
 GLIBC="$PWD/src/glibc"

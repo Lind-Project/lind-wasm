@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# set -x
-
 # Run passed (optionally precompiled) wasm file in wasmtime.
 #
 # Usage:

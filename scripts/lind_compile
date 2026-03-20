@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-set -x
 # Cross-compile C programs to wasm using the lind-wasm toolchain.
 #
 # Default pipeline:
@@ -85,7 +84,7 @@ run_cmd() {
     printf '%q ' "$@" >&2
     printf '\n' >&2
   fi
-  sudo "$@"
+  "$@"
 }
 
 # --- option parsing ---
