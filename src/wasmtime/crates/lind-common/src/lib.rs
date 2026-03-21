@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use rand::Rng;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const;
@@ -389,28 +390,21 @@ fn add_environ_funcs_to_linker<
         module,
         "random_get",
         move |mut caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
-            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
-            // Route through 3i make_syscall (getrandom = syscall 318)
-            // instead of opening /dev/urandom which doesn't exist in
-            // the lindfs chroot.
-            make_syscall(
-                cageid,
-                318, // SYS_getrandom
-                0,
-                cageid,
-                buf as u64,
-                cageid,
-                buf_len as u64,
-                cageid,
-                0, // flags
-                cageid,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-            )
+            let base = get_memory_base(&caller) as *mut u8;
+
+            // Use rand to fill up the buffer of requested size
+            let mut bytes = vec![0u8; buf_len as usize];
+            let mut rng = rand::thread_rng();
+            rng.fill(&mut bytes[..]);
+
+            // Copy to the provided buffer
+            unsafe {
+                write_bytes(base, buf as usize, &bytes);
+            }
+
+            // wasip1::random_get expects return value of 0 on success, positive numbers represent
+            // error codes
+            0
         },
     )?;
 
