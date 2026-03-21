@@ -6,6 +6,7 @@ use dashmap::DashSet;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use std::sync::RwLock;
+use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
@@ -16,7 +17,7 @@ use crate::handler_table::{
 };
 use crate::threei_const;
 
-pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
+pub use sysdefs::constants::sys_const::{EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = extern "C" fn(
@@ -412,10 +413,19 @@ pub fn make_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Return error if the target cage/grate is exiting. We need to add this check beforehead, because make_syscall will also
-    // contain cases that can directly redirect a syscall when self_cageid == target_id, which will bypass the handlertable check
-    if EXITING_TABLE.contains(&target_cageid) && syscall_num != EXIT_SYSCALL {
-        return threei_const::ELINDESRCH as i32;
+    // Block cross-cage calls to a dead or removed cage (e.g. grate-forwarded
+    // syscalls).  The cage's own threads are allowed to keep making
+    // syscalls until the epoch kill fires — without the self != target
+    // guard, the cage's own mmap/futex calls would get -ESRCH and glibc
+    // would misinterpret the error as a valid address.
+    // EXITING_TABLE persists after remove_cage, catching calls to fully
+    // removed cages that is_cage_dead misses (it returns false for None).
+    if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+        && syscall_num != EXIT_SYSCALL
+        && syscall_num != EXIT_GROUP_SYSCALL
+        && self_cageid != target_cageid
+    {
+        return -(Errno::ESRCH as i32);
     }
 
     // TODO:
@@ -428,6 +438,16 @@ pub fn make_syscall(
         if grateid == lind_platform_const::RAWPOSIX_CAGEID
             || grateid == lind_platform_const::WASMTIME_CAGEID
         {
+            // Second check: catch in-flight grate-forwarded calls that
+            // passed the initial check before is_dead was set or the cage
+            // was removed.
+            if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+                && syscall_num != EXIT_SYSCALL
+                && syscall_num != EXIT_GROUP_SYSCALL
+                && self_cageid != target_cageid
+            {
+                return -(Errno::ESRCH as i32);
+            }
             let func: RawCallFunc =
                 unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
             return func(
@@ -472,7 +492,27 @@ pub fn make_syscall(
         // Grate case: call into the corresponding grate function
         // <targetcage, targetcallnum, in_grate_fn_ptr_u64, this_grate_id>
         // Theoretically, the complexity is O(1), shouldn't affect performance a lot
-        if let Some(ret) = _call_grate_func(
+
+        // Track this in-flight grate dispatch so cage_finalize() waits
+        // for it to complete before removing the cage.
+        if let Some(grate_cage) = cage::get_cage(grateid) {
+            grate_cage
+                .grate_inflight
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            // After incrementing, recheck is_dead: if the cage started
+            // exiting between our earlier check and now, bail out.
+            if grate_cage
+                .is_dead
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                grate_cage
+                    .grate_inflight
+                    .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+                return -(Errno::ESRCH as i32);
+            }
+        }
+
+        let grate_result = _call_grate_func(
             grateid,
             in_grate_fn_ptr_u64,
             arg1,
@@ -487,7 +527,16 @@ pub fn make_syscall(
             arg5_cageid,
             arg6,
             arg6_cageid,
-        ) {
+        );
+
+        // Decrement the in-flight counter now that the dispatch returned.
+        if let Some(grate_cage) = cage::get_cage(grateid) {
+            grate_cage
+                .grate_inflight
+                .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        }
+
+        if let Some(ret) = grate_result {
             return ret;
         } else {
             // syscall has been registered to register_handler but grate's entry function
@@ -501,11 +550,11 @@ pub fn make_syscall(
         }
     }
 
+    // _get_handler returned None — the target_map for this
+    // (self_cageid, syscall_num) exists but has no dest_grateid entry.
     panic!(
-        "[3i|make_syscall] syscall number {} not found in handler table for cage {}, targetcage {}!",
-        syscall_num,
-        self_cageid,
-        target_cageid,
+        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
+        self_cageid, syscall_num
     );
 }
 

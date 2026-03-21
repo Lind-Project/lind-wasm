@@ -6,7 +6,7 @@ use std::ffi::c_void;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
+use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Linker, Module, Store, Val, ValType,
@@ -86,7 +86,20 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             Ok(exit_code)
         }
         Err(e) => {
-            // Exit the process
+            // Initial cage crashed.  Do the same cleanup as the
+            // fork-crash and signal-handler error paths so child
+            // cages see proper termination and resources are freed.
+            let cageid = CAGE_START_ID as u64;
+            cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+            if let Some(c) = cage::get_cage(cageid) {
+                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+            }
+            threei::EXITING_TABLE.insert(cageid);
+            threei::handler_table::_rm_grate_from_handler(cageid);
+            cage::signal::lind_thread_exit(cageid, THREAD_START_ID as u64);
+            cage::cage_finalize(cageid);
+            lind_manager.decrement();
+            lind_manager.wait();
             return Err(e);
         }
     }
@@ -390,7 +403,7 @@ fn load_main_module(
 
     // 5) Create backup instances to populate the vmctx pool
     // See more comments in lind-3i/lib.rs
-    for _ in 0..9 {
+    for _ in 0..INSTANCE_NUMBER {
         let (_, backup_cage_instanceid) = linker
             .instantiate_with_lind_thread(&mut *store, &module)
             .context(format!("failed to instantiate"))?;
