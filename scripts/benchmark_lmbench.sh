@@ -7,7 +7,7 @@ LIND_WASM_ROOT="${LIND_WASM_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 LIND_APPS_ROOT="${LIND_APPS_ROOT:-$LIND_WASM_ROOT/../lind-wasm-apps}"
 
 NATIVE_BIN="$LIND_WASM_ROOT/build/benchmark/native"
-LIND_BIN="$LIND_APPS_ROOT/build/bin/lmbench/wasm32-wasi"
+LIND_BIN="$LIND_APPS_ROOT/lmbench/bin/wasm32-wasi"
 LIND_RUN="$LIND_WASM_ROOT/scripts/lind_run"
 LINDFS="$LIND_WASM_ROOT/lindfs"
 
@@ -106,13 +106,13 @@ run_native_multi() {
 run_lind_multi() {
   local tag="$1" bin="$2"; shift 2
   log "  [lind]   $bin $* (x$RUNS)"
-  run_multi "${tag}_lind" "$RUNS" timeout "$TIMEOUT_SEC" "$LIND_RUN" "/${bin}.opt.wasm" "$@"
+  run_multi "${tag}_lind" "$RUNS" timeout "$TIMEOUT_SEC" "$LIND_RUN" "/${bin}.cwasm" "$@"
 }
 
 run_lind_bash_multi() {
   local tag="$1" cmd="$2"; shift 2
   log "  [lind/bash] $cmd (x$RUNS)"
-  run_multi "${tag}_lind" "$RUNS" timeout "$TIMEOUT_SEC" "$LIND_RUN" /bash.opt.wasm -c "$cmd"
+  run_multi "${tag}_lind" "$RUNS" timeout "$TIMEOUT_SEC" "$LIND_RUN" /bash.cwasm -c "$cmd"
 }
 
 ratio() {
@@ -141,17 +141,17 @@ stage() {
   log "Staging lind binaries..."
   mkdir -p "$LINDFS/tmp" "$LINDFS/dev"
   for b in lat_ctx lat_syscall lat_sig lat_proc lat_pipe lat_unix lat_tcp bw_pipe bw_unix bw_tcp bw_mem hello bash msleep; do
-    if [ -f "$LIND_BIN/${b}.opt.wasm" ]; then
-      cp "$LIND_BIN/${b}.opt.wasm" "$LINDFS/"
+    if [ -f "$LIND_BIN/${b}.cwasm" ]; then
+      cp "$LIND_BIN/${b}.cwasm" "$LINDFS/"
     fi
   done
   # bash from apps
-  local bash_wasm="$LIND_APPS_ROOT/build/bin/bash/wasm32-wasi/bash.opt.wasm"
+  local bash_wasm="$LIND_APPS_ROOT/bash/bin/wasm32-wasi/bash.cwasm"
   if [ -f "$bash_wasm" ]; then
     cp "$bash_wasm" "$LINDFS/"
   fi
   # files needed by benchmarks
-  [ -f "$LINDFS/hello.opt.wasm" ] && cp "$LINDFS/hello.opt.wasm" "$LINDFS/tmp/hello"
+  [ -f "$LINDFS/hello.cwasm" ] && cp "$LINDFS/hello.cwasm" "$LINDFS/tmp/hello"
   echo "test" > "$LINDFS/tmp/sigtest"
   if [ ! -e "$LINDFS/dev/null" ]; then mknod "$LINDFS/dev/null" c 1 3 2>/dev/null; chmod 666 "$LINDFS/dev/null" 2>/dev/null; fi
   if [ ! -e "$LINDFS/dev/zero" ]; then mknod "$LINDFS/dev/zero" c 1 5 2>/dev/null; chmod 666 "$LINDFS/dev/zero" 2>/dev/null; fi
@@ -356,7 +356,7 @@ do_lat_tcp() {
 
   # Lind: bash approach
   if [ "$RUN_LIND" = "true" ]; then
-    read lv ln <<< $(run_lind_bash_multi "lat_tcp" "lat_tcp.opt.wasm -s & msleep.opt.wasm 2000; lat_tcp.opt.wasm -P 1 127.0.0.1")
+    read lv ln <<< $(run_lind_bash_multi "lat_tcp" "lat_tcp.cwasm -s & msleep.cwasm 2000; lat_tcp.cwasm -P 1 127.0.0.1")
   fi
 
   fmt_row "tcp" "$nv" "$nn" "$lv" "$ln" "us" >> "$OUTFILE"
@@ -424,7 +424,7 @@ do_bw_tcp() {
 
   # Lind: bash approach
   if [ "$RUN_LIND" = "true" ]; then
-    read lv ln <<< $(run_lind_bash_multi "bw_tcp" "bw_tcp.opt.wasm -s & msleep.opt.wasm 2000; bw_tcp.opt.wasm 127.0.0.1")
+    read lv ln <<< $(run_lind_bash_multi "bw_tcp" "bw_tcp.cwasm -s & msleep.cwasm 2000; bw_tcp.cwasm 127.0.0.1")
   fi
 
   fmt_row "tcp" "$nv" "$nn" "$lv" "$ln" "MB/s" >> "$OUTFILE"
