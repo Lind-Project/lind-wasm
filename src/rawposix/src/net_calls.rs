@@ -1293,7 +1293,6 @@ pub extern "C" fn accept4_syscall(
 
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
-    // 👇 Key difference here
     let ret_kernelfd = unsafe {
         if flags == 0 {
             libc::accept(fd, finalsockaddr, &mut addrlen as *mut u32)
@@ -1307,9 +1306,11 @@ pub extern "C" fn accept4_syscall(
         return handle_errno(errno, "accept4");
     }
 
+    let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
+
     let ret_virtualfd =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, false, 0)
-            .unwrap();
+    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, should_cloexec, 0)
+        .unwrap();
 
     ret_virtualfd as i32
 }
