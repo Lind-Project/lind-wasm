@@ -28,13 +28,12 @@
 #include <addr_translation.h>
 
 int
-accept4 (int fd, __SOCKADDR_ARG addr, socklen_t *addr_len, int flags)
+accept4 (int fd, struct sockaddr *addr, socklen_t *addr_len, int flags)
 {
-  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
-  uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST (len);
+  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST(addr);
+  uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST(addr_len);
 
   return MAKE_LEGACY_SYSCALL(ACCEPT4_SYSCALL, "syscall|accept4",
       (uint64_t) fd, host_addr, host_len,
       (uint64_t) flags, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
-
 }
