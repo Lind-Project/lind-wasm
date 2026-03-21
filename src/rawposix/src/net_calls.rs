@@ -1308,9 +1308,14 @@ pub extern "C" fn accept4_syscall(
 
     let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
 
-    let ret_virtualfd =
-    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, should_cloexec, 0)
-        .unwrap();
+    let ret_virtualfd = fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        ret_kernelfd as u64,
+        should_cloexec,
+        0,
+    )
+    .unwrap();
 
     ret_virtualfd as i32
 }
