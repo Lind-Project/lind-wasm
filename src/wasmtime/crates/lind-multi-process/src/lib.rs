@@ -834,7 +834,7 @@ impl<
         environs: Option<Vec<(String, Option<String>)>>,
         recursion_depth: i32,
     ) -> Result<i32> {
-        // linux enforcing the maximum recursion depth of shebang
+        // linux limits the maximum recursion depth of shebang
         // it's typical value is 4, so let's use the same value
         if recursion_depth > MAX_SHEBANG_DEPTH {
             return Ok(-(Errno::ELOOP as i32));
