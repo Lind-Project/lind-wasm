@@ -24,3 +24,4 @@
 ./nss/Versions
 ./inet/Versions
 ./setjmp/Versions
+./debug/Versions

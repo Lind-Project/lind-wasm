@@ -466,6 +466,7 @@ pub fn add_dylink_to_linker<
 /// Groups:
 /// - **syscall**: the unified `make-syscall` entry point
 /// - **runtime**: memory base, cage ID, setjmp/longjmp, epoch callback, debug panic
+/// - **dylink**: dlopen, dlsym and dlclose
 /// - **debug** (lind_debug feature only): `lind_debug_num`, `lind_debug_str`
 /// - **environ**: argv/environ/random_get under both `"lind"` and `"wasi_snapshot_preview1"`
 pub fn add_to_linker<

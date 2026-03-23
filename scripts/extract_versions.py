@@ -193,7 +193,7 @@ def main(argv: List[str]) -> int:
 
     lines: List[str]
     if args.flags:
-        lines = [f"--export-if-defined={s} \\" for s in syms]
+        lines = [f"--export-if-defined={s} " for s in syms]
     else:
         lines = syms
 

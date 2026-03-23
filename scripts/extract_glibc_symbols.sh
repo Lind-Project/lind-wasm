@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gen_wasm_exports_from_glibc_versions.sh
+# extract_glibc_symbols.sh
 #
 # Finds (or reads) glibc "Versions" files, then runs the Python parser on each
 # file (one by one), printing:
@@ -8,7 +8,7 @@
 #     <symbol or flag>
 #
 # Usage:
-#   ./gen_wasm_exports_from_glibc_versions.sh <glibc-root> <parse_versions.py> \
+#   ./extract_glibc_symbols.sh <glibc-root> <parse_versions.py> \
 #       [--include-private] [--flags] [--out FILE] [--paths-file FILE]
 #
 # Options:
