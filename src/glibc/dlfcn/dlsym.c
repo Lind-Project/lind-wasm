@@ -20,6 +20,7 @@
 #include <ldsodefs.h>
 #include <shlib-compat.h>
 #include <stddef.h>
+#include <dlerror.h>
 
 int __lind_dlsym(void* handle, char* symbol) __attribute__((
     __import_module__("lind"),
@@ -53,7 +54,13 @@ dlsym_implementation (void *handle, const char *name, void *dl_caller)
   args.handle = handle;
   args.name = name;
   
-  return __lind_dlsym(handle, name);
+  int result = __lind_dlsym(handle, name);
+  if (result < 0) {
+    __lind_dlerror_result = -result;
+    return NULL;
+  }
+
+  return result;
 }
 
 #ifdef SHARED

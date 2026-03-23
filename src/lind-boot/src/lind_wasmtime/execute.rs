@@ -8,7 +8,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
 use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID};
-use sysdefs::constants::{DEFAULT_STACKSIZE, GUARD_SIZE, LINDFS_ROOT};
+use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT};
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, Store, Val,
@@ -776,7 +776,7 @@ fn load_library_module(
     // retrieve inode of the file as the unique identifier of the library
     let metadata = match std::fs::metadata(library_path) {
         Ok(data) => data,
-        Err(_) => return 0, // return NULL (0) to indicate error
+        Err(_) => return -(DylinkErrorCode::EOPEN as i32),
     };
     let inode = metadata.ino();
 
@@ -785,11 +785,17 @@ fn load_library_module(
     }
 
     // Load and compile the library module (either wasm or cwasm format).
-    let lib_module = read_wasm_or_cwasm(&engine, Path::new(library_path)).unwrap();
+    let lib_module = match read_wasm_or_cwasm(&engine, Path::new(library_path)) {
+        Ok(module) => module,
+        Err(_) => return -(DylinkErrorCode::ETYPE as i32), // library is not a valid wasm module
+    };
 
     // Extract dylink metadata from the library.
     // This includes table and memory requirements declared by the toolchain.
-    let dylink_info = lib_module.dylink_meminfo().unwrap();
+    let dylink_info = match lib_module.dylink_meminfo() {
+        Some(info) => info,
+        None => return -(DylinkErrorCode::EDYLINKINFO as i32), // dylink section is not found
+    };
 
     // Record the current size of the shared indirect function table.
     // The library's functions will be appended starting from this index.
@@ -813,7 +819,7 @@ fn load_library_module(
     // the library's function references can be relocated correctly.
     //
     // The GOT is used to patch symbol addresses/indices after instantiation.
-    linker
+    match linker
         .module_with_caller(
             &mut main_module,
             library_name,
@@ -822,8 +828,14 @@ fn load_library_module(
             &*got_guard,
             symbol_map,
         )
-        .context(format!("failed to process library `{}`", library_name))
-        .unwrap() as i32
+    {
+        Ok(handle) => handle as i32,
+        Err(_) => {
+            #[cfg(feature = "debug-dylink")]
+            println!("failed to process library `{}`", library_name);
+            -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
+        },
+    }
 }
 
 /// AOT-compile a `.wasm` file to a `.cwasm` artifact on disk.

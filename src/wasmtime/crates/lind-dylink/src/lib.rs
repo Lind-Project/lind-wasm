@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use sysdefs::{
-    constants::{RTLD_DEFAULT, RTLD_NEXT},
+    constants::{DylinkErrorCode, RTLD_DEFAULT, RTLD_NEXT},
     logging::lind_debug_panic,
 };
 use wasmtime::Caller;
@@ -40,7 +40,10 @@ pub fn dlopen_call<
     loader: DynamicLoader<T>,
 ) -> i32 {
     let base = get_memory_base(&mut caller);
-    let path = typemap::get_cstr(base + file as u64).unwrap();
+    let path = match typemap::get_cstr(base + file as u64) {
+        Ok(path) => path,
+        Err(_) => return -(DylinkErrorCode::EOPEN as i32),
+    };
 
     // Delegate to runtime dynamic loader.
     loader(&mut caller, path, mode)
@@ -67,13 +70,19 @@ pub fn dlsym_call<
 
     // Resolve symbol based on handle semantics.
     let val = if handle == RTLD_DEFAULT {
-        caller.find_library_symbol_from_global(symbol).unwrap()
+        match caller.find_library_symbol_from_global(symbol) {
+            Some(val) => val,
+            None => return -(DylinkErrorCode::ENOFOUND as i32),
+        }
     } else if handle == RTLD_NEXT {
         lind_debug_panic("[lind-dylink] dlsym RTLD_NEXT encountered but not supported");
     } else {
-        caller
-            .find_library_symbol_from_local(handle, symbol)
-            .unwrap()
+        match caller
+            .find_library_symbol_from_local(handle, symbol) {
+                Some(val) => val,
+                None => return -(DylinkErrorCode::ENOFOUND as i32),
+            }
+
     };
     #[cfg(feature = "debug-dylink")]
     println!("[debug] dlsym resolves {} to {}", symbol, val);

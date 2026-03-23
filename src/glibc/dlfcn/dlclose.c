@@ -19,6 +19,7 @@
 #include <dlfcn.h>
 #include <ldsodefs.h>
 #include <shlib-compat.h>
+#include <dlerror.h>
 
 int __lind_dlclose(void* handle) __attribute__((
     __import_module__("lind"),
@@ -28,7 +29,13 @@ int __lind_dlclose(void* handle) __attribute__((
 int
 __dlclose (void *handle)
 {
-    return __lind_dlclose(handle);
+  int result = __lind_dlclose(handle);
+  if (result < 0) {
+    __lind_dlerror_result = -result;
+    return -1;
+  }
+
+  return result;
 }
 versioned_symbol (libc, __dlclose, dlclose, GLIBC_2_34);
 
