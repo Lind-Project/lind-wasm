@@ -9,8 +9,6 @@
 #
 set -e
 
-set -x
-
 CC="clang"
 REPO_ROOT="$PWD"
 SCRIPTS_DIR="$REPO_ROOT/scripts"
@@ -42,7 +40,6 @@ wasm-ld \
 
 mkdir -p $REPO_ROOT/lindfs/lib
 
-# sudo ./scripts/append_tls_relocs_export.sh "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/lindfs/lib/libc.wasm
 $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/lindfs/lib/libc.wasm __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm $REPO_ROOT/lindfs/lib/libc.wasm __wasm_apply_global_relocs func __wasm_apply_global_relocs
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm $REPO_ROOT/lindfs/lib/libc.wasm __stack_pointer global __stack_pointer
