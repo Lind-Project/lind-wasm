@@ -327,12 +327,6 @@ impl Instance {
             _ => {}
         }
 
-        #[cfg(feature = "debug-dylink")]
-        println!(
-            "[debug] module memory size round to {}",
-            module_rounded_size
-        );
-
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
         // memory init in wasmtime and do our own initialization here
@@ -358,6 +352,12 @@ impl Instance {
                 let module_rounded_size =
                     round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
                 let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
+
+                #[cfg(feature = "debug-dylink")]
+                println!(
+                    "[debug] module memory size round to {}",
+                    module_rounded_size
+                );
 
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address

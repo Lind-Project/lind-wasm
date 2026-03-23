@@ -5,7 +5,6 @@
 ./sysdeps/unix/sysv/linux/Versions
 ./sysdeps/unix/sysv/linux/i386/Versions
 ./stdio-common/Versions
-./math/Versions
 ./malloc/Versions
 ./string/Versions
 ./libio/Versions

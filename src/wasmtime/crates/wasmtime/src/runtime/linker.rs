@@ -836,6 +836,47 @@ impl<T> Linker<T> {
         Ok(self)
     }
 
+    /// same as instance, but with a few blacklist symbols for dynamic loading usage
+    pub fn instance_dylink(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        module_name: &str,
+        instance: Instance,
+    ) -> Result<&mut Self> {
+        let mut store = store.as_context_mut();
+        let exports = instance
+            .exports(&mut store)
+            .filter_map(|e| {
+                (
+                    if module_name == "env" && match e.name() {
+                        "__stack_pointer" |
+                        "__wasm_call_ctors" |
+                        "__wasm_apply_data_relocs" |
+                        "__wasm_apply_global_relocs" |
+                        "asyncify_start_unwind" |
+                        "asyncify_stop_unwind" |
+                        "asyncify_start_rewind" |
+                        "asyncify_stop_rewind" |
+                        "asyncify_get_state"
+                            => true,
+                        _   => false
+                    } {
+                        None
+                    } else {
+                        Some((
+                            self.import_key(module_name, Some(e.name())),
+                            e.into_extern(),
+                        ))
+                    }
+                )
+            })
+            .collect::<Vec<_>>();
+        for (key, export) in exports {
+            self.insert(key, Definition::new(store.0, export))?;
+        }
+        Ok(self)
+    }
+
     /// Define automatic instantiations of a [`Module`] in this linker.
     ///
     /// This automatically handles [Commands and Reactors] instantiation and
@@ -1013,7 +1054,8 @@ impl<T> Linker<T> {
                 //
                 // `allow_shadowing(true)` permits redefining these globals in the cloned
                 // linker without affecting the original linker state.
-                // self.allow_shadowing(true);
+                let mut module_linker = self.clone();
+                module_linker.allow_shadowing(true);
 
                 // Create a placeholder for `__memory_base` for library instantiation.
                 //
@@ -1022,9 +1064,6 @@ impl<T> Linker<T> {
                 // We therefore link a dummy `__memory_base` global (initialized to 0)
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
                 // `instantiate_with_lind` can patch the global once the real base is known.
-                self.allow_shadowing(true);
-                let mut module_linker = self.clone();
-                // module_linker.allow_shadowing(true);
                 let memory_base = Global::new(
                     &mut store,
                     GlobalType::new(ValType::I32, crate::Mutability::Const),
@@ -1150,7 +1189,7 @@ impl<T> Linker<T> {
                     let _ = init.call(store.as_context_mut(), ()).unwrap();
                 }
 
-                self.instance(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance)
             }
         }
     }
@@ -1190,7 +1229,8 @@ impl<T> Linker<T> {
                 //
                 // `allow_shadowing(true)` permits redefining these globals in the cloned
                 // linker without affecting the original linker state.
-                self.allow_shadowing(true);
+                let mut module_linker = self.clone();
+                module_linker.allow_shadowing(true);
 
                 // Create a placeholder for `__memory_base` for library instantiation.
                 //
@@ -1199,7 +1239,6 @@ impl<T> Linker<T> {
                 // We therefore link a dummy `__memory_base` global (initialized to 0)
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
                 // `instantiate_with_lind` can patch the global once the real base is known.
-                let mut module_linker = self.clone();
                 let memory_base = Global::new(
                     &mut store,
                     GlobalType::new(ValType::I32, crate::Mutability::Const),
@@ -1264,7 +1303,7 @@ impl<T> Linker<T> {
                 println!("[debug] child library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
-                self.instance(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance)
             }
         }
     }
@@ -1304,7 +1343,8 @@ impl<T> Linker<T> {
                 //
                 // `allow_shadowing(true)` permits redefining these globals in the cloned
                 // linker without affecting the original linker state.
-                self.allow_shadowing(true);
+                let mut module_linker = self.clone();
+                module_linker.allow_shadowing(true);
 
                 // Create a placeholder for `__memory_base` for library instantiation.
                 //
@@ -1313,7 +1353,6 @@ impl<T> Linker<T> {
                 // We therefore link a dummy `__memory_base` global (initialized to 0)
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
                 // `instantiate_with_lind` can patch the global once the real base is known.
-                let mut module_linker = self.clone();
                 let memory_base = Global::new(
                     &mut store,
                     GlobalType::new(ValType::I32, crate::Mutability::Const),
@@ -1423,7 +1462,7 @@ impl<T> Linker<T> {
                     let _ = init.call(store.as_context_mut(), ())?;
                 }
 
-                self.instance(store, module_name, instance);
+                self.instance_dylink(store, module_name, instance);
 
                 Ok(handler)
             }
