@@ -1265,6 +1265,67 @@ pub extern "C" fn accept_syscall(
     ret_virtualfd as i32
 }
 
+/// The Linux `accept4()` syscall is similar to `accept()` but allows setting flags
+/// on the accepted socket at creation time. The `flags` argument is a bitmask that
+/// can include:
+///     - `SOCK_CLOEXEC`: set close-on-exec (FD_CLOEXEC) on the new file descriptor
+///     - `SOCK_NONBLOCK`: set the socket to non-blocking mode
+
+pub extern "C" fn accept4_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    len_arg: u64,
+    len_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "accept4_syscall"
+        );
+    }
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+
+    let ret_kernelfd = unsafe {
+        if flags == 0 {
+            libc::accept(fd, finalsockaddr, &mut addrlen as *mut u32)
+        } else {
+            libc::accept4(fd, finalsockaddr, &mut addrlen as *mut u32, flags)
+        }
+    };
+
+    if ret_kernelfd < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "accept4");
+    }
+
+    let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
+
+    let ret_virtualfd = fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        ret_kernelfd as u64,
+        should_cloexec,
+        0,
+    )
+    .unwrap();
+
+    ret_virtualfd as i32
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/setsockopt.2.html
 ///
 /// The Linux `setsockopt()` syscall sets options for a socket. Options may exist at multiple protocol levels.

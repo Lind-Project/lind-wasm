@@ -23,13 +23,17 @@
 #include <sys/syscall.h>
 #include <socketcall.h>
 #include <kernel-features.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
-accept4 (int fd, __SOCKADDR_ARG addr, socklen_t *addr_len, int flags)
+accept4 (int fd, struct sockaddr *addr, socklen_t *addr_len, int flags)
 {
-#ifdef __ASSUME_ACCEPT4_SYSCALL
-  return SYSCALL_CANCEL (accept4, fd, addr.__sockaddr__, addr_len, flags);
-#else
-  return SOCKETCALL_CANCEL (accept4, fd, addr.__sockaddr__, addr_len, flags);
-#endif
+  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST(addr);
+  uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST(addr_len);
+
+  return MAKE_LEGACY_SYSCALL(ACCEPT4_SYSCALL, "syscall|accept4",
+      (uint64_t) fd, host_addr, host_len,
+      (uint64_t) flags, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
