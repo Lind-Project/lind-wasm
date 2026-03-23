@@ -1375,7 +1375,7 @@ impl<T> Linker<T> {
 
                 for (name, func) in funcs {
                     // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
-                    let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)));
+                    let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)))?;
                     // append the symbol into mappings
                     symbol_map.add(name.clone(), index);
                     // update GOT entry

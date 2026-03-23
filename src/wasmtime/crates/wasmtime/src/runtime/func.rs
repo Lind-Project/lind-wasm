@@ -2372,17 +2372,15 @@ impl<T> Caller<'_, T> {
     /// - The table does not exist,
     /// - The element type is incompatible,
     /// - Or the grow operation fails.
-    pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> u32 {
+    pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> Result<u32> {
         let lib_ty = crate::TableType::new(crate::RefType::FUNCREF, 0, None);
         let lib_init = init_value
-            .into_table_element(self.store.0, lib_ty.element())
-            .unwrap();
+            .into_table_element(self.store.0, lib_ty.element())?;
         let res = self
             .caller
-            .table_grow(TableIndex::from_u32(0), delta, lib_init)
-            .unwrap();
+            .table_grow(TableIndex::from_u32(0), delta, lib_init)?;
 
-        res.unwrap()
+        res.ok_or(anyhow!("cannot grow table"))
     }
 
     /// Return the current size of the library's function table (table index 0).

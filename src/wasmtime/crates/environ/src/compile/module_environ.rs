@@ -807,7 +807,8 @@ and for re-adding support for interface types you can see this issue:
                                 .insert(crate::DylinkImportInfo { imports: imports });
                         }
                         wasmparser::Dylink0Subsection::Unknown { ty, data, range } => {
-                            panic!("Dylink.0 Unknown Section Encountered!");
+                            #[cfg(feature = "debug-dylink")]
+                            eprintln!("Dylink.0 Unknown Section Encountered!");
                         }
                     }
                 }

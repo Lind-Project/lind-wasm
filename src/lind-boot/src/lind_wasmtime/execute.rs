@@ -183,7 +183,7 @@ pub fn execute_with_lind(
         println!("[debug] main module table size: {}", main_module_table_size);
         let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
         table = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
-        linker.define(&mut wstore, "env", "__indirect_function_table", table);
+        linker.define(&mut wstore, "env", "__indirect_function_table", table).unwrap();
 
         // calculate the stack address for main module
         let stack_low_num = 1024; // reserve first 1024 bytes for guard page
@@ -205,8 +205,8 @@ pub fn execute_with_lind(
             Val::I32(stack_high_num),
         )
         .unwrap();
-        linker.define(&mut wstore, "GOT.mem", "__stack_low", stack_low);
-        linker.define(&mut wstore, "GOT.mem", "__stack_high", stack_high);
+        linker.define(&mut wstore, "GOT.mem", "__stack_low", stack_low).unwrap();
+        linker.define(&mut wstore, "GOT.mem", "__stack_high", stack_high).unwrap();
 
         let stack_pointer = wasmtime::Global::new(
             &mut wstore,
@@ -214,7 +214,7 @@ pub fn execute_with_lind(
             Val::I32(stack_high_num),
         )
         .unwrap();
-        linker.define(&mut wstore, "env", "__stack_pointer", stack_pointer);
+        linker.define(&mut wstore, "env", "__stack_pointer", stack_pointer).unwrap();
 
         // For the main module:
         // - Table base starts at 0.
@@ -231,8 +231,8 @@ pub fn execute_with_lind(
             Val::I32(1),
         )
         .unwrap();
-        linker.define(&mut wstore, "env", "__memory_base", memory_base);
-        linker.define(&mut wstore, "env", "__table_base", table_base);
+        linker.define(&mut wstore, "env", "__memory_base", memory_base).unwrap();
+        linker.define(&mut wstore, "env", "__table_base", table_base).unwrap();
 
         // Define placeholder globals for GOT imports so they can be
         // patched during/after instantiation.
@@ -261,9 +261,9 @@ pub fn execute_with_lind(
             Val::I64(0),
         )
         .unwrap();
-        linker.define(&mut wstore, "env", "__asyncify_state", __asyncify_state);
-        linker.define(&mut wstore, "env", "__asyncify_data", __asyncify_data);
-        linker.define(&mut wstore, "lind", "epoch", lind_epoch);
+        linker.define(&mut wstore, "env", "__asyncify_state", __asyncify_state).unwrap();
+        linker.define(&mut wstore, "env", "__asyncify_data", __asyncify_data).unwrap();
+        linker.define(&mut wstore, "lind", "epoch", lind_epoch).unwrap();
 
         lind_epoch.get_handler_as_u64(&mut wstore) as u64
     };
@@ -668,6 +668,8 @@ fn load_main_module(
     // 4) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
+    let mut GOT_updated= false;
+
     // 5) Create backup instances to populate the vmctx pool
     // See more comments in lind-3i/lib.rs
     for _ in 0..INSTANCE_NUMBER {
@@ -678,42 +680,46 @@ fn load_main_module(
             .context(format!("failed to instantiate"))?;
         drop(linker);
 
-        // update GOT entries after main module is instantiated
-        let mut funcs: Vec<(String, wasmtime::Func)> = vec![];
-        let mut globals: Vec<(String, wasmtime::Global)> = vec![];
-        for export in instance.exports(&mut store) {
-            let name = export.name().to_owned();
-            match export.into_extern() {
-                // I don't think main module should update GOT functions?
-                wasmtime::Extern::Func(func) => {
-                    funcs.push((name, func));
+        if !GOT_updated {
+            // update GOT entries after main module is instantiated
+            let mut funcs: Vec<(String, wasmtime::Func)> = vec![];
+            let mut globals: Vec<(String, wasmtime::Global)> = vec![];
+            for export in instance.exports(&mut store) {
+                let name = export.name().to_owned();
+                match export.into_extern() {
+                    // I don't think main module should update GOT functions?
+                    wasmtime::Extern::Func(func) => {
+                        funcs.push((name, func));
+                    }
+                    wasmtime::Extern::Global(global) => {
+                        globals.push((name, global));
+                    }
+                    _ => {}
                 }
-                wasmtime::Extern::Global(global) => {
-                    globals.push((name, global));
-                }
-                _ => {}
             }
-        }
 
-        for (name, func) in funcs {
-            let index = table
-                .grow(&mut store, 1, wasmtime::Ref::Func(Some(func)))
-                .unwrap();
-            let mut guard = got.lock().unwrap();
-            if (*guard).update_entry_if_unresolved(&name, index) {
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] update GOT.func.{} to {}", name, index);
+            for (name, func) in funcs {
+                let index = table
+                    .grow(&mut store, 1, wasmtime::Ref::Func(Some(func)))
+                    .unwrap();
+                let mut guard = got.lock().unwrap();
+                if (*guard).update_entry_if_unresolved(&name, index) {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] update GOT.func.{} to {}", name, index);
+                }
             }
-        }
-        for (name, global) in globals {
-            let val = global.get(&mut store);
-            // relocate the variable
-            let val = val.i32().unwrap() as u32 + 1024 + 8388608 + 1024; // 0 stands for memory base for main module
-            let mut guard = got.lock().unwrap();
-            if (*guard).update_entry_if_unresolved(&name, val) {
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] main update GOT.mem.{} to {}", name, val);
+            for (name, global) in globals {
+                let val = global.get(&mut store);
+                // relocate the variable
+                let val = val.i32().unwrap() as u32 + 1024 + 8388608 + 1024; // 0 stands for memory base for main module
+                let mut guard = got.lock().unwrap();
+                if (*guard).update_entry_if_unresolved(&name, val) {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] main update GOT.mem.{} to {}", name, val);
+                }
             }
+
+            GOT_updated = true;
         }
 
         // Extract vmctx pointer
@@ -800,7 +806,10 @@ fn load_library_module(
     // Record the current size of the shared indirect function table.
     // The library's functions will be appended starting from this index.
     let table_size = main_module.get_table_size();
-    main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None));
+    match main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None)) {
+        Ok(_) => {},
+        Err(_) => return -(DylinkErrorCode::EINTERNAL as i32),
+    };
 
     // Grow the shared function table to reserve space for this library's
     // function entries, as declared in its dylink section.

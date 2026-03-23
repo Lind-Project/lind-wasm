@@ -378,7 +378,7 @@ impl<
                         );
                         wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
                     };
-                    linker.define(&mut store, "env", "__indirect_function_table", child_table);
+                    linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
 
                     for (name, module) in modules.iter().skip(1) {
                         // Read dylink metadata for this preloaded (library) module.
@@ -402,7 +402,7 @@ impl<
                             &mut store,
                             dylink_info.table_size,
                             wasmtime::Ref::Func(None),
-                        );
+                        ).unwrap();
 
                         // get the library's memory_base from Global snapshot, we need to provide the same value for child library module's memory base
                         let module_memory_base = linker
@@ -800,7 +800,7 @@ impl<
                         let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
                         wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
                     };
-                    linker.define(&mut store, "env", "__indirect_function_table", child_table);
+                    linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
 
                     for (name, module) in modules.iter().skip(1) {
                         // Read dylink metadata for this preloaded (library) module.
@@ -824,7 +824,7 @@ impl<
                             &mut store,
                             dylink_info.table_size,
                             wasmtime::Ref::Func(None),
-                        );
+                        ).unwrap();
 
                         // get the library's memory_base from Global snapshot, we need to provide the same value for child thread library module's memory base
                         let module_memory_base = linker.get_memory_base_from_snapshot(&mut store, &snapshot, module.name().unwrap()).unwrap();
