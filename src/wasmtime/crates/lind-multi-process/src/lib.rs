@@ -954,6 +954,8 @@ impl<
         store.set_asyncify_state(AsyncifyState::Unwind);
 
         // after returning from here, unwind process should start
+        // we use 0 to tell upstream (e.g. rawposix) that exec is successful
+        // so that they are safe to execute their own cleanup mechanisms
         return Ok(0);
     }
 

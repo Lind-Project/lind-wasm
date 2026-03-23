@@ -243,34 +243,7 @@ pub extern "C" fn exec_syscall(
         );
     }
 
-    // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(cageid);
-
-    // Copy necessary data from current cage
-    let selfcage = get_cage(cageid).unwrap();
-
-    selfcage.rev_shm.lock().clear();
-
-    // ensures that all old mappings and states are discarded, allowing the new cage to
-    // run in a clean virtual address space, while reusing the existing `Vmmap` container
-    // to avoid extra allocations.
-    let mut vmmap = selfcage.vmmap.write();
-    vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
-
-    // perform signal related clean up
-    // all the signal handler becomes default after exec
-    // pending signals should be perserved though
-    selfcage.signalhandler.clear();
-    // the sigset will be reset after exec
-    selfcage.sigset.store(0, Relaxed);
-    // Do NOT clear epoch_handler or main_threadid here.
-    // If exec fails, the thread is still running and needs its
-    // epoch_handler entry for proper exit tracking.  On success,
-    // wasmtime re-instantiates and lind_signal_init (called from
-    // lind-multi-process/src/lib.rs during new instance setup) will
-    // overwrite the stale entries in epoch_handler and main_threadid.
-
-    threei::make_syscall(
+    let ret = threei::make_syscall(
         RAWPOSIX_CAGEID,
         59, // exec syscall number
         UNUSED_NAME,
@@ -287,7 +260,44 @@ pub extern "C" fn exec_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    );
+
+    // Clean up the cage only if exec succeeds.
+    // A return value < 0 indicates exec failure.
+    //
+    // We rely on Asyncify to detect success:
+    // if Asyncify begins unwinding, exec has succeeded.
+    // By convention, Asyncify unwind returns 0, which we use as the success signal.
+    if ret == 0 {
+        // Empty fd with flag should_cloexec
+        fdtables::empty_fds_for_exec(cageid);
+
+        // Copy necessary data from current cage
+        let selfcage = get_cage(cageid).unwrap();
+
+        selfcage.rev_shm.lock().clear();
+
+        // ensures that all old mappings and states are discarded, allowing the new cage to
+        // run in a clean virtual address space, while reusing the existing `Vmmap` container
+        // to avoid extra allocations.
+        let mut vmmap = selfcage.vmmap.write();
+        vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+
+        // perform signal related clean up
+        // all the signal handler becomes default after exec
+        // pending signals should be perserved though
+        selfcage.signalhandler.clear();
+        // the sigset will be reset after exec
+        selfcage.sigset.store(0, Relaxed);
+        // Do NOT clear epoch_handler or main_threadid here.
+        // If exec-ed module crashes, the thread is still running and needs its
+        // epoch_handler entry for proper exit tracking.  On success,
+        // wasmtime re-instantiates and lind_signal_init (called from
+        // lind-multi-process/src/lib.rs during new instance setup) will
+        // overwrite the stale entries in epoch_handler and main_threadid.
+    }
+
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
