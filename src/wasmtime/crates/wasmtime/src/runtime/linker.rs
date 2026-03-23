@@ -847,28 +847,27 @@ impl<T> Linker<T> {
         let exports = instance
             .exports(&mut store)
             .filter_map(|e| {
-                (
-                    if module_name == "env" && match e.name() {
-                        "__stack_pointer" |
-                        "__wasm_call_ctors" |
-                        "__wasm_apply_data_relocs" |
-                        "__wasm_apply_global_relocs" |
-                        "asyncify_start_unwind" |
-                        "asyncify_stop_unwind" |
-                        "asyncify_start_rewind" |
-                        "asyncify_stop_rewind" |
-                        "asyncify_get_state"
-                            => true,
-                        _   => false
-                    } {
-                        None
-                    } else {
-                        Some((
-                            self.import_key(module_name, Some(e.name())),
-                            e.into_extern(),
-                        ))
+                (if module_name == "env"
+                    && match e.name() {
+                        "__stack_pointer"
+                        | "__wasm_call_ctors"
+                        | "__wasm_apply_data_relocs"
+                        | "__wasm_apply_global_relocs"
+                        | "asyncify_start_unwind"
+                        | "asyncify_stop_unwind"
+                        | "asyncify_start_rewind"
+                        | "asyncify_stop_rewind"
+                        | "asyncify_get_state" => true,
+                        _ => false,
                     }
-                )
+                {
+                    None
+                } else {
+                    Some((
+                        self.import_key(module_name, Some(e.name())),
+                        e.into_extern(),
+                    ))
+                })
             })
             .collect::<Vec<_>>();
         for (key, export) in exports {

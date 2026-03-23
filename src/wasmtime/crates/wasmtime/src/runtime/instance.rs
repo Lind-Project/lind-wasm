@@ -17,8 +17,8 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
-use sysdefs::constants::{DEFAULT_STACKSIZE, GUARD_SIZE, lind_platform_const};
 use sysdefs::constants::PAGESIZE;
+use sysdefs::constants::{lind_platform_const, DEFAULT_STACKSIZE, GUARD_SIZE};
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{

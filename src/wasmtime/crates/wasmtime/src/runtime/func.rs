@@ -2374,8 +2374,7 @@ impl<T> Caller<'_, T> {
     /// - Or the grow operation fails.
     pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> Result<u32> {
         let lib_ty = crate::TableType::new(crate::RefType::FUNCREF, 0, None);
-        let lib_init = init_value
-            .into_table_element(self.store.0, lib_ty.element())?;
+        let lib_init = init_value.into_table_element(self.store.0, lib_ty.element())?;
         let res = self
             .caller
             .table_grow(TableIndex::from_u32(0), delta, lib_init)?;

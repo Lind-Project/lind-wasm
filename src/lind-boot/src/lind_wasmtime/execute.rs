@@ -183,7 +183,9 @@ pub fn execute_with_lind(
         println!("[debug] main module table size: {}", main_module_table_size);
         let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
         table = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
-        linker.define(&mut wstore, "env", "__indirect_function_table", table).unwrap();
+        linker
+            .define(&mut wstore, "env", "__indirect_function_table", table)
+            .unwrap();
 
         // calculate the stack address for main module
         let stack_low_num = 1024; // reserve first 1024 bytes for guard page
@@ -205,8 +207,12 @@ pub fn execute_with_lind(
             Val::I32(stack_high_num),
         )
         .unwrap();
-        linker.define(&mut wstore, "GOT.mem", "__stack_low", stack_low).unwrap();
-        linker.define(&mut wstore, "GOT.mem", "__stack_high", stack_high).unwrap();
+        linker
+            .define(&mut wstore, "GOT.mem", "__stack_low", stack_low)
+            .unwrap();
+        linker
+            .define(&mut wstore, "GOT.mem", "__stack_high", stack_high)
+            .unwrap();
 
         let stack_pointer = wasmtime::Global::new(
             &mut wstore,
@@ -214,7 +220,9 @@ pub fn execute_with_lind(
             Val::I32(stack_high_num),
         )
         .unwrap();
-        linker.define(&mut wstore, "env", "__stack_pointer", stack_pointer).unwrap();
+        linker
+            .define(&mut wstore, "env", "__stack_pointer", stack_pointer)
+            .unwrap();
 
         // For the main module:
         // - Table base starts at 0.
@@ -231,8 +239,12 @@ pub fn execute_with_lind(
             Val::I32(1),
         )
         .unwrap();
-        linker.define(&mut wstore, "env", "__memory_base", memory_base).unwrap();
-        linker.define(&mut wstore, "env", "__table_base", table_base).unwrap();
+        linker
+            .define(&mut wstore, "env", "__memory_base", memory_base)
+            .unwrap();
+        linker
+            .define(&mut wstore, "env", "__table_base", table_base)
+            .unwrap();
 
         // Define placeholder globals for GOT imports so they can be
         // patched during/after instantiation.
@@ -261,9 +273,15 @@ pub fn execute_with_lind(
             Val::I64(0),
         )
         .unwrap();
-        linker.define(&mut wstore, "env", "__asyncify_state", __asyncify_state).unwrap();
-        linker.define(&mut wstore, "env", "__asyncify_data", __asyncify_data).unwrap();
-        linker.define(&mut wstore, "lind", "epoch", lind_epoch).unwrap();
+        linker
+            .define(&mut wstore, "env", "__asyncify_state", __asyncify_state)
+            .unwrap();
+        linker
+            .define(&mut wstore, "env", "__asyncify_data", __asyncify_data)
+            .unwrap();
+        linker
+            .define(&mut wstore, "lind", "epoch", lind_epoch)
+            .unwrap();
 
         lind_epoch.get_handler_as_u64(&mut wstore) as u64
     };
@@ -668,7 +686,7 @@ fn load_main_module(
     // 4) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
-    let mut GOT_updated= false;
+    let mut GOT_updated = false;
 
     // 5) Create backup instances to populate the vmctx pool
     // See more comments in lind-3i/lib.rs
@@ -808,7 +826,7 @@ fn load_library_module(
     // The library's functions will be appended starting from this index.
     let table_size = main_module.get_table_size();
     match main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None)) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(_) => return -(DylinkErrorCode::EINTERNAL as i32),
     };
 
@@ -829,22 +847,20 @@ fn load_library_module(
     // the library's function references can be relocated correctly.
     //
     // The GOT is used to patch symbol addresses/indices after instantiation.
-    match linker
-        .module_with_caller(
-            &mut main_module,
-            library_name,
-            &lib_module,
-            table_size as i32,
-            &*got_guard,
-            symbol_map,
-        )
-    {
+    match linker.module_with_caller(
+        &mut main_module,
+        library_name,
+        &lib_module,
+        table_size as i32,
+        &*got_guard,
+        symbol_map,
+    ) {
         Ok(handle) => handle as i32,
         Err(_) => {
             #[cfg(feature = "debug-dylink")]
             println!("failed to process library `{}`", library_name);
             -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
-        },
+        }
     }
 }
 

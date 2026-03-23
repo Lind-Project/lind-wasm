@@ -3,10 +3,10 @@
 use crate::prelude::*;
 use crate::{PrimaryMap, Tunables};
 use alloc::collections::BTreeMap;
-use wasmparser::SymbolFlags;
 use core::ops::Range;
 use cranelift_entity::{packed_option::ReservedValue, EntityRef};
 use serde_derive::{Deserialize, Serialize};
+use wasmparser::SymbolFlags;
 use wasmtime_types::*;
 
 /// Implementation styles for WebAssembly linear memory.

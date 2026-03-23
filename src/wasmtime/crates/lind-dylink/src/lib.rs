@@ -77,12 +77,10 @@ pub fn dlsym_call<
     } else if handle == RTLD_NEXT {
         lind_debug_panic("[lind-dylink] dlsym RTLD_NEXT encountered but not supported");
     } else {
-        match caller
-            .find_library_symbol_from_local(handle, symbol) {
-                Some(val) => val,
-                None => return -(DylinkErrorCode::ENOFOUND as i32),
-            }
-
+        match caller.find_library_symbol_from_local(handle, symbol) {
+            Some(val) => val,
+            None => return -(DylinkErrorCode::ENOFOUND as i32),
+        }
     };
     #[cfg(feature = "debug-dylink")]
     println!("[debug] dlsym resolves {} to {}", symbol, val);

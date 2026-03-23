@@ -378,7 +378,9 @@ impl<
                         );
                         wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
                     };
-                    linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
+                    linker
+                        .define(&mut store, "env", "__indirect_function_table", child_table)
+                        .unwrap();
 
                     for (name, module) in modules.iter().skip(1) {
                         // Read dylink metadata for this preloaded (library) module.
@@ -398,11 +400,13 @@ impl<
                         // Grow the shared indirect function table by the amount requested by the
                         // library (as recorded in its dylink section). New slots are initialized
                         // to null funcref.
-                        child_table.grow(
-                            &mut store,
-                            dylink_info.table_size,
-                            wasmtime::Ref::Func(None),
-                        ).unwrap();
+                        child_table
+                            .grow(
+                                &mut store,
+                                dylink_info.table_size,
+                                wasmtime::Ref::Func(None),
+                            )
+                            .unwrap();
 
                         // get the library's memory_base from Global snapshot, we need to provide the same value for child library module's memory base
                         let module_memory_base = linker
