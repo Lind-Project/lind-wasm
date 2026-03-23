@@ -1,3 +1,5 @@
+# This file is used by Makefile in testing to check whether test
+# is successful
 import glob
 import json
 import sys
