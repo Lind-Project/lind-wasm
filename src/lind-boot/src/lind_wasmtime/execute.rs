@@ -708,10 +708,11 @@ fn load_main_module(
                     println!("[debug] update GOT.func.{} to {}", name, index);
                 }
             }
+            let global_reloc = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
             for (name, global) in globals {
                 let val = global.get(&mut store);
                 // relocate the variable
-                let val = val.i32().unwrap() as u32 + 1024 + 8388608 + 1024; // 0 stands for memory base for main module
+                let val = val.i32().unwrap() as u32 + global_reloc;
                 let mut guard = got.lock().unwrap();
                 if (*guard).update_entry_if_unresolved(&name, val) {
                     #[cfg(feature = "debug-dylink")]

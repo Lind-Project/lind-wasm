@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
-use sysdefs::constants::lind_platform_const;
+use sysdefs::constants::{DEFAULT_STACKSIZE, GUARD_SIZE, lind_platform_const};
 use sysdefs::constants::PAGESIZE;
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
@@ -327,25 +327,6 @@ impl Instance {
             _ => {}
         }
 
-        // retrieve the initial memory size
-        let plans = module.compiled_module().module().memory_plans.clone();
-        let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
-
-        // in wasmtime, one page is 65536 bytes, so we need to convert to host pagesize
-        // 1. Get minimum bytes from Wasmtime’s own metadata.
-        let min_bytes = plan
-            .memory
-            .minimum_byte_size()
-            .expect("minimum memory size overflow");
-
-        // 2. Convert bytes to pages.
-        let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
-        let minimal_pages = 2048 + 1; // stack size + guard page, reference to run.rs
-        let module_meminfo = module.dylink_meminfo().unwrap();
-        let module_rounded_size =
-            round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
-        let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
-
         #[cfg(feature = "debug-dylink")]
         println!(
             "[debug] module memory size round to {}",
@@ -367,6 +348,17 @@ impl Instance {
         match instantiate_type {
             // InstantiateFirst: this is the first wasm instance
             InstantiateType::InstantiateFirst(cageid) => {
+                // retrieve the initial memory size
+                let plans = module.compiled_module().module().memory_plans.clone();
+                let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
+
+                let initial_memory_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
+                let minimal_pages = round_up_size(initial_memory_size, PAGESIZE) >> PAGESHIFT; // stack size + guard page, reference to run.rs
+                let module_meminfo = module.dylink_meminfo().unwrap();
+                let module_rounded_size =
+                    round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
+                let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
+
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
@@ -398,7 +390,7 @@ impl Instance {
                     cageid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     cageid,
-                    module_rounded_size as u64 + (minimal_pages << PAGESHIFT),
+                    (module_rounded_size + (minimal_pages << PAGESHIFT)) as u64,
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
                     cageid,
