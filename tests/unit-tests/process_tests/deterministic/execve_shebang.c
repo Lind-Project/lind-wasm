@@ -1,4 +1,3 @@
-// requires /bin/sh to run correctly
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
