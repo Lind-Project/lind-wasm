@@ -76,7 +76,11 @@ test: lindfs
 	@if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
-	python3 ./scripts/check_reports.py; then \
+	if [ "$(LIND_DEBUG)" = "1" ]; then \
+	  python3 ./scripts/check_reports.py --debug; \
+	else \
+	  python3 ./scripts/check_reports.py; \
+	fi; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
 	else \
 	  echo "E2E_STATUS=fail" > e2e_status; \
