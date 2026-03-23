@@ -52,7 +52,10 @@ __dlerror (void)
     size_t len = sizeof(__lind_dylink_error_msg) / sizeof(__lind_dylink_error_msg[0]);
     assert(__lind_dlerror_result < len);
     
-    return __lind_dylink_error_msg[__lind_dlerror_result];
+    char* msg = __lind_dylink_error_msg[__lind_dlerror_result];
+    __lind_dlerror_result = 0; // clear the error message
+
+    return msg;
   }
 
   return NULL;
