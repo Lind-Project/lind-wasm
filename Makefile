@@ -76,7 +76,6 @@ test: lindfs
 	@if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
-	# Check the test results and generate the final report
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
 	  python3 ./scripts/check_reports.py --debug; \
 	else \
