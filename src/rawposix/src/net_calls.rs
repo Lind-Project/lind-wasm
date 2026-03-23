@@ -1265,6 +1265,12 @@ pub extern "C" fn accept_syscall(
     ret_virtualfd as i32
 }
 
+/// The Linux `accept4()` syscall is similar to `accept()` but allows setting flags
+/// on the accepted socket at creation time. The `flags` argument is a bitmask that
+/// can include:
+///     - `SOCK_CLOEXEC`: set close-on-exec (FD_CLOEXEC) on the new file descriptor
+///     - `SOCK_NONBLOCK`: set the socket to non-blocking mode
+
 pub extern "C" fn accept4_syscall(
     cageid: u64,
     fd_arg: u64,
