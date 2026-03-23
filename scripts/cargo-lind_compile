@@ -40,7 +40,9 @@ echo "Building with profile: $PROFILE"
 cargo +nightly build -Z build-std=std,panic_abort "${CARGO_ARGS[@]}"
 
 echo "-------------------------------"
-# Find the wasm files in the appropriate profile directory
-for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -name "*deps*" 2>/dev/null| sort -r); do
+for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -name "*deps*" ! -name "*-*" 2>/dev/null | sort -r); do
+        # Find the wasm files in the appropriate profile directory
         lind_compile --opt-only "$f" 2> /dev/null || true
+        # Precompile the optimized wasm file to cache it in the LindFS
+        lind_compile --precompile-only "$f" 2> /dev/null || true
 done
