@@ -3,6 +3,7 @@
 use crate::prelude::*;
 use crate::{PrimaryMap, Tunables};
 use alloc::collections::BTreeMap;
+use wasmparser::SymbolFlags;
 use core::ops::Range;
 use cranelift_entity::{packed_option::ReservedValue, EntityRef};
 use serde_derive::{Deserialize, Serialize};
@@ -538,7 +539,7 @@ pub struct DylinkImport {
     /// field name of the import
     pub field: String,
     /// flags associated with the import
-    pub flags: i32,
+    pub flags: u32,
 }
 
 /// lind-wasm addition: dylink import information
@@ -554,8 +555,10 @@ impl DylinkImportInfo {
         // TODO: doing linear search here is slow
         for import in &self.imports {
             if import.module == module && import.field == field {
-                // TODO: should check flag here
-                return true;
+                let flags = SymbolFlags::from_bits_truncate(import.flags);
+                if flags.contains(SymbolFlags::BINDING_WEAK) {
+                    return true;
+                }
             }
         }
         return false;

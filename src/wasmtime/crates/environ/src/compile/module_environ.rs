@@ -798,7 +798,7 @@ and for re-adding support for interface types you can see this issue:
                                 imports.push(crate::DylinkImport {
                                     module: import.module.to_owned(),
                                     field: import.field.to_owned(),
-                                    flags: 0, // TODO: we assume the flag is always BINDING_WEAK for now
+                                    flags: import.flags.bits(),
                                 });
                             }
                             self.result
