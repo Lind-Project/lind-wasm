@@ -11,8 +11,7 @@ use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, 
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT};
 use threei::threei_const;
 use wasmtime::{
-    AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, Store, Val,
-    ValType, WasmBacktraceDetails,
+    AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails
 };
 use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
 use wasmtime_lind_common::LindEnviron;
@@ -20,7 +19,6 @@ use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID, get_memory_base};
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
-use wasmtime_wasi_threads::WasiThreadsCtx;
 
 /// Boots the Lind + RawPOSIX + 3i runtime and executes the initial Wasm program
 /// in the first cage.
@@ -286,16 +284,6 @@ pub fn execute_with_lind(
         lind_epoch.get_handler_as_u64(&mut wstore) as u64
     };
 
-    attach_api(
-        &mut wstore,
-        &mut linker,
-        &module,
-        lind_manager.clone(),
-        lind_boot.clone(),
-        cageid as i32,
-        lind_got.clone(),
-    )?;
-
     // Load the preload wasm modules.
     let mut modules = Vec::new();
     modules.push((String::new(), module.clone()));
@@ -304,6 +292,16 @@ pub fn execute_with_lind(
         let module = read_wasm_or_cwasm(&engine, path)?;
         modules.push((name.clone(), module.clone()));
     }
+
+    attach_api(
+        &mut wstore,
+        &mut linker,
+        &modules,
+        lind_manager.clone(),
+        lind_boot.clone(),
+        cageid as i32,
+        lind_got.clone(),
+    )?;
 
     // For each additional module (excluding the main module),
     // register its GOT imports with the shared LindGOT instance.
@@ -386,10 +384,11 @@ pub fn execute_with_lind(
     }
 
     {
+        // after all preloaded library are attached to the linker, update the linker in LindCtx
+        // so that newly forked cage could use the Linker with necessary library loaded
         let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
         let mut linker = linker.lock().unwrap();
         ctx.update_linker(linker.clone());
-        ctx.update_modules(modules.clone());
     }
 
     // -- Run the module in the cage --
@@ -517,7 +516,7 @@ fn register_wasmtime_syscall_entry() -> bool {
 fn attach_api(
     wstore: &mut Store<HostCtx>,
     mut linker: &mut Arc<Mutex<Linker<HostCtx>>>,
-    module: &Module,
+    modules: &Vec<(String, Module)>,
     lind_manager: Arc<LindCageManager>,
     lindboot_cli: CliOptions,
     cageid: i32,
@@ -550,17 +549,26 @@ fn attach_api(
         dynamic_loader,
     )?;
 
-    // Setup WASI-thread
-    let _ = wasmtime_wasi_threads::add_to_linker(
-        &mut linker_guard,
-        &wstore,
-        &module,
-        |s: &mut HostCtx| s.wasi_threads.as_ref().unwrap(),
-    );
+    let main_module = &modules.get(0).unwrap().1;
+
+    // attach SharedMemory to the wasm module
+    for import in main_module.imports() {
+        if let Some(m) = import.ty().memory() {
+            if m.is_shared() {
+                let mem = SharedMemory::new(main_module.engine(), m.clone())?;
+                // Initialize vmmap immediately after creating the shared linear memory
+                let memory_base = mem.get_memory_base();
+                cage::init_vmmap(CAGE_START_ID as u64, memory_base as usize, None);
+                linker_guard.define(&mut *wstore, import.module(), import.name(), mem.clone())?;
+            } else {
+                bail!("Main Module does not contain a shared memory");
+            }
+        }
+    }
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
-        Vec::<(String, Module)>::new(),
+        modules.clone(),
         linker_guard.clone(),
         lind_manager.clone(),
         lindboot_cli.clone(),
@@ -629,8 +637,10 @@ fn load_main_module(
 
     // let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
     // let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
-    let stack_low = 1024;
-    let stack_pointer = 1024 + 8388608;
+    let guard_start = 0; // initial guard page starts from 0
+    let guard_end = guard_start + GUARD_SIZE;
+    let stack_low = guard_end;
+    let stack_pointer = GUARD_SIZE + DEFAULT_STACKSIZE;
     store.as_context_mut().set_stack_base(stack_pointer as u64);
     store.as_context_mut().set_stack_top(stack_low as u64);
 
@@ -641,14 +651,6 @@ fn load_main_module(
         if #[cfg(feature = "disable_signals")] {
             let pointer = 0;
         } else {
-            // // retrieve the epoch global
-            // let lind_epoch = instance
-            //     .get_export(&mut *store, "epoch")
-            //     .and_then(|export| export.into_global())
-            //     .expect("Failed to find epoch global export!");
-
-            // // retrieve the handler (underlying pointer) for the epoch global
-            // let pointer = lind_epoch.get_handler_as_u64(&mut *store);
             let pointer = epoch_handler;
         }
     }

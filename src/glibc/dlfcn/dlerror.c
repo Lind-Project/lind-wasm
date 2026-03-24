@@ -28,12 +28,14 @@
 #include <assert.h>
 #include <dlerror.h>
 
+// error message for lind dynamic loader
+// dylink errno returned from host is served as the index to the array
 // should match sysdefs/lind_platform_const.rs
 static const char *__lind_dylink_error_msg[] = {
     "UNUSED", // 0
     "cannot open shared object file",
     "Invalid library file type: expects wasm file",
-    "shared wasm object file does not dylink section",
+    "shared wasm object file does not have dylink.0 section",
     "error while loading shared libraries",
     "undefined symbol",
 

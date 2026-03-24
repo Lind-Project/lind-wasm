@@ -158,10 +158,6 @@ impl<
         self.linker = linker;
     }
 
-    pub fn update_modules(&mut self, modules: Vec<(String, Module)>) {
-        self.modules = modules;
-    }
-
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
     // normal state, unwind state and rewind state.
     // During the normal state, the process continues its execution as normal.
