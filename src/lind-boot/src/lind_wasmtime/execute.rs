@@ -186,8 +186,8 @@ pub fn execute_with_lind(
             .unwrap();
 
         // calculate the stack address for main module
-        let stack_low_num = 1024; // reserve first 1024 bytes for guard page
-        let stack_high_num = stack_low_num + 8388608; // 8 MB of default stack size
+        let stack_low_num = GUARD_SIZE as i32; // reserve first 1024 bytes for guard page
+        let stack_high_num = stack_low_num + DEFAULT_STACKSIZE; // 8 MB of default stack size
         #[cfg(feature = "debug-dylink")]
         println!(
             "[debug] main module stack pointer starts from {} to {}",
