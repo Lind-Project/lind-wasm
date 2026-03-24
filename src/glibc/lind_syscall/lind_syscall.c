@@ -125,8 +125,8 @@ int register_handler (int64_t targetcage,
     return make_threei_call(
         REGISTER_HANDLER_SYSCALL, 
         NOTUSED, // callname is not used in the trampoline
-        targetcage, // pass targetcage as self_cageid
-        targetcage, // pass targetcage as target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        this_grate_id, // pass grate calling register handler as self_cageid
+        this_grate_id, // self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         targetcage, 
         targetcallnum, 
         NOTUSED, // runtime_id currently not used
