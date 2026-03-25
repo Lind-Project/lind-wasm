@@ -18,3 +18,9 @@ reports/
 
 #Ignore python cache
 __pycache__/
+
+llvm-project/
+libcxx-*/
+compiler-rt-*/
+llvm-wasm-build/
+llvm-native-build/
