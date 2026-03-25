@@ -50,8 +50,11 @@ static INIT_TLS_BASE: AtomicI32 = AtomicI32::new(0);
 ///
 /// - `InstantiateLib`:
 ///     A dynamically loaded library Wasm instance.  
-///     Argument: a pointer to the underlying `memory_base`, which will be
-///     updated after `mmap` returns to reflect the actual linear memory base.
+///     Argument:
+///         - `memory_base`: a pointer to the underlying `memory_base`, which will be
+///                          updated after `mmap` returns to reflect the actual linear memory base.
+///         - `cageid`: the cageid associated with the library
+///         - `needs_init`: whether initialization is needed. Used in alternative routine in multiprocess scenario
 pub enum InstantiateType {
     InstantiateFirst(u64),
     InstantiateChild {
@@ -59,6 +62,7 @@ pub enum InstantiateType {
         child_cageid: u64,
     },
     InstantiateLib {
+        cageid: u64,
         needs_init: bool,
         memory_base: *mut u32,
     },
@@ -315,6 +319,7 @@ impl Instance {
         // in case of instantiating a child library instance, we do not need to do the memory initialization since the child instance will inherit the memory state from parent
         match instantiate_type {
             InstantiateType::InstantiateLib {
+                cageid,
                 needs_init,
                 memory_base,
             } => {
@@ -346,11 +351,13 @@ impl Instance {
                 let plans = module.compiled_module().module().memory_plans.clone();
                 let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
 
+                // initial page includes the stack size and the guard size surrounded by it
                 let initial_memory_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
                 let minimal_pages = round_up_size(initial_memory_size, PAGESIZE) >> PAGESHIFT; // stack size + guard page, reference to run.rs
                 let module_meminfo = module.dylink_meminfo().unwrap();
                 let module_rounded_size =
                     round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
+                // module size is a memory region located after stack, used for storing constant data 
                 let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
 
                 #[cfg(feature = "debug-dylink")]
@@ -380,6 +387,7 @@ impl Instance {
                     module_rounded_size as u64,
                     (minimal_pages << PAGESHIFT)
                 );
+                // Allocated memory should include stack AND constant data region
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
@@ -423,6 +431,7 @@ impl Instance {
                 fork_vmmap(parent_cageid as u64, child_cageid);
             }
             InstantiateType::InstantiateLib {
+                cageid,
                 needs_init,
                 memory_base,
             } => {
@@ -435,7 +444,7 @@ impl Instance {
                 println!("[debug] library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
-                    1,                     // self cageid
+                    cageid,                     // self cageid
                     (MMAP_SYSCALL) as u64, // syscall num
                     0, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     1, // target cageid (should be same)
@@ -518,6 +527,7 @@ impl Instance {
                 }
             }
             InstantiateType::InstantiateLib {
+                cageid,
                 needs_init,
                 memory_base,
             } => {

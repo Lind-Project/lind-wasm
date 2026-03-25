@@ -20,7 +20,7 @@ use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 ///
 /// It returns an integer handle identifying the loaded library.
 pub type DynamicLoader<T> =
-    Arc<dyn for<'a> Fn(&'a mut wasmtime::Caller<'_, T>, &str, i32) -> i32 + Send + Sync + 'static>;
+    Arc<dyn for<'a> Fn(&'a mut wasmtime::Caller<'_, T>, i32, &str, i32) -> i32 + Send + Sync + 'static>;
 
 /// Host implementation of `dlopen`.
 ///
@@ -45,8 +45,13 @@ pub fn dlopen_call<
         Err(_) => return -(DylinkErrorCode::EOPEN as i32),
     };
 
+    // retrieve the cageid of the caller
+    let host = caller.data().clone();
+    let ctx = host.get_ctx();
+    let cageid = ctx.cageid;
+
     // Delegate to runtime dynamic loader.
-    loader(&mut caller, path, mode)
+    loader(&mut caller, cageid, path, mode)
 }
 
 /// Host implementation of `dlsym`.

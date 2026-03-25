@@ -419,6 +419,7 @@ fn add_environ_funcs_to_linker<
     Ok(())
 }
 
+/// register dynamic loading related functions: dlopen, dlsym and dlclose
 pub fn add_dylink_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
@@ -440,7 +441,6 @@ pub fn add_dylink_to_linker<
         },
     )?;
 
-    // attach copy_handler_table_to_cage to wasmtime
     linker.func_wrap(
         "lind",
         "dlsym",
@@ -449,7 +449,6 @@ pub fn add_dylink_to_linker<
         },
     )?;
 
-    // export lind-get-memory-base for libc to query base address
     linker.func_wrap(
         "lind",
         "dlclose",

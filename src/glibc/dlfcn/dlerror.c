@@ -39,7 +39,7 @@ static const char *__lind_dylink_error_msg[] = {
     "error while loading shared libraries",
     "undefined symbol",
 
-    "invalid handler"
+    "invalid handler",
     "symbol not found",
 
     "shared object is already closed",

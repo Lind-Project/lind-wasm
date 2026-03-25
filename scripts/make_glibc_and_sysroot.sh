@@ -78,6 +78,7 @@ rm -rf $BUILD
 mkdir -p $BUILD
 cd $BUILD
 
+# do configure, we enable fPIC by default for dynamic build
 ../configure \
   --disable-werror \
   --disable-hidden-plt \

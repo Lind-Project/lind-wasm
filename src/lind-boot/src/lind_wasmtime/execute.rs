@@ -187,7 +187,7 @@ pub fn execute_with_lind(
 
         // calculate the stack address for main module
         let stack_low_num = GUARD_SIZE as i32; // reserve first 1024 bytes for guard page
-        let stack_high_num = stack_low_num + DEFAULT_STACKSIZE; // 8 MB of default stack size
+        let stack_high_num = stack_low_num + DEFAULT_STACKSIZE as i32; // 8 MB of default stack size
         #[cfg(feature = "debug-dylink")]
         println!(
             "[debug] main module stack pointer starts from {} to {}",
@@ -359,6 +359,7 @@ pub fn execute_with_lind(
             lib_linker
                 .module(
                     &mut wstore,
+                    cageid,
                     &name,
                     &module,
                     &mut table,
@@ -526,13 +527,16 @@ fn attach_api(
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
     wstore.data_mut().lind_environ = Some(LindEnviron::new(&lindboot_cli.args, &lindboot_cli.vars));
 
+    // cloning the reference to the same linker and got
+    // later when dlopen is invoked, same linker and got instance can be used for instantiate the new library
     let cloned_linker = linker.clone();
     let cloned_got = got.clone();
-    let dynamic_loader: DynamicLoader<HostCtx> = Arc::new(move |caller, library_name, mode| {
+    let dynamic_loader: DynamicLoader<HostCtx> = Arc::new(move |caller, cageid, library_name, mode| {
         load_library_module(
             caller,
             cloned_linker.clone(),
             cloned_got.clone(),
+            cageid,
             library_name,
             mode,
         )
@@ -791,6 +795,7 @@ fn load_library_module(
     mut main_module: &mut wasmtime::Caller<HostCtx>,
     mut main_linker: Arc<Mutex<Linker<HostCtx>>>,
     mut lind_got: Arc<Mutex<LindGOT>>,
+    cageid: i32,
     library_name: &str,
     dlopen_mode: i32,
 ) -> i32 {
@@ -851,6 +856,7 @@ fn load_library_module(
     // The GOT is used to patch symbol addresses/indices after instantiation.
     match linker.module_with_caller(
         &mut main_module,
+        cageid as u64,
         library_name,
         &lib_module,
         table_size as i32,

@@ -995,6 +995,7 @@ impl<T> Linker<T> {
     pub fn module(
         &mut self,
         mut store: impl AsContextMut<Data = T>,
+        cageid: u64,
         module_name: &str,
         module: &Module,
         table: &mut Table,
@@ -1102,6 +1103,7 @@ impl<T> Linker<T> {
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
+                        cageid,
                         needs_init: needs_init,
                         memory_base: handler,
                     },
@@ -1196,6 +1198,7 @@ impl<T> Linker<T> {
     pub fn module_with_child(
         &mut self,
         mut store: impl AsContextMut<Data = T>,
+        cageid: u64,
         module_name: &str,
         module: &Module,
         table: &mut Table,
@@ -1266,6 +1269,7 @@ impl<T> Linker<T> {
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
+                        cageid,
                         needs_init: false,
                         memory_base: handler,
                     },
@@ -1317,6 +1321,7 @@ impl<T> Linker<T> {
     pub fn module_with_caller(
         &mut self,
         mut store: &mut crate::Caller<T>,
+        cageid: u64,
         module_name: &str,
         module: &Module,
         table_base: i32,
@@ -1378,6 +1383,7 @@ impl<T> Linker<T> {
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
+                        cageid,
                         needs_init: true,
                         memory_base: handler,
                     },

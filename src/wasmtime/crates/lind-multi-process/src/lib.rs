@@ -60,7 +60,7 @@ pub struct LindCtx<T, U> {
     modules: Vec<(String, Module)>,
 
     // cage id
-    cageid: i32,
+    pub cageid: i32,
 
     // thread id
     tid: i32,
@@ -420,6 +420,7 @@ impl<
                         linker
                             .module_with_child(
                                 &mut store,
+                                child_cageid,
                                 &name,
                                 &module,
                                 &mut child_table,
@@ -836,6 +837,7 @@ impl<
                         linker
                             .module_with_child(
                                 &mut store,
+                                child_cageid as u64,
                                 &name,
                                 &module,
                                 &mut child_table,
