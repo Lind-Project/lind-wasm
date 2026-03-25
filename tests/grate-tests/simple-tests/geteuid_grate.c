@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
       assert(0);
     }
 
-    if (execv(argv[i], &argv[i]) == -1) {
+    if (execv(argv[1], &argv[1]) == -1) {
       perror("execv failed");
       assert(0);
     }
