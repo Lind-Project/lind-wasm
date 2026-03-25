@@ -122,6 +122,9 @@ int register_handler (int64_t targetcage,
     uint64_t this_grate_id,
     uint64_t in_grate_fn_ptr_u64)
 {
+    // register_handler is treated as a syscall called by `this_grate_id`.
+    // This approach allows us to interpose on register_handler calls based on which cage
+    // this syscall was meant to be redirected to. 
     return make_threei_call(
         REGISTER_HANDLER_SYSCALL, 
         NOTUSED, // callname is not used in the trampoline
