@@ -7,7 +7,6 @@ shift
 PROFILE="debug"
 CARGO_ARGS=("--target" "wasm32-wasip1")
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
-LINDFS=${LIND_WASM_ROOT}/lindfs
 
 for arg in "$@"; do
     if [ "$arg" = "--release" ] || [ "$arg" = "-r" ]; then
@@ -44,8 +43,6 @@ echo "-------------------------------"
 for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -path "*deps*" 2>/dev/null | sort -r); do
         # Find the wasm files in the appropriate profile directory
         lind_compile --opt-only "$f" &> /dev/null || true
-        # Precompile the optimized wasm file to cache it
+        # Precompile the optimized wasm file to cache it to LindFS
         lind_compile --precompile-only "$f" &> /dev/null || true
-        # Copy precompiled wasm file to LindFS
-        cp ${f%.wasm}.cwasm $LINDFS || true
 done
