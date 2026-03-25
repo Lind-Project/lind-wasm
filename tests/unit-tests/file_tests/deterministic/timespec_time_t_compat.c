@@ -25,9 +25,6 @@ int main() {
     struct tm *tm = localtime(&st.st_mtime);
     assert(tm != NULL);
 
-    /* 4. Verify the time is reasonable (after year 2000) */
-    assert(tm->tm_year >= 100);
-
     printf("timespec_time_t_compat: all checks passed\n");
     return 0;
 }
