@@ -21,8 +21,9 @@ use sysdefs::constants::lind_platform_const::{
     MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
-    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
-    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
+    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_DATA, RLIMIT_NOFILE,
+    RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK,
+    WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
@@ -1196,18 +1197,15 @@ pub extern "C" fn prlimit64_syscall(
             Err(e) => return syscall_error(e, "prlimit64", "bad address"),
         };
         match resource {
-            3 => {
-                // RLIMIT_STACK: 8MiB
+            RLIMIT_STACK => {
                 old_limit.rlim_cur = 8 * 1024 * 1024;
                 old_limit.rlim_max = 8 * 1024 * 1024;
             }
-            7 => {
-                // RLIMIT_NOFILE: 1024
+            RLIMIT_NOFILE => {
                 old_limit.rlim_cur = 1024;
                 old_limit.rlim_max = 1024;
             }
-            5 | 9 => {
-                // RLIMIT_DATA (5) / RLIMIT_AS (9): wasm32 linear memory
+            RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => {
                 old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
                 old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
             }
