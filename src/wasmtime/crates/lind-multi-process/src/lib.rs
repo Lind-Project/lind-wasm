@@ -57,7 +57,7 @@ pub struct LindCtx<T, U> {
     // linker used by the module
     linker: Linker<T>,
     // the module associated with the ctx
-    modules: Vec<(String, Module)>,
+    modules: Vec<(String, String, Module)>,
 
     // cage id
     pub cageid: i32,
@@ -112,7 +112,7 @@ impl<
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
     pub fn new(
-        modules: Vec<(String, Module)>,
+        modules: Vec<(String, String, Module)>,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
@@ -241,7 +241,7 @@ impl<
         let address = get_memory_base(&mut caller) as *mut u8;
 
         // main module is the first module in the module list
-        let main_module = &self.modules.get(0).unwrap().1;
+        let main_module = &self.modules.get(0).unwrap().2;
 
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
@@ -289,7 +289,7 @@ impl<
         let mut snapshot = {
             let child_ctx = get_cx(&mut child_host);
             let mut child_linker = child_ctx.linker.clone();
-            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
+            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
             let snapshot = child_linker
                 .get_global_define_snapshot(&mut caller, main_module)
                 .unwrap();
@@ -344,7 +344,7 @@ impl<
                     // create a new memory area for child
                     child_ctx.fork_memory(&store_inner);
                     // main module is the first module in the module list
-                    let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
+                    let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
 
                     let lind_manager = child_ctx.lind_manager.clone();
                     let mut linker = child_ctx.linker.clone();
@@ -378,7 +378,7 @@ impl<
                         .define(&mut store, "env", "__indirect_function_table", child_table)
                         .unwrap();
 
-                    for (name, module) in modules.iter().skip(1) {
+                    for (name, _path, module) in modules.iter().skip(1) {
                         // Read dylink metadata for this preloaded (library) module.
                         // This contains the module's declared table/memory requirements.
                         let dylink_info = module.dylink_meminfo();
@@ -656,7 +656,7 @@ impl<
         let parent_address = get_memory_base(&mut caller) as *mut u8;
 
         // main module is the first module in the module list
-        let main_module = self.modules.get(0).unwrap().1.clone();
+        let main_module = self.modules.get(0).unwrap().2.clone();
 
         // get the wasm stack top address
         let parent_stack_low_usr = caller.as_context().get_stack_top();
@@ -700,7 +700,7 @@ impl<
         let mut snapshot = {
             let child_ctx = get_cx(&mut child_host);
             let mut child_linker = child_ctx.linker.clone();
-            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
+            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
             let snapshot = child_linker
                 .get_global_define_snapshot(&mut caller, main_module)
                 .unwrap();
@@ -776,7 +776,7 @@ impl<
                     child_ctx.tid = next_tid as i32;
 
                     // main module is the first module in the module list
-                    let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().1;
+                    let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
                     let lind_manager = child_ctx.lind_manager.clone();
 
                     let mut linker = child_ctx.linker.clone();
@@ -803,7 +803,7 @@ impl<
                     };
                     linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
 
-                    for (name, module) in modules.iter().skip(1) {
+                    for (name, _path, module) in modules.iter().skip(1) {
                         // Read dylink metadata for this preloaded (library) module.
                         // This contains the module's declared table/memory requirements.
                         let dylink_info = module.dylink_meminfo();
@@ -1451,7 +1451,7 @@ impl<
         self.linker.allow_shadowing(true);
         // main module is the first module in the module list
         // create a new SharedMemory from main module's memory plan
-        let main_module = &self.modules.get(0).unwrap().1;
+        let main_module = &self.modules.get(0).unwrap().2;
         for import in main_module.imports() {
             if let Some(m) = import.ty().memory() {
                 if m.is_shared() {

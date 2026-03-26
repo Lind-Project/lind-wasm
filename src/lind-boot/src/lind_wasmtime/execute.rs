@@ -286,11 +286,11 @@ pub fn execute_with_lind(
 
     // Load the preload wasm modules.
     let mut modules = Vec::new();
-    modules.push((String::new(), module.clone()));
+    modules.push((String::new(), String::new(), module.clone()));
     for (name, path) in lind_boot.preloads.iter() {
         // Read the wasm module binary either as `*.wat` or a raw binary
         let module = read_wasm_or_cwasm(&engine, path)?;
-        modules.push((name.clone(), module.clone()));
+        modules.push((name.clone(), path.to_string_lossy().to_string(), module.clone()));
     }
 
     attach_api(
@@ -312,7 +312,7 @@ pub fn execute_with_lind(
     //
     // We skip the first module because it is the main module, which was
     // already processed earlier.
-    for (name, module) in modules.iter().skip(1) {
+    for (name, _path, module) in modules.iter().skip(1) {
         let mut linker = linker.lock().unwrap();
 
         let mut got_guard = lind_got.lock().unwrap();
@@ -320,9 +320,9 @@ pub fn execute_with_lind(
     }
 
     // Add the module's functions to the linker.
-    for (name, module) in modules.iter().skip(1) {
+    for (name, path, module) in modules.iter().skip(1) {
         #[cfg(feature = "debug-dylink")]
-        println!("[debug] link module {}", name);
+        println!("[debug] link module {}.{}", name, path);
         let mut lib_linker = linker.lock().unwrap();
 
         // Read dylink metadata for this preloaded (library) module.
@@ -517,7 +517,7 @@ fn register_wasmtime_syscall_entry() -> bool {
 fn attach_api(
     wstore: &mut Store<HostCtx>,
     mut linker: &mut Arc<Mutex<Linker<HostCtx>>>,
-    modules: &Vec<(String, Module)>,
+    modules: &Vec<(String, String, Module)>,
     lind_manager: Arc<LindCageManager>,
     lindboot_cli: CliOptions,
     cageid: i32,
@@ -553,7 +553,7 @@ fn attach_api(
         dynamic_loader,
     )?;
 
-    let main_module = &modules.get(0).unwrap().1;
+    let main_module = &modules.get(0).unwrap().2;
 
     // attach SharedMemory to the wasm module
     for import in main_module.imports() {

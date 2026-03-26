@@ -853,6 +853,7 @@ impl<T> Linker<T> {
                         | "__wasm_call_ctors"
                         | "__wasm_apply_data_relocs"
                         | "__wasm_apply_global_relocs"
+                        | "__wasm_apply_tls_relocs"
                         | "asyncify_start_unwind"
                         | "asyncify_stop_unwind"
                         | "asyncify_start_rewind"
