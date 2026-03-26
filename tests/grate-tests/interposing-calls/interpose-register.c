@@ -3,21 +3,32 @@
 #include <unistd.h>
 #include <assert.h>
 #include <lind_syscall.h>
+#include <sys/wait.h>
 
+// This is grate-2. It spawns a child cage and tries to interpose the child's
+// geteuid syscall.
 int main(int argc, char *argv[]) {
-    printf("[Cage|interpose-register] In cage %d, about to register handler for geteuid\n", getpid());
-    int ret_reg = register_handler(2, 107, 1, 0);
-    if (ret_reg != 0) {
-        fprintf(stderr, "[Cage|interpose-register] Failed to register handler for cage %d in "
-                "grate %d with fn ptr addr: %llu, ret: %d\n",
-                2, 1, 0ULL, ret_reg);
-        assert(0);
-    }
-    int ret = geteuid();
-    if (ret != 10) {
-        fprintf(stderr, "[Cage|interpose-register] FAIL: expected 10, got %d\n", ret);
-        assert(0);
-    }
-    printf("[Cage|interpose-register] PASS: geteuid ret = %d\n", ret);
-    return 0;
+	int grateid = getpid();
+
+	int pid = fork();
+
+	if (pid < 0) {
+		exit(1);
+	} else if (pid == 0) {
+		int cageid = getpid();
+		// This grateid has it's register_handler interposed. This call
+		// should go to the grate-1.
+		printf("[cage] registering 107. grateid: %d cageid: %d\n",
+		       grateid, cageid);
+		register_handler(cageid, 107, grateid, 0);
+
+		int ret = geteuid();
+		if (ret != 10) {
+			assert(0);
+		}
+	} else {
+		wait(NULL);
+	}
+
+	return 0;
 }
