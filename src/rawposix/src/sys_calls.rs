@@ -1206,8 +1206,8 @@ pub extern "C" fn prlimit64_syscall(
                 old_limit.rlim_cur = 1024;
                 old_limit.rlim_max = 1024;
             }
-            9 => {
-                // RLIMIT_AS: wasm32 linear memory address space
+            5 | 9 => {
+                // RLIMIT_DATA (5) / RLIMIT_AS (9): wasm32 linear memory
                 old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
                 old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
             }
