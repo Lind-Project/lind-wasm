@@ -18,7 +18,7 @@ use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
-    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+    MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
@@ -1205,6 +1205,11 @@ pub extern "C" fn prlimit64_syscall(
                 // RLIMIT_NOFILE: 1024
                 old_limit.rlim_cur = 1024;
                 old_limit.rlim_max = 1024;
+            }
+            9 => {
+                // RLIMIT_AS: wasm32 linear memory address space
+                old_limit.rlim_cur = lind_platform_const::MAX_LINEAR_MEMORY_SIZE as u32;
+                old_limit.rlim_max = lind_platform_const::MAX_LINEAR_MEMORY_SIZE as u32;
             }
             _ => {
                 lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
