@@ -7,6 +7,7 @@ LINDFS_DIRS := \
 	       bin \
 	       dev \
 	       etc \
+	       lib \
 	       sbin \
 	       tmp \
 	       usr/bin \
@@ -74,6 +75,30 @@ sync-sysroot:
 .PHONY: test
 test: lindfs
 	# Unified harness entry point (run all discovered harnesses for e2e signal)
+	alias_path='$(LIND_RUNTIME_LINDFS_ALIAS)'; \
+	prebuilt_lindfs_root='$(PREBUILT_LINDFS_ROOT)'; \
+	cleanup() { \
+	  if [ -n "$$alias_path" ]; then \
+	    alias_parent="$$(dirname "$$alias_path")"; \
+	    rm -f "$$alias_path"; \
+	    rmdir "$$alias_parent" 2>/dev/null || true; \
+	    rmdir "$$(dirname "$$alias_parent")" 2>/dev/null || true; \
+	  fi; \
+	}; \
+	if [ -n "$$alias_path" ]; then \
+	  mkdir -p "$$(dirname "$$alias_path")"; \
+	  rm -f "$$alias_path"; \
+	  case '$(LINDFS_ROOT)' in \
+	    /*) lindfs_root='$(LINDFS_ROOT)' ;; \
+	    *) lindfs_root="$$PWD/$(LINDFS_ROOT)" ;; \
+	  esac; \
+	  ln -s "$$lindfs_root" "$$alias_path"; \
+	  trap cleanup EXIT; \
+	fi; \
+	if [ -n "$$prebuilt_lindfs_root" ] && [ -d "$$prebuilt_lindfs_root/lib" ]; then \
+	  mkdir -p "$(LINDFS_ROOT)/lib"; \
+	  cp -a "$$prebuilt_lindfs_root/lib/." "$(LINDFS_ROOT)/lib/"; \
+	fi; \
 	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \

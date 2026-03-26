@@ -124,8 +124,12 @@ RUN make lind-boot
 FROM base AS build-glibc
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
 COPY scripts ./scripts
+COPY tools ./tools
 COPY --parents src/glibc Makefile .
-RUN make sysroot
+COPY --from=build-lind-boot --parents build/lind-boot .
+RUN make sysroot \
+ && test -f lindfs/lib/libc.cwasm \
+ && test -f lindfs/lib/libm.cwasm
 
 
 # Build Docker image that includes the full lind-wasm toolchain
@@ -139,6 +143,7 @@ COPY --from=build-lind-boot --parents build/lind-boot .
 RUN chmod 0755 /build/lind-boot
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --from=build-glibc --parents build/sysroot .
+COPY --from=build-glibc --parents lindfs .
 COPY --parents scripts tests tools skip_test_cases.txt .
 
 ENV LIND_WASM_ROOT=/
@@ -158,14 +163,15 @@ RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_run \
  && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
-# Create symlink so hardcoded paths in wasmtime match Docker environment
-RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
-# NOTE: Build artifacts from prior stages are only mounted, to save COPY time
-# and cache layers. This means they are not preserved in the resulting image.
+# NOTE: Precompiled lindfs runtime libraries are mounted and copied into the
+# writable test lindfs so runtime preloads like /lib/libc.cwasm are available.
 RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lind-boot/target \
     --mount=from=build-lind-boot,source=build/lind-boot,destination=/build/lind-boot \
+    --mount=from=build-glibc,source=lindfs,destination=/prebuilt-lindfs,readonly \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
-    make test && \
+    make PREBUILT_LINDFS_ROOT=/prebuilt-lindfs \
+         LIND_RUNTIME_LINDFS_ALIAS=/home/lind/lind-wasm/lindfs \
+         test && \
     make md_generation OUT=/ REPORT=/report.html
 
 
