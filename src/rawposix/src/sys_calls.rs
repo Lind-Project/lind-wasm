@@ -1208,8 +1208,8 @@ pub extern "C" fn prlimit64_syscall(
             }
             9 => {
                 // RLIMIT_AS: wasm32 linear memory address space
-                old_limit.rlim_cur = lind_platform_const::MAX_LINEAR_MEMORY_SIZE as u32;
-                old_limit.rlim_max = lind_platform_const::MAX_LINEAR_MEMORY_SIZE as u32;
+                old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
+                old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
             }
             _ => {
                 lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
