@@ -11,7 +11,8 @@ use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, 
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT};
 use threei::threei_const;
 use wasmtime::{
-    AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails
+    AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
+    Store, Val, ValType, WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
 use wasmtime_lind_common::LindEnviron;
@@ -290,7 +291,11 @@ pub fn execute_with_lind(
     for (name, path) in lind_boot.preloads.iter() {
         // Read the wasm module binary either as `*.wat` or a raw binary
         let module = read_wasm_or_cwasm(&engine, path)?;
-        modules.push((name.clone(), path.to_string_lossy().to_string(), module.clone()));
+        modules.push((
+            name.clone(),
+            path.to_string_lossy().to_string(),
+            module.clone(),
+        ));
     }
 
     attach_api(
@@ -531,16 +536,17 @@ fn attach_api(
     // later when dlopen is invoked, same linker and got instance can be used for instantiate the new library
     let cloned_linker = linker.clone();
     let cloned_got = got.clone();
-    let dynamic_loader: DynamicLoader<HostCtx> = Arc::new(move |caller, cageid, library_name, mode| {
-        load_library_module(
-            caller,
-            cloned_linker.clone(),
-            cloned_got.clone(),
-            cageid,
-            library_name,
-            mode,
-        )
-    });
+    let dynamic_loader: DynamicLoader<HostCtx> =
+        Arc::new(move |caller, cageid, library_name, mode| {
+            load_library_module(
+                caller,
+                cloned_linker.clone(),
+                cloned_got.clone(),
+                cageid,
+                library_name,
+                mode,
+            )
+        });
 
     let mut linker_guard = linker.lock().unwrap();
     let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(

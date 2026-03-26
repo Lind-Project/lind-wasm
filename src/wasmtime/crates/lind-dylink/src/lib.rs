@@ -19,8 +19,9 @@ use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 /// - the dlopen mode flags.
 ///
 /// It returns an integer handle identifying the loaded library.
-pub type DynamicLoader<T> =
-    Arc<dyn for<'a> Fn(&'a mut wasmtime::Caller<'_, T>, i32, &str, i32) -> i32 + Send + Sync + 'static>;
+pub type DynamicLoader<T> = Arc<
+    dyn for<'a> Fn(&'a mut wasmtime::Caller<'_, T>, i32, &str, i32) -> i32 + Send + Sync + 'static,
+>;
 
 /// Host implementation of `dlopen`.
 ///

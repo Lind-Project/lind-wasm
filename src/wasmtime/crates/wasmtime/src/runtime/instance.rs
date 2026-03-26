@@ -357,7 +357,7 @@ impl Instance {
                 let module_meminfo = module.dylink_meminfo().unwrap();
                 let module_rounded_size =
                     round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
-                // module size is a memory region located after stack, used for storing constant data 
+                // module size is a memory region located after stack, used for storing constant data
                 let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
 
                 #[cfg(feature = "debug-dylink")]
@@ -444,7 +444,7 @@ impl Instance {
                 println!("[debug] library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
-                    cageid,                     // self cageid
+                    cageid,                // self cageid
                     (MMAP_SYSCALL) as u64, // syscall num
                     0, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     1, // target cageid (should be same)
