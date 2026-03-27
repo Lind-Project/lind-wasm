@@ -52,4 +52,5 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm
 $REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $REPO_ROOT/lindfs/lib/libc.wasm -o $REPO_ROOT/lindfs/lib/libc.wasm
 
 # do precompile
+rm -f $REPO_ROOT/lindfs/lib/libc.cwasm
 $REPO_ROOT/scripts/lind_compile --precompile-only $REPO_ROOT/lindfs/lib/libc.wasm

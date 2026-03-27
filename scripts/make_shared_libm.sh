@@ -43,6 +43,7 @@ mkdir -p $REPO_ROOT/lindfs/lib
 
 # apply wasm-opt
 $REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.wasm
-# do precompile
 
+# do precompile
+rm -f $REPO_ROOT/lindfs/lib/libm.cwasm
 $REPO_ROOT/scripts/lind_compile --precompile-only $REPO_ROOT/lindfs/lib/libm.wasm
