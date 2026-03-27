@@ -1447,9 +1447,8 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // push new library instance
-    pub fn push_library_symbols(&mut self, symbol_map: SymbolMap) -> Result<usize> {
-        self.0.library_symbols.add(symbol_map);
-        Ok(self.0.library_symbols.count())
+    pub fn push_library_symbols(&mut self, symbol_map: SymbolMap) -> Result<i32> {
+        Ok(self.0.library_symbols.add(symbol_map))
     }
 
     // find library symbol from local scope

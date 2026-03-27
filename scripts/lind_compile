@@ -62,10 +62,11 @@ EOF
 
 MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
-SHARED_BUILD="true"
+SHARED_BUILD="false"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
+COMPILE_LIBRARY="false"
 ORIGINAL_ARGS=("$@")
 
 set_mode() {
@@ -111,6 +112,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --no-default-clang-flags)
       NO_DEFAULT_CLANG_FLAGS="true"
+      ;;
+    --compile-library)
+      COMPILE_LIBRARY="true"
       ;;
     --compile-grate)
       COMPILE_GRATE="true"
@@ -377,11 +381,45 @@ do_dynamic_compile() {
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
 }
 
+do_library_compile() {
+  local -a mandatory_clang_flags=(
+    --target=wasm32-unknown-wasi
+    "--sysroot=${SYSROOT}"
+    "-fvisibility=default"
+    "-Wl,--import-memory"
+    "-Wl,--shared-memory"
+    "-Wl,--export-dynamic"
+    "-Wl,--experimental-pic"
+    "-Wl,--unresolved-symbols=import-dynamic"
+    "-Wl,-shared"
+  )
+  local -a default_clang_flags=(
+    -g
+    -O0
+    -fPIC
+  )
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
+  
+  # run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
+  # run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
+}
+
 do_compile() {
-  if [[ "${SHARED_BUILD}" == "true" ]]; then
-    do_dynamic_compile
+  if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+    do_library_compile
   else
-    do_static_compile
+    if [[ "${SHARED_BUILD}" == "true" ]]; then
+      do_dynamic_compile
+    else
+      do_static_compile
+    fi
   fi
 }
 
@@ -393,12 +431,21 @@ do_optimize() {
     # --debuginfo: retain debug information for better debugging experience 
     run_cmd "${WASM_OPT_BIN}" \
       --enable-bulk-memory --enable-threads \
-      --epoch-injection --pass-arg=epoch-import  --pass-arg=epoch-main-module \
+      --epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module \
       --asyncify --pass-arg=asyncify-import-globals \
       --debuginfo \
       "${OUT_WASM}" -o "${OUT_WASM}"
-  else
-    run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+  else 
+    if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+        run_cmd "${WASM_OPT_BIN}" \
+        --enable-bulk-memory --enable-threads \
+        --epoch-injection --pass-arg=epoch-import \
+        --asyncify --pass-arg=asyncify-import-globals \
+        --debuginfo \
+        "${OUT_WASM}" -o "${OUT_WASM}"
+    else
+      run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+    fi
   fi
 }
 

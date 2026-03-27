@@ -2141,7 +2141,7 @@ impl<T> Caller<'_, T> {
     }
 
     /// append library's symbols into lookup table
-    pub fn push_library_symbols(&mut self, symbols: SymbolMap) -> Result<usize> {
+    pub fn push_library_symbols(&mut self, symbols: SymbolMap) -> Result<i32> {
         self.store.push_library_symbols(symbols)
     }
 
