@@ -43,7 +43,7 @@ int fork_grate(uint64_t cageid,
   printf("[Grate|interpose-fork] In fork_grate %d handler for cage: %llu\n",
          getpid(), cageid);
   int self_grate_id = getpid();
-  int ret = make_threei_call(
+  int new_cageid = make_threei_call(
     56, // syscallnum for clone
     0,    // callname is not used in the trampoline, set to 0
     self_grate_id,    // self_grate_id is not used in the trampoline, set to 0
@@ -56,7 +56,11 @@ int fork_grate(uint64_t cageid,
     arg6, arg6cage,
     0 // we will handle the errno in this grate instead of translating it to -1 in the trampoline
   );
-  return ret;
+
+  // Ensure the return value is a valid process ID.
+  assert(new_cageid > 0);
+
+  return new_cageid;
 }
 
 // Main function will always be same in all grates

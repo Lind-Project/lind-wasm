@@ -73,11 +73,14 @@ sync-sysroot:
 
 .PHONY: test
 test: lindfs
-	# Unified harness entry point (run all discovered harnesses for e2e signal)
-	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	@if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
-	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \;; \
-	if python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); total=sum(int(json.load(open(p)).get('number_of_failures', 0)) for p in paths); print(f'total_failures={total}'); sys.exit(1 if total else 0)"; then \
+	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
+	if [ "$(LIND_DEBUG)" = "1" ]; then \
+	  python3 ./scripts/check_reports.py --debug; \
+	else \
+	  python3 ./scripts/check_reports.py; \
+	fi; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
 	else \
 	  echo "E2E_STATUS=fail" > e2e_status; \

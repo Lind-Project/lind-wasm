@@ -6,7 +6,7 @@ use std::ffi::c_void;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
+use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Linker, Module, Store, Val, ValType,
@@ -67,8 +67,20 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         panic!("[lind-boot] egister syscall handlers (clone/exec/exit) with 3i failed");
     }
 
+    // -- Initialize the Wasmtime execution environment --
+    let wasm_file_path = Path::new(lindboot_cli.wasm_file());
+    let wt_config = make_wasmtime_config(lindboot_cli.wasmtime_backtrace);
+    let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
+    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
+
     // -- Run the first module in the first cage --
-    let result = execute_with_lind(lindboot_cli, lind_manager.clone(), CAGE_START_ID as u64);
+    let result = execute_with_lind(
+        lindboot_cli,
+        lind_manager.clone(),
+        engine,
+        module,
+        CAGE_START_ID as u64,
+    );
 
     match result {
         Ok(ref ret_vals) => {
@@ -86,7 +98,20 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             Ok(exit_code)
         }
         Err(e) => {
-            // Exit the process
+            // Initial cage crashed.  Do the same cleanup as the
+            // fork-crash and signal-handler error paths so child
+            // cages see proper termination and resources are freed.
+            let cageid = CAGE_START_ID as u64;
+            cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+            if let Some(c) = cage::get_cage(cageid) {
+                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+            }
+            threei::EXITING_TABLE.insert(cageid);
+            threei::handler_table::_rm_grate_from_handler(cageid);
+            cage::signal::lind_thread_exit(cageid, THREAD_START_ID as u64);
+            cage::cage_finalize(cageid);
+            lind_manager.decrement();
+            lind_manager.wait();
             return Err(e);
         }
     }
@@ -108,18 +133,16 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
 pub fn execute_with_lind(
     lind_boot: CliOptions,
     lind_manager: Arc<LindCageManager>,
+    engine: Engine,
+    module: Module,
     cageid: u64,
 ) -> Result<Vec<Val>> {
     // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(lind_boot.wasm_file());
     let args = lind_boot.args.clone();
-    let wt_config = make_wasmtime_config(lind_boot.wasmtime_backtrace);
-    let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
 
-    // -- Load module and attach host APIs --
-    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
+    // -- attach host APIs --
     let mut linker = Linker::new(&engine);
 
     attach_api(
@@ -276,7 +299,7 @@ fn attach_api(
         cageid,
         |host| host.lind_fork_ctx.as_mut().unwrap(),
         |host| host.fork(),
-        |lindboot_cli, path, args, cageid, lind_manager, envs| {
+        |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs| {
             let mut new_lindboot_cli = lindboot_cli.clone();
             new_lindboot_cli.args = vec![String::from(path)];
             // new_lindboot_cli.wasm_file = path.to_string();
@@ -287,7 +310,13 @@ fn attach_api(
                 new_lindboot_cli.args.push(String::from(arg));
             }
 
-            execute_with_lind(new_lindboot_cli, lind_manager.clone(), cageid as u64)
+            execute_with_lind(
+                new_lindboot_cli,
+                lind_manager.clone(),
+                engine,
+                module,
+                cageid as u64,
+            )
         },
     )?);
 
@@ -390,7 +419,7 @@ fn load_main_module(
 
     // 5) Create backup instances to populate the vmctx pool
     // See more comments in lind-3i/lib.rs
-    for _ in 0..9 {
+    for _ in 0..INSTANCE_NUMBER {
         let (_, backup_cage_instanceid) = linker
             .instantiate_with_lind_thread(&mut *store, &module)
             .context(format!("failed to instantiate"))?;

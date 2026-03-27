@@ -23,14 +23,27 @@ pub const NOFILE_MAX: u64 = 4 * 1024; // Hard limit for number of open files
 pub const STACK_CUR: u64 = 8192 * 1024; // Soft limit for stack size (8MB)
 pub const STACK_MAX: u64 = 1 << 32; // Hard limit for stack size (4GB)
 
-// Resource identifiers
-pub const RLIMIT_STACK: u64 = 0; // Limit type for stack size
-pub const RLIMIT_NOFILE: u64 = 1; // Limit type for number of files
+// Resource identifiers (must match glibc bits/resource.h)
+pub const RLIMIT_CPU: u32 = 0;
+pub const RLIMIT_FSIZE: u32 = 1;
+pub const RLIMIT_DATA: u32 = 2;
+pub const RLIMIT_STACK: u32 = 3;
+pub const RLIMIT_CORE: u32 = 4;
+pub const RLIMIT_RSS: u32 = 5;
+pub const RLIMIT_NPROC: u32 = 6;
+pub const RLIMIT_NOFILE: u32 = 7;
+pub const RLIMIT_MEMLOCK: u32 = 8;
+pub const RLIMIT_AS: u32 = 9;
 
 // ===== Process Exit Status =====
 // Source: <stdlib.h> and POSIX standard
 pub const EXIT_SUCCESS: i32 = 0; // Successful termination
 pub const EXIT_FAILURE: i32 = 1; // Unsuccessful termination
+
+// ===== Syscall Numbers =====
+// Source: include/uapi/asm-generic/unistd.h
+pub const EXIT_SYSCALL: u64 = 60; // exit — terminate calling thread
+pub const EXIT_GROUP_SYSCALL: u64 = 231; // exit_group — terminate all threads
 
 // ===== Waitpid Options =====
 // Source: include/uapi/linux/wait.h

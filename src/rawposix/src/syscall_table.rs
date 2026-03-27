@@ -9,8 +9,8 @@ use super::fs_calls::{
     fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
     ftruncate_syscall, futex_syscall, getcwd_syscall, getdents_syscall, getrandom_syscall,
     ioctl_syscall, link_syscall, lseek_syscall, mkdir_syscall, mknod_syscall, mmap_syscall,
-    mprotect_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, pipe2_syscall,
-    pipe_syscall, pread_syscall, pwrite_syscall, read_syscall, readlink_syscall,
+    mprotect_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, openat_syscall,
+    pipe2_syscall, pipe_syscall, pread_syscall, pwrite_syscall, read_syscall, readlink_syscall,
     readlinkat_syscall, readv_syscall, rename_syscall, rmdir_syscall, shmat_syscall,
     shmctl_syscall, shmdt_syscall, shmget_syscall, stat_syscall, statfs_syscall,
     sync_file_range_syscall, truncate_syscall, unlink_syscall, unlinkat_syscall, write_syscall,
@@ -18,16 +18,17 @@ use super::fs_calls::{
 };
 use super::init::RawCallFunc;
 use super::net_calls::{
-    accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall, epoll_create_syscall,
-    epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall, getpeername_syscall,
-    getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall,
-    recvmsg_syscall, select_syscall, sendmsg_syscall, sendto_syscall, setsockopt_syscall,
-    shutdown_syscall, socket_syscall, socketpair_syscall,
+    accept4_syscall, accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall,
+    epoll_create_syscall, epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall,
+    getpeername_syscall, getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall,
+    recvfrom_syscall, recvmsg_syscall, select_syscall, sendmsg_syscall, sendto_syscall,
+    setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
 };
 use super::sys_calls::{
-    exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
-    getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, sched_yield_syscall,
-    setitimer_syscall, sigaction_syscall, sigprocmask_syscall, waitpid_syscall,
+    exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
+    getgid_syscall, getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall,
+    prlimit64_syscall, sched_yield_syscall, setitimer_syscall, sigaction_syscall,
+    sigprocmask_syscall, waitpid_syscall,
 };
 
 pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
@@ -113,13 +114,17 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (202, futex_syscall),
     (213, epoll_create_syscall),
     (228, clock_gettime_syscall),
+    (231, exit_group_syscall),
     (232, epoll_wait_syscall),
     (233, epoll_ctl_syscall),
+    (257, openat_syscall),
     (263, unlinkat_syscall),
     (267, readlinkat_syscall),
     (277, sync_file_range_syscall),
+    (288, accept4_syscall),
     (291, epoll_create1_syscall),
     (292, dup3_syscall),
     (293, pipe2_syscall),
+    (302, prlimit64_syscall),
     (318, getrandom_syscall),
 ];
