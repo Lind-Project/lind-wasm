@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use sysdefs::logging::lind_debug_panic;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const;
@@ -231,7 +232,8 @@ fn add_runtime_to_linker<
 
     linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
         let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
-        sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
+        // sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
+        println!("Lind Warning: {}", format!("FROM GUEST: {}", _panic_str).as_str());
     })?;
 
     linker.func_wrap(
@@ -425,19 +427,24 @@ pub fn add_dylink_to_linker<
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
-    dynamic_loader: DynamicLoader<T>,
+    dynamic_loader: Option<DynamicLoader<T>>,
 ) -> anyhow::Result<()> {
+    let dylink_enabled = dynamic_loader.is_some();
     let cloned_dynamic_loader = dynamic_loader.clone();
     linker.func_wrap(
         "lind",
         "dlopen",
         move |mut caller: wasmtime::Caller<'_, T>, file: i32, mode: i32| -> i32 {
-            wasmtime_lind_dylink::dlopen_call(
-                &mut caller,
-                file,
-                mode,
-                cloned_dynamic_loader.clone(),
-            )
+            if dylink_enabled {
+                wasmtime_lind_dylink::dlopen_call(
+                    &mut caller,
+                    file,
+                    mode,
+                    cloned_dynamic_loader.clone().unwrap(),
+                )
+            } else {
+                lind_debug_panic("dynamic loading support is not enabled!");
+            }
         },
     )?;
 
@@ -445,7 +452,11 @@ pub fn add_dylink_to_linker<
         "lind",
         "dlsym",
         move |mut caller: wasmtime::Caller<'_, T>, handle: i32, name: i32| -> i32 {
-            wasmtime_lind_dylink::dlsym_call(&mut caller, handle, name)
+            if dylink_enabled {
+                wasmtime_lind_dylink::dlsym_call(&mut caller, handle, name)
+            } else {
+                lind_debug_panic("dynamic loading support is not enabled!");
+            }
         },
     )?;
 
@@ -453,7 +464,11 @@ pub fn add_dylink_to_linker<
         "lind",
         "dlclose",
         move |mut caller: wasmtime::Caller<'_, T>, handle: i32| -> i32 {
-            wasmtime_lind_dylink::dlclose_call(&mut caller, handle)
+            if dylink_enabled {
+                wasmtime_lind_dylink::dlclose_call(&mut caller, handle)
+            } else {
+                lind_debug_panic("dynamic loading support is not enabled!");
+            }
         },
     )?;
 
@@ -474,7 +489,7 @@ pub fn add_to_linker<
 >(
     linker: &mut wasmtime::Linker<T>,
     get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
-    dynamic_loader: DynamicLoader<T>,
+    dynamic_loader: Option<DynamicLoader<T>>,
 ) -> anyhow::Result<()> {
     add_syscall_to_linker(linker)?;
     add_runtime_to_linker(linker)?;

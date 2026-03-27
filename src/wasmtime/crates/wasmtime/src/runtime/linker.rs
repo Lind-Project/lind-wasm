@@ -385,6 +385,7 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         globals: &Vec<(String, String, GlobalType, Val)>,
     ) -> anyhow::Result<Option<u64>> {
+        self.allow_shadowing(true);
         let mut epoch_handler = None;
         for (module, name, ty, val) in globals {
             let cloned_global = Global::new(&mut store, ty.clone(), val.clone())?;
@@ -394,6 +395,7 @@ impl<T> Linker<T> {
                 epoch_handler = Some(cloned_global.get_handler_as_u64(&mut store) as u64);
             }
         }
+        self.allow_shadowing(false);
         Ok(epoch_handler)
     }
 
@@ -1307,7 +1309,9 @@ impl<T> Linker<T> {
                 println!("[debug] child library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
-                self.instance_dylink(store, module_name, instance)
+                let ret = self.instance_dylink(store, module_name, instance);
+
+                ret
             }
         }
     }

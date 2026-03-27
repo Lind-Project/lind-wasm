@@ -786,11 +786,11 @@ and for re-adding support for interface types you can see this issue:
                         }
                         wasmparser::Dylink0Subsection::Needed(needed) => {
                             #[cfg(feature = "debug-dylink")]
-                            eprintln!("Warning: Dylink.0 Needed Section not handled");
+                            eprintln!("Warning: Dylink.0 Needed Section not handled: {:?}", needed);
                         }
                         wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
                             #[cfg(feature = "debug-dylink")]
-                            eprintln!("Warning: Dylink.0 Export Section not handled");
+                            eprintln!("Warning: Dylink.0 Export Section not handled: {:?}", exportinfo);
                         }
                         wasmparser::Dylink0Subsection::ImportInfo(importinfo) => {
                             let mut imports = vec![];

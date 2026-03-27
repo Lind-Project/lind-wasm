@@ -1,3 +1,4 @@
+use crate::lind_wasmtime::host::DylinkMetadata;
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
@@ -134,20 +135,24 @@ pub fn execute_with_lind(
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
 
-    // create Global Offset Table for dynamic loading
-    // #[cfg(feature = "dylink-support")]
-    let mut lind_got = Arc::new(Mutex::new(LindGOT::new()));
-
     // -- Load module and Attach host APIs --
     let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
     let mut linker = Arc::new(Mutex::new(Linker::new(&engine)));
 
-    let mut table;
-    {
+    let dylink_enabled = module.dylink_meminfo().is_some();
+    let mut dylink_metadata = DylinkMetadata::new(dylink_enabled);
+
+    // println!("[debug] dylink enabled: {}", dylink_metadata.dylink_enabled);
+
+    if dylink_metadata.dylink_enabled {
+        // create Global Offset Table for dynamic loading
+        dylink_metadata.got = Some(Arc::new(Mutex::new(LindGOT::new())));
+        let lind_got = dylink_metadata.got.as_ref().unwrap();
+
         let mut linker = linker.lock().unwrap();
         // Determine the minimal table size required by the main module
         // from its table import declaration.
-        let mut main_module_table_size = None;
+        let mut main_module_table_size = Some(0);
         let memory_size;
 
         for import in module.imports() {
@@ -181,9 +186,9 @@ pub fn execute_with_lind(
         #[cfg(feature = "debug-dylink")]
         println!("[debug] main module table size: {}", main_module_table_size);
         let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
-        table = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
+        let table_inner = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
         linker
-            .define(&mut wstore, "env", "__indirect_function_table", table)
+            .define(&mut wstore, "env", "__indirect_function_table", table_inner)
             .unwrap();
 
         // calculate the stack address for main module
@@ -235,7 +240,7 @@ pub fn execute_with_lind(
         let table_base = wasmtime::Global::new(
             &mut wstore,
             wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Const),
-            Val::I32(1),
+            Val::I32(2),
         )
         .unwrap();
         linker
@@ -250,9 +255,11 @@ pub fn execute_with_lind(
         let mut got_guard = lind_got.lock().unwrap();
         linker.define_GOT_dispatcher(&mut wstore, &module, &mut *got_guard);
         drop(got_guard);
+
+        dylink_metadata.table = Some(table_inner);
     }
 
-    let epoch_handler = {
+    if dylink_metadata.dylink_enabled {
         let mut linker = linker.lock().unwrap();
         let __asyncify_state = wasmtime::Global::new(
             &mut wstore,
@@ -282,8 +289,8 @@ pub fn execute_with_lind(
             .define(&mut wstore, "lind", "epoch", lind_epoch)
             .unwrap();
 
-        lind_epoch.get_handler_as_u64(&mut wstore) as u64
-    };
+        dylink_metadata.epoch_handler = Some(lind_epoch.get_handler_as_u64(&mut wstore) as u64);
+    }
 
     // Load the preload wasm modules.
     let mut modules = Vec::new();
@@ -305,96 +312,101 @@ pub fn execute_with_lind(
         lind_manager.clone(),
         lind_boot.clone(),
         cageid as i32,
-        lind_got.clone(),
+        &dylink_metadata,
     )?;
 
-    // For each additional module (excluding the main module),
-    // register its GOT imports with the shared LindGOT instance.
-    //
-    // This installs placeholder globals for unresolved GOT entries so that
-    // the library modules can be instantiated first and have their symbols
-    // patched later during relocation/export processing.
-    //
-    // We skip the first module because it is the main module, which was
-    // already processed earlier.
-    for (name, _path, module) in modules.iter().skip(1) {
-        let mut linker = linker.lock().unwrap();
+    if dylink_metadata.dylink_enabled {
+        let lind_got = dylink_metadata.got.as_ref().unwrap();
 
-        let mut got_guard = lind_got.lock().unwrap();
-        linker.define_GOT_dispatcher(&mut wstore, &module, &mut *got_guard);
-    }
+        // For each additional module (excluding the main module),
+        // register its GOT imports with the shared LindGOT instance.
+        //
+        // This installs placeholder globals for unresolved GOT entries so that
+        // the library modules can be instantiated first and have their symbols
+        // patched later during relocation/export processing.
+        //
+        // We skip the first module because it is the main module, which was
+        // already processed earlier.
+        for (name, _path, module) in modules.iter().skip(1) {
+            let mut linker = linker.lock().unwrap();
 
-    // Add the module's functions to the linker.
-    for (name, path, module) in modules.iter().skip(1) {
-        #[cfg(feature = "debug-dylink")]
-        println!("[debug] link module {}.{}", name, path);
-        let mut lib_linker = linker.lock().unwrap();
-
-        // Read dylink metadata for this preloaded (library) module.
-        // This contains the module's declared table/memory requirements.
-        let dylink_info = module.dylink_meminfo();
-        let dylink_info = dylink_info.as_ref().unwrap();
-        // Append this library's function table region to the shared table.
-        // `table_start` is the starting index of the library's reserved range
-        // within the global indirect function table.
-        let table_start = table.size(&mut wstore) as i32;
-
-        #[cfg(feature = "debug-dylink")]
-        println!(
-            "[debug] library table_start: {}, grow: {}",
-            table_start, dylink_info.table_size
-        );
-        // Grow the shared indirect function table by the amount requested by the
-        // library (as recorded in its dylink section). New slots are initialized
-        // to null funcref.
-        table.grow(
-            &mut wstore,
-            dylink_info.table_size,
-            wasmtime::Ref::Func(None),
-        );
-
-        // Link the library instance into the main linker namespace.
-        // The linker records the module under `name` and uses `table_start`
-        // to relocate/interpret the library's function references into the
-        // shared table. GOT entries are patched through the shared LindGOT.
-        {
-            #[cfg(feature = "debug-dylink")]
-            println!("[debug] library {} instantiate", name);
-            let mut guard = lind_got.lock().unwrap();
-            lib_linker
-                .module(
-                    &mut wstore,
-                    cageid,
-                    &name,
-                    &module,
-                    &mut table,
-                    table_start,
-                    Some(&*guard),
-                )
-                .context(format!("failed to process preload `{}`", name,))?;
+            let mut got_guard = lind_got.lock().unwrap();
+            linker.define_GOT_dispatcher(&mut wstore, &module, &mut *got_guard);
         }
-    }
 
-    {
-        // Resolve any remaining unknown imports to trap stubs so the library can
-        // instantiate even when it has optional/unused imports.
-        let mut linker = linker.lock().unwrap();
-        linker.define_unknown_imports_as_traps(&module);
-    }
+        // Add the module's functions to the linker.
+        for (name, path, module) in modules.iter().skip(1) {
+            #[cfg(feature = "debug-dylink")]
+            println!("[debug] link module {}.{}", name, path);
+            let mut lib_linker = linker.lock().unwrap();
+            let mut table_inner = dylink_metadata.table.as_mut().unwrap();
 
-    {
-        // Emit warnings for any GOT slots that remain unresolved after processing
-        // preloads and defining trap stubs.
-        let mut guard = lind_got.lock().unwrap();
-        guard.warning_undefined();
-    }
+            // Read dylink metadata for this preloaded (library) module.
+            // This contains the module's declared table/memory requirements.
+            let dylink_info = module.dylink_meminfo();
+            let dylink_info = dylink_info.as_ref().expect("library does not contain dylink.0 section");
+            // Append this library's function table region to the shared table.
+            // `table_start` is the starting index of the library's reserved range
+            // within the global indirect function table.
+            let table_start = table_inner.size(&mut wstore) as i32;
 
-    {
-        // after all preloaded library are attached to the linker, update the linker in LindCtx
-        // so that newly forked cage could use the Linker with necessary library loaded
-        let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
-        let mut linker = linker.lock().unwrap();
-        ctx.update_linker(linker.clone());
+            #[cfg(feature = "debug-dylink")]
+            println!(
+                "[debug] library table_start: {}, grow: {}",
+                table_start, dylink_info.table_size
+            );
+            // Grow the shared indirect function table by the amount requested by the
+            // library (as recorded in its dylink section). New slots are initialized
+            // to null funcref.
+            table_inner.grow(
+                &mut wstore,
+                dylink_info.table_size,
+                wasmtime::Ref::Func(None),
+            );
+
+            // Link the library instance into the main linker namespace.
+            // The linker records the module under `name` and uses `table_start`
+            // to relocate/interpret the library's function references into the
+            // shared table. GOT entries are patched through the shared LindGOT.
+            {
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library {} instantiate", name);
+                let mut guard = lind_got.lock().unwrap();
+                lib_linker
+                    .module(
+                        &mut wstore,
+                        cageid,
+                        &name,
+                        &module,
+                        &mut table_inner,
+                        table_start,
+                        Some(&*guard),
+                    )
+                    .context(format!("failed to process preload `{}`", name,))?;
+            }
+        }
+
+        {
+            // Resolve any remaining unknown imports to trap stubs so the library can
+            // instantiate even when it has optional/unused imports.
+            let mut linker = linker.lock().unwrap();
+            linker.define_unknown_imports_as_traps(&module);
+        }
+
+        {
+            // Emit warnings for any GOT slots that remain unresolved after processing
+            // preloads and defining trap stubs.
+            let mut guard = lind_got.lock().unwrap();
+            guard.warning_undefined();
+        }
+
+        {
+            // after all preloaded library are attached to the linker, update the linker in LindCtx
+            // so that newly forked cage could use the Linker with necessary library loaded
+            let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
+            let mut linker = linker.lock().unwrap();
+            ctx.update_linker(linker.clone());
+        }
     }
 
     // -- Run the module in the cage --
@@ -405,9 +417,7 @@ pub fn execute_with_lind(
             &module,
             cageid as u64,
             &args,
-            lind_got,
-            &mut table,
-            epoch_handler,
+            dylink_metadata,
         )
         .with_context(|| format!("failed to run main module"))
     });
@@ -526,7 +536,7 @@ fn attach_api(
     lind_manager: Arc<LindCageManager>,
     lindboot_cli: CliOptions,
     cageid: i32,
-    got: Arc<Mutex<LindGOT>>,
+    dylink_metadata: &DylinkMetadata,
 ) -> Result<()> {
     // Initialize argv/environ data and attach all Lind host functions
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
@@ -534,19 +544,27 @@ fn attach_api(
 
     // cloning the reference to the same linker and got
     // later when dlopen is invoked, same linker and got instance can be used for instantiate the new library
-    let cloned_linker = linker.clone();
-    let cloned_got = got.clone();
-    let dynamic_loader: DynamicLoader<HostCtx> =
-        Arc::new(move |caller, cageid, library_name, mode| {
-            load_library_module(
-                caller,
-                cloned_linker.clone(),
-                cloned_got.clone(),
-                cageid,
-                library_name,
-                mode,
-            )
-        });
+    let dynamic_loader = {
+        if dylink_metadata.dylink_enabled {
+            let cloned_linker = linker.clone();
+            let lind_got = dylink_metadata.got.as_ref().unwrap();
+            let cloned_got = lind_got.clone();
+            let dynamic_loader: DynamicLoader<HostCtx> =
+                Arc::new(move |caller, cageid, library_name, mode| {
+                    load_library_module(
+                        caller,
+                        cloned_linker.clone(),
+                        cloned_got.clone(),
+                        cageid,
+                        library_name,
+                        mode,
+                    )
+                });
+            Some(dynamic_loader)
+        } else {
+            None
+        }
+    };
 
     let mut linker_guard = linker.lock().unwrap();
     let _ = wasmtime_lind_common::add_to_linker::<HostCtx, _>(
@@ -614,9 +632,7 @@ fn load_main_module(
     module: &Module,
     cageid: u64,
     args: &[String],
-    got: Arc<Mutex<LindGOT>>,
-    table: &mut wasmtime::Table,
-    epoch_handler: u64,
+    mut dylink_metadata: DylinkMetadata,
 ) -> Result<Vec<Val>> {
     let mut linker_guard = linker.lock().unwrap();
 
@@ -645,30 +661,46 @@ fn load_main_module(
         .get_func(&mut *store, "")
         .or_else(|| instance.get_func(&mut *store, "_start"));
 
-    // let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
-    // let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
-    let guard_start = 0; // initial guard page starts from 0
-    let guard_end = guard_start + GUARD_SIZE;
-    let stack_low = guard_end;
-    let stack_pointer = GUARD_SIZE + DEFAULT_STACKSIZE;
-    store.as_context_mut().set_stack_base(stack_pointer as u64);
-    store.as_context_mut().set_stack_top(stack_low as u64);
+    if dylink_metadata.dylink_enabled {
+        let guard_start = 0; // initial guard page starts from 0
+        let guard_end = guard_start + GUARD_SIZE;
+        let stack_low = guard_end;
+        let stack_pointer = GUARD_SIZE + DEFAULT_STACKSIZE;
+
+        store.as_context_mut().set_stack_base(stack_pointer as u64);
+        store.as_context_mut().set_stack_top(stack_low as u64);
+    } else {
+        let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
+        let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+        store.as_context_mut().set_stack_base(stack_pointer as u64);
+        store.as_context_mut().set_stack_top(stack_low as u64);
+    }
 
     cfg_if! {
         // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
         // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
         // This is intended for debugging only and should not be used in production.
         if #[cfg(feature = "disable_signals")] {
-            let pointer = 0;
+            let epoch_handler = 0;
         } else {
-            let pointer = epoch_handler;
+            let epoch_handler = if dylink_metadata.dylink_enabled {
+                dylink_metadata.epoch_handler.unwrap()
+            } else {
+                let lind_epoch = instance
+                    .get_export(&mut *store, "epoch")
+                    .and_then(|export| export.into_global())
+                    .expect("Failed to find epoch global export!");
+
+                // retrieve the handler (underlying pointer) for the epoch global
+                lind_epoch.get_handler_as_u64(&mut *store) as u64
+            };
         }
     }
 
     // initialize the signal for the main thread of the cage
     lind_signal_init(
         cageid,
-        pointer as *mut u64,
+        epoch_handler as *mut u64,
         THREAD_START_ID,
         true, /* this is the main thread */
     );
@@ -710,7 +742,9 @@ fn load_main_module(
             .context(format!("failed to instantiate"))?;
         drop(linker);
 
-        if !GOT_updated {
+        if !GOT_updated && dylink_metadata.dylink_enabled {
+            let got = dylink_metadata.got.as_mut().unwrap();
+
             // update GOT entries after main module is instantiated
             let mut funcs: Vec<(String, wasmtime::Func)> = vec![];
             let mut globals: Vec<(String, wasmtime::Global)> = vec![];
@@ -728,8 +762,10 @@ fn load_main_module(
                 }
             }
 
+            let table_inner = dylink_metadata.table.as_ref().unwrap();
+
             for (name, func) in funcs {
-                let index = table
+                let index = table_inner
                     .grow(&mut store, 1, wasmtime::Ref::Func(Some(func)))
                     .unwrap();
                 let mut guard = got.lock().unwrap();

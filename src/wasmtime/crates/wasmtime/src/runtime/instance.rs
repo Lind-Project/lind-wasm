@@ -332,6 +332,8 @@ impl Instance {
             _ => {}
         }
 
+        let dylink_enabled = module.dylink_meminfo().is_some();
+
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
         // memory init in wasmtime and do our own initialization here
@@ -347,25 +349,6 @@ impl Instance {
         match instantiate_type {
             // InstantiateFirst: this is the first wasm instance
             InstantiateType::InstantiateFirst(cageid) => {
-                // retrieve the initial memory size
-                let plans = module.compiled_module().module().memory_plans.clone();
-                let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
-
-                // initial page includes the stack size and the guard size surrounded by it
-                let initial_memory_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
-                let minimal_pages = round_up_size(initial_memory_size, PAGESIZE) >> PAGESHIFT; // stack size + guard page, reference to run.rs
-                let module_meminfo = module.dylink_meminfo().unwrap();
-                let module_rounded_size =
-                    round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
-                // module size is a memory region located after stack, used for storing constant data
-                let module_rounded_size = round_up_size(module_rounded_size, PAGESIZE);
-
-                #[cfg(feature = "debug-dylink")]
-                println!(
-                    "[debug] module memory size round to {}",
-                    module_rounded_size
-                );
-
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
@@ -374,18 +357,53 @@ impl Instance {
                 drop(memory_iter);
                 let memory_base = memory.data_ptr(&mut *store) as usize;
 
-                let module_page = module_rounded_size >> PAGESHIFT;
+                let required_memory_size = if dylink_enabled {
+                    // for dynamic builds, we manually calcuate the initial memory region
+                    // which is stack size + data region size
+                    let module_meminfo = module.dylink_meminfo().unwrap();
+                    let rounded_data_size =
+                        round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
+                    // module size is a memory region located after stack, used for storing constant data
+                    let rounded_data_size = round_up_size(rounded_data_size, PAGESIZE);
+                    // initial page includes the stack size and the guard size surrounded by it
+
+                    let stack_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
+                    let rounded_stack_size = round_up_size(stack_size, PAGESIZE);
+
+                    #[cfg(feature = "debug-dylink")]
+                    println!(
+                        "[debug] main module allocate {} + {} bytes",
+                        rounded_stack_size,
+                        rounded_data_size
+                    );
+
+                    rounded_stack_size + rounded_data_size
+                } else {
+                    // retrieve the initial memory size for static module
+                    let plans = module.compiled_module().module().memory_plans.clone();
+                    let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
+                    // in wasmtime, one page is 65536 bytes, so we need to convert to host pagesize
+                    // 1. Get minimum bytes from Wasmtime’s own metadata.
+                    let min_bytes = plan
+                        .memory
+                        .minimum_byte_size()
+                        .expect("minimum memory size overflow");
+
+                    // 2. Convert bytes to pages.
+                    let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
+                    let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
+
+                    let minimal_size = minimal_pages << PAGESHIFT;
+
+                    minimal_size.try_into().expect("allocated memory is larger than 4GB")
+                };
+
+                let required_memory_page = required_memory_size >> PAGESHIFT;
+
                 init_vmmap(
                     cageid,
                     memory_base,
-                    Some(minimal_pages as u32 + module_page),
-                );
-
-                #[cfg(feature = "debug-dylink")]
-                println!(
-                    "[debug] main module allocate {} + {} bytes",
-                    module_rounded_size as u64,
-                    (minimal_pages << PAGESHIFT)
+                    Some(required_memory_page),
                 );
                 // Allocated memory should include stack AND constant data region
 
@@ -398,7 +416,7 @@ impl Instance {
                     cageid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     cageid,
-                    (module_rounded_size + (minimal_pages << PAGESHIFT)) as u64,
+                    required_memory_size as u64,
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
                     cageid,
@@ -474,8 +492,6 @@ impl Instance {
             }
         }
 
-        let is_first = matches!(instantiate_type, InstantiateType::InstantiateFirst(_));
-
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         match instantiate_type {
@@ -483,22 +499,24 @@ impl Instance {
                 if let Some(start) = start {
                     instance.start_raw(store, start)?;
                 }
-
-                // apply data relocations
-                let reloc = instance
-                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
-                    .unwrap();
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] main module start reloc func");
-                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
-
-                // apply tls relocations if any
-                if let Ok(init) = instance
-                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
-                {
+            
+                if dylink_enabled {
+                    // apply data relocations
+                    let reloc = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
+                        .unwrap();
                     #[cfg(feature = "debug-dylink")]
-                    println!("[debug] main module start __wasm_apply_tls_relocs");
-                    let _ = init.call(store.as_context_mut(), ()).unwrap();
+                    println!("[debug] main module start reloc func");
+                    let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                    // apply tls relocations if any
+                    if let Ok(init) = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
+                    {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] main module start __wasm_apply_tls_relocs");
+                        let _ = init.call(store.as_context_mut(), ()).unwrap();
+                    }
                 }
             }
             InstantiateType::InstantiateChild {
@@ -509,21 +527,23 @@ impl Instance {
                     instance.start_raw(store, start)?;
                 }
 
-                // apply data relocations
-                let reloc = instance
-                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
-                    .unwrap();
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] child start reloc func");
-                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
-
-                // apply tls relocations if any
-                if let Ok(init) = instance
-                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
-                {
+                if dylink_enabled {
+                    // apply data relocations
+                    let reloc = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
+                        .unwrap();
                     #[cfg(feature = "debug-dylink")]
-                    println!("[debug] child module start __wasm_apply_tls_relocs");
-                    let _ = init.call(store.as_context_mut(), ()).unwrap();
+                    println!("[debug] child start reloc func");
+                    let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                    // apply tls relocations if any
+                    if let Ok(init) = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
+                    {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] child module start __wasm_apply_tls_relocs");
+                        let _ = init.call(store.as_context_mut(), ()).unwrap();
+                    }
                 }
             }
             InstantiateType::InstantiateLib {
@@ -535,6 +555,8 @@ impl Instance {
                 // so relocation is moved to linker.rs
             }
         }
+
+        let is_first = matches!(instantiate_type, InstantiateType::InstantiateFirst(_));
 
         // Fix __tls_base for forked children.
         //

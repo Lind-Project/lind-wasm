@@ -1,7 +1,9 @@
 use crate::cli::CliOptions;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use wasmtime::Table;
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
+use wasmtime_lind_utils::LindGOT;
 
 /// The HostCtx host structure stores all relevant execution context objects:
 /// `lind_environ`: argv/environ data served by the 4 host functions in lind-common;
@@ -33,5 +35,23 @@ impl HostCtx {
 impl LindHost<HostCtx, CliOptions> for HostCtx {
     fn get_ctx(&self) -> LindCtx<HostCtx, CliOptions> {
         self.lind_fork_ctx.clone().unwrap()
+    }
+}
+
+pub struct DylinkMetadata {
+    pub dylink_enabled: bool,
+    pub got: Option<Arc<Mutex<LindGOT>>>,
+    pub table: Option<Table>,
+    pub epoch_handler: Option<u64>,
+}
+
+impl DylinkMetadata {
+    pub fn new(dylink_enabled: bool) -> Self {
+        DylinkMetadata {
+            dylink_enabled,
+            got: None,
+            table: None,
+            epoch_handler: None
+        }
     }
 }

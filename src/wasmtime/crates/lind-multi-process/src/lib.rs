@@ -243,6 +243,9 @@ impl<
         // main module is the first module in the module list
         let main_module = &self.modules.get(0).unwrap().2;
 
+        // detect if dynamic loading is enabled
+        let dylink_enabled = main_module.dylink_meminfo().is_some();
+
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
 
@@ -286,14 +289,16 @@ impl<
         let mut child_host = (self.fork_host)(caller.data());
 
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
-        let mut snapshot = {
+        let mut snapshot = if dylink_enabled {
             let child_ctx = get_cx(&mut child_host);
             let mut child_linker = child_ctx.linker.clone();
             let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
             let snapshot = child_linker
                 .get_global_define_snapshot(&mut caller, main_module)
                 .unwrap();
-            snapshot
+            Some(snapshot)
+        } else {
+            None
         };
 
         // mark the start of unwind
@@ -348,86 +353,95 @@ impl<
 
                     let lind_manager = child_ctx.lind_manager.clone();
                     let mut linker = child_ctx.linker.clone();
-                    linker.allow_shadowing(true);
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     // copy the value of all Global into the child instance
                     // and retrieve epoch_handler from Global snapshot
-                    let epoch_handler = linker
-                        .set_global_define_snapshot(&mut store, &snapshot)
-                        .unwrap();
-
-                    let mut child_table = {
-                        let mut main_module_table_size = None;
-                        for import in module.imports() {
-                            if let wasmtime::ExternType::Table(table) = import.ty() {
-                                main_module_table_size = Some(table.minimum());
-                            }
-                        }
-                        let main_module_table_size = main_module_table_size.unwrap();
-                        let ty = wasmtime::TableType::new(
-                            wasmtime::RefType::FUNCREF,
-                            main_module_table_size,
-                            None,
-                        );
-                        wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
-                    };
-                    linker
-                        .define(&mut store, "env", "__indirect_function_table", child_table)
-                        .unwrap();
-
-                    for (name, _path, module) in modules.iter().skip(1) {
-                        // Read dylink metadata for this preloaded (library) module.
-                        // This contains the module's declared table/memory requirements.
-                        let dylink_info = module.dylink_meminfo();
-                        let dylink_info = dylink_info.as_ref().unwrap();
-                        // Append this library's function table region to the shared table.
-                        // `table_start` is the starting index of the library's reserved range
-                        // within the global indirect function table.
-                        let table_start = child_table.size(&mut store) as i32;
-
-                        #[cfg(feature = "debug-dylink")]
-                        println!(
-                            "[debug] library table_start: {}, grow: {}",
-                            table_start, dylink_info.table_size
-                        );
-                        // Grow the shared indirect function table by the amount requested by the
-                        // library (as recorded in its dylink section). New slots are initialized
-                        // to null funcref.
-                        child_table
-                            .grow(
-                                &mut store,
-                                dylink_info.table_size,
-                                wasmtime::Ref::Func(None),
-                            )
-                            .unwrap();
-
-                        // get the library's memory_base from Global snapshot, we need to provide the same value for child library module's memory base
-                        let module_memory_base = linker
-                            .get_memory_base_from_snapshot(
-                                &mut store,
-                                &snapshot,
-                                module.name().unwrap(),
-                            )
-                            .unwrap();
-
-                        // Link the library instance into the main linker namespace.
-                        // The linker records the module under `name` and uses `table_start`
-                        // to relocate/interpret the library's function references into the
-                        // shared table. GOT entries are patched through the shared LindGOT.
+                    let epoch_handler = if dylink_enabled {
                         linker
-                            .module_with_child(
-                                &mut store,
-                                child_cageid,
-                                &name,
-                                &module,
-                                &mut child_table,
-                                table_start,
-                                module_memory_base,
-                            )
+                            .set_global_define_snapshot(&mut store, snapshot.as_ref().unwrap())
+                            .unwrap()
+                    } else {
+                        None
+                    };
+
+                    if dylink_enabled {
+                        let mut child_table = {
+                            let mut main_module_table_size = Some(0);
+                            for import in module.imports() {
+                                if let wasmtime::ExternType::Table(table) = import.ty() {
+                                    main_module_table_size = Some(table.minimum());
+                                }
+                            }
+                            let main_module_table_size = main_module_table_size.unwrap();
+                            let ty = wasmtime::TableType::new(
+                                wasmtime::RefType::FUNCREF,
+                                main_module_table_size,
+                                None,
+                            );
+                            wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
+                        };
+                        linker.allow_shadowing(true);
+                        linker
+                            .define(&mut store, "env", "__indirect_function_table", child_table)
                             .unwrap();
+                        linker.allow_shadowing(false);
+
+                        for (name, _path, module) in modules.iter().skip(1) {
+                            // Read dylink metadata for this preloaded (library) module.
+                            // This contains the module's declared table/memory requirements.
+                            let dylink_info = module.dylink_meminfo();
+                            let dylink_info = dylink_info.as_ref().unwrap();
+                            // Append this library's function table region to the shared table.
+                            // `table_start` is the starting index of the library's reserved range
+                            // within the global indirect function table.
+                            let table_start = child_table.size(&mut store) as i32;
+
+                            #[cfg(feature = "debug-dylink")]
+                            println!(
+                                "[debug] library table_start: {}, grow: {}",
+                                table_start, dylink_info.table_size
+                            );
+                            // Grow the shared indirect function table by the amount requested by the
+                            // library (as recorded in its dylink section). New slots are initialized
+                            // to null funcref.
+                            child_table
+                                .grow(
+                                    &mut store,
+                                    dylink_info.table_size,
+                                    wasmtime::Ref::Func(None),
+                                )
+                                .unwrap();
+
+                            // get the library's memory_base from Global snapshot, we need to provide the same value for child library module's memory base
+                            let module_memory_base = linker
+                                .get_memory_base_from_snapshot(
+                                    &mut store,
+                                    snapshot.as_ref().unwrap(),
+                                    module.name().unwrap(),
+                                )
+                                .unwrap();
+
+                            linker.allow_shadowing(true);
+                            // Link the library instance into the main linker namespace.
+                            // The linker records the module under `name` and uses `table_start`
+                            // to relocate/interpret the library's function references into the
+                            // shared table. GOT entries are patched through the shared LindGOT.
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    child_cageid,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base,
+                                )
+                                .unwrap();
+                            linker.allow_shadowing(false);
+                        }
                     }
 
                     store.set_stack_snapshots(parent_stack_snapshots);
@@ -658,6 +672,9 @@ impl<
         // main module is the first module in the module list
         let main_module = self.modules.get(0).unwrap().2.clone();
 
+        // detect if dynamic loading is enabled
+        let dylink_enabled = main_module.dylink_meminfo().is_some();
+
         // get the wasm stack top address
         let parent_stack_low_usr = caller.as_context().get_stack_top();
 
@@ -697,14 +714,16 @@ impl<
         let mut child_host = caller.data().clone();
 
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
-        let mut snapshot = {
+        let mut snapshot = if dylink_enabled {
             let child_ctx = get_cx(&mut child_host);
             let mut child_linker = child_ctx.linker.clone();
             let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
             let snapshot = child_linker
                 .get_global_define_snapshot(&mut caller, main_module)
                 .unwrap();
-            snapshot
+            Some(snapshot)
+        } else {
+            None
         };
 
         // mark the start of unwind
@@ -788,62 +807,72 @@ impl<
 
                     // copy the value of all Global into the child instance
                     // and retrieve epoch_handler from Global snapshot
-                    let epoch_handler = linker.set_global_define_snapshot(&mut store, &snapshot).unwrap();
-
-                    let mut child_table = {
-                        let mut main_module_table_size = None;
-                        for import in module.imports() {
-                            if let wasmtime::ExternType::Table(table) = import.ty() {
-                                main_module_table_size = Some(table.minimum());
-                            }
-                        }
-                        let main_module_table_size = main_module_table_size.unwrap();
-                        let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
-                        wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
+                    let epoch_handler = if dylink_enabled {
+                        linker.set_global_define_snapshot(&mut store, snapshot.as_ref().unwrap()).unwrap()
+                    } else {
+                        None
                     };
-                    linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
 
-                    for (name, _path, module) in modules.iter().skip(1) {
-                        // Read dylink metadata for this preloaded (library) module.
-                        // This contains the module's declared table/memory requirements.
-                        let dylink_info = module.dylink_meminfo();
-                        let dylink_info = dylink_info.as_ref().unwrap();
-                        // Append this library's function table region to the shared table.
-                        // `table_start` is the starting index of the library's reserved range
-                        // within the global indirect function table.
-                        let table_start = child_table.size(&mut store) as i32;
+                    if dylink_enabled {
+                        let mut child_table = {
+                            let mut main_module_table_size = Some(0);
+                            for import in module.imports() {
+                                if let wasmtime::ExternType::Table(table) = import.ty() {
+                                    main_module_table_size = Some(table.minimum());
+                                }
+                            }
+                            let main_module_table_size = main_module_table_size.unwrap();
+                            let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
+                            wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
+                        };
+                        linker.allow_shadowing(true);
+                        linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
+                        linker.allow_shadowing(false);
 
-                        #[cfg(feature = "debug-dylink")]
-                        println!(
-                            "[debug] library table_start: {}, grow: {}",
-                            table_start, dylink_info.table_size
-                        );
-                        // Grow the shared indirect function table by the amount requested by the
-                        // library (as recorded in its dylink section). New slots are initialized
-                        // to null funcref.
-                        child_table.grow(
-                            &mut store,
-                            dylink_info.table_size,
-                            wasmtime::Ref::Func(None),
-                        ).unwrap();
+                        for (name, _path, module) in modules.iter().skip(1) {
+                            // Read dylink metadata for this preloaded (library) module.
+                            // This contains the module's declared table/memory requirements.
+                            let dylink_info = module.dylink_meminfo();
+                            let dylink_info = dylink_info.as_ref().unwrap();
+                            // Append this library's function table region to the shared table.
+                            // `table_start` is the starting index of the library's reserved range
+                            // within the global indirect function table.
+                            let table_start = child_table.size(&mut store) as i32;
 
-                        // get the library's memory_base from Global snapshot, we need to provide the same value for child thread library module's memory base
-                        let module_memory_base = linker.get_memory_base_from_snapshot(&mut store, &snapshot, module.name().unwrap()).unwrap();
-
-                        // Link the library instance into the main linker namespace.
-                        // The linker records the module under `name` and uses `table_start`
-                        // to relocate/interpret the library's function references into the
-                        // shared table. GOT entries are patched through the shared LindGOT.
-                        linker
-                            .module_with_child(
+                            #[cfg(feature = "debug-dylink")]
+                            println!(
+                                "[debug] library table_start: {}, grow: {}",
+                                table_start, dylink_info.table_size
+                            );
+                            // Grow the shared indirect function table by the amount requested by the
+                            // library (as recorded in its dylink section). New slots are initialized
+                            // to null funcref.
+                            child_table.grow(
                                 &mut store,
-                                child_cageid as u64,
-                                &name,
-                                &module,
-                                &mut child_table,
-                                table_start,
-                                module_memory_base
+                                dylink_info.table_size,
+                                wasmtime::Ref::Func(None),
                             ).unwrap();
+
+                            // get the library's memory_base from Global snapshot, we need to provide the same value for child thread library module's memory base
+                            let module_memory_base = linker.get_memory_base_from_snapshot(&mut store, snapshot.as_ref().unwrap(), module.name().unwrap()).unwrap();
+
+                            linker.allow_shadowing(true);
+                            // Link the library instance into the main linker namespace.
+                            // The linker records the module under `name` and uses `table_start`
+                            // to relocate/interpret the library's function references into the
+                            // shared table. GOT entries are patched through the shared LindGOT.
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    child_cageid as u64,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base
+                                ).unwrap();
+                            linker.allow_shadowing(false);
+                        }
                     }
 
                     // mark as thread

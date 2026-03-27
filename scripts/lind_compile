@@ -62,6 +62,7 @@ EOF
 
 MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
+SHARED_BUILD="true"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
@@ -101,6 +102,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
+      ;;
+    -s|--shared|--dynamic)
+      SHARED_BUILD="true"
       ;;
     --print-args|--debug-args)
       PRINT_ARGS="true"
@@ -319,7 +323,7 @@ do_static_compile() {
   local -a mandatory_clang_flags=(
     "--sysroot=${SYSROOT}"
     --target=wasm32-unknown-wasi
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base
   )
   local -a default_clang_flags=(
     -pthread
@@ -343,6 +347,7 @@ do_dynamic_compile() {
   local -a mandatory_clang_flags=(
     --target=wasm32-unknown-wasi
     "--sysroot=${SYSROOT}"
+    "-nostartfiles" # we manually enforce the crt1 file for dynamic build
     -Wl,-pie # required flag for compiling into shared wasm binary
     -Wl,--import-table # table needs to be shared across module in dynamic build
     -Wl,--import-memory # memory needs to be shared across module for threading support
@@ -367,26 +372,34 @@ do_dynamic_compile() {
   fi
 
   run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
-    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/set_stack_pointer.o" -o "${OUT_WASM}"
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/set_stack_pointer.o" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" -o "${OUT_WASM}"
   
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
 }
 
-# do_optimize() {
-#   run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
-# }
+do_compile() {
+  if [[ "${SHARED_BUILD}" == "true" ]]; then
+    do_dynamic_compile
+  else
+    do_static_compile
+  fi
+}
 
 do_optimize() {
-  # --enable-bulk-memory --enable-threads: required wasm feature enabled for lind
-  # --epoch-injection --pass-arg=epoch-import: enable signal support, with dynamic build feature (epoch-import), with hint for applying epoch on main module (epoch-main-module)
-  # --asyncify --pass-arg=asyncify-import-globals --pass-arg=epoch-main-module: enable asyncify for multiprocess, with dynamic build feature (import-globals)
-  # --debuginfo: retain debug information for better debugging experience 
-  run_cmd "${WASM_OPT_BIN}" \
-    --enable-bulk-memory --enable-threads \
-    --epoch-injection --pass-arg=epoch-import  --pass-arg=epoch-main-module \
-    --asyncify --pass-arg=asyncify-import-globals \
-    --debuginfo \
-    "${OUT_WASM}" -o "${OUT_WASM}"
+  if [[ "${SHARED_BUILD}" == "true" ]]; then
+    # --enable-bulk-memory --enable-threads: required wasm feature enabled for lind
+    # --epoch-injection --pass-arg=epoch-import: enable signal support, with dynamic build feature (epoch-import), with hint for applying epoch on main module (epoch-main-module)
+    # --asyncify --pass-arg=asyncify-import-globals --pass-arg=epoch-main-module: enable asyncify for multiprocess, with dynamic build feature (import-globals)
+    # --debuginfo: retain debug information for better debugging experience 
+    run_cmd "${WASM_OPT_BIN}" \
+      --enable-bulk-memory --enable-threads \
+      --epoch-injection --pass-arg=epoch-import  --pass-arg=epoch-main-module \
+      --asyncify --pass-arg=asyncify-import-globals \
+      --debuginfo \
+      "${OUT_WASM}" -o "${OUT_WASM}"
+  else
+    run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+  fi
 }
 
 do_precompile() {
@@ -405,13 +418,13 @@ cp_to_lindfs() {
 # --- run selected pipeline ---
 case "${MODE}" in
   full)
-    do_dynamic_compile
+    do_compile
     do_optimize
     do_precompile
     cp_to_lindfs
     ;;
   "compile-only")
-    do_dynamic_compile
+    do_compile
     cp_to_lindfs
     ;;
   "opt-only")
