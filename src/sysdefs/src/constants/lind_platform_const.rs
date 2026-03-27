@@ -95,6 +95,9 @@ pub const MAIN_THREADID: u64 = 1;
 /// Number of instances to pre-allocate for the initial cage
 pub const INSTANCE_NUMBER: usize = 5000;
 
+/// Maximum execve recursion depth for shebang execution, 4 is the typical value used in Linux.
+pub const MAX_SHEBANG_DEPTH: i32 = 4;
+
 // Custom Dynamic loading Error Code for communication between host loader and guest
 pub enum DylinkErrorCode {
     // dlopen errors

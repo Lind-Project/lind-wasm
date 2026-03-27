@@ -38,33 +38,31 @@ int main(int argc, char *argv[]) {
 
   int grateid = getpid();
 
-  for (int i = 1; i < argc; i++) {
-    pid_t pid = fork();
-    if (pid < 0) {
-      perror("fork failed");
+  pid_t pid = fork();
+  if (pid < 0) {
+    perror("fork failed");
+    assert(0);
+  } else if (pid == 0) {
+    int cageid = getpid();
+    // Set the geteuid (syscallnum=107) of this cage to call this grate
+    // function geteuid_grate 
+    // Syntax of register_handler:
+    // <targetcage, targetcallnum, this_grate_id, fn_ptr_u64)>
+    uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&geteuid_grate;
+    printf("[Grate|geteuid] Registering geteuid handler for cage %d in "
+            "grate %d with fn ptr addr: %llu\n",
+            cageid, grateid, fn_ptr_addr);
+    int ret = register_handler(cageid, 107, grateid, fn_ptr_addr);
+    if (ret != 0) {
+      fprintf(stderr, "[Grate|geteuid] Failed to register handler for cage %d in "
+              "grate %d with fn ptr addr: %llu, ret: %d\n",
+              cageid, grateid, fn_ptr_addr, ret);
       assert(0);
-    } else if (pid == 0) {
-      int cageid = getpid();
-      // Set the geteuid (syscallnum=107) of this cage to call this grate
-      // function geteuid_grate 
-      // Syntax of register_handler:
-      // <targetcage, targetcallnum, this_grate_id, fn_ptr_u64)>
-      uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&geteuid_grate;
-      printf("[Grate|geteuid] Registering geteuid handler for cage %d in "
-              "grate %d with fn ptr addr: %llu\n",
-              cageid, grateid, fn_ptr_addr);
-      int ret = register_handler(cageid, 107, grateid, fn_ptr_addr);
-      if (ret != 0) {
-          fprintf(stderr, "[Grate|geteuid] Failed to register handler for cage %d in "
-                  "grate %d with fn ptr addr: %llu, ret: %d\n",
-                  cageid, grateid, fn_ptr_addr, ret);
-          assert(0);
-        }
+    }
 
-      if (execv(argv[i], &argv[i]) == -1) {
-        perror("execv failed");
-        assert(0);
-      }
+    if (execv(argv[1], &argv[1]) == -1) {
+      perror("execv failed");
+      assert(0);
     }
   }
 

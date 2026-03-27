@@ -18,11 +18,12 @@ use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
-    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+    MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
-    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
-    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
+    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_DATA, RLIMIT_NOFILE,
+    RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK,
+    WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
@@ -244,34 +245,7 @@ pub extern "C" fn exec_syscall(
         );
     }
 
-    // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(cageid);
-
-    // Copy necessary data from current cage
-    let selfcage = get_cage(cageid).unwrap();
-
-    selfcage.rev_shm.lock().clear();
-
-    // ensures that all old mappings and states are discarded, allowing the new cage to
-    // run in a clean virtual address space, while reusing the existing `Vmmap` container
-    // to avoid extra allocations.
-    let mut vmmap = selfcage.vmmap.write();
-    vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
-
-    // perform signal related clean up
-    // all the signal handler becomes default after exec
-    // pending signals should be perserved though
-    selfcage.signalhandler.clear();
-    // the sigset will be reset after exec
-    selfcage.sigset.store(0, Relaxed);
-    // Do NOT clear epoch_handler or main_threadid here.
-    // If exec fails, the thread is still running and needs its
-    // epoch_handler entry for proper exit tracking.  On success,
-    // wasmtime re-instantiates and lind_signal_init (called from
-    // lind-multi-process/src/lib.rs during new instance setup) will
-    // overwrite the stale entries in epoch_handler and main_threadid.
-
-    threei::make_syscall(
+    let ret = threei::make_syscall(
         RAWPOSIX_CAGEID,
         59, // exec syscall number
         UNUSED_NAME,
@@ -288,7 +262,44 @@ pub extern "C" fn exec_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    );
+
+    // Clean up the cage only if exec succeeds.
+    // A return value < 0 indicates exec failure.
+    //
+    // We rely on Asyncify to detect success:
+    // if Asyncify begins unwinding, exec has succeeded.
+    // By convention, Asyncify unwind returns 0, which we use as the success signal.
+    if ret == 0 {
+        // Empty fd with flag should_cloexec
+        fdtables::empty_fds_for_exec(cageid);
+
+        // Copy necessary data from current cage
+        let selfcage = get_cage(cageid).unwrap();
+
+        selfcage.rev_shm.lock().clear();
+
+        // ensures that all old mappings and states are discarded, allowing the new cage to
+        // run in a clean virtual address space, while reusing the existing `Vmmap` container
+        // to avoid extra allocations.
+        let mut vmmap = selfcage.vmmap.write();
+        vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+
+        // perform signal related clean up
+        // all the signal handler becomes default after exec
+        // pending signals should be perserved though
+        selfcage.signalhandler.clear();
+        // the sigset will be reset after exec
+        selfcage.sigset.store(0, Relaxed);
+        // Do NOT clear epoch_handler or main_threadid here.
+        // If exec-ed module crashes, the thread is still running and needs its
+        // epoch_handler entry for proper exit tracking.  On success,
+        // wasmtime re-instantiates and lind_signal_init (called from
+        // lind-multi-process/src/lib.rs during new instance setup) will
+        // overwrite the stale entries in epoch_handler and main_threadid.
+    }
+
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
@@ -1186,15 +1197,17 @@ pub extern "C" fn prlimit64_syscall(
             Err(e) => return syscall_error(e, "prlimit64", "bad address"),
         };
         match resource {
-            3 => {
-                // RLIMIT_STACK: 8MiB
+            RLIMIT_STACK => {
                 old_limit.rlim_cur = 8 * 1024 * 1024;
                 old_limit.rlim_max = 8 * 1024 * 1024;
             }
-            7 => {
-                // RLIMIT_NOFILE: 1024
+            RLIMIT_NOFILE => {
                 old_limit.rlim_cur = 1024;
                 old_limit.rlim_max = 1024;
+            }
+            RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => {
+                old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
+                old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
             }
             _ => {
                 lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));

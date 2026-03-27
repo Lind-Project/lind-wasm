@@ -432,6 +432,7 @@ case "${MODE}" in
     ;;
   "precompile-only")
     do_precompile
+    cp_to_lindfs
     ;;
 esac
 
