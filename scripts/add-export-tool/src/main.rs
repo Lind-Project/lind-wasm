@@ -27,11 +27,9 @@ fn main() -> Result<()> {
     let export_name = args.next().context(
         "usage: add-wasm-export <in.wasm> <out.wasm> <export-name> <func|global> <target-name>",
     )?;
-    let kind = parse_target_kind(
-        &args.next().context(
-            "usage: add-wasm-export <in.wasm> <out.wasm> <export-name> <func|global> <target-name>",
-        )?,
-    )?;
+    let kind = parse_target_kind(&args.next().context(
+        "usage: add-wasm-export <in.wasm> <out.wasm> <export-name> <func|global> <target-name>",
+    )?)?;
     let target_name = args.next().context(
         "usage: add-wasm-export <in.wasm> <out.wasm> <export-name> <func|global> <target-name>",
     )?;
@@ -238,7 +236,9 @@ fn add_export(
 
             Payload::DataSection(s) => {
                 // Flush code section before data, because code must stay before data.
-                if let (Some(start), Some(end)) = (code_section_start.take(), code_section_end.take()) {
+                if let (Some(start), Some(end)) =
+                    (code_section_start.take(), code_section_end.take())
+                {
                     emitted.push(raw_section(
                         wasm_encoder::SectionId::Code.into(),
                         &wasm[start..end],
@@ -253,7 +253,9 @@ fn add_export(
 
             Payload::TagSection(s) => {
                 // Flush code section before tag too, in case tag comes after code/data in this file.
-                if let (Some(start), Some(end)) = (code_section_start.take(), code_section_end.take()) {
+                if let (Some(start), Some(end)) =
+                    (code_section_start.take(), code_section_end.take())
+                {
                     emitted.push(raw_section(
                         wasm_encoder::SectionId::Code.into(),
                         &wasm[start..end],
