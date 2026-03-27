@@ -354,7 +354,9 @@ pub fn execute_with_lind(
             // Read dylink metadata for this preloaded (library) module.
             // This contains the module's declared table/memory requirements.
             let dylink_info = module.dylink_meminfo();
-            let dylink_info = dylink_info.as_ref().expect("library does not contain dylink.0 section");
+            let dylink_info = dylink_info
+                .as_ref()
+                .expect("library does not contain dylink.0 section");
             // Append this library's function table region to the shared table.
             // `table_start` is the starting index of the library's reserved range
             // within the global indirect function table.

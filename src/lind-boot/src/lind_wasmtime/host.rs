@@ -51,7 +51,7 @@ impl DylinkMetadata {
             dylink_enabled,
             got: None,
             table: None,
-            epoch_handler: None
+            epoch_handler: None,
         }
     }
 }

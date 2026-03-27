@@ -373,8 +373,7 @@ impl Instance {
                     #[cfg(feature = "debug-dylink")]
                     println!(
                         "[debug] main module allocate {} + {} bytes",
-                        rounded_stack_size,
-                        rounded_data_size
+                        rounded_stack_size, rounded_data_size
                     );
 
                     rounded_stack_size + rounded_data_size
@@ -395,16 +394,14 @@ impl Instance {
 
                     let minimal_size = minimal_pages << PAGESHIFT;
 
-                    minimal_size.try_into().expect("allocated memory is larger than 4GB")
+                    minimal_size
+                        .try_into()
+                        .expect("allocated memory is larger than 4GB")
                 };
 
                 let required_memory_page = required_memory_size >> PAGESHIFT;
 
-                init_vmmap(
-                    cageid,
-                    memory_base,
-                    Some(required_memory_page),
-                );
+                init_vmmap(cageid, memory_base, Some(required_memory_page));
                 // Allocated memory should include stack AND constant data region
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -499,11 +496,14 @@ impl Instance {
                 if let Some(start) = start {
                     instance.start_raw(store, start)?;
                 }
-            
+
                 if dylink_enabled {
                     // apply data relocations
                     let reloc = instance
-                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
+                        .get_typed_func::<(), ()>(
+                            store.as_context_mut(),
+                            "__wasm_apply_data_relocs",
+                        )
                         .unwrap();
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] main module start reloc func");
@@ -530,7 +530,10 @@ impl Instance {
                 if dylink_enabled {
                     // apply data relocations
                     let reloc = instance
-                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
+                        .get_typed_func::<(), ()>(
+                            store.as_context_mut(),
+                            "__wasm_apply_data_relocs",
+                        )
                         .unwrap();
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] child start reloc func");
