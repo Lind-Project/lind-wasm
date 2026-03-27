@@ -1,0 +1,9 @@
+[package]
+name = "lind-wasm-tool"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+wasmparser = "0.245.1"
+wasm-encoder = "0.245.1"
