@@ -62,7 +62,7 @@ EOF
 
 MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
-SHARED_BUILD="false"
+SHARED_BUILD="true"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
