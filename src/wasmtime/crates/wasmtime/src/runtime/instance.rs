@@ -11,11 +11,11 @@ use crate::{
     StoreContext, StoreContextMut, Table, TypedFunc,
 };
 use alloc::sync::Arc;
-use cage::DashMap;
 use cage::memory::{fork_vmmap, init_vmmap};
+use cage::DashMap;
 use core::ptr::NonNull;
-use std::sync::LazyLock;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::LazyLock;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
@@ -357,7 +357,6 @@ impl Instance {
                     //         }
                     //     }
                     // }
-
 
                     return Ok((instance, instanceid));
                 }

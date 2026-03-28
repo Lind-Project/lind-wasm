@@ -8,16 +8,16 @@ use crate::{
 };
 use alloc::sync::Arc;
 use cage::DashMap;
-use wasmtime_environ::EntityIndex;
 use core::fmt;
 #[cfg(feature = "async")]
 use core::future::Future;
 use core::marker;
 #[cfg(feature = "async")]
 use core::pin::Pin;
-use std::sync::LazyLock;
 use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
+use std::sync::LazyLock;
+use wasmtime_environ::EntityIndex;
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::LindGOT;
 
@@ -1209,10 +1209,12 @@ impl<T> Linker<T> {
 
                 {
                     let tls_key = path.clone();
-                    let tls_base = instance.get_export(store.as_context_mut(), "__tls_base").unwrap();
+                    let tls_base = instance
+                        .get_export(store.as_context_mut(), "__tls_base")
+                        .unwrap();
                     let tls_base = tls_base.into_global().unwrap();
                     let p = tls_base.get_handler_as_u32(store.as_context_mut());
-                    
+
                     let val = unsafe { *p };
                     // println!("[debug] set TLS_BASE key: {} to {}", tls_key, val);
                     INIT_TLS_BASE_MAP.insert(tls_key.to_string(), val as i32);
@@ -1336,10 +1338,11 @@ impl<T> Linker<T> {
                 println!("[debug] child library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
-
                 {
                     let tls_key = path.clone();
-                    let tls_base = instance.get_export(store.as_context_mut(), "__tls_base").unwrap();
+                    let tls_base = instance
+                        .get_export(store.as_context_mut(), "__tls_base")
+                        .unwrap();
                     let tls_base = tls_base.into_global().unwrap();
                     let p = tls_base.get_handler_as_u32(store.as_context_mut());
 
@@ -1473,10 +1476,9 @@ impl<T> Linker<T> {
                 println!("[debug] child library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
-                if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
-                    store.as_context_mut(),
-                    "__wasm_init_tls",
-                ) {
+                if let Ok(init_tls) =
+                    instance.get_typed_func::<i32, ()>(store.as_context_mut(), "__wasm_init_tls")
+                {
                     let get_tls_size = instance.get_typed_func::<(), i32>(
                         store.as_context_mut(),
                         "__get_aligned_tls_size",
@@ -1484,7 +1486,9 @@ impl<T> Linker<T> {
 
                     let tls_size = get_tls_size.call(store.as_context_mut(), ()).unwrap();
                     stack_addr -= tls_size as u32;
-                    let _ = init_tls.call(store.as_context_mut(), stack_addr as i32).unwrap();
+                    let _ = init_tls
+                        .call(store.as_context_mut(), stack_addr as i32)
+                        .unwrap();
                 }
 
                 let _ = self.instance_dylink(store, module_name, instance)?;
