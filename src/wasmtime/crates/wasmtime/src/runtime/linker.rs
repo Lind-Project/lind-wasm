@@ -1193,8 +1193,8 @@ impl<T> Linker<T> {
                     let _ = init.call(store.as_context_mut(), ()).unwrap();
                 }
 
-                if let Ok(constructor) = instance
-                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+                if let Ok(constructor) =
+                    instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
                 {
                     let _ = constructor.call(store.as_context_mut(), ()).unwrap();
                 }
@@ -1478,8 +1478,8 @@ impl<T> Linker<T> {
                     let _ = init.call(store.as_context_mut(), ())?;
                 }
 
-                if let Ok(constructor) = instance
-                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+                if let Ok(constructor) =
+                    instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
                 {
                     let _ = constructor.call(store.as_context_mut(), ()).unwrap();
                 }

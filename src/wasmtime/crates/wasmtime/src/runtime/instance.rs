@@ -529,31 +529,7 @@ impl Instance {
                 parent_cageid,
                 child_cageid,
             } => {
-                if let Some(start) = start {
-                    instance.start_raw(store, start)?;
-                }
-
-                if dylink_enabled {
-                    // apply data relocations
-                    let reloc = instance
-                        .get_typed_func::<(), ()>(
-                            store.as_context_mut(),
-                            "__wasm_apply_data_relocs",
-                        )
-                        .unwrap();
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] child start reloc func");
-                    let _ = reloc.call(store.as_context_mut(), ()).unwrap();
-
-                    // apply tls relocations if any
-                    if let Ok(init) = instance
-                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
-                    {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] child module start __wasm_apply_tls_relocs");
-                        let _ = init.call(store.as_context_mut(), ()).unwrap();
-                    }
-                }
+                // memory is already copied from parent, so no need to initialize the memory
             }
             InstantiateType::InstantiateLib {
                 cageid,
