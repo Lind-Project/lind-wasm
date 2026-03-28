@@ -514,7 +514,7 @@ pub fn make_syscall(
             }
         }*/
 
-        with_cage(grateid, |grate| {
+        let cage_dead = with_cage(grateid, |grate| {
             grate
                 .grate_inflight
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
@@ -524,7 +524,12 @@ pub fn make_syscall(
                     .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
                 return -(Errno::ESRCH as i32);
             }
+            0
         });
+
+        if cage_dead != Some(0) {
+            return -(Errno::ESRCH as i32);
+        }
 
         let grate_result = _call_grate_func(
             grateid,
