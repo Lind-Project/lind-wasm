@@ -322,7 +322,7 @@ pub fn get_cage_or_debug_panic(cageid: u64, caller: &str) -> Option<Arc<Cage>> {
     result
 }
 
-pub fn with_cage<F, R>(cageid: u64, f: F)
+pub fn with_cage<F, R>(cageid: u64, f: F) -> Option<R>
 where
     F: FnOnce(&Cage) -> R,
 {
@@ -330,9 +330,7 @@ where
         return None;
     }
 
-    unsafe {
-        CAGE_MAP[cageid as usize].as_deref().map(f);
-    }
+    unsafe { CAGE_MAP[cageid as usize].as_deref().map(f) }
 }
 
 #[allow(static_mut_refs)]
