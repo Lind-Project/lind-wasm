@@ -322,6 +322,19 @@ pub fn get_cage_or_debug_panic(cageid: u64, caller: &str) -> Option<Arc<Cage>> {
     result
 }
 
+pub fn with_cage<F, R>(cageid: u64, f: F)
+where
+    F: FnOnce(&Cage) -> R,
+{
+    if cageid >= MAX_CAGEID as u64 {
+        return None;
+    }
+
+    unsafe {
+        CAGE_MAP[cageid as usize].as_deref().map(f);
+    }
+}
+
 #[allow(static_mut_refs)]
 // SAFETY: This code is single-threaded during teardown, and no other
 // mutable or immutable references to `CAGE_MAP` exist while this call executes.
