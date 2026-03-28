@@ -517,6 +517,12 @@ impl Instance {
                         println!("[debug] main module start __wasm_apply_tls_relocs");
                         let _ = init.call(store.as_context_mut(), ()).unwrap();
                     }
+
+                    if let Ok(constructor) = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+                    {
+                        let _ = constructor.call(store.as_context_mut(), ()).unwrap();
+                    }
                 }
             }
             InstantiateType::InstantiateChild {

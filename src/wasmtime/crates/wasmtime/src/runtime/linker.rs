@@ -1193,6 +1193,12 @@ impl<T> Linker<T> {
                     let _ = init.call(store.as_context_mut(), ()).unwrap();
                 }
 
+                if let Ok(constructor) = instance
+                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+                {
+                    let _ = constructor.call(store.as_context_mut(), ()).unwrap();
+                }
+
                 self.instance_dylink(store, module_name, instance)
             }
         }
@@ -1470,6 +1476,12 @@ impl<T> Linker<T> {
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] library start __wasm_apply_tls_relocs");
                     let _ = init.call(store.as_context_mut(), ())?;
+                }
+
+                if let Ok(constructor) = instance
+                    .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+                {
+                    let _ = constructor.call(store.as_context_mut(), ()).unwrap();
                 }
 
                 self.instance_dylink(store, module_name, instance);

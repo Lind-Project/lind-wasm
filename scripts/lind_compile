@@ -359,6 +359,7 @@ do_dynamic_compile() {
     -Wl,--max-memory=67108864
     -Wl,--allow-undefined # treat undefined symbol as external library symbol
     -Wl,--unresolved-symbols=import-dynamic
+    -Wl,--export=__wasm_call_ctors
   )
   local -a default_clang_flags=(
     -pthread
@@ -392,6 +393,7 @@ do_library_compile() {
     "-Wl,--experimental-pic"
     "-Wl,--unresolved-symbols=import-dynamic"
     "-Wl,-shared"
+    -Wl,--export=__wasm_call_ctors
   )
   local -a default_clang_flags=(
     -g
