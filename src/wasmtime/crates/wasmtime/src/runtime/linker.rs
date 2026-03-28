@@ -852,6 +852,7 @@ impl<T> Linker<T> {
                 (if module_name == "env"
                     && match e.name() {
                         "__stack_pointer"
+                        | "__tls_base"
                         | "__wasm_call_ctors"
                         | "__wasm_apply_data_relocs"
                         | "__wasm_apply_global_relocs"

@@ -361,6 +361,7 @@ do_dynamic_compile() {
     -Wl,--unresolved-symbols=import-dynamic
     -Wl,--export=__wasm_call_ctors
     -Wl,--export-if-defined=__wasm_init_tls
+    -Wl,--export=__tls_base
   )
   local -a default_clang_flags=(
     -pthread
@@ -398,6 +399,7 @@ do_library_compile() {
     "-Wl,-shared"
     -Wl,--export=__wasm_call_ctors
     -Wl,--export-if-defined=__wasm_init_tls
+    -Wl,--export=__tls_base
   )
   local -a default_clang_flags=(
     -g

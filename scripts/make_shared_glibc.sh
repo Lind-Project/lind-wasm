@@ -39,6 +39,7 @@ wasm-ld \
     --export-if-defined=__lind_init_addr_translation \
     --export-if-defined=__wasm_init_tls \
     --export-if-defined=environ \
+    --export=__tls_base \
     -o "$SYSROOT/lib/wasm32-wasi/libc.so" "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
 
 mkdir -p $REPO_ROOT/lindfs/lib
