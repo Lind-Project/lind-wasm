@@ -393,6 +393,7 @@ pub fn execute_with_lind(
                         &mut table_inner,
                         table_start,
                         Some(&*guard),
+                        path.clone(),
                     )
                     .context(format!("failed to process preload `{}`", name,))?;
             }
@@ -922,6 +923,7 @@ fn load_library_module(
         table_size as i32,
         &*got_guard,
         symbol_map,
+        library_name.to_string(),
     ) {
         Ok(handle) => handle as i32,
         Err(_) => {

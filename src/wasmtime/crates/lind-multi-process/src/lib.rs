@@ -400,7 +400,7 @@ impl<
                             .unwrap();
                         linker.allow_shadowing(false);
 
-                        for (name, _path, module) in modules.iter().skip(1) {
+                        for (name, path, module) in modules.iter().skip(1) {
                             // Read dylink metadata for this preloaded (library) module.
                             // This contains the module's declared table/memory requirements.
                             let dylink_info = module.dylink_meminfo();
@@ -449,6 +449,7 @@ impl<
                                     &mut child_table,
                                     table_start,
                                     module_memory_base,
+                                    path.clone(),
                                 )
                                 .unwrap();
                             linker.allow_shadowing(false);

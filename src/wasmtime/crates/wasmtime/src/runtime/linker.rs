@@ -8,12 +8,14 @@ use crate::{
 };
 use alloc::sync::Arc;
 use cage::DashMap;
+use wasmtime_environ::EntityIndex;
 use core::fmt;
 #[cfg(feature = "async")]
 use core::future::Future;
 use core::marker;
 #[cfg(feature = "async")]
 use core::pin::Pin;
+use std::sync::LazyLock;
 use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
 use wasmtime_lind_utils::symbol_table::SymbolMap;
@@ -21,6 +23,8 @@ use wasmtime_lind_utils::LindGOT;
 
 use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
+
+static INIT_TLS_BASE_MAP: LazyLock<DashMap<String, i32>> = LazyLock::new(DashMap::new);
 
 /// Structure used to link wasm modules/instances together.
 ///
@@ -1006,6 +1010,7 @@ impl<T> Linker<T> {
         table: &mut Table,
         table_base: i32,
         got: Option<&LindGOT>,
+        path: String,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1111,6 +1116,7 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: needs_init,
                         memory_base: handler,
+                        key: path.clone(),
                     },
                 )?;
                 #[cfg(feature = "debug-dylink")]
@@ -1201,6 +1207,17 @@ impl<T> Linker<T> {
                     let _ = constructor.call(store.as_context_mut(), ()).unwrap();
                 }
 
+                {
+                    let tls_key = path.clone();
+                    let tls_base = instance.get_export(store.as_context_mut(), "__tls_base").unwrap();
+                    let tls_base = tls_base.into_global().unwrap();
+                    let p = tls_base.get_handler_as_u32(store.as_context_mut());
+                    
+                    let val = unsafe { *p };
+                    // println!("[debug] set TLS_BASE key: {} to {}", tls_key, val);
+                    INIT_TLS_BASE_MAP.insert(tls_key.to_string(), val as i32);
+                }
+
                 self.instance_dylink(store, module_name, instance)
             }
         }
@@ -1215,6 +1232,7 @@ impl<T> Linker<T> {
         table: &mut Table,
         table_base: i32,
         memory_base: i32,
+        path: String,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1283,6 +1301,7 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: false,
                         memory_base: handler,
+                        key: path.clone(),
                     },
                 )?;
                 #[cfg(feature = "debug-dylink")]
@@ -1316,6 +1335,23 @@ impl<T> Linker<T> {
                 #[cfg(feature = "debug-dylink")]
                 println!("[debug] child library start reloc func");
                 let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+
+                {
+                    let tls_key = path.clone();
+                    let tls_base = instance.get_export(store.as_context_mut(), "__tls_base").unwrap();
+                    let tls_base = tls_base.into_global().unwrap();
+                    let p = tls_base.get_handler_as_u32(store.as_context_mut());
+
+                    // println!("[debug] get TLS_BASE key: {}", tls_key);
+                    let saved = *INIT_TLS_BASE_MAP.get(&tls_key).unwrap() as u32;
+
+                    if saved != 0 {
+                        unsafe {
+                            *p = saved;
+                        }
+                    }
+                }
 
                 let ret = self.instance_dylink(store, module_name, instance);
 
@@ -1402,6 +1438,7 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: false,
                         memory_base: handler,
+                        key: "NONE".to_string(),
                     },
                 )?;
                 #[cfg(feature = "debug-dylink")]
@@ -1473,6 +1510,7 @@ impl<T> Linker<T> {
         table_base: i32,
         got: &LindGOT,
         mut symbol_map: SymbolMap,
+        path: String,
     ) -> Result<u64>
     where
         T: 'static,
@@ -1532,6 +1570,7 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: true,
                         memory_base: handler,
+                        key: path,
                     },
                 )?;
 
