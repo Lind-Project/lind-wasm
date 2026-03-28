@@ -379,6 +379,8 @@ do_dynamic_compile() {
   run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
     "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/set_stack_pointer.o" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" -o "${OUT_WASM}"
   
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
 }
 
@@ -408,8 +410,8 @@ do_library_compile() {
   run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
     "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
   
-  # run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
-  # run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
 }
 

@@ -529,7 +529,7 @@ impl Instance {
                 parent_cageid,
                 child_cageid,
             } => {
-                // memory is already copied from parent, so no need to initialize the memory
+                // memory is already copied from parent, so no need to initialize the memory for child
             }
             InstantiateType::InstantiateLib {
                 cageid,
