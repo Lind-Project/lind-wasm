@@ -82,7 +82,7 @@ pub extern "C" fn grate_callback_trampoline(
 
                     let typed = entry_func.typed(&mut store)?;
 
-                    store.data_mut().pass_fptr_func = Some(typed);
+                    store.data_mut().pass_fptr_func = Some(typed.clone());
 
                     typed
                 }
