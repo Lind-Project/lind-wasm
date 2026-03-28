@@ -327,7 +327,7 @@ do_static_compile() {
   local -a mandatory_clang_flags=(
     "--sysroot=${SYSROOT}"
     --target=wasm32-unknown-wasi
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base,--export=__wasm_init_tls
   )
   local -a default_clang_flags=(
     -pthread
@@ -344,7 +344,7 @@ do_static_compile() {
   fi
 
   run_cmd "${CLANG_BIN}" "${mandatory_clang_flags[@]}" "${default_clang_flags[@]}" \
-    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
 }
 
 do_dynamic_compile() {
