@@ -37,7 +37,6 @@ use super::Val;
 /// of 0. This causes all TLS variable accesses to read/write wrong addresses.
 /// We save the value here and restore it for each forked child.
 static INIT_TLS_BASE: AtomicI32 = AtomicI32::new(0);
-static INIT_TLS_BASE_MAP: LazyLock<DashMap<String, i32>> = LazyLock::new(DashMap::new);
 
 /// Describes how a Lind-Wasm instance is being instantiated.
 ///
@@ -68,7 +67,6 @@ pub enum InstantiateType {
         cageid: u64,
         needs_init: bool,
         memory_base: *mut u32,
-        key: String,
     },
 }
 
@@ -326,37 +324,10 @@ impl Instance {
                 cageid,
                 needs_init,
                 memory_base,
-                ref key,
             } => {
-                let tls_key = key.clone();
                 if !needs_init {
                     let (instance, start, instanceid) =
                         Instance::new_raw(store.0, module, imports)?;
-
-                    // if tls_key != "NONE" {
-                    //     let tls_global_idx = {
-                    //         let handle = store.0.instance(instanceid);
-                    //         handle
-                    //             .exports()
-                    //             .find(|(name, _)| name.as_str() == "__tls_base")
-                    //             .and_then(|(_, entity)| match entity {
-                    //                 EntityIndex::Global(idx) => Some(*idx),
-                    //                 _ => None,
-                    //             })
-                    //     };
-
-                    //     let tls_idx = tls_global_idx.unwrap();
-                    //     println!("[debug] get TLS_BASE key: {}", tls_key);
-                    //     let saved = *INIT_TLS_BASE_MAP.get(&tls_key).unwrap();
-
-                    //     if saved != 0 {
-                    //         let handle = store.0.instance_mut(instanceid);
-                    //         let export_global = handle.get_exported_global(tls_idx);
-                    //         unsafe {
-                    //             *(*export_global.definition).as_i32_mut() = saved;
-                    //         }
-                    //     }
-                    // }
 
                     return Ok((instance, instanceid));
                 }
@@ -481,7 +452,6 @@ impl Instance {
                 cageid,
                 needs_init,
                 memory_base,
-                ref key,
             } => {
                 let dylink_meminfo = module.dylink_meminfo().unwrap();
 
@@ -524,15 +494,11 @@ impl Instance {
 
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
-        let mut tls_key = "NONE";
-
         match instantiate_type {
             InstantiateType::InstantiateFirst(_) => {
                 if let Some(start) = start {
                     instance.start_raw(store, start)?;
                 }
-
-                tls_key = "MAIN";
 
                 if dylink_enabled {
                     // apply data relocations
@@ -572,9 +538,7 @@ impl Instance {
                 cageid,
                 needs_init,
                 memory_base,
-                ref key,
             } => {
-                tls_key = key;
                 // for library instance, we have to update the GOT entries before relocation happens
                 // so relocation is moved to linker.rs
             }
@@ -612,20 +576,15 @@ impl Instance {
                 })
         };
         if let Some(tls_idx) = tls_global_idx {
-            if tls_key != "NONE" {
-                // first cage and its library's routine
+            if is_first {
                 let handle = store.0.instance_mut(instanceid);
                 let export_global = handle.get_exported_global(tls_idx);
                 let val = unsafe { *(*export_global.definition).as_i32() };
-                // if val != 0 {
-                // println!("[debug] set TLS_BASE key: {} to {}", tls_key, val);
-                INIT_TLS_BASE_MAP.insert(tls_key.to_string(), val);
-                // }
+                if val != 0 {
+                    INIT_TLS_BASE.store(val, Ordering::SeqCst);
+                }
             } else {
-                // main module's child's routine
-                // println!("[debug] get TLS_BASE key: MAIN");
-                let saved = *INIT_TLS_BASE_MAP.get("MAIN").unwrap();
-
+                let saved = INIT_TLS_BASE.load(Ordering::SeqCst);
                 if saved != 0 {
                     let handle = store.0.instance_mut(instanceid);
                     let export_global = handle.get_exported_global(tls_idx);
@@ -634,24 +593,6 @@ impl Instance {
                     }
                 }
             }
-
-            // if is_first {
-            //     let handle = store.0.instance_mut(instanceid);
-            //     let export_global = handle.get_exported_global(tls_idx);
-            //     let val = unsafe { *(*export_global.definition).as_i32() };
-            //     if val != 0 {
-            //         INIT_TLS_BASE.store(val, Ordering::SeqCst);
-            //     }
-            // } else {
-            //     let saved = INIT_TLS_BASE.load(Ordering::SeqCst);
-            //     if saved != 0 {
-            //         let handle = store.0.instance_mut(instanceid);
-            //         let export_global = handle.get_exported_global(tls_idx);
-            //         unsafe {
-            //             *(*export_global.definition).as_i32_mut() = saved;
-            //         }
-            //     }
-            // }
         }
 
         Ok((instance, instanceid))

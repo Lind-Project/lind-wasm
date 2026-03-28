@@ -1116,7 +1116,6 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: needs_init,
                         memory_base: handler,
-                        key: path.clone(),
                     },
                 )?;
                 #[cfg(feature = "debug-dylink")]
@@ -1303,7 +1302,6 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: false,
                         memory_base: handler,
-                        key: path.clone(),
                     },
                 )?;
                 #[cfg(feature = "debug-dylink")]
@@ -1441,7 +1439,6 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: false,
                         memory_base: handler,
-                        key: "NONE".to_string(),
                     },
                 )?;
                 #[cfg(feature = "debug-dylink")]
@@ -1574,7 +1571,6 @@ impl<T> Linker<T> {
                         cageid,
                         needs_init: true,
                         memory_base: handler,
-                        key: path,
                     },
                 )?;
 
