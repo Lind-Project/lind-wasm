@@ -860,7 +860,8 @@ impl<T> Linker<T> {
                         | "asyncify_stop_unwind"
                         | "asyncify_start_rewind"
                         | "asyncify_stop_rewind"
-                        | "asyncify_get_state" => true,
+                        | "asyncify_get_state"
+                        | "__get_aligned_tls_size" => true,
                         _ => false,
                     }
                 {
@@ -1318,6 +1319,139 @@ impl<T> Linker<T> {
                 let ret = self.instance_dylink(store, module_name, instance);
 
                 ret
+            }
+        }
+    }
+
+    pub fn module_with_child_thread(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        cageid: u64,
+        module_name: &str,
+        module: &Module,
+        table: &mut Table,
+        table_base: i32,
+        memory_base: i32,
+        mut stack_addr: u32,
+    ) -> Result<i32>
+    where
+        T: 'static,
+    {
+        // NB: this is intended to function the same as `Linker::module_async`,
+        // they should be kept in sync.
+
+        // This assert isn't strictly necessary since it'll bottom out in the
+        // `HostFunc::to_func` method anyway. This is placed earlier for this
+        // function though to prevent the functions created here from delaying
+        // the panic until they're called.
+        assert!(
+            Engine::same(&self.engine, store.as_context().engine()),
+            "different engines for this linker and the store provided"
+        );
+        match ModuleKind::categorize(module)? {
+            ModuleKind::Command => {
+                unreachable!();
+            }
+            ModuleKind::Reactor => {
+                // We clone the linker to instantiate the library with instance-specific globals.
+                // `__memory_base` and `__table_base` are specific to each library instance,
+                // so we create a cloned linker, override these two globals in the clone,
+                // and then instantiate the library using that cloned linker.
+                //
+                // `allow_shadowing(true)` permits redefining these globals in the cloned
+                // linker without affecting the original linker state.
+                let mut module_linker = self.clone();
+                module_linker.allow_shadowing(true);
+
+                // Create a placeholder for `__memory_base` for library instantiation.
+                //
+                // In Lind, the final linear-memory base address is only known after the
+                // main module's shared memory is created and `vmmap` is initialized.
+                // We therefore link a dummy `__memory_base` global (initialized to 0)
+                // and pass its backing slot (`handler`) into `InstantiateLib`, so
+                // `instantiate_with_lind` can patch the global once the real base is known.
+                let memory_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(memory_base),
+                )?;
+                // Provide `__memory_base` for the library (used by data relocs).
+                module_linker.define(&mut store, "env", "__memory_base", memory_base);
+                let handler = memory_base.get_handler_as_u32(&mut store);
+
+                // Provide `__table_base` for the library (used by indirect calls / table relocs).
+                let table_base = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Const),
+                    Val::I32(table_base),
+                )?;
+                module_linker.define(&mut store, "env", "__table_base", table_base);
+
+                // Resolve any remaining unknown imports to trap stubs so the library can
+                // instantiate even when it has optional/unused imports.
+                module_linker.define_unknown_imports_as_traps(module);
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library module instantiate");
+                // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
+                // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
+                let (instance, _) = module_linker.instantiate_with_lind(
+                    &mut store,
+                    &module,
+                    InstantiateType::InstantiateLib {
+                        cageid,
+                        needs_init: false,
+                        memory_base: handler,
+                    },
+                )?;
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library module instantiate done");
+
+                // Collect exports first to avoid mutating the store/linker while iterating exports.
+                // We split funcs and globals because they are relocated differently.
+                let mut funcs = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    match export.into_extern() {
+                        Extern::Func(func) => {
+                            funcs.push((name, func));
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Patch GOT function entries with the runtime table index of each exported function.
+                // We only update slots that are still unresolved to preserve first-definition-wins
+                // semantics (load-order precedence / interposition).
+                for (name, func) in funcs {
+                    let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
+                }
+
+                // we should and only should apply global relocs for child libraries
+                let reloc = instance.get_typed_func::<(), ()>(
+                    store.as_context_mut(),
+                    "__wasm_apply_global_relocs",
+                )?;
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] child library start reloc func");
+                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
+                    store.as_context_mut(),
+                    "__wasm_init_tls",
+                ) {
+                    let get_tls_size = instance.get_typed_func::<(), i32>(
+                        store.as_context_mut(),
+                        "__get_aligned_tls_size",
+                    )?;
+
+                    let tls_size = get_tls_size.call(store.as_context_mut(), ()).unwrap();
+                    stack_addr -= tls_size as u32;
+                    let _ = init_tls.call(store.as_context_mut(), stack_addr as i32).unwrap();
+                }
+
+                let _ = self.instance_dylink(store, module_name, instance)?;
+
+                Ok(stack_addr as i32)
             }
         }
     }

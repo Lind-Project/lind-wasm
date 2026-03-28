@@ -675,7 +675,7 @@ impl<
     pub fn pthread_create_call(
         &self,
         mut caller: &mut Caller<'_, T>,
-        stack_addr: u32,
+        mut stack_addr: u32,
         stack_size: u32,
         child_tid: u64,
     ) -> Result<i32> {
@@ -842,7 +842,7 @@ impl<
                         linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
                         linker.allow_shadowing(false);
 
-                        for (name, _path, module) in modules.iter().skip(1) {
+                        for (name, path, module) in modules.iter().skip(1) {
                             // Read dylink metadata for this preloaded (library) module.
                             // This contains the module's declared table/memory requirements.
                             let dylink_info = module.dylink_meminfo();
@@ -874,17 +874,19 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            linker
-                                .module_with_child(
+                            let updated_stack_addr = linker
+                                .module_with_child_thread(
                                     &mut store,
                                     child_cageid as u64,
                                     &name,
                                     &module,
                                     &mut child_table,
                                     table_start,
-                                    module_memory_base
+                                    module_memory_base,
+                                    stack_addr,
                                 ).unwrap();
                             linker.allow_shadowing(false);
+                            stack_addr = updated_stack_addr as u32;
                         }
                     }
 
@@ -896,6 +898,20 @@ impl<
                     let (instance, grate_instanceid) = linker
                         .instantiate_with_lind_thread(&mut store, &module)
                         .unwrap();
+
+                    if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
+                        store.as_context_mut(),
+                        "__wasm_init_tls",
+                    ) {
+                        let get_tls_size = instance.get_typed_func::<(), i32>(
+                            store.as_context_mut(),
+                            "__get_aligned_tls_size",
+                        ).unwrap();
+
+                        let tls_size = get_tls_size.call(store.as_context_mut(), ()).unwrap();
+                        stack_addr -= tls_size as u32;
+                        let _ = init_tls.call(store.as_context_mut(), stack_addr as i32).unwrap();
+                    }
 
                     // we might also want to perserve the offset of current stack pointer to stack bottom
                     // not very sure if this is required, but just keep everything the same from parent seems to be good

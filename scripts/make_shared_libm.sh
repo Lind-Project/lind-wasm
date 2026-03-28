@@ -33,7 +33,7 @@ wasm-ld \
     "$SYSROOT/lib/wasm32-wasi/libm_pic.a" \
     --no-whole-archive \
     $symbols \
-    -o "$SYSROOT/lib/wasm32-wasi/libm.so" $REPO_ROOT/src/glibc/build/csu/errno.o
+    -o "$SYSROOT/lib/wasm32-wasi/libm.so" $REPO_ROOT/src/glibc/build/csu/errno.o "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
 
 # append `__wasm_apply_tls_relocs`, `__wasm_apply_global_relocs` and `__stack_pointer` export
 $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __wasm_apply_global_relocs func __wasm_apply_global_relocs
