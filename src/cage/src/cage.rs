@@ -322,6 +322,14 @@ pub fn get_cage_or_debug_panic(cageid: u64, caller: &str) -> Option<Arc<Cage>> {
     result
 }
 
+/// Borrows the `cageid` cage and applies a function `f` to it, return `Some(R)` or `None`
+/// depending on whether tha cage is out of randge or does not exist.
+///
+/// Preferred over `get_cage` for synchronous operations where cloning the cage through an `Arc` is
+/// uneccessary.
+///
+/// SAFETY: Assumes that the cage cannoy be removed while `f` is running (e.g. by ensuring
+/// `grate_inflight > 0`).
 pub fn with_cage<F, R>(cageid: u64, f: F) -> Option<R>
 where
     F: FnOnce(&Cage) -> R,

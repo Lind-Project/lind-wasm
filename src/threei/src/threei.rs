@@ -496,24 +496,8 @@ pub fn make_syscall(
 
         // Track this in-flight grate dispatch so cage_finalize() waits
         // for it to complete before removing the cage.
-        /*
-        if let Some(grate_cage) = cage::get_cage(grateid) {
-            grate_cage
-                .grate_inflight
-                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-            // After incrementing, recheck is_dead: if the cage started
-            // exiting between our earlier check and now, bail out.
-            if grate_cage
-                .is_dead
-                .load(std::sync::atomic::Ordering::Acquire)
-            {
-                grate_cage
-                    .grate_inflight
-                    .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
-                return -(Errno::ESRCH as i32);
-            }
-        }*/
-
+        //
+        // If the cage is already dead, return early.
         let cage_dead = with_cage(grateid, |grate| {
             grate
                 .grate_inflight
@@ -549,14 +533,6 @@ pub fn make_syscall(
         );
 
         // Decrement the in-flight counter now that the dispatch returned.
-        /*
-                if let Some(grate_cage) = cage::get_cage(grateid) {
-                    grate_cage
-                        .grate_inflight
-                        .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
-                }
-        */
-
         with_cage(grateid, |grate| {
             grate
                 .grate_inflight

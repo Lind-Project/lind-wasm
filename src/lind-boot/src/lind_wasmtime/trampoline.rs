@@ -70,7 +70,10 @@ pub extern "C" fn grate_callback_trampoline(
             } = caller;
 
             let typed_func: PassFptrTyped = match store.data().pass_fptr_func.clone() {
+                // Check if the dispatcher function is already cached.
                 Some(f) => f,
+                // Retrieve and store the dispatcher function. Done on the first syscall
+                // invocation.
                 None => {
                     let entry_func = instance
                         .host_state()
@@ -88,7 +91,6 @@ pub extern "C" fn grate_callback_trampoline(
                 }
             };
 
-            // Resolve the unified entry function once per call
             // Call the entry function with all arguments and in grate function pointer
             typed_func.call(
                 &mut store,

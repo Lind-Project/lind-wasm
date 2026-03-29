@@ -5,6 +5,7 @@ use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_wasi_threads::WasiThreadsCtx;
 
+/// Function type for the `pass_fptr_to_wt` function used as an entry point for grate-run syscalls.
 pub type PassFptrTyped = TypedFunc<
     (
         u64,
@@ -29,6 +30,8 @@ pub type PassFptrTyped = TypedFunc<
 /// `lind_environ`: argv/environ data served by the 4 host functions in lind-common;
 /// `lind_fork_ctx`: the multi-process management structure, encapsulating fork/exec state;
 /// `wasi_threads`: which manages WASI thread-related capabilities.
+/// `pass_fptr_func`: the dispatcher function defined in the grate's WASM module. Cached after the
+/// first invocation.
 #[derive(Default, Clone)]
 pub struct HostCtx {
     pub lind_environ: Option<LindEnviron>,
