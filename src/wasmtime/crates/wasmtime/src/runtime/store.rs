@@ -94,6 +94,7 @@ use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
 use alloc::sync::Arc;
 use cage::DashMap;
+use wasmtime_environ::GlobalIndex;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
@@ -1524,6 +1525,30 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// set stack base
     pub fn set_stack_base(&mut self, stack_base: u64) {
         self.0.stack_base = stack_base;
+    }
+
+    pub fn get_global_snapshot(&mut self) -> Vec<(usize, Vec<(GlobalIndex, i64)>)> {
+        // println!("[debug] reach get_global_snapshot");
+        let mut collected = vec![];
+        let instance_length = self.0.instances.len();
+        for i in 0..instance_length {
+            // println!("instance id: {}", i);
+            let instance = self.0.instance_mut(InstanceId(i));
+            let mut globals = vec![];
+            for (index, global) in instance.all_globals() {
+                let val = unsafe {
+                    *(*global.definition).as_i64_mut()
+                };
+                // collected.push((i, index, val));
+                globals.push((index, val));
+                // println!("index: {:?}: val: {}", index, val);
+            }
+            if globals.len() > 0 {
+                collected.push((i, globals));
+            }
+        }
+
+        collected
     }
 
     /// Configures epoch-deadline expiration to yield to the async

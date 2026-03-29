@@ -17,7 +17,7 @@ use core::pin::Pin;
 use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
 use std::sync::LazyLock;
-use wasmtime_environ::EntityIndex;
+use wasmtime_environ::{EntityIndex, GlobalIndex};
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::LindGOT;
 
@@ -1234,6 +1234,7 @@ impl<T> Linker<T> {
         table_base: i32,
         memory_base: i32,
         path: String,
+        snapshots: &Vec<(GlobalIndex, i64)>,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1328,30 +1329,73 @@ impl<T> Linker<T> {
                 }
 
                 // we should and only should apply global relocs for child libraries
-                let reloc = instance.get_typed_func::<(), ()>(
-                    store.as_context_mut(),
-                    "__wasm_apply_global_relocs",
-                )?;
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] child library start reloc func");
-                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+                // let reloc = instance.get_typed_func::<(), ()>(
+                //     store.as_context_mut(),
+                //     "__wasm_apply_global_relocs",
+                // )?;
+                // #[cfg(feature = "debug-dylink")]
+                // println!("[debug] child library start reloc func");
+                // let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
-                {
-                    let tls_key = path.clone();
-                    let tls_base = instance
-                        .get_export(store.as_context_mut(), "__tls_base")
-                        .unwrap();
-                    let tls_base = tls_base.into_global().unwrap();
-                    let p = tls_base.get_handler_as_u32(store.as_context_mut());
+                // {
+                //     let tls_key = path.clone();
+                //     let tls_base = instance
+                //         .get_export(store.as_context_mut(), "__tls_base")
+                //         .unwrap();
+                //     let tls_base = tls_base.into_global().unwrap();
+                //     let p = tls_base.get_handler_as_u32(store.as_context_mut());
 
-                    // println!("[debug] get TLS_BASE key: {}", tls_key);
-                    let saved = *INIT_TLS_BASE_MAP.get(&tls_key).unwrap() as u32;
+                //     // println!("[debug] get TLS_BASE key: {}", tls_key);
+                //     let saved = *INIT_TLS_BASE_MAP.get(&tls_key).unwrap() as u32;
 
-                    if saved != 0 {
-                        unsafe {
-                            *p = saved;
-                        }
+                //     if saved != 0 {
+                //         unsafe {
+                //             *p = saved;
+                //         }
+                //     }
+                // }
+
+                let mut collected_global = vec![];
+                for (index, global) in instance.all_globals(store.as_context_mut().0) {
+                    collected_global.push((index, global.clone()));
+                }
+
+                // println!("[debug] module with child, new module");
+                // for (index, global) in collected_global {
+                //     let val = global.get(store.as_context_mut());
+                    
+                //     println!("index: {:?}, val: {:?}", index, val);
+                // }
+                // println!("[debug] snapshots");
+                // for (index, val) in snapshots {
+                //     println!("index: {:?}, val: {}", index, val);
+                // }
+
+                if collected_global.len() != snapshots.len() {
+                    panic!("snapshot mismatch!");
+                }
+                
+                for i in 0..snapshots.len() {
+                    if snapshots[i].0 != collected_global[i].0 {
+                        panic!("Global Index mismatch");
                     }
+                    let ty = collected_global[i].1.ty(store.as_context());
+
+                    let target_val = snapshots[i].1;
+
+                    let target = match ty.content() {
+                        ValType::I32 => {
+                            let raw = ValRaw::i32(target_val as u32 as i32);
+                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                        },
+                        ValType::I64 => {
+                            let raw = ValRaw::i64(target_val);
+                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                        },
+                        _ => { unreachable!() }
+                    };
+
+                    collected_global[i].1.set(store.as_context_mut(), target);
                 }
 
                 let ret = self.instance_dylink(store, module_name, instance);
@@ -1371,6 +1415,7 @@ impl<T> Linker<T> {
         table_base: i32,
         memory_base: i32,
         mut stack_addr: u32,
+        snapshots: &Vec<(GlobalIndex, i64)>,
     ) -> Result<i32>
     where
         T: 'static,
@@ -1465,13 +1510,13 @@ impl<T> Linker<T> {
                 }
 
                 // we should and only should apply global relocs for child libraries
-                let reloc = instance.get_typed_func::<(), ()>(
-                    store.as_context_mut(),
-                    "__wasm_apply_global_relocs",
-                )?;
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] child library start reloc func");
-                let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+                // let reloc = instance.get_typed_func::<(), ()>(
+                //     store.as_context_mut(),
+                //     "__wasm_apply_global_relocs",
+                // )?;
+                // #[cfg(feature = "debug-dylink")]
+                // println!("[debug] child library start reloc func");
+                // let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                 if let Ok(init_tls) =
                     instance.get_typed_func::<i32, ()>(store.as_context_mut(), "__wasm_init_tls")
@@ -1486,6 +1531,39 @@ impl<T> Linker<T> {
                     let _ = init_tls
                         .call(store.as_context_mut(), stack_addr as i32)
                         .unwrap();
+                }
+
+
+                let mut collected_global = vec![];
+                for (index, global) in instance.all_globals(store.as_context_mut().0) {
+                    collected_global.push((index, global.clone()));
+                }
+
+                if collected_global.len() != snapshots.len() {
+                    panic!("snapshot mismatch!");
+                }
+                
+                for i in 0..snapshots.len() {
+                    if snapshots[i].0 != collected_global[i].0 {
+                        panic!("Global Index mismatch");
+                    }
+                    let ty = collected_global[i].1.ty(store.as_context());
+
+                    let target_val = snapshots[i].1;
+
+                    let target = match ty.content() {
+                        ValType::I32 => {
+                            let raw = ValRaw::i32(target_val as u32 as i32);
+                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                        },
+                        ValType::I64 => {
+                            let raw = ValRaw::i64(target_val);
+                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                        },
+                        _ => { unreachable!() }
+                    };
+
+                    collected_global[i].1.set(store.as_context_mut(), target);
                 }
 
                 let _ = self.instance_dylink(store, module_name, instance)?;

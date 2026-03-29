@@ -25,7 +25,7 @@ use std::thread;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId,
-    InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val,
+    InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val, ValRaw, ValType,
 };
 
 use cage::alloc_cage_id;
@@ -312,6 +312,9 @@ impl<
             None
         };
 
+        let global_snapshots = caller.as_context_mut().get_global_snapshot();
+        let mut global_snapshots_index = 0;
+
         // mark the start of unwind
         let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
 
@@ -450,8 +453,10 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     path.clone(),
+                                    &global_snapshots[global_snapshots_index].1
                                 )
                                 .unwrap();
+                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
                     }
@@ -473,6 +478,42 @@ impl<
                             },
                         )
                         .unwrap();
+
+                    {
+                        let snapshots = &global_snapshots[global_snapshots_index].1;
+
+                        let mut collected_global = vec![];
+                        for (index, global) in instance.all_globals(store.as_context_mut().0) {
+                            collected_global.push((index, global.clone()));
+                        }
+                        
+                        if collected_global.len() != snapshots.len() {
+                            panic!("snapshot mismatch!");
+                        }
+                        
+                        for i in 0..snapshots.len() {
+                            if snapshots[i].0 != collected_global[i].0 {
+                                panic!("Global Index mismatch");
+                            }
+                            let ty = collected_global[i].1.ty(store.as_context());
+
+                            let target_val = snapshots[i].1;
+
+                            let target = match ty.content() {
+                                ValType::I32 => {
+                                    let raw = ValRaw::i32(target_val as u32 as i32);
+                                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                                },
+                                ValType::I64 => {
+                                    let raw = ValRaw::i64(target_val);
+                                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                                },
+                                _ => { unreachable!() }
+                            };
+
+                            collected_global[i].1.set(store.as_context_mut(), target);
+                        }
+                    }
 
                     let epoch_pointer = if epoch_handler.is_some() {
                         epoch_handler.unwrap() as *mut u64
@@ -740,6 +781,9 @@ impl<
             None
         };
 
+        let global_snapshots = caller.as_context_mut().get_global_snapshot();
+        let mut global_snapshots_index = 0;
+
         // mark the start of unwind
         let _res =
             asyncify_start_unwind_func.call(&mut caller, parent_unwind_data_start_usr as i32);
@@ -885,7 +929,9 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     stack_addr,
+                                    &global_snapshots[global_snapshots_index].1
                                 ).unwrap();
+                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                             stack_addr = updated_stack_addr as u32;
                         }
@@ -899,6 +945,42 @@ impl<
                     let (instance, grate_instanceid) = linker
                         .instantiate_with_lind_thread(&mut store, &module)
                         .unwrap();
+
+                    {
+                        let snapshots = &global_snapshots[global_snapshots_index].1;
+
+                        let mut collected_global = vec![];
+                        for (index, global) in instance.all_globals(store.as_context_mut().0) {
+                            collected_global.push((index, global.clone()));
+                        }
+                        
+                        if collected_global.len() != snapshots.len() {
+                            panic!("snapshot mismatch!");
+                        }
+                        
+                        for i in 0..snapshots.len() {
+                            if snapshots[i].0 != collected_global[i].0 {
+                                panic!("Global Index mismatch");
+                            }
+                            let ty = collected_global[i].1.ty(store.as_context());
+
+                            let target_val = snapshots[i].1;
+
+                            let target = match ty.content() {
+                                ValType::I32 => {
+                                    let raw = ValRaw::i32(target_val as u32 as i32);
+                                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                                },
+                                ValType::I64 => {
+                                    let raw = ValRaw::i64(target_val);
+                                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                                },
+                                _ => { unreachable!() }
+                            };
+
+                            collected_global[i].1.set(store.as_context_mut(), target);
+                        }
+                    }
 
                     if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
                         store.as_context_mut(),
