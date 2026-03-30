@@ -25,6 +25,8 @@ int main() {
 
     printf("Testing symlink() syscall\n");
     fflush(stdout);
+    // Setup: create testfiles directory
+    mkdir("/testfiles", 0755);
 
     // Setup: create target file
     fd = open(TEST_FILE, O_CREAT | O_WRONLY, 0644);
