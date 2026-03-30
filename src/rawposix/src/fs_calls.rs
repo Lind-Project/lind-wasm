@@ -1677,7 +1677,7 @@ pub extern "C" fn lstat_syscall(
     }
 
     let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
-    let libcret = unsafe { libc::lstat(path.as_ptr(), &mut libc_statbuf) };  // <-- only change
+    let libcret = unsafe { libc::lstat(path.as_ptr(), &mut libc_statbuf) }; // <-- only change
 
     if libcret < 0 {
         let errno = get_errno();
