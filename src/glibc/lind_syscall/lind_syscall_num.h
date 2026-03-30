@@ -18,6 +18,7 @@
 #define CLOSE_SYSCALL 3
 #define XSTAT_SYSCALL 4
 #define FXSTAT_SYSCALL 5
+#define LSTAT_SYSCALL 6
 
 #define POLL_SYSCALL 7
 #define LSEEK_SYSCALL 8

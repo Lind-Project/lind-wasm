@@ -1630,6 +1630,68 @@ pub extern "C" fn stat_syscall(
     libcret
 }
 
+//------------------------------------LSTAT SYSCALL------------------------------------
+/// `lstat` retrieves file status information without following symlinks.
+/// Reference: https://man7.org/linux/man-pages/man2/lstat.2.html
+///
+/// ## Arguments:
+///  - `pathname`: Path to the file or symlink to get status information for.
+///  - `statbuf`: Buffer to store the file status information.
+///
+/// ## Implementation Details:
+///  - Identical to `stat_syscall`, except `libc::lstat` is used instead of `libc::stat`,
+///    so symlinks are stat'd directly rather than following to the target.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub extern "C" fn lstat_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "lstat", "path conversion failed"),
+    };
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "lstat_syscall"
+        );
+    }
+
+    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    let libcret = unsafe { libc::lstat(path.as_ptr(), &mut libc_statbuf) };  // <-- only change
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "lstat");
+    }
+
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "lstat", "Bad address"),
+    }
+
+    libcret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
 ///
 /// Linux `statfs()` syscall returns information about a mounted filesystem

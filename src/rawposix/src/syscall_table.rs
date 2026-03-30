@@ -14,7 +14,7 @@ use super::fs_calls::{
     readlinkat_syscall, readv_syscall, rename_syscall, rmdir_syscall, shmat_syscall,
     shmctl_syscall, shmdt_syscall, shmget_syscall, stat_syscall, statfs_syscall, symlink_syscall,
     symlinkat_syscall, sync_file_range_syscall, truncate_syscall, unlink_syscall, unlinkat_syscall,
-    write_syscall, writev_syscall,
+    write_syscall, writev_syscall,lstat_syscall,
 };
 use super::init::RawCallFunc;
 use super::net_calls::{
@@ -39,6 +39,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (7, poll_syscall),
     (4, stat_syscall),
     (5, fstat_syscall),
+    (6, lstat_syscall),
     (8, lseek_syscall),
     (9, mmap_syscall),
     (10, mprotect_syscall),
