@@ -319,12 +319,12 @@ struct libc_do_syscall_args
 
 #define INTERNAL_SYSCALL(name, nr, args...) \
   ({									      \
-    register unsigned int resultvar;					      \
+    register unsigned int resultvar = 0;			      \
     INTERNAL_SYSCALL_MAIN_##nr (name, args);			      	      \
     (int) resultvar; })
 #define INTERNAL_SYSCALL_NCS(name, nr, args...) \
   ({									      \
-    register unsigned int resultvar;					      \
+    register unsigned int resultvar = 0;				     \
     INTERNAL_SYSCALL_MAIN_NCS_##nr (name, args);		      	      \
     (int) resultvar; })
 
