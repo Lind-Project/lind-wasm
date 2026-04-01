@@ -20,14 +20,16 @@ cmake -B "$BUILD_DIR" -S "$LLVM_SRC" \
   -DLLVM_TARGETS_TO_BUILD="X86" \
   -DLLD_ENABLE_TARGETS="ELF" \
   -DLLVM_TOOL_LLD_BUILD=ON \
-  -DCMAKE_C_FLAGS="-fno-exceptions -fno-unwind-tables -L/usr/lib/gcc/x86_64-linux-gnu/13" \
+  -DCMAKE_C_FLAGS="-pthread -matomics -mbulk-memory -fno-exceptions -fno-unwind-tables -L/usr/lib/gcc/x86_64-linux-gnu/13" \
   -DCMAKE_CXX_FLAGS="-include $FIX_HEADER -fno-exceptions \
+      -pthread -matomics -mbulk-memory \
       -Wno-error=template-argument-type-deduction \
       -fno-unwind-tables -fno-rtti -I$LIBCXX_INCLUDE -D__GNU__ -D_POSIX_C_SOURCE=200809L -L/usr/lib/gcc/x86_64-linux-gnu/13" \
   -DCMAKE_EXE_LINKER_FLAGS=" \
   	-L$HOME_DIR/build/sysroot/lib/wasm32-wasi \
   	-Wl,--export=__stack_pointer,--export=__stack_low \
   	-Wl,--import-memory,--export-memory \
+    -Wl,--shared-memory \
   	-Wl,--max-memory=67108864 \
     -Wl,--no-entry \
   	-lm " \
@@ -41,11 +43,7 @@ cmake -B "$BUILD_DIR" -S "$LLVM_SRC" \
   -DCMAKE_SKIP_INSTALL_RPATH=ON \
   -DLLVM_ENABLE_THREADS=OFF \
   -DLLVM_BUILD_TESTS=OFF \
-  -DHAVE_CXX_ATOMICS_WITHOUT_LIB=1 \
-  -DHAVE_CXX_ATOMICS_WITH_LIB=0 \
-  -DHAVE_CXX_ATOMICS64_WITHOUT_LIB=1 \
-  -DHAVE_CXX_ATOMICS64_WITH_LIB=0 \
-  -DHAVE_LIBATOMIC=0 \
+  -DHAVE_LIBATOMIC=1 \
   -DHAVE_LIBRT=0 \
   -DLLVM_INCLUDE_GOOGLETEST=OFF \
   -DLLVM_TOOL_CLANG_BUILD=ON \
@@ -60,10 +58,14 @@ cmake -B "$BUILD_DIR" -S "$LLVM_SRC" \
   -DLLVM_NATIVE_TOOL_DIR="$NATIVE_TOOL_DIR" \
   -DLLVM_INCLUDE_BENCHMARKS=OFF
 
-# cmake --build "$BUILD_DIR" --target clang
-# cmake --build "$BUILD_DIR" --target lld
+cmake --build "$BUILD_DIR" --target clang --verbose
+cmake --build "$BUILD_DIR" --target lld
 cmake --build "$BUILD_DIR" --target install-core-resource-headers
 
 # -DCMAKE_SHARED_LINKER_FLAGS="\
   #   -L/usr/lib/gcc/x86_64-linux-gnu/13" \
   # -DCMAKE_REQUIRED_LIBRARIES=atomic \
+  # -DHAVE_CXX_ATOMICS_WITHOUT_LIB=1 \
+  # -DHAVE_CXX_ATOMICS_WITH_LIB=0 \
+  # -DHAVE_CXX_ATOMICS64_WITHOUT_LIB=1 \
+  # -DHAVE_CXX_ATOMICS64_WITH_LIB=0 \
