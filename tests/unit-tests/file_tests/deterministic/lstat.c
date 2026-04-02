@@ -9,7 +9,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-const char* TARGET = "testfiles/lstat_target.txt";
+char TARGET[PATH_MAX];
+realpath("testfiles/lstat_target.txt", TARGET);
 const char* SYMLINK = "testfiles/lstat_link";
 
 int main(int argc, char **argv)
