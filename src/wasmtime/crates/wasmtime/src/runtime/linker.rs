@@ -1399,43 +1399,7 @@ impl<T> Linker<T> {
                     let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
                 }
 
-                let mut collected_global = vec![];
-                for (index, global) in instance.all_globals(store.as_context_mut().0) {
-                    collected_global.push((index, global.clone()));
-                }
-
-                if collected_global.len() != snapshots.len() {
-                    panic!("snapshot mismatch!");
-                }
-
-                for i in 0..snapshots.len() {
-                    if snapshots[i].0 != collected_global[i].0 {
-                        panic!("Global Index mismatch");
-                    }
-                    let ty = collected_global[i].1.ty(store.as_context());
-
-                    let target_val = snapshots[i].1;
-
-                    let target = match ty.content() {
-                        ValType::I32 => {
-                            let raw = ValRaw::i32(target_val as u32 as i32);
-                            unsafe {
-                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
-                            }
-                        }
-                        ValType::I64 => {
-                            let raw = ValRaw::i64(target_val);
-                            unsafe {
-                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
-                            }
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
-
-                    collected_global[i].1.set(store.as_context_mut(), target);
-                }
+                instance.apply_global_snapshots(&mut store, snapshots);
 
                 let ret = self.instance_dylink(store, module_name, instance);
 
@@ -1563,43 +1527,7 @@ impl<T> Linker<T> {
                         .unwrap();
                 }
 
-                let mut collected_global = vec![];
-                for (index, global) in instance.all_globals(store.as_context_mut().0) {
-                    collected_global.push((index, global.clone()));
-                }
-
-                if collected_global.len() != snapshots.len() {
-                    panic!("snapshot mismatch!");
-                }
-
-                for i in 0..snapshots.len() {
-                    if snapshots[i].0 != collected_global[i].0 {
-                        panic!("Global Index mismatch");
-                    }
-                    let ty = collected_global[i].1.ty(store.as_context());
-
-                    let target_val = snapshots[i].1;
-
-                    let target = match ty.content() {
-                        ValType::I32 => {
-                            let raw = ValRaw::i32(target_val as u32 as i32);
-                            unsafe {
-                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
-                            }
-                        }
-                        ValType::I64 => {
-                            let raw = ValRaw::i64(target_val);
-                            unsafe {
-                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
-                            }
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
-
-                    collected_global[i].1.set(store.as_context_mut(), target);
-                }
+                instance.apply_global_snapshots(&mut store, snapshots);
 
                 let _ = self.instance_dylink(store, module_name, instance)?;
 
