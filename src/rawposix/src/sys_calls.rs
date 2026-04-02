@@ -24,8 +24,7 @@ use sysdefs::constants::lind_platform_const::{
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_DATA, RLIMIT_NOFILE,
     RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK,
-    SIG_UNBLOCK,
-    WNOHANG,
+    SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
