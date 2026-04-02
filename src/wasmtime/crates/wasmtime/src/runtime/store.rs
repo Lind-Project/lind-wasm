@@ -94,7 +94,6 @@ use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
 use alloc::sync::Arc;
 use cage::DashMap;
-use wasmtime_environ::GlobalIndex;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
@@ -110,6 +109,7 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use wasmtime_environ::GlobalIndex;
 use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 mod context;
@@ -1534,9 +1534,7 @@ impl<'a, T> StoreContextMut<'a, T> {
             let instance = self.0.instance_mut(InstanceId(i));
             let mut globals = vec![];
             for (index, global) in instance.all_globals() {
-                let val = unsafe {
-                    *(*global.definition).as_i64_mut()
-                };
+                let val = unsafe { *(*global.definition).as_i64_mut() };
                 globals.push((index, val));
             }
             if globals.len() > 0 {

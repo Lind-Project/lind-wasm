@@ -1,7 +1,7 @@
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::{StoreId, StoreOpaque};
-use crate::{Global, GlobalType, IntoFunc, SharedMemory, Table, prelude::*};
+use crate::{prelude::*, Global, GlobalType, IntoFunc, MemoryType, SharedMemory, Table};
 use crate::{
     AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
@@ -118,6 +118,12 @@ impl<T> Clone for Linker<T> {
 struct ImportKey {
     name: usize,
     module: usize,
+}
+
+#[derive(Clone)]
+pub enum ClonedMemory {
+    Thread(SharedMemory),
+    New(MemoryType),
 }
 
 #[derive(Clone)]
@@ -356,7 +362,11 @@ impl<T> Linker<T> {
         &mut self,
         mut store: impl AsContextMut<Data = T>,
         share_memory: bool,
-    ) -> (Vec<(String, String, GlobalType, Val)>, Vec<(String, String, Arc<HostFunc>)>, Option<(String, String, SharedMemory)>) {
+    ) -> (
+        Vec<(String, String, GlobalType, Val)>,
+        Vec<(String, String, Arc<HostFunc>)>,
+        Option<(String, String, ClonedMemory)>,
+    ) {
         // we collect two items from parent linker to child linker
         // 1. GOT entries defined as wasm global (i.e. GOT.mem)
         // 2. Host-defined functions, which are independent to Store
@@ -377,7 +387,8 @@ impl<T> Linker<T> {
                                || (module == "env" && name == "__table_base") // main module table base
                                || module == "lib.memory_base" // library __memory_base
                                || (module == "env" && name == "__stack_pointer") // stack pointer
-                               || (module == "lind" && name == "epoch") // signal epoch
+                               || (module == "lind" && name == "epoch")
+                            // signal epoch
                             {
                                 // NOTE: asyncify state is intentionally not copied
                                 let global_ty = global.ty(&store);
@@ -395,16 +406,16 @@ impl<T> Linker<T> {
                             // Those are functions defined by library
                             // Those has to be "cloned" by re-instantiating
                             // the library and link the exported function again
-                        },
+                        }
                         Extern::Table(table) => {
                             // no-op
                             // indirect_table is handled explicitly by the fork logic
-                        },
+                        }
                         Extern::Memory(memory) => {
-                            // lind wasm instance shouldn't have any Memory 
+                            // lind wasm instance shouldn't have any Memory
                             // (They are all SharedMemory instead)
                             unreachable!()
-                        },
+                        }
                         Extern::SharedMemory(shared_memory) => {
                             if share_memory {
                                 // if memory should be shared between new linker
@@ -413,36 +424,37 @@ impl<T> Linker<T> {
                                 memory = Some((
                                     module.to_string(),
                                     name.to_string(),
-                                    shared_memory.clone(),
+                                    ClonedMemory::Thread(shared_memory.clone()),
                                 ));
                             } else {
-                                // otherwise, do not collect SharedMemory
+                                // otherwise, collect memory type only
                                 // and have new instance creating a new one for itself
+                                memory = Some((
+                                    module.to_string(),
+                                    name.to_string(),
+                                    ClonedMemory::New(shared_memory.ty().clone()),
+                                ));
                             }
-                        },
+                        }
                     }
-                },
+                }
                 Definition::HostFunc(host_func) => {
-                    funcs.push((
-                        module.to_string(),
-                        name.to_string(),
-                        host_func.clone(),
-                    ));
-                },
+                    funcs.push((module.to_string(), name.to_string(), host_func.clone()));
+                }
             }
         }
 
         (globals, funcs, memory)
     }
-    
+
     pub fn new_child_linker(
         mut store: impl AsContextMut<Data = T>,
         engine: &Engine,
         globals: &Vec<(String, String, GlobalType, Val)>,
         hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
-        shared_memory: &Option<(String, String, SharedMemory)>,
+        shared_memory: &Option<(String, String, ClonedMemory)>,
     ) -> Result<(Self, HashMap<String, i32>, Option<*mut u64>)> {
-        let mut new_linker = Self::new(engine);
+        let mut new_linker = Self::new(&engine);
 
         // a mapping of library name to its memory base value
         let mut memory_base_table = HashMap::new();
@@ -474,7 +486,15 @@ impl<T> Linker<T> {
 
         // attach the SharedMemory if exist
         if let Some((module, name, memory)) = shared_memory {
-            new_linker.define(&mut store, &module, &name, memory.clone())?;
+            match memory {
+                ClonedMemory::Thread(shared_memory) => {
+                    new_linker.define(&mut store, &module, &name, shared_memory.clone())?;
+                }
+                ClonedMemory::New(memory_type) => {
+                    let mem = SharedMemory::new(&engine, memory_type.clone())?;
+                    new_linker.define(&mut store, &module, &name, mem)?;
+                }
+            }
         }
 
         Ok((new_linker, memory_base_table, epoch_handler))
@@ -1142,7 +1162,12 @@ impl<T> Linker<T> {
                 // Provide `__memory_base` for the library (used by data relocs).
                 module_linker.define(&mut store, "env", "__memory_base", memory_base);
                 // keep a recording of this memory base in main linker as well
-                self.define(&mut store, "lib.memory_base", &module.name().unwrap(), memory_base);
+                self.define(
+                    &mut store,
+                    "lib.memory_base",
+                    &module.name().unwrap(),
+                    memory_base,
+                );
                 let handler = memory_base.get_handler_as_u32(&mut store);
 
                 // Provide `__table_base` for the library (used by indirect calls / table relocs).
@@ -1382,7 +1407,7 @@ impl<T> Linker<T> {
                 if collected_global.len() != snapshots.len() {
                     panic!("snapshot mismatch!");
                 }
-                
+
                 for i in 0..snapshots.len() {
                     if snapshots[i].0 != collected_global[i].0 {
                         panic!("Global Index mismatch");
@@ -1394,13 +1419,19 @@ impl<T> Linker<T> {
                     let target = match ty.content() {
                         ValType::I32 => {
                             let raw = ValRaw::i32(target_val as u32 as i32);
-                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
-                        },
+                            unsafe {
+                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
+                            }
+                        }
                         ValType::I64 => {
                             let raw = ValRaw::i64(target_val);
-                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
-                        },
-                        _ => { unreachable!() }
+                            unsafe {
+                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
                     };
 
                     collected_global[i].1.set(store.as_context_mut(), target);
@@ -1532,7 +1563,6 @@ impl<T> Linker<T> {
                         .unwrap();
                 }
 
-
                 let mut collected_global = vec![];
                 for (index, global) in instance.all_globals(store.as_context_mut().0) {
                     collected_global.push((index, global.clone()));
@@ -1541,7 +1571,7 @@ impl<T> Linker<T> {
                 if collected_global.len() != snapshots.len() {
                     panic!("snapshot mismatch!");
                 }
-                
+
                 for i in 0..snapshots.len() {
                     if snapshots[i].0 != collected_global[i].0 {
                         panic!("Global Index mismatch");
@@ -1553,13 +1583,19 @@ impl<T> Linker<T> {
                     let target = match ty.content() {
                         ValType::I32 => {
                             let raw = ValRaw::i32(target_val as u32 as i32);
-                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
-                        },
+                            unsafe {
+                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
+                            }
+                        }
                         ValType::I64 => {
                             let raw = ValRaw::i64(target_val);
-                            unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
-                        },
-                        _ => { unreachable!() }
+                            unsafe {
+                                Val::from_raw(store.as_context_mut(), raw, ty.content().clone())
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
                     };
 
                     collected_global[i].1.set(store.as_context_mut(), target);
@@ -2286,6 +2322,36 @@ impl<T> Linker<T> {
 
         // Otherwise return a no-op function.
         Ok(Func::wrap(store, || {}))
+    }
+}
+
+impl<T> Linker<T> {
+    pub fn attach_asyncify(&mut self, mut store: impl AsContextMut<Data = T>) -> Result<()> {
+        let __asyncify_state = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(0),
+        )?;
+        let __asyncify_data = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(0),
+        )?;
+        self.define(&mut store, "env", "__asyncify_state", __asyncify_state)?;
+        self.define(&mut store, "env", "__asyncify_data", __asyncify_data)?;
+        Ok(())
+    }
+
+    pub fn attach_epoch(&mut self, mut store: impl AsContextMut<Data = T>) -> Result<u64> {
+        let lind_epoch = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I64, crate::Mutability::Var),
+            Val::I64(0),
+        )?;
+
+        self.define(&mut store, "lind", "epoch", lind_epoch)?;
+
+        Ok(lind_epoch.get_handler_as_u64(&mut store) as u64)
     }
 }
 

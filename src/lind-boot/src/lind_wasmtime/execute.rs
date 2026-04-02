@@ -18,7 +18,9 @@ use wasmtime::{
 use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
-use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID, get_memory_base};
+use wasmtime_lind_multi_process::{
+    CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, get_memory_base,
+};
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
@@ -271,35 +273,10 @@ pub fn execute_with_lind(
 
     if dylink_metadata.dylink_enabled {
         let mut linker = linker.lock().unwrap();
-        let __asyncify_state = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-            Val::I32(0),
-        )
-        .unwrap();
-        let __asyncify_data = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-            Val::I32(0),
-        )
-        .unwrap();
-        let lind_epoch = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I64, wasmtime::Mutability::Var),
-            Val::I64(0),
-        )
-        .unwrap();
-        linker
-            .define(&mut wstore, "env", "__asyncify_state", __asyncify_state)
-            .unwrap();
-        linker
-            .define(&mut wstore, "env", "__asyncify_data", __asyncify_data)
-            .unwrap();
-        linker
-            .define(&mut wstore, "lind", "epoch", lind_epoch)
-            .unwrap();
+        let _ = linker.attach_asyncify(&mut wstore).unwrap();
+        let epoch = linker.attach_epoch(&mut wstore).unwrap();
 
-        dylink_metadata.epoch_handler = Some(lind_epoch.get_handler_as_u64(&mut wstore) as u64);
+        dylink_metadata.epoch_handler = Some(epoch);
     }
 
     // Load the preload wasm modules.
@@ -592,20 +569,8 @@ fn attach_api(
 
     let main_module = &modules.get(0).unwrap().2;
 
-    // attach SharedMemory to the wasm module
-    for import in main_module.imports() {
-        if let Some(m) = import.ty().memory() {
-            if m.is_shared() {
-                let mem = SharedMemory::new(main_module.engine(), m.clone())?;
-                // Initialize vmmap immediately after creating the shared linear memory
-                let memory_base = mem.get_memory_base();
-                cage::init_vmmap(CAGE_START_ID as u64, memory_base as usize, None);
-                linker_guard.define(&mut *wstore, import.module(), import.name(), mem.clone())?;
-            } else {
-                bail!("Main Module does not contain a shared memory");
-            }
-        }
-    }
+    // attach SharedMemory to the instance
+    attach_shared_memory(&mut *wstore, &mut linker_guard, &main_module, true)?;
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(

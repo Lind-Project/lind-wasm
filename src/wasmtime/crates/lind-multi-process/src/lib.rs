@@ -25,7 +25,8 @@ use std::thread;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId,
-    InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val, ValRaw, ValType,
+    InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val, ValRaw,
+    ValType,
 };
 
 use cage::alloc_cage_id;
@@ -365,27 +366,17 @@ impl<
                     let modules = child_ctx.modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
-                    let (mut linker,
-                         memory_base_table,
-                         epoch_handler
-                        ) = Linker::new_child_linker(&mut store, &engine, &snapshot.as_ref().unwrap().0, &snapshot.as_ref().unwrap().1, &None)
-                                .expect("failed to create child linker");
-                    
-                    {
-                        for import in module.imports() {
-                            if let Some(m) = import.ty().memory() {
-                                if m.is_shared() {
-                                    // define a new shared memory for the child
-                                    let mut plan = m.clone();
+                    let (mut linker, memory_base_table, epoch_handler) = Linker::new_child_linker(
+                        &mut store,
+                        &engine,
+                        &snapshot.as_ref().unwrap().0,
+                        &snapshot.as_ref().unwrap().1,
+                        &snapshot.as_ref().unwrap().2,
+                    )
+                    .expect("failed to create child linker");
 
-                                    let mem = SharedMemory::new(module.engine(), plan.clone()).unwrap();
-                                    linker
-                                        .define(&mut store, import.module(), import.name(), mem.clone())
-                                        .unwrap();
-                                }
-                            }
-                        }
-                    }
+                    // update the linker for the child instance, since new linker contains some child-specific defines
+                    // e.g. __stack_pointer, __indirect_function_table, etc.
 
                     if dylink_enabled {
                         let mut child_table = {
@@ -407,24 +398,7 @@ impl<
                             .define(&mut store, "env", "__indirect_function_table", child_table)
                             .unwrap();
 
-                        let __asyncify_state = wasmtime::Global::new(
-                            &mut store,
-                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-                            Val::I32(0),
-                        )
-                        .unwrap();
-                        let __asyncify_data = wasmtime::Global::new(
-                            &mut store,
-                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-                            Val::I32(0),
-                        )
-                        .unwrap();
-                        linker
-                            .define(&mut store, "env", "__asyncify_state", __asyncify_state)
-                            .unwrap();
-                        linker
-                            .define(&mut store, "env", "__asyncify_data", __asyncify_data)
-                            .unwrap();
+                        linker.attach_asyncify(&mut store).unwrap();
 
                         for (name, path, module) in modules.iter().skip(1) {
                             // Read dylink metadata for this preloaded (library) module.
@@ -453,7 +427,9 @@ impl<
                                 .unwrap();
 
                             let module_name = module.name().unwrap();
-                            let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
+                            let module_memory_base = *memory_base_table
+                                .get(module_name)
+                                .expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
                             // Link the library instance into the main linker namespace.
@@ -470,7 +446,7 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     path.clone(),
-                                    &global_snapshots[global_snapshots_index].1
+                                    &global_snapshots[global_snapshots_index].1,
                                 )
                                 .unwrap();
                             global_snapshots_index += 1;
@@ -503,11 +479,11 @@ impl<
                         for (index, global) in instance.all_globals(store.as_context_mut().0) {
                             collected_global.push((index, global.clone()));
                         }
-                        
+
                         if collected_global.len() != snapshots.len() {
                             panic!("snapshot mismatch!");
                         }
-                        
+
                         for i in 0..snapshots.len() {
                             if snapshots[i].0 != collected_global[i].0 {
                                 panic!("Global Index mismatch");
@@ -519,13 +495,27 @@ impl<
                             let target = match ty.content() {
                                 ValType::I32 => {
                                     let raw = ValRaw::i32(target_val as u32 as i32);
-                                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
-                                },
+                                    unsafe {
+                                        Val::from_raw(
+                                            store.as_context_mut(),
+                                            raw,
+                                            ty.content().clone(),
+                                        )
+                                    }
+                                }
                                 ValType::I64 => {
                                     let raw = ValRaw::i64(target_val);
-                                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
-                                },
-                                _ => { unreachable!() }
+                                    unsafe {
+                                        Val::from_raw(
+                                            store.as_context_mut(),
+                                            raw,
+                                            ty.content().clone(),
+                                        )
+                                    }
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
                             };
 
                             collected_global[i].1.set(store.as_context_mut(), target);
@@ -607,7 +597,6 @@ impl<
                     barrier_clone.wait();
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
-                    // e.g. __stack_pointer, __indirect_function_table, etc.
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
                     new_child_ctx.update_linker(linker);
@@ -900,24 +889,7 @@ impl<
                         };
                         linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
 
-                        let __asyncify_state = wasmtime::Global::new(
-                            &mut store,
-                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-                            Val::I32(0),
-                        )
-                        .unwrap();
-                        let __asyncify_data = wasmtime::Global::new(
-                            &mut store,
-                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-                            Val::I32(0),
-                        )
-                        .unwrap();
-                        linker
-                            .define(&mut store, "env", "__asyncify_state", __asyncify_state)
-                            .unwrap();
-                        linker
-                            .define(&mut store, "env", "__asyncify_data", __asyncify_data)
-                            .unwrap();
+                        linker.attach_asyncify(&mut store).unwrap();
 
                         for (name, path, module) in modules.iter().skip(1) {
                             // Read dylink metadata for this preloaded (library) module.
@@ -985,11 +957,10 @@ impl<
                         for (index, global) in instance.all_globals(store.as_context_mut().0) {
                             collected_global.push((index, global.clone()));
                         }
-                        
                         if collected_global.len() != snapshots.len() {
                             panic!("snapshot mismatch!");
                         }
-                        
+
                         for i in 0..snapshots.len() {
                             if snapshots[i].0 != collected_global[i].0 {
                                 panic!("Global Index mismatch");
@@ -1581,35 +1552,6 @@ impl<
         }
     }
 
-    // fork the memory to child
-    // Memory is attached to Linker instead of a specific wasm instance since
-    // the memory needs to be shared between threads. To achieve this, we have to set the
-    // memory to be imported memory, then share the imported memory to all the child thread.
-    // Then when we want to fork a thread, we need to clone the Linker, then replace the
-    // imported memory that it links to a new memory region.
-    fn fork_memory(&mut self, store: &StoreOpaque) {
-        // allow shadowing means defining a symbol that already exits would replace the old one
-        self.linker.allow_shadowing(true);
-        // main module is the first module in the module list
-        // create a new SharedMemory from main module's memory plan
-        let main_module = &self.modules.get(0).unwrap().2;
-        for import in main_module.imports() {
-            if let Some(m) = import.ty().memory() {
-                if m.is_shared() {
-                    // define a new shared memory for the child
-                    let mut plan = m.clone();
-
-                    let mem = SharedMemory::new(main_module.engine(), plan.clone()).unwrap();
-                    self.linker
-                        .define_with_inner(store, import.module(), import.name(), mem.clone())
-                        .unwrap();
-                }
-            }
-        }
-        // set shadowing state back
-        self.linker.allow_shadowing(false);
-    }
-
     // fork the state
     pub fn fork(&self) -> Self {
         let forked_ctx = Self {
@@ -2029,6 +1971,37 @@ where
     U: Clone + Send + Sync + 'static,
 {
     caller.data().get_ctx().tid as i32
+}
+
+// attach a new SharedMemory to the Linker for multi-threading usage
+// Warning: only set need_init to true for first cage initialization
+pub fn attach_shared_memory<
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+>(
+    store: impl AsContext<Data = T>,
+    mut linker: &mut Linker<T>,
+    module: &Module,
+    need_init: bool,
+) -> Result<()> {
+    for import in module.imports() {
+        if let Some(m) = import.ty().memory() {
+            if m.is_shared() {
+                let mem = SharedMemory::new(module.engine(), m.clone())?;
+                if need_init {
+                    // in case of first cage
+                    // Initialize vmmap immediately after creating the shared linear memory
+                    let memory_base = mem.get_memory_base();
+                    cage::init_vmmap(CAGE_START_ID as u64, memory_base as usize, None);
+                }
+                linker.define(&store, import.module(), import.name(), mem.clone())?;
+
+                return Ok(());
+            }
+        }
+    }
+
+    Err(anyhow!("Main Module does not contain a shared memory"))
 }
 
 // check if the module has the necessary exported Asyncify functions
