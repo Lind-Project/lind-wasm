@@ -24,8 +24,6 @@ use wasmtime_lind_utils::LindGOT;
 use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
 
-// static INIT_TLS_BASE_MAP: LazyLock<DashMap<String, i32>> = LazyLock::new(DashMap::new);
-
 /// Structure used to link wasm modules/instances together.
 ///
 /// This structure is used to assist in instantiating a [`Module`]. A [`Linker`]
@@ -1143,8 +1141,7 @@ impl<T> Linker<T> {
                 )?;
                 // Provide `__memory_base` for the library (used by data relocs).
                 module_linker.define(&mut store, "env", "__memory_base", memory_base);
-                // let library_memory_base_name =
-                //     format!("{}.{}", "__memory_base", module.name().unwrap());
+                // keep a recording of this memory base in main linker as well
                 self.define(&mut store, "lib.memory_base", &module.name().unwrap(), memory_base);
                 let handler = memory_base.get_handler_as_u32(&mut store);
 
@@ -1268,19 +1265,6 @@ impl<T> Linker<T> {
                     let _ = constructor.call(store.as_context_mut(), ()).unwrap();
                 }
 
-                // {
-                //     let tls_key = path.clone();
-                //     let tls_base = instance
-                //         .get_export(store.as_context_mut(), "__tls_base")
-                //         .unwrap();
-                //     let tls_base = tls_base.into_global().unwrap();
-                //     let p = tls_base.get_handler_as_u32(store.as_context_mut());
-
-                //     let val = unsafe { *p };
-                //     // println!("[debug] set TLS_BASE key: {} to {}", tls_key, val);
-                //     INIT_TLS_BASE_MAP.insert(tls_key.to_string(), val as i32);
-                // }
-
                 self.instance_dylink(store, module_name, instance)
             }
         }
@@ -1390,48 +1374,10 @@ impl<T> Linker<T> {
                     let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
                 }
 
-                // we should and only should apply global relocs for child libraries
-                // let reloc = instance.get_typed_func::<(), ()>(
-                //     store.as_context_mut(),
-                //     "__wasm_apply_global_relocs",
-                // )?;
-                // #[cfg(feature = "debug-dylink")]
-                // println!("[debug] child library start reloc func");
-                // let _ = reloc.call(store.as_context_mut(), ()).unwrap();
-
-                // {
-                //     let tls_key = path.clone();
-                //     let tls_base = instance
-                //         .get_export(store.as_context_mut(), "__tls_base")
-                //         .unwrap();
-                //     let tls_base = tls_base.into_global().unwrap();
-                //     let p = tls_base.get_handler_as_u32(store.as_context_mut());
-
-                //     // println!("[debug] get TLS_BASE key: {}", tls_key);
-                //     let saved = *INIT_TLS_BASE_MAP.get(&tls_key).unwrap() as u32;
-
-                //     if saved != 0 {
-                //         unsafe {
-                //             *p = saved;
-                //         }
-                //     }
-                // }
-
                 let mut collected_global = vec![];
                 for (index, global) in instance.all_globals(store.as_context_mut().0) {
                     collected_global.push((index, global.clone()));
                 }
-
-                // println!("[debug] module with child, new module");
-                // for (index, global) in collected_global {
-                //     let val = global.get(store.as_context_mut());
-                    
-                //     println!("index: {:?}, val: {:?}", index, val);
-                // }
-                // println!("[debug] snapshots");
-                // for (index, val) in snapshots {
-                //     println!("index: {:?}, val: {}", index, val);
-                // }
 
                 if collected_global.len() != snapshots.len() {
                     panic!("snapshot mismatch!");
@@ -1570,15 +1516,6 @@ impl<T> Linker<T> {
                 for (name, func) in funcs {
                     let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
                 }
-
-                // we should and only should apply global relocs for child libraries
-                // let reloc = instance.get_typed_func::<(), ()>(
-                //     store.as_context_mut(),
-                //     "__wasm_apply_global_relocs",
-                // )?;
-                // #[cfg(feature = "debug-dylink")]
-                // println!("[debug] child library start reloc func");
-                // let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                 if let Ok(init_tls) =
                     instance.get_typed_func::<i32, ()>(store.as_context_mut(), "__wasm_init_tls")
@@ -2006,10 +1943,6 @@ impl<T> Linker<T> {
             }
         }
         Ok(())
-    }
-
-    fn remove(&mut self, key: ImportKey, item: Definition) {
-        // self.map.remove(&item);
     }
 
     fn import_key(&mut self, module: &str, name: Option<&str>) -> ImportKey {

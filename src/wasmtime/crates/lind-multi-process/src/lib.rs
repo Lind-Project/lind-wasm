@@ -357,26 +357,13 @@ impl<
                     let child_ctx = get_cx(&mut child_host);
                     child_ctx.cageid = child_cageid as i32;
 
-                    // create a new memory area for child
-                    // child_ctx.fork_memory(&store_inner);
                     // main module is the first module in the module list
                     let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
 
                     let lind_manager = child_ctx.lind_manager.clone();
-                    // let mut linker = child_ctx.linker.clone();
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
-
-                    // copy the value of all Global into the child instance
-                    // and retrieve epoch_handler from Global snapshot
-                    // let epoch_handler = if dylink_enabled {
-                    //     linker
-                    //         .set_global_define_snapshot(&mut store, snapshot.as_ref().unwrap())
-                    //         .unwrap()
-                    // } else {
-                    //     None
-                    // };
 
                     let (mut linker,
                          memory_base_table,
@@ -464,15 +451,6 @@ impl<
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
-
-                            // get the library's memory_base from Global snapshot, we need to provide the same value for child library module's memory base
-                            // let module_memory_base = linker
-                            //     .get_memory_base_from_snapshot(
-                            //         &mut store,
-                            //         snapshot.as_ref().unwrap(),
-                            //         module.name().unwrap(),
-                            //     )
-                            //     .unwrap();
 
                             let module_name = module.name().unwrap();
                             let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
@@ -893,8 +871,6 @@ impl<
                     let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
                     let lind_manager = child_ctx.lind_manager.clone();
 
-                    // let mut linker = child_ctx.linker.clone();
-                    // linker.allow_shadowing(true);
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
 

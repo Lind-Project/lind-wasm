@@ -1528,7 +1528,6 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     pub fn get_global_snapshot(&mut self) -> Vec<(usize, Vec<(GlobalIndex, i64)>)> {
-        // println!("[debug] reach get_global_snapshot");
         let mut collected = vec![];
         let instance_length = self.0.instances.len();
         for i in 0..instance_length {
