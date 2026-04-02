@@ -36,7 +36,7 @@ use super::Val;
 /// is already set in copied memory), leaving __tls_base at the module default
 /// of 0. This causes all TLS variable accesses to read/write wrong addresses.
 /// We save the value here and restore it for each forked child.
-static INIT_TLS_BASE: AtomicI32 = AtomicI32::new(0);
+// static INIT_TLS_BASE: AtomicI32 = AtomicI32::new(0);
 
 /// Describes how a Lind-Wasm instance is being instantiated.
 ///

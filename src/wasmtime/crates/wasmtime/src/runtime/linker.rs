@@ -1,7 +1,7 @@
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::{StoreId, StoreOpaque};
-use crate::{prelude::*, Global, GlobalType, IntoFunc, Table};
+use crate::{Global, GlobalType, IntoFunc, SharedMemory, Table, prelude::*};
 use crate::{
     AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
@@ -24,7 +24,7 @@ use wasmtime_lind_utils::LindGOT;
 use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
 
-static INIT_TLS_BASE_MAP: LazyLock<DashMap<String, i32>> = LazyLock::new(DashMap::new);
+// static INIT_TLS_BASE_MAP: LazyLock<DashMap<String, i32>> = LazyLock::new(DashMap::new);
 
 /// Structure used to link wasm modules/instances together.
 ///
@@ -354,70 +354,132 @@ impl<T> Linker<T> {
         Ok(())
     }
 
-    pub fn get_global_define_snapshot(
+    pub fn get_linker_snapshot_for_child(
         &mut self,
         mut store: impl AsContextMut<Data = T>,
-        module: &Module,
-    ) -> anyhow::Result<Vec<(String, String, GlobalType, Val)>> {
-        let mut collected = vec![];
+        share_memory: bool,
+    ) -> (Vec<(String, String, GlobalType, Val)>, Vec<(String, String, Arc<HostFunc>)>, Option<(String, String, SharedMemory)>) {
+        // we collect two items from parent linker to child linker
+        // 1. GOT entries defined as wasm global (i.e. GOT.mem)
+        // 2. Host-defined functions, which are independent to Store
         let mut globals = vec![];
-        for (module, name, ext) in self.iter(&mut store) {
-            match ext {
-                Extern::Global(global) => {
-                    collected.push((module.to_string(), name.to_string(), global.clone()));
-                }
-                _ => {}
+        let mut funcs = vec![];
+        let mut memory = None;
+
+        for (key, item) in self.map.iter() {
+            let module = &*self.strings[key.module];
+            let name = &*self.strings[key.name];
+
+            match item {
+                Definition::Extern(ext, _) => {
+                    match ext {
+                        Extern::Global(global) => {
+                            if module == "GOT.mem" || module == "GOT.func" // GOT entries
+                               || (module == "env" && name == "__memory_base") // main module memory base
+                               || (module == "env" && name == "__table_base") // main module table base
+                               || module == "lib.memory_base" // library __memory_base
+                               || (module == "env" && name == "__stack_pointer") // stack pointer
+                               || (module == "lind" && name == "epoch") // signal epoch
+                            {
+                                // NOTE: asyncify state is intentionally not copied
+                                let global_ty = global.ty(&store);
+                                let value = global.get(&mut store);
+                                globals.push((
+                                    module.to_string(),
+                                    name.to_string(),
+                                    global_ty.clone(),
+                                    value.clone(),
+                                ));
+                            }
+                        }
+                        Extern::Func(func) => {
+                            // no-np
+                            // Those are functions defined by library
+                            // Those has to be "cloned" by re-instantiating
+                            // the library and link the exported function again
+                        },
+                        Extern::Table(table) => {
+                            // no-op
+                            // indirect_table is handled explicitly by the fork logic
+                        },
+                        Extern::Memory(memory) => {
+                            // lind wasm instance shouldn't have any Memory 
+                            // (They are all SharedMemory instead)
+                            unreachable!()
+                        },
+                        Extern::SharedMemory(shared_memory) => {
+                            if share_memory {
+                                // if memory should be shared between new linker
+                                // (e.g. in case of new thread creation)
+                                // collect the SharedMemory Instance as well
+                                memory = Some((
+                                    module.to_string(),
+                                    name.to_string(),
+                                    shared_memory.clone(),
+                                ));
+                            } else {
+                                // otherwise, do not collect SharedMemory
+                                // and have new instance creating a new one for itself
+                            }
+                        },
+                    }
+                },
+                Definition::HostFunc(host_func) => {
+                    funcs.push((
+                        module.to_string(),
+                        name.to_string(),
+                        host_func.clone(),
+                    ));
+                },
             }
         }
 
-        for (module, name, global) in collected {
-            let global_ty = global.ty(&store);
-            let value = global.get(&mut store);
-            let cloned_value = value.clone();
-            globals.push((
-                module.to_string(),
-                name.to_string(),
-                global_ty.clone(),
-                cloned_value,
-            ));
-        }
-        Ok(globals)
+        (globals, funcs, memory)
     }
-
-    pub fn set_global_define_snapshot(
-        &mut self,
+    
+    pub fn new_child_linker(
         mut store: impl AsContextMut<Data = T>,
+        engine: &Engine,
         globals: &Vec<(String, String, GlobalType, Val)>,
-    ) -> anyhow::Result<Option<u64>> {
-        self.allow_shadowing(true);
+        hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
+        shared_memory: &Option<(String, String, SharedMemory)>,
+    ) -> Result<(Self, HashMap<String, i32>, Option<*mut u64>)> {
+        let mut new_linker = Self::new(engine);
+
+        // a mapping of library name to its memory base value
+        let mut memory_base_table = HashMap::new();
+
         let mut epoch_handler = None;
+
+        // define globals to the new linker
         for (module, name, ty, val) in globals {
             let cloned_global = Global::new(&mut store, ty.clone(), val.clone())?;
-            self.define(&mut store, &module, &name, cloned_global)?;
+
+            // collect library's memory base for quick look up when instantiate the child library
+            if module == "lib.memory_base" {
+                let memory_base = val.i32().unwrap();
+                memory_base_table.insert(name.clone(), memory_base);
+            }
 
             if module == "lind" && name == "epoch" {
-                epoch_handler = Some(cloned_global.get_handler_as_u64(&mut store) as u64);
+                epoch_handler = Some(cloned_global.get_handler_as_u64(&mut store));
             }
-        }
-        self.allow_shadowing(false);
-        Ok(epoch_handler)
-    }
 
-    pub fn get_memory_base_from_snapshot(
-        &self,
-        mut store: impl AsContextMut<Data = T>,
-        globals: &Vec<(String, String, GlobalType, Val)>,
-        name: &str,
-    ) -> Option<i32> {
-        for (module, global_name, ty, val) in globals {
-            let expected_name = format!("{}.{}", "__memory_base", name);
-            if global_name == &expected_name {
-                if let Val::I32(i) = val {
-                    return Some(i.clone());
-                }
-            }
+            new_linker.define(&mut store, &module, &name, cloned_global)?;
         }
-        None
+
+        // attach host functions to the new linker
+        for (ref module, ref name, hostfunc) in hostfuncs {
+            let key = new_linker.import_key(module, Some(name));
+            new_linker.insert(key, Definition::HostFunc(hostfunc.clone()))?;
+        }
+
+        // attach the SharedMemory if exist
+        if let Some((module, name, memory)) = shared_memory {
+            new_linker.define(&mut store, &module, &name, memory.clone())?;
+        }
+
+        Ok((new_linker, memory_base_table, epoch_handler))
     }
 
     /// Implement any function imports of the [`Module`] with a function that
@@ -1081,9 +1143,9 @@ impl<T> Linker<T> {
                 )?;
                 // Provide `__memory_base` for the library (used by data relocs).
                 module_linker.define(&mut store, "env", "__memory_base", memory_base);
-                let library_memory_base_name =
-                    format!("{}.{}", "__memory_base", module.name().unwrap());
-                self.define(&mut store, "env", &library_memory_base_name, memory_base);
+                // let library_memory_base_name =
+                //     format!("{}.{}", "__memory_base", module.name().unwrap());
+                self.define(&mut store, "lib.memory_base", &module.name().unwrap(), memory_base);
                 let handler = memory_base.get_handler_as_u32(&mut store);
 
                 // Provide `__table_base` for the library (used by indirect calls / table relocs).
@@ -1206,18 +1268,18 @@ impl<T> Linker<T> {
                     let _ = constructor.call(store.as_context_mut(), ()).unwrap();
                 }
 
-                {
-                    let tls_key = path.clone();
-                    let tls_base = instance
-                        .get_export(store.as_context_mut(), "__tls_base")
-                        .unwrap();
-                    let tls_base = tls_base.into_global().unwrap();
-                    let p = tls_base.get_handler_as_u32(store.as_context_mut());
+                // {
+                //     let tls_key = path.clone();
+                //     let tls_base = instance
+                //         .get_export(store.as_context_mut(), "__tls_base")
+                //         .unwrap();
+                //     let tls_base = tls_base.into_global().unwrap();
+                //     let p = tls_base.get_handler_as_u32(store.as_context_mut());
 
-                    let val = unsafe { *p };
-                    // println!("[debug] set TLS_BASE key: {} to {}", tls_key, val);
-                    INIT_TLS_BASE_MAP.insert(tls_key.to_string(), val as i32);
-                }
+                //     let val = unsafe { *p };
+                //     // println!("[debug] set TLS_BASE key: {} to {}", tls_key, val);
+                //     INIT_TLS_BASE_MAP.insert(tls_key.to_string(), val as i32);
+                // }
 
                 self.instance_dylink(store, module_name, instance)
             }
@@ -1944,6 +2006,10 @@ impl<T> Linker<T> {
             }
         }
         Ok(())
+    }
+
+    fn remove(&mut self, key: ImportKey, item: Definition) {
+        // self.map.remove(&item);
     }
 
     fn import_key(&mut self, module: &str, name: Option<&str>) -> ImportKey {

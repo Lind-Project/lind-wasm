@@ -299,14 +299,11 @@ impl<
         // retrieve the child host
         let mut child_host = (self.fork_host)(caller.data());
 
-        // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
         let mut snapshot = if dylink_enabled {
             let child_ctx = get_cx(&mut child_host);
             let mut child_linker = child_ctx.linker.clone();
-            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
-            let snapshot = child_linker
-                .get_global_define_snapshot(&mut caller, main_module)
-                .unwrap();
+            let snapshot = child_linker.get_linker_snapshot_for_child(&mut caller, false);
+
             Some(snapshot)
         } else {
             None
@@ -361,25 +358,47 @@ impl<
                     child_ctx.cageid = child_cageid as i32;
 
                     // create a new memory area for child
-                    child_ctx.fork_memory(&store_inner);
+                    // child_ctx.fork_memory(&store_inner);
                     // main module is the first module in the module list
                     let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
 
                     let lind_manager = child_ctx.lind_manager.clone();
-                    let mut linker = child_ctx.linker.clone();
+                    // let mut linker = child_ctx.linker.clone();
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     // copy the value of all Global into the child instance
                     // and retrieve epoch_handler from Global snapshot
-                    let epoch_handler = if dylink_enabled {
-                        linker
-                            .set_global_define_snapshot(&mut store, snapshot.as_ref().unwrap())
-                            .unwrap()
-                    } else {
-                        None
-                    };
+                    // let epoch_handler = if dylink_enabled {
+                    //     linker
+                    //         .set_global_define_snapshot(&mut store, snapshot.as_ref().unwrap())
+                    //         .unwrap()
+                    // } else {
+                    //     None
+                    // };
+
+                    let (mut linker,
+                         memory_base_table,
+                         epoch_handler
+                        ) = Linker::new_child_linker(&mut store, &engine, &snapshot.as_ref().unwrap().0, &snapshot.as_ref().unwrap().1, &None)
+                                .expect("failed to create child linker");
+                    
+                    {
+                        for import in module.imports() {
+                            if let Some(m) = import.ty().memory() {
+                                if m.is_shared() {
+                                    // define a new shared memory for the child
+                                    let mut plan = m.clone();
+
+                                    let mem = SharedMemory::new(module.engine(), plan.clone()).unwrap();
+                                    linker
+                                        .define(&mut store, import.module(), import.name(), mem.clone())
+                                        .unwrap();
+                                }
+                            }
+                        }
+                    }
 
                     if dylink_enabled {
                         let mut child_table = {
@@ -397,11 +416,28 @@ impl<
                             );
                             wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
                         };
-                        linker.allow_shadowing(true);
                         linker
                             .define(&mut store, "env", "__indirect_function_table", child_table)
                             .unwrap();
-                        linker.allow_shadowing(false);
+
+                        let __asyncify_state = wasmtime::Global::new(
+                            &mut store,
+                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
+                            Val::I32(0),
+                        )
+                        .unwrap();
+                        let __asyncify_data = wasmtime::Global::new(
+                            &mut store,
+                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
+                            Val::I32(0),
+                        )
+                        .unwrap();
+                        linker
+                            .define(&mut store, "env", "__asyncify_state", __asyncify_state)
+                            .unwrap();
+                        linker
+                            .define(&mut store, "env", "__asyncify_data", __asyncify_data)
+                            .unwrap();
 
                         for (name, path, module) in modules.iter().skip(1) {
                             // Read dylink metadata for this preloaded (library) module.
@@ -430,13 +466,16 @@ impl<
                                 .unwrap();
 
                             // get the library's memory_base from Global snapshot, we need to provide the same value for child library module's memory base
-                            let module_memory_base = linker
-                                .get_memory_base_from_snapshot(
-                                    &mut store,
-                                    snapshot.as_ref().unwrap(),
-                                    module.name().unwrap(),
-                                )
-                                .unwrap();
+                            // let module_memory_base = linker
+                            //     .get_memory_base_from_snapshot(
+                            //         &mut store,
+                            //         snapshot.as_ref().unwrap(),
+                            //         module.name().unwrap(),
+                            //     )
+                            //     .unwrap();
+
+                            let module_name = module.name().unwrap();
+                            let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
                             // Link the library instance into the main linker namespace.
@@ -772,10 +811,8 @@ impl<
         let mut snapshot = if dylink_enabled {
             let child_ctx = get_cx(&mut child_host);
             let mut child_linker = child_ctx.linker.clone();
-            let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
-            let snapshot = child_linker
-                .get_global_define_snapshot(&mut caller, main_module)
-                .unwrap();
+            let snapshot = child_linker.get_linker_snapshot_for_child(&mut caller, true);
+
             Some(snapshot)
         } else {
             None
@@ -856,20 +893,22 @@ impl<
                     let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
                     let lind_manager = child_ctx.lind_manager.clone();
 
-                    let mut linker = child_ctx.linker.clone();
-                    linker.allow_shadowing(true);
+                    // let mut linker = child_ctx.linker.clone();
+                    // linker.allow_shadowing(true);
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
-                    // copy the value of all Global into the child instance
-                    // and retrieve epoch_handler from Global snapshot
-                    let epoch_handler = if dylink_enabled {
-                        linker.set_global_define_snapshot(&mut store, snapshot.as_ref().unwrap()).unwrap()
-                    } else {
-                        None
-                    };
+                    let (mut linker,
+                         memory_base_table,
+                         epoch_handler
+                        ) = Linker::new_child_linker(&mut store,
+                                &engine,
+                                &snapshot.as_ref().unwrap().0,
+                                &snapshot.as_ref().unwrap().1,
+                                &snapshot.as_ref().unwrap().2
+                        ).expect("failed to create child linker");
 
                     if dylink_enabled {
                         let mut child_table = {
@@ -883,9 +922,26 @@ impl<
                             let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
                             wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
                         };
-                        linker.allow_shadowing(true);
                         linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
-                        linker.allow_shadowing(false);
+
+                        let __asyncify_state = wasmtime::Global::new(
+                            &mut store,
+                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
+                            Val::I32(0),
+                        )
+                        .unwrap();
+                        let __asyncify_data = wasmtime::Global::new(
+                            &mut store,
+                            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
+                            Val::I32(0),
+                        )
+                        .unwrap();
+                        linker
+                            .define(&mut store, "env", "__asyncify_state", __asyncify_state)
+                            .unwrap();
+                        linker
+                            .define(&mut store, "env", "__asyncify_data", __asyncify_data)
+                            .unwrap();
 
                         for (name, path, module) in modules.iter().skip(1) {
                             // Read dylink metadata for this preloaded (library) module.
@@ -911,8 +967,8 @@ impl<
                                 wasmtime::Ref::Func(None),
                             ).unwrap();
 
-                            // get the library's memory_base from Global snapshot, we need to provide the same value for child thread library module's memory base
-                            let module_memory_base = linker.get_memory_base_from_snapshot(&mut store, snapshot.as_ref().unwrap(), module.name().unwrap()).unwrap();
+                            let module_name = module.name().unwrap();
+                            let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
                             // Link the library instance into the main linker namespace.

@@ -2551,7 +2551,7 @@ impl HostContext {
 /// Technically this structure needs a `<T>` type parameter to connect to the
 /// `Store<T>` itself, but that's an unsafe contract of using this for now
 /// rather than part of the struct type (to avoid `Func<T>` in the API).
-pub(crate) struct HostFunc {
+pub struct HostFunc {
     ctx: HostContext,
 
     // Stored to unregister this function's signature with the engine when this

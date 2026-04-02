@@ -1532,16 +1532,13 @@ impl<'a, T> StoreContextMut<'a, T> {
         let mut collected = vec![];
         let instance_length = self.0.instances.len();
         for i in 0..instance_length {
-            // println!("instance id: {}", i);
             let instance = self.0.instance_mut(InstanceId(i));
             let mut globals = vec![];
             for (index, global) in instance.all_globals() {
                 let val = unsafe {
                     *(*global.definition).as_i64_mut()
                 };
-                // collected.push((i, index, val));
                 globals.push((index, val));
-                // println!("index: {:?}: val: {}", index, val);
             }
             if globals.len() > 0 {
                 collected.push((i, globals));
