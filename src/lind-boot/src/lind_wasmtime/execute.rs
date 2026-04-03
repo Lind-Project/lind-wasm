@@ -395,7 +395,7 @@ pub fn execute_with_lind(
             // so that newly forked cage could use the Linker with necessary library loaded
             let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
             let mut linker = linker.lock().unwrap();
-            ctx.update_linker(linker.clone());
+            ctx.attach_linker(linker.clone());
         }
     }
 

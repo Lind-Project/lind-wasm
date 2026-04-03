@@ -165,7 +165,9 @@ impl<
         })
     }
 
-    pub fn update_linker(&mut self, linker: Linker<T>) {
+    pub fn attach_linker(&mut self, linker: Linker<T>) {
+        // debug_assert!(self.linker.is_none());
+
         self.linker = Some(linker);
     }
 
@@ -299,7 +301,7 @@ impl<
         // retrieve the child host
         let mut child_host = (self.fork_host)(caller.data());
 
-        let mut snapshot = if dylink_enabled {
+        let mut snapshot = {
             let mut parent_host = caller.data_mut();
             let parent_ctx = get_cx(&mut parent_host);
             // has to clone to prevent double mutable reference of caller
@@ -308,9 +310,7 @@ impl<
 
             let snapshot = parent_linker.get_linker_snapshot_for_child(&mut caller, false);
 
-            Some(snapshot)
-        } else {
-            None
+            snapshot
         };
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
@@ -372,9 +372,9 @@ impl<
                     let (mut linker, memory_base_table, epoch_handler) = Linker::new_child_linker(
                         &mut store,
                         &engine,
-                        &snapshot.as_ref().unwrap().0,
-                        &snapshot.as_ref().unwrap().1,
-                        &snapshot.as_ref().unwrap().2,
+                        &snapshot.0,
+                        &snapshot.1,
+                        &snapshot.2,
                     )
                     .expect("failed to create child linker");
 
@@ -555,7 +555,7 @@ impl<
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
-                    new_child_ctx.update_linker(linker);
+                    new_child_ctx.attach_linker(linker);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -729,7 +729,7 @@ impl<
         let get_cx = self.get_cx.clone();
 
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
-        let mut snapshot = if dylink_enabled {
+        let mut snapshot = {
             let mut parent_host = caller.data_mut();
             let parent_ctx = get_cx(&mut parent_host);
             // has to clone to prevent double mutable reference of caller
@@ -738,9 +738,7 @@ impl<
 
             let snapshot = parent_linker.get_linker_snapshot_for_child(&mut caller, true);
 
-            Some(snapshot)
-        } else {
-            None
+            snapshot
         };
 
         // retrieve the child host
@@ -831,9 +829,9 @@ impl<
                          epoch_handler
                         ) = Linker::new_child_linker(&mut store,
                                 &engine,
-                                &snapshot.as_ref().unwrap().0,
-                                &snapshot.as_ref().unwrap().1,
-                                &snapshot.as_ref().unwrap().2
+                                &snapshot.0,
+                                &snapshot.1,
+                                &snapshot.2
                         ).expect("failed to create child linker");
 
                     if dylink_enabled {
@@ -989,7 +987,7 @@ impl<
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
-                    new_child_ctx.update_linker(linker);
+                    new_child_ctx.attach_linker(linker);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
