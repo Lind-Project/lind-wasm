@@ -1,16 +1,16 @@
-/* geteuid_threaded.c — Cage-side test for concurrent grate calls.
+/* store_race.c — Cage-side test for concurrent grate Store access (#961).
  *
- * Spawns NUM_THREADS threads that each call geteuid() CALLS_PER_THREAD
- * times in a tight loop. Since geteuid is interposed by the grate,
- * this generates concurrent grate_callback_trampoline invocations
- * from different host threads into the same Wasmtime Store.
+ * Spawns NUM_THREADS threads that each call geteuid() (interposed by the
+ * grate) CALLS_PER_THREAD times. This forces concurrent
+ * grate_callback_trampoline invocations from different host threads into
+ * the same Wasmtime Store, reproducing the Store concurrency bug.
  *
- * This reproduces the Store concurrency bug (#961): multiple threads
- * calling TypedFunc::call() on the same Store races on StoreData's
- * internal Vecs, corrupting Wasmtime state.
+ * The grate handler does heap allocations, shared state mutation, and
+ * pointer chasing to exercise the same memory patterns as a real grate
+ * (e.g. fdtables/DashMap).
  *
- * Pair with: geteuid_threaded_grate.c
- * Run: lind-wasm geteuid_threaded_grate.cwasm geteuid_threaded.cwasm
+ * Pair with: store_race_grate.c
+ * Run: lind-wasm store_race_grate.cwasm store_race.cwasm
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +48,7 @@ int main(void) {
     for (int i = 0; i < NUM_THREADS; i++)
         pthread_join(threads[i], NULL);
 
-    printf("[Cage | geteuid] PASS: %d threads x %d calls returned 10\n",
+    printf("[store_race] PASS: %d threads x %d calls returned 10\n",
            NUM_THREADS, CALLS_PER_THREAD);
     return 0;
 }
