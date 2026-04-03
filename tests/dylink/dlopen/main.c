@@ -8,7 +8,7 @@ int main(void) {
     char *error;
 
     /* Load the math library */
-    handle = dlopen("lib.wasm", RTLD_LAZY);
+    handle = dlopen("lib.cwasm", RTLD_LAZY);
     if (!handle) {
         fprintf(stderr, "dlopen failed: %s\n", dlerror());
         return 1;

@@ -72,7 +72,7 @@ EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
 # Check if LIND_DEBUG is defined (set by build.rs when `lind_debug` is enabled)
 if [ "$LIND_DEBUG" ]; then
-DEFINES="$DEFINES -DLIND_DEBUG"
+  DEFINES="$DEFINES -DLIND_DEBUG"
 fi
 
 # Build glibc

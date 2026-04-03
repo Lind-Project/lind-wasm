@@ -233,11 +233,7 @@ fn add_runtime_to_linker<
 
     linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
         let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
-        // sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
-        println!(
-            "Lind Warning: {}",
-            format!("FROM GUEST: {}", _panic_str).as_str()
-        );
+        sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
     })?;
 
     linker.func_wrap(
