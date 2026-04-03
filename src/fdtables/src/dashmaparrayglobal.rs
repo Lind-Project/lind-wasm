@@ -278,21 +278,24 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
     assert!(check_cage_exists(srccageid),"Unknown cageid in fdtable access");
     assert!(!check_cage_exists(newcageid),"Known cageid in fdtable access");
 
-    // Insert a copy and ensure it didn't exist...
-    // I've checked this should be a copy, not a ref to the same thing.  
-    let hmcopy = *FDTABLE.get(&srccageid).unwrap();
+    // Collect only the populated entries (typically 3-5) into a small Vec
+    // instead of copying the entire ~24KB array onto the WASM stack.
+    let entries: Vec<(usize, FDTableEntry)> = {
+        let guard = FDTABLE.get(&srccageid).unwrap();
+        guard.iter().enumerate()
+            .filter_map(|(i, e)| e.map(|entry| (i, entry)))
+            .collect()
+    };
 
-    // Increment copied items
-    for entry in FDTABLE.get(&srccageid).unwrap().iter() {
-        if entry.is_some() {
-            _increment_fdcount(entry.unwrap());
+    FDTABLE.insert(newcageid, [Option::None; FD_PER_PROCESS_MAX as usize]);
+    {
+        let mut dst = FDTABLE.get_mut(&newcageid).unwrap();
+        for (i, entry) in &entries {
+            dst[*i] = Some(*entry);
+            _increment_fdcount(*entry);
         }
     }
 
-    assert!(FDTABLE.insert(newcageid, hmcopy).is_none());
-    
-    // I'm not going to bother to check the number of fds used overall yet...
-    //    Err(threei::Errno::EMFILE as u64),
     Ok(())
 }
 
@@ -713,11 +716,12 @@ pub fn convert_virtualfds_for_poll(cageid:u64, virtualfds:HashSet<u64>) -> (Hash
 
     assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
-    let thefdrow = *FDTABLE.get(&cageid).unwrap();
+    // Hold the guard and read through it instead of copying ~24KB onto the stack.
+    let thefdrow = FDTABLE.get(&cageid).unwrap();
     let mut mappingtable:HashMap<(u32,u64),u64> = HashMap::new();
     let mut rethashmap:HashMap<u32,HashSet<(u64,FDTableEntry)>> = HashMap::new();
 
-    
+
     // BUG?: I'm ignoring the fact that virtualfds can show up multiple times.
     // I'm not sure this actually matters, but I didn't think hard about it.
     for virtfd in virtualfds {
