@@ -60,10 +60,9 @@ pub trait LindHost<T, U> {
 // the sub modules to directly interact with the top level runtime engine. But multi-processing, especially exec syscall,
 // would heavily require to do so. So the only convenient way to break the rule and communicate with the
 // top level runtime engine is abusing closures.
-#[derive(Clone)]
 pub struct LindCtx<T, U> {
     // linker used by the module
-    linker: Linker<T>,
+    linker: Option<Linker<T>>,
     // the module associated with the ctx
     modules: Vec<(String, String, Module)>,
 
@@ -153,7 +152,7 @@ impl<
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
-            linker,
+            linker: Some(linker),
             modules: modules.clone(),
             cageid,
             tid,
@@ -167,7 +166,7 @@ impl<
     }
 
     pub fn update_linker(&mut self, linker: Linker<T>) {
-        self.linker = linker;
+        self.linker = Some(linker);
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -301,9 +300,13 @@ impl<
         let mut child_host = (self.fork_host)(caller.data());
 
         let mut snapshot = if dylink_enabled {
-            let child_ctx = get_cx(&mut child_host);
-            let mut child_linker = child_ctx.linker.clone();
-            let snapshot = child_linker.get_linker_snapshot_for_child(&mut caller, false);
+            let mut parent_host = caller.data_mut();
+            let parent_ctx = get_cx(&mut parent_host);
+            // has to clone to prevent double mutable reference of caller
+            // TODO: may worth a refactor in the future for performance
+            let mut parent_linker = parent_ctx.linker.clone().unwrap();
+
+            let snapshot = parent_linker.get_linker_snapshot_for_child(&mut caller, false);
 
             Some(snapshot)
         } else {
@@ -724,19 +727,24 @@ impl<
         }
 
         let get_cx = self.get_cx.clone();
-        // retrieve the child host
-        let mut child_host = caller.data().clone();
 
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
         let mut snapshot = if dylink_enabled {
-            let child_ctx = get_cx(&mut child_host);
-            let mut child_linker = child_ctx.linker.clone();
-            let snapshot = child_linker.get_linker_snapshot_for_child(&mut caller, true);
+            let mut parent_host = caller.data_mut();
+            let parent_ctx = get_cx(&mut parent_host);
+            // has to clone to prevent double mutable reference of caller
+            // TODO: may worth a refactor in the future for performance
+            let mut parent_linker = parent_ctx.linker.clone().unwrap();
+            
+            let snapshot = parent_linker.get_linker_snapshot_for_child(&mut caller, true);
 
             Some(snapshot)
         } else {
             None
         };
+        
+        // retrieve the child host
+        let mut child_host = caller.data().clone();
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
         let mut global_snapshots_index = 0;
@@ -1473,10 +1481,10 @@ impl<
         }
     }
 
-    // fork the state
-    pub fn fork(&self) -> Self {
+    // fork the state for new process
+    pub fn fork_process(&self) -> Self {
         let forked_ctx = Self {
-            linker: self.linker.clone(),
+            linker: None,                               // Linker is explicitly set up by the caller
             modules: self.modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
@@ -1489,6 +1497,34 @@ impl<
         };
 
         return forked_ctx;
+    }
+
+    // fork the state for new thread
+    pub fn fork_thread(&self) -> Self {
+        let forked_ctx = Self {
+            linker: None,                               // Linker is explicitly set up by the caller
+            modules: self.modules.clone(),
+            cageid: self.cageid,
+            tid: self.tid,
+            next_threadid: self.next_threadid.clone(),
+            lind_manager: self.lind_manager.clone(),
+            lindboot_cli: self.lindboot_cli.clone(),
+            get_cx: self.get_cx.clone(),
+            fork_host: self.fork_host.clone(),
+            exec_host: self.exec_host.clone(),
+        };
+
+        return forked_ctx;
+    }
+}
+
+impl<T, U> Clone for LindCtx<T, U>
+where
+    T: Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
+    fn clone(&self) -> Self {
+        self.fork_thread()
     }
 }
 

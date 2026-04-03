@@ -23,7 +23,7 @@ impl HostCtx {
     pub fn fork(&self) -> Self {
         let forked_lind_environ = self.lind_environ.as_ref().map(|e| e.fork());
 
-        let forked_lind_fork_ctx = self.lind_fork_ctx.as_ref().map(|ctx| ctx.fork());
+        let forked_lind_fork_ctx = self.lind_fork_ctx.as_ref().map(|ctx| ctx.fork_process());
 
         Self {
             lind_environ: forked_lind_environ,
