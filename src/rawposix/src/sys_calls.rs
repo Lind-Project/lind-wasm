@@ -18,12 +18,13 @@ use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
-    MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+    MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_DATA, RLIMIT_NOFILE,
-    RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK,
-    WNOHANG,
+    RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK,
+    SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
@@ -1208,6 +1209,10 @@ pub extern "C" fn prlimit64_syscall(
             RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => {
                 old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
                 old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
+            }
+            RLIMIT_NPROC => {
+                old_limit.rlim_cur = MAX_CAGEID as u32;
+                old_limit.rlim_max = MAX_CAGEID as u32;
             }
             _ => {
                 lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));

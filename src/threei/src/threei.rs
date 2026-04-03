@@ -1,5 +1,6 @@
 //! Threei (Three Interposition) module
 use cage::memory::{check_addr_read, check_addr_rw};
+use cage::with_cage;
 use core::panic;
 use dashmap::DashMap;
 use dashmap::DashSet;
@@ -495,21 +496,23 @@ pub fn make_syscall(
 
         // Track this in-flight grate dispatch so cage_finalize() waits
         // for it to complete before removing the cage.
-        if let Some(grate_cage) = cage::get_cage(grateid) {
-            grate_cage
+        //
+        // If the cage is already dead, return early.
+        let cage_dead = with_cage(grateid, |grate| {
+            grate
                 .grate_inflight
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-            // After incrementing, recheck is_dead: if the cage started
-            // exiting between our earlier check and now, bail out.
-            if grate_cage
-                .is_dead
-                .load(std::sync::atomic::Ordering::Acquire)
-            {
-                grate_cage
+            if grate.is_dead.load(std::sync::atomic::Ordering::Acquire) {
+                grate
                     .grate_inflight
                     .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
                 return -(Errno::ESRCH as i32);
             }
+            0
+        });
+
+        if cage_dead != Some(0) {
+            return -(Errno::ESRCH as i32);
         }
 
         let grate_result = _call_grate_func(
@@ -530,11 +533,11 @@ pub fn make_syscall(
         );
 
         // Decrement the in-flight counter now that the dispatch returned.
-        if let Some(grate_cage) = cage::get_cage(grateid) {
-            grate_cage
+        with_cage(grateid, |grate| {
+            grate
                 .grate_inflight
                 .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
-        }
+        });
 
         if let Some(ret) = grate_result {
             return ret;

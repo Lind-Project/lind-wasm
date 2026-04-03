@@ -322,6 +322,25 @@ pub fn get_cage_or_debug_panic(cageid: u64, caller: &str) -> Option<Arc<Cage>> {
     result
 }
 
+/// Borrows the `cageid` cage and applies a function `f` to it, return `Some(R)` or `None`
+/// depending on whether tha cage is out of range or does not exist.
+///
+/// Preferred over `get_cage` for synchronous operations where cloning the cage through an `Arc` is
+/// unnecessary.
+///
+/// SAFETY: Assumes that the cage cannot be removed while `f` is running (e.g. by ensuring
+/// `grate_inflight > 0`).
+pub fn with_cage<F, R>(cageid: u64, f: F) -> Option<R>
+where
+    F: FnOnce(&Cage) -> R,
+{
+    if cageid >= MAX_CAGEID as u64 {
+        return None;
+    }
+
+    unsafe { CAGE_MAP[cageid as usize].as_deref().map(f) }
+}
+
 #[allow(static_mut_refs)]
 // SAFETY: This code is single-threaded during teardown, and no other
 // mutable or immutable references to `CAGE_MAP` exist while this call executes.
