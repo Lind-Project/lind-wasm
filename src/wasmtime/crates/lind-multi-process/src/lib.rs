@@ -236,10 +236,6 @@ impl<
                 .as_context_mut()
                 .set_asyncify_state(AsyncifyState::Normal);
 
-            // println!("catch_rewind: {}", retval);
-            // if retval == 0 {
-            //     thread::sleep(std::time::Duration::from_secs(1));
-            // }
             return Some(retval);
         }
 
@@ -254,7 +250,6 @@ impl<
     // 5. fork the memory region to child (including saved unwind context)
     // 6. start the rewind for both parent and child
     pub fn fork_call(&self, mut caller: &mut Caller<'_, T>, child_cageid: u64) -> Result<i32> {
-        // println!("[wasmtime] fork start");
         // get the base address of the memory
         let address = get_memory_base(&mut caller) as *mut u8;
 
@@ -365,7 +360,6 @@ impl<
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
                     child_ctx.cageid = child_cageid as i32;
-                    // println!("[wasmtime] parent cageid: {}, child cageid: {}", parent_cageid, child_cageid);
 
                     // main module is the first module in the module list
                     let mut main_module = &mut child_ctx.modules.get_mut(0).unwrap().2;
@@ -375,17 +369,17 @@ impl<
                     let modules = child_ctx.modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
-                    let (mut linker, memory_base_table, epoch_handler, child_memory_base) = Linker::new_child_linker(
-                        &mut store,
-                        &engine,
-                        &snapshot.0,
-                        &snapshot.1,
-                        &snapshot.2,
-                    )
-                    .expect("failed to create child linker");
+                    let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
+                        Linker::new_child_linker(
+                            &mut store,
+                            &engine,
+                            &snapshot.0,
+                            &snapshot.1,
+                            &snapshot.2,
+                        )
+                        .expect("failed to create child linker");
 
                     // early init vmmap
-                    // println!("[fork] in child routine: child_cageid: {}", child_cageid);
                     cage::init_vmmap(child_cageid, child_memory_base.unwrap() as usize, None);
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
@@ -611,10 +605,7 @@ impl<
                             .as_context_mut()
                             .set_syscall_asyncify_data(syscall_asyncify_data);
 
-                        // println!("[wasmtime] fork: child start");
-                        // thread::sleep(std::time::Duration::from_secs(1));
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
-                        // println!("[wasmtime] fork: child execution done: {:?}", invoke_res);
                         // Wasm instance crashed — perform the same cleanup
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.

@@ -82,13 +82,11 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// * `parent_cageid` - cageid of parent
 /// * `child_cageid` - caegid of child
 pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
-    // println!("fork vmmap from {} to {}", parent_cageid, child_cageid);
     // first retrieve corresponding vmmaps
     let parent_cage = get_cage(parent_cageid).unwrap();
     let child_cage = get_cage(child_cageid).unwrap();
     let parent_vmmap = parent_cage.vmmap.read();
     let child_vmmap = child_cage.vmmap.read();
-    // println!("[fork_vmmap] child_vmmap 1: {:?}", child_vmmap);
 
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
@@ -102,7 +100,6 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
         let addr_st = (entry.page_num << PAGESHIFT) as u32;
         let addr_len = (entry.npages << PAGESHIFT) as usize;
 
-        // println!("[fork-vmmap]: copy from {}, len: {}", addr_st, addr_len);
         // translate user address to system address
         let parent_st = parent_vmmap.user_to_sys(addr_st);
         let child_st = child_vmmap.user_to_sys(addr_st);
@@ -143,8 +140,6 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     }
 
     // update program break for child
-    // println!("[fork_vmmap] child_vmmap 2: {:?}", child_vmmap);
-    // println!("[fork_vmmap] parent_vmmap: {:?}", parent_vmmap);
     drop(child_vmmap);
     let mut child_vmmap = child_cage.vmmap.write();
     child_vmmap.set_program_break(parent_vmmap.program_break);
@@ -152,7 +147,6 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
 
 // set the wasm linear memory base address to vmmap
 pub fn init_vmmap(cageid: u64, base_address: usize, program_break: Option<u32>) {
-    // println!("init vmmap for cage {} with memory base: {}", cageid, base_address);
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);

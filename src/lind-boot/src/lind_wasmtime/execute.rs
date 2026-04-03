@@ -143,7 +143,6 @@ pub fn execute_with_lind(
     module: Module,
     cageid: u64,
 ) -> Result<Vec<Val>> {
-    // println!("[wasmtime] execute_with_lind");
     // -- Initialize the Wasmtime execution environment --
     let args = lind_boot.args.clone();
     let host = HostCtx::default();
@@ -284,7 +283,6 @@ pub fn execute_with_lind(
     let mut modules = Vec::new();
     modules.push((String::new(), String::new(), module.clone()));
     for (name, path) in lind_boot.preloads.iter() {
-        // println!("[wasmtime] execute_with_lind: preload module: {}: {:?}", name, path);
         // Read the wasm module binary either as `*.wat` or a raw binary
         let module = read_wasm_or_cwasm(&engine, path)?;
         modules.push((

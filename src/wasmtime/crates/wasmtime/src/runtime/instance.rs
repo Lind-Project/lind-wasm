@@ -428,7 +428,6 @@ impl Instance {
                 parent_cageid,
                 child_cageid,
             } => {
-                // println!("instantiate child");
                 // if this is a child, we do not need to specifically set up the first memory region
                 // since this should be taken care of when we fork the entire memory region from parent
                 // therefore in this case, we only need to:
@@ -439,7 +438,6 @@ impl Instance {
                 drop(memory_iter);
                 let child_address = memory.data_ptr(&mut *store) as usize;
 
-                // init_vmmap(child_cageid, child_address, None);
                 fork_vmmap(parent_cageid as u64, child_cageid);
             }
             InstantiateType::InstantiateLib {
@@ -447,7 +445,6 @@ impl Instance {
                 needs_init,
                 memory_base,
             } => {
-                // println!("instantiate lib for cageid: {}", cageid);
                 let dylink_meminfo = module.dylink_meminfo().unwrap();
 
                 let rounded_size =
