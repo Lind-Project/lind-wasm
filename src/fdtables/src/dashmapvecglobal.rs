@@ -397,23 +397,23 @@ pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
 
     assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
 
-    // cloning this so I don't hold a lock and deadlock close handlers
-    let mut myfdrow = FDTABLE.get_mut(&cageid).unwrap().clone();
+    // Mutate in place under the guard, extract the entry, then drop the
+    // guard before calling the close handler (which may re-enter fdtables).
+    let entry = {
+        let mut guard = FDTABLE.get_mut(&cageid).unwrap();
+        let entry = guard[virtfd as usize];
+        guard[virtfd as usize] = None;
+        entry
+        // guard drops here — lock released
+    };
 
-
-    if myfdrow[virtfd as usize].is_some() {
-        let entry = myfdrow[virtfd as usize];
-
-        // Zero out this entry before calling the close handler...
-        myfdrow[virtfd as usize] = None;
-
-        FDTABLE.insert(cageid, myfdrow.clone());
-
-        // always _decrement last as it may call the user handler...
-        _decrement_fdcount(entry.unwrap());
-        return Ok(());
+    match entry {
+        Some(e) => {
+            _decrement_fdcount(e);
+            Ok(())
+        }
+        None => Err(threei::Errno::EBADFD as u64),
     }
-    Err(threei::Errno::EBADFD as u64)
 }
 
 
