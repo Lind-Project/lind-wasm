@@ -735,14 +735,14 @@ impl<
             // has to clone to prevent double mutable reference of caller
             // TODO: may worth a refactor in the future for performance
             let mut parent_linker = parent_ctx.linker.clone().unwrap();
-            
+
             let snapshot = parent_linker.get_linker_snapshot_for_child(&mut caller, true);
 
             Some(snapshot)
         } else {
             None
         };
-        
+
         // retrieve the child host
         let mut child_host = caller.data().clone();
 
@@ -1484,7 +1484,7 @@ impl<
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
         let forked_ctx = Self {
-            linker: None,                               // Linker is explicitly set up by the caller
+            linker: None, // Linker is explicitly set up by the caller
             modules: self.modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
@@ -1502,7 +1502,7 @@ impl<
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
         let forked_ctx = Self {
-            linker: None,                               // Linker is explicitly set up by the caller
+            linker: None, // Linker is explicitly set up by the caller
             modules: self.modules.clone(),
             cageid: self.cageid,
             tid: self.tid,
