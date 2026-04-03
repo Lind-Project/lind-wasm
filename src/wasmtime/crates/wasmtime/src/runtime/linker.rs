@@ -453,13 +453,14 @@ impl<T> Linker<T> {
         globals: &Vec<(String, String, GlobalType, Val)>,
         hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
         shared_memory: &Option<(String, String, ClonedMemory)>,
-    ) -> Result<(Self, HashMap<String, i32>, Option<*mut u64>)> {
+    ) -> Result<(Self, HashMap<String, i32>, Option<*mut u64>, Option<u64>)> {
         let mut new_linker = Self::new(&engine);
 
         // a mapping of library name to its memory base value
         let mut memory_base_table = HashMap::new();
 
         let mut epoch_handler = None;
+        let mut memory_base = None;
 
         // define globals to the new linker
         for (module, name, ty, val) in globals {
@@ -488,16 +489,18 @@ impl<T> Linker<T> {
         if let Some((module, name, memory)) = shared_memory {
             match memory {
                 ClonedMemory::Thread(shared_memory) => {
+                    memory_base = Some(shared_memory.get_memory_base());
                     new_linker.define(&mut store, &module, &name, shared_memory.clone())?;
                 }
                 ClonedMemory::New(memory_type) => {
                     let mem = SharedMemory::new(&engine, memory_type.clone())?;
+                    memory_base = Some(mem.get_memory_base());
                     new_linker.define(&mut store, &module, &name, mem)?;
                 }
             }
         }
 
-        Ok((new_linker, memory_base_table, epoch_handler))
+        Ok((new_linker, memory_base_table, epoch_handler, memory_base))
     }
 
     /// Implement any function imports of the [`Module`] with a function that

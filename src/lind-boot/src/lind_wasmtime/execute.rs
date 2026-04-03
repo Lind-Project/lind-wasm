@@ -143,6 +143,7 @@ pub fn execute_with_lind(
     module: Module,
     cageid: u64,
 ) -> Result<Vec<Val>> {
+    // println!("[wasmtime] execute_with_lind");
     // -- Initialize the Wasmtime execution environment --
     let args = lind_boot.args.clone();
     let host = HostCtx::default();
@@ -283,6 +284,7 @@ pub fn execute_with_lind(
     let mut modules = Vec::new();
     modules.push((String::new(), String::new(), module.clone()));
     for (name, path) in lind_boot.preloads.iter() {
+        // println!("[wasmtime] execute_with_lind: preload module: {}: {:?}", name, path);
         // Read the wasm module binary either as `*.wat` or a raw binary
         let module = read_wasm_or_cwasm(&engine, path)?;
         modules.push((
@@ -570,7 +572,7 @@ fn attach_api(
     let main_module = &modules.get(0).unwrap().2;
 
     // attach SharedMemory to the instance
-    attach_shared_memory(&mut *wstore, &mut linker_guard, &main_module, true)?;
+    attach_shared_memory(&mut *wstore, &mut linker_guard, &main_module, true, cageid)?;
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(

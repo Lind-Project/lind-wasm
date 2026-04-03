@@ -40,6 +40,10 @@ wasm-ld \
     --export-if-defined=__wasm_init_tls \
     --export-if-defined=environ \
     --export=__tls_base \
+    --export-if-defined=copy_data_between_cages \
+    --export-if-defined=copy_handler_table_to_cage \
+    --export-if-defined=make_threei_call \
+    --export-if-defined=register_handler \
     -o "$SYSROOT/lib/wasm32-wasi/libc.so" "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
 
 mkdir -p $REPO_ROOT/lindfs/lib

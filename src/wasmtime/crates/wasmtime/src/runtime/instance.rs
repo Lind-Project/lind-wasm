@@ -428,6 +428,7 @@ impl Instance {
                 parent_cageid,
                 child_cageid,
             } => {
+                // println!("instantiate child");
                 // if this is a child, we do not need to specifically set up the first memory region
                 // since this should be taken care of when we fork the entire memory region from parent
                 // therefore in this case, we only need to:
@@ -438,7 +439,7 @@ impl Instance {
                 drop(memory_iter);
                 let child_address = memory.data_ptr(&mut *store) as usize;
 
-                init_vmmap(child_cageid, child_address, None);
+                // init_vmmap(child_cageid, child_address, None);
                 fork_vmmap(parent_cageid as u64, child_cageid);
             }
             InstantiateType::InstantiateLib {
@@ -446,6 +447,7 @@ impl Instance {
                 needs_init,
                 memory_base,
             } => {
+                // println!("instantiate lib for cageid: {}", cageid);
                 let dylink_meminfo = module.dylink_meminfo().unwrap();
 
                 let rounded_size =
@@ -458,21 +460,21 @@ impl Instance {
                     cageid,                // self cageid
                     (MMAP_SYSCALL) as u64, // syscall num
                     0, // since wasmtime operates with lower level memory, it always interacts with underlying os
-                    1, // target cageid (should be same)
+                    cageid, // target cageid (should be same)
                     0, // the first memory region starts from 0
-                    1,
+                    cageid,
                     rounded_size as u64, // size of first memory region
-                    1,
+                    cageid,
                     (PROT_READ | PROT_WRITE) as u64,
-                    1,
+                    cageid,
                     (MAP_PRIVATE | MAP_ANONYMOUS) as u64,
-                    1,
+                    cageid,
                     // we need to pass -1 here, but since make_syscall only accepts u64
                     // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
                     (0 - 1) as u64,
-                    1,
+                    cageid,
                     0,
-                    1,
+                    cageid,
                 ) as u32;
 
                 // update the address
