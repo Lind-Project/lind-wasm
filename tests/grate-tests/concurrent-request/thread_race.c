@@ -1,4 +1,4 @@
-/* store_race.c — Cage-side test for concurrent grate Store access (#961).
+/* thread_race.c — Cage-side test for concurrent grate Store access (#961).
  *
  * Spawns NUM_THREADS threads that each call geteuid() (interposed by the
  * grate) CALLS_PER_THREAD times. This forces concurrent
@@ -9,8 +9,8 @@
  * pointer chasing to exercise the same memory patterns as a real grate
  * (e.g. fdtables/DashMap).
  *
- * Pair with: store_race_grate.c
- * Run: lind-wasm store_race_grate.cwasm store_race.cwasm
+ * Pair with: thread_race_grate.c
+ * Run: lind-wasm thread_race_grate.cwasm thread_race.cwasm
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,7 +48,7 @@ int main(void) {
     for (int i = 0; i < NUM_THREADS; i++)
         pthread_join(threads[i], NULL);
 
-    printf("[store_race] PASS: %d threads x %d calls returned 10\n",
+    printf("[thread_race] PASS: %d threads x %d calls returned 10\n",
            NUM_THREADS, CALLS_PER_THREAD);
     return 0;
 }

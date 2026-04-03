@@ -1,4 +1,4 @@
-/* store_race_grate.c — Grate for concurrent Store access test (#961).
+/* thread_race_grate.c — Grate for concurrent Store access test (#961).
  *
  * Interposes on geteuid (syscall 107) and does heap-heavy work in the
  * handler: lazy-init shared structures, realloc under contention,
@@ -24,7 +24,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
                     uint64_t arg6, uint64_t arg6cage) {
     if (fn_ptr_uint == 0) {
-        fprintf(stderr, "[store_race] Invalid function ptr\n");
+        fprintf(stderr, "[thread_race] Invalid function ptr\n");
         assert(0);
     }
 
@@ -44,7 +44,7 @@ static int log_next = 0;
  * growing data structures, lookups, and writes to shared memory.
  * This exercises dlmalloc contention, shared global mutation, and
  * pointer chasing — the same patterns as fdtables/DashMap in Rust. */
-int store_race_handler(uint64_t cageid) {
+int thread_race_handler(uint64_t cageid) {
     int id = (int)cageid;
 
     /* Lazy init of shared state — races here mirror DashMap lazy init */
@@ -103,8 +103,8 @@ int main(int argc, char *argv[]) {
         assert(0);
     } else if (pid == 0) {
         int cageid = getpid();
-        uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&store_race_handler;
-        printf("[store_race] Registering handler for cage %d "
+        uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&thread_race_handler;
+        printf("[thread_race] Registering handler for cage %d "
                "in grate %d with fn ptr addr: %llu\n",
                cageid, grateid, fn_ptr_addr);
         register_handler(cageid, 107, grateid, fn_ptr_addr);
@@ -118,12 +118,12 @@ int main(int argc, char *argv[]) {
     int status;
     while (wait(&status) > 0) {
         if (status != 0) {
-            fprintf(stderr, "[store_race] FAIL: child exited with status %d\n",
+            fprintf(stderr, "[thread_race] FAIL: child exited with status %d\n",
                     status);
             assert(0);
         }
     }
 
-    printf("[store_race] PASS\n");
+    printf("[thread_race] PASS\n");
     return 0;
 }
