@@ -17,6 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <dirent.h>
+#include <stdio.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
 #include <dirstream.h>
@@ -25,37 +26,66 @@
 struct dirent *
 __readdir_unlocked (DIR *dirp)
 {
-  struct dirent *dp;
+  struct dirent64 *src;
+  struct dirent *dst;
   int saved_errno = errno;
 
   if (dirp->offset >= dirp->size)
     {
-      /* We've emptied out our buffer.  Refill it.  */
+      /* We have exhausted the current buffer. Refill it.  */
 
       size_t maxread = dirp->allocation;
       ssize_t bytes;
-      bytes = __getdents (dirp->fd, dirp->data, maxread);
+
+      bytes = MAKE_LEGACY_SYSCALL(GETDENTS_SYSCALL, "syscall|getdents",
+                                  (uint64_t) dirp->fd,
+                                  TRANSLATE_GUEST_POINTER_TO_HOST (dirp->data),
+                                  (uint64_t) maxread,
+                                  NOTUSED, NOTUSED, NOTUSED,
+                                  TRANSLATE_ERRNO_ON);
+
       if (bytes <= 0)
-	{
-	  /* Linux may fail with ENOENT on some file systems if the
-	     directory inode is marked as dead (deleted).  POSIX
-	     treats this as a regular end-of-directory condition, so
-	     do not set errno in that case, to indicate success.  */
-	  if (bytes == 0 || errno == ENOENT)
-	    __set_errno (saved_errno);
-	  return NULL;
-	}
+        {
+          /* Linux may fail with ENOENT on some file systems if the
+             directory inode is marked as dead (deleted). POSIX treats
+             this as a regular end-of-directory condition, so do not
+             set errno in that case, to indicate success.  */
+          if (bytes == 0 || errno == ENOENT)
+            __set_errno (saved_errno);
+          return NULL;
+        }
+
       dirp->size = (size_t) bytes;
 
       /* Reset the offset into the buffer.  */
       dirp->offset = 0;
     }
 
-  dp = (struct dirent *) &dirp->data[dirp->offset];
-  dirp->offset += dp->d_reclen;
-  dirp->filepos = dp->d_off;
 
-  return dp;
+  src = (struct dirent64 *) &dirp->data[dirp->offset];
+  dst = (struct dirent *) &dirp->data[dirp->offset];
+
+  /* Copy source fields into local variables first, so that in-place
+     rewriting does not interfere with reading the original record.  */
+  __ino64_t src_ino = src->d_ino;
+  __off64_t src_off = src->d_off;
+  unsigned short src_reclen = src->d_reclen;
+  unsigned char src_type = src->d_type;
+  char src_name[256];
+
+  snprintf(src_name, sizeof(src_name), "%s", src->d_name);
+
+  /* Convert the dirent64 record into a plain dirent record.  */
+  dst->d_ino = (__ino_t) src_ino;
+  dst->d_off = (__off_t) src_off;
+  dst->d_reclen = src_reclen;
+  dst->d_type = src_type;
+  snprintf(dst->d_name, sizeof(dst->d_name), "%s", src_name);
+
+  dirp->offset += src_reclen;
+  dirp->filepos = src_off;
+
+  return dst;
 }
 
 struct dirent *
