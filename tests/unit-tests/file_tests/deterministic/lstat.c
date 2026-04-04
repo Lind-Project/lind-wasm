@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,12 +10,16 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-char TARGET[PATH_MAX];
-realpath("testfiles/lstat_target.txt", TARGET);
-const char* SYMLINK = "testfiles/lstat_link";
-
 int main(int argc, char **argv)
 {
+    char TARGET[PATH_MAX];
+    const char* SYMLINK = "testfiles/lstat_link";
+
+    if (!realpath("testfiles/lstat_target.txt", TARGET)) {
+        perror("realpath");
+        exit(1);
+    }
+
     // Setup: create target file and symlink
     FILE *fp = fopen(TARGET, "w");
     if (!fp) {

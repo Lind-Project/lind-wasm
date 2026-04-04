@@ -4649,6 +4649,9 @@ pub extern "C" fn symlinkat_syscall(
             return handle_errno(-kernel_fd, "symlinkat");
         }
 
+        // Use the raw (untranslated) linkpath here intentionally — sc_convert_path_to_host
+        // resolves relative to CWD, but symlinkat interprets linkpath relative to dirfd.
+        // The kernel handles that resolution, so we pass the original guest pointer.
         let raw_linkpath = match get_cstr(linkpath_arg) {
             Ok(p) => p,
             Err(_) => return syscall_error(Errno::EINVAL, "symlinkat", "invalid linkpath"),
