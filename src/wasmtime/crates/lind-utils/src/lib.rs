@@ -205,7 +205,6 @@ impl LindGOT {
             let val = cell.load(Ordering::Acquire);
 
             if val == 0 {
-                #[cfg(feature = "debug-dylink")]
                 println!("[debug] Warning: GOT entry \"{}\" unresolved", name);
             }
         }

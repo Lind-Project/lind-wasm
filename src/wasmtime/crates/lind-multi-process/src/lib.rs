@@ -1536,7 +1536,6 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
 ) -> u64 {
     let mut memory_iter = caller.as_context_mut().0.all_memories();
     let memory = memory_iter.next().expect("no defined memory found").clone();
-    // assert!(memory_iter.next().is_none(), "multiple defined memory found");
     drop(memory_iter);
 
     memory.data_ptr(caller.as_context()) as usize as u64

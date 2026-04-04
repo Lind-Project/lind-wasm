@@ -938,17 +938,22 @@ impl<T> Linker<T> {
             .filter_map(|e| {
                 (if module_name == "env"
                     && match e.name() {
+                        // stack pointer and tls base are per-module exclusive and should not be exposed to child module
                         "__stack_pointer"
                         | "__tls_base"
+                        // constructor functions, which is module exclusive and should not be exposed to child module
                         | "__wasm_call_ctors"
+                        // those symbols are used internally by wasmtime and shouldn't be exposed to the child module
                         | "__wasm_apply_data_relocs"
                         | "__wasm_apply_global_relocs"
                         | "__wasm_apply_tls_relocs"
+                        // asyncify symbols
                         | "asyncify_start_unwind"
                         | "asyncify_stop_unwind"
                         | "asyncify_start_rewind"
                         | "asyncify_stop_rewind"
                         | "asyncify_get_state"
+                        // lind custom symbols
                         | "__get_aligned_tls_size" => true,
                         _ => false,
                     }
@@ -1201,7 +1206,7 @@ impl<T> Linker<T> {
                     &module,
                     InstantiateType::InstantiateLib {
                         cageid,
-                        needs_init: needs_init,
+                        needs_init: true,
                         memory_base: handler,
                     },
                 )?;
@@ -2256,7 +2261,9 @@ impl<T> Linker<T> {
     }
 }
 
+/// Additional APIs for attaching common imports used by the Lind runtime and toolchain.
 impl<T> Linker<T> {
+    // attach the asyncify imports used by the asyncify transform.
     pub fn attach_asyncify(&mut self, mut store: impl AsContextMut<Data = T>) -> Result<()> {
         let __asyncify_state = Global::new(
             &mut store,
@@ -2273,6 +2280,7 @@ impl<T> Linker<T> {
         Ok(())
     }
 
+    // attach the epoch global used by the Lind runtime for signal usage
     pub fn attach_epoch(&mut self, mut store: impl AsContextMut<Data = T>) -> Result<u64> {
         let lind_epoch = Global::new(
             &mut store,
@@ -2283,6 +2291,70 @@ impl<T> Linker<T> {
         self.define(&mut store, "lind", "epoch", lind_epoch)?;
 
         Ok(lind_epoch.get_handler_as_u64(&mut store) as u64)
+    }
+
+    // attach the `__indirect_function_table` used by the Lind runtime for dynamic loading
+    pub fn attach_function_table(&mut self, mut store: impl AsContextMut<Data = T>, size: u32) -> Result<Table> {
+        let ty = crate::TableType::new(crate::RefType::FUNCREF, size, None);
+        let table = Table::new(&mut store, ty, crate::Ref::Func(None))?;
+        self
+            .define(&mut store, "env", "__indirect_function_table", table)?;
+
+        Ok(table)
+    }
+
+    // attach the `__stack_low`, `__stack_high`, and `__stack_pointer` globals used by the Lind runtime for stack management.
+    pub fn attach_stack_imports(&mut self, mut store: impl AsContextMut<Data = T>, stack_low: i32, stack_high: i32) -> Result<()> {
+        let stack_low_global = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(stack_low),
+        )?;
+
+        let stack_high_global = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(stack_high),
+        )?;
+
+        // stack grows downwards, so the initial stack pointer is set to the high address.
+        let stack_pointer = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(stack_high),
+        )?;
+    
+        self.define(&mut store, "GOT.mem", "__stack_low", stack_low_global)?;
+        self.define(&mut store, "GOT.mem", "__stack_high", stack_high_global)?;
+        self.define(&mut store, "env", "__stack_pointer", stack_pointer)?;
+
+        Ok(())
+    }
+
+    // attach the `__memory_base` global used by the Lind runtime for dynamic loading.
+    pub fn attach_memory_base(&mut self, mut store: impl AsContextMut<Data = T>, memory_base: i32) -> Result<()> {
+        let memory_base = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Const),
+            Val::I32(memory_base),
+        )?;
+
+        self.define(&mut store, "env", "__memory_base", memory_base)?;
+
+        Ok(())
+    }
+
+    // attach the `__table_base` global used by the Lind runtime for dynamic loading.
+    pub fn attach_table_base(&mut self, mut store: impl AsContextMut<Data = T>, table_base: i32) -> Result<()> {
+        let table_base = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Const),
+            Val::I32(table_base),
+        )?;
+
+        self.define(&mut store, "env", "__table_base", table_base)?;
+
+        Ok(())
     }
 }
 

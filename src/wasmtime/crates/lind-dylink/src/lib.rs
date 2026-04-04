@@ -72,7 +72,10 @@ pub fn dlsym_call<
     sym: i32,
 ) -> i32 {
     let base = get_memory_base(&mut caller);
-    let symbol = typemap::get_cstr(base + sym as u64).unwrap();
+    let symbol = match typemap::get_cstr(base + sym as u64) {
+        Ok(path) => path,
+        Err(_) => return -(DylinkErrorCode::ENOFOUND as i32),
+    };
 
     // Resolve symbol based on handle semantics.
     let val = if handle == RTLD_DEFAULT {
@@ -81,7 +84,7 @@ pub fn dlsym_call<
             None => return -(DylinkErrorCode::ENOFOUND as i32),
         }
     } else if handle == RTLD_NEXT {
-        lind_debug_panic("[lind-dylink] dlsym RTLD_NEXT encountered but not supported");
+        lind_debug_panic("[lind-dylink] dlsym RTLD_NEXT encountered but not currently supported");
     } else {
         match caller.find_library_symbol_from_local(handle, symbol) {
             Some(val) => val,

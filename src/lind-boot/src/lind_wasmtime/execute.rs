@@ -9,7 +9,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
 use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID};
-use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT};
+use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX};
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
@@ -154,128 +154,49 @@ pub fn execute_with_lind(
     let dylink_enabled = module.dylink_meminfo().is_some();
     let mut dylink_metadata = DylinkMetadata::new(dylink_enabled);
 
-    // println!("[debug] dylink enabled: {}", dylink_metadata.dylink_enabled);
-
     if dylink_metadata.dylink_enabled {
         // create Global Offset Table for dynamic loading
         dylink_metadata.got = Some(Arc::new(Mutex::new(LindGOT::new())));
-        let lind_got = dylink_metadata.got.as_ref().unwrap();
 
         let mut linker = linker.lock().unwrap();
         // Determine the minimal table size required by the main module
         // from its table import declaration.
-        let mut main_module_table_size = Some(0);
-        let memory_size;
+        let mut main_module_table_size = 0;
 
         for import in module.imports() {
             if let wasmtime::ExternType::Table(table) = import.ty() {
-                main_module_table_size = Some(table.minimum());
+                main_module_table_size = table.minimum();
             }
         }
+        
+        // calculate the stack address for main module
+        let stack_low = GUARD_SIZE as i32; // reserve first 1024 bytes for guard page
+        let stack_high = stack_low + DEFAULT_STACKSIZE as i32; // 8 MB of default stack size
+        let memory_base = stack_high + GUARD_SIZE as i32; // memory base starts after the stack space (plus guard)
+        let table_base = TABLE_START_INDEX as i32;
 
-        // Memory size and alignment are encoded in the dylink section.
-        let dylink_info = module.dylink_meminfo();
-        let dylink_info = dylink_info.as_ref().unwrap();
-
-        let size = dylink_info.memory_size;
-        let mut align = {
-            // Enforce minimal alignment requirement for Lind:
-            // at least 8 bytes (2^3).
-            if dylink_info.memory_alignment < 3 {
-                3
-            } else {
-                dylink_info.memory_alignment
-            }
-        };
-        // round up memory size to align
-        align = (1 << align) - 1;
-        memory_size = (size + align) & !align;
-
-        let main_module_table_size = main_module_table_size.unwrap();
+        #[cfg(feature = "debug-dylink")]
+        {
+            println!("[debug] main module table size: {}", main_module_table_size);
+            println!(
+                "[debug] main module stack pointer starts from {} to {}",
+                stack_low, stack_high
+            );
+        }
 
         // Allocate the main module's indirect function table with
         // the minimal required size.
-        #[cfg(feature = "debug-dylink")]
-        println!("[debug] main module table size: {}", main_module_table_size);
-        let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
-        let table_inner = wasmtime::Table::new(&mut wstore, ty, wasmtime::Ref::Func(None)).unwrap();
-        linker
-            .define(&mut wstore, "env", "__indirect_function_table", table_inner)
-            .unwrap();
+        let table_inner = linker.attach_function_table(&mut wstore, main_module_table_size).expect("failed to create table");
+        linker.attach_stack_imports(&mut wstore, stack_low, stack_high).expect("failed to attach stack imports");
+        linker.attach_memory_base(&mut wstore, memory_base).expect("failed to attach memory base");
+        linker.attach_table_base(&mut wstore, table_base).expect("failed to attach table base");
+        linker.attach_asyncify(&mut wstore).expect("failed to attach asyncify imports");
+        let epoch = linker.attach_epoch(&mut wstore).expect("failed to attach epoch");
 
-        // calculate the stack address for main module
-        let stack_low_num = GUARD_SIZE as i32; // reserve first 1024 bytes for guard page
-        let stack_high_num = stack_low_num + DEFAULT_STACKSIZE as i32; // 8 MB of default stack size
-        #[cfg(feature = "debug-dylink")]
-        println!(
-            "[debug] main module stack pointer starts from {} to {}",
-            stack_low_num, stack_high_num
-        );
-        let stack_low = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-            Val::I32(stack_low_num),
-        )
-        .unwrap();
-        let stack_high = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-            Val::I32(stack_high_num),
-        )
-        .unwrap();
-        linker
-            .define(&mut wstore, "GOT.mem", "__stack_low", stack_low)
-            .unwrap();
-        linker
-            .define(&mut wstore, "GOT.mem", "__stack_high", stack_high)
-            .unwrap();
-
-        let stack_pointer = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Var),
-            Val::I32(stack_high_num),
-        )
-        .unwrap();
-        linker
-            .define(&mut wstore, "env", "__stack_pointer", stack_pointer)
-            .unwrap();
-
-        // For the main module:
-        // - Table base starts at 0.
-        // - Memory base begins after the stack space (plus padding).
-        let memory_base = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Const),
-            Val::I32((GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE) as i32),
-        )
-        .unwrap();
-        let table_base = wasmtime::Global::new(
-            &mut wstore,
-            wasmtime::GlobalType::new(ValType::I32, wasmtime::Mutability::Const),
-            Val::I32(2),
-        )
-        .unwrap();
-        linker
-            .define(&mut wstore, "env", "__memory_base", memory_base)
-            .unwrap();
-        linker
-            .define(&mut wstore, "env", "__table_base", table_base)
-            .unwrap();
-
-        // Define placeholder globals for GOT imports so they can be
-        // patched during/after instantiation.
-        let mut got_guard = lind_got.lock().unwrap();
-        linker.define_GOT_dispatcher(&mut wstore, &module, &mut *got_guard);
-        drop(got_guard);
+        wstore.as_context_mut().set_stack_base(stack_high as u64);
+        wstore.as_context_mut().set_stack_top(stack_low as u64);
 
         dylink_metadata.table = Some(table_inner);
-    }
-
-    if dylink_metadata.dylink_enabled {
-        let mut linker = linker.lock().unwrap();
-        let _ = linker.attach_asyncify(&mut wstore).unwrap();
-        let epoch = linker.attach_epoch(&mut wstore).unwrap();
-
         dylink_metadata.epoch_handler = Some(epoch);
     }
 
@@ -305,7 +226,7 @@ pub fn execute_with_lind(
     if dylink_metadata.dylink_enabled {
         let lind_got = dylink_metadata.got.as_ref().unwrap();
 
-        // For each additional module (excluding the main module),
+        // For each module (including the main module),
         // register its GOT imports with the shared LindGOT instance.
         //
         // This installs placeholder globals for unresolved GOT entries so that
@@ -314,7 +235,7 @@ pub fn execute_with_lind(
         //
         // We skip the first module because it is the main module, which was
         // already processed earlier.
-        for (name, _path, module) in modules.iter().skip(1) {
+        for (name, _path, module) in modules.iter() {
             let mut linker = linker.lock().unwrap();
 
             let mut got_guard = lind_got.lock().unwrap();
@@ -357,45 +278,41 @@ pub fn execute_with_lind(
             // The linker records the module under `name` and uses `table_start`
             // to relocate/interpret the library's function references into the
             // shared table. GOT entries are patched through the shared LindGOT.
-            {
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] library {} instantiate", name);
-                let mut guard = lind_got.lock().unwrap();
-                lib_linker
-                    .module(
-                        &mut wstore,
-                        cageid,
-                        &name,
-                        &module,
-                        &mut table_inner,
-                        table_start,
-                        Some(&*guard),
-                        path.clone(),
-                    )
-                    .context(format!("failed to process preload `{}`", name,))?;
-            }
+            #[cfg(feature = "debug-dylink")]
+            println!("[debug] library {} instantiate", name);
+            let mut got_guard = lind_got.lock().unwrap();
+            lib_linker
+                .module(
+                    &mut wstore,
+                    cageid,
+                    &name,
+                    &module,
+                    &mut table_inner,
+                    table_start,
+                    Some(&*got_guard),
+                    path.clone(),
+                )
+                .context(format!("failed to process preload `{}`", name,))?;
         }
 
-        {
-            // Resolve any remaining unknown imports to trap stubs so the library can
-            // instantiate even when it has optional/unused imports.
-            let mut linker = linker.lock().unwrap();
-            linker.define_unknown_imports_as_traps(&module);
-        }
+        // Resolve any remaining unknown imports to trap stubs so the library can
+        // instantiate even when it has optional/unused imports.
+        let mut linker_guard = linker.lock().unwrap();
+        linker_guard.define_unknown_imports_as_traps(&module);
 
+        // after all preloaded library are attached to the linker, update the linker in LindCtx
+        // so that newly forked cage could use the Linker with necessary library loaded
+        let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
+        ctx.attach_linker(linker_guard.clone());
+
+        drop(linker_guard);
+
+        #[cfg(feature = "debug-dylink")]
         {
             // Emit warnings for any GOT slots that remain unresolved after processing
             // preloads and defining trap stubs.
-            let mut guard = lind_got.lock().unwrap();
-            guard.warning_undefined();
-        }
-
-        {
-            // after all preloaded library are attached to the linker, update the linker in LindCtx
-            // so that newly forked cage could use the Linker with necessary library loaded
-            let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
-            let mut linker = linker.lock().unwrap();
-            ctx.attach_linker(linker.clone());
+            let mut got_guard = lind_got.lock().unwrap();
+            got_guard.warning_undefined();
         }
     }
 
@@ -645,15 +562,7 @@ fn load_main_module(
         .get_func(&mut *store, "")
         .or_else(|| instance.get_func(&mut *store, "_start"));
 
-    if dylink_metadata.dylink_enabled {
-        let guard_start = 0; // initial guard page starts from 0
-        let guard_end = guard_start + GUARD_SIZE;
-        let stack_low = guard_end;
-        let stack_pointer = GUARD_SIZE + DEFAULT_STACKSIZE;
-
-        store.as_context_mut().set_stack_base(stack_pointer as u64);
-        store.as_context_mut().set_stack_top(stack_low as u64);
-    } else {
+    if !dylink_metadata.dylink_enabled {
         let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
         let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
         store.as_context_mut().set_stack_base(stack_pointer as u64);
@@ -832,6 +741,7 @@ fn load_library_module(
     let library_path = Path::new(library_name);
 
     // retrieve inode of the file as the unique identifier of the library
+    // TODO: should redirect to threei
     let metadata = match std::fs::metadata(library_path) {
         Ok(data) => data,
         Err(_) => return -(DylinkErrorCode::EOPEN as i32),

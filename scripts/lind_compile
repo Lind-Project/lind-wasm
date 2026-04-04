@@ -104,8 +104,8 @@ while [[ "$#" -gt 0 ]]; do
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
-    -s|--shared|--dynamic)
-      SHARED_BUILD="true"
+    -s|--static)
+      SHARED_BUILD="false"
       ;;
     --print-args|--debug-args)
       PRINT_ARGS="true"

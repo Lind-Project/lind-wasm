@@ -88,6 +88,11 @@ pub const DEFAULT_STACKSIZE: u32 = 8388608; // 8 MB
 /// Size of guard pages
 pub const GUARD_SIZE: u32 = 1024; // 1 KB
 
+/// The starting index for function tables of wasm modules in Lind.
+/// function index of 1 must be reserved for SIG_IGN constant for signal handling
+/// so the function table starts from index 2.
+pub const TABLE_START_INDEX: u32 = 2;
+
 /// Cage ID for the initial (bootstrap) cage created during `rawposix_start`.
 pub const INIT_CAGEID: u64 = 1;
 /// Thread ID for the main thread of a cage.

@@ -475,6 +475,8 @@ impl Instance {
                 ) as u32;
 
                 // update the address
+                // SAFETY: memory_base here is used in a synchrounous model, so there won't be concurrent access to it,
+                // and it's only updated once during instantiation, so it's safe to update the memory base address here.
                 unsafe {
                     *memory_base = addr;
                 }
