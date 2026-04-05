@@ -27,7 +27,7 @@ use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
 use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
-use wasmtime_lind_utils::round_up_size;
+use wasmtime_lind_utils::{round_up_size, LindGOT};
 
 use super::Val;
 
@@ -1021,6 +1021,104 @@ impl Instance {
             .map(|(i, m)| (i, unsafe { Memory::from_wasmtime_memory(m, store) }))
     }
 
+    /// run the data relocation function and constructor function if present
+    /// used for initialization phase of dynamically loaded library
+    pub fn apply_relocs_func_and_constructor<'a>(
+        &'a self,
+        mut store: impl AsContextMut,
+    ) -> Result<()> {
+        // Apply data relocations emitted by the toolchain after exports/GOT have been patched.
+        // This populates relocated pointers/data segments inside the library's memory.
+        let reloc =
+            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
+        let _ = reloc.call(store.as_context_mut(), ())?;
+
+        // Apply TLS relocations if present.
+        if let Ok(init) =
+            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
+        {
+            let _ = init.call(store.as_context_mut(), ())?;
+        }
+
+        // run the constructor function if present
+        if let Ok(constructor) =
+            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+        {
+            let _ = constructor.call(store.as_context_mut(), ())?;
+        }
+
+        Ok(())
+    }
+
+    pub fn apply_GOT_relocs<'a>(
+        &'a self,
+        mut store: impl AsContextMut,
+        got: Option<&LindGOT>,
+        table: &Table,
+        memory_base: Option<u32>,
+    ) -> Result<()> {
+        // if updating GOT is not needed (in case of fork or thread creation, as the GOT is already cloned)
+        // just append the library function into function table
+        let need_update_got = got.is_some();
+
+        // Collect exports first to avoid mutating the store/linker while iterating exports.
+        // We split funcs and globals because they are relocated differently.
+        let mut funcs = vec![];
+        let mut globals = vec![];
+        for export in self.exports(&mut store) {
+            let name = export.name().to_owned();
+            match export.into_extern() {
+                Extern::Func(func) => {
+                    funcs.push((name, func));
+                }
+                Extern::Global(global) => {
+                    if need_update_got {
+                        globals.push((name, global));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Patch GOT function entries with the runtime table index of each exported function.
+        // We only update slots that are still unresolved to preserve first-definition-wins
+        // semantics (load-order precedence / interposition).
+        for (name, func) in funcs {
+            let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
+            if need_update_got {
+                // update GOT entry
+                let got_inner = got.as_ref().unwrap();
+                if got_inner.update_entry_if_unresolved(&name, index) {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] update GOT.func.{} to {}", name, index);
+                }
+            }
+        }
+
+        // Patch GOT memory entries for exported globals.
+        // The exported global value is treated as a module-relative offset; we relocate it by
+        // adding the resolved shared-memory base, producing an absolute address in Lind.
+        // Again, only update unresolved slots to preserve load-order precedence.
+        if need_update_got {
+            let got_inner = got.as_ref().unwrap();
+            let memory_base = memory_base.unwrap();
+            for (name, global) in globals {
+                let val = global.get(&mut store);
+                // relocate the variable
+                let val = val.i32().unwrap() as u32 + memory_base;
+                // update GOT entry
+                if got_inner.update_entry_if_unresolved(&name, val) {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] update GOT.mem.{} to {}", name, val);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// update the wasm globals within the wasm instance given a snapshot
+    /// used for cloning the state of a wasm instance during fork
     pub fn apply_global_snapshots<'a>(
         &'a self,
         mut store: impl AsContextMut,

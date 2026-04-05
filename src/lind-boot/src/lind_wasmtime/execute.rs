@@ -9,7 +9,9 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
 use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID};
-use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX};
+use sysdefs::constants::{
+    DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX,
+};
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
@@ -168,7 +170,7 @@ pub fn execute_with_lind(
                 main_module_table_size = table.minimum();
             }
         }
-        
+
         // calculate the stack address for main module
         let stack_low = GUARD_SIZE as i32; // reserve first 1024 bytes for guard page
         let stack_high = stack_low + DEFAULT_STACKSIZE as i32; // 8 MB of default stack size
@@ -186,12 +188,24 @@ pub fn execute_with_lind(
 
         // Allocate the main module's indirect function table with
         // the minimal required size.
-        let table_inner = linker.attach_function_table(&mut wstore, main_module_table_size).expect("failed to create table");
-        linker.attach_stack_imports(&mut wstore, stack_low, stack_high).expect("failed to attach stack imports");
-        linker.attach_memory_base(&mut wstore, memory_base).expect("failed to attach memory base");
-        linker.attach_table_base(&mut wstore, table_base).expect("failed to attach table base");
-        linker.attach_asyncify(&mut wstore).expect("failed to attach asyncify imports");
-        let epoch = linker.attach_epoch(&mut wstore).expect("failed to attach epoch");
+        let table_inner = linker
+            .attach_function_table(&mut wstore, main_module_table_size)
+            .expect("failed to create table");
+        linker
+            .attach_stack_imports(&mut wstore, stack_low, stack_high)
+            .expect("failed to attach stack imports");
+        let _ = linker
+            .attach_memory_base(&mut wstore, memory_base)
+            .expect("failed to attach memory base");
+        linker
+            .attach_table_base(&mut wstore, table_base)
+            .expect("failed to attach table base");
+        linker
+            .attach_asyncify(&mut wstore)
+            .expect("failed to attach asyncify imports");
+        let epoch = linker
+            .attach_epoch(&mut wstore)
+            .expect("failed to attach epoch");
 
         wstore.as_context_mut().set_stack_base(stack_high as u64);
         wstore.as_context_mut().set_stack_top(stack_low as u64);
@@ -282,14 +296,14 @@ pub fn execute_with_lind(
             println!("[debug] library {} instantiate", name);
             let mut got_guard = lind_got.lock().unwrap();
             lib_linker
-                .module(
+                .module_with_preload(
                     &mut wstore,
                     cageid,
                     &name,
                     &module,
                     &mut table_inner,
                     table_start,
-                    Some(&*got_guard),
+                    &got_guard,
                     path.clone(),
                 )
                 .context(format!("failed to process preload `{}`", name,))?;
@@ -637,47 +651,10 @@ fn load_main_module(
 
         if !GOT_updated && dylink_metadata.dylink_enabled {
             let got = dylink_metadata.got.as_mut().unwrap();
-
-            // update GOT entries after main module is instantiated
-            let mut funcs: Vec<(String, wasmtime::Func)> = vec![];
-            let mut globals: Vec<(String, wasmtime::Global)> = vec![];
-            for export in instance.exports(&mut store) {
-                let name = export.name().to_owned();
-                match export.into_extern() {
-                    // I don't think main module should update GOT functions?
-                    wasmtime::Extern::Func(func) => {
-                        funcs.push((name, func));
-                    }
-                    wasmtime::Extern::Global(global) => {
-                        globals.push((name, global));
-                    }
-                    _ => {}
-                }
-            }
-
-            let table_inner = dylink_metadata.table.as_ref().unwrap();
-
-            for (name, func) in funcs {
-                let index = table_inner
-                    .grow(&mut store, 1, wasmtime::Ref::Func(Some(func)))
-                    .unwrap();
-                let mut guard = got.lock().unwrap();
-                if (*guard).update_entry_if_unresolved(&name, index) {
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] update GOT.func.{} to {}", name, index);
-                }
-            }
-            let global_reloc = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
-            for (name, global) in globals {
-                let val = global.get(&mut store);
-                // relocate the variable
-                let val = val.i32().unwrap() as u32 + global_reloc;
-                let mut guard = got.lock().unwrap();
-                if (*guard).update_entry_if_unresolved(&name, val) {
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] main update GOT.mem.{} to {}", name, val);
-                }
-            }
+            let mut got_guard = got.lock().unwrap();
+            let table = dylink_metadata.table.as_ref().unwrap();
+            let memory_base = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
+            instance.apply_GOT_relocs(&mut store, Some(&got_guard), table, Some(memory_base));
 
             GOT_updated = true;
         }

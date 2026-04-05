@@ -24,9 +24,9 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
-    AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId,
-    InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val, ValRaw,
-    ValType,
+    AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
+    InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque,
+    Val, ValRaw, ValType,
 };
 
 use cage::alloc_cage_id;
@@ -386,23 +386,14 @@ impl<
                     // e.g. __stack_pointer, __indirect_function_table, etc.
 
                     if dylink_enabled {
-                        let mut child_table = {
-                            let mut main_module_table_size = Some(0);
-                            for import in module.imports() {
-                                if let wasmtime::ExternType::Table(table) = import.ty() {
-                                    main_module_table_size = Some(table.minimum());
-                                }
+                        let mut table_size = 0;
+                        for import in module.imports() {
+                            if let wasmtime::ExternType::Table(table) = import.ty() {
+                                table_size = table.minimum();
                             }
-                            let main_module_table_size = main_module_table_size.unwrap();
-                            let ty = wasmtime::TableType::new(
-                                wasmtime::RefType::FUNCREF,
-                                main_module_table_size,
-                                None,
-                            );
-                            wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
-                        };
-                        linker
-                            .define(&mut store, "env", "__indirect_function_table", child_table)
+                        }
+                        let mut child_table = linker
+                            .attach_function_table(&mut store, table_size)
                             .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
@@ -452,7 +443,7 @@ impl<
                                     &mut child_table,
                                     table_start,
                                     module_memory_base,
-                                    path.clone(),
+                                    ChildLibraryType::Process,
                                     &global_snapshots[global_snapshots_index].1,
                                 )
                                 .unwrap();
@@ -839,18 +830,13 @@ impl<
                         ).expect("failed to create child linker");
 
                     if dylink_enabled {
-                        let mut child_table = {
-                            let mut main_module_table_size = Some(0);
-                            for import in module.imports() {
-                                if let wasmtime::ExternType::Table(table) = import.ty() {
-                                    main_module_table_size = Some(table.minimum());
-                                }
+                        let mut table_size = 0;
+                        for import in module.imports() {
+                            if let wasmtime::ExternType::Table(table) = import.ty() {
+                                table_size = table.minimum();
                             }
-                            let main_module_table_size = main_module_table_size.unwrap();
-                            let ty = wasmtime::TableType::new(wasmtime::RefType::FUNCREF, main_module_table_size, None);
-                            wasmtime::Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap()
-                        };
-                        linker.define(&mut store, "env", "__indirect_function_table", child_table).unwrap();
+                        }
+                        let mut child_table = linker.attach_function_table(&mut store, table_size).unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
 
@@ -886,8 +872,8 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let updated_stack_addr = linker
-                                .module_with_child_thread(
+                            linker
+                                .module_with_child(
                                     &mut store,
                                     child_cageid as u64,
                                     &name,
@@ -895,12 +881,11 @@ impl<
                                     &mut child_table,
                                     table_start,
                                     module_memory_base,
-                                    stack_addr,
+                                    ChildLibraryType::Thread(&mut stack_addr),
                                     &global_snapshots[global_snapshots_index].1
                                 ).unwrap();
                             global_snapshots_index += 1;
                             linker.allow_shadowing(false);
-                            stack_addr = updated_stack_addr as u32;
                         }
                     }
 
@@ -908,7 +893,6 @@ impl<
                     store.set_is_thread(true);
 
                     // instantiate the module
-                    // let instance = instance_pre.instantiate(&mut store).unwrap();
                     let (instance, grate_instanceid) = linker
                         .instantiate_with_lind_thread(&mut store, &module)
                         .unwrap();
