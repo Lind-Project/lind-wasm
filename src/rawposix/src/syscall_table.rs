@@ -139,10 +139,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         syscall_const::CLOCK_GETTIME_SYSCALL as u64,
         clock_gettime_syscall,
     ),
-    (
-        syscall_const::EXIT_GROUP_SYSCALL as u64,
-        exit_group_syscall,
-    ),
+    (syscall_const::EXIT_GROUP_SYSCALL as u64, exit_group_syscall),
     (syscall_const::EPOLL_WAIT_SYSCALL as u64, epoll_wait_syscall),
     (syscall_const::EPOLL_CTL_SYSCALL as u64, epoll_ctl_syscall),
     (syscall_const::OPENAT_SYSCALL as u64, openat_syscall),
