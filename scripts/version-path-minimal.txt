@@ -24,3 +24,5 @@
 ./inet/Versions
 ./setjmp/Versions
 ./debug/Versions
+./intl/Versions
+./iconv/Versions
