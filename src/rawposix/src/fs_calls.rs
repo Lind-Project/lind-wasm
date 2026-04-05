@@ -3014,32 +3014,6 @@ pub extern "C" fn getdents_syscall(
     let ret =
         unsafe { libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) };
 
-
-    if ret > 0 {
-        #[repr(C)]
-        struct LinuxDirent64 {
-            d_ino: u64,
-            d_off: i64,
-            d_reclen: u16,
-            d_type: u8,
-            d_name: [u8; 256],
-        }
-
-        let first = unsafe { &*(dirp as *const LinuxDirent64) };
-
-        let nul_pos = first
-            .d_name
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(first.d_name.len());
-
-        let name = String::from_utf8_lossy(&first.d_name[..nul_pos]);
-
-        let raw_preview_len = std::cmp::min(ret as usize, 64);
-        let raw_preview =
-            unsafe { std::slice::from_raw_parts(dirp as *const u8, raw_preview_len) };
-    }
-
     ret as i32
 }
 
@@ -3097,7 +3071,6 @@ pub extern "C" fn lseek_syscall(
     }
 
     let ret = unsafe { libc::lseek(kernel_fd, offset, whence) };
-
     if ret < 0 {
         return handle_errno(get_errno(), "lseek");
     }

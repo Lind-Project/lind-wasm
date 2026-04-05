@@ -54,7 +54,6 @@ __readdir_unlocked (DIR *dirp)
             __set_errno (saved_errno);
           return NULL;
         }
-
       dirp->size = (size_t) bytes;
 
       /* Reset the offset into the buffer.  */
