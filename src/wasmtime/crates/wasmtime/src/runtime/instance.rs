@@ -58,7 +58,6 @@ pub enum InstantiateType {
     },
     InstantiateLib {
         cageid: u64,
-        needs_init: bool,
         memory_base: *mut u32,
     },
 }
@@ -280,9 +279,6 @@ impl Instance {
     ) -> Result<(Instance, InstanceId)> {
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
-        if let Some(start) = start {
-            instance.start_raw(store, start)?;
-        }
         Ok((instance, instanceid))
     }
 
@@ -311,23 +307,6 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
-        // in case of instantiating a child library instance, we do not need to do the memory initialization since the child instance will inherit the memory state from parent
-        match instantiate_type {
-            InstantiateType::InstantiateLib {
-                cageid,
-                needs_init,
-                memory_base,
-            } => {
-                if !needs_init {
-                    let (instance, start, instanceid) =
-                        Instance::new_raw(store.0, module, imports)?;
-
-                    return Ok((instance, instanceid));
-                }
-            }
-            _ => {}
-        }
-
         let dylink_enabled = module.dylink_meminfo().is_some();
 
         // initialize the memory
@@ -442,7 +421,6 @@ impl Instance {
             }
             InstantiateType::InstantiateLib {
                 cageid,
-                needs_init,
                 memory_base,
             } => {
                 let dylink_meminfo = module.dylink_meminfo().unwrap();
@@ -530,15 +508,12 @@ impl Instance {
             }
             InstantiateType::InstantiateLib {
                 cageid,
-                needs_init,
                 memory_base,
             } => {
                 // for library instance, we have to update the GOT entries before relocation happens
                 // so relocation is moved to linker.rs
             }
         }
-
-        let is_first = matches!(instantiate_type, InstantiateType::InstantiateFirst(_));
 
         Ok((instance, instanceid))
     }

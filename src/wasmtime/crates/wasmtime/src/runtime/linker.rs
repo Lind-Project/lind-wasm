@@ -1227,7 +1227,6 @@ impl<T> Linker<T> {
                     &module,
                     InstantiateType::InstantiateLib {
                         cageid,
-                        needs_init: true,
                         memory_base: handler,
                     },
                 )?;
@@ -1304,20 +1303,13 @@ impl<T> Linker<T> {
                 // Resolve any remaining unknown imports to trap stubs so the library can
                 // instantiate even when it has optional/unused imports.
                 module_linker.define_unknown_imports_as_traps(module);
-                // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
-                // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(
-                    &mut store,
-                    &module,
-                    InstantiateType::InstantiateLib {
-                        cageid,
-                        needs_init: false,
-                        memory_base: handler,
-                    },
-                )?;
+                // Instantiate the library module. Do not need to do any initialization for the module
+                // since all the state are already copied from parent
+                let (instance, _) =
+                    module_linker.instantiate_with_lind_thread(&mut store, &module)?;
 
                 // for child library, just append the library function into function table without doing GOT relocation
-                // instance.apply_GOT_relocs(&mut store, None, table, None)?;
+                instance.apply_GOT_relocs(&mut store, None, table, None)?;
 
                 // clone the wasm global for the child instance
                 instance.apply_global_snapshots(&mut store, snapshots);
@@ -1419,7 +1411,6 @@ impl<T> Linker<T> {
                     &module,
                     InstantiateType::InstantiateLib {
                         cageid,
-                        needs_init: true,
                         memory_base: handler,
                     },
                 )?;
