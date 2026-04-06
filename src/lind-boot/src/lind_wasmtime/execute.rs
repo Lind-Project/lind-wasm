@@ -583,6 +583,15 @@ fn load_main_module(
         store.as_context_mut().set_stack_top(stack_low as u64);
     }
 
+    // apply the relocations for the main module if dylink is enable
+    if dylink_metadata.dylink_enabled {
+        let got = dylink_metadata.got.as_mut().unwrap();
+        let mut got_guard = got.lock().unwrap();
+        let table = dylink_metadata.table.as_ref().unwrap();
+        let memory_base = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
+        instance.apply_GOT_relocs(&mut store, Some(&got_guard), table, Some(memory_base));
+    }
+
     cfg_if! {
         // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
         // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
@@ -637,27 +646,15 @@ fn load_main_module(
     // 4) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
-    let mut GOT_updated = false;
+    let mut linker = linker_guard.clone();
+    linker.define_weak_imports_as_traps(&module);
 
     // 5) Create backup instances to populate the vmctx pool
     // See more comments in lind-3i/lib.rs
     for _ in 0..INSTANCE_NUMBER {
-        let mut linker = linker_guard.clone();
-        linker.define_weak_imports_as_traps(&module);
         let (instance, backup_cage_instanceid) = linker
-            .instantiate_with_lind_thread(&mut *store, &module)
+            .instantiate_with_lind_thread(&mut *store, &module, false)
             .context(format!("failed to instantiate"))?;
-        drop(linker);
-
-        if !GOT_updated && dylink_metadata.dylink_enabled {
-            let got = dylink_metadata.got.as_mut().unwrap();
-            let mut got_guard = got.lock().unwrap();
-            let table = dylink_metadata.table.as_ref().unwrap();
-            let memory_base = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
-            instance.apply_GOT_relocs(&mut store, Some(&got_guard), table, Some(memory_base));
-
-            GOT_updated = true;
-        }
 
         // Extract vmctx pointer
         let backup_cage_storeopaque = store.inner_mut();
@@ -674,6 +671,7 @@ fn load_main_module(
     }
 
     // must drop linker before jump into wasm
+    drop(linker);
     drop(linker_guard);
 
     let ret = match func {

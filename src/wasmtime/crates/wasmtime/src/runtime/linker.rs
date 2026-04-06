@@ -1306,7 +1306,7 @@ impl<T> Linker<T> {
                 // Instantiate the library module. Do not need to do any initialization for the module
                 // since all the state are already copied from parent
                 let (instance, _) =
-                    module_linker.instantiate_with_lind_thread(&mut store, &module)?;
+                    module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
 
                 // for child library, just append the library function into function table without doing GOT relocation
                 instance.apply_GOT_relocs(&mut store, None, table, None)?;
@@ -1777,9 +1777,10 @@ impl<T> Linker<T> {
         &self,
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
+        no_start: bool,
     ) -> Result<(Instance, InstanceId)> {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
-            .instantiate_with_lind_thread(store)
+            .instantiate_with_lind_thread(store, no_start)
     }
 
     /// Instantiates a Wasm module as a new lind-wasm cage and returns both the created instance and

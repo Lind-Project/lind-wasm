@@ -276,8 +276,15 @@ impl Instance {
         store: &mut StoreContextMut<'_, T>,
         module: &Module,
         imports: Imports<'_>,
+        no_start: bool,
     ) -> Result<(Instance, InstanceId)> {
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+
+        if !no_start {
+            if let Some(start) = start {
+                instance.start_raw(store, start)?;
+            }
+        }
 
         Ok((instance, instanceid))
     }
@@ -1370,6 +1377,7 @@ impl<T> InstancePre<T> {
     pub fn instantiate_with_lind_thread(
         &self,
         mut store: impl AsContextMut<Data = T>,
+        no_start: bool,
     ) -> Result<(Instance, InstanceId)> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
@@ -1384,7 +1392,12 @@ impl<T> InstancePre<T> {
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
         unsafe {
-            Instance::new_started_impl_with_lind_thread(&mut store, &self.module, imports.as_ref())
+            Instance::new_started_impl_with_lind_thread(
+                &mut store,
+                &self.module,
+                imports.as_ref(),
+                no_start,
+            )
         }
     }
 

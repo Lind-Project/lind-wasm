@@ -530,7 +530,7 @@ impl<
                     // See more comments in lind-3i/lib.rs
                     for _ in 0..9 {
                         let (_, backup_cage_instanceid) = linker
-                            .instantiate_with_lind_thread(&mut store, &module)
+                            .instantiate_with_lind_thread(&mut store, &module, false)
                             .unwrap();
                         let backup_cage_storeopaque = store.inner_mut();
                         let backup_cage_instancehandler =
@@ -894,7 +894,7 @@ impl<
 
                     // instantiate the module
                     let (instance, grate_instanceid) = linker
-                        .instantiate_with_lind_thread(&mut store, &module)
+                        .instantiate_with_lind_thread(&mut store, &module, false)
                         .unwrap();
 
                     let snapshots = &global_snapshots[global_snapshots_index].1;
