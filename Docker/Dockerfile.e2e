@@ -194,7 +194,6 @@ RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lin
     bash -lc '\
       set -euxo pipefail; \
       cd /; \
-      echo "[debug] listing artifacts"; \
       find artifacts -maxdepth 4 | sort || true; \
       test -d artifacts/include/wasm32-wasi/c++; \
       test -f artifacts/lib/wasm32-wasi/libc++.a; \
@@ -203,13 +202,16 @@ RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lin
       mkdir -p build/sysroot/lib/wasm32-wasi; \
       cp -r artifacts/include/wasm32-wasi/c++ build/sysroot/include/wasm32-wasi/; \
       cp artifacts/lib/wasm32-wasi/libc++.a artifacts/lib/wasm32-wasi/libc++abi.a build/sysroot/lib/wasm32-wasi/; \
+      test -f /build/lind-boot; \
+      chmod 0755 /build/lind-boot; \
+      ls -l /build/lind-boot; \
       rm -f trial/*.wasm; \
-      scripts/lind_compile_cpp --compile-only trial/hello.cpp; \
+      scripts/lind_compile_cpp --print-args --print-cmd --compile-only trial/hello.cpp; \
+      ls -l trial; \
       test -f trial/hello.cpp.wasm; \
       mkdir -p /libcpp-out; \
       cp trial/hello.cpp.wasm /libcpp-out/hello.cpp.wasm; \
       printf "%s\n" "LIBCPP_STATUS=pass" > /libcpp-out/libcpp_status \
     '
-
 FROM scratch AS libcpp-artifacts
 COPY --from=libcpp-test /libcpp-out/ /
