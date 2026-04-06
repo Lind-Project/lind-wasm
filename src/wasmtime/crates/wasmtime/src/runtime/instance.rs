@@ -19,14 +19,13 @@ use std::sync::LazyLock;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
-use sysdefs::constants::PAGESIZE;
-use sysdefs::constants::{lind_platform_const, DEFAULT_STACKSIZE, GUARD_SIZE};
+use sysdefs::constants::{lind_platform_const, DEFAULT_STACKSIZE, GUARD_SIZE, PAGESIZE};
+use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
-use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 use wasmtime_lind_utils::{round_up_size, LindGOT};
 
 use super::Val;

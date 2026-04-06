@@ -5,3 +5,4 @@ signal_tests/deterministic/signal_nodefer.c
 dylink_tests/deterministic/main.c
 dylink_tests/deterministic/lib.c
 ci/deterministic/ci_intentional_failure_tmp.c
+concurrent-request/thread_race_grate.c

@@ -7,7 +7,6 @@ use std::sync::{
 
 use dashmap::DashMap;
 
-pub mod lind_syscall_numbers;
 pub mod symbol_table;
 
 // used to manage global active cage count. Used to determine when wasmtime can exit

@@ -26,6 +26,7 @@ use sysdefs::constants::sys_const::{
     RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK,
     SIG_UNBLOCK, WNOHANG,
 };
+use sysdefs::constants::syscall_const;
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
@@ -190,7 +191,7 @@ pub extern "C" fn fork_syscall(
     //   - Resume execution in parent and child
     threei::make_syscall(
         RAWPOSIX_CAGEID,
-        56, // clone syscall number
+        syscall_const::CLONE_SYSCALL as u64,
         UNUSED_NAME,
         WASMTIME_CAGEID,
         clone_arg,
@@ -248,7 +249,7 @@ pub extern "C" fn exec_syscall(
 
     let ret = threei::make_syscall(
         RAWPOSIX_CAGEID,
-        59, // exec syscall number
+        syscall_const::EXEC_SYSCALL as u64,
         UNUSED_NAME,
         WASMTIME_CAGEID,
         path,
@@ -348,7 +349,7 @@ pub extern "C" fn exit_syscall(
     // OnCalledAction handles lind_thread_exit + cage_finalize if last.
     threei::make_syscall(
         RAWPOSIX_CAGEID,
-        60, // exit syscall number
+        syscall_const::EXIT_SYSCALL as u64,
         UNUSED_NAME,
         WASMTIME_CAGEID,
         status_arg,
