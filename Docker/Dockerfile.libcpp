@@ -1,0 +1,22 @@
+# Reuse the same base/build logic style as Dockerfile.e2e
+
+FROM base AS build-libcpp
+
+COPY . .
+
+RUN make sysroot
+
+RUN cp -r artifacts/include/wasm32-wasi/. build/sysroot/include/wasm32-wasi/ \
+    && cp -r artifacts/lib/wasm32-wasi/. build/sysroot/lib/wasm32-wasi/
+
+RUN chmod +x scripts/lind_compile_cpp \
+    && rm -f trial/*.wasm \
+    && scripts/lind_compile_cpp trial/hello.cpp \
+    && test -n "$(find trial -maxdepth 1 -type f -name '*.wasm' | head -n 1)"
+
+RUN mkdir -p /out \
+    && cp "$(find trial -maxdepth 1 -type f -name '*.wasm' | head -n 1)" /out/hello.cpp.wasm \
+    && printf '%s\n' 'LIBCPP_STATUS=pass' > /out/libcpp_status
+
+FROM scratch
+COPY --from=build-libcpp /out/ /
