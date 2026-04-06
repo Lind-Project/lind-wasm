@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH};
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
@@ -13,7 +14,6 @@ use wasmtime_lind_3i::{
     get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
     VmCtxWrapper,
 };
-use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::LindCageManager;
 
 use std::ffi::CStr;
