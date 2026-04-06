@@ -4552,17 +4552,22 @@ pub extern "C" fn symlink_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Type conversion
-    let target = match sc_convert_path_to_host(target_arg, target_cageid, cageid) {
+    // The symlink target is stored as-is and should NOT be path-normalized.
+    // Normalizing would resolve relative paths against cwd, but relative symlink
+    // targets are meant to resolve relative to the symlink's location at dereference
+    // time, not at creation time. So we use get_cstr directly instead of
+    // sc_convert_path_to_host.
+    let target = match get_cstr(target_arg) {
         Ok(path) => path,
-        Err(e) => return syscall_error(e, "symlink", "target path conversion failed"),
+        Err(_) => return syscall_error(Errno::EFAULT, "symlink", "target path conversion failed"),
     };
+
+    // The linkpath is where the symlink is created, so it does need full path resolution.
     let linkpath = match sc_convert_path_to_host(linkpath_arg, linkpath_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "symlink", "linkpath conversion failed"),
     };
 
-    // Validate unused args
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
@@ -4574,7 +4579,7 @@ pub extern "C" fn symlink_syscall(
         );
     }
 
-    let ret = unsafe { libc::symlink(target.as_ptr(), linkpath.as_ptr()) };
+    let ret = unsafe { libc::symlink(target.as_ptr() as *const libc::c_char, linkpath.as_ptr()) };
 
     if ret < 0 {
         let errno = get_errno();
@@ -4619,18 +4624,25 @@ pub extern "C" fn symlinkat_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Type conversion
-    let target = match sc_convert_path_to_host(target_arg, target_cageid, cageid) {
+    // The symlink target is stored as-is and should NOT be path-normalized.
+    // Normalizing would resolve relative paths against cwd, but relative symlink
+    // targets are meant to resolve relative to the symlink's location at dereference
+    // time, not at creation time. So we use get_cstr directly instead of
+    // sc_convert_path_to_host.
+    let target = match get_cstr(target_arg) {
         Ok(path) => path,
-        Err(e) => return syscall_error(e, "symlinkat", "target path conversion failed"),
+        Err(_) => {
+            return syscall_error(Errno::EFAULT, "symlinkat", "target path conversion failed")
+        }
     };
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+
+    // The linkpath is where the symlink is created, so it does need full path resolution.
     let linkpath = match sc_convert_path_to_host(linkpath_arg, linkpath_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "symlinkat", "linkpath conversion failed"),
     };
 
-    // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -4642,7 +4654,7 @@ pub extern "C" fn symlinkat_syscall(
     }
 
     let ret = if virtual_fd == libc::AT_FDCWD {
-        unsafe { libc::symlink(target.as_ptr(), linkpath.as_ptr()) }
+        unsafe { libc::symlink(target.as_ptr() as *const libc::c_char, linkpath.as_ptr()) }
     } else {
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
         if kernel_fd < 0 {
@@ -4659,7 +4671,7 @@ pub extern "C" fn symlinkat_syscall(
 
         unsafe {
             libc::symlinkat(
-                target.as_ptr(),
+                target.as_ptr() as *const libc::c_char,
                 kernel_fd,
                 raw_linkpath.as_ptr() as *const c_char,
             )

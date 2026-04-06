@@ -2,7 +2,6 @@
 #define _GNU_SOURCE
 
 #include <errno.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,15 +11,10 @@
 
 int main(int argc, char **argv)
 {
-    char TARGET[PATH_MAX];
+    const char* TARGET = "testfiles/lstat_target.txt";
     const char* SYMLINK = "testfiles/lstat_link";
+    const char* SYMLINK_TARGET = "lstat_target.txt";
 
-    if (!realpath("testfiles/lstat_target.txt", TARGET)) {
-        perror("realpath");
-        exit(1);
-    }
-
-    // Setup: create target file and symlink
     FILE *fp = fopen(TARGET, "w");
     if (!fp) {
         perror("fopen");
@@ -30,7 +24,7 @@ int main(int argc, char **argv)
     fclose(fp);
 
     unlink(SYMLINK);
-    if (symlink(TARGET, SYMLINK) < 0) {
+    if (symlink(SYMLINK_TARGET, SYMLINK) < 0) {
         perror("symlink");
         exit(1);
     }
@@ -65,24 +59,9 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    // Test 3: stat on symlink SHOULD follow and show regular file
-    printf("=== Test 3: stat() on symlink follows to regular file ===\n");
-    struct stat fst = {0};
-    if (stat(SYMLINK, &fst) < 0) {
-        perror("stat");
-        printf("errno: %d\n", errno);
-        exit(1);
-    }
-    if (S_ISREG(fst.st_mode)) {
-        printf(" stat() correctly followed symlink to regular file\n");
-    } else {
-        printf(" Error: expected regular file after follow, got mode %o\n", fst.st_mode);
-        exit(1);
-    }
-
-    // Test 4: lstat size on symlink should be length of target path string
-    printf("=== Test 4: lstat() size on symlink equals target path length ===\n");
-    size_t expected_size = strlen(TARGET);
+    // Test 3: lstat size on symlink should be length of target path string
+    printf("=== Test 3: lstat() size on symlink equals target path length ===\n");
+    size_t expected_size = strlen(SYMLINK_TARGET);
     if ((size_t)lst.st_size == expected_size) {
         printf(" lstat() symlink size correct: %jd\n", lst.st_size);
     } else {

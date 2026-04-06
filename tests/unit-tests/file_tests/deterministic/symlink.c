@@ -6,9 +6,9 @@
 #include <fcntl.h>
 #include <string.h>
 
-#define TEST_FILE       "/testfiles/symlink_target.txt"
-#define SYMLINK_FILE    "/testfiles/symlink_link.txt"
-#define SYMLINK_AT_FILE "/testfiles/symlinkat_link.txt"
+#define TEST_FILE       "testfiles/symlink_target.txt"
+#define SYMLINK_FILE    "testfiles/symlink_link.txt"
+#define SYMLINK_AT_FILE "testfiles/symlinkat_link.txt"
 
 static void cleanup() {
     unlink(TEST_FILE);
@@ -25,8 +25,10 @@ int main() {
 
     printf("Testing symlink() syscall\n");
     fflush(stdout);
-    // Setup: create testfiles directory
-    mkdir("/testfiles", 0755);
+
+    // Cleanup any leftover files from previous runs
+    unlink(SYMLINK_FILE);
+    unlink(SYMLINK_AT_FILE);
 
     // Setup: create target file
     fd = open(TEST_FILE, O_CREAT | O_WRONLY, 0644);
