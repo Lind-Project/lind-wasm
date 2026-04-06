@@ -99,6 +99,7 @@ RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
 
 
 # Build lind-boot
@@ -145,8 +146,10 @@ ENV LIND_WASM_ROOT=/
 
 RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
  && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run     \
+ && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
- && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
+ && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
@@ -156,8 +159,10 @@ COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_run \
  && install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
  && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run \
+ && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
- && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
+ && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 # Create symlink so hardcoded paths in wasmtime match Docker environment
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
