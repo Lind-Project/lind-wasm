@@ -193,21 +193,21 @@ RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lin
     --mount=from=build-glibc,source=build/sysroot,destination=/build/sysroot \
     bash -lc '\
       set -euxo pipefail; \
-      echo "[debug] listing /artifacts"; \
-      find /artifacts -maxdepth 4 | sort || true; \
-      test -d /artifacts/include/wasm32-wasi/c++; \
-      test -f /artifacts/lib/wasm32-wasi/libc++.a; \
-      test -f /artifacts/lib/wasm32-wasi/libc++abi.a; \
-      mkdir -p /build/sysroot/include/wasm32-wasi; \
-      mkdir -p /build/sysroot/lib/wasm32-wasi; \
-      cp -r /artifacts/include/wasm32-wasi/c++ /build/sysroot/include/wasm32-wasi/; \
-      cp /artifacts/lib/wasm32-wasi/libc++.a /artifacts/lib/wasm32-wasi/libc++abi.a /build/sysroot/lib/wasm32-wasi/; \
-      rm -f /trial/*.wasm; \
-      /scripts/lind_compile_cpp /trial/hello.cpp; \
-      wasm_file="$$(find /trial -maxdepth 1 -type f -name "*.wasm" | head -n 1)"; \
-      test -n "$$wasm_file"; \
+      cd /; \
+      echo "[debug] listing artifacts"; \
+      find artifacts -maxdepth 4 | sort || true; \
+      test -d artifacts/include/wasm32-wasi/c++; \
+      test -f artifacts/lib/wasm32-wasi/libc++.a; \
+      test -f artifacts/lib/wasm32-wasi/libc++abi.a; \
+      mkdir -p build/sysroot/include/wasm32-wasi; \
+      mkdir -p build/sysroot/lib/wasm32-wasi; \
+      cp -r artifacts/include/wasm32-wasi/c++ build/sysroot/include/wasm32-wasi/; \
+      cp artifacts/lib/wasm32-wasi/libc++.a artifacts/lib/wasm32-wasi/libc++abi.a build/sysroot/lib/wasm32-wasi/; \
+      rm -f trial/*.wasm; \
+      scripts/lind_compile_cpp trial/hello.cpp; \
+      test -f trial/hello.cpp.wasm; \
       mkdir -p /libcpp-out; \
-      cp "$$wasm_file" /libcpp-out/hello.cpp.wasm; \
+      cp trial/hello.cpp.wasm /libcpp-out/hello.cpp.wasm; \
       printf "%s\n" "LIBCPP_STATUS=pass" > /libcpp-out/libcpp_status \
     '
 
