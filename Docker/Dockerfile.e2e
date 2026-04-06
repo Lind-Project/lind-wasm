@@ -193,12 +193,36 @@ RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lin
     --mount=from=build-glibc,source=build/sysroot,destination=/build/sysroot \
     bash -lc '\
       set -euxo pipefail; \
+      echo "[debug] checking mounted paths"; \
+      pwd; \
+      ls -la /; \
+      echo "[debug] /artifacts"; \
+      ls -la /artifacts || true; \
+      find /artifacts -maxdepth 4 | sort || true; \
+      echo "[debug] /build/sysroot"; \
+      ls -la /build || true; \
+      ls -la /build/sysroot || true; \
+      find /build/sysroot -maxdepth 3 | sort || true; \
+      echo "[debug] /trial"; \
+      ls -la /trial || true; \
+      echo "[debug] creating sysroot dirs"; \
       mkdir -p /build/sysroot/include/wasm32-wasi; \
       mkdir -p /build/sysroot/lib/wasm32-wasi; \
+      echo "[debug] copying libc++ headers"; \
+      test -d /artifacts/include/wasm32-wasi/c++; \
       cp -r /artifacts/include/wasm32-wasi/c++ /build/sysroot/include/wasm32-wasi/; \
+      echo "[debug] copying libc++ libs"; \
+      test -f /artifacts/lib/wasm32-wasi/libc++.a; \
+      test -f /artifacts/lib/wasm32-wasi/libc++abi.a; \
       cp /artifacts/lib/wasm32-wasi/libc++.a /artifacts/lib/wasm32-wasi/libc++abi.a /build/sysroot/lib/wasm32-wasi/; \
+      echo "[debug] sysroot after copy"; \
+      find /build/sysroot/include/wasm32-wasi -maxdepth 2 | sort || true; \
+      find /build/sysroot/lib/wasm32-wasi -maxdepth 2 | sort || true; \
+      echo "[debug] compiling hello.cpp"; \
       rm -f /trial/*.wasm; \
       /scripts/lind_compile_cpp /trial/hello.cpp; \
+      echo "[debug] trial after compile"; \
+      ls -la /trial; \
       wasm_file="$$(find /trial -maxdepth 1 -type f -name "*.wasm" | head -n 1)"; \
       test -n "$$wasm_file"; \
       mkdir -p /libcpp-out; \
