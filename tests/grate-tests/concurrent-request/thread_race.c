@@ -13,45 +13,19 @@
 #include <pthread.h>
 #include <assert.h>
 
-#define NUM_THREADS 20
-#define TOTAL_CALLS 5000
-
-static int next_call = 0;
-static pthread_mutex_t call_mu = PTHREAD_MUTEX_INITIALIZER;
+#define NUM_THREADS      20
+#define CALLS_PER_THREAD 100000
 
 static void *thread_fn(void *arg) {
     int tid = (int)(long)arg;
-
-    while (1) {
-        int my_call;
-
-        if (pthread_mutex_lock(&call_mu) != 0) {
-            fprintf(stderr, "[thread %d] FAIL: pthread_mutex_lock failed\n", tid);
-            assert(0);
-        }
-
-        if (next_call >= TOTAL_CALLS) {
-            pthread_mutex_unlock(&call_mu);
-            break;
-        }
-
-        my_call = next_call;
-        next_call++;
-
-        if (pthread_mutex_unlock(&call_mu) != 0) {
-            fprintf(stderr, "[thread %d] FAIL: pthread_mutex_unlock failed\n", tid);
-            assert(0);
-        }
-
+    for (int i = 0; i < CALLS_PER_THREAD; i++) {
         int ret = geteuid();
         if (ret != 10) {
-            fprintf(stderr,
-                    "[thread %d] FAIL: global_call %d, expected 10, got %d\n",
-                    tid, my_call, ret);
+            fprintf(stderr, "[thread %d] FAIL: iteration %d, expected 10, got %d\n",
+                    tid, i, ret);
             assert(0);
         }
     }
-
     return NULL;
 }
 
@@ -66,11 +40,10 @@ int main(void) {
         }
     }
 
-    for (int i = 0; i < NUM_THREADS; i++) {
+    for (int i = 0; i < NUM_THREADS; i++)
         pthread_join(threads[i], NULL);
-    }
 
-    printf("[thread_race] PASS: %d total calls across %d threads returned 10\n",
-           TOTAL_CALLS, NUM_THREADS);
+    printf("[thread_race] PASS: %d threads x %d calls returned 10\n",
+           NUM_THREADS, CALLS_PER_THREAD);
     return 0;
 }
