@@ -19,8 +19,8 @@ use std::sync::LazyLock;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
-use sysdefs::constants::{lind_platform_const, DEFAULT_STACKSIZE, GUARD_SIZE, PAGESIZE};
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
+use sysdefs::constants::{lind_platform_const, DEFAULT_STACKSIZE, GUARD_SIZE, PAGESIZE};
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
