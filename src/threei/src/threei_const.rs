@@ -20,7 +20,7 @@ pub const ELINDESRCH: u64 = 0xE001_0002;
 /// normally without error.
 pub const GRATE_OK: i32 = 0;
 /// Indicates a failed Grate call.
-/// This value (-1) is used by Wasmtime to signal an error or invalid
+/// This value is used by Wasmtime to signal an error or invalid
 /// state during Grate function dispatch (e.g., invalid pointer, missing
 /// context, or lookup failure).
 pub const GRATE_ERR: i32 = -0x1FFF_0003;

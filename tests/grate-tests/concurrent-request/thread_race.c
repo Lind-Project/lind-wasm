@@ -1,8 +1,6 @@
 /* thread_race.c — Cage-side test with a global cap on total calls.
  *
- * Spawns NUM_THREADS threads. Together they perform at most TOTAL_CALLS
- * geteuid() calls in total. This is useful when the runtime can only
- * support a bounded number of calls in one test run.
+ * Spawns NUM_THREADS threads and each performs CALLS_PER_THREAD geteuid() calls. 
  *
  * Pair with: thread_race_grate.c
  * Run: lind-wasm thread_race_grate.cwasm thread_race.cwasm
