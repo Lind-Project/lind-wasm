@@ -174,3 +174,37 @@ COPY --from=test /report.html /wasm-e2e-report.html
 COPY --from=test /reports /reports
 COPY --from=test /e2e_comment.md /e2e_comment.md
 COPY --from=test /e2e_status /e2e_status
+
+FROM base AS libcpp-test
+ENV LIND_WASM_ROOT=/
+COPY --parents scripts trial artifacts Makefile .
+RUN chmod 0755 /scripts/lind_compile /scripts/lind_compile_cpp /scripts/lind_run \
+ && install -D -m 0755 /scripts/lind_compile     /usr/local/bin/lind_compile \
+ && install -D -m 0755 /scripts/lind_compile_cpp /usr/local/bin/lind_compile_cpp \
+ && install -D -m 0755 /scripts/lind_run         /usr/local/bin/lind_run \
+ && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+
+RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
+
+RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lind-boot/target \
+    --mount=from=build-lind-boot,source=build/lind-boot,destination=/build/lind-boot \
+    --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
+    --mount=from=build-glibc,source=build/sysroot,destination=/build/sysroot \
+    bash -lc '\
+      set -euxo pipefail; \
+      mkdir -p /build/sysroot/include/wasm32-wasi; \
+      mkdir -p /build/sysroot/lib/wasm32-wasi; \
+      cp -r /artifacts/include/wasm32-wasi/c++ /build/sysroot/include/wasm32-wasi/; \
+      cp /artifacts/lib/wasm32-wasi/libc++.a /artifacts/lib/wasm32-wasi/libc++abi.a /build/sysroot/lib/wasm32-wasi/; \
+      rm -f /trial/*.wasm; \
+      /scripts/lind_compile_cpp /trial/hello.cpp; \
+      wasm_file="$$(find /trial -maxdepth 1 -type f -name "*.wasm" | head -n 1)"; \
+      test -n "$$wasm_file"; \
+      mkdir -p /libcpp-out; \
+      cp "$$wasm_file" /libcpp-out/hello.cpp.wasm; \
+      printf "%s\n" "LIBCPP_STATUS=pass" > /libcpp-out/libcpp_status \
+    '
+
+FROM scratch AS libcpp-artifacts
+COPY --from=libcpp-test /libcpp-out/ /
