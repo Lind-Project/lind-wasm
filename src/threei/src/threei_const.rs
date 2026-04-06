@@ -23,7 +23,7 @@ pub const GRATE_OK: i32 = 0;
 /// This value (-1) is used by Wasmtime to signal an error or invalid
 /// state during Grate function dispatch (e.g., invalid pointer, missing
 /// context, or lookup failure).
-pub const GRATE_ERR: i32 = -1;
+pub const GRATE_ERR: i32 = -0x1FFF_0003;
 /// Runtime identifier for the Wasmtime-based execution environment.
 /// This constant represents the runtime ID assigned to the Wasmtime runtime
 /// when integrating with the 3i library. It is used to associate cages or
@@ -44,5 +44,9 @@ pub const REGISTER_HANDLER_SYSCALL: u64 = 1001;
 /// TODO: When introducing a Rust-side unified syscall number table
 /// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const COPY_DATA_BETWEEN_CAGES_SYSCALL: u64 = 1002;
-
+/// 3i-specific syscall number for `copy_handler_table_to_cage`.
+///
+/// Match the definition in `glibc/lind_syscall_num.h`.
+/// TODO: When introducing a Rust-side unified syscall number table
+/// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const COPY_HANDLER_TABLE_TO_CAGE_SYSCALL: u64 = 1003;
