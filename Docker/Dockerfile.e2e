@@ -152,6 +152,9 @@ RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
 FROM base AS test
 ENV LIND_WASM_ROOT=/
+find /artifacts -maxdepth 4 | sort || true
+test -d /artifacts/include/wasm32-wasi/c++
+test -f /artifacts/lib/wasm32-wasi/libc++.a
 COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_run \
  && install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
