@@ -96,6 +96,7 @@ pub const OPENAT_SYSCALL: i32 = 257;
 pub const UNLINKAT_SYSCALL: i32 = 263;
 pub const READLINKAT_SYSCALL: i32 = 267;
 pub const SYNC_FILE_RANGE_SYSCALL: i32 = 277;
+pub const ACCEPT4_SYSCALL: i32 = 288;
 pub const PRLIMIT64_SYSCALL: i32 = 302;
 pub const EPOLL_CREATE1_SYSCALL: i32 = 291;
 pub const DUP3_SYSCALL: i32 = 292;

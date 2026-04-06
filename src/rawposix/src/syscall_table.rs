@@ -149,6 +149,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         syscall_const::SYNC_FILE_RANGE_SYSCALL as u64,
         sync_file_range_syscall,
     ),
+    (syscall_const::ACCEPT4_SYSCALL as u64, accept4_syscall),
     (
         syscall_const::EPOLL_CREATE1_SYSCALL as u64,
         epoll_create1_syscall,
