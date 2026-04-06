@@ -177,7 +177,7 @@ COPY --from=test /e2e_status /e2e_status
 
 FROM base AS libcpp-test
 ENV LIND_WASM_ROOT=/
-COPY --parents scripts trial artifacts Makefile .
+COPY --parents scripts trial artifacts tools Makefile .
 RUN chmod 0755 /scripts/lind_compile /scripts/lind_compile_cpp /scripts/lind_run \
  && install -D -m 0755 /scripts/lind_compile     /usr/local/bin/lind_compile \
  && install -D -m 0755 /scripts/lind_compile_cpp /usr/local/bin/lind_compile_cpp \
@@ -204,7 +204,7 @@ RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lin
       cp -r artifacts/include/wasm32-wasi/c++ build/sysroot/include/wasm32-wasi/; \
       cp artifacts/lib/wasm32-wasi/libc++.a artifacts/lib/wasm32-wasi/libc++abi.a build/sysroot/lib/wasm32-wasi/; \
       rm -f trial/*.wasm; \
-      scripts/lind_compile_cpp trial/hello.cpp; \
+      scripts/lind_compile_cpp --compile-only trial/hello.cpp; \
       test -f trial/hello.cpp.wasm; \
       mkdir -p /libcpp-out; \
       cp trial/hello.cpp.wasm /libcpp-out/hello.cpp.wasm; \
