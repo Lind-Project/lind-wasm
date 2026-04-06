@@ -188,30 +188,22 @@ RUN chmod 0755 /scripts/lind_compile /scripts/lind_compile_cpp /scripts/lind_run
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 
 RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lind-boot/target \
-    --mount=from=build-lind-boot,source=build/lind-boot,destination=/build/lind-boot \
-    --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
-    --mount=from=build-glibc,source=build/sysroot,destination=/build/sysroot \
-    bash -lc '\
-      set -euxo pipefail; \
-      cd /; \
-      find artifacts -maxdepth 4 | sort || true; \
-      test -d artifacts/include/wasm32-wasi/c++; \
-      test -f artifacts/lib/wasm32-wasi/libc++.a; \
-      test -f artifacts/lib/wasm32-wasi/libc++abi.a; \
+    --mount=from=build-lind-boot,source=build/lind-boot,destination=/mnt/lind-boot \
+    --mount=from=build-glibc,source=src/glibc/sysroot,destination=/mnt/glibc-sysroot-src \
+    --mount=from=build-glibc,source=build/sysroot,destination=/mnt/sysroot \
+    bash -lc 'set -euxo pipefail; cd /; \
+      rm -rf /build/sysroot; \
+      mkdir -p /build/sysroot; \
+      cp -a /mnt/sysroot/. /build/sysroot/; \
+      mkdir -p /build; \
+      cp -a /mnt/lind-boot /build/lind-boot; \
+      chmod 0755 /build/lind-boot; \
       mkdir -p build/sysroot/include/wasm32-wasi; \
       mkdir -p build/sysroot/lib/wasm32-wasi; \
       cp -r artifacts/include/wasm32-wasi/c++ build/sysroot/include/wasm32-wasi/; \
       cp artifacts/lib/wasm32-wasi/libc++.a artifacts/lib/wasm32-wasi/libc++abi.a build/sysroot/lib/wasm32-wasi/; \
-      test -f /build/lind-boot; \
-      chmod 0755 /build/lind-boot; \
-      ls -l /build/lind-boot; \
       rm -f trial/*.wasm; \
-      scripts/lind_compile_cpp --print-args --print-cmd --compile-only trial/hello.cpp; \
-      ls -l trial; \
-      test -f trial/hello.cpp.wasm; \
-      mkdir -p /libcpp-out; \
-      cp trial/hello.cpp.wasm /libcpp-out/hello.cpp.wasm; \
-      printf "%s\n" "LIBCPP_STATUS=pass" > /libcpp-out/libcpp_status \
-    '
+      scripts/lind_compile_cpp --print-args --print-cmd --compile-only trial/hello.cpp'
+      
 FROM scratch AS libcpp-artifacts
 COPY --from=libcpp-test /libcpp-out/ /
