@@ -1,8 +1,8 @@
 [package]
-name = "wasmtime-lind-multi-process"
+name = "wasmtime-lind-dylink"
 version.workspace = true
 authors.workspace = true
-description = "lind multi-process implementation inside wasmtime"
+description = "lind dynamic loading implementation inside wasmtime"
 edition.workspace = true
 
 [lints]
@@ -12,19 +12,15 @@ workspace = true
 anyhow = { workspace = true }
 log = { workspace = true }
 rand = "0.8"
-wasi-common = { workspace = true, features = ["exit", "sync"]}
 wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
-wasmtime-lind-utils = { path = "../lind-utils" }
-wasmtime-lind-3i = { path = "../lind-3i" }
 rawposix = { path = "../rawposix" }
-typemap = { path = "../typemap" }
-sysdefs = { path = "../sysdefs" }
 threei = { path = "../threei" }
+wasmtime-lind-multi-process = { path = "../lind-multi-process" }
+wasmtime-lind-utils = { path = "../lind-utils" }
+sysdefs = { path = "../sysdefs" }
 cage = { path = "../cage" }
-cfg-if = { workspace = true }
+typemap = { path = "../typemap" }
 
 [features]
-default = []
-disable_signals = []
 debug-dylink = []

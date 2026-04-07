@@ -1,6 +1,6 @@
 use std::boxed::Box;
 
-use crate::store::StoreOpaque;
+use crate::store::{StoreId, StoreOpaque};
 use crate::{AsContext, Engine, ExternType, Func, Memory, SharedMemory};
 
 mod global;

@@ -1,9 +1,9 @@
 use crate::cli::CliOptions;
-use std::sync::Arc;
-use wasmtime::TypedFunc;
+use std::sync::{Arc, Mutex};
+use wasmtime::{Table, TypedFunc};
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
-use wasmtime_wasi_threads::WasiThreadsCtx;
+use wasmtime_lind_utils::LindGOT;
 
 /// Function type for the `pass_fptr_to_wt` function used as an entry point for grate-run syscalls.
 pub type PassFptrTyped = TypedFunc<
@@ -35,7 +35,6 @@ pub type PassFptrTyped = TypedFunc<
 #[derive(Default, Clone)]
 pub struct HostCtx {
     pub lind_environ: Option<LindEnviron>,
-    pub wasi_threads: Option<Arc<WasiThreadsCtx<HostCtx>>>,
     pub lind_fork_ctx: Option<LindCtx<HostCtx, CliOptions>>,
     pub pass_fptr_func: Option<PassFptrTyped>,
 }
@@ -48,12 +47,11 @@ impl HostCtx {
     pub fn fork(&self) -> Self {
         let forked_lind_environ = self.lind_environ.as_ref().map(|e| e.fork());
 
-        let forked_lind_fork_ctx = self.lind_fork_ctx.as_ref().map(|ctx| ctx.fork());
+        let forked_lind_fork_ctx = self.lind_fork_ctx.as_ref().map(|ctx| ctx.fork_process());
 
         Self {
             lind_environ: forked_lind_environ,
             lind_fork_ctx: forked_lind_fork_ctx,
-            wasi_threads: self.wasi_threads.clone(),
             pass_fptr_func: None,
         }
     }
@@ -62,5 +60,23 @@ impl HostCtx {
 impl LindHost<HostCtx, CliOptions> for HostCtx {
     fn get_ctx(&self) -> LindCtx<HostCtx, CliOptions> {
         self.lind_fork_ctx.clone().unwrap()
+    }
+}
+
+pub struct DylinkMetadata {
+    pub dylink_enabled: bool,
+    pub got: Option<Arc<Mutex<LindGOT>>>,
+    pub table: Option<Table>,
+    pub epoch_handler: Option<u64>,
+}
+
+impl DylinkMetadata {
+    pub fn new(dylink_enabled: bool) -> Self {
+        DylinkMetadata {
+            dylink_enabled,
+            got: None,
+            table: None,
+            epoch_handler: None,
+        }
     }
 }

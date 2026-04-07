@@ -311,50 +311,38 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
         |         | |
         |         | |
         |         |
-        ----------- <--- tls_base_addr / real_stack_bottom
-        | tls_base|
+        ----------- <--- real_stack_bottom
+        |   TLS   |
+        |   DATA  |
         ----------- <--- clone_args
         |  clone  |
         |   args  |
-        ----------- <--- TLS_addr
-        |   TLS   |
-        |   data  |
         ----------- <--- pthread_addr
         | pthread |
         |  struct |
         ----------- <--- stack_bottom
   */
-  size_t tls_size = __builtin_wasm_tls_size();
-  size_t tls_align = __builtin_wasm_tls_align();
-  // __copy_tls aligns mem UP by up to tls_align bytes before writing tls_size
-  // bytes of TLS data.  Reserve the extra alignment padding so TLS doesn't
-  // overflow into the pthread struct above it.
-  size_t tls_alloc = tls_size + tls_align;
+  // NOTE: TLS DATA is allocated by the host
+  // for guest side, only TCB and clone args are laid out
+  // and we transfer the allocation control to host after that
+  
   // stack bottom = stack top + stack size
   unsigned char *stack_bottom = (void *)pd->stackblock + pd->stackblock_size;
   // calculate the offset for each field based on the above diagram
 
   // Reserve space for the pthread struct just below the stack
   unsigned char *pthread_addr = stack_bottom - TLS_TCB_SIZE;
-  // Allocate space for TLS data (+ alignment padding) below pthread struct
-  unsigned char *TLS_addr = pthread_addr - tls_alloc;
-  // Allocate space for clone_args below TLS data
-  struct clone_args *args = (struct clone_args *)(TLS_addr - sizeof(struct clone_args));
-  // Reserve 8 bytes below clone_args for the TLS base pointer
-  uintptr_t* tls_base_addr = (uintptr_t*)((unsigned char *)args - 8);
+  // Allocate space for clone_args
+  struct clone_args *args = (struct clone_args *)(pthread_addr - sizeof(struct clone_args));
   // The actual bottom of the usable stack (with all metadata laid out)
-  unsigned char *real_stack_bottom = (unsigned char *)tls_base_addr;
+  unsigned char *real_stack_bottom = (unsigned char *)args;
 
   // set up clone args
   memset(args, 0, sizeof(struct clone_args));
   args->flags = clone_flags;
   args->stack = real_stack_bottom;
-  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_alloc - 8;
+  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE;
   args->child_tid = &pd->tid;
-
-  // initialize TLS data
-  void* tls_base = __copy_tls((void *)TLS_addr);
-  *tls_base_addr = (uintptr_t)tls_base;
 
   // do the clone call
   int ret = __clone_internal(args, &start_thread, pd);
@@ -399,18 +387,6 @@ static int _Noreturn
 start_thread (void *arg)
 {
   struct pthread *pd = arg;
-
-  // retrieve the TLS data address
-  size_t tls_size = __builtin_wasm_tls_size();
-  size_t tls_align = __builtin_wasm_tls_align();
-  size_t tls_alloc = tls_size + tls_align;
-  uintptr_t* tls_base_addr = pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_alloc - 8;
-  void* tls_base = (void*)(*tls_base_addr);
-
-  // set __tls_base wasm global
-	__asm__("local.get %0\n"
-    "global.set __tls_base\n"
-    :: "r"(tls_base));
 
   /* We are either in (a) or (b), and in either case we either own PD already
      (2) or are about to own PD (1), and so our only restriction would be that

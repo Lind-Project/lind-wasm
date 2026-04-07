@@ -223,6 +223,32 @@ pub const CLONE_IO: u64 = 0x80000000; /* Clone I/O context.  */
 clone3 syscalls.  */
 pub const CLONE_NEWTIME: u64 = 0x00000080; /* New time namespace */
 
+// dlopen mode constants
+pub const RTLD_LAZY: i32 = 0x00001; /* Lazy function call binding.  */
+pub const RTLD_NOW: i32 = 0x00002; /* Immediate function call binding.  */
+pub const RTLD_NOLOAD: i32 = 0x00004; /* Do not load the object.  */
+pub const RTLD_DEEPBIND: i32 = 0x00008; /* Use deep binding.  */
+/* If the following bit is set in the MODE argument to `dlopen',
+the symbols of the loaded object and its dependencies are made
+visible as if the object were linked directly into the program.  */
+pub const RTLD_GLOBAL: i32 = 0x00100;
+/* Unix98 demands the following flag which is the inverse to RTLD_GLOBAL.
+The implementation does this by default and so we can define the
+value to zero.  */
+pub const RTLD_LOCAL: i32 = 0;
+pub const RTLD_NODELETE: i32 = 0x01000; /* Do not delete object when closed.  */
+
+// dlsym constants
+/* If the first argument of `dlsym' or `dlvsym' is set to RTLD_NEXT
+the run-time address of the symbol called NAME in the next shared
+object is returned.  The "next" relation is defined by the order
+the shared objects were loaded.  */
+pub const RTLD_NEXT: i32 = -1;
+/* If the first argument to `dlsym' or `dlvsym' is set to RTLD_DEFAULT
+the run-time address of the symbol called NAME in the global scope
+is returned.  */
+pub const RTLD_DEFAULT: i32 = 0;
+
 // Exit code
 // Source: src/glibc/misc/sysexits.h
 pub const EX_OK: i32 = 0; /* successful termination */
