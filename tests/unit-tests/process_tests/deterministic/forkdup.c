@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
         fflush(stdout);
     }
     
-    printf("all done\n");
+    printf("PASS\n");
     fflush(stdout);
     close(fd);
     return 0;
