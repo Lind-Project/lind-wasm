@@ -19,6 +19,8 @@ LINDFS_DIRS := \
 	       var/log \
 	       var/run
 
+WITH_FPCAST ?=
+
 .PHONY: build 
 build: lindfs lind-boot sysroot
 	@echo "Build complete"
@@ -28,7 +30,7 @@ all: build
 
 .PHONY: sysroot
 sysroot: build-dir
-	./scripts/make_glibc_and_sysroot.sh
+	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
 .PHONY: lind-boot

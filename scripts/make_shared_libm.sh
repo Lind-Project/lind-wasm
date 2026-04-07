@@ -17,6 +17,11 @@ BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 
+WITH_FPCAST=""
+if [[ "$1" == "--with-fpcast" ]]; then
+    WITH_FPCAST="--fpcast-emu --pass-arg=relocatable-fpcast"
+fi
+
 symbols=$($SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $SCRIPTS_DIR/extract_versions.py --flags --paths-file $SCRIPTS_DIR/math-path.txt)
 
 # --import-memory, --shared-memory: to make memory shared across wasm module
@@ -43,7 +48,7 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.
 mkdir -p $REPO_ROOT/lindfs/lib
 
 # apply wasm-opt
-$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.wasm
+$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals $WITH_FPCAST -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.wasm
 
 # do precompile
 rm -f $REPO_ROOT/lindfs/lib/libm.cwasm
