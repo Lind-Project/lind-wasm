@@ -131,8 +131,6 @@ RUN make sysroot
 
 # Build Docker image that includes the full lind-wasm toolchain
 # NOTE: Lind-wasm source code is not included
-# Build Docker image that includes the full lind-wasm toolchain
-# NOTE: Lind-wasm source code is not included
 FROM base AS release
 
 COPY --from=build-lind-boot --parents src/lind-boot/target .
@@ -144,16 +142,13 @@ COPY --parents scripts tests tools skip_test_cases.txt .
 
 ENV LIND_WASM_ROOT=/
 
-RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
- && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run     \
+RUN chmod 0755 /scripts/lind_compile /scripts/lind_run /scripts/cargo-lind_compile \
+ && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
  && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
-# Replace copied helper scripts with symlinks so local edits are reflected.
-RUN rm -f /usr/local/bin/lind_compile /usr/local/bin/lind_run \
- && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /scripts/lind_run     /usr/local/bin/lind_run
 
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
@@ -161,16 +156,13 @@ FROM base AS test
 ENV LIND_WASM_ROOT=/
 COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_run \
- && install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
- && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run \
+ && chmod 0755 /scripts/cargo-lind_compile \
+ && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
  && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
-# Replace copied helper scripts with symlinks so local edits are reflected.
-RUN rm -f /usr/local/bin/lind_compile /usr/local/bin/lind_run \
- && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /scripts/lind_run     /usr/local/bin/lind_run
 # Create symlink so hardcoded paths in wasmtime match Docker environment
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
