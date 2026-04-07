@@ -19,7 +19,7 @@ LINDFS_DIRS := \
 	       var/log \
 	       var/run
 
-WITH_FPCAST ?= 0
+WITH_FPCAST ?=
 
 .PHONY: build 
 build: lindfs lind-boot sysroot
