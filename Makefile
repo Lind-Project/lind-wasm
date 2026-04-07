@@ -20,7 +20,7 @@ LINDFS_DIRS := \
 	       var/run
 
 .PHONY: build 
-build: sysroot lind-boot lindfs
+build: lindfs lind-boot sysroot
 	@echo "Build complete"
 
 .PHONY: all
