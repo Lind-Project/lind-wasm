@@ -34,6 +34,11 @@ pub struct CliOptions {
     #[arg(long = "wasmtime-backtrace")]
     pub wasmtime_backtrace: bool,
 
+    /// Enables special handling of fpcast enabled wasm binary, mainly for dynamic loading
+    /// A dynamically compiled wasm binary with fpcast-emu enabled must enable this option
+    #[arg(long = "enable-fpcast")]
+    pub enable_fpcast: bool,
+
     /// First item is WASM file (argv[0]), rest are program args (argv[1..])
     ///
     /// Example:

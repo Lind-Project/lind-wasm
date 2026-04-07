@@ -10,6 +10,11 @@
 
 set -e
 
+shared_script_args=()
+if [[ "$1" == "--with-fpcast" ]]; then
+    shared_script_args+=(--with-fpcast)
+fi
+
 CC="clang"
 GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
@@ -185,8 +190,8 @@ cp "$BUILD/csu/set_stack_pointer.o" "$SYSROOT/lib/wasm32-wasi/"
 "$SCRIPT_DIR/make_archive.sh"
 cd $SCRIPT_DIR
 cd ../
-"$SCRIPT_DIR/make_shared_glibc.sh"
-"$SCRIPT_DIR/make_shared_libm.sh"
+"$SCRIPT_DIR/make_shared_glibc.sh" "${shared_script_args[@]}"
+"$SCRIPT_DIR/make_shared_libm.sh" "${shared_script_args[@]}"
 
 # Copy all files from the external include directory to the new sysroot include directory
 cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"

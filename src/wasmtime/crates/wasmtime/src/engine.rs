@@ -180,6 +180,10 @@ impl Engine {
         &self.inner.tunables
     }
 
+    pub fn fpcast_enabled(&self) -> bool {
+        self.config().fpcast_enabled
+    }
+
     /// Returns whether the engine `a` and `b` refer to the same configuration.
     #[inline]
     pub fn same(a: &Engine, b: &Engine) -> bool {

@@ -77,7 +77,8 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
 
     // -- Initialize the Wasmtime execution environment --
     let wasm_file_path = Path::new(lindboot_cli.wasm_file());
-    let wt_config = make_wasmtime_config(lindboot_cli.wasmtime_backtrace);
+    let wt_config =
+        make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
     let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
     let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
 
@@ -589,7 +590,14 @@ fn load_main_module(
         let mut got_guard = got.lock().unwrap();
         let table = dylink_metadata.table.as_ref().unwrap();
         let memory_base = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
-        instance.apply_GOT_relocs(&mut store, Some(&got_guard), table, Some(memory_base));
+        let fpcast_enabled = linker_guard.engine().fpcast_enabled();
+        instance.apply_GOT_relocs(
+            &mut store,
+            Some(&got_guard),
+            table,
+            Some(memory_base),
+            fpcast_enabled,
+        );
     }
 
     cfg_if! {
@@ -792,7 +800,7 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     let wasm_path = Path::new(cli.wasm_file());
     let cwasm_path = wasm_path.with_extension("cwasm");
 
-    let wt_config = make_wasmtime_config(cli.wasmtime_backtrace);
+    let wt_config = make_wasmtime_config(cli.wasmtime_backtrace, false);
     let engine = Engine::new(&wt_config).context("failed to create engine")?;
     let wasm_bytes = std::fs::read(wasm_path)
         .with_context(|| format!("failed to read {}", wasm_path.display()))?;
@@ -864,9 +872,10 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
 
 /// Generates a wasmtime config based on the whether or not the --wasmtime-backtrace flag was
 /// provided to lind-boot.
-fn make_wasmtime_config(backtrace: bool) -> wasmtime::Config {
+fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Config {
     let mut wt_config = wasmtime::Config::new();
     wt_config.wasm_backtrace(backtrace);
+    wt_config.fpcast_enabled(enable_fpcast);
 
     let details = if backtrace {
         WasmBacktraceDetails::Enable

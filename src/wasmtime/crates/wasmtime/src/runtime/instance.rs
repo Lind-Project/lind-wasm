@@ -20,7 +20,9 @@ use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
-use sysdefs::constants::{lind_platform_const, DEFAULT_STACKSIZE, GUARD_SIZE, PAGESIZE};
+use sysdefs::constants::{
+    lind_platform_const, DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE,
+};
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
@@ -1037,6 +1039,7 @@ impl Instance {
         got: Option<&LindGOT>,
         table: &Table,
         memory_base: Option<u32>,
+        fpcast_enabled: bool,
     ) -> Result<()> {
         // if updating GOT is not needed (in case of fork or thread creation, as the GOT is already cloned)
         // just append the library function into function table
@@ -1065,13 +1068,36 @@ impl Instance {
         // We only update slots that are still unresolved to preserve first-definition-wins
         // semantics (load-order precedence / interposition).
         for (name, func) in funcs {
-            let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
-            if need_update_got {
-                // update GOT entry
-                let got_inner = got.as_ref().unwrap();
-                if got_inner.update_entry_if_unresolved(&name, index) {
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] update GOT.func.{} to {}", name, index);
+            // skip updating GOT only if fpcast is enabled
+            // and the function is NOT a fpcast function
+            let should_skip = if fpcast_enabled {
+                if name.starts_with(FPCAST_FUNC_SIGNATURE) {
+                    false
+                } else {
+                    true
+                }
+            } else {
+                false
+            };
+
+            if !should_skip {
+                let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
+                if need_update_got {
+                    let final_name = {
+                        if fpcast_enabled {
+                            // restore to its original name
+                            name.strip_prefix(FPCAST_FUNC_SIGNATURE).unwrap()
+                        } else {
+                            &name
+                        }
+                    };
+
+                    // update GOT entry
+                    let got_inner = got.as_ref().unwrap();
+                    if got_inner.update_entry_if_unresolved(&final_name, index) {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] update GOT.func.{} to {}", final_name, index);
+                    }
                 }
             }
         }

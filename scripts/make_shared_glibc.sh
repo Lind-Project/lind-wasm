@@ -17,6 +17,11 @@ BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 
+WITH_FPCAST=""
+if [[ "$1" == "--with-fpcast" ]]; then
+    WITH_FPCAST="--fpcast-emu --pass-arg=relocatable-fpcast"
+fi
+
 symbols=$($SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $SCRIPTS_DIR/extract_versions.py --flags --paths-file $SCRIPTS_DIR/version-path-minimal.txt)
 
 # --import-memory, --shared-memory: to make memory shared across wasm module
@@ -54,7 +59,7 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm $REPO_ROOT/lindfs/lib/libc.wasm __stack_pointer global __stack_pointer
 
 # apply wasm-opt
-$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals -O2 --debuginfo $REPO_ROOT/lindfs/lib/libc.wasm -o $REPO_ROOT/lindfs/lib/libc.wasm
+$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals $WITH_FPCAST -O2 --debuginfo $REPO_ROOT/lindfs/lib/libc.wasm -o $REPO_ROOT/lindfs/lib/libc.wasm
 
 # do precompile
 rm -f $REPO_ROOT/lindfs/lib/libc.cwasm

@@ -122,3 +122,5 @@ pub enum DylinkErrorCode {
     // other errors
     EINTERNAL = 9, // other internal error occurs in dynamic loader
 }
+
+pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";

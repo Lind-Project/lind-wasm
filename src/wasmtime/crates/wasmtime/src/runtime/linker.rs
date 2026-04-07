@@ -17,6 +17,7 @@ use core::pin::Pin;
 use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
 use std::sync::LazyLock;
+use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
 use wasmtime_environ::{EntityIndex, GlobalIndex};
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::LindGOT;
@@ -960,6 +961,8 @@ impl<T> Linker<T> {
                         | "asyncify_get_state"
                         // lind custom symbols
                         | "__get_aligned_tls_size" => true,
+                        // fpcast-emu exports, which shouldn't linked directly
+                        | s if s.starts_with(FPCAST_FUNC_SIGNATURE) => true,
                         _ => false,
                     }
                 {
@@ -1234,7 +1237,14 @@ impl<T> Linker<T> {
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };
 
-                instance.apply_GOT_relocs(&mut store, Some(got), table, Some(memory_base))?;
+                let fpcast_enabled = self.engine.config().fpcast_enabled;
+                instance.apply_GOT_relocs(
+                    &mut store,
+                    Some(got),
+                    table,
+                    Some(memory_base),
+                    fpcast_enabled,
+                )?;
 
                 // If the module has a start function, run it (Wasm start semantics).
                 if let Some(start) = module.compiled_module().module().start_func {
@@ -1308,8 +1318,9 @@ impl<T> Linker<T> {
                 let (instance, _) =
                     module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
 
+                let fpcast_enabled = self.engine.config().fpcast_enabled;
                 // for child library, just append the library function into function table without doing GOT relocation
-                instance.apply_GOT_relocs(&mut store, None, table, None)?;
+                instance.apply_GOT_relocs(&mut store, None, table, None, fpcast_enabled)?;
 
                 // clone the wasm global for the child instance
                 instance.apply_global_snapshots(&mut store, snapshots);
@@ -1418,6 +1429,8 @@ impl<T> Linker<T> {
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };
 
+                let fpcast_enabled = self.engine.config().fpcast_enabled;
+
                 // Collect exports first to avoid mutating the store/linker while iterating exports.
                 // We split funcs and globals because they are relocated differently.
                 // TODO: probably want to unify this with apply_GOT_relocs in the future
@@ -1437,14 +1450,39 @@ impl<T> Linker<T> {
                 }
 
                 for (name, func) in funcs {
-                    // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
-                    let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)))?;
-                    // append the symbol into mappings
-                    symbol_map.add(name.clone(), index);
-                    // update GOT entry
-                    if got.update_entry_if_unresolved(&name, index) {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] update GOT.func.{} to {}", name, index);
+                    // skip updating GOT only if fpcast is enabled
+                    // and the function is NOT a fpcast function
+                    let should_skip = if fpcast_enabled {
+                        if name.starts_with(FPCAST_FUNC_SIGNATURE) {
+                            false
+                        } else {
+                            true
+                        }
+                    } else {
+                        false
+                    };
+
+                    if !should_skip {
+                        // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
+                        let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)))?;
+
+                        let final_name = {
+                            if fpcast_enabled {
+                                // restore to its original name
+                                name.strip_prefix(FPCAST_FUNC_SIGNATURE).unwrap()
+                            } else {
+                                &name
+                            }
+                        };
+
+                        // update GOT entry
+                        if got.update_entry_if_unresolved(&final_name, index) {
+                            #[cfg(feature = "debug-dylink")]
+                            println!("[debug] update GOT.func.{} to {}", final_name, index);
+                        }
+
+                        // append the symbol into mappings
+                        symbol_map.add(final_name.to_string(), index);
                     }
                 }
                 for (name, global) in globals {
