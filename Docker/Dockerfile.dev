@@ -128,6 +128,10 @@ RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/loc
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
+# Replace copied helper scripts with symlinks so local edits are reflected.
+RUN rm -f /usr/local/bin/lind_compile /usr/local/bin/lind_run \
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run
 USER ${USERNAME}
 
 CMD ["/bin/bash"]
