@@ -19,17 +19,17 @@ int main(int argc, char *argv[])
         printf("I'm the child\n");
         fflush(stdout);
         dup2(backup,STDOUT_FILENO);
-	printf("back to stdout\n");
-	fflush(stdout);
-	exit(0);
+        printf("back to stdout\n");
+        fflush(stdout);
+        exit(0);
     }
     else
     {
+        wait(NULL);
         printf("I'm the parent\n");
-	fflush(stdout);
+        fflush(stdout);
     }
     
-    wait(NULL);
     printf("all done\n");
     fflush(stdout);
     close(fd);
