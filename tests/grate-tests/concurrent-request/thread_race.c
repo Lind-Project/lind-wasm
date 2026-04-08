@@ -1,13 +1,6 @@
-/* thread_race.c — Cage-side test for concurrent grate Store access (#961).
+/* thread_race.c — Cage-side test with a global cap on total calls.
  *
- * Spawns NUM_THREADS threads that each call geteuid() (interposed by the
- * grate) CALLS_PER_THREAD times. This forces concurrent
- * grate_callback_trampoline invocations from different host threads into
- * the same Wasmtime Store, reproducing the Store concurrency bug.
- *
- * The grate handler does heap allocations, shared state mutation, and
- * pointer chasing to exercise the same memory patterns as a real grate
- * (e.g. fdtables/DashMap).
+ * Spawns NUM_THREADS threads and each performs CALLS_PER_THREAD geteuid() calls. 
  *
  * Pair with: thread_race_grate.c
  * Run: lind-wasm thread_race_grate.cwasm thread_race.cwasm
