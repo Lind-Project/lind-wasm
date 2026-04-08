@@ -23,28 +23,32 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-SYSROOT="$REPO_ROOT/src/glibc/sysroot"
+SYSROOT="${REPO_ROOT}/build/sysroot"
+if [[ ! -d "$SYSROOT" ]]; then
+  SYSROOT="${REPO_ROOT}/src/glibc/sysroot"
+fi
 LIBDIR="$SYSROOT/lib/wasm32-wasi"
-CRT1="$LIBDIR/crt1.o"
 
 # Sanity checks (fail early with a clear message)
-[ -r "$CRT1" ] || { echo "Missing $CRT1"; exit 1; }
 [ -d "$LIBDIR" ] || { echo "Missing $LIBDIR"; exit 1; }
+[ -r "$LIBDIR/crt1_shared.o" ] || { echo "Missing $LIBDIR/crt1_shared.o"; exit 1; }
 
 # Build the actual clang command we will exec
 cmd=(
   clang
   --target=wasm32-unknown-wasip1
   --sysroot="$SYSROOT"
-  -nostartfiles          # prevent clang from looking for its own crt1.o
+  -nostartfiles          # we manually link crt1_shared.o for dynamic build
 )
 
 # Forward all rustc-provided args
 cmd+=("$@")
 
-# Inject our startup object and libraries **after** user objects
+# Inject startup objects and libraries for shared/dynamic build
 cmd+=(
-  "$CRT1"
+  "$LIBDIR/set_stack_pointer.o"
+  "$LIBDIR/crt1_shared.o"
+  "$LIBDIR/lind_utils.o"
   -L"$LIBDIR"
   -lc
   -pthread
