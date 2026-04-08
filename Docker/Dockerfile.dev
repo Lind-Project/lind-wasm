@@ -86,7 +86,7 @@ WORKDIR /home/${USERNAME}
 # --profile minimal tells rustup to install only the essentials for the toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal
-RUN /home/${USERNAME}/.cargo/bin/rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+RUN /home/${USERNAME}/.cargo/bin/rustup component add rust-src --toolchain nightly-2026-02-11-x86_64-unknown-linux-gnu
 
 # --- Clone the repo as user ---
 RUN git clone --branch "${BRANCH_NAME}" --single-branch "${REPO_URL}" /home/${USERNAME}/lind-wasm
