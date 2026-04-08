@@ -17,7 +17,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <dirent.h>
-#include <stdio.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
 #include <dirstream.h>
