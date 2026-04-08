@@ -37,12 +37,7 @@ __readdir_unlocked (DIR *dirp)
       size_t maxread = dirp->allocation;
       ssize_t bytes;
 
-      bytes = MAKE_LEGACY_SYSCALL(GETDENTS_SYSCALL, "syscall|getdents",
-                                  (uint64_t) dirp->fd,
-                                  TRANSLATE_GUEST_POINTER_TO_HOST (dirp->data),
-                                  (uint64_t) maxread,
-                                  NOTUSED, NOTUSED, NOTUSED,
-                                  TRANSLATE_ERRNO_ON);
+      bytes = __getdents (dirp->fd, dirp->data, maxread);
 
       if (bytes <= 0)
         {
