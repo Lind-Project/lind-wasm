@@ -102,6 +102,12 @@ lazy_static! {
     };
 }
 
+#[doc = include_str!("../docs/check_cage_exists.md")]
+pub fn check_cage_exists(cageid: u64) -> bool {
+    let fdtable = GLOBALFDTABLE.lock().unwrap();
+    fdtable.contains_key(&cageid)
+}
+
 #[doc = include_str!("../docs/init_empty_cage.md")]
 pub fn init_empty_cage(cageid: u64) {
     let mut fdtable = GLOBALFDTABLE.lock().unwrap();
@@ -1104,4 +1110,3 @@ pub fn refresh() {
         e.into_inner()
     });
 }
-
