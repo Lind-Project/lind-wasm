@@ -61,6 +61,8 @@ __readdir_unlocked (DIR *dirp)
 
   /* Copy source fields into local variables first, so that in-place
      rewriting does not interfere with reading the original record.  */
+  /*TODO: directing casting 64bit field to 32bit field is not safe and could cause potential problems. 
+     It is rare to have d_ino and d_off to be large enough to cause the problem but should still might need to be fixed in the future*/
   __ino64_t src_ino = src->d_ino;
   __off64_t src_off = src->d_off;
   unsigned short src_reclen = src->d_reclen;
