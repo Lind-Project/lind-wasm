@@ -50,7 +50,7 @@ lindfs:
 	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
 
 .PHONY: lind-debug
-lind-debug: build-dir
+lind-debug: build-dir lindfs
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
 	$(MAKE) build_glibc LIND_DEBUG=1
 	
