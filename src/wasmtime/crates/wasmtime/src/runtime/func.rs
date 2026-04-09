@@ -3,7 +3,7 @@ use crate::runtime::vm::{
     VMFunctionImport, VMOpaqueContext,
 };
 use crate::runtime::Uninhabited;
-use crate::store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored};
+use crate::store::{AutoAssertNoGc, StoreData, StoreId, StoreOpaque, Stored};
 use crate::type_registry::RegisteredType;
 use crate::vm::TrapReason;
 use crate::{prelude::*, OnCalledAction};
@@ -12,13 +12,15 @@ use crate::{
     StoreContext, StoreContextMut, Val, ValRaw, ValType,
 };
 use alloc::sync::Arc;
+use cage::DashMap;
 use core::ffi::c_void;
 use core::future::Future;
 use core::mem::{self, MaybeUninit};
 use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
-use wasmtime_environ::VMSharedTypeIndex;
+use wasmtime_environ::{TableIndex, VMSharedTypeIndex};
+use wasmtime_lind_utils::symbol_table::SymbolMap;
 
 /// A reference to the abstract `nofunc` heap value.
 ///
@@ -2056,7 +2058,7 @@ for_each_function_signature!(impl_wasm_ty_list);
 /// recommended to use this type.
 pub struct Caller<'a, T> {
     pub store: StoreContextMut<'a, T>,
-    pub caller: &'a crate::runtime::vm::Instance,
+    pub caller: &'a mut crate::runtime::vm::Instance,
 }
 
 impl<T> Caller<'_, T> {
@@ -2075,7 +2077,7 @@ impl<T> Caller<'_, T> {
 
             let ret = f(Caller {
                 store,
-                caller: &instance,
+                caller: instance,
             });
 
             // Safe to recreate a mutable borrow of the store because `ret`
@@ -2136,6 +2138,31 @@ impl<T> Caller<'_, T> {
             .ok_or(())
             .unwrap()
             .get_stack_pointer(&mut self.store)
+    }
+
+    /// append library's symbols into lookup table
+    pub fn push_library_symbols(&mut self, symbols: SymbolMap) -> Result<i32> {
+        self.store.push_library_symbols(symbols)
+    }
+
+    /// find library symbol from local scope
+    pub fn find_library_symbol_from_local(&mut self, handler: i32, name: &str) -> Option<u32> {
+        self.store.find_library_symbol_from_local(handler, name)
+    }
+
+    /// find library symbol from global scope
+    pub fn find_library_symbol_from_global(&mut self, name: &str) -> Option<u32> {
+        self.store.find_library_symbol_from_global(name)
+    }
+
+    /// detach the library
+    pub fn detach_library(&mut self, handler: i32) {
+        self.store.detach_library(handler);
+    }
+
+    /// check if the library is already loaded
+    pub fn check_library_loaded(&self, inode: u64) -> Option<i32> {
+        self.store.check_library_loaded(inode)
     }
 
     pub fn get_asyncify_start_unwind(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
@@ -2329,6 +2356,47 @@ impl<T> Caller<'_, T> {
     pub fn fuel_async_yield_interval(&mut self, interval: Option<u64>) -> Result<()> {
         self.store.fuel_async_yield_interval(interval)
     }
+
+    /// Grow the library's function table (table index 0) by `delta` entries.
+    ///
+    /// Each newly added slot is initialized with `init_value`, which must be
+    /// convertible to a `funcref` table element.
+    ///
+    /// This assumes:
+    /// - The library uses table index 0 as its primary function table.
+    /// - The table has element type `funcref`.
+    ///
+    /// Returns the previous size of the table (as per Wasm `table.grow` semantics).
+    ///
+    /// Panics if:
+    /// - The table does not exist,
+    /// - The element type is incompatible,
+    /// - Or the grow operation fails.
+    pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> Result<u32> {
+        let lib_ty = crate::TableType::new(crate::RefType::FUNCREF, 0, None);
+        let lib_init = init_value.into_table_element(self.store.0, lib_ty.element())?;
+        let res = self
+            .caller
+            .table_grow(TableIndex::from_u32(0), delta, lib_init)?;
+
+        res.ok_or(anyhow!("cannot grow table"))
+    }
+
+    /// Return the current size of the library's function table (table index 0).
+    ///
+    /// This directly accesses the underlying VM table structure and queries its size.
+    ///
+    /// SAFETY:
+    /// - Assumes table index 0 exists and remains valid for the lifetime of `self`.
+    /// - The returned pointer from `get_table` must reference a live table.
+    /// - No concurrent mutation should invalidate the table pointer while accessed.
+    pub fn get_table_size(&mut self) -> u32 {
+        let table_pointer = self.caller.get_table(TableIndex::from_u32(0));
+        unsafe {
+            let table = &*table_pointer;
+            table.size()
+        }
+    }
 }
 
 impl<T> AsContext for Caller<'_, T> {
@@ -2483,7 +2551,7 @@ impl HostContext {
 /// Technically this structure needs a `<T>` type parameter to connect to the
 /// `Store<T>` itself, but that's an unsafe contract of using this for now
 /// rather than part of the struct type (to avoid `Func<T>` in the API).
-pub(crate) struct HostFunc {
+pub struct HostFunc {
     ctx: HostContext,
 
     // Stored to unregister this function's signature with the engine when this

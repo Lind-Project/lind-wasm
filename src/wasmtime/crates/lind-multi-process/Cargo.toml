@@ -27,3 +27,4 @@ cfg-if = { workspace = true }
 [features]
 default = []
 disable_signals = []
+debug-dylink = []
