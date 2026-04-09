@@ -3,7 +3,6 @@ use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampo
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
-use sysdefs::logging::lind_debug_panic;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::ptr::NonNull;
@@ -13,6 +12,7 @@ use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, 
 use sysdefs::constants::{
     DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX,
 };
+use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
@@ -481,14 +481,7 @@ fn attach_api(
                         lind_debug_panic("dlopen within threads is currently not supported!");
                     }
 
-                    load_library_module(
-                        caller,
-                        linker,
-                        got_table,
-                        cageid,
-                        library_name,
-                        mode,
-                    )
+                    load_library_module(caller, linker, got_table, cageid, library_name, mode)
                 });
             Some(dynamic_loader)
         } else {

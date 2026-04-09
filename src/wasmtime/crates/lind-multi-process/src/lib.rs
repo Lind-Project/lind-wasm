@@ -66,7 +66,7 @@ pub struct LindCtx<T, U> {
 
     // Global Offset Table of the process
     pub got_table: Option<Arc<Mutex<LindGOT>>>,
-    
+
     // the module associated with the ctx
     modules: Vec<(String, String, Module)>,
 
@@ -1496,7 +1496,7 @@ impl<
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
         let forked_ctx = Self {
-            linker: None, // Linker is explicitly set up by the caller
+            linker: None,    // Linker is explicitly set up by the caller
             got_table: None, // new process should use a new GOT
             modules: self.modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
@@ -1515,7 +1515,7 @@ impl<
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
         let forked_ctx = Self {
-            linker: None, // Linker is explicitly set up by the caller
+            linker: None,    // Linker is explicitly set up by the caller
             got_table: None, // threads within a process should use same GOT
             modules: self.modules.clone(),
             cageid: self.cageid,
