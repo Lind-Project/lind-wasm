@@ -458,29 +458,39 @@ fn _decrement_fdcount(entry: FDTableEntry) {
     }
     drop(closehandlers);
 
-    let mut call_last = false;
     let newcount;
+    let call_last;
 
-    if let Some(mut count) = FDCOUNT.get_mut(&mytuple) {
-        let old = *count;
-        newcount = old.checked_sub(1).unwrap_or_else(|| {
-            panic!("FDCOUNT underflow for key {:?}", mytuple);
-        });
+    match FDCOUNT.entry(mytuple) {
+        dashmap::mapref::entry::Entry::Occupied(mut occ) => {
+            let old = *occ.get();
+            newcount = old.checked_sub(1).unwrap_or_else(|| {
+                panic!("FDCOUNT underflow for key {:?}", mytuple);
+            });
 
-        if newcount > 0 {
-            *count = newcount;
-        } else {
-            *count = 0;
-            call_last = true;
+            if newcount > 0 {
+                *occ.get_mut() = newcount;
+                call_last = false;
+            } else {
+                occ.remove();
+                call_last = true;
+            }
         }
-    } else {
-        panic!("FDCOUNT get failed. FDCOUNT missing key {:?}, current map: {:?}", mytuple, FDCOUNT.iter().map(|kv| (*kv.key(), *kv.value())).collect::<Vec<_>>());
+        dashmap::mapref::entry::Entry::Vacant(_) => {
+            panic!(
+                "FDCOUNT get failed. FDCOUNT missing key {:?}, current map: {:?}",
+                mytuple,
+                FDCOUNT
+                    .iter()
+                    .map(|kv| (*kv.key(), *kv.value()))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 
     if !call_last {
         (intermediatech)(entry, newcount);
     } else {
-        FDCOUNT.remove(&mytuple);
         (lastch)(entry, 0);
     }
 }
