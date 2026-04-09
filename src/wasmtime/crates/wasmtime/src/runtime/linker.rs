@@ -1518,7 +1518,10 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                self.instance_dylink(store, module_name, instance);
+                if !symbol_map.is_local() {
+                    // only attach library symbol to Linker if it is global scope
+                    self.instance_dylink(store, module_name, instance);
+                }
 
                 Ok(handler)
             }
