@@ -17,7 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <dirent.h>
-#include <stdio.h>
+#include <stddef.h>
+#include <string.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
 #include <dirstream.h>
@@ -67,16 +68,20 @@ __readdir_unlocked (DIR *dirp)
   __off64_t src_off = src->d_off;
   unsigned short src_reclen = src->d_reclen;
   unsigned char src_type = src->d_type;
-  char src_name[256];
 
-  snprintf(src_name, sizeof(src_name), "%s", src->d_name);
+  size_t name_len = strnlen (src->d_name, sizeof (src->d_name)) + 1;
+  size_t dst_reclen = offsetof (struct dirent, d_name) + name_len;
+
+  /* Align the resulting record length.  */
+  dst_reclen = (dst_reclen + sizeof (long) - 1) & ~(sizeof (long) - 1);
 
   /* Convert the dirent64 record into a plain dirent record.  */
   dst->d_ino = (__ino_t) src_ino;
   dst->d_off = (__off_t) src_off;
-  dst->d_reclen = src_reclen;
+  dst->d_reclen = (unsigned short) dst_reclen;
   dst->d_type = src_type;
-  snprintf(dst->d_name, sizeof(dst->d_name), "%s", src_name);
+
+  memmove (dst->d_name, src->d_name, name_len);
 
   dirp->offset += src_reclen;
   dirp->filepos = src_off;
