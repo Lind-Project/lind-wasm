@@ -146,10 +146,8 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::EPOLL_CTL_SYSCALL as u64, epoll_ctl_syscall),
     (syscall_const::OPENAT_SYSCALL as u64, openat_syscall),
     (syscall_const::UNLINKAT_SYSCALL as u64, unlinkat_syscall),
-    (syscall_const::SYMLINKAT_SYSCALL as u64, symlinkat_syscall)(
-        syscall_const::READLINKAT_SYSCALL as u64,
-        readlinkat_syscall,
-    ),
+    (syscall_const::SYMLINKAT_SYSCALL as u64, symlinkat_syscall),
+    (syscall_const::READLINKAT_SYSCALL as u64, readlinkat_syscall),
     (
         syscall_const::SYNC_FILE_RANGE_SYSCALL as u64,
         sync_file_range_syscall,
