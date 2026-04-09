@@ -1507,6 +1507,8 @@ impl<T> Linker<T> {
                     }
                 }
 
+                let is_local = symbol_map.is_local();
+
                 // append the symbol mapping of this library into the global lookup table
                 let handler = store.push_library_symbols(symbol_map).unwrap() as u64;
 
@@ -1518,7 +1520,7 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                if !symbol_map.is_local() {
+                if !is_local {
                     // only attach library symbol to Linker if it is global scope
                     self.instance_dylink(store, module_name, instance);
                 }

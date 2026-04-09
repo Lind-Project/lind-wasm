@@ -70,6 +70,8 @@ pub struct LindCtx<T, U> {
     // the module associated with the ctx
     modules: Vec<(String, String, Module)>,
 
+    dlopen_modules: Vec<(String, String, Module)>,
+
     // cage id
     pub cageid: i32,
 
@@ -160,6 +162,7 @@ impl<
             linker: Some(linker),
             got_table: got_table,
             modules: modules.clone(),
+            dlopen_modules: vec![],
             cageid,
             tid,
             next_threadid,
@@ -179,6 +182,10 @@ impl<
         if let Some(got) = got_table {
             self.got_table = Some(Arc::new(Mutex::new(got)));
         }
+    }
+
+    pub fn append_module(&mut self, path: String, module: Module) {
+        self.dlopen_modules.push(("env".to_string(), path, module));
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -346,6 +353,8 @@ impl<
         let parent_stack_low = caller.as_context().get_stack_top();
         let parent_stack_high = caller.as_context().get_stack_base();
 
+        let symbol_table = caller.get_library_symbol_table().clone();
+
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
@@ -365,7 +374,7 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -377,6 +386,7 @@ impl<
                     let lind_manager = child_ctx.lind_manager.clone();
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
+                    let dlopen_modules = child_ctx.dlopen_modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     let mut child_got = if dylink_enabled {
@@ -402,7 +412,9 @@ impl<
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     // e.g. __stack_pointer, __indirect_function_table, etc.
 
-                    if dylink_enabled {
+                    let mut main_module_index: i32 = -1;
+
+                    let child_table = if dylink_enabled {
                         let mut table_size = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
@@ -461,13 +473,17 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Process,
-                                    &global_snapshots[global_snapshots_index].1,
+                                    &global_snapshots[global_snapshots_index as usize].1,
                                 )
                                 .unwrap();
                             global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
-                    }
+
+                        Some(child_table)
+                    } else {
+                        None
+                    };
 
                     store.set_stack_snapshots(parent_stack_snapshots);
 
@@ -489,6 +505,66 @@ impl<
 
                     let snapshots = &global_snapshots[global_snapshots_index].1;
                     instance.apply_global_snapshots(&mut store, snapshots);
+                    global_snapshots_index += 1;
+
+                    if dylink_enabled {
+                        let mut child_table = child_table.unwrap();
+                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+
+                        global_snapshots_index += 5;
+                        for (name, path, module) in dlopen_modules.iter() {
+                            // Read dylink metadata for this preloaded (library) module.
+                            // This contains the module's declared table/memory requirements.
+                            let dylink_info = module.dylink_meminfo();
+                            let dylink_info = dylink_info.as_ref().unwrap();
+                            // Append this library's function table region to the shared table.
+                            // `table_start` is the starting index of the library's reserved range
+                            // within the global indirect function table.
+                            let table_start = child_table.size(&mut store) as i32;
+
+                            #[cfg(feature = "debug-dylink")]
+                            println!(
+                                "[debug] library table_start: {}, grow: {}",
+                                table_start, dylink_info.table_size
+                            );
+                            // Grow the shared indirect function table by the amount requested by the
+                            // library (as recorded in its dylink section). New slots are initialized
+                            // to null funcref.
+                            child_table
+                                .grow(
+                                    &mut store,
+                                    dylink_info.table_size,
+                                    wasmtime::Ref::Func(None),
+                                )
+                                .unwrap();
+
+                            let module_name = module.name().unwrap();
+                            let module_memory_base = *memory_base_table
+                                .get(module_name)
+                                .expect("memory base not found for library");
+
+                            linker.allow_shadowing(true);
+                            // Link the library instance into the main linker namespace.
+                            // The linker records the module under `name` and uses `table_start`
+                            // to relocate/interpret the library's function references into the
+                            // shared table. GOT entries are patched through the shared LindGOT.
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    child_cageid,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base,
+                                    ChildLibraryType::Process,
+                                    &global_snapshots[global_snapshots_index as usize].1,
+                                )
+                                .unwrap();
+                            global_snapshots_index += 1;
+                            linker.allow_shadowing(false);
+                        }
+                    }
 
                     let epoch_pointer = if epoch_handler.is_some() {
                         epoch_handler.unwrap() as *mut u64
@@ -772,6 +848,8 @@ impl<
         let parent_address_u64 = parent_address as u64;
         let parent_stack_high_usr = caller.as_context().get_stack_base();
 
+        let symbol_table = caller.get_library_symbol_table().clone();
+
         // get current cageid, child should have the same cageid
         let child_cageid = self.cageid;
 
@@ -819,7 +897,7 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -1499,6 +1577,7 @@ impl<
             linker: None,    // Linker is explicitly set up by the caller
             got_table: None, // new process should use a new GOT
             modules: self.modules.clone(),
+            dlopen_modules: self.dlopen_modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
@@ -1518,6 +1597,7 @@ impl<
             linker: None,    // Linker is explicitly set up by the caller
             got_table: None, // threads within a process should use same GOT
             modules: self.modules.clone(),
+            dlopen_modules: self.dlopen_modules.clone(),
             cageid: self.cageid,
             tid: self.tid,
             next_threadid: self.next_threadid.clone(),

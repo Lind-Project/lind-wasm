@@ -794,6 +794,7 @@ fn load_library_module(
 
     let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
     lind_ctx.attach_linker(linker);
+    lind_ctx.append_module(library_name.to_string().clone(), lib_module);
 
     ret
 }

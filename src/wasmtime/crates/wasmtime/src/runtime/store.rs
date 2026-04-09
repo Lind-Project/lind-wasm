@@ -665,7 +665,7 @@ impl<T> Store<T> {
     /// The store will limit the number of instances, linear memories, and
     /// tables created to 10,000. This can be overridden with the
     /// [`Store::limiter`] configuration method.
-    pub fn new_inner(engine: &Engine) -> StoreOpaque {
+    pub fn new_inner(engine: &Engine, symbol_table: SymbolTable) -> StoreOpaque {
         let pkey = engine.allocator().next_available_pkey();
 
         StoreOpaque {
@@ -676,7 +676,7 @@ impl<T> Store<T> {
             asyncify_state: super::AsyncifyState::Normal,
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
-            library_symbols: SymbolTable::new(),
+            library_symbols: symbol_table,
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
@@ -1450,6 +1450,15 @@ impl<'a, T> StoreContextMut<'a, T> {
     // push new library instance
     pub fn push_library_symbols(&mut self, symbol_map: SymbolMap) -> Result<i32> {
         Ok(self.0.library_symbols.add(symbol_map))
+    }
+
+    // get and set library symbol table, used for cloning symbol table across fork/thread
+    pub fn get_library_symbol_table(&self) -> &SymbolTable {
+        &self.0.library_symbols
+    }
+
+    pub fn set_library_symbol_table(&mut self, symbol_table: SymbolTable) {
+        self.0.library_symbols = symbol_table;
     }
 
     // find library symbol from local scope
