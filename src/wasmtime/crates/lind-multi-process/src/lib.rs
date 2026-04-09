@@ -14,13 +14,13 @@ use wasmtime_lind_3i::{
     get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
     VmCtxWrapper,
 };
-use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
@@ -62,7 +62,11 @@ pub trait LindHost<T, U> {
 // top level runtime engine is abusing closures.
 pub struct LindCtx<T, U> {
     // linker used by the module
-    linker: Option<Linker<T>>,
+    pub linker: Option<Linker<T>>,
+
+    // Global Offset Table of the process
+    pub got_table: Option<Arc<Mutex<LindGOT>>>,
+    
     // the module associated with the ctx
     modules: Vec<(String, String, Module)>,
 
@@ -70,7 +74,7 @@ pub struct LindCtx<T, U> {
     pub cageid: i32,
 
     // thread id
-    tid: i32,
+    pub tid: i32,
 
     // next thread id
     next_threadid: Arc<AtomicU32>,
@@ -123,6 +127,7 @@ impl<
     pub fn new(
         modules: Vec<(String, String, Module)>,
         linker: Linker<T>,
+        got_table: Option<Arc<Mutex<LindGOT>>>,
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
         cageid: i32,
@@ -153,6 +158,7 @@ impl<
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
             linker: Some(linker),
+            got_table: got_table,
             modules: modules.clone(),
             cageid,
             tid,
@@ -166,9 +172,13 @@ impl<
     }
 
     pub fn attach_linker(&mut self, linker: Linker<T>) {
-        // debug_assert!(self.linker.is_none());
-
         self.linker = Some(linker);
+    }
+
+    pub fn attach_got_table(&mut self, got_table: Option<LindGOT>) {
+        if let Some(got) = got_table {
+            self.got_table = Some(Arc::new(Mutex::new(got)));
+        }
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -369,10 +379,17 @@ impl<
                     let modules = child_ctx.modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
+                    let mut child_got = if dylink_enabled {
+                        Some(LindGOT::new())
+                    } else {
+                        None
+                    };
+
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
                             &mut store,
                             &engine,
+                            &mut child_got,
                             &snapshot.0,
                             &snapshot.1,
                             &snapshot.2,
@@ -551,6 +568,7 @@ impl<
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
                     new_child_ctx.attach_linker(linker);
+                    new_child_ctx.attach_got_table(child_got);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -818,12 +836,19 @@ impl<
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
+                    let mut child_got = if dylink_enabled {
+                        Some(LindGOT::new())
+                    } else {
+                        None
+                    };
+
                     let (mut linker,
                          memory_base_table,
                          epoch_handler,
                          _,
                         ) = Linker::new_child_linker(&mut store,
                                 &engine,
+                                &mut child_got,
                                 &snapshot.0,
                                 &snapshot.1,
                                 &snapshot.2
@@ -976,6 +1001,7 @@ impl<
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
                     new_child_ctx.attach_linker(linker);
+                    new_child_ctx.attach_got_table(child_got);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -1471,6 +1497,7 @@ impl<
     pub fn fork_process(&self) -> Self {
         let forked_ctx = Self {
             linker: None, // Linker is explicitly set up by the caller
+            got_table: None, // new process should use a new GOT
             modules: self.modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
@@ -1489,6 +1516,7 @@ impl<
     pub fn fork_thread(&self) -> Self {
         let forked_ctx = Self {
             linker: None, // Linker is explicitly set up by the caller
+            got_table: None, // threads within a process should use same GOT
             modules: self.modules.clone(),
             cageid: self.cageid,
             tid: self.tid,

@@ -456,6 +456,7 @@ impl<T> Linker<T> {
     pub fn new_child_linker(
         mut store: impl AsContextMut<Data = T>,
         engine: &Engine,
+        mut got_table: &mut Option<LindGOT>,
         globals: &Vec<(String, String, GlobalType, Val)>,
         hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
         shared_memory: &Option<(String, String, ClonedMemory)>,
@@ -471,6 +472,13 @@ impl<T> Linker<T> {
         // define globals to the new linker
         for (module, name, ty, val) in globals {
             let cloned_global = Global::new(&mut store, ty.clone(), val.clone())?;
+
+            if let Some(got) = got_table.as_mut() {
+                if module == "GOT.func" || module == "GOT.mem" {
+                    let handler = cloned_global.get_handler_as_u32(&mut store);
+                    got.new_entry(name.clone(), handler);
+                }
+            }
 
             // collect library's memory base for quick look up when instantiate the child library
             if module == "lib.memory_base" {
