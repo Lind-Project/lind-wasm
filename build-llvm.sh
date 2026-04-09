@@ -29,9 +29,7 @@ cmake -B "$BUILD_DIR" -S "$LLVM_SRC" \
   	-L$HOME_DIR/build/sysroot/lib/wasm32-wasi \
   	-Wl,--export=__stack_pointer,--export=__stack_low \
   	-Wl,--import-memory,--export-memory \
-    -Wl,--shared-memory \
   	-Wl,--max-memory=67108864 \
-    -Wl,--no-entry \
   	-lm " \
   -DLLVM_TOOL_LLI_BUILD=OFF \
   -DLLVM_TOOL_LLVM_JITLINK_EXECUTOR_BUILD=OFF \
