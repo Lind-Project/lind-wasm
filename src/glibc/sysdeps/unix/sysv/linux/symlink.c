@@ -20,8 +20,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include <sysdep-cancel.h>
-#include <sys/syscall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 #include <addr_translation.h>
@@ -37,3 +35,4 @@ __symlink (const char *from, const char *to)
       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__symlink, symlink)
+
