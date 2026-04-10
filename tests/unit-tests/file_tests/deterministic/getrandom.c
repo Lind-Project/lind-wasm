@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <stdint.h>
 
 static int fill_with_random(unsigned char *buf, size_t len) {
     size_t filled = 0;
@@ -65,7 +67,31 @@ int main(void) {
         return 1;
     }
 
-    // If we reached here, everything looks fine.
+    // 5. arc4random (uses __getrandom_nocancel internally)
+    uint32_t r1 = arc4random();
+    uint32_t r2 = arc4random();
+    // at minimum it should not crash, and two calls should differ
+    if (r1 == 0 && r2 == 0) {
+        fprintf(stderr, "arc4random test: FAIL (both returned 0)\n");
+        return 1;
+    }
+
+    // 6. arc4random_buf
+    unsigned char arc_buf[32];
+    memset(arc_buf, 0, sizeof(arc_buf));
+    arc4random_buf(arc_buf, sizeof(arc_buf));
+    all_zero = true;
+    for (size_t i = 0; i < sizeof(arc_buf); i++) {
+        if (arc_buf[i] != 0) {
+            all_zero = false;
+            break;
+        }
+    }
+    if (all_zero) {
+        fprintf(stderr, "arc4random_buf test: FAIL (buffer is all zeros)\n");
+        return 1;
+    }
+
     printf("getrandom basic test: PASS\n");
     return 0;
 }
