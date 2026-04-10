@@ -467,13 +467,14 @@ fn attach_api(
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
     wstore.data_mut().lind_environ = Some(LindEnviron::new(&lindboot_cli.args, &lindboot_cli.vars));
 
-    // cloning the reference to the same linker and got
-    // later when dlopen is invoked, same linker and got instance can be used for instantiate the new library
+    // Build a dynamic loader closure that reads the current cage's linker and GOT
+    // at dlopen call time. This ensures the correct per-cage linker is used
+    // rather than a snapshot captured at cage creation.
     let dynamic_loader = {
         if dylink_metadata.dylink_enabled {
             let dynamic_loader: DynamicLoader<HostCtx> =
                 Arc::new(move |caller, cageid, library_name, mode| {
-                    let mut lind_ctx = caller.data().lind_fork_ctx.as_ref().unwrap();
+                    let lind_ctx = caller.data().lind_fork_ctx.as_ref().unwrap();
                     let linker = lind_ctx.linker.clone().unwrap();
                     let got_table = lind_ctx.got_table.clone().unwrap();
 
@@ -794,7 +795,7 @@ fn load_library_module(
 
     let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
     lind_ctx.attach_linker(linker);
-    lind_ctx.append_module(library_name.to_string().clone(), lib_module);
+    lind_ctx.append_module(library_name.to_string(), lib_module);
 
     ret
 }

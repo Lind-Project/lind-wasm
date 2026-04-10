@@ -160,7 +160,7 @@ impl<
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
             linker: Some(linker),
-            got_table: got_table,
+            got_table,
             modules: modules.clone(),
             dlopen_modules: vec![],
             cageid,
@@ -471,7 +471,10 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Process,
-                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
                                 )
                                 .unwrap();
                             linker.allow_shadowing(false);
@@ -503,15 +506,18 @@ impl<
                     let main_module_name = module.name().unwrap();
                     instance.apply_global_snapshots(
                         &mut store,
-                        global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
+                        global_snapshots
+                            .get(main_module_name)
+                            .map(Vec::as_slice)
+                            .unwrap_or(&[]),
                     );
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
 
-                        for (name, path, module) in dlopen_modules.iter() {
-                            // Read dylink metadata for this preloaded (library) module.
+                        for (name, _path, module) in dlopen_modules.iter() {
+                            // Read dylink metadata for this dlopen'd module.
                             // This contains the module's declared table/memory requirements.
                             let dylink_info = module.dylink_meminfo();
                             let dylink_info = dylink_info.as_ref().unwrap();
@@ -556,7 +562,10 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Process,
-                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
                                 )
                                 .unwrap();
                             linker.allow_shadowing(false);
@@ -1011,7 +1020,7 @@ impl<
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
 
-                        for (name, path, module) in dlopen_modules.iter() {
+                        for (name, _path, module) in dlopen_modules.iter() {
                             let dylink_info = module.dylink_meminfo();
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;

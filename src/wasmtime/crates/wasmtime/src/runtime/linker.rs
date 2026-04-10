@@ -456,7 +456,7 @@ impl<T> Linker<T> {
     pub fn new_child_linker(
         mut store: impl AsContextMut<Data = T>,
         engine: &Engine,
-        mut got_table: &mut Option<LindGOT>,
+        got_table: &mut Option<LindGOT>,
         globals: &Vec<(String, String, GlobalType, Val)>,
         hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
         shared_memory: &Option<(String, String, ClonedMemory)>,

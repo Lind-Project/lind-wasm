@@ -275,7 +275,7 @@ impl Clone for SymbolTable {
         }
 
         Self {
-            symbol_table: symbol_table,
+            symbol_table,
             next_handler: AtomicI32::new(
                 self.next_handler.load(std::sync::atomic::Ordering::Relaxed),
             ),
