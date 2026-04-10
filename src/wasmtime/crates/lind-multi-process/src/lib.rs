@@ -331,7 +331,6 @@ impl<
         };
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
-        let mut global_snapshots_index = 0;
 
         // mark the start of unwind
         let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
@@ -463,6 +462,7 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
+                            let module_name = module.name().unwrap();
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -473,10 +473,9 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Process,
-                                    &global_snapshots[global_snapshots_index as usize].1,
+                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
                                 )
                                 .unwrap();
-                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
 
@@ -503,15 +502,16 @@ impl<
                         )
                         .unwrap();
 
-                    let snapshots = &global_snapshots[global_snapshots_index].1;
-                    instance.apply_global_snapshots(&mut store, snapshots);
-                    global_snapshots_index += 1;
+                    let main_module_name = module.name().unwrap();
+                    instance.apply_global_snapshots(
+                        &mut store,
+                        global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
+                    );
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
 
-                        global_snapshots_index += 5;
                         for (name, path, module) in dlopen_modules.iter() {
                             // Read dylink metadata for this preloaded (library) module.
                             // This contains the module's declared table/memory requirements.
@@ -558,10 +558,9 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Process,
-                                    &global_snapshots[global_snapshots_index as usize].1,
+                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
                                 )
                                 .unwrap();
-                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
                     }
@@ -833,7 +832,6 @@ impl<
         let mut child_host = caller.data().clone();
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
-        let mut global_snapshots_index = 0;
 
         // mark the start of unwind
         let _res =
@@ -976,6 +974,7 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
+                            let module_name = module.name().unwrap();
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -986,9 +985,8 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
-                                    &global_snapshots[global_snapshots_index].1
+                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
                                 ).unwrap();
-                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
 
@@ -1005,17 +1003,15 @@ impl<
                         .instantiate_with_lind_thread(&mut store, &module, false)
                         .unwrap();
 
-                    let snapshots = &global_snapshots[global_snapshots_index].1;
-                    instance.apply_global_snapshots(&mut store, snapshots);
-                    global_snapshots_index += 1;
+                    let main_module_name = module.name().unwrap();
+                    instance.apply_global_snapshots(
+                        &mut store,
+                        global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
+                    );
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
-                        // advance past the main module entry and the parent's backup
-                        // instances (INSTANCE_NUMBER = 5) in the global snapshot array,
-                        // mirroring the same skip done in fork_call
-                        global_snapshots_index += 5;
 
                         for (name, path, module) in dlopen_modules.iter() {
                             let dylink_info = module.dylink_meminfo();
@@ -1051,10 +1047,9 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
-                                    &global_snapshots[global_snapshots_index].1,
+                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
                                 )
                                 .unwrap();
-                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
                     }

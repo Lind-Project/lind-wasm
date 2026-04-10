@@ -1536,22 +1536,39 @@ impl<'a, T> StoreContextMut<'a, T> {
         self.0.stack_base = stack_base;
     }
 
-    pub fn get_global_snapshot(&mut self) -> Vec<(usize, Vec<(GlobalIndex, i64)>)> {
-        let mut collected = vec![];
+    pub fn get_global_snapshot(&mut self) -> HashMap<String, Vec<(GlobalIndex, i64)>> {
+        let mut map = HashMap::new();
         let instance_length = self.0.instances.len();
         for i in 0..instance_length {
-            let instance = self.0.instance_mut(InstanceId(i));
-            let mut globals = vec![];
-            for (index, global) in instance.all_globals() {
-                let val = unsafe { *(*global.definition).as_i64_mut() };
-                globals.push((index, val));
+            let id = InstanceId(i);
+            // Skip instances that have no associated module (e.g. Dummy instances
+            // created for host memories).
+            // Clone the name eagerly so we release the immutable borrow on self.0
+            // before the subsequent instance_mut call.
+            let name: String = match self.0.module_for_instance(id) {
+                Some(module) => match module.name() {
+                    Some(n) => n.to_string(),
+                    // Skip anonymous modules.
+                    None => continue,
+                },
+                None => continue,
+            };
+            // First occurrence wins: the real instance is always created before
+            // its backup copies (which share the same module name), so subsequent
+            // entries for the same name are backup instances and can be skipped.
+            if map.contains_key(&name) {
+                continue;
             }
-            if globals.len() > 0 {
-                collected.push((i, globals));
+            let instance = self.0.instance_mut(id);
+            let globals: Vec<(GlobalIndex, i64)> = instance
+                .all_globals()
+                .map(|(index, global)| (index, unsafe { *(*global.definition).as_i64_mut() }))
+                .collect();
+            if !globals.is_empty() {
+                map.insert(name, globals);
             }
         }
-
-        collected
+        map
     }
 
     /// Configures epoch-deadline expiration to yield to the async

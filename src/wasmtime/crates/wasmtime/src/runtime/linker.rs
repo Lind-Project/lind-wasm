@@ -1277,7 +1277,7 @@ impl<T> Linker<T> {
         table_base: i32,
         memory_base: i32,
         child_type: ChildLibraryType,
-        snapshots: &Vec<(GlobalIndex, i64)>,
+        snapshots: &[(GlobalIndex, i64)],
     ) -> Result<&mut Self>
     where
         T: 'static,
