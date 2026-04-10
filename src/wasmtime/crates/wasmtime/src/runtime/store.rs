@@ -109,6 +109,7 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use sysdefs::logging::lind_debug_panic;
 use wasmtime_environ::GlobalIndex;
 use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
@@ -1462,6 +1463,14 @@ impl<'a, T> StoreContextMut<'a, T> {
     // Register a named module instance so get_global_snapshot can find it
     // without scanning all INSTANCE_NUMBER slots.
     pub fn register_named_instance(&mut self, name: String, id: InstanceId) {
+        if let Some((_, existing_id)) = self
+            .0
+            .named_module_instances
+            .iter()
+            .find(|(n, _)| n == &name)
+        {
+            lind_debug_panic(&format!("[register_named_instance] wasm module with same name \"{}\" detected, currently not supported", name));
+        }
         self.0.named_module_instances.push((name, id));
     }
 
