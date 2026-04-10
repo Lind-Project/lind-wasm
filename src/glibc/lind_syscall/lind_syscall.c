@@ -98,15 +98,14 @@ int make_threei_call (unsigned int callnumber,
     // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
     // the errno and mmap result by simply checking if the return value is
     // within the valid errno range
+    //
+    // errno should only be 'set' and never 'unset'. i.e. successful calls should not set this to 0.
     if(ret < 0 && ret > -MAX_ERRNO)
     {
         errno = -ret;
         return -1;
     }
-    else
-    {
-        errno = 0;
-    }
+
     return ret;
 }
 
