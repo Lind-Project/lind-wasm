@@ -1233,7 +1233,7 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(
+                let (instance, instance_id) = module_linker.instantiate_with_lind(
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
@@ -1241,6 +1241,16 @@ impl<T> Linker<T> {
                         memory_base: handler,
                     },
                 )?;
+
+                // Register this instance under its intrinsic wasm name so
+                // get_global_snapshot can find it without scanning all INSTANCE_NUMBER slots.
+                // We use module.name() (the name embedded in the binary) because
+                // the snapshot lookup in child processes also uses module.name().
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
 
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };
@@ -1323,8 +1333,14 @@ impl<T> Linker<T> {
                 module_linker.define_unknown_imports_as_traps(module);
                 // Instantiate the library module. Do not need to do any initialization for the module
                 // since all the state are already copied from parent
-                let (instance, _) =
+                let (instance, instance_id) =
                     module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
+
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
 
                 let fpcast_enabled = self.engine.config().fpcast_enabled;
                 // for child library, just append the library function into function table without doing GOT relocation
@@ -1425,7 +1441,7 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(
+                let (instance, instance_id) = module_linker.instantiate_with_lind(
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
@@ -1433,6 +1449,12 @@ impl<T> Linker<T> {
                         memory_base: handler,
                     },
                 )?;
+
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
 
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };

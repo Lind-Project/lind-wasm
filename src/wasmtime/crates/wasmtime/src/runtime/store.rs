@@ -358,6 +358,11 @@ pub struct StoreOpaque {
     // libraries symbol mapping
     library_symbols: SymbolTable,
 
+    // Tracks the InstanceId of every named module instance created in this store:
+    // preloaded libraries, the main module, and dlopen'd libraries. Used by
+    // get_global_snapshot to avoid iterating all INSTANCE_NUMBER slots.
+    named_module_instances: Vec<(String, InstanceId)>,
+
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
     stack_snapshots: HashMap<u64, Vec<u8>>,
@@ -562,6 +567,7 @@ impl<T> Store<T> {
                 signal_asyncify_data: Vec::new(),
                 signal_asyncify_counter: 0,
                 library_symbols: SymbolTable::new(),
+                named_module_instances: Vec::new(),
                 syscall_asyncify_data: Vec::new(),
                 syscall_asyncify_counter: 0,
                 #[cfg(feature = "component-model")]
@@ -677,6 +683,7 @@ impl<T> Store<T> {
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
             library_symbols: symbol_table,
+            named_module_instances: Vec::new(),
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
@@ -1452,6 +1459,12 @@ impl<'a, T> StoreContextMut<'a, T> {
         Ok(self.0.library_symbols.add(symbol_map))
     }
 
+    // Register a named module instance so get_global_snapshot can find it
+    // without scanning all INSTANCE_NUMBER slots.
+    pub fn register_named_instance(&mut self, name: String, id: InstanceId) {
+        self.0.named_module_instances.push((name, id));
+    }
+
     // get and set library symbol table, used for cloning symbol table across fork/thread
     pub fn get_library_symbol_table(&self) -> &SymbolTable {
         &self.0.library_symbols
@@ -1538,27 +1551,14 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     pub fn get_global_snapshot(&mut self) -> HashMap<String, Vec<(GlobalIndex, i64)>> {
         let mut map = HashMap::new();
-        let instance_length = self.0.instances.len();
-        for i in 0..instance_length {
-            let id = InstanceId(i);
-            // Skip instances that have no associated module (e.g. Dummy instances
-            // created for host memories).
-            // Clone the name eagerly so we release the immutable borrow on self.0
-            // before the subsequent instance_mut call.
-            let name: String = match self.0.module_for_instance(id) {
-                Some(module) => match module.name() {
-                    Some(n) => n.to_string(),
-                    // Skip anonymous modules.
-                    None => continue,
-                },
-                None => continue,
-            };
-            // First occurrence wins: the real instance is always created before
-            // its backup copies (which share the same module name), so subsequent
-            // entries for the same name are backup instances and can be skipped.
-            if map.contains_key(&name) {
-                continue;
-            }
+        // Iterate only the explicitly registered named instances (preloaded libs,
+        // main module, dlopen'd libs) rather than all INSTANCE_NUMBER slots.
+        // Backup instances are never registered, so they are excluded automatically.
+        for i in 0..self.0.named_module_instances.len() {
+            // Clone name and copy id to release the immutable borrow on
+            // named_module_instances before the mutable instance_mut call below.
+            let name = self.0.named_module_instances[i].0.clone();
+            let id = self.0.named_module_instances[i].1;
             let instance = self.0.instance_mut(id);
             let globals: Vec<(GlobalIndex, i64)> = instance
                 .all_globals()

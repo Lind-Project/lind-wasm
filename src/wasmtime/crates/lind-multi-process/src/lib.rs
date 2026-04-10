@@ -504,6 +504,9 @@ impl<
                         .unwrap();
 
                     let main_module_name = module.name().unwrap();
+                    store
+                        .as_context_mut()
+                        .register_named_instance(main_module_name.to_string(), grate_instanceid);
                     instance.apply_global_snapshots(
                         &mut store,
                         global_snapshots
@@ -1011,6 +1014,7 @@ impl<
                         .unwrap();
 
                     let main_module_name = module.name().unwrap();
+                    store.as_context_mut().register_named_instance(main_module_name.to_string(), grate_instanceid);
                     instance.apply_global_snapshots(
                         &mut store,
                         global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
