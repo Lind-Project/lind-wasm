@@ -411,8 +411,6 @@ impl<
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     // e.g. __stack_pointer, __indirect_function_table, etc.
 
-                    let mut main_module_index: i32 = -1;
-
                     let child_table = if dylink_enabled {
                         let mut table_size = 0;
                         for import in module.imports() {
