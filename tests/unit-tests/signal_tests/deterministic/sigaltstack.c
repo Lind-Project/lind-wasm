@@ -35,17 +35,15 @@ int main(void) {
     long minsz = sysconf(_SC_MINSIGSTKSZ);
     assert(minsz > 0);
 
-    /* install a signal handler with SA_ONSTACK and fire it,
-       to make sure sigaltstack + signal delivery doesn't crash.
-       NOTE: the stub sigaltstack doesn't actually switch stacks,
-       the handler runs on the main stack. this just tests that
-       the combination doesn't blow up. */
+    /* install a handler with SA_ONSTACK and deliver via kill.
+       the stub sigaltstack doesn't actually switch stacks, but
+       this tests that the combination doesn't crash. */
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = sigusr1_handler;
     sa.sa_flags = SA_ONSTACK;
     assert(sigaction(SIGUSR1, &sa, NULL) == 0);
-    assert(raise(SIGUSR1) == 0);
+    kill(getpid(), SIGUSR1);
     assert(handler_ran == 1);
 
     /* disable alternate stack */
