@@ -911,6 +911,7 @@ impl<
 
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
+                    let dlopen_modules = child_ctx.dlopen_modules.clone();
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
@@ -932,7 +933,7 @@ impl<
                                 &snapshot.2
                         ).expect("failed to create child linker");
 
-                    if dylink_enabled {
+                    let child_table = if dylink_enabled {
                         let mut table_size = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
@@ -990,7 +991,11 @@ impl<
                             global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
-                    }
+
+                        Some(child_table)
+                    } else {
+                        None
+                    };
 
                     // mark as thread
                     store.set_is_thread(true);
@@ -1002,6 +1007,57 @@ impl<
 
                     let snapshots = &global_snapshots[global_snapshots_index].1;
                     instance.apply_global_snapshots(&mut store, snapshots);
+                    global_snapshots_index += 1;
+
+                    if dylink_enabled {
+                        let mut child_table = child_table.unwrap();
+                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+                        // advance past the main module entry and the parent's backup
+                        // instances (INSTANCE_NUMBER = 5) in the global snapshot array,
+                        // mirroring the same skip done in fork_call
+                        global_snapshots_index += 5;
+
+                        for (name, path, module) in dlopen_modules.iter() {
+                            let dylink_info = module.dylink_meminfo();
+                            let dylink_info = dylink_info.as_ref().unwrap();
+                            let table_start = child_table.size(&mut store) as i32;
+
+                            #[cfg(feature = "debug-dylink")]
+                            println!(
+                                "[debug] dlopen library table_start: {}, grow: {}",
+                                table_start, dylink_info.table_size
+                            );
+                            child_table
+                                .grow(
+                                    &mut store,
+                                    dylink_info.table_size,
+                                    wasmtime::Ref::Func(None),
+                                )
+                                .unwrap();
+
+                            let module_name = module.name().unwrap();
+                            let module_memory_base = *memory_base_table
+                                .get(module_name)
+                                .expect("memory base not found for library");
+
+                            linker.allow_shadowing(true);
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    child_cageid as u64,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base,
+                                    ChildLibraryType::Thread(&mut stack_addr),
+                                    &global_snapshots[global_snapshots_index].1,
+                                )
+                                .unwrap();
+                            global_snapshots_index += 1;
+                            linker.allow_shadowing(false);
+                        }
+                    }
 
                     if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
                         store.as_context_mut(),
