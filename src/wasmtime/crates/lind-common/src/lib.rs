@@ -1,16 +1,19 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use rand::Rng;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
+use sysdefs::logging::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
 use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
+use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
@@ -22,7 +25,9 @@ use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
-use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
+use sysdefs::constants::syscall_const::{
+    CLONE_SYSCALL, EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL,
+};
 
 /// Stores argv and environment variables for the guest program. During glibc's
 /// `_start()`, the guest calls 4 imported host functions (`args_sizes_get`,
@@ -129,11 +134,16 @@ fn add_syscall_to_linker<
             // If we are reaching here at rewind state, that means fork was called within
             // a syscall-interrupted signal handler. We should restore the saved return value
             // of the syscall that was interrupted, rather than re-executing it.
+            // If there's no syscall rewind data, we're rewinding from an exit_call —
+            // let the rewind continue without re-executing the syscall.
             if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
-                let retval = caller
-                    .as_context_mut()
-                    .get_current_syscall_rewind_data()
-                    .unwrap();
+                let retval = match caller.as_context_mut().get_current_syscall_rewind_data() {
+                    Some(v) => v,
+                    None => {
+                        wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                        return 0;
+                    }
+                };
                 // let signal handler finish rest of the rewinding process
                 wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
                 return retval;
@@ -150,8 +160,10 @@ fn add_syscall_to_linker<
             // to wasmtime, it can resolve the correct thread instance deterministically, independent of
             // interposition or cross-cage routing.
             let final_arg2 = if target_cageid == self_cageid
-                && matches!(call_number as i32, CLONE_SYSCALL | EXIT_SYSCALL)
-            {
+                && matches!(
+                    call_number as i32,
+                    CLONE_SYSCALL | EXIT_SYSCALL | EXIT_GROUP_SYSCALL
+                ) {
                 wasmtime_lind_multi_process::current_tid(&mut caller) as u64
             } else {
                 arg2
@@ -207,14 +219,15 @@ fn add_runtime_to_linker<
     linker.func_wrap(
         "lind",
         "lind-get-memory-base",
-        move |caller: Caller<'_, T>| -> u64 { get_memory_base(&caller) },
+        move |mut caller: Caller<'_, T>| -> u64 { get_memory_base(&mut caller) },
     )?;
 
     linker.func_wrap(
         "lind",
         "lind-get-cage-id",
         move |mut caller: Caller<'_, T>| -> u64 {
-            wasmtime_lind_multi_process::current_cageid(&mut caller) as u64
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
+            cageid
         },
     )?;
 
@@ -270,8 +283,8 @@ fn add_debug_to_linker<
     linker.func_wrap(
         "debug",
         "lind_debug_str",
-        move |caller: Caller<'_, T>, ptr: i32| -> i32 {
-            let mem_base = get_memory_base(&caller);
+        move |mut caller: Caller<'_, T>, ptr: i32| -> i32 {
+            let mem_base = get_memory_base(&mut caller);
             if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
                 eprintln!("[LIND DEBUG STR]: {}", msg);
             }
@@ -298,11 +311,11 @@ fn add_environ_funcs_to_linker<
     linker.func_wrap(
         module,
         "args_sizes_get",
-        move |caller: Caller<'_, T>, ptr_argc: i32, ptr_buf_size: i32| -> i32 {
+        move |mut caller: Caller<'_, T>, ptr_argc: i32, ptr_buf_size: i32| -> i32 {
             let cx = get_environ(caller.data());
             let argc = cx.args.len() as u32;
             let buf_size: u32 = cx.args.iter().map(|a| a.len() as u32 + 1).sum();
-            let base = get_memory_base(&caller) as *mut u8;
+            let base = get_memory_base(&mut caller) as *mut u8;
             unsafe {
                 write_u32(base, ptr_argc as usize, argc);
                 write_u32(base, ptr_buf_size as usize, buf_size);
@@ -314,10 +327,10 @@ fn add_environ_funcs_to_linker<
     linker.func_wrap(
         module,
         "args_get",
-        move |caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
+        move |mut caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let args: Vec<String> = cx.args.clone();
-            let base = get_memory_base(&caller) as *mut u8;
+            let base = get_memory_base(&mut caller) as *mut u8;
             let mut buf_offset = argv_buf as u32;
             for (i, arg) in args.iter().enumerate() {
                 let ptr_slot = argv_ptrs as usize + i * 4;
@@ -336,7 +349,7 @@ fn add_environ_funcs_to_linker<
     linker.func_wrap(
         module,
         "environ_sizes_get",
-        move |caller: Caller<'_, T>, ptr_count: i32, ptr_buf_size: i32| -> i32 {
+        move |mut caller: Caller<'_, T>, ptr_count: i32, ptr_buf_size: i32| -> i32 {
             let cx = get_environ(caller.data());
             let count = cx.env.len() as u32;
             let buf_size: u32 = cx
@@ -344,7 +357,7 @@ fn add_environ_funcs_to_linker<
                 .iter()
                 .map(|(k, v)| k.len() as u32 + 1 + v.len() as u32 + 1)
                 .sum();
-            let base = get_memory_base(&caller) as *mut u8;
+            let base = get_memory_base(&mut caller) as *mut u8;
             unsafe {
                 write_u32(base, ptr_count as usize, count);
                 write_u32(base, ptr_buf_size as usize, buf_size);
@@ -356,10 +369,10 @@ fn add_environ_funcs_to_linker<
     linker.func_wrap(
         module,
         "environ_get",
-        move |caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
+        move |mut caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let env: Vec<(String, String)> = cx.env.clone();
-            let base = get_memory_base(&caller) as *mut u8;
+            let base = get_memory_base(&mut caller) as *mut u8;
             let mut buf_offset = env_buf as u32;
             for (i, (key, val)) in env.iter().enumerate() {
                 let ptr_slot = env_ptrs as usize + i * 4;
@@ -380,28 +393,75 @@ fn add_environ_funcs_to_linker<
         module,
         "random_get",
         move |mut caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
-            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
-            // Route through 3i make_syscall (getrandom = syscall 318)
-            // instead of opening /dev/urandom which doesn't exist in
-            // the lindfs chroot.
-            make_syscall(
-                cageid,
-                318, // SYS_getrandom
-                0,
-                cageid,
-                buf as u64,
-                cageid,
-                buf_len as u64,
-                cageid,
-                0, // flags
-                cageid,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-            )
+            let base = get_memory_base(&mut caller) as *mut u8;
+
+            // Use rand to fill up the buffer of requested size
+            let mut bytes = vec![0u8; buf_len as usize];
+            let mut rng = rand::thread_rng();
+            rng.fill(&mut bytes[..]);
+
+            // Copy to the provided buffer
+            unsafe {
+                write_bytes(base, buf as usize, &bytes);
+            }
+
+            // wasip1::random_get expects return value of 0 on success, positive numbers represent
+            // error codes
+            0
+        },
+    )?;
+
+    Ok(())
+}
+
+/// register dynamic loading related functions: dlopen, dlsym and dlclose
+pub fn add_dylink_to_linker<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    linker: &mut wasmtime::Linker<T>,
+    dynamic_loader: Option<DynamicLoader<T>>,
+) -> anyhow::Result<()> {
+    let dylink_enabled = dynamic_loader.is_some();
+    let cloned_dynamic_loader = dynamic_loader.clone();
+    linker.func_wrap(
+        "lind",
+        "dlopen",
+        move |mut caller: wasmtime::Caller<'_, T>, file: i32, mode: i32| -> i32 {
+            if dylink_enabled {
+                wasmtime_lind_dylink::dlopen_call(
+                    &mut caller,
+                    file,
+                    mode,
+                    cloned_dynamic_loader.clone().unwrap(),
+                )
+            } else {
+                lind_debug_panic("dynamic loading support is not enabled!");
+            }
+        },
+    )?;
+
+    linker.func_wrap(
+        "lind",
+        "dlsym",
+        move |mut caller: wasmtime::Caller<'_, T>, handle: i32, name: i32| -> i32 {
+            if dylink_enabled {
+                wasmtime_lind_dylink::dlsym_call(&mut caller, handle, name)
+            } else {
+                lind_debug_panic("dynamic loading support is not enabled!");
+            }
+        },
+    )?;
+
+    linker.func_wrap(
+        "lind",
+        "dlclose",
+        move |mut caller: wasmtime::Caller<'_, T>, handle: i32| -> i32 {
+            if dylink_enabled {
+                wasmtime_lind_dylink::dlclose_call(&mut caller, handle)
+            } else {
+                lind_debug_panic("dynamic loading support is not enabled!");
+            }
         },
     )?;
 
@@ -413,6 +473,7 @@ fn add_environ_funcs_to_linker<
 /// Groups:
 /// - **syscall**: the unified `make-syscall` entry point
 /// - **runtime**: memory base, cage ID, setjmp/longjmp, epoch callback, debug panic
+/// - **dylink**: dlopen, dlsym and dlclose
 /// - **debug** (lind_debug feature only): `lind_debug_num`, `lind_debug_str`
 /// - **environ**: argv/environ/random_get under both `"lind"` and `"wasi_snapshot_preview1"`
 pub fn add_to_linker<
@@ -421,9 +482,11 @@ pub fn add_to_linker<
 >(
     linker: &mut wasmtime::Linker<T>,
     get_environ: impl Fn(&T) -> &LindEnviron + Send + Sync + Copy + 'static,
+    dynamic_loader: Option<DynamicLoader<T>>,
 ) -> anyhow::Result<()> {
     add_syscall_to_linker(linker)?;
     add_runtime_to_linker(linker)?;
+    add_dylink_to_linker(linker, dynamic_loader)?;
     #[cfg(feature = "lind_debug")]
     add_debug_to_linker(linker)?;
     add_environ_funcs_to_linker(linker, "lind", get_environ)?;

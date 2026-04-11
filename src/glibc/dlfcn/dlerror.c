@@ -28,79 +28,39 @@
 #include <assert.h>
 #include <dlerror.h>
 
+// error message for lind dynamic loader
+// dylink errno returned from host is served as the index to the array
+// should match sysdefs/lind_platform_const.rs
+static const char *__lind_dylink_error_msg[] = {
+    "UNUSED", // 0
+    "cannot open shared object file",
+    "Invalid library file type: expects wasm file",
+    "shared wasm object file does not have dylink.0 section",
+    "error while loading shared libraries",
+    "undefined symbol",
+
+    "invalid handler",
+    "symbol not found",
+
+    "shared object is already closed",
+
+    "internal error",
+};
+
 char *
 __dlerror (void)
 {
-# ifdef SHARED
-  if (GLRO (dl_dlfcn_hook) != NULL)
-    return GLRO (dl_dlfcn_hook)->dlerror ();
-# endif
+  if (__lind_dlerror_result != 0) {
+    size_t len = sizeof(__lind_dylink_error_msg) / sizeof(__lind_dylink_error_msg[0]);
+    assert(__lind_dlerror_result < len);
+    
+    char* msg = __lind_dylink_error_msg[__lind_dlerror_result];
+    __lind_dlerror_result = 0; // clear the error message
 
-  struct dl_action_result *result = __libc_dlerror_result;
+    return msg;
+  }
 
-  /* No libdl function has been called.  No error is possible.  */
-  if (result == NULL)
-    return NULL;
-
-  /* For an early malloc failure, clear the error flag and return the
-     error message.  This marks the error as delivered.  */
-  if (result == dl_action_result_malloc_failed)
-    {
-      __libc_dlerror_result = NULL;
-      return (char *) "out of memory";
-    }
-
-  /* Placeholder object.  This can be observed in a recursive call,
-     e.g. from an ELF constructor.  */
-  if (result->errstring == NULL)
-    return NULL;
-
-  /* If we have already reported the error, we can free the result and
-     return NULL.  See __libc_dlerror_result_free.  */
-  if (result->returned)
-    {
-      __libc_dlerror_result = NULL;
-      dl_action_result_errstring_free (result);
-      free (result);
-      return NULL;
-    }
-
-  assert (result->errstring != NULL);
-
-  /* Create the combined error message.  */
-  char *buf;
-  int n;
-  if (result->errcode == 0)
-    n = __asprintf (&buf, "%s%s%s",
-		    result->objname,
-		    result->objname[0] == '\0' ? "" : ": ",
-		    _(result->errstring));
-  else
-    {
-      __set_errno (result->errcode);
-      n = __asprintf (&buf, "%s%s%s: %m",
-		      result->objname,
-		      result->objname[0] == '\0' ? "" : ": ",
-		      _(result->errstring));
-      /* Set errno again in case asprintf clobbered it.  */
-      __set_errno (result->errcode);
-    }
-
-  /* Mark the error as delivered.  */
-  result->returned = true;
-
-  if (n >= 0)
-    {
-      /* Replace the error string with the newly allocated one.  */
-      dl_action_result_errstring_free (result);
-      result->errstring = buf;
-      result->errstring_source = dl_action_result_errstring_local;
-      return buf;
-    }
-  else
-    /* We could not create the combined error message, so use the
-       existing string as a fallback.  */
-    return result->errstring;
+  return NULL;
 }
 versioned_symbol (libc, __dlerror, dlerror, GLIBC_2_34);
 

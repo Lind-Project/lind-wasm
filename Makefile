@@ -7,6 +7,7 @@ LINDFS_DIRS := \
 	       bin \
 	       dev \
 	       etc \
+	       lib \
 	       sbin \
 	       tmp \
 	       usr/bin \
@@ -18,8 +19,10 @@ LINDFS_DIRS := \
 	       var/log \
 	       var/run
 
+WITH_FPCAST ?=
+
 .PHONY: build 
-build: sysroot lind-boot lindfs
+build: lindfs lind-boot sysroot
 	@echo "Build complete"
 
 .PHONY: all
@@ -27,7 +30,7 @@ all: build
 
 .PHONY: sysroot
 sysroot: build-dir
-	./scripts/make_glibc_and_sysroot.sh
+	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
 .PHONY: lind-boot
@@ -47,13 +50,13 @@ lindfs:
 	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
 
 .PHONY: lind-debug
-lind-debug: build-dir
-	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
-	$(MAKE) build_glibc LIND_DEBUG=1
-	
+lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
 	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
+
+	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
+	$(MAKE) build_glibc LIND_DEBUG=1
 build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
@@ -74,26 +77,38 @@ sync-sysroot:
 .PHONY: test
 test: lindfs
 	# Unified harness entry point (run all discovered harnesses for e2e signal)
+	alias_path='$(LIND_RUNTIME_LINDFS_ALIAS)'; \
+	prebuilt_lindfs_root='$(PREBUILT_LINDFS_ROOT)'; \
+	cleanup() { \
+	  if [ -n "$$alias_path" ]; then \
+	    alias_parent="$$(dirname "$$alias_path")"; \
+	    rm -f "$$alias_path"; \
+	    rmdir "$$alias_parent" 2>/dev/null || true; \
+	    rmdir "$$(dirname "$$alias_parent")" 2>/dev/null || true; \
+	  fi; \
+	}; \
+	if [ -n "$$alias_path" ]; then \
+	  mkdir -p "$$(dirname "$$alias_path")"; \
+	  rm -f "$$alias_path"; \
+	  case '$(LINDFS_ROOT)' in \
+	    /*) lindfs_root='$(LINDFS_ROOT)' ;; \
+	    *) lindfs_root="$$PWD/$(LINDFS_ROOT)" ;; \
+	  esac; \
+	  ln -s "$$lindfs_root" "$$alias_path"; \
+	  trap cleanup EXIT; \
+	fi; \
+	if [ -n "$$prebuilt_lindfs_root" ] && [ -d "$$prebuilt_lindfs_root/lib" ]; then \
+	  mkdir -p "$(LINDFS_ROOT)/lib"; \
+	  cp -a "$$prebuilt_lindfs_root/lib/." "$(LINDFS_ROOT)/lib/"; \
+	fi; \
 	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
-	python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); \
-def count_failures(node): \
-  if not isinstance(node, dict): \
-    return 0; \
-  direct=node.get('number_of_failures'); \
-  try: \
-    direct_val=int(direct) if direct is not None else None; \
-  except (TypeError, ValueError): \
-    direct_val=None; \
-  nested=sum(count_failures(v) for v in node.values() if isinstance(v, dict)); \
-  return nested if direct_val is None else max(direct_val, nested); \
-total=1 if not paths else 0; \
-for path in paths: \
-  with open(path, encoding='utf-8') as handle: \
-    total += count_failures(json.load(handle)); \
-print(f'total_failures={total}'); \
-sys.exit(1 if total else 0)"; then \
+	if [ "$(LIND_DEBUG)" = "1" ]; then \
+	  python3 ./scripts/check_reports.py --debug; \
+	else \
+	  python3 ./scripts/check_reports.py; \
+	fi; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
 	else \
 	  echo "E2E_STATUS=fail" > e2e_status; \

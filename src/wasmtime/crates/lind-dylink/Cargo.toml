@@ -1,0 +1,26 @@
+[package]
+name = "wasmtime-lind-dylink"
+version.workspace = true
+authors.workspace = true
+description = "lind dynamic loading implementation inside wasmtime"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+rand = "0.8"
+wasmtime = { workspace = true, features = ['threads'] }
+wasmtime-environ = { workspace = true }
+rawposix = { path = "../rawposix" }
+threei = { path = "../threei" }
+wasmtime-lind-multi-process = { path = "../lind-multi-process" }
+wasmtime-lind-utils = { path = "../lind-utils" }
+sysdefs = { path = "../sysdefs" }
+cage = { path = "../cage" }
+typemap = { path = "../typemap" }
+
+[features]
+debug-dylink = []

@@ -88,10 +88,12 @@ use crate::runtime::vm::{
     VMRuntimeLimits, WasmFault,
 };
 use crate::trampoline::VMHostGlobalContext;
+use crate::vm::ExportMemory;
 use crate::RootSet;
 use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
 use alloc::sync::Arc;
+use cage::DashMap;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
@@ -107,6 +109,8 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use wasmtime_environ::GlobalIndex;
+use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 mod context;
 pub use self::context::*;
@@ -351,6 +355,8 @@ pub struct StoreOpaque {
     stack_top: u64,
     // stack bottom
     stack_base: u64,
+    // libraries symbol mapping
+    library_symbols: SymbolTable,
 
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
@@ -555,6 +561,7 @@ impl<T> Store<T> {
                 asyncify_state: super::AsyncifyState::Normal,
                 signal_asyncify_data: Vec::new(),
                 signal_asyncify_counter: 0,
+                library_symbols: SymbolTable::new(),
                 syscall_asyncify_data: Vec::new(),
                 syscall_asyncify_counter: 0,
                 #[cfg(feature = "component-model")]
@@ -669,6 +676,7 @@ impl<T> Store<T> {
             asyncify_state: super::AsyncifyState::Normal,
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
+            library_symbols: SymbolTable::new(),
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
@@ -1439,6 +1447,33 @@ impl<'a, T> StoreContextMut<'a, T> {
         self.0.signal_asyncify_counter = 0;
     }
 
+    // push new library instance
+    pub fn push_library_symbols(&mut self, symbol_map: SymbolMap) -> Result<i32> {
+        Ok(self.0.library_symbols.add(symbol_map))
+    }
+
+    // find library symbol from local scope
+    pub fn find_library_symbol_from_local(&self, handler: i32, name: &str) -> Option<u32> {
+        self.0
+            .library_symbols
+            .find_symbol_from_handler(handler, name)
+    }
+
+    // find library symbol from global scope
+    pub fn find_library_symbol_from_global(&self, name: &str) -> Option<u32> {
+        self.0.library_symbols.find_symbol_from_global_scope(name)
+    }
+
+    // detach the library
+    pub fn detach_library(&mut self, handler: i32) {
+        self.0.library_symbols.delete_by_handler(handler);
+    }
+
+    /// check if the library is already loaded
+    pub fn check_library_loaded(&self, inode: u64) -> Option<i32> {
+        self.0.library_symbols.check_library_loaded(inode)
+    }
+
     // append the syscall retval information
     pub fn append_syscall_asyncify_data(&mut self, retval: i32) {
         self.0.syscall_asyncify_data.push(retval);
@@ -1490,6 +1525,24 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// set stack base
     pub fn set_stack_base(&mut self, stack_base: u64) {
         self.0.stack_base = stack_base;
+    }
+
+    pub fn get_global_snapshot(&mut self) -> Vec<(usize, Vec<(GlobalIndex, i64)>)> {
+        let mut collected = vec![];
+        let instance_length = self.0.instances.len();
+        for i in 0..instance_length {
+            let instance = self.0.instance_mut(InstanceId(i));
+            let mut globals = vec![];
+            for (index, global) in instance.all_globals() {
+                let val = unsafe { *(*global.definition).as_i64_mut() };
+                globals.push((index, val));
+            }
+            if globals.len() > 0 {
+                collected.push((i, globals));
+            }
+        }
+
+        collected
     }
 
     /// Configures epoch-deadline expiration to yield to the async

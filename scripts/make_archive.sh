@@ -4,7 +4,6 @@
 # IMPORTANT NOTES:
 # - expects `clang` and other llvm binaries on $PATH
 #
-set -x
 
 CC="clang"
 # 1. Get the directory where this script is located
@@ -113,5 +112,16 @@ if [ $? -eq 0 ]; then
   echo "SUCCESS: Created archive libpthread.a"
 else
   echo "Failed to create the archive libpthread.a"
+  return 1
+fi
+
+#libdl.a is created as a placeholder since static python build requires libdl.a
+llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libdl.a"
+
+# Check if llvm-ar succeeded
+if [ $? -eq 0 ]; then
+  echo "SUCCESS: Created archive libdl.a"
+else
+  echo "Failed to create the archive libdl.a"
   return 1
 fi

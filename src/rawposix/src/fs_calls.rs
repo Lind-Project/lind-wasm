@@ -9,10 +9,10 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED,
-    MAP_POPULATE, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE,
-    PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO,
-    STDOUT_FILENO, TIOCGWINSZ,
+    AT_FDCWD, FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS,
+    MAP_FIXED, MAP_POPULATE, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
+    PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
+    STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
@@ -41,6 +41,109 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     if ret < 0 {
         let errno = get_errno();
         panic!("kernel_close failed with errno: {:?}", errno);
+    }
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/openat2.2.html
+///
+/// Linux `openat` opens the file specified by the path. If path is relative, then
+/// it is interpreted relative to the directory referred to by the file descriptor
+/// dirfd. If path is absolute, then dirfd is ignored. If dirfd is AT_FDCWD, then
+/// current working directory is used.
+/// ## Arguments:
+///     This call will only have one cageid indicates current cage, and three regular arguments same with Linux
+///     - cageid: current cage
+///     - dirfd_arg: This argument points to a file descriptor referring to the directory
+///     - path_arg: This argument points to a pathname naming the file. User's perspective.
+///     - oflag_arg: This argument contains the file status flags and file access modes which will be alloted to
+///                 the open file description. The flags are combined together using a bitwise-inclusive-OR and the
+///                 result is passed as an argument to the function. We need to check if `O_CLOEXEC` has been set.
+///     - mode_arg: This represents the permission of the newly created file. Directly passing to kernel.
+///
+/// ## Returns:
+/// On success, a new file descriptor is returned.  On error, -1 is
+/// returned, and errno is set to indicate the error.
+pub extern "C" fn openat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    oflag_arg: u64,
+    oflag_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "open", "path conversion failed"),
+    };
+    let oflag = sc_convert_sysarg_to_i32(oflag_arg, oflag_cageid, cageid);
+    let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "openat_syscall"
+        );
+    }
+    if virtual_fd == AT_FDCWD {
+        // delegate to open_syscall which handles path resolution from CWD
+        return open_syscall(
+            cageid,
+            path_arg,
+            path_cageid,
+            oflag_arg,
+            oflag_cageid,
+            mode_arg,
+            mode_cageid,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+        );
+    } else {
+        // Case 2: Specific directory fd
+        let host_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+        // Return error
+        if host_fd < 0 {
+            return handle_errno(-host_fd, "openat");
+        }
+
+        // Use raw path for dirfd case — sc_convert_path_to_host normalizes to
+        // an absolute path which would cause openat to ignore the dirfd.
+        let raw_path = match get_cstr(path_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EINVAL, "openat", "invalid path"),
+        };
+        let c_path = match CString::new(raw_path) {
+            Ok(c) => c,
+            Err(_) => return syscall_error(Errno::EINVAL, "openat", "invalid path"),
+        };
+
+        let kernel_fd =
+            unsafe { libc::openat(host_fd, c_path.as_ptr(), oflag, mode as libc::mode_t) };
+        if kernel_fd < 0 {
+            return handle_errno(get_errno(), "openat_syscall");
+        }
+        let should_cloexec = (oflag & O_CLOEXEC) != 0;
+
+        match fdtables::get_unused_virtual_fd(
+            cageid,
+            FDKIND_KERNEL,
+            kernel_fd as u64,
+            should_cloexec,
+            0,
+        ) {
+            Ok(vfd) => vfd as i32,
+            Err(_) => syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened"),
+        }
     }
 }
 

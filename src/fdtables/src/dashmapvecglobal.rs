@@ -68,6 +68,11 @@ lazy_static! {
 
 }
 
+#[doc = include_str!("../docs/check_cage_exists.md")]
+pub fn check_cage_exists(cageid: u64) -> bool {
+    FDTABLE.contains_key(&cageid)
+}
+
 #[doc = include_str!("../docs/init_empty_cage.md")]
 pub fn init_empty_cage(cageid: u64) {
 
@@ -294,16 +299,13 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
 #[doc = include_str!("../docs/remove_cage_from_fdtable.md")]
 pub fn remove_cage_from_fdtable(cageid: u64) {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
-
-
-    // remove the item first and then we clean up and call their close
-    // handlers.
-    let myfdrow = FDTABLE.remove(&cageid).unwrap().1;
-
-    // Take only the Some items in here (clippy suggested)
-    for entry in myfdrow.into_iter().flatten() {
-        _decrement_fdcount(entry);
+    // In multi-cage (grate) scenarios, concurrent exit paths may race to
+    // remove the same cage. If already removed, there's nothing to clean up.
+    if let Some((_, myfdrow)) = FDTABLE.remove(&cageid) {
+        // Take only the Some items in here (clippy suggested)
+        for entry in myfdrow.into_iter().flatten() {
+            _decrement_fdcount(entry);
+        }
     }
 
 }
@@ -437,40 +439,56 @@ pub fn register_close_handlers(fdkind:u32, intermediate: fn(FDTableEntry,u64), l
 
 // Helpers to track the count of times each (fdkind,underfd) is used
 #[doc(hidden)]
-fn _decrement_fdcount(entry:FDTableEntry) {
-
+fn _decrement_fdcount(entry: FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
-
-    let newcount:u64 = FDCOUNT.get(&mytuple).unwrap().value() - 1;
 
     let intermediatech;
     let lastch;
-    // Doing this to release the lock so I can call it recursively...
+
     let closehandlers = CLOSEHANDLERTABLE.lock().unwrap();
     if let Some(closehandlerentry) = closehandlers.get(&entry.fdkind) {
-        intermediatech =  closehandlerentry.intermediate;
+        intermediatech = closehandlerentry.intermediate;
         lastch = closehandlerentry.last;
-    }
-    else {
-        // TODO: If at any future point, I wanted to add a "default" handler
-        // for all fdkind values, I would add it here...
+    } else {
         intermediatech = NULL_FUNC;
         lastch = NULL_FUNC;
     }
-    // release the lock...
     drop(closehandlers);
 
-    if newcount > 0 {
-        // Update before calling their close handler in case they do operations
-        // inside the close handler which create / close fds...
-        FDCOUNT.insert(mytuple,newcount);
-        (intermediatech)(entry,newcount);
+    let newcount;
+    let call_last;
+
+    match FDCOUNT.entry(mytuple) {
+        dashmap::mapref::entry::Entry::Occupied(mut occ) => {
+            let old = *occ.get();
+            newcount = old.checked_sub(1).unwrap_or_else(|| {
+                panic!("FDCOUNT underflow for key {:?}", mytuple);
+            });
+
+            if newcount > 0 {
+                *occ.get_mut() = newcount;
+                call_last = false;
+            } else {
+                occ.remove();
+                call_last = true;
+            }
+        }
+        dashmap::mapref::entry::Entry::Vacant(_) => {
+            panic!(
+                "FDCOUNT get failed. FDCOUNT missing key {:?}, current map: {:?}",
+                mytuple,
+                FDCOUNT
+                    .iter()
+                    .map(|kv| (*kv.key(), *kv.value()))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
-    else{
-        // Remove before calling their close handler in case they do operations
-        // inside the close handler which create / close fds...
-        FDCOUNT.remove(&mytuple);
-        (lastch)(entry,0);
+
+    if !call_last {
+        (intermediatech)(entry, newcount);
+    } else {
+        (lastch)(entry, 0);
     }
 }
 

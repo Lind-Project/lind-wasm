@@ -68,10 +68,15 @@ lazy_static! {
 
 }
 
+#[doc = include_str!("../docs/check_cage_exists.md")]
+pub fn check_cage_exists(cageid: u64) -> bool {
+    FDTABLE.contains_key(&cageid)
+}
+
 #[doc = include_str!("../docs/init_empty_cage.md")]
 pub fn init_empty_cage(cageid: u64) {
 
-    assert!(!FDTABLE.contains_key(&cageid),"Known cageid in fdtable access");
+    assert!(!check_cage_exists(cageid),"Known cageid in fdtable access");
 
     FDTABLE.insert(cageid,[Option::None;FD_PER_PROCESS_MAX as usize]);
 }
@@ -82,10 +87,10 @@ pub fn translate_virtual_fd(cageid: u64, virtualfd: u64) -> Result<FDTableEntry,
     // They should not be able to pass a new cage I don't know.  I should
     // always have a table for each cage because each new cage is added at fork
     // time
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     // Below condition checks if the virtualfd is out of bounds and if yes it throws an error
-    // Note that this assumes that all virtualfd numbers returned < FD_PER_PROCESS_MAX 
+    // Note that this assumes that all virtualfd numbers returned < FD_PER_PROCESS_MAX
     if virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADFD as u64);
     }
@@ -113,7 +118,7 @@ pub fn get_unused_virtual_fd(
     perfdinfo: u64,
 ) -> Result<u64, threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
     // Set up the entry so it has the right info...
     // Note, a HashMap stores its data on the heap!  No need to box it...
     // https://doc.rust-lang.org/book/ch08-03-hash-maps.html#creating-a-new-hash-map
@@ -154,7 +159,7 @@ pub fn get_unused_virtual_fd_from_startfd(
     arg: u64,
 ) -> Result<u64, threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
     // Set up the entry so it has the right info...
     // Note, a HashMap stores its data on the heap!  No need to box it...
     // https://doc.rust-lang.org/book/ch08-03-hash-maps.html#creating-a-new-hash-map
@@ -194,7 +199,7 @@ pub fn get_specific_virtual_fd(
     perfdinfo: u64,
 ) -> Result<(), threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     // If you ask for a FD number that is too large, I'm going to reject it.
     // Note that, I need to use the FD_PER_PROCESS_MAX setting because this
@@ -235,7 +240,7 @@ pub fn get_specific_virtual_fd(
 #[doc = include_str!("../docs/set_cloexec.md")]
 pub fn set_cloexec(cageid: u64, virtualfd: u64, is_cloexec: bool) -> Result<(), threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     // return EBADFD, if the fd is missing...
     if FDTABLE.get(&cageid).unwrap()[virtualfd as usize].is_none() {
@@ -254,7 +259,7 @@ pub fn set_perfdinfo(
     perfdinfo: u64,
 ) -> Result<(), threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     // return EBADFD, if the fd is missing...
     if FDTABLE.get(&cageid).unwrap()[virtualfd as usize].is_none() {
@@ -270,8 +275,8 @@ pub fn set_perfdinfo(
 #[doc = include_str!("../docs/copy_fdtable_for_cage.md")]
 pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), threei::Errno> {
 
-    assert!(FDTABLE.contains_key(&srccageid),"Unknown cageid in fdtable access");
-    assert!(!FDTABLE.contains_key(&newcageid),"Known cageid in fdtable access");
+    assert!(check_cage_exists(srccageid),"Unknown cageid in fdtable access");
+    assert!(!check_cage_exists(newcageid),"Known cageid in fdtable access");
 
     // Insert a copy and ensure it didn't exist...
     // I've checked this should be a copy, not a ref to the same thing.  
@@ -296,16 +301,13 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
 #[doc = include_str!("../docs/remove_cage_from_fdtable.md")]
 pub fn remove_cage_from_fdtable(cageid: u64) {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
-
-
-    // remove the item first and then we clean up and call their close
-    // handlers.
-    let myfdrow = FDTABLE.remove(&cageid).unwrap().1;
-
-    // Take only the Some items in here (clippy suggested)
-    for entry in myfdrow.into_iter().flatten() {
-        _decrement_fdcount(entry);
+    // In multi-cage (grate) scenarios, concurrent exit paths may race to
+    // remove the same cage. If already removed, there's nothing to clean up.
+    if let Some((_, myfdrow)) = FDTABLE.remove(&cageid) {
+        // Take only the Some items in here (clippy suggested)
+        for entry in myfdrow.into_iter().flatten() {
+            _decrement_fdcount(entry);
+        }
     }
 
 }
@@ -315,7 +317,7 @@ pub fn remove_cage_from_fdtable(cageid: u64) {
 #[doc = include_str!("../docs/empty_fds_for_exec.md")]
 pub fn empty_fds_for_exec(cageid: u64) {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     let mut myfdrow = FDTABLE.get_mut(&cageid).unwrap();
     // I need to call all the close handlers at the end.  So I need to 
@@ -349,7 +351,7 @@ pub fn empty_fds_for_exec(cageid: u64) {
 #[must_use] // must use the return value if you call it.
 pub fn return_fdtable_copy(cageid: u64) -> HashMap<u64, FDTableEntry> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     let mut myhashmap = HashMap::new();
 
@@ -400,7 +402,7 @@ pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
         return Err(threei::Errno::EBADFD as u64);
     }
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     // derefing this so I don't hold a lock and deadlock close handlers
     let mut myfdrow = *FDTABLE.get_mut(&cageid).unwrap();
@@ -440,40 +442,56 @@ pub fn register_close_handlers(fdkind:u32, intermediate: fn(FDTableEntry,u64), l
 
 // Helpers to track the count of times each (fdkind,underfd) is used
 #[doc(hidden)]
-fn _decrement_fdcount(entry:FDTableEntry) {
-
+fn _decrement_fdcount(entry: FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
-
-    let newcount:u64 = FDCOUNT.get(&mytuple).unwrap().value() - 1;
 
     let intermediatech;
     let lastch;
-    // Doing this to release the lock so I can call it recursively...
+
     let closehandlers = CLOSEHANDLERTABLE.lock().unwrap();
     if let Some(closehandlerentry) = closehandlers.get(&entry.fdkind) {
-        intermediatech =  closehandlerentry.intermediate;
+        intermediatech = closehandlerentry.intermediate;
         lastch = closehandlerentry.last;
-    }
-    else {
-        // TODO: If at any future point, I wanted to add a "default" handler
-        // for all fdkind values, I would add it here...
+    } else {
         intermediatech = NULL_FUNC;
         lastch = NULL_FUNC;
     }
-    // release the lock...
     drop(closehandlers);
 
-    if newcount > 0 {
-        // Update before calling their close handler in case they do operations
-        // inside the close handler which create / close fds...
-        FDCOUNT.insert(mytuple,newcount);
-        (intermediatech)(entry,newcount);
+    let newcount;
+    let call_last;
+
+    match FDCOUNT.entry(mytuple) {
+        dashmap::mapref::entry::Entry::Occupied(mut occ) => {
+            let old = *occ.get();
+            newcount = old.checked_sub(1).unwrap_or_else(|| {
+                panic!("FDCOUNT underflow for key {:?}", mytuple);
+            });
+
+            if newcount > 0 {
+                *occ.get_mut() = newcount;
+                call_last = false;
+            } else {
+                occ.remove();
+                call_last = true;
+            }
+        }
+        dashmap::mapref::entry::Entry::Vacant(_) => {
+            panic!(
+                "FDCOUNT get failed. FDCOUNT missing key {:?}, current map: {:?}",
+                mytuple,
+                FDCOUNT
+                    .iter()
+                    .map(|kv| (*kv.key(), *kv.value()))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
-    else{
-        // Remove before calling their close handler in case they do operations
-        // inside the close handler which create / close fds...
-        FDCOUNT.remove(&mytuple);
-        (lastch)(entry,0);
+
+    if !call_last {
+        (intermediatech)(entry, newcount);
+    } else {
+        (lastch)(entry, 0);
     }
 }
 
@@ -550,7 +568,7 @@ pub fn get_bitmask_for_select(cageid:u64, nfds:u64, bits:Option<fd_set>, fdkinds
         return Err(threei::Errno::EINVAL as u64);
     }
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     // The three things I will return...
     let mut retbittable:HashMap<u32,(u64,fd_set)> = HashMap::new();
@@ -710,7 +728,7 @@ pub fn get_one_virtual_bitmask_from_select_result(fdkind:u32, nfds:u64, bits:Opt
 #[must_use] // must use the return value if you call it.
 pub fn convert_virtualfds_for_poll(cageid:u64, virtualfds:HashSet<u64>) -> (HashMap<u32,HashSet<(u64,FDTableEntry)>>, HashMap<(u32,u64),u64>) {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     let thefdrow = *FDTABLE.get(&cageid).unwrap();
     let mut mappingtable:HashMap<(u32,u64),u64> = HashMap::new();
@@ -905,7 +923,7 @@ pub fn epoll_create_empty(cageid:u64, should_cloexec:bool) -> Result<u64,threei:
 #[doc = include_str!("../docs/epoll_add_underfd.md")]
 pub fn epoll_add_underfd(cageid:u64, virtepollfd:u64, fdkind:u32, underfd:u64) -> Result<(),threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     let mut ept = EPOLLTABLE.lock().unwrap();
 
@@ -926,7 +944,7 @@ pub fn epoll_add_underfd(cageid:u64, virtepollfd:u64, fdkind:u32, underfd:u64) -
 #[doc = include_str!("../docs/epoll_get_underfd_hashmap.md")]
 pub fn epoll_get_underfd_hashmap(cageid:u64, virtepollfd:u64) -> Result<HashMap<u32,u64>,threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     let ept = EPOLLTABLE.lock().unwrap();
 
@@ -942,7 +960,7 @@ pub fn epoll_get_underfd_hashmap(cageid:u64, virtepollfd:u64) -> Result<HashMap<
 #[doc = include_str!("../docs/virtualize_epoll_ctl.md")]
 pub fn virtualize_epoll_ctl(cageid:u64, epfd:u64, op:i32, virtfd:u64, event:epoll_event) -> Result<(),threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     if epfd == virtfd {
         return Err(threei::Errno::EINVAL as u64);
@@ -1018,7 +1036,7 @@ pub fn virtualize_epoll_ctl(cageid:u64, epfd:u64, op:i32, virtfd:u64, event:epol
 #[doc = include_str!("../docs/get_virtual_epoll_wait_data.md")]
 pub fn get_virtual_epoll_wait_data(cageid:u64, epfd:u64) -> Result<HashMap<u32,HashMap<u64,epoll_event>>,threei::RetVal> {
 
-    assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
+    assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
     // get this or error out...
     let epentrynum =  _get_epoll_entrynum_or_error(cageid, epfd)?;

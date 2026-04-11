@@ -1,3 +1,4 @@
+use crate::lind_wasmtime::host::PassFptrTyped;
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx};
 use anyhow::anyhow;
 use threei::threei_const;
@@ -48,7 +49,10 @@ pub extern "C" fn grate_callback_trampoline(
     let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
         Some(v) => v,
         None => {
-            panic!("no VMContext found for cage_id {}", cageid);
+            panic!(
+                "[grate_trampoline] no VMContext found for cage_id {}",
+                cageid
+            );
         }
     };
 
@@ -65,31 +69,27 @@ pub extern "C" fn grate_callback_trampoline(
                 caller: instance,
             } = caller;
 
-            // Resolve the unified entry function once per call
-            let entry_func = instance
-                .host_state()
-                .downcast_ref::<Instance>()
-                .ok_or_else(|| anyhow!("bad host_state Instance"))?
-                .get_export(&mut store, "pass_fptr_to_wt")
-                .and_then(|f| f.into_func())
-                .ok_or_else(|| anyhow!("missing export `pass_fptr_to_wt`"))?;
+            let typed_func: PassFptrTyped = match store.data().pass_fptr_func.clone() {
+                // Check if the dispatcher function is already cached.
+                Some(f) => f,
+                // Retrieve and store the dispatcher function. Done on the first syscall
+                // invocation.
+                None => {
+                    let entry_func = instance
+                        .host_state()
+                        .downcast_ref::<Instance>()
+                        .ok_or_else(|| anyhow!("bad host_state Instance"))?
+                        .get_export(&mut store, "pass_fptr_to_wt")
+                        .and_then(|f| f.into_func())
+                        .ok_or_else(|| anyhow!("missing export `pass_fptr_to_wt`"))?;
 
-            let typed_func = entry_func.typed::<(
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-            ), i32>(&mut store)?;
+                    let typed = entry_func.typed(&mut store)?;
+
+                    store.data_mut().pass_fptr_func = Some(typed.clone());
+
+                    typed
+                }
+            };
 
             // Call the entry function with all arguments and in grate function pointer
             typed_func.call(

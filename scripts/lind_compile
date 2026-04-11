@@ -62,9 +62,12 @@ EOF
 
 MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
+SHARED_BUILD="true"
+WITH_FPCAST="false"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
+COMPILE_LIBRARY="false"
 ORIGINAL_ARGS=("$@")
 
 set_mode() {
@@ -102,11 +105,20 @@ while [[ "$#" -gt 0 ]]; do
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
+    -s|--static)
+      SHARED_BUILD="false"
+      ;;
+    --fpcast-emu)
+      WITH_FPCAST="true"
+      ;;
     --print-args|--debug-args)
       PRINT_ARGS="true"
       ;;
     --no-default-clang-flags)
       NO_DEFAULT_CLANG_FLAGS="true"
+      ;;
+    --compile-library)
+      COMPILE_LIBRARY="true"
       ;;
     --compile-grate)
       COMPILE_GRATE="true"
@@ -315,11 +327,11 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
 fi
 
 # --- individual steps ---
-do_compile() {
+do_static_compile() {
   local -a mandatory_clang_flags=(
     "--sysroot=${SYSROOT}"
     --target=wasm32-unknown-wasi
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base,--export=__wasm_init_tls
   )
   local -a default_clang_flags=(
     -pthread
@@ -336,11 +348,128 @@ do_compile() {
   fi
 
   run_cmd "${CLANG_BIN}" "${mandatory_clang_flags[@]}" "${default_clang_flags[@]}" \
-    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
+}
+
+do_dynamic_compile() {
+  local -a mandatory_clang_flags=(
+    --target=wasm32-unknown-wasi
+    "--sysroot=${SYSROOT}"
+    "-nostartfiles" # we manually enforce the crt1 file for dynamic build
+    -Wl,-pie # required flag for compiling into shared wasm binary
+    -Wl,--import-table # table needs to be shared across module in dynamic build
+    -Wl,--import-memory # memory needs to be shared across module for threading support
+    -Wl,--export-memory
+    -Wl,--max-memory=67108864
+    -Wl,--allow-undefined # treat undefined symbol as external library symbol
+    -Wl,--unresolved-symbols=import-dynamic
+    -Wl,--export=__wasm_call_ctors
+    -Wl,--export-if-defined=__wasm_init_tls
+    -Wl,--export=__tls_base
+  )
+  local -a default_clang_flags=(
+    -pthread
+    -g
+    -O0
+    -fPIC
+  )
+
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
+  fi
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/set_stack_pointer.o" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
+  
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
+}
+
+do_library_compile() {
+  local -a mandatory_clang_flags=(
+    --target=wasm32-unknown-wasi
+    "--sysroot=${SYSROOT}"
+    "-fvisibility=default"
+    "-Wl,--import-memory"
+    "-Wl,--shared-memory"
+    "-Wl,--export-dynamic"
+    "-Wl,--experimental-pic"
+    "-Wl,--unresolved-symbols=import-dynamic"
+    "-Wl,-shared"
+    -Wl,--export=__wasm_call_ctors
+    -Wl,--export-if-defined=__wasm_init_tls
+    -Wl,--export=__tls_base
+  )
+  local -a default_clang_flags=(
+    -g
+    -O0
+    -fPIC
+  )
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
+  
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
+}
+
+do_compile() {
+  if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+    do_library_compile
+  else
+    if [[ "${SHARED_BUILD}" == "true" ]]; then
+      do_dynamic_compile
+    else
+      do_static_compile
+    fi
+  fi
 }
 
 do_optimize() {
-  run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+  FPCAST_ARG=""
+  if [[ "${WITH_FPCAST}" == "true" ]]; then
+    if [[ "${SHARED_BUILD}" == "true" || "${COMPILE_LIBRARY}" == "true" ]]; then
+      FPCAST_ARG="--fpcast-emu --pass-arg=relocatable-fpcast"
+    else
+      FPCAST_ARG="--fpcast-emu"
+    fi
+  fi
+
+  if [[ "${SHARED_BUILD}" == "true" ]]; then
+    # --enable-bulk-memory --enable-threads: required wasm feature enabled for lind
+    # --epoch-injection --pass-arg=epoch-import: enable signal support, with dynamic build feature (epoch-import), with hint for applying epoch on main module (epoch-main-module)
+    # --asyncify --pass-arg=asyncify-import-globals --pass-arg=epoch-main-module: enable asyncify for multiprocess, with dynamic build feature (import-globals)
+    # --debuginfo: retain debug information for better debugging experience 
+    run_cmd "${WASM_OPT_BIN}" \
+      --enable-bulk-memory --enable-threads \
+      --epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module \
+      --asyncify --pass-arg=asyncify-import-globals \
+      $FPCAST_ARG \
+      --debuginfo \
+      "${OUT_WASM}" -o "${OUT_WASM}"
+  else 
+    if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+        run_cmd "${WASM_OPT_BIN}" \
+        --enable-bulk-memory --enable-threads \
+        --epoch-injection --pass-arg=epoch-import \
+        --asyncify --pass-arg=asyncify-import-globals \
+        $FPCAST_ARG \
+        --debuginfo \
+        "${OUT_WASM}" -o "${OUT_WASM}"
+    else
+      run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify $FPCAST_ARG -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+    fi
+  fi
 }
 
 do_precompile() {
@@ -373,6 +502,7 @@ case "${MODE}" in
     ;;
   "precompile-only")
     do_precompile
+    cp_to_lindfs
     ;;
 esac
 

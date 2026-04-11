@@ -12,20 +12,24 @@ use libc::sched_yield;
 use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::*;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
-    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+    MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
-    EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK,
-    WNOHANG,
+    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_DATA, RLIMIT_NOFILE,
+    RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK,
+    SIG_UNBLOCK, WNOHANG,
 };
-use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
+use sysdefs::constants::syscall_const;
+use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
+use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
@@ -133,6 +137,7 @@ pub extern "C" fn fork_syscall(
             main_threadid: RwLock::new(0),
             interval_timer: IntervalTimer::new(child_cageid),
             epoch_handler: DashMap::new(),
+            os_tid_map: DashMap::new(),
             pending_signals: RwLock::new(vec![]),
             signalhandler: selfcage.signalhandler.clone(),
             sigset: AtomicU64::new(0),
@@ -140,6 +145,9 @@ pub extern "C" fn fork_syscall(
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(new_vmmap),
             final_exit_status: RwLock::new(None),
+            exit_group_initiated: AtomicBool::new(false),
+            is_dead: AtomicBool::new(false),
+            grate_inflight: AtomicU64::new(0),
         };
 
         // increment child counter for parent
@@ -184,7 +192,7 @@ pub extern "C" fn fork_syscall(
     //   - Resume execution in parent and child
     threei::make_syscall(
         RAWPOSIX_CAGEID,
-        56, // clone syscall number
+        syscall_const::CLONE_SYSCALL as u64,
         UNUSED_NAME,
         WASMTIME_CAGEID,
         clone_arg,
@@ -240,36 +248,9 @@ pub extern "C" fn exec_syscall(
         );
     }
 
-    // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(cageid);
-
-    // Copy necessary data from current cage
-    let selfcage = get_cage(cageid).unwrap();
-
-    selfcage.rev_shm.lock().clear();
-
-    // ensures that all old mappings and states are discarded, allowing the new cage to
-    // run in a clean virtual address space, while reusing the existing `Vmmap` container
-    // to avoid extra allocations.
-    let mut vmmap = selfcage.vmmap.write();
-    vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
-
-    // perform signal related clean up
-    // all the signal handler becomes default after exec
-    // pending signals should be perserved though
-    selfcage.signalhandler.clear();
-    // the sigset will be reset after exec
-    selfcage.sigset.store(0, Relaxed);
-    // we also clean up epoch handler and main thread id
-    // since they will be re-established from wasmtime
-    selfcage.epoch_handler.clear();
-    let mut threadid_guard = selfcage.main_threadid.write();
-    *threadid_guard = 0;
-    drop(threadid_guard);
-
-    threei::make_syscall(
+    let ret = threei::make_syscall(
         RAWPOSIX_CAGEID,
-        59, // exec syscall number
+        syscall_const::EXEC_SYSCALL as u64,
         UNUSED_NAME,
         WASMTIME_CAGEID,
         path,
@@ -284,30 +265,53 @@ pub extern "C" fn exec_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    );
+
+    // Clean up the cage only if exec succeeds.
+    // A return value < 0 indicates exec failure.
+    //
+    // We rely on Asyncify to detect success:
+    // if Asyncify begins unwinding, exec has succeeded.
+    // By convention, Asyncify unwind returns 0, which we use as the success signal.
+    if ret == 0 {
+        // Empty fd with flag should_cloexec
+        fdtables::empty_fds_for_exec(cageid);
+
+        // Copy necessary data from current cage
+        let selfcage = get_cage(cageid).unwrap();
+
+        selfcage.rev_shm.lock().clear();
+
+        // ensures that all old mappings and states are discarded, allowing the new cage to
+        // run in a clean virtual address space, while reusing the existing `Vmmap` container
+        // to avoid extra allocations.
+        let mut vmmap = selfcage.vmmap.write();
+        vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+
+        // perform signal related clean up
+        // all the signal handler becomes default after exec
+        // pending signals should be perserved though
+        selfcage.signalhandler.clear();
+        // the sigset will be reset after exec
+        selfcage.sigset.store(0, Relaxed);
+        // Do NOT clear epoch_handler or main_threadid here.
+        // If exec-ed module crashes, the thread is still running and needs its
+        // epoch_handler entry for proper exit tracking.  On success,
+        // wasmtime re-instantiates and lind_signal_init (called from
+        // lind-multi-process/src/lib.rs during new instance setup) will
+        // overwrite the stale entries in epoch_handler and main_threadid.
+    }
+
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
+/// Syscall 60 — exit the calling thread only.
 ///
-/// RawPOSIX-side implementation of the `exit` syscall.
-///
-/// This function performs **userspace process / thread teardown** inside
-/// RawPOSIX before transferring control back to Wasmtime via 3i.
-///
-/// Its responsibilities are split into two phases:
-///
-/// 1. **RawPOSIX-side state transition**
-///    - Convert and validate syscall arguments
-///    - Perform thread exit
-///    - Detect whether this is the **last thread** of the cage
-///    - If so, clean up all cage-level resources (FD tables, cage table, zombies)
-///
-/// 2. **Control transfer back to Wasmtime**
-///    - Invoke the Wasmtime re-entry trampoline via `threei::make_syscall`
-///    - Pass `is_last_thread` so Wasmtime can complete execution teardown
-///
-/// RawPOSIX itself does **not** return to Wasm execution after this point;
-/// control is conceptually handed off to Wasmtime for final termination.
+/// Used by start_thread (pthread_create.c) when a non-main thread returns
+/// from its thread function.  Does NOT initiate cage-wide shutdown — that
+/// is exit_group's job (syscall 231).
+/// See also: exit_group_syscall (syscall 231).
 pub extern "C" fn exit_syscall(
     cageid: u64,
     status_arg: u64,
@@ -323,7 +327,6 @@ pub extern "C" fn exit_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -337,83 +340,106 @@ pub extern "C" fn exit_syscall(
         );
     }
 
-    // Indicates whether the exiting thread is the last live thread
-    // in the cage (0 = no, 1 = yes).
-    let mut is_last_thread = 0;
+    let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
 
-    // Set the normal exit code
-    let exit_st = ExitStatus::Exited(status);
+    // Thread-only exit: just record status and trigger asyncify unwind.
+    // No CAS, no epoch_kill_all — the cage stays alive for other threads.
+    cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
 
-    // Perform thread exit inside RawPOSIX.
-    //
-    // `lind_thread_exit` returns true if this thread was the last
-    // remaining thread of the cage.
-    if cage::lind_thread_exit(cageid, tid) {
-        // Need to perform cage-level resource cleanup
-        is_last_thread = 1;
-
-        // Cleanup fdtable
-        fdtables::remove_cage_from_fdtable(cageid);
-
-        // Cleanup cage table and process hierarchy state.
-        //
-        // If the cage has a parent, we:
-        //   - Decrement the parent's child count
-        //   - Record this cage as a zombie
-        //   - Send SIGCHLD to the parent
-        //
-        //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-        if let Some(selfcage) = get_cage(cageid) {
-            if selfcage.parent != cageid {
-                let parent_cage = get_cage(selfcage.parent);
-                if let Some(parent) = parent_cage {
-                    parent.child_num.fetch_sub(1, SeqCst);
-                    let mut zombie_vec = parent.zombies.write();
-                    // Determine the final termination status for this cage.
-                    //
-                    // If a termination status was previously recorded (e.g., due to
-                    // signal-based termination), use that value. Otherwise fall back
-                    // to the normal exit status derived from the `exit()` syscall.
-                    //
-                    // This ensures that signal-triggered termination (which may have
-                    // recorded `ExitStatus::Signaled`) is not overwritten by the
-                    // default exit status path.
-                    let zombie_status = {
-                        let recorded = *selfcage.final_exit_status.read();
-                        recorded.unwrap_or(exit_st)
-                    };
-                    zombie_vec.push(Zombie {
-                        cageid: cageid,
-                        exit_code: zombie_status,
-                    });
-                } else {
-                    // if parent already exited
-                    // BUG: we currently do not handle the situation where a parent has exited already
-                }
-            }
-
-            // if the cage has parent (i.e. it is not the "root" cage)
-            if cageid != selfcage.parent {
-                // Notify parent via SIGCHLD if this is not the root cage.
-                lind_send_signal(selfcage.parent, SIGCHLD);
-            }
-
-            // Remove the cage from the global cage table.
-            remove_cage(cageid);
-        }
-    }
-
-    // Call wasmtime
-    // See comments in wasmtime/lind-multi-process
+    // Call wasmtime to trigger asyncify unwind for this thread.
+    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
     threei::make_syscall(
         RAWPOSIX_CAGEID,
-        60, // exit syscall number
+        syscall_const::EXIT_SYSCALL as u64,
         UNUSED_NAME,
         WASMTIME_CAGEID,
         status_arg,
-        cageid, // Pass cageid as the second argument to identify the exiting cage in wasmtime
+        cageid,
         tid,
-        is_last_thread, // represent the last thread exiting
+        UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
+}
+
+/// Syscall 231 — exit_group: terminate all threads in the cage.
+///
+/// Called by glibc exit() after running atexit handlers and flushing stdio.
+/// Kills all other threads via epoch, then exits the calling thread.
+pub extern "C" fn exit_group_syscall(
+    cageid: u64,
+    status_arg: u64,
+    status_cageid: u64,
+    tid: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // would check when `secure` flag has been set during compilation,
+    // no-op by default
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "exit_group_syscall"
+        );
+    }
+
+    let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
+
+    // Only the first thread to win the CAS initiates cage shutdown.
+    // Other threads just fall through and will be killed via epoch_kill_all.
+    if cage::signal::signal::try_initiate_exit_group(cageid) {
+        cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
+
+        if let Some(c) = cage::get_cage(cageid) {
+            c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+        }
+
+        // Mark cage as exiting BEFORE epoch_kill_all — killed threads
+        // wake up and may make syscalls; EXITING_TABLE must be set so
+        // make_syscall returns -ESRCH instead of dispatching.
+        //
+        // TODO: this cleanup (EXITING_TABLE insert, epoch_kill_all,
+        // _rm_grate_from_handler) should be moved into
+        // trigger_harsh_cage_exit / harsh_cage_exit so all exit paths
+        // go through a single cage teardown sequence.  We currently
+        // inline it here because trigger_harsh_cage_exit dispatches
+        // harsh_cage_exit through the grate chain, which causes
+        // additional syscall traffic during exit and widens race
+        // windows with concurrent threads.
+        threei::EXITING_TABLE.insert(cageid);
+
+        cage::signal::signal::epoch_kill_all(cageid, tid as i32);
+        threei::handler_table::_rm_grate_from_handler(cageid);
+    }
+
+    // Call wasmtime to trigger asyncify unwind.
+    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        60, // reuse exit trampoline in wasmtime
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        status_arg,
+        cageid,
+        tid,
+        UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
         UNUSED_ARG,
         UNUSED_ID,
         UNUSED_ARG,
@@ -1117,6 +1143,88 @@ pub extern "C" fn sigprocmask_syscall(
         }
     }
     res
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/prlimit.2.html
+///
+/// Reads or sets resource limits.
+/// Each resource has an associated soft and hard limit defined by rlimit struct.
+/// soft limit is the value that kernel enforces for the reponse. Hard limit the ceiling for how high the soft limit can be set.
+/// An unprevileged process may set only the soft limit and irreversibly lower hard limit.
+/// A previleged process may make arbitrary changes to either hard/soft values.
+/// ## Returns
+/// On success, returns 0. On error, -1 is returned, and errno is set.
+
+pub extern "C" fn prlimit64_syscall(
+    cageid: u64,
+    arg1: u64, //arg1: pid (0 = current process)
+    arg1_cageid: u64,
+    arg2: u64, //arg2: which resource( RLIMIT_NOFILE, etc)
+    arg2_cageid: u64,
+    arg3: u64, //arg3: pointer to new limit (Null for getrlimit)
+    arg3_cageid: u64,
+    arg4: u64, //arg4: pointer to receive current limit (NULL for setrlimit)
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    //pid has to be zero
+    let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
+    if pid != 0 {
+        lind_debug_panic(&format!("prlimit64: unsupported pid {}", pid));
+        return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
+    }
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "prlimit64_syscall",
+        );
+    }
+    // get resource numeber from arg2
+    let resource = sc_convert_sysarg_to_u32(arg2, arg2_cageid, cageid);
+
+    // setrlimit unsupported
+    if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
+        lind_debug_panic("prlimit64: setrlimit not supported");
+        return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
+    }
+
+    // handle getrlimit calls
+    // default to 1024.
+    if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
+        let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid) {
+            Ok(rlim) => rlim,
+            Err(e) => return syscall_error(e, "prlimit64", "bad address"),
+        };
+        match resource {
+            RLIMIT_STACK => {
+                old_limit.rlim_cur = 8 * 1024 * 1024;
+                old_limit.rlim_max = 8 * 1024 * 1024;
+            }
+            RLIMIT_NOFILE => {
+                old_limit.rlim_cur = 1024;
+                old_limit.rlim_max = 1024;
+            }
+            RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => {
+                old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
+                old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
+            }
+            RLIMIT_NPROC => {
+                old_limit.rlim_cur = MAX_CAGEID as u32;
+                old_limit.rlim_max = MAX_CAGEID as u32;
+            }
+            _ => {
+                lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
+                old_limit.rlim_cur = 0;
+                old_limit.rlim_max = 0;
+            }
+        }
+    }
+
+    0 //success
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sched_yield.2.html
