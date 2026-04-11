@@ -178,12 +178,20 @@ impl<
         self.linker = Some(linker);
     }
 
+    // Attach a LindGOT (Global Offset Table) to this context, wrapping it in
+    // Arc<Mutex<>> for shared, thread-safe access. The GOT maps symbol names to
+    // the addresses of their GOT cells; it is shared across all modules within
+    // a cage so that cross-library indirect calls resolve to the correct target.
     pub fn attach_got_table(&mut self, got_table: Option<LindGOT>) {
         if let Some(got) = got_table {
             self.got_table = Some(Arc::new(Mutex::new(got)));
         }
     }
 
+    // Record a dynamically loaded module (from dlopen) into this cage's module
+    // list. During fork() and pthread_create(), every entry in dlopen_modules
+    // is re-instantiated into the child/thread store so that the child inherits
+    // access to all libraries the parent opened at runtime.
     pub fn append_module(&mut self, path: String, module: Module) {
         self.dlopen_modules.push(("env".to_string(), path, module));
     }
@@ -503,6 +511,17 @@ impl<
                         )
                         .unwrap();
 
+                    // Global snapshot workflow:
+                    // 1. register_named_instance: record the child's main module instance under
+                    //    its wasm intrinsic name so that get_global_snapshot (called at the top of
+                    //    this fork path) could locate it. Also used for name-collision detection.
+                    // 2. apply_global_snapshots: restore the parent's Wasm globals (GOT cell
+                    //    addresses, stack pointer, memory base pointers) into the child instance.
+                    //    This ensures the child starts with a consistent view of all symbol
+                    //    addresses rather than the zero-initialized defaults from instantiation.
+                    //    Snapshots are looked up by module name from the HashMap captured before
+                    //    the unwind; backup instances are never registered so they are naturally
+                    //    excluded from the snapshot map.
                     let main_module_name = module.name().unwrap();
                     store
                         .as_context_mut()
@@ -1013,6 +1032,16 @@ impl<
                         .instantiate_with_lind_thread(&mut store, &module, false)
                         .unwrap();
 
+                    // Global snapshot workflow:
+                    // 1. register_named_instance: record the thread's main module instance under
+                    //    its wasm intrinsic name so that get_global_snapshot (called at the top of
+                    //    this thread creation path) could locate it. Also used for name-collision detection.
+                    // 2. apply_global_snapshots: restore the parent's Wasm globals (GOT cell
+                    //    addresses, stack pointer, memory base pointers) into the thread instance.
+                    //    Threads share the cage's linear memory but each have their own Wasmtime
+                    //    Store/Instance, so globals must be explicitly synced from the parent's
+                    //    snapshot. Snapshots are looked up by module name; backup instances are
+                    //    never registered and are therefore naturally excluded.
                     let main_module_name = module.name().unwrap();
                     store.as_context_mut().register_named_instance(main_module_name.to_string(), grate_instanceid);
                     instance.apply_global_snapshots(
