@@ -21,12 +21,11 @@ int main(void) {
     wv[1].iov_base = buf2;
     wv[1].iov_len = strlen(buf2);
 
+    ssize_t expected = (ssize_t)(strlen(buf1) + strlen(buf2));
     ssize_t nw = pwritev(fd, wv, 2, 0);
-    if (nw < 0) {
-        perror("pwritev");
-        printf("pwritev returned %zd, errno=%d\n", nw, errno);
-    }
-    assert(nw == (ssize_t)(strlen(buf1) + strlen(buf2)));
+    printf("pwritev returned %zd, expected %zd, errno=%d\n", nw, expected, errno);
+    fflush(stdout);
+    assert(nw == expected);
 
     /* preadv: read back into two buffers at offset 0 */
     char rbuf1[6] = {0};
