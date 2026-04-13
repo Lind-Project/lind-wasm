@@ -17,23 +17,34 @@
 
 #include <sys/uio.h>
 #include <sysdep-cancel.h>
-#include <syscall-template.h>
-#include <lind_syscall_num.h>
-#include <addr_translation.h>
+
+#ifdef __ASSUME_PREADV
 
 ssize_t
 preadv64 (int fd, const struct iovec *vector, int count, off64_t offset)
 {
-  struct iovec host_iov[count];
-  __lind_translate_iov (vector, host_iov, count);
-
-  return MAKE_LEGACY_SYSCALL (PREADV_SYSCALL, "syscall|preadv",
-               (uint64_t) fd,
-               (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST ((uintptr_t) host_iov),
-               (uint64_t) count,
-               (uint64_t) offset, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return SYSCALL_CANCEL (preadv, fd, vector, count, LO_HI_LONG (offset));
 }
+#else
+static ssize_t __atomic_preadv64_replacement (int, const struct iovec *,
+					      int, off64_t);
+ssize_t
+preadv64 (int fd, const struct iovec *vector, int count, off64_t offset)
+{
+  ssize_t result = SYSCALL_CANCEL (preadv, fd, vector, count,
+				   LO_HI_LONG (offset));
+  if (result >= 0 || errno != ENOSYS)
+    return result;
+  return __atomic_preadv64_replacement (fd, vector, count, offset);
+}
+# define PREADV static __atomic_preadv64_replacement
+# define PREAD __pread64
+# define OFF_T off64_t
+# include <sysdeps/posix/preadv_common.c>
+#endif
 libc_hidden_def (preadv64)
 
+#ifdef __OFF_T_MATCHES_OFF64_T
 strong_alias (preadv64, preadv)
 libc_hidden_def (preadv)
+#endif

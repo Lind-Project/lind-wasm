@@ -17,23 +17,34 @@
 
 #include <sys/uio.h>
 #include <sysdep-cancel.h>
-#include <syscall-template.h>
-#include <lind_syscall_num.h>
-#include <addr_translation.h>
+
+#ifdef __ASSUME_PWRITEV
 
 ssize_t
 pwritev64 (int fd, const struct iovec *vector, int count, off64_t offset)
 {
-  struct iovec host_iov[count];
-  __lind_translate_iov (vector, host_iov, count);
-
-  return MAKE_LEGACY_SYSCALL (PWRITEV_SYSCALL, "syscall|pwritev",
-               (uint64_t) fd,
-               (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST ((uintptr_t) host_iov),
-               (uint64_t) count,
-               (uint64_t) offset, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return SYSCALL_CANCEL (pwritev, fd, vector, count, LO_HI_LONG (offset));
 }
+#else
+static ssize_t __atomic_pwritev64_replacement (int, const struct iovec *,
+					       int, off64_t);
+ssize_t
+pwritev64 (int fd, const struct iovec *vector, int count, off64_t offset)
+{
+  ssize_t result = SYSCALL_CANCEL (pwritev, fd, vector, count,
+				   LO_HI_LONG (offset));
+  if (result >= 0 || errno != ENOSYS)
+    return result;
+  return __atomic_pwritev64_replacement (fd, vector, count, offset);
+}
+# define PWRITEV static __atomic_pwritev64_replacement
+# define PWRITE __pwrite64
+# define OFF_T off64_t
+# include <sysdeps/posix/pwritev_common.c>
+#endif
 libc_hidden_def (pwritev64)
 
+#ifdef __OFF_T_MATCHES_OFF64_T
 strong_alias (pwritev64, pwritev)
 libc_hidden_def (pwritev)
+#endif
