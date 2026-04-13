@@ -35,6 +35,6 @@ extern const char* __lind_debug_str(const char *str) __attribute__((
 __attribute__((used))
 void __lind_debug_import(void) {
     __lind_debug_num(0);
-    __lind_debug_str("LIND DEGUG INIT");
+    __lind_debug_str("LIND DEBUG INIT");
 }
 #endif // LIND_DEBUG
