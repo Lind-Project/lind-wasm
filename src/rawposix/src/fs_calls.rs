@@ -2812,7 +2812,7 @@ pub extern "C" fn preadv_syscall(
         );
     }
 
-    let ret = unsafe { libc::preadv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
+    let ret = unsafe { libc::syscall(libc::SYS_preadv, kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset as libc::c_long, 0 as libc::c_long) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "preadv");
     }
@@ -2864,7 +2864,7 @@ pub extern "C" fn pwritev_syscall(
         );
     }
 
-    let ret = unsafe { libc::pwritev(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
+    let ret = unsafe { libc::syscall(libc::SYS_pwritev, kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset as libc::c_long, 0 as libc::c_long) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "pwritev");
     }
