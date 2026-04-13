@@ -2857,6 +2857,9 @@ pub extern "C" fn pwritev_syscall(
     let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
 
+    eprintln!("[pwritev] raw args: vfd={:#x} iov={:#x} iovcnt={:#x} offset={:#x}", vfd_arg, iov_arg, iovcnt_arg, offset_arg);
+    eprintln!("[pwritev] converted: kernel_fd={} iov_ptr={:?} iovcnt={} offset={}", kernel_fd, iov_ptr, iovcnt, offset);
+
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
