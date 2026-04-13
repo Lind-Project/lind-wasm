@@ -1,26 +1,18 @@
 name: End-to-end testing
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
   push:
-    branches:
-      - main
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-  
+
 permissions:
   pull-requests: write
 
 jobs:
-  docker:
-    # If the workflow was triggered by anything other than a pull_request event 
-    # (e.g., push, workflow_dispatch, schedule, pull_request_target), 
-    # github.event_name != 'pull_request' is true.
-    # github.event.pull_request is only populated on pull_request events. 
-    # It is true when the PR is not a draft (i.e., “Ready for review”).
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+  docker_e2e:
     runs-on: ubuntu-latest
     env:
       REPORT_LOCAL_DIR: test-reports
@@ -34,64 +26,68 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      # First attempt at build
       - name: Build e2e (attempt 1)
         id: build_e2e_try1
+        continue-on-error: true
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          file: Docker/Dockerfile.e2e          
+          file: Docker/Dockerfile.e2e
           tags: e2e:latest
           outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}
 
-      # Small backoff if it failed
       - name: Backoff (after try 1)
-        if: steps.build_e2e_try1.outcome == 'failure'
+        if: ${{ always() && steps.build_e2e_try1.outcome == 'failure' }}
         run: sleep 15
-      
-      # Second attempt
+
       - name: Build e2e (attempt 2)
         id: build_e2e_try2
-        if: steps.build_e2e_try1.outcome == 'failure'
+        if: ${{ always() && steps.build_e2e_try1.outcome == 'failure' }}
+        continue-on-error: true
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          file: Docker/Dockerfile.e2e          
+          file: Docker/Dockerfile.e2e
           tags: e2e:latest
           outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}
-      
-      # Slightly Longer Backoff if it failed again
+
       - name: Backoff (after try 2)
-        if: steps.build_e2e_try2.outcome == 'failure'
+        if: ${{ always() && steps.build_e2e_try2.outcome == 'failure' }}
         run: sleep 30
 
-      # Third and final attempt
       - name: Build e2e (attempt 3)
         id: build_e2e_try3
-        if: steps.build_e2e_try2.outcome == 'failure'
+        if: ${{ always() && steps.build_e2e_try2.outcome == 'failure' }}
+        continue-on-error: true
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          file: Docker/Dockerfile.e2e          
+          file: Docker/Dockerfile.e2e
           tags: e2e:latest
           outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}
+
+      - name: Fail if all e2e build attempts failed
+        if: ${{ always() && steps.build_e2e_try1.outcome == 'failure' && steps.build_e2e_try2.outcome == 'failure' && steps.build_e2e_try3.outcome == 'failure' }}
+        run: |
+          echo "All e2e build attempts failed"
+          exit 1
 
       - name: Read test status
         id: e2e
+        if: ${{ always() }}
         run: |
           STATUS_FILE="${{ env.REPORT_LOCAL_DIR }}/e2e_status"
           echo "Checking status file at: $STATUS_FILE"
           echo "----- File contents (if any) -----"
           if [[ -f "$STATUS_FILE" ]]; then
             cat "$STATUS_FILE"
-            # export to step output AND job env
-            cat "$STATUS_FILE" >> "$GITHUB_OUTPUT"   # writes E2E_STATUS=pass|fail
+            cat "$STATUS_FILE" >> "$GITHUB_OUTPUT"
             cat "$STATUS_FILE" >> "$GITHUB_ENV"
           else
             echo "(none)"
@@ -102,6 +98,7 @@ jobs:
           echo "----------------------------------"
 
       - name: Upload HTML report artifact to report
+        if: ${{ always() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: wasm-e2e-report
@@ -112,6 +109,7 @@ jobs:
           retention-days: 7
 
       - name: Upload wasm JSON report artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: wasm-e2e-json
@@ -120,6 +118,7 @@ jobs:
           retention-days: 7
 
       - name: Upload grate JSON report artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: grate-e2e-json
@@ -128,6 +127,7 @@ jobs:
           retention-days: 7
 
       - name: Upload unified runner HTML report artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: wasm-e2e-unified-html
@@ -136,10 +136,9 @@ jobs:
             ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
           if-no-files-found: error
           retention-days: 7
-      
+
       - name: Post PR comment
-        # Run only on branch PRs, not on fork PRs
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
@@ -148,10 +147,120 @@ jobs:
             const body = fs.readFileSync(path, 'utf8');
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
-            await github.rest.issues.createComment({ owner, repo, issue_number, body });      
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
       - name: Fail if tests failed
-        if: steps.e2e.outputs.E2E_STATUS == 'fail'
+        if: ${{ always() && steps.e2e.outputs.E2E_STATUS == 'fail' }}
         run: |
           echo "Tests failed; failing job after posting the report/comment."
+          exit 1
+
+  docker_libcpp:
+    runs-on: ubuntu-latest
+    env:
+      OUTPUT_LOCAL_DIR: libcpp-output
+      STATUS_FILE: libcpp_status
+      WASM_FILE_NAME: hello.cpp.wasm
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+
+      - name: Build libcpp integration (attempt 1)
+        id: build_libcpp_try1
+        continue-on-error: true
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294
+        with:
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          file: Docker/Dockerfile.e2e
+          target: libcpp-artifacts
+          tags: libcpp-integration:latest
+          outputs: type=local,dest=${{ env.OUTPUT_LOCAL_DIR }}
+
+      - name: Backoff (after try 1)
+        if: ${{ always() && steps.build_libcpp_try1.outcome == 'failure' }}
+        run: sleep 15
+
+      - name: Build libcpp integration (attempt 2)
+        id: build_libcpp_try2
+        if: ${{ always() && steps.build_libcpp_try1.outcome == 'failure' }}
+        continue-on-error: true
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294
+        with:
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          file: Docker/Dockerfile.e2e
+          target: libcpp-artifacts
+          tags: libcpp-integration:latest
+          outputs: type=local,dest=${{ env.OUTPUT_LOCAL_DIR }}
+
+      - name: Backoff (after try 2)
+        if: ${{ always() && steps.build_libcpp_try2.outcome == 'failure' }}
+        run: sleep 30
+
+      - name: Build libcpp integration (attempt 3)
+        id: build_libcpp_try3
+        if: ${{ always() && steps.build_libcpp_try2.outcome == 'failure' }}
+        continue-on-error: true
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294
+        with:
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          file: Docker/Dockerfile.e2e
+          target: libcpp-artifacts
+          tags: libcpp-integration:latest
+          outputs: type=local,dest=${{ env.OUTPUT_LOCAL_DIR }}
+
+      - name: Fail if all libcpp build attempts failed
+        if: ${{ always() && steps.build_libcpp_try1.outcome == 'failure' && steps.build_libcpp_try2.outcome == 'failure' && steps.build_libcpp_try3.outcome == 'failure' }}
+        run: |
+          echo "All libcpp build attempts failed"
+          exit 1
+
+      - name: Read libcpp status
+        id: libcpp
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          STATUS_PATH="${{ env.OUTPUT_LOCAL_DIR }}/${{ env.STATUS_FILE }}"
+          echo "Checking status file at: $STATUS_PATH"
+          echo "----- File contents (if any) -----"
+          if [[ -f "$STATUS_PATH" ]]; then
+            cat "$STATUS_PATH"
+            cat "$STATUS_PATH" >> "$GITHUB_OUTPUT"
+            cat "$STATUS_PATH" >> "$GITHUB_ENV"
+          else
+            echo "(none)"
+            echo "LIBCPP_STATUS=fail" >> "$GITHUB_OUTPUT"
+            echo "LIBCPP_STATUS=fail" >> "$GITHUB_ENV"
+            echo "::warning file=$STATUS_PATH::Status file missing, defaulting to fail"
+          fi
+          echo "----------------------------------"
+
+      - name: Upload wasm artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: libcpp-wasm
+          path: ${{ env.OUTPUT_LOCAL_DIR }}/${{ env.WASM_FILE_NAME }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload libcpp status artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: libcpp-status
+          path: ${{ env.OUTPUT_LOCAL_DIR }}/${{ env.STATUS_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail if libcpp integration failed
+        if: ${{ always() && steps.libcpp.outputs.LIBCPP_STATUS == 'fail' }}
+        run: |
+          echo "libcpp integration failed"
           exit 1
