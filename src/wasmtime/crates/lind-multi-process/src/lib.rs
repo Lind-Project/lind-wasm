@@ -2,7 +2,7 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Context};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
@@ -10,10 +10,11 @@ use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH};
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
-use wasmtime_lind_3i::{
-    get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
-    VmCtxWrapper,
-};
+// use wasmtime_lind_3i::{
+//     get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
+//     VmCtxWrapper,
+// };
+use wasmtime_lind_3i::*;
 use wasmtime_lind_utils::LindCageManager;
 
 use std::ffi::CStr;
@@ -505,12 +506,18 @@ impl<
 
                     // new cage created, increment the cage counter
                     lind_manager.increment();
-                    // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
-                    // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
-                    // instance boundaries particularly difficult. To overcome this, the design employs low-level context
-                    // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-                    // structures. See more details in [lind-3i/src/lib.rs]
-                    // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
+                    
+                    // 4) Notify threei of the cage runtime type
+                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+
+                    barrier_clone.wait();
+
+                    // update the linker for the child instance, since new linker contains some child-specific defines
+                    let mut new_child_host = store.data_mut();
+                    let new_child_ctx = get_cx(&mut new_child_host);
+                    let cloned_linker = linker.clone();
+                    new_child_ctx.attach_linker(linker);
+
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
                     let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
@@ -522,35 +529,16 @@ impl<
 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
+                    
+                    let grate_template = GrateTemplate {
+                        engine: module.engine().clone(),
+                        module: module.clone(),
+                        linker: cloned_linker,
+                    };
 
-                    // 4) Notify threei of the cage runtime type
-                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
-
-                    // 5) Create backup instances to populate the vmctx pool
-                    // See more comments in lind-3i/lib.rs
-                    for _ in 0..9 {
-                        let (_, backup_cage_instanceid) = linker
-                            .instantiate_with_lind_thread(&mut store, &module, false)
-                            .unwrap();
-                        let backup_cage_storeopaque = store.inner_mut();
-                        let backup_cage_instancehandler =
-                            backup_cage_storeopaque.instance(backup_cage_instanceid);
-                        let backup_vmctx_ptr: *mut c_void =
-                            backup_cage_instancehandler.vmctx().cast();
-
-                        let backup_vmctx_wrapper = VmCtxWrapper {
-                            vmctx: NonNull::new(backup_vmctx_ptr).unwrap(),
-                        };
-
-                        set_vmctx(child_cageid, backup_vmctx_wrapper);
-                    }
-
-                    barrier_clone.wait();
-
-                    // update the linker for the child instance, since new linker contains some child-specific defines
-                    let mut new_child_host = store.data_mut();
-                    let new_child_ctx = get_cx(&mut new_child_host);
-                    new_child_ctx.attach_linker(linker);
+                    // register grate workers for this cage
+                    create_handler_for_cage(&grate_template, store.data().clone(), child_cageid, ConcurrencyMode::Serialized)
+                        .with_context(|| format!("failed to register grate workers for cage {}", child_cageid));
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -614,12 +602,12 @@ impl<
                             threei::handler_table::_rm_grate_from_handler(child_cageid);
                             cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
                             cage::cage_finalize(child_cageid);
-                            if !rm_vmctx(child_cageid) {
-                                eprintln!(
-                                    "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
-                                    child_cageid
-                                );
-                            }
+                            // if !rm_vmctx(child_cageid) {
+                            //     eprintln!(
+                            //         "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
+                            //         child_cageid
+                            //     );
+                            // }
                             lind_manager.decrement();
                             return 0;
                         }
@@ -1169,12 +1157,12 @@ impl<
             // for exec, we do not need to do rewind after unwinding is done
             store.set_asyncify_state(AsyncifyState::Normal);
 
-            if !rm_vmctx(cloned_cageid as u64) {
-                panic!(
-                    "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
-                    cloned_cageid
-                );
-            }
+            // if !rm_vmctx(cloned_cageid as u64) {
+            //     panic!(
+            //         "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
+            //         cloned_cageid
+            //     );
+            // }
 
             let ret = exec_call(
                 &cloned_lindboot_cli,
@@ -1259,12 +1247,12 @@ impl<
                 cage::cage_finalize(deferred_cageid);
 
                 // Remove the VMContext pool (backup instances).
-                if !rm_vmctx(deferred_cageid) {
-                    eprintln!(
-                        "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
-                        deferred_cageid
-                    );
-                }
+                // if !rm_vmctx(deferred_cageid) {
+                //     eprintln!(
+                //         "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
+                //         deferred_cageid
+                //     );
+                // }
 
                 // Decrement the global cage count.
                 deferred_lind_manager.decrement();
