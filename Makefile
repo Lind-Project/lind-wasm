@@ -50,13 +50,13 @@ lindfs:
 	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
 
 .PHONY: lind-debug
-lind-debug: build-dir
-	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
-	$(MAKE) build_glibc LIND_DEBUG=1
-	
+lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
 	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
+
+	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
+	$(MAKE) build_glibc LIND_DEBUG=1
 build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \

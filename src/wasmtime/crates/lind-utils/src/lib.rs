@@ -186,6 +186,11 @@ impl LindGOT {
         Some(cell.load(Ordering::Acquire))
     }
 
+    /// Check whether a symbol has a GOT entry (regardless of whether it is resolved).
+    pub fn has_entry(&self, name: &str) -> bool {
+        self.global_offset_table.contains_key(name)
+    }
+
     /// print unresolved symbols.
     ///
     /// Convention: a GOT cell value of 0 means "unresolved".

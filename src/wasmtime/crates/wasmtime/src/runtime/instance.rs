@@ -1110,6 +1110,11 @@ impl Instance {
             let got_inner = got.as_ref().unwrap();
             let memory_base = memory_base.unwrap();
             for (name, global) in globals {
+                // Only relocate globals that are actually registered in the GOT.
+                // Applying memory_base to an unrelated exported global would overflow.
+                if !got_inner.has_entry(&name) {
+                    continue;
+                }
                 let val = global.get(&mut store);
                 // relocate the variable
                 let val = val.i32().unwrap() as u32 + memory_base;

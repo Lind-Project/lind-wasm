@@ -1434,12 +1434,15 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     // get the current signal callstack information
     pub fn get_current_signal_rewind_data(&mut self) -> Option<SignalAsyncifyData> {
+        let length = self.0.signal_asyncify_data.len();
+        if length == 0 {
+            return None;
+        }
         let data = self
             .0
             .signal_asyncify_data
             .get(self.0.signal_asyncify_counter as usize)
             .cloned();
-        let length = self.0.signal_asyncify_data.len();
         if self.0.signal_asyncify_counter == (length - 1) as u64 {
             self.0.signal_asyncify_counter = 0;
         } else {
