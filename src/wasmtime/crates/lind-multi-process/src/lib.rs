@@ -54,6 +54,7 @@ const UNWIND_METADATA_SIZE: u64 = 16;
 // Define the trait with the required method
 pub trait LindHost<T, U> {
     fn get_ctx(&self) -> LindCtx<T, U>;
+    fn get_ctx_mut(&mut self) -> &mut LindCtx<T, U>;
 }
 
 // Closures are abused in this file, mainly because the architecture of wasmtime itself does not support
@@ -70,7 +71,16 @@ pub struct LindCtx<T, U> {
     // the module associated with the ctx
     modules: Vec<(String, String, Module)>,
 
-    dlopen_modules: Vec<(String, String, Module)>,
+    // Shared list of dynamically loaded modules across all threads of a cage.
+    // Each entry is (module_name, path, module, memory_base).
+    // Per-process (fork): child gets its own Arc with a copy of the parent's list.
+    // Per-thread (pthread_create): all threads of a cage share the same Arc.
+    dlopen_modules: Arc<Mutex<Vec<(String, String, Module, i32)>>>,
+
+    // Index into dlopen_modules tracking how many entries this thread has already
+    // replayed. When has_pending_dlopen_replay() returns true, the thread replays
+    // entries from dlopen_replay_index to the end and advances the index.
+    dlopen_replay_index: usize,
 
     // cage id
     pub cageid: i32,
@@ -162,7 +172,8 @@ impl<
             linker: Some(linker),
             got_table,
             modules: modules.clone(),
-            dlopen_modules: vec![],
+            dlopen_modules: Arc::new(Mutex::new(vec![])),
+            dlopen_replay_index: 0,
             cageid,
             tid,
             next_threadid,
@@ -188,12 +199,31 @@ impl<
         }
     }
 
-    // Record a dynamically loaded module (from dlopen) into this cage's module
-    // list. During fork() and pthread_create(), every entry in dlopen_modules
-    // is re-instantiated into the child/thread store so that the child inherits
-    // access to all libraries the parent opened at runtime.
-    pub fn append_module(&mut self, path: String, module: Module) {
-        self.dlopen_modules.push(("env".to_string(), path, module));
+    // Record a dynamically loaded module (from dlopen) into this cage's shared
+    // module list. During fork() and pthread_create(), every entry is re-instantiated
+    // into the child/thread store so that the child inherits all libraries opened at
+    // runtime. For cross-thread replay, memory_base must be stored alongside the module.
+    pub fn append_module(&mut self, path: String, module: Module, memory_base: i32) {
+        let mut list = self.dlopen_modules.lock().unwrap();
+        list.push(("env".to_string(), path, module, memory_base));
+    }
+
+    // Returns true if there are dlopen'd modules that this thread has not yet replayed.
+    pub fn has_pending_dlopen_replay(&self) -> bool {
+        let list = self.dlopen_modules.lock().unwrap();
+        self.dlopen_replay_index < list.len()
+    }
+
+    // Return a snapshot of the dlopen entries this thread has not yet replayed.
+    // The lock is released before returning so callers can act without holding it.
+    pub fn pending_dlopen_entries(&self) -> Vec<(String, String, Module, i32)> {
+        let list = self.dlopen_modules.lock().unwrap();
+        list[self.dlopen_replay_index..].to_vec()
+    }
+
+    // Advance the per-thread replay cursor by `count` entries.
+    pub fn advance_dlopen_replay(&mut self, count: usize) {
+        self.dlopen_replay_index += count;
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -538,7 +568,10 @@ impl<
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
 
-                        for (name, _path, module) in dlopen_modules.iter() {
+                        // Snapshot the dlopen list before iterating so we don't hold
+                        // the lock while calling into Wasm (which could deadlock).
+                        let dlopen_snapshot: Vec<_> = dlopen_modules.lock().unwrap().clone();
+                        for (name, _path, module, module_memory_base) in dlopen_snapshot.iter() {
                             // Read dylink metadata for this dlopen'd module.
                             // This contains the module's declared table/memory requirements.
                             let dylink_info = module.dylink_meminfo();
@@ -565,9 +598,6 @@ impl<
                                 .unwrap();
 
                             let module_name = module.name().unwrap();
-                            let module_memory_base = *memory_base_table
-                                .get(module_name)
-                                .expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
                             // Link the library instance into the main linker namespace.
@@ -582,7 +612,7 @@ impl<
                                     &module,
                                     &mut child_table,
                                     table_start,
-                                    module_memory_base,
+                                    *module_memory_base,
                                     ChildLibraryType::Process,
                                     global_snapshots
                                         .get(module_name)
@@ -1053,7 +1083,10 @@ impl<
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
 
-                        for (name, _path, module) in dlopen_modules.iter() {
+                        // Snapshot the dlopen list before iterating so we don't hold
+                        // the lock while calling into Wasm (which could deadlock).
+                        let dlopen_snapshot: Vec<_> = dlopen_modules.lock().unwrap().clone();
+                        for (name, _path, module, module_memory_base) in dlopen_snapshot.iter() {
                             let dylink_info = module.dylink_meminfo();
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;
@@ -1072,10 +1105,6 @@ impl<
                                 .unwrap();
 
                             let module_name = module.name().unwrap();
-                            let module_memory_base = *memory_base_table
-                                .get(module_name)
-                                .expect("memory base not found for library");
-
                             linker.allow_shadowing(true);
                             linker
                                 .module_with_child(
@@ -1085,7 +1114,7 @@ impl<
                                     &module,
                                     &mut child_table,
                                     table_start,
-                                    module_memory_base,
+                                    *module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
                                     global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
                                 )
@@ -1664,13 +1693,16 @@ impl<
 
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
+        // Child process gets its OWN Arc with a copy of the parent's dlopen list.
+        // Processes are independent after fork; fork_call replays all entries from scratch.
         let forked_ctx = Self {
             linker: None,    // Linker is explicitly set up by the caller
             got_table: None, // new process should use a new GOT
             modules: self.modules.clone(),
-            dlopen_modules: self.dlopen_modules.clone(),
-            cageid: 0,                                  // cageid is managed by lind-common
-            tid: 1,                                     // thread id starts from 1
+            dlopen_modules: Arc::new(Mutex::new(self.dlopen_modules.lock().unwrap().clone())),
+            dlopen_replay_index: 0, // fork_call replays all entries from scratch
+            cageid: 0,              // cageid is managed by lind-common
+            tid: 1,                 // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
@@ -1684,11 +1716,15 @@ impl<
 
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
+        // New thread shares the SAME Arc (not a copy). pthread_create_call replays all
+        // current entries during thread creation, so start the index at the current length.
+        let replay_start = self.dlopen_modules.lock().unwrap().len();
         let forked_ctx = Self {
             linker: None,    // Linker is explicitly set up by the caller
             got_table: None, // threads within a process should use same GOT
             modules: self.modules.clone(),
-            dlopen_modules: self.dlopen_modules.clone(),
+            dlopen_modules: Arc::clone(&self.dlopen_modules),
+            dlopen_replay_index: replay_start, // already caught up via pthread_create_call replay
             cageid: self.cageid,
             tid: self.tid,
             next_threadid: self.next_threadid.clone(),

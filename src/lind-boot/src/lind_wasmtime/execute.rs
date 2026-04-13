@@ -782,7 +782,7 @@ fn load_library_module(
     // the library's function references can be relocated correctly.
     //
     // The GOT is used to patch symbol addresses/indices after instantiation.
-    let ret = match linker.module_with_caller(
+    let (handle, memory_base) = match linker.module_with_caller(
         &mut main_module,
         cageid as u64,
         library_name,
@@ -792,19 +792,26 @@ fn load_library_module(
         symbol_map,
         library_name.to_string(),
     ) {
-        Ok(handle) => handle as i32,
+        Ok(result) => result,
         Err(_) => {
             #[cfg(feature = "debug-dylink")]
             println!("failed to process library `{}`", library_name);
-            -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
+            return -(DylinkErrorCode::EINTERNAL as i32); // consider as internal error for now
         }
     };
+    drop(got_guard); // release mutex before any further work
 
     let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
     lind_ctx.attach_linker(linker);
-    lind_ctx.append_module(library_name.to_string(), lib_module);
+    lind_ctx.append_module(library_name.to_string(), lib_module, memory_base);
 
-    ret
+    // Notify other threads of the new library (fire-and-forget, no wait).
+    let caller_tid = main_module.data().lind_fork_ctx.as_ref().unwrap().tid;
+    if cage::signal::has_other_threads(cageid as u64, caller_tid) {
+        cage::signal::epoch_dlopen_trigger_others(cageid as u64, caller_tid);
+    }
+
+    handle as i32
 }
 
 /// AOT-compile a `.wasm` file to a `.cwasm` artifact on disk.

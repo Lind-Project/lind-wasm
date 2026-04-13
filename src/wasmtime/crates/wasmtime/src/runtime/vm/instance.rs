@@ -530,7 +530,7 @@ impl Instance {
         ExportFunction { func_ref }
     }
 
-    fn get_exported_table(&mut self, index: TableIndex) -> ExportTable {
+    pub(crate) fn get_exported_table(&mut self, index: TableIndex) -> ExportTable {
         let (definition, vmctx) = if let Some(def_index) = self.module().defined_table_index(index)
         {
             (self.table_ptr(def_index), self.vmctx())

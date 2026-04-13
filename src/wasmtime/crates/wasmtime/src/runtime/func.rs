@@ -2131,6 +2131,29 @@ impl<T> Caller<'_, T> {
             .get_export(&mut self.store, name)
     }
 
+    /// Return the indirect function table (table index 0) of the calling instance.
+    ///
+    /// Lind's dylink model always places the shared indirect function table at
+    /// index 0.  The main module and all child modules import it but typically
+    /// do NOT re-export it, so `get_export("__indirect_function_table")` would
+    /// return `None`.  We therefore fall back to fetching it directly from the
+    /// instance via its table index.
+    pub fn get_function_table(&mut self) -> Option<crate::Table> {
+        // Fast path: module re-exports the table (uncommon in Lind).
+        if let Some(crate::Extern::Table(t)) = self.get_export("__indirect_function_table") {
+            return Some(t);
+        }
+        // Fallback: get the table directly from the instance at compiled index 0.
+        // In Lind's dylink model, the imported __indirect_function_table is always
+        // the first (and only) table, so TableIndex 0 is correct.
+        let export = self.caller.get_exported_table(TableIndex::from_u32(0));
+        // SAFETY: the ExportTable comes from the same store/vmctx that `self`
+        // is live within; inserting it into the store's data table is safe.
+        Some(unsafe {
+            crate::Table::from_wasmtime_table(export, &mut *self.store.0)
+        })
+    }
+
     pub fn get_stack_pointer(&mut self) -> Result<u32, ()> {
         self.caller
             .host_state()

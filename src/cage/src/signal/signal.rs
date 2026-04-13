@@ -8,6 +8,7 @@ use sysdefs::logging::lind_debug_panic;
 const EPOCH_NORMAL: u64 = 0;
 const EPOCH_SIGNAL: u64 = 0xc0ffee;
 const EPOCH_KILLED: u64 = 0xdead;
+pub const EPOCH_DLOPEN: u64 = 0xd10ad;
 
 // switch the epoch of the main thread of the cage to "signal" state
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
@@ -102,6 +103,101 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
                 }
             }
         }
+    }
+}
+
+// trigger EPOCH_DLOPEN on all other threads of the cage (fire-and-forget)
+// Only writes EPOCH_DLOPEN if the current epoch is EPOCH_NORMAL — if already
+// non-NORMAL, the callback will fire anyway and handle all pending work.
+// Also sends SIGUSR2 to interrupt threads blocked in host syscalls.
+pub fn epoch_dlopen_trigger_others(cageid: u64, caller_tid: i32) {
+    #[cfg(feature = "disable_signals")]
+    return;
+
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let Some(cage) = get_cage_or_debug_panic(cageid, "epoch_dlopen_trigger_others") else {
+            return;
+        };
+
+        for entry in cage.epoch_handler.iter() {
+            if entry.key() == &caller_tid {
+                continue;
+            }
+            let epoch_handler = entry.value();
+            let guard = epoch_handler.write();
+            let epoch = *guard;
+            // SAFETY: see comment at `signal_epoch_trigger`
+            unsafe {
+                // Only overwrite EPOCH_NORMAL. If already EPOCH_SIGNAL or EPOCH_DLOPEN,
+                // the callback will fire and handle all pending work anyway.
+                if *epoch == EPOCH_NORMAL {
+                    *epoch = EPOCH_DLOPEN;
+                }
+            }
+        }
+
+        // Best-effort: interrupt threads blocked in host syscalls so they
+        // replay the dlopen promptly.
+        let my_tid = unsafe { libc::syscall(libc::SYS_gettid) };
+        for entry in cage.os_tid_map.iter() {
+            let os_tid = *entry.value();
+            if os_tid != my_tid {
+                unsafe {
+                    libc::syscall(libc::SYS_tkill, os_tid as i32, libc::SIGUSR2);
+                }
+            }
+        }
+    }
+}
+
+// reset the epoch of a specific thread back to EPOCH_NORMAL
+// Used after dlopen replay completes and no signals remain pending.
+pub fn epoch_thread_reset(cageid: u64, thread_id: i32) {
+    #[cfg(feature = "disable_signals")]
+    return;
+
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let Some(cage) = get_cage_or_debug_panic(cageid, "epoch_thread_reset") else {
+            return;
+        };
+
+        let epoch_handler = match cage.epoch_handler.get(&thread_id) {
+            Some(h) => h,
+            None => {
+                #[cfg(debug_assertions)]
+                lind_debug_panic(&format!(
+                    "epoch_thread_reset: epoch_handler for thread {} not found",
+                    thread_id
+                ));
+                #[cfg(not(debug_assertions))]
+                return;
+            }
+        };
+        let guard = epoch_handler.write();
+        let epoch = *guard;
+        // SAFETY: see comment at `signal_epoch_trigger`
+        unsafe {
+            *epoch = EPOCH_NORMAL;
+        }
+    }
+}
+
+// returns true if the cage has more than one thread registered
+// Used to skip the cross-thread sync path in single-threaded cages.
+pub fn has_other_threads(cageid: u64, caller_tid: i32) -> bool {
+    #[cfg(feature = "disable_signals")]
+    return false;
+
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let Some(cage) = get_cage_or_debug_panic(cageid, "has_other_threads") else {
+            return false;
+        };
+        // More than one thread means there are threads besides the caller.
+        // (epoch_handler contains all live threads including the caller)
+        cage.epoch_handler.len() > 1 && cage.epoch_handler.contains_key(&caller_tid)
     }
 }
 

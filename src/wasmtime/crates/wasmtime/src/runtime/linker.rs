@@ -1390,7 +1390,7 @@ impl<T> Linker<T> {
         got: &LindGOT,
         mut symbol_map: SymbolMap,
         path: String,
-    ) -> Result<u64>
+    ) -> Result<(u64, i32)>
     where
         T: 'static,
     {
@@ -1552,7 +1552,7 @@ impl<T> Linker<T> {
                     self.instance_dylink(store, module_name, instance);
                 }
 
-                Ok(handler)
+                Ok((handler, memory_base as i32))
             }
         }
     }
