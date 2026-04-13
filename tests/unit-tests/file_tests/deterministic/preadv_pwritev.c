@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/uio.h>
@@ -21,6 +22,10 @@ int main(void) {
     wv[1].iov_len = strlen(buf2);
 
     ssize_t nw = pwritev(fd, wv, 2, 0);
+    if (nw < 0) {
+        perror("pwritev");
+        printf("pwritev returned %zd, errno=%d\n", nw, errno);
+    }
     assert(nw == (ssize_t)(strlen(buf1) + strlen(buf2)));
 
     /* preadv: read back into two buffers at offset 0 */
