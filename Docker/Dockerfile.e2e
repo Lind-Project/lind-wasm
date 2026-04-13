@@ -177,7 +177,7 @@ COPY --from=test /e2e_status /e2e_status
 
 FROM base AS libcpp-test
 ENV LIND_WASM_ROOT=/
-COPY --parents scripts trial artifacts Makefile .
+COPY --parents scripts tests/unit-tests/cpp artifacts Makefile .
 RUN chmod 0755 /scripts/lind_compile /scripts/lind_compile_cpp /scripts/lind_run \
  && install -D -m 0755 /scripts/lind_compile     /usr/local/bin/lind_compile \
  && install -D -m 0755 /scripts/lind_compile_cpp /usr/local/bin/lind_compile_cpp \
@@ -205,13 +205,13 @@ RUN --mount=from=build-lind-boot,source=build/lind-boot,destination=/mnt/lind-bo
       mkdir -p build/sysroot/lib/wasm32-wasi; \
       cp -r artifacts/include/wasm32-wasi/c++ build/sysroot/include/wasm32-wasi/; \
       cp artifacts/lib/wasm32-wasi/libc++.a artifacts/lib/wasm32-wasi/libc++abi.a build/sysroot/lib/wasm32-wasi/; \
-      rm -f trial/*.wasm; \
-      scripts/lind_compile_cpp --print-args --print-cmd --compile-only trial/hello.cpp; \
-      test -f trial/hello.cpp.wasm'
+      rm -f tests/unit-tests/cpp/*.wasm; \
+      scripts/lind_compile_cpp --print-args --print-cmd --compile-only tests/unit-tests/cpp/hello.cpp; \
+      test -f tests/unit-tests/cpp/hello.cpp.wasm'
 
 RUN bash -lc 'set -euxo pipefail; \
       mkdir -p /libcpp-out; \
-      cp /trial/hello.cpp.wasm /libcpp-out/hello.cpp.wasm; \
+      cp /tests/unit-tests/cpp/hello.cpp.wasm /libcpp-out/hello.cpp.wasm; \
       printf "%s\n" "LIBCPP_STATUS=pass" > /libcpp-out/libcpp_status; \
       ls -la /libcpp-out; \
       test -f /libcpp-out/hello.cpp.wasm; \
