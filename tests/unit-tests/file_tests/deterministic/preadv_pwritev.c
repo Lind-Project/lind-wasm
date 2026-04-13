@@ -22,6 +22,16 @@ int main(void) {
     wv[1].iov_len = strlen(buf2);
 
     ssize_t expected = (ssize_t)(strlen(buf1) + strlen(buf2));
+    printf("iov[0]: base=%p len=%zu\n", wv[0].iov_base, wv[0].iov_len);
+    printf("iov[1]: base=%p len=%zu\n", wv[1].iov_base, wv[1].iov_len);
+    printf("fd=%d iovcnt=2 offset=0 expected=%zd\n", fd, expected);
+    fflush(stdout);
+
+    /* test regular writev first to isolate */
+    ssize_t nw_plain = writev(fd, wv, 2);
+    printf("writev returned %zd, errno=%d\n", nw_plain, errno);
+    lseek(fd, 0, SEEK_SET);
+
     ssize_t nw = pwritev(fd, wv, 2, 0);
     printf("pwritev returned %zd, expected %zd, errno=%d\n", nw, expected, errno);
     fflush(stdout);
