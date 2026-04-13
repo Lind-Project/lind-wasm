@@ -2812,7 +2812,7 @@ pub extern "C" fn preadv_syscall(
         );
     }
 
-    let ret = unsafe { libc::syscall(libc::SYS_preadv, kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset as libc::c_long, 0 as libc::c_long) as i32 };
+    let ret = unsafe { libc::preadv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "preadv");
     }
@@ -2857,9 +2857,6 @@ pub extern "C" fn pwritev_syscall(
     let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
 
-    eprintln!("[pwritev] raw args: vfd={:#x} iov={:#x} iovcnt={:#x} offset={:#x}", vfd_arg, iov_arg, iovcnt_arg, offset_arg);
-    eprintln!("[pwritev] converted: kernel_fd={} iov_ptr={:?} iovcnt={} offset={}", kernel_fd, iov_ptr, iovcnt, offset);
-
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
@@ -2867,7 +2864,7 @@ pub extern "C" fn pwritev_syscall(
         );
     }
 
-    let ret = unsafe { libc::syscall(libc::SYS_pwritev, kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset as libc::c_long, 0 as libc::c_long) as i32 };
+    let ret = unsafe { libc::pwritev(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "pwritev");
     }
