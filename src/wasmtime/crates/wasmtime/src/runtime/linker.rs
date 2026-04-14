@@ -1390,7 +1390,7 @@ impl<T> Linker<T> {
         got: &LindGOT,
         mut symbol_map: SymbolMap,
         path: String,
-    ) -> Result<(u64, i32)>
+    ) -> Result<(u64, i32, SymbolMap)>
     where
         T: 'static,
     {
@@ -1536,6 +1536,10 @@ impl<T> Linker<T> {
 
                 let is_local = symbol_map.is_local();
 
+                // Clone the symbol_map before consuming it so callers can store it
+                // in dlopen_modules for cross-thread replay via push_library_symbols.
+                let symbol_map_clone = symbol_map.clone();
+
                 // append the symbol mapping of this library into the global lookup table
                 let handler = store.push_library_symbols(symbol_map).unwrap() as u64;
 
@@ -1552,7 +1556,7 @@ impl<T> Linker<T> {
                     self.instance_dylink(store, module_name, instance);
                 }
 
-                Ok((handler, memory_base as i32))
+                Ok((handler, memory_base as i32, symbol_map_clone))
             }
         }
     }

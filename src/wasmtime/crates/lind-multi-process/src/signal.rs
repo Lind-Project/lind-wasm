@@ -38,7 +38,11 @@ fn handle_dlopen_replay<
         None => return,
     };
 
-    for (name, _path, module, memory_base) in &entries {
+    // Snapshot the got_table Arc so we can access it inside the loop without
+    // holding a borrow on caller while also mutably passing caller to define_GOT_dispatcher.
+    let got_arc = caller.data().get_ctx().got_table.clone();
+
+    for (name, _path, module, memory_base, symbol_map) in &entries {
         let dylink_info = match module.dylink_meminfo() {
             Some(d) => d,
             None => continue,
@@ -59,6 +63,17 @@ fn handle_dlopen_replay<
             None => continue,
         };
         linker.allow_shadowing(true);
+
+        // Define GOT entries for this library before instantiating it.
+        // A library dlopen'd after this thread started will have GOT imports
+        // (e.g. GOT.func::signal_callback) that are absent from the thread's
+        // linker snapshot. define_GOT_dispatcher is a no-op for entries already
+        // present, so calling it unconditionally is safe.
+        if let Some(ref got_arc) = got_arc {
+            let mut got_guard = got_arc.lock().unwrap();
+            let _ = linker.define_GOT_dispatcher(&mut *caller, module, &mut *got_guard);
+        }
+
         let _ = linker.module_with_child(
             &mut *caller, // reborrow to avoid moving caller in the loop
             cageid,
@@ -71,6 +86,10 @@ fn handle_dlopen_replay<
             &[],                       // no global snapshots needed for replay
         );
         linker.allow_shadowing(false);
+
+        // Register the library's symbols in this thread's symbol table so
+        // that dlsym(handle, name) works after the epoch-based replay.
+        let _ = caller.push_library_symbols(symbol_map.clone());
     }
 
     // Advance this thread's replay cursor.

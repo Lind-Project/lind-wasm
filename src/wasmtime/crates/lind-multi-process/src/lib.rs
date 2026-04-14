@@ -14,7 +14,7 @@ use wasmtime_lind_3i::{
     get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
     VmCtxWrapper,
 };
-use wasmtime_lind_utils::{LindCageManager, LindGOT};
+use wasmtime_lind_utils::{symbol_table::SymbolMap, LindCageManager, LindGOT};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -72,10 +72,12 @@ pub struct LindCtx<T, U> {
     modules: Vec<(String, String, Module)>,
 
     // Shared list of dynamically loaded modules across all threads of a cage.
-    // Each entry is (module_name, path, module, memory_base).
+    // Each entry is (module_name, path, module, memory_base, symbol_map).
+    // symbol_map is a clone taken at dlopen time so cross-thread replay can push
+    // it to each thread's symbol table (enabling dlsym in worker threads).
     // Per-process (fork): child gets its own Arc with a copy of the parent's list.
     // Per-thread (pthread_create): all threads of a cage share the same Arc.
-    dlopen_modules: Arc<Mutex<Vec<(String, String, Module, i32)>>>,
+    dlopen_modules: Arc<Mutex<Vec<(String, String, Module, i32, SymbolMap)>>>,
 
     // Index into dlopen_modules tracking how many entries this thread has already
     // replayed. When has_pending_dlopen_replay() returns true, the thread replays
@@ -202,10 +204,17 @@ impl<
     // Record a dynamically loaded module (from dlopen) into this cage's shared
     // module list. During fork() and pthread_create(), every entry is re-instantiated
     // into the child/thread store so that the child inherits all libraries opened at
-    // runtime. For cross-thread replay, memory_base must be stored alongside the module.
-    pub fn append_module(&mut self, path: String, module: Module, memory_base: i32) {
+    // runtime. symbol_map is a clone of the library's symbol namespace, stored so
+    // cross-thread replay can push it to each thread's symbol table (for dlsym).
+    pub fn append_module(
+        &mut self,
+        path: String,
+        module: Module,
+        memory_base: i32,
+        symbol_map: SymbolMap,
+    ) {
         let mut list = self.dlopen_modules.lock().unwrap();
-        list.push(("env".to_string(), path, module, memory_base));
+        list.push(("env".to_string(), path, module, memory_base, symbol_map));
     }
 
     // Returns true if there are dlopen'd modules that this thread has not yet replayed.
@@ -216,7 +225,7 @@ impl<
 
     // Return a snapshot of the dlopen entries this thread has not yet replayed.
     // The lock is released before returning so callers can act without holding it.
-    pub fn pending_dlopen_entries(&self) -> Vec<(String, String, Module, i32)> {
+    pub fn pending_dlopen_entries(&self) -> Vec<(String, String, Module, i32, SymbolMap)> {
         let list = self.dlopen_modules.lock().unwrap();
         list[self.dlopen_replay_index..].to_vec()
     }
@@ -224,6 +233,13 @@ impl<
     // Advance the per-thread replay cursor by `count` entries.
     pub fn advance_dlopen_replay(&mut self, count: usize) {
         self.dlopen_replay_index += count;
+    }
+
+    // Set the per-thread replay cursor to an absolute position.
+    // Used after a startup replay loop that may have consumed more entries than
+    // replay_start (set at fork_thread() time) if dlopen ran concurrently.
+    pub fn set_dlopen_replay_index(&mut self, index: usize) {
+        self.dlopen_replay_index = index;
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -564,6 +580,12 @@ impl<
                             .unwrap_or(&[]),
                     );
 
+                    // Track how many dlopen entries were replayed during startup.
+                    // Used to update dlopen_replay_index so the epoch-based replay path
+                    // (handle_dlopen_replay in signal.rs) does not double-replay entries
+                    // that were already handled here.
+                    let mut dlopen_startup_replay_count = 0usize;
+
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
@@ -571,7 +593,8 @@ impl<
                         // Snapshot the dlopen list before iterating so we don't hold
                         // the lock while calling into Wasm (which could deadlock).
                         let dlopen_snapshot: Vec<_> = dlopen_modules.lock().unwrap().clone();
-                        for (name, _path, module, module_memory_base) in dlopen_snapshot.iter() {
+                        dlopen_startup_replay_count = dlopen_snapshot.len();
+                        for (name, _path, module, module_memory_base, symbol_map) in dlopen_snapshot.iter() {
                             // Read dylink metadata for this dlopen'd module.
                             // This contains the module's declared table/memory requirements.
                             let dylink_info = module.dylink_meminfo();
@@ -600,6 +623,13 @@ impl<
                             let module_name = module.name().unwrap();
 
                             linker.allow_shadowing(true);
+                            // Define GOT entries for this dlopen'd module before instantiating it.
+                            // These entries may be absent from the child linker's snapshot when
+                            // dlopen was called concurrently with (or after) fork/thread creation.
+                            // define_GOT_dispatcher is a no-op for entries already present.
+                            if let Some(ref mut got) = child_got {
+                                let _ = linker.define_GOT_dispatcher(&mut store, module, got);
+                            }
                             // Link the library instance into the main linker namespace.
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
@@ -621,6 +651,10 @@ impl<
                                 )
                                 .unwrap();
                             linker.allow_shadowing(false);
+
+                            // Register the library's symbols in the child store's symbol table
+                            // so that dlsym(handle, name) works in the forked process.
+                            let _ = store.as_context_mut().push_library_symbols(symbol_map.clone());
                         }
                     }
 
@@ -703,6 +737,20 @@ impl<
                     let new_child_ctx = get_cx(&mut new_child_host);
                     new_child_ctx.attach_linker(linker);
                     new_child_ctx.attach_got_table(child_got);
+                    // Synchronise the replay index with however many entries were replayed
+                    // during startup (may be more than replay_start if dlopen ran concurrently).
+                    new_child_ctx.set_dlopen_replay_index(dlopen_startup_replay_count);
+
+                    // If dlopen ran concurrently and appended entries after our snapshot
+                    // was taken, epoch_dlopen_trigger_others may have missed this forked
+                    // process (epoch handler not registered yet). Self-trigger EPOCH_DLOPEN
+                    // so the callback fires on the first Wasm function entry.
+                    if new_child_ctx.has_pending_dlopen_replay() {
+                        let ep = epoch_pointer as *mut u64;
+                        unsafe {
+                            *ep = cage::signal::EPOCH_DLOPEN;
+                        }
+                    }
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -1079,6 +1127,9 @@ impl<
                         global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
                     );
 
+                    // Track how many dlopen entries were replayed during startup.
+                    let mut dlopen_startup_replay_count = 0usize;
+
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
@@ -1086,7 +1137,8 @@ impl<
                         // Snapshot the dlopen list before iterating so we don't hold
                         // the lock while calling into Wasm (which could deadlock).
                         let dlopen_snapshot: Vec<_> = dlopen_modules.lock().unwrap().clone();
-                        for (name, _path, module, module_memory_base) in dlopen_snapshot.iter() {
+                        dlopen_startup_replay_count = dlopen_snapshot.len();
+                        for (name, _path, module, module_memory_base, symbol_map) in dlopen_snapshot.iter() {
                             let dylink_info = module.dylink_meminfo();
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;
@@ -1106,6 +1158,12 @@ impl<
 
                             let module_name = module.name().unwrap();
                             linker.allow_shadowing(true);
+                            // Define GOT entries for this dlopen'd module before instantiating it.
+                            // These entries may be absent from the child linker's snapshot when
+                            // dlopen was called concurrently with (or after) pthread_create.
+                            if let Some(ref mut got) = child_got {
+                                let _ = linker.define_GOT_dispatcher(&mut store, module, got);
+                            }
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1120,6 +1178,10 @@ impl<
                                 )
                                 .unwrap();
                             linker.allow_shadowing(false);
+
+                            // Register the library's symbols in the thread's symbol table
+                            // so that dlsym(handle, name) works in this thread.
+                            let _ = store.as_context_mut().push_library_symbols(symbol_map.clone());
                         }
                     }
 
@@ -1200,6 +1262,9 @@ impl<
                     let new_child_ctx = get_cx(&mut new_child_host);
                     new_child_ctx.attach_linker(linker);
                     new_child_ctx.attach_got_table(child_got);
+                    // Synchronise the replay index with however many entries were replayed
+                    // during startup (may be more than replay_start if dlopen ran concurrently).
+                    new_child_ctx.set_dlopen_replay_index(dlopen_startup_replay_count);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;

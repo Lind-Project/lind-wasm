@@ -782,7 +782,7 @@ fn load_library_module(
     // the library's function references can be relocated correctly.
     //
     // The GOT is used to patch symbol addresses/indices after instantiation.
-    let (handle, memory_base) = match linker.module_with_caller(
+    let (handle, memory_base, symbol_map_clone) = match linker.module_with_caller(
         &mut main_module,
         cageid as u64,
         library_name,
@@ -803,7 +803,9 @@ fn load_library_module(
 
     let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
     lind_ctx.attach_linker(linker);
-    lind_ctx.append_module(library_name.to_string(), lib_module, memory_base);
+    // Store the symbol_map clone alongside the module so that replay in other
+    // threads can push it to their symbol tables (enabling dlsym in workers).
+    lind_ctx.append_module(library_name.to_string(), lib_module, memory_base, symbol_map_clone);
 
     // Notify other threads of the new library (fire-and-forget, no wait).
     let caller_tid = main_module.data().lind_fork_ctx.as_ref().unwrap().tid;

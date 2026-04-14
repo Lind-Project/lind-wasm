@@ -1136,6 +1136,14 @@ impl Instance {
         mut store: impl AsContextMut,
         snapshots: &[(GlobalIndex, i64)],
     ) {
+        // No snapshot provided: the library was loaded after the parent's global
+        // snapshot was taken (e.g., dlopen called concurrently with pthread_create).
+        // Leave all globals at their instantiation-time values; imported globals
+        // (__memory_base, __table_base, GOT entries) are already correctly set by
+        // the linker during module_with_child instantiation.
+        if snapshots.is_empty() {
+            return;
+        }
         let mut collected_global = vec![];
         for (index, global) in self.all_globals(store.as_context_mut().0) {
             collected_global.push((index, global.clone()));
