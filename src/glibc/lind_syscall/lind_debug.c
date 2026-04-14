@@ -1,4 +1,9 @@
 #include "addr_translation.h"
+#include "lind_debug.h"
+
+#ifdef LIND_DEBUG
+#include <stdio.h>
+#endif
 
 void __lind_debug_panic(uint64_t msg) __attribute__((
     __import_module__("lind"),
@@ -13,7 +18,7 @@ void lind_debug_panic (const char* msg)
 }
 
 #ifdef LIND_DEBUG
-// These functions returns the input value to ensure the operand
+// These functions return the input value to ensure the operand
 // remains on the WASM stack for potential debugging
 
 // Imported debug function to log or trace unsigned integer
@@ -30,10 +35,43 @@ extern const char* __lind_debug_str(const char *str) __attribute__((
     __import_name__("lind_debug_str")
 ));
 
+// Public wrappers around imported debug functions.
+unsigned int lind_debug_num(unsigned int num)
+{
+    return __lind_debug_num(num);
+}
+
+const char* lind_debug_str(const char *str)
+{
+    return __lind_debug_str(str);
+}
+
+/* Internal debug logging helper.
+   Unlike printf/fprintf(stdout, ...), this routes output through
+   lind_debug_str so logs remain visible even if the guest process
+   redirects stdout or stderr.  */
+void lind_debug_vprintf(const char *fmt, va_list ap)
+{
+    char buf[1024];
+
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    lind_debug_str(buf);
+}
+
+void lind_debug_printf(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    lind_debug_vprintf(fmt, ap);
+    va_end(ap);
+}
+
 // Force calls to import debug functions. Execution not required, their
 // presence here prevents the linker from stripping the imports
 __attribute__((used))
-void __lind_debug_import(void) {
+void __lind_debug_import(void)
+{
     __lind_debug_num(0);
     __lind_debug_str("LIND DEBUG INIT");
 }

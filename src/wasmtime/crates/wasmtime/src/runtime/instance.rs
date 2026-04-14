@@ -1110,13 +1110,36 @@ impl Instance {
             let got_inner = got.as_ref().unwrap();
             let memory_base = memory_base.unwrap();
             for (name, global) in globals {
-                let val = global.get(&mut store);
-                // relocate the variable
-                let val = val.i32().unwrap() as u32 + memory_base;
-                // update GOT entry
+                if name == "__stack_pointer" {
+                    eprintln!("[GOT MEM RELOC] skip special global {}", name);
+                    continue;
+                }
+                let raw = global.get(&mut store);
+                let raw_i32 = raw.i32().unwrap();
+
+                eprintln!(
+                    "[GOT MEM RELOC] name={} raw_i32={} raw_hex=0x{:08x} memory_base={}",
+                    name,
+                    raw_i32,
+                    raw_i32 as u32,
+                    memory_base
+                );
+
+                let val = (raw_i32 as u32)
+                    .checked_add(memory_base)
+                    .expect("memory relocation overflow");
+
                 if got_inner.update_entry_if_unresolved(&name, val) {
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] update GOT.mem.{} to {}", name, val);
+                // let val = global.get(&mut store);
+                // // relocate the variable
+                // let val = val.i32().unwrap() as u32 + memory_base;
+                // // update GOT entry
+                // if got_inner.update_entry_if_unresolved(&name, val) {
+                //     #[cfg(feature = "debug-dylink")]
+                //     println!("[debug] update GOT.mem.{} to {}", name, val);
+
                 }
             }
         }

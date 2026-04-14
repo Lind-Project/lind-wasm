@@ -206,7 +206,7 @@ int _start() {
     __lind_initialize_environ();
     __ctype_init(); //lind-wasm: init ctypes for isalpha etc.
     #ifdef LIND_DEBUG
-    	__lind_debug_import();
+    	//__lind_debug_import();
     #endif
 // Lind-Wasm: conditional compilation to ensure exit() is called before program termination,
 // and return __main_void() if NO_ASYNCIFY is defined. exit() depends on asyncify,

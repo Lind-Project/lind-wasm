@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <stddef.h>
 #include <string.h>
+#include <lind_debug.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
 #include <dirstream.h>
@@ -82,6 +83,11 @@ __readdir_unlocked (DIR *dirp)
   dst->d_type = src_type;
 
   memmove (dst->d_name, src->d_name, name_len);
+
+#ifdef LIND_DEBUG
+//#warning LIND_DEBUG_ENABLED_IN_READDIR
+  lind_debug_printf("LIND DEBUG TEST: readdir name=%s\n", dst->d_name);
+#endif
 
   dirp->offset += src_reclen;
   dirp->filepos = src_off;

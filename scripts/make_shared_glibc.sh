@@ -49,6 +49,9 @@ wasm-ld \
     --export-if-defined=copy_handler_table_to_cage \
     --export-if-defined=make_threei_call \
     --export-if-defined=register_handler \
+    --export-if-defined=lind_debug_printf \
+    --export-if-defined=__lind_debug_import \
+    --export-if-defined=lind_debug_panic \
     -o "$SYSROOT/lib/wasm32-wasi/libc.so" "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
 
 mkdir -p $REPO_ROOT/lindfs/lib
