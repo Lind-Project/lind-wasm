@@ -125,6 +125,7 @@ pub fn register_grate_handler_for_cage(
 }
 
 fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>> {
+    println!("[lind-boot] Retrieving grate handler for grate_id {}", grate_id);
     let pool = GRATE_POOL
         .get()
         .ok_or_else(|| anyhow::anyhow!("GRATE_POOL is not initialized"))?;
@@ -135,6 +136,8 @@ fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>
 
     let guard = slot.lock().unwrap();
 
+    println!("[lind-boot] Grate handler for grate_id {} is {}", grate_id, if guard.is_some() { "present" } else { "absent" });
+
     guard
         .as_ref()
         .cloned()
@@ -142,7 +145,15 @@ fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>
 }
 
 pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<i32> {
-    println!("Submitting grate request to cage {}, handler_addr: {:#x}", req.cageid, req.handler_addr);
-    let handler = get_grate_handler(grate_id)?;
+    println!("[lind-boot] Submitting grate request to cage {}, handler_addr: {:#x}", req.cageid, req.handler_addr);
+    let handler = match get_grate_handler(grate_id) {
+        Ok(handler) => {
+            println!("[lind-boot] got handler");
+            handler
+        }
+        Err(e) => {
+            panic!("[lind-boot] get_grate_handler failed: {:?}", e);
+        }
+    };
     handler.submit(req)
 }

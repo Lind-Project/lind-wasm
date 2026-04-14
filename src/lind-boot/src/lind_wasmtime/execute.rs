@@ -1,5 +1,5 @@
 use crate::lind_wasmtime::host::DylinkMetadata;
-use crate::lind_wasmtime::host::init_grate_pool;
+use crate::lind_wasmtime::host::{init_grate_pool, register_grate_handler_for_cage};
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
@@ -663,7 +663,7 @@ fn load_main_module(
     let host = store.data().clone();
 
     // 4) register grate workers for this cage
-    create_handler_for_cage(&grate_template, host, cageid, ConcurrencyMode::Serialized)
+    register_grate_handler_for_cage(&grate_template, host, cageid)
         .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
 
     // 4) Notify threei of the cage runtime type
