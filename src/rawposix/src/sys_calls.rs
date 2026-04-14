@@ -675,6 +675,50 @@ pub extern "C" fn getpid_syscall(
     return cage.cageid as i32;
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getpgid.2.html
+///
+/// Returns the process group ID of the process specified by pid.
+/// If pid is 0, returns the process group ID of the calling process.
+///
+/// Lind does not implement process groups. This always returns the cage's
+/// own cageid, which is platform-specific behavior that cannot be changed
+/// with a grate since getpgid is handled directly by RawPOSIX.
+///
+/// ## Returns
+///     - The cageid (as process group ID) on success.
+pub extern "C" fn getpgid_syscall(
+    cageid: u64,
+    pid_arg: u64,
+    pid_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getpgid_syscall"
+        );
+    }
+
+    // Lind doesn't implement process groups. Return own cageid regardless
+    // of the pid argument (matching the behavior of getpid).
+    let cage = get_cage(cageid).unwrap();
+    cage.cageid as i32
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/getppid.3p.html
 ///
 /// See comments of `getpid_syscall` for more details

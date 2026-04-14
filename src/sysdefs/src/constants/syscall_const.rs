@@ -82,6 +82,7 @@ pub const GETGID_SYSCALL: i32 = 104;
 pub const GETEUID_SYSCALL: i32 = 107;
 pub const GETEGID_SYSCALL: i32 = 108;
 pub const GETPPID_SYSCALL: i32 = 110;
+pub const GETPGID_SYSCALL: i32 = 121;
 pub const MKNOD_SYSCALL: i32 = 133;
 pub const STATFS_SYSCALL: i32 = 137;
 pub const FSTATFS_SYSCALL: i32 = 138;
