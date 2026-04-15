@@ -12,10 +12,10 @@ use super::fs_calls::{
     mknod_syscall, mmap_syscall, mprotect_syscall, munmap_syscall, nanosleep_time64_syscall,
     open_syscall, openat_syscall, pipe2_syscall, pipe_syscall, pread_syscall, preadv_syscall,
     pwrite_syscall, pwritev_syscall, read_syscall, readlink_syscall, readlinkat_syscall,
-    readv_syscall, rename_syscall, rmdir_syscall, setxattr_syscall, shmat_syscall,
-    shmctl_syscall, shmdt_syscall, shmget_syscall, stat_syscall, statfs_syscall,
-    symlink_syscall, symlinkat_syscall, sync_file_range_syscall, truncate_syscall,
-    unlink_syscall, unlinkat_syscall, write_syscall, writev_syscall,
+    readv_syscall, rename_syscall, rmdir_syscall, setxattr_syscall, shmat_syscall, shmctl_syscall,
+    shmdt_syscall, shmget_syscall, stat_syscall, statfs_syscall, symlink_syscall,
+    symlinkat_syscall, sync_file_range_syscall, truncate_syscall, unlink_syscall, unlinkat_syscall,
+    write_syscall, writev_syscall,
 };
 use super::init::RawCallFunc;
 use super::net_calls::{

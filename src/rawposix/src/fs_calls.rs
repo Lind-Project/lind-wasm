@@ -4803,20 +4803,6 @@ pub extern "C" fn symlinkat_syscall(
 
     ret
 }
-            "getrandom_syscall"
-        );
-    }
-
-    let ret = unsafe { getrandom(buf as *mut c_void, buflen.try_into().unwrap(), flags) };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "getrandom");
-    }
-
-    // convert isize to i32 safely, as ret shouldn't be larger than 32-bit
-    // due to buflen being u32
-    ret.try_into().unwrap()
-}
 
 /// Linux reference: https://man7.org/linux/man-pages/man2/setxattr.2.html
 ///
@@ -4853,18 +4839,24 @@ pub extern "C" fn setxattr_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Type conversion
+    // Type conversion for path
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "setxattr", "path conversion failed"),
     };
 
-    let name = match sc_convert_path_to_host(name_arg, name_cageid, cageid) {
-        Ok(name) => name,
-        Err(e) => return syscall_error(e, "setxattr", "name conversion failed"),
+    // Type conversion for name (attribute name, not a path - no path normalization needed)
+    let name_str = match get_cstr(name_arg) {
+        Ok(s) => s,
+        Err(_) => return syscall_error(Errno::EFAULT, "setxattr", "name conversion failed"),
+    };
+    let name = match std::ffi::CString::new(name_str) {
+        Ok(s) => s,
+        Err(_) => return syscall_error(Errno::EINVAL, "setxattr", "name contains null byte"),
     };
 
-    let value = value_arg as *const libc::c_void;
+    // Type conversion for value buffer
+    let value = sc_convert_buf(value_arg, value_cageid, cageid) as *const libc::c_void;
     let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
@@ -4919,16 +4911,17 @@ pub extern "C" fn listxattr_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Type conversion
+    // Type conversion for path
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "listxattr", "path conversion failed"),
     };
 
+    // Type conversion for list buffer (may be NULL)
     let list = if list_arg == 0 {
         std::ptr::null_mut()
     } else {
-        list_arg as *mut libc::c_char
+        sc_convert_to_u8_mut(list_arg, list_cageid, cageid) as *mut libc::c_char
     };
     let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
 
