@@ -8,6 +8,7 @@ use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH};
+use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
@@ -458,7 +459,9 @@ impl<
                                 )
                                 .unwrap();
 
-                            let module_name = module.name().unwrap();
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -468,7 +471,9 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module.name().unwrap();
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -522,7 +527,9 @@ impl<
                     //    Snapshots are looked up by module name from the HashMap captured before
                     //    the unwind; backup instances are never registered so they are naturally
                     //    excluded from the snapshot map.
-                    let main_module_name = module.name().unwrap();
+                    let main_module_name = module
+                        .name()
+                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -564,7 +571,9 @@ impl<
                                 )
                                 .unwrap();
 
-                            let module_name = module.name().unwrap();
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -995,7 +1004,7 @@ impl<
                                 wasmtime::Ref::Func(None),
                             ).unwrap();
 
-                            let module_name = module.name().unwrap();
+                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
@@ -1003,7 +1012,7 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module.name().unwrap();
+                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1042,7 +1051,7 @@ impl<
                     //    Store/Instance, so globals must be explicitly synced from the parent's
                     //    snapshot. Snapshots are looked up by module name; backup instances are
                     //    never registered and are therefore naturally excluded.
-                    let main_module_name = module.name().unwrap();
+                    let main_module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
                     store.as_context_mut().register_named_instance(main_module_name.to_string(), grate_instanceid);
                     instance.apply_global_snapshots(
                         &mut store,
@@ -1071,7 +1080,7 @@ impl<
                                 )
                                 .unwrap();
 
-                            let module_name = module.name().unwrap();
+                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
