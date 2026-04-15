@@ -143,17 +143,20 @@ def write_outputs(result: dict[str, Any], reports_dir: Path) -> dict[str, Any]:
     json_path = reports_dir / json_filename
     json_path.write_text(json.dumps(result["report"], indent=2), encoding="utf-8")
 
-    html_path: Path | None = None
     html_payload = result.get("html")
-    if html_payload is not None:
-        html_filename = str(result.get("html_filename", f"{harness_name}.html"))
-        html_path = reports_dir / html_filename
+    html_path: Path | None = None
+    # Only write a separate HTML file when html_filename is explicitly provided by
+    # the harness. Harnesses that omit html_filename still contribute their HTML
+    # content to the combined report.html via the in-memory html_payload field.
+    if html_payload is not None and "html_filename" in result:
+        html_path = reports_dir / str(result["html_filename"])
         html_path.write_text(str(html_payload), encoding="utf-8")
 
     return {
         "name": harness_name,
         "json_path": json_path,
         "html_path": html_path,
+        "html": html_payload,
         "report": result["report"],
     }
 
@@ -168,9 +171,12 @@ def generate_combined_report(harness_outputs: list[dict[str, Any]], reports_dir:
     for output in harness_outputs:
         name = output["name"]
         json_path: Path = output["json_path"]
+        html_payload: str | None = output.get("html")
         html_path: Path | None = output["html_path"]
 
-        if html_path and html_path.exists():
+        if html_payload is not None:
+            body = extract_html_body(html_payload)
+        elif html_path and html_path.exists():
             body = extract_html_body(html_path.read_text(encoding="utf-8"))
         else:
             body = (
