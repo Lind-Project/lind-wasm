@@ -41,7 +41,7 @@ pub fn dlopen_call<
     loader: DynamicLoader<T>,
 ) -> i32 {
     let base = get_memory_base(&mut caller);
-    let path = match typemap::get_cstr(base + file as u64) {
+    let path = match typemap::get_cstr(base + (file as u32) as u64) {
         Ok(path) => path,
         Err(_) => return -(DylinkErrorCode::EOPEN as i32),
     };
@@ -72,7 +72,7 @@ pub fn dlsym_call<
     sym: i32,
 ) -> i32 {
     let base = get_memory_base(&mut caller);
-    let symbol = match typemap::get_cstr(base + sym as u64) {
+    let symbol = match typemap::get_cstr(base + (sym as u32) as u64) {
         Ok(path) => path,
         Err(_) => return -(DylinkErrorCode::ENOFOUND as i32),
     };
