@@ -69,15 +69,13 @@ struct GrateWorker<T> {
 
 struct WorkerLease<'a, T> {
     owner: &'a GrateHandler<T>,
-    worker_id: WorkerId,
     worker: Option<GrateWorker<T>>,
 }
 
 impl<'a, T> WorkerLease<'a, T> {
-    fn new(owner: &'a GrateHandler<T>, worker_id: WorkerId, worker: GrateWorker<T>) -> Self {
+    fn new(owner: &'a GrateHandler<T>, worker: GrateWorker<T>) -> Self {
         Self {
             owner,
-            worker_id,
             worker: Some(worker),
         }
     }
@@ -90,7 +88,7 @@ impl<'a, T> WorkerLease<'a, T> {
 impl<'a, T> Drop for WorkerLease<'a, T> {
     fn drop(&mut self) {
         if let Some(worker) = self.worker.take() {
-            self.owner.return_worker(self.worker_id, worker);
+            self.owner.return_worker(worker);
         }
     }
 }
@@ -111,7 +109,7 @@ pub struct GrateHandler<T> {
 }
 
 struct GrateHandlerInner<T> {
-    workers: HashMap<WorkerId, GrateWorker<T>>,
+    workers: VecDeque<GrateWorker<T>>,
 }
 
 impl<T: Clone> GrateHandler<T> {
@@ -135,7 +133,7 @@ impl<T: Clone> GrateHandler<T> {
                 )
             })?;
 
-            self.inner.lock().unwrap().workers.insert(handler_id, worker);
+            self.inner.lock().unwrap().workers.push_back(worker);
         }
 
         self.main_worker = 1;
@@ -146,38 +144,27 @@ impl<T: Clone> GrateHandler<T> {
 }
 
 impl<T> GrateHandler<T> {
-    fn take_worker_blocking(&self, worker_id: WorkerId) -> GrateWorker<T> {
+    fn take_worker_blocking(&self) -> GrateWorker<T> {
         let mut inner = self.inner.lock().unwrap();
 
         loop {
-            if let Some(worker) = inner.workers.remove(&worker_id) {
+            if let Some(worker) = inner.workers.pop_front() {
                 return worker;
             }
-
             inner = self.cv.wait(inner).unwrap();
         }
     }
 
-    fn return_worker(&self, worker_id: WorkerId, worker: GrateWorker<T>) {
+    fn return_worker(&self, worker: GrateWorker<T>) {
         let mut inner = self.inner.lock().unwrap();
-        let prev = inner.workers.insert(worker_id, worker);
-        if prev.is_some() {
-            panic!("worker {} returned twice", worker_id);
-        }
+        inner.workers.push_back(worker);
         self.cv.notify_one();
     }
 
     fn submit_serialized(&self, req: GrateRequest) -> anyhow::Result<i32> {
-        println!("1");
-        println!("Submitting grate request to cage {}, handler_addr: {:#x}", req.cageid, req.handler_addr);
         let _serial_guard = self.serial_executor.enter();
-
-        let worker_id = self.main_worker;
-        println!("GrateHandler {} acquired serial executor, dispatching to worker {}", self.grate_id, worker_id);
-        let worker = self.take_worker_blocking(worker_id);
-        println!("GrateHandler {} got worker {} for request, executing...", self.grate_id, worker_id);
-        let mut lease = WorkerLease::new(self, worker_id, worker);
-        println!("GrateHandler {} executing request on worker {}", self.grate_id, worker_id);
+        let worker = self.take_worker_blocking();
+        let mut lease = WorkerLease::new(self, worker);
         Ok(lease.worker_mut().run(req))
     }
 
@@ -276,7 +263,7 @@ pub fn create_handler_for_cage<T: Clone>(
         concurrency_mode,
         serial_executor: SerialExecutor::new(),
         inner: Mutex::new(GrateHandlerInner {
-            workers: HashMap::new(),
+            workers: VecDeque::new(),
         }),
         cv: Condvar::new(),
     };
