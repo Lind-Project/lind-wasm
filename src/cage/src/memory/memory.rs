@@ -142,16 +142,16 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     // update program break for child
     drop(child_vmmap);
     let mut child_vmmap = child_cage.vmmap.write();
-    child_vmmap.set_program_break(parent_vmmap.program_break);
+    child_vmmap.set_heap_start(parent_vmmap.heap_start);
 }
 
 // set the wasm linear memory base address to vmmap
-pub fn init_vmmap(cageid: u64, base_address: usize, program_break: Option<u32>) {
+pub fn init_vmmap(cageid: u64, base_address: usize, heap_start: Option<u32>) {
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
-    if program_break.is_some() {
-        vmmap.set_program_break(program_break.unwrap());
+    if heap_start.is_some() {
+        vmmap.set_heap_start(heap_start.unwrap());
     }
 }
 
