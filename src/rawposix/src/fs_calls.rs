@@ -1221,12 +1221,12 @@ pub extern "C" fn brk_syscall(
 
     assert!(heap.page_num == vmmap.heap_start);
 
+    let old_brk_page = heap.page_num + heap.npages;
+
     // passing 0 to brk will always return the current brk
     if brk == 0 {
-        return (PAGESIZE * vmmap.heap_start) as i32;
+        return (PAGESIZE * old_brk_page) as i32;
     }
-
-    let old_brk_page = heap.page_num + heap.npages;
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
 
