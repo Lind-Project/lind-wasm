@@ -2149,9 +2149,7 @@ impl<T> Caller<'_, T> {
         let export = self.caller.get_exported_table(TableIndex::from_u32(0));
         // SAFETY: the ExportTable comes from the same store/vmctx that `self`
         // is live within; inserting it into the store's data table is safe.
-        Some(unsafe {
-            crate::Table::from_wasmtime_table(export, &mut *self.store.0)
-        })
+        Some(unsafe { crate::Table::from_wasmtime_table(export, &mut *self.store.0) })
     }
 
     pub fn get_stack_pointer(&mut self) -> Result<u32, ()> {

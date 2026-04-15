@@ -805,7 +805,12 @@ fn load_library_module(
     lind_ctx.attach_linker(linker);
     // Store the symbol_map clone alongside the module so that replay in other
     // threads can push it to their symbol tables (enabling dlsym in workers).
-    lind_ctx.append_module(library_name.to_string(), lib_module, memory_base, symbol_map_clone);
+    lind_ctx.append_module(
+        library_name.to_string(),
+        lib_module,
+        memory_base,
+        symbol_map_clone,
+    );
 
     // Notify other threads of the new library (fire-and-forget, no wait).
     let caller_tid = main_module.data().lind_fork_ctx.as_ref().unwrap().tid;
