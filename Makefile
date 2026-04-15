@@ -22,7 +22,7 @@ LINDFS_DIRS := \
 WITH_FPCAST ?=
 
 .PHONY: build 
-build: lindfs lind-boot sysroot
+build: generate-syscall-mappings lindfs lind-boot sysroot
 	@echo "Build complete"
 
 .PHONY: all
@@ -68,6 +68,10 @@ build_glibc:
 .PHONY: build-dir
 build-dir:
 	mkdir -p $(BUILD_DIR)
+
+.PHONY: generate-syscall-mappings
+generate-syscall-mappings: build-dir
+	python3 scripts/generate_syscall_mappings.py
 
 .PHONY: sync-sysroot
 sync-sysroot:
