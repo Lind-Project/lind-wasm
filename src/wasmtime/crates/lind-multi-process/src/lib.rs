@@ -677,8 +677,9 @@ impl<
         stack_size: u32,
         child_tid: u64,
     ) -> Result<i32> {
-        // get the base address of the memory
-        let parent_address = get_memory_base(&mut caller) as *mut u8;
+        // get the base address and size of the memory
+        let (mem_base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+        let parent_address = mem_base_u64 as *mut u8;
 
         // main module is the first module in the module list
         let main_module = self.modules.get(0).unwrap().2.clone();
@@ -715,6 +716,24 @@ impl<
                 0
             }
         };
+        // Validate the child thread stack region. stack_addr is the high address
+        // (stack grows down), so the region is [stack_addr - stack_size, stack_addr).
+        // Both values are WASM linear-memory offsets (u32), so we check:
+        //   stack_size <= stack_addr          (no underflow)
+        //   stack_addr <= mem_size            (high end within memory)
+        let mem_base_usize = mem_base_u64 as usize;
+        if (stack_size as usize) > (stack_addr as usize) || (stack_addr as usize) > mem_size {
+            return Err(anyhow!("thread stack region out of guest memory bounds"));
+        }
+
+        // Validate child_tid before writing: it is read from the CloneArgStruct
+        // (guest memory) and was not validated by sc_convert, so we must check
+        // that the 4-byte write target lies within the guest linear memory region.
+        let child_tid_usize = child_tid as usize;
+        match child_tid_usize.checked_add(std::mem::size_of::<u32>()) {
+            Some(end) if child_tid_usize >= mem_base_usize && end <= mem_base_usize + mem_size => {}
+            _ => return Err(anyhow!("child_tid pointer out of guest memory bounds")),
+        }
         let child_tid = child_tid as *mut u32;
         unsafe {
             *child_tid = next_tid;
@@ -1525,6 +1544,21 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     memory.data_ptr(caller.as_context()) as usize as u64
 }
 
+/// Returns `(base_ptr_as_u64, data_size_in_bytes)` for the first guest linear
+/// memory. Use this instead of `get_memory_base` whenever bounds checks are
+/// needed before accessing guest memory.
+pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
+    mut caller: &mut Caller<'_, T>,
+) -> (u64, usize) {
+    let mut memory_iter = caller.as_context_mut().0.all_memories();
+    let memory = memory_iter.next().expect("no defined memory found").clone();
+    drop(memory_iter);
+
+    let base = memory.data_ptr(caller.as_context()) as usize as u64;
+    let size = memory.data_size(caller.as_context());
+    (base, size)
+}
+
 // entry point of fork syscall
 pub fn lind_fork<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
@@ -1615,15 +1649,6 @@ where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 {
-    // `clone_arg` points to a shared ABI struct carrying clone flags and
-    // thread creation parameters (stack, tid pointer, etc.).
-    let args = unsafe { &mut *(clone_arg as *mut sys_struct::CloneArgStruct) };
-    // Determine whether this clone request represents:
-    // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
-    // otherwise, we are creating a process (i.e. fork)
-    let flags = args.flags;
-    let isthread = flags & (sys_const::CLONE_VM);
-
     unsafe {
         // Resolve the correct VMContext wrapper to re-enter Wasmtime.
         //
@@ -1642,6 +1667,27 @@ where
         let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
 
         let ret = Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+            // Validate clone_arg inside Caller::with where memory bounds are available.
+            // clone_arg is a host address (memory_base + guest_offset) and bypasses the
+            // normal sc_convert validation path, so we must check it explicitly.
+            let (mem_base, mem_size) = get_memory_base_and_size(&mut caller);
+            let struct_size = std::mem::size_of::<sys_struct::CloneArgStruct>();
+            let clone_arg_usize = clone_arg as usize;
+            let mem_base_usize = mem_base as usize;
+            match clone_arg_usize.checked_add(struct_size) {
+                Some(end)
+                    if clone_arg_usize >= mem_base_usize && end <= mem_base_usize + mem_size => {}
+                _ => return -(Errno::EFAULT as i32),
+            }
+
+            // `clone_arg` points to a shared ABI struct carrying clone flags and
+            // thread creation parameters (stack, tid pointer, etc.).
+            let args = &mut *(clone_arg as *mut sys_struct::CloneArgStruct);
+            // Determine whether this clone request represents:
+            // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
+            // otherwise, we are creating a process (i.e. fork)
+            let isthread = args.flags & sys_const::CLONE_VM;
+
             if isthread == 0 {
                 // fork
                 match lind_fork(&mut caller, child_cageid) {
