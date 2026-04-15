@@ -53,7 +53,7 @@ impl SerialExecutor {
                 guard
             }
             Err(poisoned) => {
-                println!("SerialExecutor: lock poisoned");
+                println!("Serial execution lock poisoned; continuing because it is only used as a gate");
                 poisoned.into_inner()
             }
         }
