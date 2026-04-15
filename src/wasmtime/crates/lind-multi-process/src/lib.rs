@@ -1961,13 +1961,14 @@ pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result
         cageid,
         stack_end as u64, // length: guard page + stack
         cageid,
+        // PROT_READ | PROT_WRITE: stack needs both read and write access
         (typemap::PROT_READ | typemap::PROT_WRITE) as u64,
         cageid,
+        // MAP_PRIVATE: changes are not shared; MAP_ANONYMOUS: not file-backed;
+        // MAP_FIXED: must map at the exact address (address 0 for guard page + stack region)
         (typemap::MAP_PRIVATE | typemap::MAP_ANONYMOUS | typemap::MAP_FIXED) as u64,
         cageid,
-        // we need to pass -1 here, but since make_syscall only accepts u64
-        // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
-        (0 - 1) as u64,
+        u64::MAX, // fd: -1 (required for MAP_ANONYMOUS mappings)
         cageid,
         0,
         cageid,
