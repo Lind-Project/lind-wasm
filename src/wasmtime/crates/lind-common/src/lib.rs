@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::Errno;
 use sysdefs::logging::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
@@ -15,7 +16,6 @@ use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{get_memory_base, get_memory_base_and_size, LindHost};
-use sysdefs::constants::Errno;
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed
@@ -100,7 +100,9 @@ fn checked_write_bytes(base: *mut u8, mem_size: usize, offset: usize, src: &[u8]
 /// Returns `false` (and does not write) if `offset` is at or past `mem_size`.
 fn checked_write_byte(base: *mut u8, mem_size: usize, offset: usize, val: u8) -> bool {
     if offset < mem_size {
-        unsafe { *base.add(offset) = val; }
+        unsafe {
+            *base.add(offset) = val;
+        }
         true
     } else {
         false
