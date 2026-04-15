@@ -7,7 +7,7 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
-use sysdefs::constants::{DEFAULT_STACKSIZE, Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
+use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
@@ -1947,23 +1947,19 @@ pub fn attach_shared_memory<
     Err(anyhow!("Main Module does not contain a shared memory"))
 }
 
-pub fn early_init_stack(
-    cageid: u64,
-    stack_start: i32,
-    stack_end: i32,
-) -> Result<()> {
-    // let stack_size = stack_end - stack_start;
-
-    // assert!(stack_size as u32 == DEFAULT_STACKSIZE);
+pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {
+    // TODO: currently we explicitly allocate first guard page (0-stack_start)
+    // due to a known issue. This should be fixed in the future and only allocate
+    // the actual stack space (stack_start-stack_end)
 
     let ret = make_syscall(
         cageid,                // self cageid
         (MMAP_SYSCALL) as u64, // syscall num
         0, // since wasmtime operates with lower level memory, it always interacts with underlying os
         cageid, // target cageid (should be same)
-        0 as u64,
+        0, // map from address 0 (includes the leading guard page per the TODO above)
         cageid,
-        stack_end as u64,
+        stack_end as u64, // length: guard page + stack
         cageid,
         (typemap::PROT_READ | typemap::PROT_WRITE) as u64,
         cageid,

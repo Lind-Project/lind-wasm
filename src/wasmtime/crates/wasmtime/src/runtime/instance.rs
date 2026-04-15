@@ -377,9 +377,12 @@ impl Instance {
 
                     let minimal_size = minimal_pages << PAGESHIFT;
 
-                    (0, minimal_size
-                        .try_into()
-                        .expect("allocated memory is larger than 4GB"))
+                    (
+                        0,
+                        minimal_size
+                            .try_into()
+                            .expect("allocated memory is larger than 4GB"),
+                    )
                 };
 
                 let required_memory_page = (start_addr + required_memory_size) >> PAGESHIFT;

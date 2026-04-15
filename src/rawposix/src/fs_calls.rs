@@ -1204,7 +1204,7 @@ pub extern "C" fn brk_syscall(
     let heap = if heap_opt.is_none() {
         // if heap page is not found, create an empty heap entry with 0 size
         cage::VmmapEntry::new(
-            vmmap.heap_start, 
+            vmmap.heap_start,
             0,
             (PROT_READ | PROT_WRITE),
             (PROT_READ | PROT_WRITE),
@@ -1229,7 +1229,6 @@ pub extern "C" fn brk_syscall(
     let old_brk_page = heap.page_num + heap.npages;
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
-    let changed_page = (brk_page - old_brk_page) as i32;
 
     // shrink heap below heap start is not allowed
     if brk_page < vmmap.heap_start {

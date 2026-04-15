@@ -255,7 +255,7 @@ pub struct Vmmap {
 
     pub start_address: u32, // start address of valid vmmap address range
     pub end_address: u32,   // end address of valid vmmap address range
-    pub heap_start: u32, // start of heap memory
+    pub heap_start: u32,    // start of heap memory
 }
 
 #[allow(dead_code)]
@@ -320,10 +320,10 @@ impl Vmmap {
         self.base_address = Some(base_address);
     }
 
-    /// Sets the program break for the memory
+    /// Sets the heap start page number for the memory
     ///
     /// Arguments:
-    /// - heap_start: The program break to set
+    /// - heap_start: The page number at which the heap begins
     pub fn set_heap_start(&mut self, heap_start: u32) {
         self.heap_start = heap_start;
     }
