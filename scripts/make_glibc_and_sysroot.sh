@@ -78,7 +78,6 @@ EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 # Check if LIND_DEBUG is defined (set by build.rs when `lind_debug` is enabled)
 if [ "$LIND_DEBUG" ]; then
   DEFINES="$DEFINES -DLIND_DEBUG"
-  CPPFLAGS="$CPPFLAGS -DLIND_DEBUG"
 fi
 
 # Build glibc
@@ -98,7 +97,6 @@ cd $BUILD
   --build=i686-linux-gnu \
   libc_cv_complocaledir='/usr/lib/locale' \
   CFLAGS=" -matomics -mbulk-memory -O2 -g -fPIC" \
-  CPPFLAGS="$CPPFLAGS" \
   CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
