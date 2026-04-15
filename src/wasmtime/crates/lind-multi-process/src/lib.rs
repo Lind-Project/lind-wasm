@@ -1525,6 +1525,21 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     memory.data_ptr(caller.as_context()) as usize as u64
 }
 
+/// Returns `(base_ptr_as_u64, data_size_in_bytes)` for the first guest linear
+/// memory. Use this instead of `get_memory_base` whenever bounds checks are
+/// needed before writing into guest memory.
+pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
+    mut caller: &mut Caller<'_, T>,
+) -> (u64, usize) {
+    let mut memory_iter = caller.as_context_mut().0.all_memories();
+    let memory = memory_iter.next().expect("no defined memory found").clone();
+    drop(memory_iter);
+
+    let base = memory.data_ptr(caller.as_context()) as usize as u64;
+    let size = memory.data_size(caller.as_context());
+    (base, size)
+}
+
 // entry point of fork syscall
 pub fn lind_fork<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,

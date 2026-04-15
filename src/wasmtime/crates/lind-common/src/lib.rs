@@ -14,7 +14,8 @@ use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
-use wasmtime_lind_multi_process::{get_memory_base, LindHost};
+use wasmtime_lind_multi_process::{get_memory_base, get_memory_base_and_size, LindHost};
+use sysdefs::constants::Errno;
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed
@@ -67,17 +68,42 @@ impl LindEnviron {
     }
 }
 
-/// Write a little-endian u32 at `base + offset` in guest linear memory.
-unsafe fn write_u32(base: *mut u8, offset: usize, val: u32) {
-    unsafe {
-        std::ptr::copy_nonoverlapping(val.to_le_bytes().as_ptr(), base.add(offset), 4);
+/// Write a little-endian u32 at `base[offset..offset+4]`.
+/// Returns `false` (and does not write) if the region would exceed `mem_size`.
+fn checked_write_u32(base: *mut u8, mem_size: usize, offset: usize, val: u32) -> bool {
+    match offset.checked_add(4) {
+        Some(end) if end <= mem_size => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(val.to_le_bytes().as_ptr(), base.add(offset), 4);
+            }
+            true
+        }
+        _ => false,
     }
 }
 
-/// Write `src` bytes at `base + offset` in guest linear memory.
-unsafe fn write_bytes(base: *mut u8, offset: usize, src: &[u8]) {
-    unsafe {
-        std::ptr::copy_nonoverlapping(src.as_ptr(), base.add(offset), src.len());
+/// Write `src` bytes at `base[offset..offset+src.len()]`.
+/// Returns `false` (and does not write) if the region would exceed `mem_size`.
+fn checked_write_bytes(base: *mut u8, mem_size: usize, offset: usize, src: &[u8]) -> bool {
+    match offset.checked_add(src.len()) {
+        Some(end) if end <= mem_size => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(src.as_ptr(), base.add(offset), src.len());
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Write a single byte at `base[offset]`.
+/// Returns `false` (and does not write) if `offset` is at or past `mem_size`.
+fn checked_write_byte(base: *mut u8, mem_size: usize, offset: usize, val: u8) -> bool {
+    if offset < mem_size {
+        unsafe { *base.add(offset) = val; }
+        true
+    } else {
+        false
     }
 }
 
@@ -315,10 +341,14 @@ fn add_environ_funcs_to_linker<
             let cx = get_environ(caller.data());
             let argc = cx.args.len() as u32;
             let buf_size: u32 = cx.args.iter().map(|a| a.len() as u32 + 1).sum();
-            let base = get_memory_base(&mut caller) as *mut u8;
-            unsafe {
-                write_u32(base, ptr_argc as usize, argc);
-                write_u32(base, ptr_buf_size as usize, buf_size);
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+            let argc_off = (ptr_argc as u32) as usize;
+            let buf_size_off = (ptr_buf_size as u32) as usize;
+            if !checked_write_u32(base, mem_size, argc_off, argc)
+                || !checked_write_u32(base, mem_size, buf_size_off, buf_size)
+            {
+                return -(Errno::EFAULT as i32);
             }
             0
         },
@@ -330,17 +360,23 @@ fn add_environ_funcs_to_linker<
         move |mut caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let args: Vec<String> = cx.args.clone();
-            let base = get_memory_base(&mut caller) as *mut u8;
-            let mut buf_offset = argv_buf as u32;
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+            let mut buf_offset = (argv_buf as u32) as usize;
             for (i, arg) in args.iter().enumerate() {
-                let ptr_slot = argv_ptrs as usize + i * 4;
+                let ptr_slot = (argv_ptrs as u32) as usize + i * 4;
                 let bytes = arg.as_bytes();
-                unsafe {
-                    write_u32(base, ptr_slot, buf_offset);
-                    write_bytes(base, buf_offset as usize, bytes);
-                    *base.add(buf_offset as usize + bytes.len()) = 0;
+                // Write the pointer to this arg's string into the argv array.
+                if !checked_write_u32(base, mem_size, ptr_slot, buf_offset as u32) {
+                    return -(Errno::EFAULT as i32);
                 }
-                buf_offset += bytes.len() as u32 + 1;
+                // Write the arg string bytes followed by a null terminator.
+                if !checked_write_bytes(base, mem_size, buf_offset, bytes)
+                    || !checked_write_byte(base, mem_size, buf_offset + bytes.len(), 0)
+                {
+                    return -(Errno::EFAULT as i32);
+                }
+                buf_offset += bytes.len() + 1;
             }
             0
         },
@@ -357,10 +393,14 @@ fn add_environ_funcs_to_linker<
                 .iter()
                 .map(|(k, v)| k.len() as u32 + 1 + v.len() as u32 + 1)
                 .sum();
-            let base = get_memory_base(&mut caller) as *mut u8;
-            unsafe {
-                write_u32(base, ptr_count as usize, count);
-                write_u32(base, ptr_buf_size as usize, buf_size);
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+            let count_off = (ptr_count as u32) as usize;
+            let buf_size_off = (ptr_buf_size as u32) as usize;
+            if !checked_write_u32(base, mem_size, count_off, count)
+                || !checked_write_u32(base, mem_size, buf_size_off, buf_size)
+            {
+                return -(Errno::EFAULT as i32);
             }
             0
         },
@@ -372,18 +412,24 @@ fn add_environ_funcs_to_linker<
         move |mut caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let env: Vec<(String, String)> = cx.env.clone();
-            let base = get_memory_base(&mut caller) as *mut u8;
-            let mut buf_offset = env_buf as u32;
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+            let mut buf_offset = (env_buf as u32) as usize;
             for (i, (key, val)) in env.iter().enumerate() {
-                let ptr_slot = env_ptrs as usize + i * 4;
+                let ptr_slot = (env_ptrs as u32) as usize + i * 4;
                 let entry = format!("{}={}", key, val);
                 let bytes = entry.as_bytes();
-                unsafe {
-                    write_u32(base, ptr_slot, buf_offset);
-                    write_bytes(base, buf_offset as usize, bytes);
-                    *base.add(buf_offset as usize + bytes.len()) = 0;
+                // Write the pointer to this env entry into the env-ptr array.
+                if !checked_write_u32(base, mem_size, ptr_slot, buf_offset as u32) {
+                    return -(Errno::EFAULT as i32);
                 }
-                buf_offset += bytes.len() as u32 + 1;
+                // Write the "KEY=VALUE" bytes followed by a null terminator.
+                if !checked_write_bytes(base, mem_size, buf_offset, bytes)
+                    || !checked_write_byte(base, mem_size, buf_offset + bytes.len(), 0)
+                {
+                    return -(Errno::EFAULT as i32);
+                }
+                buf_offset += bytes.len() + 1;
             }
             0
         },
@@ -393,16 +439,24 @@ fn add_environ_funcs_to_linker<
         module,
         "random_get",
         move |mut caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
-            let base = get_memory_base(&mut caller) as *mut u8;
+            // Reject negative lengths before any allocation or memory access.
+            if buf_len < 0 {
+                return -(Errno::EINVAL as i32);
+            }
+            let len = buf_len as usize;
+            let buf_off = (buf as u32) as usize;
 
-            // Use rand to fill up the buffer of requested size
-            let mut bytes = vec![0u8; buf_len as usize];
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+
+            // Fill a host-side buffer with random bytes, then copy it into
+            // guest memory with a bounds check.
+            let mut bytes = vec![0u8; len];
             let mut rng = rand::thread_rng();
             rng.fill(&mut bytes[..]);
 
-            // Copy to the provided buffer
-            unsafe {
-                write_bytes(base, buf as usize, &bytes);
+            if !checked_write_bytes(base, mem_size, buf_off, &bytes) {
+                return -(Errno::EFAULT as i32);
             }
 
             // wasip1::random_get expects return value of 0 on success, positive numbers represent
