@@ -26,3 +26,4 @@
 ./debug/Versions
 ./intl/Versions
 ./iconv/Versions
+./wctype/Versions
