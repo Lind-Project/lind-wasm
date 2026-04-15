@@ -478,7 +478,7 @@ fn attach_api(
                     let linker = lind_ctx.linker.clone().unwrap();
                     let got_table = lind_ctx.got_table.clone().unwrap();
 
-                    if lind_ctx.tid != 1 {
+                    if lind_ctx.had_threads() {
                         lind_debug_panic("dlopen within threads is currently not supported!");
                     }
 

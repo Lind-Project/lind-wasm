@@ -1662,6 +1662,17 @@ impl<
         }
     }
 
+    // return true if the lind process had thread before
+    pub fn had_threads(&self) -> bool {
+        // if next_threadid had incremented, that means the process
+        // created some threads before
+        if self.next_threadid.load(Ordering::Relaxed) != 1 {
+            true
+        } else {
+            false
+        }
+    }
+
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
         let forked_ctx = Self {
