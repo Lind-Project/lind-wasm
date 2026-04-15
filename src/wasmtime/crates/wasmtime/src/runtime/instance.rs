@@ -1134,7 +1134,7 @@ impl Instance {
     pub fn apply_global_snapshots<'a>(
         &'a self,
         mut store: impl AsContextMut,
-        snapshots: &Vec<(GlobalIndex, i64)>,
+        snapshots: &[(GlobalIndex, i64)],
     ) {
         let mut collected_global = vec![];
         for (index, global) in self.all_globals(store.as_context_mut().0) {
