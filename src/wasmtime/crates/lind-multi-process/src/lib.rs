@@ -716,14 +716,22 @@ impl<
                 0
             }
         };
+        // Validate the child thread stack region. stack_addr is the high address
+        // (stack grows down), so the region is [stack_addr - stack_size, stack_addr).
+        // Both values are WASM linear-memory offsets (u32), so we check:
+        //   stack_size <= stack_addr          (no underflow)
+        //   stack_addr <= mem_size            (high end within memory)
+        let mem_base_usize = mem_base_u64 as usize;
+        if (stack_size as usize) > (stack_addr as usize) || (stack_addr as usize) > mem_size {
+            return Err(anyhow!("thread stack region out of guest memory bounds"));
+        }
+
         // Validate child_tid before writing: it is read from the CloneArgStruct
         // (guest memory) and was not validated by sc_convert, so we must check
         // that the 4-byte write target lies within the guest linear memory region.
         let child_tid_usize = child_tid as usize;
-        let mem_base_usize = mem_base_u64 as usize;
         match child_tid_usize.checked_add(std::mem::size_of::<u32>()) {
-            Some(end) if child_tid_usize >= mem_base_usize
-                && end <= mem_base_usize + mem_size => {}
+            Some(end) if child_tid_usize >= mem_base_usize && end <= mem_base_usize + mem_size => {}
             _ => return Err(anyhow!("child_tid pointer out of guest memory bounds")),
         }
         let child_tid = child_tid as *mut u32;
@@ -1667,8 +1675,8 @@ where
             let clone_arg_usize = clone_arg as usize;
             let mem_base_usize = mem_base as usize;
             match clone_arg_usize.checked_add(struct_size) {
-                Some(end) if clone_arg_usize >= mem_base_usize
-                    && end <= mem_base_usize + mem_size => {}
+                Some(end)
+                    if clone_arg_usize >= mem_base_usize && end <= mem_base_usize + mem_size => {}
                 _ => return -(Errno::EFAULT as i32),
             }
 
