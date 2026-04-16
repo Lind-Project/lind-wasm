@@ -1126,7 +1126,7 @@ pub extern "C" fn munmap_syscall(
         .filter(|(_, e)| !matches!(e.backing, MemoryBackingType::SharedMemory(_)))
         .map(|(interval, _)| {
             let act_start = interval.start().max(req_start);
-            let act_end = interval.end().min(req_end);
+            let act_end = (interval.end() + 1).min(req_end);
             (act_start as usize, act_end as usize)
         })
         .collect();
