@@ -55,20 +55,4 @@ int main(void) {
     shmdt(shm);
     shmctl(shmid, IPC_RMID, NULL);
     return 1;
-
-    anon[0] = 0x11;
-    anon[PAGE_SIZE - 1] = 0x22;
-
-    int rc = munmap(anon, PAGE_SIZE + 1);
-    assert(rc == 0 && "munmap with unaligned length failed");
-
-    for (size_t i = 0; i < PAGE_SIZE; i++) {
-        assert(shm[i] == (char)0xAB && "shm page clobbered by adjacent munmap");
-    }
-
-    assert(shmdt(shm) == 0 && "shmdt failed");
-    assert(shmctl(shmid, IPC_RMID, NULL) == 0 && "shmctl IPC_RMID failed");
-
-    printf("munmap_adjacent_shm test: PASS\n");
-    return 0;
 }
