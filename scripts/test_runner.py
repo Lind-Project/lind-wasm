@@ -239,6 +239,9 @@ def main() -> None:
 
         if module_name == "wasmtestreport":
             harness_args.append("--allow-pre-compiled")
+            # static_tests are owned by the statictestreport harness; exclude them here
+            # so they don't also run as ordinary dynamic-build tests.
+            harness_args.extend(["--skip", "static_tests"])
 
         result = run_harness(module_name, harness_args)
         

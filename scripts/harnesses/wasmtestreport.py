@@ -1501,8 +1501,10 @@ def main():
         try:
             shutil.rmtree(TESTFILES_DST)
             logger.info(f"Testfiles at {TESTFILES_DST} deleted")
-        except FileNotFoundError as e:
-            logger.error(f"Testfiles not present at {TESTFILES_DST}")
+        except FileNotFoundError:
+            logger.info(f"Testfiles not present at {TESTFILES_DST}")
+        except PermissionError as e:
+            logger.warning(f"Could not remove testfiles at {TESTFILES_DST}: {e}")
         
         if clean_testfiles:
             return
@@ -1541,7 +1543,7 @@ def main():
         # ALWAYS clean up, regardless of success/failure/interruption
         try:
             shutil.rmtree(TESTFILES_DST)
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             pass
             
         # Remove artifacts directory if it was temp and not requested to keep
