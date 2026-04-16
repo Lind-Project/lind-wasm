@@ -5,13 +5,17 @@
 //   mmap(MAP_FIXED|PROT_NONE) over the whole rounded range, silently
 //   replacing the first page of an adjacent shm segment.
 //
-// Layout forced via MAP_FIXED (so the repro does not rely on allocator
-// placement heuristics):
+// Layout (relies on lind's top-down gap allocation: shmat is allocated
+// first and placed at the top of the first free gap; the subsequent mmap
+// is then placed immediately below it):
 //
 //     [ anon page ][ shm page ]
-//         ^addr=A    ^addr=A+PAGE
+//         ^anon      ^shm = anon + PAGE
 //
-// Calling munmap(A, PAGE+1) rounds the length up to 2*PAGE. The buggy
+// An explicit assert on adjacency makes the precondition fail loudly
+// (not silently pass) if allocator behavior ever diverges.
+//
+// Calling munmap(anon, PAGE+1) rounds the length up to 2*PAGE. The buggy
 // code replaces both pages with PROT_NONE anonymous memory; reading
 // the shm page then traps. The fixed code only PROT_NONEs the anon page
 // because the adjacent page's vmmap entry is SharedMemory-backed.
@@ -36,11 +40,12 @@ int main(void) {
 
     memset(shm, 0xAB, PAGE_SIZE);
 
-    char *anon_hint = shm - PAGE_SIZE;
-    char *anon = (char *)mmap(anon_hint, PAGE_SIZE, PROT_READ | PROT_WRITE,
-                              MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    assert(anon != MAP_FAILED && "fixed mmap before shm failed");
-    assert(anon == anon_hint && "MAP_FIXED did not honor requested address");
+    char *anon = (char *)mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    assert(anon != MAP_FAILED && "anon mmap failed");
+    assert(anon + PAGE_SIZE == shm &&
+           "precondition: anon must be placed immediately before shm "
+           "(allocator behavior may have changed)");
 
     anon[0] = 0x11;
     anon[PAGE_SIZE - 1] = 0x22;
