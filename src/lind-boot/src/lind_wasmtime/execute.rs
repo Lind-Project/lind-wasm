@@ -12,6 +12,7 @@ use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, 
 use sysdefs::constants::{
     DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX,
 };
+use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
@@ -21,7 +22,8 @@ use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_v
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{
-    CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, get_memory_base,
+    CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, early_init_stack,
+    get_memory_base,
 };
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
@@ -231,6 +233,7 @@ pub fn execute_with_lind(
     attach_api(
         &mut wstore,
         &mut linker,
+        dylink_metadata.got.clone(),
         &modules,
         lind_manager.clone(),
         lind_boot.clone(),
@@ -240,6 +243,13 @@ pub fn execute_with_lind(
 
     if dylink_metadata.dylink_enabled {
         let lind_got = dylink_metadata.got.as_ref().unwrap();
+
+        early_init_stack(
+            cageid,
+            GUARD_SIZE as i32,
+            (GUARD_SIZE + DEFAULT_STACKSIZE) as i32,
+        )
+        .unwrap();
 
         // For each module (including the main module),
         // register its GOT imports with the shared LindGOT instance.
@@ -454,6 +464,7 @@ fn register_wasmtime_syscall_entry() -> bool {
 fn attach_api(
     wstore: &mut Store<HostCtx>,
     mut linker: &mut Arc<Mutex<Linker<HostCtx>>>,
+    got_table: Option<Arc<Mutex<LindGOT>>>,
     modules: &Vec<(String, String, Module)>,
     lind_manager: Arc<LindCageManager>,
     lindboot_cli: CliOptions,
@@ -464,23 +475,22 @@ fn attach_api(
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
     wstore.data_mut().lind_environ = Some(LindEnviron::new(&lindboot_cli.args, &lindboot_cli.vars));
 
-    // cloning the reference to the same linker and got
-    // later when dlopen is invoked, same linker and got instance can be used for instantiate the new library
+    // Build a dynamic loader closure that reads the current cage's linker and GOT
+    // at dlopen call time. This ensures the correct per-cage linker is used
+    // rather than a snapshot captured at cage creation.
     let dynamic_loader = {
         if dylink_metadata.dylink_enabled {
-            let cloned_linker = linker.clone();
-            let lind_got = dylink_metadata.got.as_ref().unwrap();
-            let cloned_got = lind_got.clone();
             let dynamic_loader: DynamicLoader<HostCtx> =
                 Arc::new(move |caller, cageid, library_name, mode| {
-                    load_library_module(
-                        caller,
-                        cloned_linker.clone(),
-                        cloned_got.clone(),
-                        cageid,
-                        library_name,
-                        mode,
-                    )
+                    let lind_ctx = caller.data().lind_fork_ctx.as_ref().unwrap();
+                    let linker = lind_ctx.linker.clone().unwrap();
+                    let got_table = lind_ctx.got_table.clone().unwrap();
+
+                    if lind_ctx.had_threads() {
+                        lind_debug_panic("dlopen within threads is currently not supported!");
+                    }
+
+                    load_library_module(caller, linker, got_table, cageid, library_name, mode)
                 });
             Some(dynamic_loader)
         } else {
@@ -508,6 +518,7 @@ fn attach_api(
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
         modules.clone(),
         linker_guard.clone(),
+        got_table,
         lind_manager.clone(),
         lindboot_cli.clone(),
         cageid,
@@ -564,6 +575,13 @@ fn load_main_module(
         )
         .context(format!("failed to instantiate"))?;
     drop(linker);
+
+    // Register the main module so get_global_snapshot can find it by name.
+    if let Some(name) = module.name() {
+        store
+            .as_context_mut()
+            .register_named_instance(name.to_string(), cage_instanceid);
+    }
 
     // If `_initialize` is present, meaning a reactor, then invoke
     // the function.
@@ -711,7 +729,7 @@ fn load_main_module(
 /// which is used by dlsym symbol lookup
 fn load_library_module(
     mut main_module: &mut wasmtime::Caller<HostCtx>,
-    mut main_linker: Arc<Mutex<Linker<HostCtx>>>,
+    mut linker: Linker<HostCtx>,
     mut lind_got: Arc<Mutex<LindGOT>>,
     cageid: i32,
     library_name: &str,
@@ -758,7 +776,6 @@ fn load_library_module(
 
     // Grow the shared function table to reserve space for this library's
     // function entries, as declared in its dylink section.
-    let mut linker = main_linker.lock().unwrap();
     let mut got_guard = lind_got.lock().unwrap();
 
     // Install placeholder GOT globals for this library's imports.
@@ -773,7 +790,7 @@ fn load_library_module(
     // the library's function references can be relocated correctly.
     //
     // The GOT is used to patch symbol addresses/indices after instantiation.
-    match linker.module_with_caller(
+    let ret = match linker.module_with_caller(
         &mut main_module,
         cageid as u64,
         library_name,
@@ -789,7 +806,13 @@ fn load_library_module(
             println!("failed to process library `{}`", library_name);
             -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
         }
-    }
+    };
+
+    let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
+    lind_ctx.attach_linker(linker);
+    lind_ctx.append_module(library_name.to_string(), lib_module);
+
+    ret
 }
 
 /// AOT-compile a `.wasm` file to a `.cwasm` artifact on disk.

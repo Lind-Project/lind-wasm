@@ -205,7 +205,7 @@ pub fn get_specific_virtual_fd(
     // Note that, I need to use the FD_PER_PROCESS_MAX setting because this
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
-    if requested_virtualfd > FD_PER_PROCESS_MAX {
+    if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }
 
@@ -404,24 +404,23 @@ pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
 
     assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
-    // derefing this so I don't hold a lock and deadlock close handlers
-    let mut myfdrow = *FDTABLE.get_mut(&cageid).unwrap();
+    // Mutate in place under the guard, extract the entry, then drop the
+    // guard before calling the close handler (which may re-enter fdtables).
+    let entry = {
+        let mut guard = FDTABLE.get_mut(&cageid).unwrap();
+        let entry = guard[virtfd as usize];
+        guard[virtfd as usize] = None;
+        entry
+        // guard drops here — lock released
+    };
 
-
-    if myfdrow[virtfd as usize].is_some() {
-        let entry = myfdrow[virtfd as usize];
-
-        // Zero out this entry before calling the close handler...
-        myfdrow[virtfd as usize] = None;
-
-        // Re-insert the modified myfdrow since I've been modifying a copy
-        FDTABLE.insert(cageid, myfdrow.clone());
-        
-        // always _decrement last as it may call the user handler...
-        _decrement_fdcount(entry.unwrap());
-        return Ok(());
+    match entry {
+        Some(e) => {
+            _decrement_fdcount(e);
+            Ok(())
+        }
+        None => Err(threei::Errno::EBADFD as u64),
     }
-    Err(threei::Errno::EBADFD as u64)
 }
 
 
@@ -501,12 +500,9 @@ fn _increment_fdcount(entry:FDTableEntry) {
 
     let mytuple = (entry.fdkind, entry.underfd);
 
-    // Get a mutable reference to the entry so we can update it.
-    if let Some(mut count) = FDCOUNT.get_mut(&mytuple) {
-        *count += 1;
-    } else {
-        FDCOUNT.insert(mytuple, 1);
-    }
+    // Atomic increment-or-insert via entry API to avoid race where two
+    // threads both see None and both insert 1.
+    *FDCOUNT.entry(mytuple).or_insert(0) += 1;
 }
 
 

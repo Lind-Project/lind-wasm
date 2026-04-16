@@ -27,6 +27,18 @@ pub struct SymbolMap {
     ref_count: AtomicI32, // how many references do this library have
 }
 
+impl Clone for SymbolMap {
+    fn clone(&self) -> Self {
+        Self {
+            symbol_map: self.symbol_map.clone(),
+            mode: self.mode,
+            handler: self.handler,
+            inode: self.inode,
+            ref_count: AtomicI32::new(self.ref_count.load(std::sync::atomic::Ordering::Relaxed)),
+        }
+    }
+}
+
 // SymbolMap instances are ordered by handler so they can be stored
 // in OrderedSkipList and looked up by handler efficiently.
 impl PartialEq for SymbolMap {
@@ -251,5 +263,23 @@ impl SymbolTable {
     fn get_next_handler(&self) -> i32 {
         self.next_handler
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+impl Clone for SymbolTable {
+    fn clone(&self) -> Self {
+        let mut symbol_table = OrderedSkipList::new();
+
+        for item in self.symbol_table.iter() {
+            symbol_table.insert(item.clone());
+        }
+
+        Self {
+            symbol_table,
+            next_handler: AtomicI32::new(
+                self.next_handler.load(std::sync::atomic::Ordering::Relaxed),
+            ),
+            inode_map: self.inode_map.clone(),
+        }
     }
 }
