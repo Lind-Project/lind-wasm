@@ -56,9 +56,14 @@ int main(void) {
     int rc = munmap(base + PAGE_SIZE, PAGE_SIZE);
     assert(rc == 0 && "middle munmap failed");
 
+    printf("DIAG: base        = %p\n", (void *)base);
+    printf("DIAG: hole @       = %p\n", (void *)(base + PAGE_SIZE));
+    printf("DIAG: anon tail @  = %p\n", (void *)(base + 2 * PAGE_SIZE));
+
     // Steer shmat into the 1-page hole via the hint argument.
     char *shm = (char *)shmat(shmid, base + PAGE_SIZE, 0);
     assert(shm != (char *)-1 && "shmat failed");
+    printf("DIAG: shm actual   = %p\n", (void *)shm);
     assert(shm == base + PAGE_SIZE &&
            "shmat did not land in carved hole — allocator may have "
            "found a larger gap above the hint");
