@@ -1109,17 +1109,11 @@ pub extern "C" fn munmap_syscall(
 
     let mut vmmap = cage.vmmap.write();
 
-    // Convert sys address to user-space page numbers to match interval tree keys
     let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
     let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
 
-    // Collect intersecting anonymous entries before mutating the tree.
-    // We must collect first to release the immutable borrow on vmmap.entries
-    // before calling user_to_sys (which borrows all of vmmap) and before
-    // calling remove_entry (which mutably borrows vmmap).
-    // find_page_iter(req_start) returns all entries overlapping [req_start, map_end).
-    // take_while bounds to req_end: once an entry starts at or past req_end, all
-    // subsequent entries are also outside the range (tree is sorted by start).
+    // Collect owned page ranges first to release the iterator borrow before mutating.
+    // interval.end() is inclusive, so +1 converts to exclusive to match req_end.
     let overlaps: Vec<(usize, usize)> = vmmap
         .find_page_iter(req_start)
         .take_while(|(interval, _)| interval.start() < req_end)
@@ -1131,7 +1125,6 @@ pub extern "C" fn munmap_syscall(
         })
         .collect();
 
-    // overlapping() borrow released — safe to call user_to_sys and mmap now
     for (act_start, act_end) in overlaps {
         let act_start_addr = vmmap.user_to_sys((act_start as u32) << PAGESHIFT);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
@@ -1147,13 +1140,15 @@ pub extern "C" fn munmap_syscall(
         };
         if result as isize == -1 {
             let errno = get_errno();
-            panic!("munmap: mmap failed during memory protection reset with errno: {:?}", errno);
+            panic!(
+                "munmap: mmap failed during memory protection reset with errno: {:?}",
+                errno
+            );
         }
         if result != act_start_addr {
             panic!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-                result as *const c_void,
-                act_start_addr as *const c_void
+                result as *const c_void, act_start_addr as *const c_void
             );
         }
     }
