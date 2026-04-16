@@ -1651,6 +1651,68 @@ pub extern "C" fn stat_syscall(
     libcret
 }
 
+//------------------------------------LSTAT SYSCALL------------------------------------
+/// `lstat` retrieves file status information without following symlinks.
+/// Reference: https://man7.org/linux/man-pages/man2/lstat.2.html
+///
+/// ## Arguments:
+///  - `pathname`: Path to the file or symlink to get status information for.
+///  - `statbuf`: Buffer to store the file status information.
+///
+/// ## Implementation Details:
+///  - Identical to `stat_syscall`, except `libc::lstat` is used instead of `libc::stat`,
+///    so symlinks are stat'd directly rather than following to the target.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub extern "C" fn lstat_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "lstat", "path conversion failed"),
+    };
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "lstat_syscall"
+        );
+    }
+
+    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    let libcret = unsafe { libc::lstat(path.as_ptr(), &mut libc_statbuf) }; // <-- only change
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "lstat");
+    }
+
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "lstat", "Bad address"),
+    }
+
+    libcret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
 ///
 /// Linux `statfs()` syscall returns information about a mounted filesystem
@@ -4587,4 +4649,166 @@ pub extern "C" fn getrandom_syscall(
     // convert isize to i32 safely, as ret shouldn't be larger than 32-bit
     // due to buflen being u32
     ret.try_into().unwrap()
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/symlink.2.html
+///
+/// Creates a symbolic link at `linkpath` that points to `target`.
+///
+/// ## Arguments
+/// * `cageid` – The ID of the calling cage.
+/// * `target_arg` / `target_arg_cageid` – Pointer to the target path string.
+/// * `linkpath_arg` / `linkpath_arg_cageid` – Pointer to the path where the
+///   symbolic link should be created.
+///
+/// ## Returns
+/// * `0` on success.
+/// * Negative errno (`EEXIST`, `ENOENT`, `EFAULT`, etc.) on failure.
+pub extern "C" fn symlink_syscall(
+    cageid: u64,
+    target_arg: u64,
+    target_cageid: u64,
+    linkpath_arg: u64,
+    linkpath_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // The symlink target is stored as-is and should NOT be path-normalized.
+    // Normalizing would resolve relative paths against cwd, but relative symlink
+    // targets are meant to resolve relative to the symlink's location at dereference
+    // time, not at creation time. So we use get_cstr directly instead of
+    // sc_convert_path_to_host.
+    let target = match get_cstr(target_arg) {
+        Ok(path) => path,
+        Err(_) => return syscall_error(Errno::EFAULT, "symlink", "target path conversion failed"),
+    };
+
+    // The linkpath is where the symlink is created, so it does need full path resolution.
+    let linkpath = match sc_convert_path_to_host(linkpath_arg, linkpath_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "symlink", "linkpath conversion failed"),
+    };
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "symlink_syscall"
+        );
+    }
+
+    let ret = unsafe { libc::symlink(target.as_ptr() as *const libc::c_char, linkpath.as_ptr()) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "symlink");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/symlink.2.html
+///
+/// Creates a symbolic link at `linkpath` relative to `dirfd` that points to `target`.
+/// This is the `dirfd`-relative variant of `symlink`.
+///
+/// If `dirfd` is `AT_FDCWD`, the call behaves identically to `symlink_syscall`,
+/// resolving `linkpath` relative to the current working directory.
+/// Otherwise, `linkpath` is resolved relative to the directory referred to by `dirfd`.
+///
+/// ## Arguments
+/// * `cageid` – The ID of the calling cage.
+/// * `target_arg` / `target_cageid` – Pointer to the target path string.
+/// * `dirfd_arg` / `dirfd_cageid` – File descriptor of the directory to resolve
+///   `linkpath` relative to, or `AT_FDCWD`.
+/// * `linkpath_arg` / `linkpath_cageid` – Pointer to the path where the
+///   symbolic link should be created, relative to `dirfd`.
+///
+/// ## Returns
+/// * `0` on success.
+/// * Negative errno (`EEXIST`, `ENOENT`, `EBADF`, `EFAULT`, etc.) on failure.
+pub extern "C" fn symlinkat_syscall(
+    cageid: u64,
+    target_arg: u64,
+    target_cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    linkpath_arg: u64,
+    linkpath_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // The symlink target is stored as-is and should NOT be path-normalized.
+    // Normalizing would resolve relative paths against cwd, but relative symlink
+    // targets are meant to resolve relative to the symlink's location at dereference
+    // time, not at creation time. So we use get_cstr directly instead of
+    // sc_convert_path_to_host.
+    let target = match get_cstr(target_arg) {
+        Ok(path) => path,
+        Err(_) => {
+            return syscall_error(Errno::EFAULT, "symlinkat", "target path conversion failed")
+        }
+    };
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+
+    // The linkpath is where the symlink is created, so it does need full path resolution.
+    let linkpath = match sc_convert_path_to_host(linkpath_arg, linkpath_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "symlinkat", "linkpath conversion failed"),
+    };
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "symlinkat_syscall"
+        );
+    }
+
+    let ret = if virtual_fd == libc::AT_FDCWD {
+        unsafe { libc::symlink(target.as_ptr() as *const libc::c_char, linkpath.as_ptr()) }
+    } else {
+        let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+        if kernel_fd < 0 {
+            return handle_errno(-kernel_fd, "symlinkat");
+        }
+
+        // Use the raw (untranslated) linkpath here intentionally — sc_convert_path_to_host
+        // resolves relative to CWD, but symlinkat interprets linkpath relative to dirfd.
+        // The kernel handles that resolution, so we pass the original guest pointer.
+        let raw_linkpath = match get_cstr(linkpath_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EINVAL, "symlinkat", "invalid linkpath"),
+        };
+
+        unsafe {
+            libc::symlinkat(
+                target.as_ptr() as *const libc::c_char,
+                kernel_fd,
+                raw_linkpath.as_ptr() as *const c_char,
+            )
+        }
+    };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "symlinkat");
+    }
+
+    ret
 }
