@@ -1,11 +1,27 @@
 use crate::lind_wasmtime::host::PassFptrTyped;
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx};
 use anyhow::anyhow;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use threei::threei_const;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{Caller, Instance};
 use wasmtime_lind_3i::{VmCtxWrapper, get_vmctx, set_vmctx};
 use wasmtime_lind_multi_process;
+
+// POC: per-grate mutex to serialize concurrent calls into the same grate Store.
+// Each grate (identified by cageid) gets its own lock so independent grates
+// can still run in parallel.
+static GRATE_LOCKS: OnceLock<Mutex<HashMap<u64, std::sync::Arc<Mutex<()>>>>> = OnceLock::new();
+
+fn get_grate_lock(cageid: u64) -> std::sync::Arc<Mutex<()>> {
+    let map = GRATE_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = map.lock().unwrap();
+    guard
+        .entry(cageid)
+        .or_insert_with(|| std::sync::Arc::new(Mutex::new(())))
+        .clone()
+}
 
 /// The callback function registered with 3i uses a unified Wasm entry
 /// function as the single re-entry point into the Wasm executable.
@@ -46,6 +62,12 @@ pub extern "C" fn grate_callback_trampoline(
     arg6: u64,
     arg6cageid: u64,
 ) -> i32 {
+    // POC: serialize all calls into this grate's single Store.
+    // All backup VMContexts share one Store, so concurrent re-entry corrupts it.
+    // This lock ensures only one thread executes inside a given grate at a time.
+    let grate_lock = get_grate_lock(cageid);
+    let _grate_guard = grate_lock.lock().unwrap();
+
     let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
         Some(v) => v,
         None => {
