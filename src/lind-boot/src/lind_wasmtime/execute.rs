@@ -153,10 +153,6 @@ pub fn execute_with_lind(
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
 
-    // wstore.epoch_deadline_trap();
-    // // interrupt at next trigger
-    // wstore.set_epoch_deadline(1);
-
     // -- Attach host APIs --
     let mut linker = Arc::new(Mutex::new(Linker::new(&engine)));
 
