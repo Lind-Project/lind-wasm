@@ -205,7 +205,7 @@ pub fn get_specific_virtual_fd(
     // Note that, I need to use the FD_PER_PROCESS_MAX setting because this
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
-    if requested_virtualfd > FD_PER_PROCESS_MAX {
+    if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }
 
@@ -404,24 +404,23 @@ pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
 
     assert!(check_cage_exists(cageid),"Unknown cageid in fdtable access");
 
-    // derefing this so I don't hold a lock and deadlock close handlers
-    let mut myfdrow = *FDTABLE.get_mut(&cageid).unwrap();
+    // Mutate in place under the guard, extract the entry, then drop the
+    // guard before calling the close handler (which may re-enter fdtables).
+    let entry = {
+        let mut guard = FDTABLE.get_mut(&cageid).unwrap();
+        let entry = guard[virtfd as usize];
+        guard[virtfd as usize] = None;
+        entry
+        // guard drops here — lock released
+    };
 
-
-    if myfdrow[virtfd as usize].is_some() {
-        let entry = myfdrow[virtfd as usize];
-
-        // Zero out this entry before calling the close handler...
-        myfdrow[virtfd as usize] = None;
-
-        // Re-insert the modified myfdrow since I've been modifying a copy
-        FDTABLE.insert(cageid, myfdrow.clone());
-        
-        // always _decrement last as it may call the user handler...
-        _decrement_fdcount(entry.unwrap());
-        return Ok(());
+    match entry {
+        Some(e) => {
+            _decrement_fdcount(e);
+            Ok(())
+        }
+        None => Err(threei::Errno::EBADFD as u64),
     }
-    Err(threei::Errno::EBADFD as u64)
 }
 
 
@@ -442,40 +441,56 @@ pub fn register_close_handlers(fdkind:u32, intermediate: fn(FDTableEntry,u64), l
 
 // Helpers to track the count of times each (fdkind,underfd) is used
 #[doc(hidden)]
-fn _decrement_fdcount(entry:FDTableEntry) {
-
+fn _decrement_fdcount(entry: FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
-
-    let newcount:u64 = FDCOUNT.get(&mytuple).unwrap().value() - 1;
 
     let intermediatech;
     let lastch;
-    // Doing this to release the lock so I can call it recursively...
+
     let closehandlers = CLOSEHANDLERTABLE.lock().unwrap();
     if let Some(closehandlerentry) = closehandlers.get(&entry.fdkind) {
-        intermediatech =  closehandlerentry.intermediate;
+        intermediatech = closehandlerentry.intermediate;
         lastch = closehandlerentry.last;
-    }
-    else {
-        // TODO: If at any future point, I wanted to add a "default" handler
-        // for all fdkind values, I would add it here...
+    } else {
         intermediatech = NULL_FUNC;
         lastch = NULL_FUNC;
     }
-    // release the lock...
     drop(closehandlers);
 
-    if newcount > 0 {
-        // Update before calling their close handler in case they do operations
-        // inside the close handler which create / close fds...
-        FDCOUNT.insert(mytuple,newcount);
-        (intermediatech)(entry,newcount);
+    let newcount;
+    let call_last;
+
+    match FDCOUNT.entry(mytuple) {
+        dashmap::mapref::entry::Entry::Occupied(mut occ) => {
+            let old = *occ.get();
+            newcount = old.checked_sub(1).unwrap_or_else(|| {
+                panic!("FDCOUNT underflow for key {:?}", mytuple);
+            });
+
+            if newcount > 0 {
+                *occ.get_mut() = newcount;
+                call_last = false;
+            } else {
+                occ.remove();
+                call_last = true;
+            }
+        }
+        dashmap::mapref::entry::Entry::Vacant(_) => {
+            panic!(
+                "FDCOUNT get failed. FDCOUNT missing key {:?}, current map: {:?}",
+                mytuple,
+                FDCOUNT
+                    .iter()
+                    .map(|kv| (*kv.key(), *kv.value()))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
-    else{
-        // Remove before calling their close handler in case they do operations
-        // inside the close handler which create / close fds...
-        FDCOUNT.remove(&mytuple);
-        (lastch)(entry,0);
+
+    if !call_last {
+        (intermediatech)(entry, newcount);
+    } else {
+        (lastch)(entry, 0);
     }
 }
 
@@ -485,12 +500,9 @@ fn _increment_fdcount(entry:FDTableEntry) {
 
     let mytuple = (entry.fdkind, entry.underfd);
 
-    // Get a mutable reference to the entry so we can update it.
-    if let Some(mut count) = FDCOUNT.get_mut(&mytuple) {
-        *count += 1;
-    } else {
-        FDCOUNT.insert(mytuple, 1);
-    }
+    // Atomic increment-or-insert via entry API to avoid race where two
+    // threads both see None and both insert 1.
+    *FDCOUNT.entry(mytuple).or_insert(0) += 1;
 }
 
 

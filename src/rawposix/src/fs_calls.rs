@@ -1199,18 +1199,41 @@ pub extern "C" fn brk_syscall(
     let cage = get_cage(cageid).unwrap();
 
     let mut vmmap = cage.vmmap.write();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
+    let heap_opt = vmmap.find_page(vmmap.heap_start);
 
-    assert!(heap.npages == vmmap.program_break);
+    let heap = if heap_opt.is_none() {
+        // if heap page is not found, create an empty heap entry with 0 size
+        cage::VmmapEntry::new(
+            vmmap.heap_start,
+            0,
+            (PROT_READ | PROT_WRITE),
+            (PROT_READ | PROT_WRITE),
+            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+            false,
+            0,
+            0,
+            cageid,
+            MemoryBackingType::Anonymous,
+        )
+    } else {
+        heap_opt.unwrap().clone()
+    };
+
+    assert!(heap.page_num == vmmap.heap_start);
+
+    let old_brk_page = heap.page_num + heap.npages;
 
     // passing 0 to brk will always return the current brk
     if brk == 0 {
-        return (PAGESIZE * heap.npages) as i32;
+        return (PAGESIZE * old_brk_page) as i32;
     }
-
-    let old_brk_page = heap.npages;
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
+
+    // shrink heap below heap start is not allowed
+    if brk_page < vmmap.heap_start {
+        return syscall_error(Errno::ENOMEM, "brk", "no memory");
+    }
 
     // if we are incrementing program break, we need to check if we have enough space
     if brk_page > old_brk_page {
@@ -1220,12 +1243,12 @@ pub extern "C" fn brk_syscall(
     }
 
     // remove the old entries since new entry is overlapping with it.
-    vmmap.remove_entry(0, old_brk_page);
+    vmmap.remove_entry(heap.page_num, heap.npages);
 
     // update vmmap entry
     vmmap.add_entry_with_overwrite(
-        0,
-        brk_page,
+        heap.page_num,
+        brk_page - heap.page_num,
         heap.prot,
         heap.maxprot,
         heap.flags,
@@ -1240,8 +1263,6 @@ pub extern "C" fn brk_syscall(
 
     let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
-
-    vmmap.set_program_break(brk_page);
 
     drop(vmmap);
 
@@ -2825,6 +2846,112 @@ pub extern "C" fn readv_syscall(
     let ret = unsafe { libc::readv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "readv");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/preadv.2.html
+///
+/// `preadv()` combines the functionality of `readv()` and `pread()`: it performs
+/// scatter input from the file at the given offset without changing the file pointer.
+///
+/// ## Arguments:
+///     - vfd_arg: virtual file descriptor
+///     - iov_arg: pointer to an array of iovec structures
+///     - iovcnt_arg: number of iovec structures
+///     - offset_arg: file offset to read from
+///
+/// ## Returns:
+///     - On success, the number of bytes read.
+///     - On error, -1 with errno set.
+pub extern "C" fn preadv_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    iov_arg: u64,
+    iov_cageid: u64,
+    iovcnt_arg: u64,
+    iovcnt_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "preadv");
+    }
+
+    let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
+    let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "preadv_syscall"
+        );
+    }
+
+    let ret =
+        unsafe { libc::preadv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "preadv");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pwritev.2.html
+///
+/// `pwritev()` combines the functionality of `writev()` and `pwrite()`: it performs
+/// gather output to the file at the given offset without changing the file pointer.
+///
+/// ## Arguments:
+///     - vfd_arg: virtual file descriptor
+///     - iov_arg: pointer to an array of iovec structures
+///     - iovcnt_arg: number of iovec structures
+///     - offset_arg: file offset to write at
+///
+/// ## Returns:
+///     - On success, the number of bytes written.
+///     - On error, -1 with errno set.
+pub extern "C" fn pwritev_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    iov_arg: u64,
+    iov_cageid: u64,
+    iovcnt_arg: u64,
+    iovcnt_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "pwritev");
+    }
+
+    let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
+    let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "pwritev_syscall"
+        );
+    }
+
+    let ret =
+        unsafe { libc::pwritev(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "pwritev");
     }
     ret
 }

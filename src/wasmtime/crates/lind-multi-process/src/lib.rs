@@ -7,20 +7,21 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
-use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH};
+use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
+use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
     get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
     VmCtxWrapper,
 };
-use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
@@ -62,15 +63,21 @@ pub trait LindHost<T, U> {
 // top level runtime engine is abusing closures.
 pub struct LindCtx<T, U> {
     // linker used by the module
-    linker: Option<Linker<T>>,
+    pub linker: Option<Linker<T>>,
+
+    // Global Offset Table of the process
+    pub got_table: Option<Arc<Mutex<LindGOT>>>,
+
     // the module associated with the ctx
     modules: Vec<(String, String, Module)>,
+
+    dlopen_modules: Vec<(String, String, Module)>,
 
     // cage id
     pub cageid: i32,
 
     // thread id
-    tid: i32,
+    pub tid: i32,
 
     // next thread id
     next_threadid: Arc<AtomicU32>,
@@ -123,6 +130,7 @@ impl<
     pub fn new(
         modules: Vec<(String, String, Module)>,
         linker: Linker<T>,
+        got_table: Option<Arc<Mutex<LindGOT>>>,
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
         cageid: i32,
@@ -153,7 +161,9 @@ impl<
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
             linker: Some(linker),
+            got_table,
             modules: modules.clone(),
+            dlopen_modules: vec![],
             cageid,
             tid,
             next_threadid,
@@ -166,9 +176,25 @@ impl<
     }
 
     pub fn attach_linker(&mut self, linker: Linker<T>) {
-        // debug_assert!(self.linker.is_none());
-
         self.linker = Some(linker);
+    }
+
+    // Attach a LindGOT (Global Offset Table) to this context, wrapping it in
+    // Arc<Mutex<>> for shared, thread-safe access. The GOT maps symbol names to
+    // the addresses of their GOT cells; it is shared across all modules within
+    // a cage so that cross-library indirect calls resolve to the correct target.
+    pub fn attach_got_table(&mut self, got_table: Option<LindGOT>) {
+        if let Some(got) = got_table {
+            self.got_table = Some(Arc::new(Mutex::new(got)));
+        }
+    }
+
+    // Record a dynamically loaded module (from dlopen) into this cage's module
+    // list. During fork() and pthread_create(), every entry in dlopen_modules
+    // is re-instantiated into the child/thread store so that the child inherits
+    // access to all libraries the parent opened at runtime.
+    pub fn append_module(&mut self, path: String, module: Module) {
+        self.dlopen_modules.push(("env".to_string(), path, module));
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -314,7 +340,6 @@ impl<
         };
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
-        let mut global_snapshots_index = 0;
 
         // mark the start of unwind
         let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
@@ -336,6 +361,8 @@ impl<
         let parent_stack_low = caller.as_context().get_stack_top();
         let parent_stack_high = caller.as_context().get_stack_base();
 
+        let symbol_table = caller.get_library_symbol_table().clone();
+
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
@@ -355,7 +382,7 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -367,12 +394,20 @@ impl<
                     let lind_manager = child_ctx.lind_manager.clone();
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
+                    let dlopen_modules = child_ctx.dlopen_modules.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+
+                    let mut child_got = if dylink_enabled {
+                        Some(LindGOT::new())
+                    } else {
+                        None
+                    };
 
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
                             &mut store,
                             &engine,
+                            &mut child_got,
                             &snapshot.0,
                             &snapshot.1,
                             &snapshot.2,
@@ -385,7 +420,7 @@ impl<
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     // e.g. __stack_pointer, __indirect_function_table, etc.
 
-                    if dylink_enabled {
+                    let child_table = if dylink_enabled {
                         let mut table_size = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
@@ -424,7 +459,9 @@ impl<
                                 )
                                 .unwrap();
 
-                            let module_name = module.name().unwrap();
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -434,6 +471,9 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -444,13 +484,19 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Process,
-                                    &global_snapshots[global_snapshots_index].1,
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
                                 )
                                 .unwrap();
-                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
-                    }
+
+                        Some(child_table)
+                    } else {
+                        None
+                    };
 
                     store.set_stack_snapshots(parent_stack_snapshots);
 
@@ -470,8 +516,92 @@ impl<
                         )
                         .unwrap();
 
-                    let snapshots = &global_snapshots[global_snapshots_index].1;
-                    instance.apply_global_snapshots(&mut store, snapshots);
+                    // Global snapshot workflow:
+                    // 1. register_named_instance: record the child's main module instance under
+                    //    its wasm intrinsic name so that get_global_snapshot (called at the top of
+                    //    this fork path) could locate it. Also used for name-collision detection.
+                    // 2. apply_global_snapshots: restore the parent's Wasm globals (GOT cell
+                    //    addresses, stack pointer, memory base pointers) into the child instance.
+                    //    This ensures the child starts with a consistent view of all symbol
+                    //    addresses rather than the zero-initialized defaults from instantiation.
+                    //    Snapshots are looked up by module name from the HashMap captured before
+                    //    the unwind; backup instances are never registered so they are naturally
+                    //    excluded from the snapshot map.
+                    let main_module_name = module
+                        .name()
+                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    store
+                        .as_context_mut()
+                        .register_named_instance(main_module_name.to_string(), grate_instanceid);
+                    instance.apply_global_snapshots(
+                        &mut store,
+                        global_snapshots
+                            .get(main_module_name)
+                            .map(Vec::as_slice)
+                            .unwrap_or(&[]),
+                    );
+
+                    if dylink_enabled {
+                        let mut child_table = child_table.unwrap();
+                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+
+                        for (name, _path, module) in dlopen_modules.iter() {
+                            // Read dylink metadata for this dlopen'd module.
+                            // This contains the module's declared table/memory requirements.
+                            let dylink_info = module.dylink_meminfo();
+                            let dylink_info = dylink_info.as_ref().unwrap();
+                            // Append this library's function table region to the shared table.
+                            // `table_start` is the starting index of the library's reserved range
+                            // within the global indirect function table.
+                            let table_start = child_table.size(&mut store) as i32;
+
+                            #[cfg(feature = "debug-dylink")]
+                            println!(
+                                "[debug] library table_start: {}, grow: {}",
+                                table_start, dylink_info.table_size
+                            );
+                            // Grow the shared indirect function table by the amount requested by the
+                            // library (as recorded in its dylink section). New slots are initialized
+                            // to null funcref.
+                            child_table
+                                .grow(
+                                    &mut store,
+                                    dylink_info.table_size,
+                                    wasmtime::Ref::Func(None),
+                                )
+                                .unwrap();
+
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_memory_base = *memory_base_table
+                                .get(module_name)
+                                .expect("memory base not found for library");
+
+                            linker.allow_shadowing(true);
+                            // Link the library instance into the main linker namespace.
+                            // The linker records the module under `name` and uses `table_start`
+                            // to relocate/interpret the library's function references into the
+                            // shared table. GOT entries are patched through the shared LindGOT.
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    child_cageid,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base,
+                                    ChildLibraryType::Process,
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
+                                )
+                                .unwrap();
+                            linker.allow_shadowing(false);
+                        }
+                    }
 
                     let epoch_pointer = if epoch_handler.is_some() {
                         epoch_handler.unwrap() as *mut u64
@@ -551,6 +681,7 @@ impl<
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
                     new_child_ctx.attach_linker(linker);
+                    new_child_ctx.attach_got_table(child_got);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -677,8 +808,9 @@ impl<
         stack_size: u32,
         child_tid: u64,
     ) -> Result<i32> {
-        // get the base address of the memory
-        let parent_address = get_memory_base(&mut caller) as *mut u8;
+        // get the base address and size of the memory
+        let (mem_base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+        let parent_address = mem_base_u64 as *mut u8;
 
         // main module is the first module in the module list
         let main_module = self.modules.get(0).unwrap().2.clone();
@@ -715,6 +847,24 @@ impl<
                 0
             }
         };
+        // Validate the child thread stack region. stack_addr is the high address
+        // (stack grows down), so the region is [stack_addr - stack_size, stack_addr).
+        // Both values are WASM linear-memory offsets (u32), so we check:
+        //   stack_size <= stack_addr          (no underflow)
+        //   stack_addr <= mem_size            (high end within memory)
+        let mem_base_usize = mem_base_u64 as usize;
+        if (stack_size as usize) > (stack_addr as usize) || (stack_addr as usize) > mem_size {
+            return Err(anyhow!("thread stack region out of guest memory bounds"));
+        }
+
+        // Validate child_tid before writing: it is read from the CloneArgStruct
+        // (guest memory) and was not validated by sc_convert, so we must check
+        // that the 4-byte write target lies within the guest linear memory region.
+        let child_tid_usize = child_tid as usize;
+        match child_tid_usize.checked_add(std::mem::size_of::<u32>()) {
+            Some(end) if child_tid_usize >= mem_base_usize && end <= mem_base_usize + mem_size => {}
+            _ => return Err(anyhow!("child_tid pointer out of guest memory bounds")),
+        }
         let child_tid = child_tid as *mut u32;
         unsafe {
             *child_tid = next_tid;
@@ -739,7 +889,6 @@ impl<
         let mut child_host = caller.data().clone();
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
-        let mut global_snapshots_index = 0;
 
         // mark the start of unwind
         let _res =
@@ -753,6 +902,8 @@ impl<
         // we want to send this address to child thread
         let parent_address_u64 = parent_address as u64;
         let parent_stack_high_usr = caller.as_context().get_stack_base();
+
+        let symbol_table = caller.get_library_symbol_table().clone();
 
         // get current cageid, child should have the same cageid
         let child_cageid = self.cageid;
@@ -801,7 +952,7 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -815,8 +966,15 @@ impl<
 
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
+                    let dlopen_modules = child_ctx.dlopen_modules.clone();
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+
+                    let mut child_got = if dylink_enabled {
+                        Some(LindGOT::new())
+                    } else {
+                        None
+                    };
 
                     let (mut linker,
                          memory_base_table,
@@ -824,12 +982,13 @@ impl<
                          _,
                         ) = Linker::new_child_linker(&mut store,
                                 &engine,
+                                &mut child_got,
                                 &snapshot.0,
                                 &snapshot.1,
                                 &snapshot.2
                         ).expect("failed to create child linker");
 
-                    if dylink_enabled {
+                    let child_table = if dylink_enabled {
                         let mut table_size = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
@@ -864,7 +1023,7 @@ impl<
                                 wasmtime::Ref::Func(None),
                             ).unwrap();
 
-                            let module_name = module.name().unwrap();
+                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
@@ -872,6 +1031,7 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
+                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -882,12 +1042,15 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
-                                    &global_snapshots[global_snapshots_index].1
+                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
                                 ).unwrap();
-                            global_snapshots_index += 1;
                             linker.allow_shadowing(false);
                         }
-                    }
+
+                        Some(child_table)
+                    } else {
+                        None
+                    };
 
                     // mark as thread
                     store.set_is_thread(true);
@@ -897,8 +1060,67 @@ impl<
                         .instantiate_with_lind_thread(&mut store, &module, false)
                         .unwrap();
 
-                    let snapshots = &global_snapshots[global_snapshots_index].1;
-                    instance.apply_global_snapshots(&mut store, snapshots);
+                    // Global snapshot workflow:
+                    // 1. register_named_instance: record the thread's main module instance under
+                    //    its wasm intrinsic name so that get_global_snapshot (called at the top of
+                    //    this thread creation path) could locate it. Also used for name-collision detection.
+                    // 2. apply_global_snapshots: restore the parent's Wasm globals (GOT cell
+                    //    addresses, stack pointer, memory base pointers) into the thread instance.
+                    //    Threads share the cage's linear memory but each have their own Wasmtime
+                    //    Store/Instance, so globals must be explicitly synced from the parent's
+                    //    snapshot. Snapshots are looked up by module name; backup instances are
+                    //    never registered and are therefore naturally excluded.
+                    let main_module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    store.as_context_mut().register_named_instance(main_module_name.to_string(), grate_instanceid);
+                    instance.apply_global_snapshots(
+                        &mut store,
+                        global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
+                    );
+
+                    if dylink_enabled {
+                        let mut child_table = child_table.unwrap();
+                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+
+                        for (name, _path, module) in dlopen_modules.iter() {
+                            let dylink_info = module.dylink_meminfo();
+                            let dylink_info = dylink_info.as_ref().unwrap();
+                            let table_start = child_table.size(&mut store) as i32;
+
+                            #[cfg(feature = "debug-dylink")]
+                            println!(
+                                "[debug] dlopen library table_start: {}, grow: {}",
+                                table_start, dylink_info.table_size
+                            );
+                            child_table
+                                .grow(
+                                    &mut store,
+                                    dylink_info.table_size,
+                                    wasmtime::Ref::Func(None),
+                                )
+                                .unwrap();
+
+                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_memory_base = *memory_base_table
+                                .get(module_name)
+                                .expect("memory base not found for library");
+
+                            linker.allow_shadowing(true);
+                            linker
+                                .module_with_child(
+                                    &mut store,
+                                    child_cageid as u64,
+                                    &name,
+                                    &module,
+                                    &mut child_table,
+                                    table_start,
+                                    module_memory_base,
+                                    ChildLibraryType::Thread(&mut stack_addr),
+                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
+                                )
+                                .unwrap();
+                            linker.allow_shadowing(false);
+                        }
+                    }
 
                     if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
                         store.as_context_mut(),
@@ -976,6 +1198,7 @@ impl<
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
                     new_child_ctx.attach_linker(linker);
+                    new_child_ctx.attach_got_table(child_got);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -1467,11 +1690,24 @@ impl<
         }
     }
 
+    // return true if the lind process had thread before
+    pub fn had_threads(&self) -> bool {
+        // if next_threadid had incremented, that means the process
+        // created some threads before
+        if self.next_threadid.load(Ordering::Relaxed) != 1 {
+            true
+        } else {
+            false
+        }
+    }
+
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
         let forked_ctx = Self {
-            linker: None, // Linker is explicitly set up by the caller
+            linker: None,    // Linker is explicitly set up by the caller
+            got_table: None, // new process should use a new GOT
             modules: self.modules.clone(),
+            dlopen_modules: self.dlopen_modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
@@ -1488,8 +1724,10 @@ impl<
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
         let forked_ctx = Self {
-            linker: None, // Linker is explicitly set up by the caller
+            linker: None,    // Linker is explicitly set up by the caller
+            got_table: None, // threads within a process should use same GOT
             modules: self.modules.clone(),
+            dlopen_modules: self.dlopen_modules.clone(),
             cageid: self.cageid,
             tid: self.tid,
             next_threadid: self.next_threadid.clone(),
@@ -1523,6 +1761,21 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     drop(memory_iter);
 
     memory.data_ptr(caller.as_context()) as usize as u64
+}
+
+/// Returns `(base_ptr_as_u64, data_size_in_bytes)` for the first guest linear
+/// memory. Use this instead of `get_memory_base` whenever bounds checks are
+/// needed before accessing guest memory.
+pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
+    mut caller: &mut Caller<'_, T>,
+) -> (u64, usize) {
+    let mut memory_iter = caller.as_context_mut().0.all_memories();
+    let memory = memory_iter.next().expect("no defined memory found").clone();
+    drop(memory_iter);
+
+    let base = memory.data_ptr(caller.as_context()) as usize as u64;
+    let size = memory.data_size(caller.as_context());
+    (base, size)
 }
 
 // entry point of fork syscall
@@ -1615,15 +1868,6 @@ where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 {
-    // `clone_arg` points to a shared ABI struct carrying clone flags and
-    // thread creation parameters (stack, tid pointer, etc.).
-    let args = unsafe { &mut *(clone_arg as *mut sys_struct::CloneArgStruct) };
-    // Determine whether this clone request represents:
-    // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
-    // otherwise, we are creating a process (i.e. fork)
-    let flags = args.flags;
-    let isthread = flags & (sys_const::CLONE_VM);
-
     unsafe {
         // Resolve the correct VMContext wrapper to re-enter Wasmtime.
         //
@@ -1642,6 +1886,27 @@ where
         let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
 
         let ret = Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+            // Validate clone_arg inside Caller::with where memory bounds are available.
+            // clone_arg is a host address (memory_base + guest_offset) and bypasses the
+            // normal sc_convert validation path, so we must check it explicitly.
+            let (mem_base, mem_size) = get_memory_base_and_size(&mut caller);
+            let struct_size = std::mem::size_of::<sys_struct::CloneArgStruct>();
+            let clone_arg_usize = clone_arg as usize;
+            let mem_base_usize = mem_base as usize;
+            match clone_arg_usize.checked_add(struct_size) {
+                Some(end)
+                    if clone_arg_usize >= mem_base_usize && end <= mem_base_usize + mem_size => {}
+                _ => return -(Errno::EFAULT as i32),
+            }
+
+            // `clone_arg` points to a shared ABI struct carrying clone flags and
+            // thread creation parameters (stack, tid pointer, etc.).
+            let args = &mut *(clone_arg as *mut sys_struct::CloneArgStruct);
+            // Determine whether this clone request represents:
+            // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
+            // otherwise, we are creating a process (i.e. fork)
+            let isthread = args.flags & sys_const::CLONE_VM;
+
             if isthread == 0 {
                 // fork
                 match lind_fork(&mut caller, child_cageid) {
@@ -1945,6 +2210,40 @@ pub fn attach_shared_memory<
     }
 
     Err(anyhow!("Main Module does not contain a shared memory"))
+}
+
+pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {
+    // TODO: currently we explicitly allocate first guard page (0-stack_start)
+    // due to a known issue. This should be fixed in the future and only allocate
+    // the actual stack space (stack_start-stack_end)
+
+    let ret = make_syscall(
+        cageid,                // self cageid
+        (MMAP_SYSCALL) as u64, // syscall num
+        0, // since wasmtime operates with lower level memory, it always interacts with underlying os
+        cageid, // target cageid (should be same)
+        0, // map from address 0 (includes the leading guard page per the TODO above)
+        cageid,
+        stack_end as u64, // length: guard page + stack
+        cageid,
+        // PROT_READ | PROT_WRITE: stack needs both read and write access
+        (typemap::PROT_READ | typemap::PROT_WRITE) as u64,
+        cageid,
+        // MAP_PRIVATE: changes are not shared; MAP_ANONYMOUS: not file-backed;
+        // MAP_FIXED: must map at the exact address (address 0 for guard page + stack region)
+        (typemap::MAP_PRIVATE | typemap::MAP_ANONYMOUS | typemap::MAP_FIXED) as u64,
+        cageid,
+        u64::MAX, // fd: -1 (required for MAP_ANONYMOUS mappings)
+        cageid,
+        0,
+        cageid,
+    );
+
+    if ret < 0 {
+        return Err(anyhow!("failed to allocate stack"));
+    }
+
+    Ok(())
 }
 
 // check if the module has the necessary exported Asyncify functions

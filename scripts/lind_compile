@@ -36,21 +36,34 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     --opt-only          : .wasm -> .wasm  (in-place optimization)
     --precompile-only   : .wasm -> .cwasm (AOT compile via lind-boot)
 
+  Compilation backend (applies to full and --compile-only modes):
+    (no backend flag)   : dynamic build — PIE executable with dlopen support (default)
+    -s, --static        : static build — traditional WASM binary without dynamic linking
+    --compile-library   : library build — shared WASM library (.wasm) to be loaded via dlopen
+                          Note: --compile-library takes precedence over -s/--static if both are given.
+
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
     --print-args, --debug-args  print parsed arguments after option handling
-    --compile-grate             add grate-specific clang flags automatically
+    --compile-grate             add grate-specific clang flags (exports pass_fptr_to_wt);
+                                compatible with dynamic and static backends
+    --fpcast-emu                enable function-pointer-cast emulation via wasm-opt
+                                (applies to full and --opt-only modes; for dynamic/library
+                                builds also passes --pass-arg=relocatable-fpcast)
     --no-default-clang-flags    do not add lind_compile's optional clang flags
-    -h, --help              show this help
+    -h, --help                  show this help
 
   Additional clang args:
     Any extra arguments after the source file are passed through to clang.
     Use -- to separate lind_compile flags from clang flags if needed.
 
   Examples:
-    $(basename "$0") hello.c
+    $(basename "$0") hello.c                              # dynamic build (default)
+    $(basename "$0") -s hello.c                           # static build
+    $(basename "$0") --compile-library mylib.c            # shared library for dlopen
     $(basename "$0") --compile-only hello.c
     $(basename "$0") --compile-grate hello.c
+    $(basename "$0") --fpcast-emu hello.c
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --precompile-only build/hello.wasm
     $(basename "$0") --print-cmd hello.c
