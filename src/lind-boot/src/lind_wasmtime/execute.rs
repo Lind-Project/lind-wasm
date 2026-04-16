@@ -1,5 +1,5 @@
 use crate::lind_wasmtime::host::DylinkMetadata;
-use crate::lind_wasmtime::host::{init_grate_pool, register_grate_handler_for_cage};
+use crate::lind_wasmtime::host::{init_grate_pool, register_grate_handler_for_cage, cleanup_grate_handler};
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
@@ -63,11 +63,13 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // new cage is created
     lind_manager.increment();
 
+    let grate_cleanup_funcptr = cleanup_grate_handler as *const () as usize as u64;
     // Initialize trampoline entry function pointer for wasmtime runtime.
     // This is for grate calls to re-enter wasmtime runtime.
     threei::register_trampoline(
         threei_const::RUNTIME_TYPE_WASMTIME,
         grate_callback_trampoline,
+        grate_cleanup_funcptr,
     );
 
     // Register syscall handlers (clone/exec/exit) with 3i
@@ -150,6 +152,10 @@ pub fn execute_with_lind(
     let args = lind_boot.args.clone();
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
+
+    // wstore.epoch_deadline_trap();
+    // // interrupt at next trigger
+    // wstore.set_epoch_deadline(1);
 
     // -- Attach host APIs --
     let mut linker = Arc::new(Mutex::new(Linker::new(&engine)));
@@ -802,7 +808,7 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
         .with_context(|| format!("failed to read {}", wasm_path.display()))?;
     let cwasm_bytes = engine
         .precompile_module(&wasm_bytes)
-        .context("failed to precompile module")?;
+        .with_context(|| format!("failed to precompile module {}", wasm_path.display()))?;
     std::fs::write(&cwasm_path, cwasm_bytes)
         .with_context(|| format!("failed to write {}", cwasm_path.display()))?;
 
@@ -823,8 +829,8 @@ fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
     // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
     match engine.detect_precompiled_file(path) {
         Ok(_) => unsafe { Module::deserialize_file(engine, path) }
-            .context("failed to deserialize precompiled module"),
-        Err(_) => Module::from_file(engine, path).context("failed to compile module"),
+            .with_context(|| format!("failed to deserialize precompiled module {}", path.display())),
+        Err(_) => Module::from_file(engine, path).with_context(|| format!("failed to compile module {}", path.display())),
     }
 }
 

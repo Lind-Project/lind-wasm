@@ -7,27 +7,6 @@ use wasmtime_lind_utils::LindGOT;
 use wasmtime_lind_3i::*;
 use sysdefs::constants::lind_platform_const;
 
-// /// Function type for the `pass_fptr_to_wt` function used as an entry point for grate-run syscalls.
-// pub type PassFptrTyped = TypedFunc<
-//     (
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//         u64,
-//     ),
-//     i32,
-// >;
-
 /// The HostCtx host structure stores all relevant execution context objects:
 /// `lind_environ`: argv/environ data served by the 4 host functions in lind-common;
 /// `lind_fork_ctx`: the multi-process management structure, encapsulating fork/exec state;
@@ -156,4 +135,35 @@ pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<
         }
     };
     handler.submit(req)
+}
+
+pub fn unregister_grate_handler(
+    grate_id: u64,
+) -> anyhow::Result<Arc<GrateHandler<HostCtx>>> {
+    let pool = GRATE_POOL
+        .get()
+        .ok_or_else(|| anyhow::anyhow!("GRATE_POOL is not initialized"))?;
+
+    let slot = pool
+        .get(grate_id as usize)
+        .ok_or_else(|| anyhow::anyhow!("invalid grate_id {}", grate_id))?;
+
+    let mut guard = slot.lock().unwrap();
+
+    guard
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("grate handler {} not found", grate_id))
+}
+
+pub fn cleanup_grate_handler(grate_id: u64) -> anyhow::Result<()> {
+    let handler = unregister_grate_handler(grate_id)?;
+
+    // 1. Deactivate the handler to prevent new requests from being accepted
+    // and interrupt other running stores
+    handler.begin_shutdown();
+
+    // 2. Wait for the handler to finish processing any in-flight requests and become idle.
+    handler.wait_for_idle();
+
+    Ok(())
 }

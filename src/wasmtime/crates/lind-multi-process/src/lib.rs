@@ -602,12 +602,12 @@ impl<
                             threei::handler_table::_rm_grate_from_handler(child_cageid);
                             cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
                             cage::cage_finalize(child_cageid);
-                            // if !rm_vmctx(child_cageid) {
-                            //     eprintln!(
-                            //         "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
-                            //         child_cageid
-                            //     );
-                            // }
+                            if !rm_vmctx_thread(child_cageid, 0) {
+                                eprintln!(
+                                    "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
+                                    child_cageid
+                                );
+                            }
                             lind_manager.decrement();
                             return 0;
                         }
@@ -1157,12 +1157,12 @@ impl<
             // for exec, we do not need to do rewind after unwinding is done
             store.set_asyncify_state(AsyncifyState::Normal);
 
-            // if !rm_vmctx(cloned_cageid as u64) {
-            //     panic!(
-            //         "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
-            //         cloned_cageid
-            //     );
-            // }
+            if !rm_vmctx_thread(cloned_cageid as u64, 0) {
+                panic!(
+                    "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
+                    cloned_cageid
+                );
+            }
 
             let ret = exec_call(
                 &cloned_lindboot_cli,
@@ -1246,13 +1246,13 @@ impl<
                 // records zombie/SIGCHLD, removes fdtable + cage.
                 cage::cage_finalize(deferred_cageid);
 
-                // Remove the VMContext pool (backup instances).
-                // if !rm_vmctx(deferred_cageid) {
-                //     eprintln!(
-                //         "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
-                //         deferred_cageid
-                //     );
-                // }
+                // Remove the VMContext pool
+                if !rm_vmctx_thread(deferred_cageid, 0) {
+                    eprintln!(
+                        "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
+                        deferred_cageid
+                    );
+                }
 
                 // Decrement the global cage count.
                 deferred_lind_manager.decrement();

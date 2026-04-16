@@ -1,9 +1,10 @@
 use sysdefs::constants::lind_platform_const;
 use threei::threei_const;
-use std::sync::{Condvar, Mutex, MutexGuard};
+use std::sync::{Condvar, Mutex, MutexGuard, Arc};
 use std::collections::HashMap;
 use anyhow::{Context, Result, anyhow};
 use wasmtime::{Engine, Module, Linker, Store, Instance, TypedFunc};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 type PassFptrTyped = TypedFunc<
     (u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64),
@@ -100,12 +101,16 @@ pub enum ConcurrencyMode {
 
 pub struct GrateHandler<T> {
     grate_id: u64,
+    engine: Engine, // needed by epoch to interrupt all workers of the handler
     main_worker: WorkerId,
     concurrency_mode: ConcurrencyMode,
     serial_executor: SerialExecutor,
 
     inner: Mutex<GrateHandlerInner<T>>,
     cv: Condvar,
+
+    shutting_down: AtomicBool,
+    active_calls: AtomicUsize,
 }
 
 struct GrateHandlerInner<T> {
@@ -123,7 +128,6 @@ impl<T: Clone> GrateHandler<T> {
             let worker = create_worker(
                 template,
                 host.clone(),
-                cageid,
                 handler_id,
             )
             .with_context(|| {
@@ -139,8 +143,6 @@ impl<T: Clone> GrateHandler<T> {
         self.main_worker = 1;
         Ok(())
     }
-
-    
 }
 
 impl<T> GrateHandler<T> {
@@ -161,14 +163,30 @@ impl<T> GrateHandler<T> {
         self.cv.notify_one();
     }
 
+    pub fn begin_shutdown(&self) {
+        self.shutting_down.store(true, Ordering::Release);
+        // Interrupt currently running wasm in stores that have deadline=1.
+        self.engine.increment_epoch();
+        self.cv.notify_all();
+    }
+
+    pub fn wait_for_idle(&self) {
+        let mut guard = self.inner.lock().unwrap();
+        while self.active_calls.load(Ordering::Acquire) != 0 {
+            guard = self.cv.wait(guard).unwrap();
+        }
+    }
+
     fn submit_serialized(&self, req: GrateRequest) -> anyhow::Result<i32> {
         let _serial_guard = self.serial_executor.enter();
         let worker = self.take_worker_blocking();
         let mut lease = WorkerLease::new(self, worker);
-        Ok(lease.worker_mut().run(req))
+        lease.worker_mut().run(req)
     }
 
     pub fn submit(&self, req: GrateRequest) -> anyhow::Result<i32> {
+        let _active_guard = ActiveCallGuard::new(self)?;
+
         match self.concurrency_mode {
             ConcurrencyMode::Serialized => self.submit_serialized(req),
             ConcurrencyMode::Parallel => {
@@ -178,54 +196,89 @@ impl<T> GrateHandler<T> {
     }
 }
 
-impl<T> GrateWorker<T> {
-    fn run(&mut self, req: GrateRequest) -> i32 {
-        println!("Worker {} handling grate request for cage {}, handler_addr: {:#x}", self.worker_id, req.cageid, req.handler_addr);
-        match &self.pass_fptr_func {
-            Some(func) => {
-                let ret = func.call(&mut self.store,
-                    (
-                        req.handler_addr,
-                        req.cageid,
-                        req.arg1,
-                        req.arg1cageid,
-                        req.arg2,
-                        req.arg2cageid,
-                        req.arg3,
-                        req.arg3cageid,
-                        req.arg4,
-                        req.arg4cageid,
-                        req.arg5,
-                        req.arg5cageid,
-                        req.arg6,
-                        req.arg6cageid,
-                    )).unwrap_or_else(|e| {
-                        panic!(
-                            "failed to call pass_fptr_to_wt in worker {}: {}",
-                            self.worker_id, e
-                        )
-                    });
-                println!("Worker {} got result {} from pass_fptr_to_wt", self.worker_id, ret);
-                ret
-            }
-            None => {
-                panic!("no pass_fptr_func found in worker {}", self.worker_id);
-            }
+struct ActiveCallGuard<'a, T> {
+    owner: &'a GrateHandler<T>,
+}
+
+impl<'a, T> ActiveCallGuard<'a, T> {
+    fn new(owner: &'a GrateHandler<T>) -> anyhow::Result<Self> {
+        if owner.shutting_down.load(Ordering::Acquire) {
+            anyhow::bail!("grate handler {} is shutting down", owner.grate_id);
         }
-        
+
+        owner.active_calls.fetch_add(1, Ordering::AcqRel);
+
+        // double-check, avoid shutdown between fetch_add and return
+        if owner.shutting_down.load(Ordering::Acquire) {
+            owner.active_calls.fetch_sub(1, Ordering::AcqRel);
+            owner.cv.notify_all();
+            anyhow::bail!("grate handler {} is shutting down", owner.grate_id);
+        }
+
+        Ok(Self { owner })
     }
+}
+
+impl<'a, T> Drop for ActiveCallGuard<'a, T> {
+    fn drop(&mut self) {
+        self.owner.active_calls.fetch_sub(1, Ordering::AcqRel);
+        self.owner.cv.notify_all();
+    }
+}
+
+impl<T> GrateWorker<T> {
+    fn run(&mut self, req: GrateRequest) -> anyhow::Result<i32> {
+        println!(
+            "Worker {} handling grate request for cage {}, handler_addr: {:#x}",
+            self.worker_id, req.cageid, req.handler_addr
+        );
+
+        let func = self.pass_fptr_func
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id))?;
+
+        let ret = func.call(
+            &mut self.store,
+            (
+                req.handler_addr,
+                req.cageid,
+                req.arg1,
+                req.arg1cageid,
+                req.arg2,
+                req.arg2cageid,
+                req.arg3,
+                req.arg3cageid,
+                req.arg4,
+                req.arg4cageid,
+                req.arg5,
+                req.arg5cageid,
+                req.arg6,
+                req.arg6cageid,
+            ),
+        ).map_err(|e| anyhow::anyhow!(
+            "pass_fptr_to_wt trapped in worker {}: {:#}",
+            self.worker_id,
+            e
+        ))?;
+
+        println!("Worker {} got result {} from pass_fptr_to_wt", self.worker_id, ret);
+        Ok(ret)
+    } 
 }
 
 pub fn create_worker<T>(
     template: &GrateTemplate<T>,
     host: T,
-    _cageid: u64,
     worker_id: WorkerId,
 ) -> anyhow::Result<GrateWorker<T>>
 where
     T: Clone,
 {
     let mut store = Store::new(&template.engine, host);
+
+    // store.epoch_deadline_trap();
+    // // interrupt at next trigger
+    // store.set_epoch_deadline(1);
 
     let mut linker: Linker<T> = template.linker.clone();
 
@@ -259,6 +312,7 @@ pub fn create_handler_for_cage<T: Clone>(
 ) -> anyhow::Result<GrateHandler<T>> {
     let mut handler = GrateHandler {
         grate_id: cageid,
+        engine: template.engine.clone(),
         main_worker: 1,
         concurrency_mode,
         serial_executor: SerialExecutor::new(),
@@ -266,6 +320,8 @@ pub fn create_handler_for_cage<T: Clone>(
             workers: VecDeque::new(),
         }),
         cv: Condvar::new(),
+        shutting_down: AtomicBool::new(false),
+        active_calls: AtomicUsize::new(0),
     };
 
     handler.init_ten_workers(template, &host, cageid)?;
@@ -320,7 +376,10 @@ pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
     t.lock().unwrap().get(&tid).copied()
 }
 
-/// Remove a single thread entry
+/// Remove a single thread entry.
+///
+/// Special case:
+/// - if `tid == 0`, remove all VMContext entries under `cage_id`.
 pub fn rm_vmctx_thread(cage_id: u64, tid: u64) -> bool {
     let Some(tables) = VMCTX_THREADS.get() else {
         return false;
@@ -328,5 +387,14 @@ pub fn rm_vmctx_thread(cage_id: u64, tid: u64) -> bool {
     let Some(t) = tables.get(cage_id as usize) else {
         return false;
     };
-    t.lock().unwrap().remove(&tid).is_some()
+
+    let mut guard = t.lock().unwrap();
+
+    if tid == 0 {
+        let had_entries = !guard.is_empty();
+        guard.clear();
+        had_entries
+    } else {
+        guard.remove(&tid).is_some()
+    }
 }
