@@ -1117,14 +1117,17 @@ pub extern "C" fn munmap_syscall(
     // We must collect first to release the immutable borrow on vmmap.entries
     // before calling user_to_sys (which borrows all of vmmap) and before
     // calling remove_entry (which mutably borrows vmmap).
+    // find_page_iter(req_start) returns all entries overlapping [req_start, map_end).
+    // take_while bounds to req_end: once an entry starts at or past req_end, all
+    // subsequent entries are also outside the range (tree is sorted by start).
     let overlaps: Vec<(usize, usize)> = vmmap
-        .entries
-        .overlapping(ie(req_start, req_end))
+        .find_page_iter(req_start)
+        .take_while(|(interval, _)| interval.start() < req_end)
         .filter(|(_, e)| !matches!(e.backing, MemoryBackingType::SharedMemory(_)))
         .map(|(interval, _)| {
             let act_start = interval.start().max(req_start);
             let act_end = interval.end().min(req_end);
-            (act_start, act_end)
+            (act_start as usize, act_end as usize)
         })
         .collect();
 
