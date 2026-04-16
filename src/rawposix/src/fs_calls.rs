@@ -1105,44 +1105,57 @@ pub extern "C" fn munmap_syscall(
         return syscall_error(Errno::EINVAL, "munmap", "address it not aligned");
     }
 
-    let vmmap = cage.vmmap.read();
-    let sysaddr = rounded_addr;
-    drop(vmmap);
-
     let rounded_length = round_up_page(len as u64) as usize;
-
-    // we are replacing munmap with mmap because we do not want to really deallocate the memory region
-    // we just want to set the prot of the memory region back to PROT_NONE
-    let result = unsafe {
-        libc::mmap(
-            sysaddr as *mut c_void,
-            rounded_length,
-            PROT_NONE,
-            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-            -1,
-            0,
-        ) as usize
-    };
-    // Check for different failure modes with specific error messages
-    if result as isize == -1 {
-        let errno = get_errno();
-        panic!(
-            "munmap: mmap failed during memory protection reset with errno: {:?}",
-            errno
-        );
-    }
-
-    if result != sysaddr {
-        panic!(
-            "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-            result as *const c_void, sysaddr as *const c_void
-        );
-    }
 
     let mut vmmap = cage.vmmap.write();
 
-    let user_addr = vmmap.sys_to_user(rounded_addr) as u32;
-    vmmap.remove_entry(user_addr >> PAGESHIFT, (rounded_length as u32) >> PAGESHIFT);
+    // Convert sys address to user-space page numbers to match interval tree keys
+    let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
+    let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
+
+    // Collect intersecting anonymous entries before mutating the tree.
+    // We must collect first to release the immutable borrow on vmmap.entries
+    // before calling user_to_sys (which borrows all of vmmap) and before
+    // calling remove_entry (which mutably borrows vmmap).
+    let overlaps: Vec<(usize, usize)> = vmmap
+        .entries
+        .overlapping(ie(req_start, req_end))
+        .filter(|(_, e)| !matches!(e.backing, MemoryBackingType::SharedMemory(_)))
+        .map(|(interval, _)| {
+            let act_start = interval.start().max(req_start);
+            let act_end = interval.end().min(req_end);
+            (act_start, act_end)
+        })
+        .collect();
+
+    // overlapping() borrow released — safe to call user_to_sys and mmap now
+    for (act_start, act_end) in overlaps {
+        let act_start_addr = vmmap.user_to_sys(act_start << PAGESHIFT);
+        let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
+        let result = unsafe {
+            libc::mmap(
+                act_start_addr as *mut c_void,
+                act_len,
+                PROT_NONE,
+                (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+                -1,
+                0,
+            ) as usize
+        };
+        if result as isize == -1 {
+            let errno = get_errno();
+            panic!("munmap: mmap failed during memory protection reset with errno: {:?}", errno);
+        }
+        if result != act_start_addr {
+            panic!(
+                "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
+                result as *const c_void,
+                act_start_addr as *const c_void
+            );
+        }
+    }
+
+    vmmap.remove_entry(req_start, req_end - req_start);
 
     0
 }
