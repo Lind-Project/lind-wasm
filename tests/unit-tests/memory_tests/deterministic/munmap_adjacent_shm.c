@@ -40,21 +40,21 @@ int main(void) {
 
     memset(shm, 0xAB, PAGE_SIZE);
 
-    char *anon = (char *)mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
-                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    assert(anon != MAP_FAILED && "anon mmap failed");
     printf("DIAG: shm  = %p\n", (void *)shm);
-    printf("DIAG: anon = %p  (anon + PAGE = %p, gap = %ld bytes)\n",
-           (void *)anon, (void *)(anon + PAGE_SIZE),
-           (long)(shm - (anon + PAGE_SIZE)));
 
-    if (anon + PAGE_SIZE != shm) {
-        printf("FAIL: could not create adjacent anon+shm layout; "
-               "allocator did not place anon immediately before shm.\n");
-        shmdt(shm);
-        shmctl(shmid, IPC_RMID, NULL);
-        return 1;
+    char *probe[8];
+    for (int i = 0; i < 8; i++) {
+        probe[i] = (char *)mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        assert(probe[i] != MAP_FAILED && "probe mmap failed");
+        printf("DIAG: probe[%d] = %p\n", i, (void *)probe[i]);
     }
+
+    printf("FAIL: diagnostic probe run — review layout above.\n");
+    for (int i = 0; i < 8; i++) munmap(probe[i], PAGE_SIZE);
+    shmdt(shm);
+    shmctl(shmid, IPC_RMID, NULL);
+    return 1;
 
     anon[0] = 0x11;
     anon[PAGE_SIZE - 1] = 0x22;
