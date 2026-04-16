@@ -26,7 +26,8 @@
 #define PAGE_SIZE 4096
 
 int main(void) {
-    int shmid = shmget(IPC_PRIVATE, PAGE_SIZE, 0666 | IPC_CREAT);
+    key_t key = 4242;
+    int shmid = shmget(key, PAGE_SIZE, 0666 | IPC_CREAT);
     assert(shmid != -1 && "shmget failed");
 
     char *shm = (char *)shmat(shmid, NULL, 0);
