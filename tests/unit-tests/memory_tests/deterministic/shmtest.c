@@ -26,7 +26,7 @@ int main()
     assert(buf1.shm_nattch == 3);
     assert(buf2.shm_nattch == 2);
 
-    shmctl(shmid1, IPC_RMID, (struct shmid_ds *) NULL);
+    shmctl(shmid1, IPC_RMID, (struct shmid_ds *) NULL); 
     shmctl(shmid2, IPC_RMID, (struct shmid_ds *) NULL);
     shmdt(shm1);
     shmdt(shm2);
