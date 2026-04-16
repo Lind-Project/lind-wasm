@@ -1133,7 +1133,7 @@ pub extern "C" fn munmap_syscall(
 
     // overlapping() borrow released — safe to call user_to_sys and mmap now
     for (act_start, act_end) in overlaps {
-        let act_start_addr = vmmap.user_to_sys(act_start << PAGESHIFT);
+        let act_start_addr = vmmap.user_to_sys((act_start as u32) << PAGESHIFT);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
         let result = unsafe {
             libc::mmap(
