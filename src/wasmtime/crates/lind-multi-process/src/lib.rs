@@ -7,7 +7,7 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
-use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH};
+use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
@@ -2210,6 +2210,40 @@ pub fn attach_shared_memory<
     }
 
     Err(anyhow!("Main Module does not contain a shared memory"))
+}
+
+pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {
+    // TODO: currently we explicitly allocate first guard page (0-stack_start)
+    // due to a known issue. This should be fixed in the future and only allocate
+    // the actual stack space (stack_start-stack_end)
+
+    let ret = make_syscall(
+        cageid,                // self cageid
+        (MMAP_SYSCALL) as u64, // syscall num
+        0, // since wasmtime operates with lower level memory, it always interacts with underlying os
+        cageid, // target cageid (should be same)
+        0, // map from address 0 (includes the leading guard page per the TODO above)
+        cageid,
+        stack_end as u64, // length: guard page + stack
+        cageid,
+        // PROT_READ | PROT_WRITE: stack needs both read and write access
+        (typemap::PROT_READ | typemap::PROT_WRITE) as u64,
+        cageid,
+        // MAP_PRIVATE: changes are not shared; MAP_ANONYMOUS: not file-backed;
+        // MAP_FIXED: must map at the exact address (address 0 for guard page + stack region)
+        (typemap::MAP_PRIVATE | typemap::MAP_ANONYMOUS | typemap::MAP_FIXED) as u64,
+        cageid,
+        u64::MAX, // fd: -1 (required for MAP_ANONYMOUS mappings)
+        cageid,
+        0,
+        cageid,
+    );
+
+    if ret < 0 {
+        return Err(anyhow!("failed to allocate stack"));
+    }
+
+    Ok(())
 }
 
 // check if the module has the necessary exported Asyncify functions

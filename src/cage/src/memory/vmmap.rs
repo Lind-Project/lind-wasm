@@ -255,7 +255,7 @@ pub struct Vmmap {
 
     pub start_address: u32, // start address of valid vmmap address range
     pub end_address: u32,   // end address of valid vmmap address range
-    pub program_break: u32, // program break (i.e. heap bottom) of the memory
+    pub heap_start: u32,    // start of heap memory
 }
 
 #[allow(dead_code)]
@@ -269,7 +269,7 @@ impl Vmmap {
             base_address: None,
             start_address: 0,
             end_address: DEFAULT_VMMAP_SIZE,
-            program_break: 0,
+            heap_start: 0,
         }
     }
 
@@ -284,7 +284,7 @@ impl Vmmap {
         self.base_address = None;
         self.start_address = 0;
         self.end_address = DEFAULT_VMMAP_SIZE;
-        self.program_break = 0;
+        self.heap_start = 0;
     }
 
     /// Rounds up a page number to the nearest multiple of pages_per_map
@@ -320,12 +320,12 @@ impl Vmmap {
         self.base_address = Some(base_address);
     }
 
-    /// Sets the program break for the memory
+    /// Sets the heap start page number for the memory
     ///
     /// Arguments:
-    /// - program_break: The program break to set
-    pub fn set_program_break(&mut self, program_break: u32) {
-        self.program_break = program_break;
+    /// - heap_start: The page number at which the heap begins
+    pub fn set_heap_start(&mut self, heap_start: u32) {
+        self.heap_start = heap_start;
     }
 
     /// Converts a user address to a system address

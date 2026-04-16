@@ -86,7 +86,7 @@ pub const THREEI_CAGEID: u64 = 999999;
 /// Default stack size assigned to each cage
 pub const DEFAULT_STACKSIZE: u32 = 8388608; // 8 MB
 /// Size of guard pages
-pub const GUARD_SIZE: u32 = 1024; // 1 KB
+pub const GUARD_SIZE: u32 = 4096; // 4 KB
 
 /// The starting index for function tables of wasm modules in Lind.
 /// function index of 1 must be reserved for SIG_IGN constant for signal handling

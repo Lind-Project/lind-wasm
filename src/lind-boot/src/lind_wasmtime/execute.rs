@@ -22,7 +22,8 @@ use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_v
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{
-    CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, get_memory_base,
+    CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, early_init_stack,
+    get_memory_base,
 };
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
@@ -242,6 +243,13 @@ pub fn execute_with_lind(
 
     if dylink_metadata.dylink_enabled {
         let lind_got = dylink_metadata.got.as_ref().unwrap();
+
+        early_init_stack(
+            cageid,
+            GUARD_SIZE as i32,
+            (GUARD_SIZE + DEFAULT_STACKSIZE) as i32,
+        )
+        .unwrap();
 
         // For each module (including the main module),
         // register its GOT imports with the shared LindGOT instance.

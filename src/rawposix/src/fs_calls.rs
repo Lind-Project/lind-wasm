@@ -1199,18 +1199,41 @@ pub extern "C" fn brk_syscall(
     let cage = get_cage(cageid).unwrap();
 
     let mut vmmap = cage.vmmap.write();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
+    let heap_opt = vmmap.find_page(vmmap.heap_start);
 
-    assert!(heap.npages == vmmap.program_break);
+    let heap = if heap_opt.is_none() {
+        // if heap page is not found, create an empty heap entry with 0 size
+        cage::VmmapEntry::new(
+            vmmap.heap_start,
+            0,
+            (PROT_READ | PROT_WRITE),
+            (PROT_READ | PROT_WRITE),
+            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+            false,
+            0,
+            0,
+            cageid,
+            MemoryBackingType::Anonymous,
+        )
+    } else {
+        heap_opt.unwrap().clone()
+    };
+
+    assert!(heap.page_num == vmmap.heap_start);
+
+    let old_brk_page = heap.page_num + heap.npages;
 
     // passing 0 to brk will always return the current brk
     if brk == 0 {
-        return (PAGESIZE * heap.npages) as i32;
+        return (PAGESIZE * old_brk_page) as i32;
     }
-
-    let old_brk_page = heap.npages;
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
+
+    // shrink heap below heap start is not allowed
+    if brk_page < vmmap.heap_start {
+        return syscall_error(Errno::ENOMEM, "brk", "no memory");
+    }
 
     // if we are incrementing program break, we need to check if we have enough space
     if brk_page > old_brk_page {
@@ -1220,12 +1243,12 @@ pub extern "C" fn brk_syscall(
     }
 
     // remove the old entries since new entry is overlapping with it.
-    vmmap.remove_entry(0, old_brk_page);
+    vmmap.remove_entry(heap.page_num, heap.npages);
 
     // update vmmap entry
     vmmap.add_entry_with_overwrite(
-        0,
-        brk_page,
+        heap.page_num,
+        brk_page - heap.page_num,
         heap.prot,
         heap.maxprot,
         heap.flags,
@@ -1240,8 +1263,6 @@ pub extern "C" fn brk_syscall(
 
     let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
-
-    vmmap.set_program_break(brk_page);
 
     drop(vmmap);
 
