@@ -4281,36 +4281,29 @@ pub extern "C" fn shmat_syscall(
     let result = vmmap.sys_to_user(result);
     drop(vmmap);
 
-    // If the syscall succeeded, update the vmmap entry.
-    if result as i32 >= 0 {
-        // Ensure the syscall attached the segment at the expected address.
-        if result as u32 != useraddr {
-            panic!("shmat did not attach at the expected address");
-        }
-        let mut vmmap = cage.vmmap.write();
-        let backing = MemoryBackingType::SharedMemory(shmid as u64);
-        // Use the effective protection (prot) for both the current and maximum protection.
-        let maxprot = prot;
-        // Add a new vmmap entry for the shared memory segment.
-        // Since shared memory is not file-backed, there are no extra mapping flags
-        // or file offset parameters to consider; thus, we pass 0 for both.
-        vmmap
-            .add_entry_with_overwrite(
-                useraddr >> PAGESHIFT,
-                (rounded_length >> PAGESHIFT) as u32,
-                prot,
-                maxprot,
-                0, // No flags for shared memory mapping
-                backing,
-                0, // Offset is not applicable for shared memory
-                len as i64,
-                cageid,
-            )
-            .expect("shmat: failed to add vmmap entry");
-    } else {
-        // If the syscall failed, propagate the error.
-        return result as i32;
+    // The host-side error case was already handled via is_mmap_error() above;
+    // here `result` is a valid u32 user-space address. Do NOT reinterpret it
+    // as a signed integer to detect failure — high addresses (>= 0x80000000)
+    // would alias to negative values and falsely look like errors.
+    if result as u32 != useraddr {
+        panic!("shmat did not attach at the expected address");
     }
+    let mut vmmap = cage.vmmap.write();
+    let backing = MemoryBackingType::SharedMemory(shmid as u64);
+    let maxprot = prot;
+    vmmap
+        .add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
+            prot,
+            maxprot,
+            0,
+            backing,
+            0,
+            len as i64,
+            cageid,
+        )
+        .expect("shmat: failed to add vmmap entry");
 
     useraddr as i32
 }
