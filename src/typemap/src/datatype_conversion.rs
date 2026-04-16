@@ -269,7 +269,7 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 ///
 /// ## Returns:
 ///     - buf: actual system address, which is the actual position that stores data
-pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
+pub fn sc_convert_buf(buf_arg: u64, _arg_cageid: u64, _cageid: u64) -> *const u8 {
     buf_arg as *const u8
 }
 
@@ -282,10 +282,10 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
 ///
 /// ## Returns:
 /// - The host address as u64, or 0 if the address is null.
-pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, cageid: u64) -> u64 {
+pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, _cageid: u64) -> u64 {
     #[cfg(feature = "secure")]
     {
-        if !validate_cageid(addr_cageid, cageid) {
+        if !validate_cageid(addr_cageid, _cageid) {
             return 0;
         }
     }

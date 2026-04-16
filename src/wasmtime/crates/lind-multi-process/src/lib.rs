@@ -350,7 +350,7 @@ impl<
         let asyncify_start_rewind_func = caller.get_asyncify_start_rewind().unwrap();
 
         // we want to send this address to child thread
-        let cloned_address = address as u64;
+        let _cloned_address = address as u64;
 
         let parent_cageid = self.cageid;
 

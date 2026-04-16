@@ -22,7 +22,6 @@ use wasmtime_environ::{EntityIndex, GlobalIndex};
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::LindGOT;
 
-use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
 
 /// Structure used to link wasm modules/instances together.
@@ -2003,7 +2002,7 @@ impl<T> Linker<T> {
     pub fn iter<'a: 'p, 'p>(
         &'a self,
         mut store: impl AsContextMut<Data = T> + 'p,
-    ) -> impl Iterator<Item = (&str, &str, Extern)> + 'p {
+    ) -> impl Iterator<Item = (&'a str, &'a str, Extern)> + 'p {
         self.map.iter().map(move |(key, item)| {
             let store = store.as_context_mut();
             (

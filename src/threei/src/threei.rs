@@ -835,7 +835,7 @@ fn _strlen_in_cage(src: *const u8, max_len: usize) -> Option<usize> {
 ///     - Failed string validation (e.g., missing null terminator).
 ///     - Invalid copytype.
 pub fn copy_data_between_cages(
-    thiscage: u64,
+    _thiscage: u64,
     _targetcage: u64,
     srcaddr: u64,
     srccage: u64,

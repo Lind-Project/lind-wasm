@@ -1428,7 +1428,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // pop the signal callstack information
-    pub fn pop_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+    pub fn pop_signal_asyncify_data(&mut self, _signal_handler: i32, _signo: i32) {
         self.0.signal_asyncify_data.pop();
     }
 
