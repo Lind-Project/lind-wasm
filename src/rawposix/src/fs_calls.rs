@@ -1,7 +1,7 @@
 use cage::{
     get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
-    shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
-    SHM_METADATA,
+    shmdt_helper, signal::signal::lind_send_signal, signal::signal::signal_check_trigger,
+    MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX, SHM_METADATA,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
@@ -275,13 +275,55 @@ pub extern "C" fn read_syscall(
         );
     }
 
-    // Call the underlying libc read.
-    let ret = unsafe { libc::read(kernel_fd, buf as *mut c_void, count) as i32 };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "read");
+    // For non-blocking fds, call read directly.
+    let flags = unsafe { libc::fcntl(kernel_fd, libc::F_GETFL) };
+    if flags >= 0 && (flags & libc::O_NONBLOCK != 0) {
+        let ret = unsafe { libc::read(kernel_fd, buf as *mut c_void, count) as i32 };
+        if ret < 0 {
+            return handle_errno(get_errno(), "read");
+        }
+        return ret;
     }
-    ret
+
+    // For blocking fds, poll in 100ms chunks so SIGALRM (and other signals)
+    // can interrupt the wait and return EINTR, matching POSIX semantics.
+    loop {
+        let mut pfd = libc::pollfd {
+            fd: kernel_fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let poll_ret = unsafe { libc::poll(&mut pfd, 1, 100) };
+
+        if poll_ret < 0 {
+            let errno = get_errno();
+            if errno == libc::EINTR as i32 {
+                if signal_check_trigger(cageid) {
+                    return syscall_error(Errno::EINTR, "read", "interrupted by signal");
+                }
+                continue;
+            }
+            return handle_errno(errno, "read");
+        }
+
+        if signal_check_trigger(cageid) {
+            return syscall_error(Errno::EINTR, "read", "interrupted by signal");
+        }
+
+        if poll_ret == 0 {
+            continue;
+        }
+
+        let ret = unsafe { libc::read(kernel_fd, buf as *mut c_void, count) as i32 };
+        if ret < 0 {
+            let errno = get_errno();
+            if errno == libc::EAGAIN as i32 || errno == libc::EWOULDBLOCK as i32 {
+                continue;
+            }
+            return handle_errno(errno, "read");
+        }
+        return ret;
+    }
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/close.2.html
@@ -439,17 +481,62 @@ pub extern "C" fn write_syscall(
         );
     }
 
-    let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
-
-    if ret < 0 {
-        let errno = get_errno();
-        // Linux delivers SIGPIPE before returning EPIPE on broken pipe writes
-        if errno == Errno::EPIPE as i32 {
-            lind_send_signal(cageid, SIGPIPE);
+    // For non-blocking fds, call write directly.
+    let flags = unsafe { libc::fcntl(kernel_fd, libc::F_GETFL) };
+    if flags >= 0 && (flags & libc::O_NONBLOCK != 0) {
+        let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
+        if ret < 0 {
+            let errno = get_errno();
+            if errno == Errno::EPIPE as i32 {
+                lind_send_signal(cageid, SIGPIPE);
+            }
+            return handle_errno(errno, "write");
         }
-        return handle_errno(errno, "write");
+        return ret;
     }
-    return ret;
+
+    // For blocking fds, poll in 100ms chunks so SIGALRM (and other signals)
+    // can interrupt the wait and return EINTR, matching POSIX semantics.
+    loop {
+        let mut pfd = libc::pollfd {
+            fd: kernel_fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        let poll_ret = unsafe { libc::poll(&mut pfd, 1, 100) };
+
+        if poll_ret < 0 {
+            let errno = get_errno();
+            if errno == libc::EINTR as i32 {
+                if signal_check_trigger(cageid) {
+                    return syscall_error(Errno::EINTR, "write", "interrupted by signal");
+                }
+                continue;
+            }
+            return handle_errno(errno, "write");
+        }
+
+        if signal_check_trigger(cageid) {
+            return syscall_error(Errno::EINTR, "write", "interrupted by signal");
+        }
+
+        if poll_ret == 0 {
+            continue;
+        }
+
+        let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
+        if ret < 0 {
+            let errno = get_errno();
+            if errno == Errno::EPIPE as i32 {
+                lind_send_signal(cageid, SIGPIPE);
+            }
+            if errno == libc::EAGAIN as i32 || errno == libc::EWOULDBLOCK as i32 {
+                continue;
+            }
+            return handle_errno(errno, "write");
+        }
+        return ret;
+    }
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/mkdir.2.html
