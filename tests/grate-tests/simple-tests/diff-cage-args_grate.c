@@ -76,7 +76,7 @@ int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	    2, 0, self_grate_id, arg1cage,
 	    // We need to modify the cageid here to indicate that we want the
 	    // address translated.
-	    (uint64_t)&new_path, self_grate_id | (1ULL << 63), arg2, arg2cage,
+	    (uint64_t)&new_path, self_grate_id | GRATE_MEMORY_FLAG, arg2, arg2cage,
 	    arg3, arg3cage, arg4, arg4cage, arg5, arg5cage, arg6, arg6cage,
 	    0 // we will handle the errno in this grate instead of translating
 	      // it to
