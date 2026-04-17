@@ -4281,10 +4281,6 @@ pub extern "C" fn shmat_syscall(
     let result = vmmap.sys_to_user(result);
     drop(vmmap);
 
-    // The host-side error case was already handled via is_mmap_error() above;
-    // here `result` is a valid u32 user-space address. Do NOT reinterpret it
-    // as a signed integer to detect failure — high addresses (>= 0x80000000)
-    // would alias to negative values and falsely look like errors.
     if result as u32 != useraddr {
         panic!("shmat did not attach at the expected address");
     }
