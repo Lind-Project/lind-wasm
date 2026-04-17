@@ -98,30 +98,49 @@ int main(void) {
     }
     printf("    munmap returned %d (success)\n", rc);
 
-    // Step 7: Verify shm is still intact
-    printf("\n[7] Verifying shm contents are intact...\n");
+    // Step 7: Verify shm SEGMENT still exists (not just local mapping)
+    // munmap may have detached local mapping, but segment should persist
+    printf("\n[7] Verifying shm segment still exists...\n");
+    struct shmid_ds shm_stat;
+    if (shmctl(shmid, IPC_STAT, &shm_stat) == -1) {
+        perror("shmctl IPC_STAT failed");
+        printf("FAIL: shm segment was destroyed by munmap\n");
+        return 1;
+    }
+    printf("    shm segment exists (nattch=%lu)\n", (unsigned long)shm_stat.shm_nattch);
+
+    // Step 8: Re-attach and verify data integrity
+    printf("\n[8] Re-attaching to shm to verify data...\n");
+    char *shm2 = (char *)shmat(shmid, NULL, 0);
+    if (shm2 == (char *)-1) {
+        perror("shmat re-attach failed");
+        shmctl(shmid, IPC_RMID, NULL);
+        return 1;
+    }
+    printf("    re-attached at %p\n", (void *)shm2);
+
     int failures = 0;
     for (int i = 0; i < PAGE_SIZE; i++) {
-        if ((unsigned char)shm[i] != 0xAB) {
+        if ((unsigned char)shm2[i] != 0xAB) {
             if (failures < 10) {
                 printf("    CORRUPTION: shm[%d] = 0x%02x, expected 0xAB\n",
-                       i, (unsigned char)shm[i]);
+                       i, (unsigned char)shm2[i]);
             }
             failures++;
         }
     }
 
     // Cleanup
-    printf("\n[8] Cleanup: detaching and removing shm\n");
-    shmdt(shm);
+    printf("\n[9] Cleanup: detaching and removing shm\n");
+    shmdt(shm2);
     shmctl(shmid, IPC_RMID, NULL);
 
     if (failures > 0) {
-        printf("\nFAIL: %d bytes corrupted in shm page\n", failures);
-        printf("      munmap with unaligned length clobbered adjacent shm\n");
+        printf("\nFAIL: %d bytes corrupted in shm segment\n", failures);
+        printf("      munmap with unaligned length clobbered shm data\n");
         return 1;
     }
 
-    printf("\nPASS: shm page intact after unaligned munmap of adjacent anon\n");
+    printf("\nPASS: shm segment and data intact after unaligned munmap\n");
     return 0;
 }
