@@ -38,10 +38,6 @@ int main(void) {
     }
     memset(anon, 0xCD, 2 * PAGE_SIZE);
 
-    printf("Layout: anon=[%p-%p) shm=[%p-%p)\n",
-           (void *)anon, (void *)(anon + 2 * PAGE_SIZE),
-           (void *)shm, (void *)(shm + PAGE_SIZE));
-
     // munmap with unaligned length - rounds up to cover shm
     if (munmap(anon, 2 * PAGE_SIZE + 1) != 0) {
         perror("munmap");
