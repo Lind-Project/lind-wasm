@@ -2,7 +2,7 @@
 #define _LIND_DEBUG_H
 
 // lind soft panic
-void lind_debug_panic(const char* msg);
+void lind_debug_panic (const char* msg);
 
 #ifdef LIND_DEBUG
 void lind_debug_printf(const char *fmt, ...);
