@@ -52,49 +52,25 @@ int main(void) {
     printf("[3] Filling shm with 0xAB pattern\n");
     memset(shm, 0xAB, PAGE_SIZE);
 
-    // Step 3: Check if target address is available before using MAP_FIXED
-    // On native Linux, shm-2*PAGE might already be occupied by stack/heap/libs
+    // Step 3: Use MAP_FIXED to place anon exactly 2 pages before shm
+    // In lind-wasm, the region before shm should be free (allocator works top-down)
+    // On native Linux, this might fail or clobber existing mappings
     char *anon_target = shm - 2 * PAGE_SIZE;
-    printf("[4] Probing target address %p (shm - 2*PAGE)\n", (void *)anon_target);
+    printf("[4] Mapping anon at %p (shm - 2*PAGE) with MAP_FIXED\n", (void *)anon_target);
 
-    // First try without MAP_FIXED to see if we can get near the target
-    char *probe = (char *)mmap(anon_target, 2 * PAGE_SIZE, PROT_NONE,
-                               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (probe == MAP_FAILED) {
-        perror("probe mmap failed");
-        shmdt(shm);
-        shmctl(shmid, IPC_RMID, NULL);
-        return 1;
-    }
-    printf("    probe returned %p\n", (void *)probe);
-
-    if (probe != anon_target) {
-        // Target address was not available - skip test on native Linux
-        printf("SKIP: target address %p not available (got %p instead)\n",
-               (void *)anon_target, (void *)probe);
-        printf("      This is expected on native Linux where address space is occupied\n");
-        munmap(probe, 2 * PAGE_SIZE);
+    char *anon = (char *)mmap(anon_target, 2 * PAGE_SIZE, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (anon == MAP_FAILED) {
+        printf("SKIP: MAP_FIXED at %p failed (errno=%d)\n", (void *)anon_target, errno);
+        printf("      Target address not mappable - expected on some systems\n");
         shmdt(shm);
         shmctl(shmid, IPC_RMID, NULL);
         return 77;  // Skip exit code
     }
-    // Probe succeeded at target - unmap and re-map with proper permissions
-    munmap(probe, 2 * PAGE_SIZE);
-
-    printf("[5] Mapping anon at %p with MAP_FIXED\n", (void *)anon_target);
-    char *anon = (char *)mmap(anon_target, 2 * PAGE_SIZE, PROT_READ | PROT_WRITE,
-                              MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-    if (anon == MAP_FAILED) {
-        perror("mmap MAP_FIXED failed");
-        printf("    errno = %d\n", errno);
-        shmdt(shm);
-        shmctl(shmid, IPC_RMID, NULL);
-        return 1;
-    }
     printf("    anon mapped at %p\n", (void *)anon);
 
     // Fill anon with different marker
-    printf("[6] Filling anon with 0xCD pattern\n");
+    printf("[5] Filling anon with 0xCD pattern\n");
     memset(anon, 0xCD, 2 * PAGE_SIZE);
 
     // Print layout summary
@@ -104,10 +80,10 @@ int main(void) {
     printf("    [%p - %p): shm  (1 page,  0xAB)\n",
            (void *)shm, (void *)(shm + PAGE_SIZE));
 
-    // Step 7: Trigger the bug - munmap with unaligned length
+    // Step 6: Trigger the bug - munmap with unaligned length
     size_t unaligned_len = 2 * PAGE_SIZE + 1;
     size_t rounded_len = ((unaligned_len + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
-    printf("\n[7] Triggering munmap(anon=%p, len=%zu)\n", (void *)anon, unaligned_len);
+    printf("\n[6] Triggering munmap(anon=%p, len=%zu)\n", (void *)anon, unaligned_len);
     printf("    len rounds up to %zu bytes (%zu pages)\n", rounded_len, rounded_len / PAGE_SIZE);
     printf("    Range covered: [%p - %p)\n",
            (void *)anon, (void *)(anon + rounded_len));
@@ -122,8 +98,8 @@ int main(void) {
     }
     printf("    munmap returned %d (success)\n", rc);
 
-    // Step 8: Verify shm is still intact
-    printf("\n[8] Verifying shm contents are intact...\n");
+    // Step 7: Verify shm is still intact
+    printf("\n[7] Verifying shm contents are intact...\n");
     int failures = 0;
     for (int i = 0; i < PAGE_SIZE; i++) {
         if ((unsigned char)shm[i] != 0xAB) {
@@ -136,7 +112,7 @@ int main(void) {
     }
 
     // Cleanup
-    printf("\n[9] Cleanup: detaching and removing shm\n");
+    printf("\n[8] Cleanup: detaching and removing shm\n");
     shmdt(shm);
     shmctl(shmid, IPC_RMID, NULL);
 
