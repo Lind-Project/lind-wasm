@@ -5,7 +5,6 @@ use crate::runtime::vm::{
 use crate::runtime::Uninhabited;
 use crate::store::{AutoAssertNoGc, StoreData, StoreId, StoreOpaque, Stored};
 use crate::type_registry::RegisteredType;
-use crate::vm::TrapReason;
 use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, CallHook, Engine, Extern, FuncType, Instance, Module, Ref,
@@ -20,7 +19,7 @@ use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
 use wasmtime_environ::{TableIndex, VMSharedTypeIndex};
-use wasmtime_lind_utils::symbol_table::SymbolMap;
+use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 /// A reference to the abstract `nofunc` heap value.
 ///
@@ -1676,7 +1675,7 @@ fn enter_wasm<T>(store: &mut StoreContextMut<'_, T>) -> Option<usize> {
         return None;
     }
 
-    let stack_pointer = crate::runtime::vm::get_stack_pointer();
+    let _stack_pointer = crate::runtime::vm::get_stack_pointer();
 
     // Determine the stack pointer where, after which, any wasm code will
     // immediately trap. This is checked on the entry to all wasm functions.
@@ -2153,6 +2152,15 @@ impl<T> Caller<'_, T> {
     /// find library symbol from global scope
     pub fn find_library_symbol_from_global(&mut self, name: &str) -> Option<u32> {
         self.store.find_library_symbol_from_global(name)
+    }
+
+    // get and set library symbol table, used for cloning symbol table across fork/thread
+    pub fn get_library_symbol_table(&self) -> &SymbolTable {
+        self.store.get_library_symbol_table()
+    }
+
+    pub fn set_library_symbol_table(&mut self, symbol_table: SymbolTable) {
+        self.store.set_library_symbol_table(symbol_table);
     }
 
     /// detach the library

@@ -231,7 +231,7 @@ impl Global {
     ///   global may be accessed concurrently.
     pub fn get_handler_as_u64(&self, mut store: impl AsContextMut) -> *mut u64 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
-        let global_ty = self._ty(&store);
+        let _global_ty = self._ty(&store);
         unsafe {
             let definition = &mut *store[self.0].definition;
             definition.as_u64_mut()

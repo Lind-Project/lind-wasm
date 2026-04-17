@@ -341,7 +341,7 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   memset(args, 0, sizeof(struct clone_args));
   args->flags = clone_flags;
   args->stack = real_stack_bottom;
-  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE;
+  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE - pd->guardsize;
   args->child_tid = &pd->tid;
 
   // do the clone call

@@ -1,6 +1,7 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
+use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
@@ -15,7 +16,7 @@ use std::sync::atomic::Ordering::*;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
+use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
     MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,

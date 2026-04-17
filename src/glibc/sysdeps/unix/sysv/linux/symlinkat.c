@@ -1,4 +1,4 @@
-/* Get file status.  Linux version.
+/* Create a symbolic link relative to a directory file descriptor. Linux version.
    Copyright (C) 2020-2024 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
@@ -15,25 +15,22 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
-#include <sys/stat.h>
+   
+#include <errno.h>
+#include <unistd.h>
 #include <fcntl.h>
-#include <kernel_stat.h>
+
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 #include <addr_translation.h>
 
-#if !XSTAT_IS_XSTAT64
 int
-__lstat (const char *file, struct stat *buf)
+symlinkat (const char *from, int fd, const char *to)
 {
-  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
-  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  uint64_t host_from = TRANSLATE_GUEST_POINTER_TO_HOST(from);
+  uint64_t host_to = TRANSLATE_GUEST_POINTER_TO_HOST(to);
 
-  return MAKE_LEGACY_SYSCALL (LSTAT_SYSCALL, "syscall|lstat",
-               host_file, host_buf,
-               NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return MAKE_LEGACY_SYSCALL(SYMLINKAT_SYSCALL, "syscall|symlinkat",
+      host_from, (uint64_t) fd, host_to,
+      NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
-
-weak_alias (__lstat, lstat)
-#endif
