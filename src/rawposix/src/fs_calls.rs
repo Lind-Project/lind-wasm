@@ -882,6 +882,8 @@ pub extern "C" fn mmap_syscall(
     let rounded_length = round_up_page(len as u64);
 
     let mut useraddr = addr as u32;
+    eprintln!("[mmap] addr_arg={:#x}, addr={:?}, useraddr={:#x}, MAP_FIXED={}",
+              addr_arg, addr, useraddr, flags & MAP_FIXED as i32 != 0);
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
         let mut vmmap = cage.vmmap.write();
@@ -918,6 +920,7 @@ pub extern "C" fn mmap_syscall(
     let vmmap = cage.vmmap.read();
 
     let sysaddr = vmmap.user_to_sys(useraddr);
+    eprintln!("[mmap] useraddr={:#x} -> sysaddr={:#x}", useraddr, sysaddr);
 
     drop(vmmap);
 
