@@ -1,33 +1,9 @@
-// Test: unaligned-length munmap must not clobber a nearby shm page.
+// Regression test for PR #1075: munmap with unaligned length must not clobber adjacent shm pages.
 //
-// Regression test for the bug fixed in PR #1075:
-//   munmap_syscall rounded `len` up to a page multiple and issued a single
-//   mmap(MAP_FIXED|PROT_NONE) over the whole rounded range. When that
-//   range crossed into a SharedMemory-backed vmmap entry, the host-level
-//   PROT_NONE silently clobbered the shm page.
-//
-// Layout strategy (no MAP_FIXED, no shmat hint):
-//   lind's allocator places NULL-addr shmat / mmap at the top of a free
-//   gap, and empirically leaves a 1-page stride between consecutive
-//   NULL-addr allocations. So:
-//
-//     shmat(NULL) -> shm at top page T
-//     mmap (NULL) -> anon at T - 2*PAGE
-//     page at   T - PAGE  -> unmapped gap
-//
-//     [ anon @ T-2P ][ gap @ T-P ][ shm @ T ]
-//
-// munmap(anon, 2*PAGE+1) rounds up to 3*PAGE and targets [T-2P .. T+P),
-// covering {anon, gap, shm}. The shm entry's backing is SharedMemory, so:
-//
-//   Buggy path: one mmap(PROT_NONE, MAP_FIXED) over the full 3*PAGE range
-//               clobbers shm's host memory -> reading shm[0] faults.
-//   Fixed path: the overlap loop filters out the SharedMemory entry;
-//               only the anon page gets PROT_NONE'd. shm stays readable.
-//
-// The stride is asserted explicitly — if allocator behavior ever changes
-// and anon doesn't land at T - 2*PAGE, the test fails loudly instead of
-// silently passing.
+// Layout: shmat(NULL) -> shm @ T, mmap(NULL) -> anon @ T-2P, gap @ T-P.
+// munmap(anon, 2*PAGE+1) rounds to 3*PAGE, covering [T-2P, T+P).
+// Buggy path: single PROT_NONE over full range wipes shm. Fixed path: shm skipped.
+// Stride is asserted — if allocator changes, test fails loudly rather than passing silently.
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
@@ -53,17 +29,11 @@ int main(void) {
     assert(anon != MAP_FAILED && "anon mmap failed");
     memset(anon, 0xCD, PAGE_SIZE);
 
-    // Precondition on allocator layout: anon must land exactly 2 pages
-    // below shm (one page of unmapped gap between them). If this ever
-    // changes, fail loudly instead of passing by accident.
+    // Allocator must place anon at shm - 2*PAGE; fail loudly if layout changes.
     assert(shm == anon + 2 * PAGE_SIZE &&
            "allocator layout changed: anon is not at shm - 2*PAGE");
 
-    // Unaligned munmap starting at anon, ending one byte past the gap:
-    //   len = 2*PAGE+1  ->  rounded length = 3*PAGE
-    //   rounded range   =  [anon, anon + 3*PAGE) = [anon, shm + PAGE)
-    // Buggy runtime PROT_NONEs the whole range (clobbering shm).
-    // Fixed runtime skips the SharedMemory-backed page.
+    // munmap(anon, 2*PAGE+1) rounds to 3*PAGE -> [anon, shm+PAGE). Shm must survive.
     int rc = munmap(anon, 2 * PAGE_SIZE + 1);
     assert(rc == 0 && "trigger munmap failed");
 
