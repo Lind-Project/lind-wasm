@@ -960,6 +960,7 @@ impl<T> Linker<T> {
                         | "__wasm_apply_data_relocs"
                         | "__wasm_apply_global_relocs"
                         | "__wasm_apply_tls_relocs"
+                        | "__wasm_init_tls"
                         // asyncify symbols
                         | "asyncify_start_unwind"
                         | "asyncify_stop_unwind"

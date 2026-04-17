@@ -191,7 +191,9 @@ fn add_syscall_to_linker<
             // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
             // If fork is called within the signal handler, asyncify will unwind the stack;
             // we save the syscall return value so it can be restored on rewind.
-            if -retval == sysdefs::constants::Errno::EINTR as i32 {
+            // Only negate `retval` if it falls within the valid errno range;
+            // since negating `I32::MIN` would cause an overflow panic.
+            if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i32 {
                 caller.as_context_mut().append_syscall_asyncify_data(retval);
                 wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
 
