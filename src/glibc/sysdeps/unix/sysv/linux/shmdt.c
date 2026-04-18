@@ -25,12 +25,11 @@
 /* Detach shared memory segment starting at address specified by SHMADDR
    from the caller's data segment.  */
 
-// Do NOT translate shmaddr - it's a guest virtual address, not a data pointer.
-// rawposix handles the user->sys translation internally.
 int
 shmdt (const void *shmaddr)
 {
+  uint64_t host_shmaddr = TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr);
   return MAKE_LEGACY_SYSCALL (SHMDT_SYSCALL, "syscall|shmdt",
-			       (uint64_t)(uintptr_t) shmaddr, NOTUSED, NOTUSED,
+			       host_shmaddr, NOTUSED, NOTUSED,
 			       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

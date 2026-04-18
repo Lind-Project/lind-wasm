@@ -4427,7 +4427,11 @@ pub extern "C" fn shmdt_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let useraddr = sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid);
+    // NOTE: glibc's shmdt wrapper already calls TRANSLATE_GUEST_POINTER_TO_HOST,
+    // so shmaddr_arg is already a host/system pointer. Do NOT translate again.
+    // This avoids dependency on vmmap.base_address which can change after fork/exec.
+    let sysaddr = shmaddr_arg as usize;
+
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -4444,29 +4448,24 @@ pub extern "C" fn shmdt_syscall(
     let cage = get_cage(cageid).unwrap();
 
     // Check that the provided address is aligned on a page boundary.
-    let rounded_addr = round_up_page(useraddr as u64) as usize;
-    if rounded_addr != useraddr as usize {
+    if sysaddr & (PAGESIZE as usize - 1) != 0 {
         return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
     }
 
-    // Convert the user address into a system address using the vmmap.
-    let vmmap = cage.vmmap.read();
-    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
-    drop(vmmap);
-
-    // Call shmdt_helper which returns length of the detached segment
+    // Call shmdt_helper which returns length of the detached segment.
+    // Pass the host address directly - rev_shm stores host addresses from shmat.
     let length = shmdt_helper(cageid, sysaddr as *mut u8);
     if length < 0 {
         return length;
     }
 
     // Remove the mapping from the vmmap.
-    // This call removes the range starting at the page-aligned user address,
-    // for the number of pages that cover the shared memory region.
+    // Convert sys address back to user address for vmmap bookkeeping.
     let mut vmmap = cage.vmmap.write();
+    let useraddr = vmmap.sys_to_user(sysaddr);
     vmmap
         .remove_entry(
-            rounded_addr as u32 >> PAGESHIFT,
+            useraddr >> PAGESHIFT,
             (length as u32) >> PAGESHIFT,
         )
         .expect("shmdt: remove_entry failed");
