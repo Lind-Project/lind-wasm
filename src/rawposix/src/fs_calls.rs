@@ -4464,10 +4464,7 @@ pub extern "C" fn shmdt_syscall(
     let mut vmmap = cage.vmmap.write();
     let useraddr = vmmap.sys_to_user(sysaddr);
     vmmap
-        .remove_entry(
-            useraddr >> PAGESHIFT,
-            (length as u32) >> PAGESHIFT,
-        )
+        .remove_entry(useraddr >> PAGESHIFT, (length as u32) >> PAGESHIFT)
         .expect("shmdt: remove_entry failed");
 
     0
