@@ -1112,20 +1112,10 @@ pub extern "C" fn munmap_syscall(
     let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
     let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
 
-    // Collect owned page ranges first to release the iterator borrow before mutating.
-    // interval.end() is inclusive, so +1 converts to exclusive to match req_end.
-    let overlaps: Vec<(usize, usize)> = vmmap
-        .find_page_iter(req_start)
-        .take_while(|(interval, _)| interval.start() < req_end)
-        .filter(|(_, e)| !matches!(e.backing, MemoryBackingType::SharedMemory(_)))
-        .map(|(interval, _)| {
-            let act_start = interval.start().max(req_start);
-            let act_end = (interval.end() + 1).min(req_end);
-            (act_start as usize, act_end as usize)
-        })
-        .collect();
+    let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
 
     for (act_start, act_end) in overlaps {
+        let (act_start, act_end) = (act_start as usize, act_end as usize);
         let act_start_addr = vmmap.user_to_sys((act_start as u32) << PAGESHIFT);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
         let result = unsafe {
