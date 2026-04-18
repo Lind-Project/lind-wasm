@@ -14,7 +14,7 @@ use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
-use wasmtime_lind_multi_process::{get_memory_base, LindHost};
+use wasmtime_lind_multi_process::{get_memory_base, get_memory_base_and_size, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed
@@ -317,10 +317,16 @@ fn add_environ_funcs_to_linker<
             let cx = get_environ(caller.data());
             let argc = cx.args.len() as u32;
             let buf_size: u32 = cx.args.iter().map(|a| a.len() as u32 + 1).sum();
-            let base = get_memory_base(&mut caller) as *mut u8;
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+            let off_argc = ptr_argc as u32 as usize;
+            let off_buf_size = ptr_buf_size as u32 as usize;
+            if off_argc + 4 > mem_size || off_buf_size + 4 > mem_size {
+                return 21; // EFAULT
+            }
             unsafe {
-                write_u32(base, ptr_argc as usize, argc);
-                write_u32(base, ptr_buf_size as usize, buf_size);
+                write_u32(base, off_argc, argc);
+                write_u32(base, off_buf_size, buf_size);
             }
             0
         },
@@ -332,11 +338,16 @@ fn add_environ_funcs_to_linker<
         move |mut caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let args: Vec<String> = cx.args.clone();
-            let base = get_memory_base(&mut caller) as *mut u8;
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
             let mut buf_offset = argv_buf as u32;
             for (i, arg) in args.iter().enumerate() {
-                let ptr_slot = argv_ptrs as usize + i * 4;
+                let ptr_slot = argv_ptrs as u32 as usize + i * 4;
                 let bytes = arg.as_bytes();
+                let end = buf_offset as usize + bytes.len() + 1;
+                if ptr_slot + 4 > mem_size || end > mem_size {
+                    return 21; // EFAULT
+                }
                 unsafe {
                     write_u32(base, ptr_slot, buf_offset);
                     write_bytes(base, buf_offset as usize, bytes);
@@ -359,10 +370,16 @@ fn add_environ_funcs_to_linker<
                 .iter()
                 .map(|(k, v)| k.len() as u32 + 1 + v.len() as u32 + 1)
                 .sum();
-            let base = get_memory_base(&mut caller) as *mut u8;
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+            let off_count = ptr_count as u32 as usize;
+            let off_buf_size = ptr_buf_size as u32 as usize;
+            if off_count + 4 > mem_size || off_buf_size + 4 > mem_size {
+                return 21; // EFAULT
+            }
             unsafe {
-                write_u32(base, ptr_count as usize, count);
-                write_u32(base, ptr_buf_size as usize, buf_size);
+                write_u32(base, off_count, count);
+                write_u32(base, off_buf_size, buf_size);
             }
             0
         },
@@ -374,12 +391,17 @@ fn add_environ_funcs_to_linker<
         move |mut caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let env: Vec<(String, String)> = cx.env.clone();
-            let base = get_memory_base(&mut caller) as *mut u8;
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
             let mut buf_offset = env_buf as u32;
             for (i, (key, val)) in env.iter().enumerate() {
-                let ptr_slot = env_ptrs as usize + i * 4;
+                let ptr_slot = env_ptrs as u32 as usize + i * 4;
                 let entry = format!("{}={}", key, val);
                 let bytes = entry.as_bytes();
+                let end = buf_offset as usize + bytes.len() + 1;
+                if ptr_slot + 4 > mem_size || end > mem_size {
+                    return 21; // EFAULT
+                }
                 unsafe {
                     write_u32(base, ptr_slot, buf_offset);
                     write_bytes(base, buf_offset as usize, bytes);
@@ -395,20 +417,22 @@ fn add_environ_funcs_to_linker<
         module,
         "random_get",
         move |mut caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
-            let base = get_memory_base(&mut caller) as *mut u8;
+            let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
+            let base = base_u64 as *mut u8;
+            let offset = buf as u32 as usize;
+            let len = buf_len as u32 as usize;
 
-            // Use rand to fill up the buffer of requested size
-            let mut bytes = vec![0u8; buf_len as usize];
+            if offset + len > mem_size {
+                return 21; // EFAULT
+            }
+
+            let mut bytes = vec![0u8; len];
             let mut rng = rand::thread_rng();
             rng.fill(&mut bytes[..]);
 
-            // Copy to the provided buffer
             unsafe {
-                write_bytes(base, buf as usize, &bytes);
+                write_bytes(base, offset, &bytes);
             }
-
-            // wasip1::random_get expects return value of 0 on success, positive numbers represent
-            // error codes
             0
         },
     )?;
