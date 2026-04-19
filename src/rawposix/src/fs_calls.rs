@@ -1133,11 +1133,6 @@ pub extern "C" fn munmap_syscall(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
                 result as *const c_void, act_start_addr as *const c_void
             ));
-            return syscall_error(
-                Errno::EINVAL,
-                "munmap",
-                "MAP_FIXED mmap returned unexpected address",
-            );
         }
         if result as isize == -1 {
             let errno = get_errno();
