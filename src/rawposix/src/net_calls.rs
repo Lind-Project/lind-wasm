@@ -1,5 +1,4 @@
 use cage::{get_cage, readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use fdtables;
 use lazy_static::lazy_static;
 use libc::*;
@@ -7,6 +6,7 @@ use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
@@ -290,8 +290,19 @@ pub extern "C" fn ppoll_syscall(
 
     // Call poll with the same args (fds, nfds, timeout)
     let result = poll_syscall(
-        cageid, fds_arg, fds_cageid, nfds_arg, nfds_cageid, timeout_arg, timeout_cageid,
-        UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
+        cageid,
+        fds_arg,
+        fds_cageid,
+        nfds_arg,
+        nfds_cageid,
+        timeout_arg,
+        timeout_cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Restore the original signal mask

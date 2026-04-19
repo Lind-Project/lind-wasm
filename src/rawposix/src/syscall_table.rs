@@ -22,8 +22,7 @@ use super::net_calls::{
     epoll_create_syscall, epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall,
     getpeername_syscall, getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall,
     ppoll_syscall, recvfrom_syscall, recvmsg_syscall, select_syscall, sendmsg_syscall,
-    sendto_syscall,
-    setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
+    sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
 };
 use super::sys_calls::{
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
