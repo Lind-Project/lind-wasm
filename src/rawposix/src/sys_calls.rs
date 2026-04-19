@@ -680,9 +680,9 @@ pub extern "C" fn getpid_syscall(
 /// Returns the process group ID of the process specified by pid.
 /// If pid is 0, returns the process group ID of the calling process.
 ///
-/// Lind does not implement process groups. This always returns the cage's
-/// own cageid, which is platform-specific behavior that cannot be changed
-/// with a grate since getpgid is handled directly by RawPOSIX.
+/// Lind does not implement process groups. The default RawPOSIX behavior
+/// always returns the cage's own cageid. A grate can interpose on this
+/// syscall to provide different process group semantics.
 ///
 /// ## Returns
 ///     - The cageid (as process group ID) on success.

@@ -1,8 +1,6 @@
 #include <unistd.h>
-#include <sysdep-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
-#include <addr_translation.h>
 
 pid_t
 __getpgid (pid_t pid)
