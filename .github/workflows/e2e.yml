@@ -102,7 +102,7 @@ jobs:
           echo "----------------------------------"
 
       - name: Upload HTML report artifact to report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: wasm-e2e-report
           path: |
@@ -112,7 +112,7 @@ jobs:
           retention-days: 7
 
       - name: Upload wasm JSON report artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: wasm-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.WASM_REPORT_JSON_FILE }}
@@ -120,7 +120,7 @@ jobs:
           retention-days: 7
 
       - name: Upload grate JSON report artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: grate-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.GRATE_REPORT_JSON_FILE }}
@@ -128,7 +128,7 @@ jobs:
           retention-days: 7
 
       - name: Upload unified runner HTML report artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: wasm-e2e-unified-html
           path: |
