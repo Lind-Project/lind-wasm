@@ -122,6 +122,17 @@ pub extern "C" fn openat_syscall(
             Ok(p) => p,
             Err(_) => return syscall_error(Errno::EINVAL, "openat", "invalid path"),
         };
+
+        // Reject absolute paths — the host kernel ignores dirfd for absolute paths,
+        // which would allow a guest to escape the cage sandbox.
+        if raw_path.to_bytes().starts_with(b"/") {
+            return syscall_error(
+                Errno::EACCES,
+                "openat",
+                "absolute path bypasses dirfd sandbox",
+            );
+        }
+
         let c_path = match CString::new(raw_path) {
             Ok(c) => c,
             Err(_) => return syscall_error(Errno::EINVAL, "openat", "invalid path"),
@@ -2108,15 +2119,18 @@ pub extern "C" fn readlinkat_syscall(
 
         let raw_path = match get_cstr(path_arg) {
             Ok(p) => p,
-            Err(_) => {
-                return syscall_error(
-                    Errno::EINVAL,
-                    "readlinkat",
-                    "invalid  
-        path",
-                )
-            }
+            Err(_) => return syscall_error(Errno::EINVAL, "readlinkat", "invalid path"),
         };
+
+        // Reject absolute paths — the host kernel ignores dirfd for absolute paths,
+        // which would allow a guest to read arbitrary host filesystem paths.
+        if raw_path.to_bytes().starts_with(b"/") {
+            return syscall_error(
+                Errno::EACCES,
+                "readlinkat",
+                "absolute path bypasses dirfd sandbox",
+            );
+        }
 
         unsafe { libc::readlinkat(kernel_fd, raw_path.as_ptr() as *const c_char, buf, buflen) }
     };
@@ -2328,6 +2342,17 @@ pub extern "C" fn unlinkat_syscall(
         // For this case, we pass the provided pathname directly.
         let pathname = pathname_arg;
         let tmp_cstr = get_cstr(pathname).unwrap();
+
+        // Reject absolute paths — the host kernel ignores dirfd for absolute paths,
+        // which would allow a guest to escape the cage sandbox.
+        if tmp_cstr.to_bytes().starts_with(b"/") {
+            return syscall_error(
+                Errno::EACCES,
+                "unlinkat",
+                "absolute path bypasses dirfd sandbox",
+            );
+        }
+
         c_path = CString::new(tmp_cstr).unwrap();
         vfd.underfd as i32
     };
@@ -4791,10 +4816,20 @@ pub extern "C" fn symlinkat_syscall(
         // Use the raw (untranslated) linkpath here intentionally — sc_convert_path_to_host
         // resolves relative to CWD, but symlinkat interprets linkpath relative to dirfd.
         // The kernel handles that resolution, so we pass the original guest pointer.
+        // However, we must reject absolute paths because the host kernel ignores dirfd
+        // for absolute paths, which would allow a guest to escape the cage sandbox.
         let raw_linkpath = match get_cstr(linkpath_arg) {
             Ok(p) => p,
             Err(_) => return syscall_error(Errno::EINVAL, "symlinkat", "invalid linkpath"),
         };
+
+        if raw_linkpath.to_bytes().starts_with(b"/") {
+            return syscall_error(
+                Errno::EACCES,
+                "symlinkat",
+                "absolute path bypasses dirfd sandbox",
+            );
+        }
 
         unsafe {
             libc::symlinkat(
