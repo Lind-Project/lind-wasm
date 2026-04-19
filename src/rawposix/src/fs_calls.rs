@@ -1130,15 +1130,21 @@ pub extern "C" fn munmap_syscall(
         };
         if result as isize == -1 {
             let errno = get_errno();
-            panic!(
-                "munmap: mmap failed during memory protection reset with errno: {:?}",
-                errno
+            return syscall_error(
+                errno,
+                "munmap",
+                "mmap failed during memory protection reset",
             );
         }
         if result != act_start_addr {
-            panic!(
+            lind_debug_panic(&format!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
                 result as *const c_void, act_start_addr as *const c_void
+            ));
+            return syscall_error(
+                Errno::EINVAL,
+                "munmap",
+                "MAP_FIXED mmap returned unexpected address",
             );
         }
     }
