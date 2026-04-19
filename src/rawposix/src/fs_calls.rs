@@ -1136,11 +1136,7 @@ pub extern "C" fn munmap_syscall(
         }
         if result as isize == -1 {
             let errno = get_errno();
-            return syscall_error(
-                errno,
-                "munmap",
-                "mmap failed during memory protection reset",
-            );
+            return handle_errno(errno, "munmap");
         }
     }
 
