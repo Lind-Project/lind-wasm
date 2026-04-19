@@ -1128,14 +1128,6 @@ pub extern "C" fn munmap_syscall(
                 0,
             ) as usize
         };
-        if result as isize == -1 {
-            let errno = get_errno();
-            return syscall_error(
-                errno,
-                "munmap",
-                "mmap failed during memory protection reset",
-            );
-        }
         if result != act_start_addr {
             lind_debug_panic(&format!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
@@ -1145,6 +1137,14 @@ pub extern "C" fn munmap_syscall(
                 Errno::EINVAL,
                 "munmap",
                 "MAP_FIXED mmap returned unexpected address",
+            );
+        }
+        if result as isize == -1 {
+            let errno = get_errno();
+            return syscall_error(
+                errno,
+                "munmap",
+                "mmap failed during memory protection reset",
             );
         }
     }
