@@ -71,10 +71,7 @@ pub extern "C" fn grate_callback_trampoline(
 
             let typed_func: PassFptrTyped = match store.data().pass_fptr_func.clone() {
                 // Check if the dispatcher function is already cached.
-                Some(f) => f,
-                // Retrieve and store the dispatcher function. Done on the first syscall
-                // invocation.
-                None => {
+                _ => {
                     let entry_func = instance
                         .host_state()
                         .downcast_ref::<Instance>()
@@ -114,6 +111,7 @@ pub extern "C" fn grate_callback_trampoline(
         })
         .unwrap_or(threei_const::GRATE_ERR)
     };
+    println!("[grate_callback_trampoline] cageid: {}, arg1cageid: {}, grate_ret: {}", cageid, arg1cageid, grate_ret);
     // Push the vmctx back to the global pool
     set_vmctx(cageid, vmctx_wrapper);
     grate_ret

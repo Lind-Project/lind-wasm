@@ -677,10 +677,21 @@ fn load_main_module(
 
     // 5) Create backup instances to populate the vmctx pool
     // See more comments in lind-3i/lib.rs
-    for _ in 0..INSTANCE_NUMBER {
+    for i in 0..INSTANCE_NUMBER {
         let (instance, backup_cage_instanceid) = linker
             .instantiate_with_lind_thread(&mut *store, &module, false)
             .context(format!("failed to instantiate"))?;
+
+        let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+        let tmp_stack_pointer = stack_pointer - 65536;
+        // println!("stack pointer: {}", stack_pointer);
+         let stack_pointer_setter = instance                                                                                                                      
+            .get_typed_func::<i32, ()>(&mut *store, "set_stack_pointer")                                                                                         
+            .unwrap();                                                                                                                                           
+        stack_pointer_setter.call(&mut *store, (tmp_stack_pointer - (i as u32 + 1) * 4096) as i32).unwrap();                                                             
+                                                                                                 
+        // Pre-populate export cache while still sequential                                                                                                  
+        let _ = instance.get_export(&mut *store, "pass_fptr_to_wt");
 
         // Extract vmctx pointer
         let backup_cage_storeopaque = store.inner_mut();

@@ -16,9 +16,11 @@
 #include <stdint.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <assert.h>
 #include <lind_syscall.h>
 
 #define MMAP_SYSCALL  9
+#define GETPID_SYSCALL 39
 #define FUTEX_SYSCALL 202
 
 /* ── Dispatcher ─────────────────────────────────────────────────────── */
@@ -46,34 +48,61 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
 
 /* Intercept mmap — the crash site at fs_calls.rs:795.
  * Just forward it. The grate dispatch round-trip is the delay. */
-int mmap_handler(uint64_t cageid,
+// int mmap_handler(uint64_t cageid,
+//                  uint64_t arg1, uint64_t arg1cage,
+//                  uint64_t arg2, uint64_t arg2cage,
+//                  uint64_t arg3, uint64_t arg3cage,
+//                  uint64_t arg4, uint64_t arg4cage,
+//                  uint64_t arg5, uint64_t arg5cage,
+//                  uint64_t arg6, uint64_t arg6cage) {
+//     return make_threei_call(MMAP_SYSCALL, 0,
+//                             cageid, arg1cage,
+//                             arg1, arg1cage, arg2, arg2cage,
+//                             arg3, arg3cage, arg4, arg4cage,
+//                             arg5, arg5cage, arg6, arg6cage, 0);
+// }
+
+void sleep_and_print(uint64_t arg1cage, int get)
+{
+    // sleep(1);
+    printf("arg1cage=%lld, get pid=%d\n", arg1cage, get);
+    fflush(stdout);
+    // exit(1);
+}
+
+int getpid_handler(uint64_t cageid,
                  uint64_t arg1, uint64_t arg1cage,
                  uint64_t arg2, uint64_t arg2cage,
                  uint64_t arg3, uint64_t arg3cage,
                  uint64_t arg4, uint64_t arg4cage,
                  uint64_t arg5, uint64_t arg5cage,
                  uint64_t arg6, uint64_t arg6cage) {
-    return make_threei_call(MMAP_SYSCALL, 0,
+    int pid = make_threei_call(GETPID_SYSCALL, 0,
                             cageid, arg1cage,
                             arg1, arg1cage, arg2, arg2cage,
                             arg3, arg3cage, arg4, arg4cage,
                             arg5, arg5cage, arg6, arg6cage, 0);
+    // printf("[grate] getpid_handler: cageid: %lld, arg1cage: %lld, pid: %lld\n", cageid, arg1cage, pid);
+    // if(arg1cage != pid)
+    //     sleep_and_print(arg1cage, pid);
+    // assert(((int)arg1cage) == pid);
+    return pid;
 }
 
 /* Intercept futex — high-frequency during thread sync, adds more pressure. */
-int futex_handler(uint64_t cageid,
-                  uint64_t arg1, uint64_t arg1cage,
-                  uint64_t arg2, uint64_t arg2cage,
-                  uint64_t arg3, uint64_t arg3cage,
-                  uint64_t arg4, uint64_t arg4cage,
-                  uint64_t arg5, uint64_t arg5cage,
-                  uint64_t arg6, uint64_t arg6cage) {
-    return make_threei_call(FUTEX_SYSCALL, 0,
-                            cageid, arg1cage,
-                            arg1, arg1cage, arg2, arg2cage,
-                            arg3, arg3cage, arg4, arg4cage,
-                            arg5, arg5cage, arg6, arg6cage, 0);
-}
+// int futex_handler(uint64_t cageid,
+//                   uint64_t arg1, uint64_t arg1cage,
+//                   uint64_t arg2, uint64_t arg2cage,
+//                   uint64_t arg3, uint64_t arg3cage,
+//                   uint64_t arg4, uint64_t arg4cage,
+//                   uint64_t arg5, uint64_t arg5cage,
+//                   uint64_t arg6, uint64_t arg6cage) {
+//     return make_threei_call(FUTEX_SYSCALL, 0,
+//                             cageid, arg1cage,
+//                             arg1, arg1cage, arg2, arg2cage,
+//                             arg3, arg3cage, arg4, arg4cage,
+//                             arg5, arg5cage, arg6, arg6cage, 0);
+// }
 
 /* ── Main ───────────────────────────────────────────────────────────── */
 
@@ -92,10 +121,13 @@ int main(int argc, char *argv[]) {
     } else if (pid == 0) {
         int cageid = getpid();
 
-        register_handler(cageid, MMAP_SYSCALL, grateid,
-                         (uint64_t)(uintptr_t)&mmap_handler);
-        register_handler(cageid, FUTEX_SYSCALL, grateid,
-                         (uint64_t)(uintptr_t)&futex_handler);
+        // register_handler(cageid, MMAP_SYSCALL, grateid,
+        //                  (uint64_t)(uintptr_t)&mmap_handler);
+        // register_handler(cageid, FUTEX_SYSCALL, grateid,
+        //                  (uint64_t)(uintptr_t)&futex_handler);
+
+        register_handler(cageid, GETPID_SYSCALL, grateid,
+                         (uint64_t)(uintptr_t)&getpid_handler);
 
         if (execv(argv[1], &argv[1]) == -1) {
             perror("execv failed");

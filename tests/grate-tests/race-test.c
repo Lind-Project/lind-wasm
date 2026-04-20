@@ -18,32 +18,30 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <assert.h>
 #include <sys/wait.h>
 
-#define NUM_FORKS   5
-#define NUM_THREADS 10
-#define ITERATIONS  500
+#define NUM_FORKS   2
 
 static volatile int sink;
 
-static void *thread_fn(void *arg) {
-    /* Each iteration touches mmap (stack), futex (pthread internals),
-     * and generates general syscall traffic. */
-    for (int i = 0; i < ITERATIONS; i++)
-        sink = i;
-    return NULL;
+void sleep_and_print(int real, int get, int iteration)
+{
+    sleep(1);
+    printf("real pid=%d, get pid=%d at iteration %d\n", real, get, iteration);
+    fflush(stdout);
+    exit(1);
 }
 
-static void child_work(void) {
-    pthread_t threads[NUM_THREADS];
-
-    for (int i = 0; i < NUM_THREADS; i++)
-        pthread_create(&threads[i], NULL, thread_fn, NULL);
-    for (int i = 0; i < NUM_THREADS; i++)
-        pthread_join(threads[i], NULL);
-
-    /* Child exits immediately after threads finish — triggers remove_cage()
-     * while siblings may still be in mmap/futex handlers. */
+static void child_work(int real_pid) {
+    printf("child work: real_pid: %d\n", real_pid);
+    for(int i = 0; i < 10000; ++i)
+    {
+        int pid = getpid();
+        if(real_pid != pid)
+            sleep_and_print(real_pid, pid, i);
+        // assert(real_pid == pid);
+    }
 }
 
 int main(void) {
@@ -56,7 +54,7 @@ int main(void) {
             exit(1);
         }
         if (pids[i] == 0) {
-            child_work();
+            child_work(getpid());
             exit(0);
         }
     }

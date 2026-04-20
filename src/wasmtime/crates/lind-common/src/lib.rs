@@ -127,6 +127,7 @@ fn add_syscall_to_linker<
             // check here to early-return when we are on a rewind replay path.
             if call_number as i32 == CLONE_SYSCALL {
                 if let Some(rewind_res) = wasmtime_lind_multi_process::catch_rewind(&mut caller) {
+                    println!("clone rewind return {}", rewind_res);
                     return rewind_res;
                 }
             }
@@ -141,11 +142,13 @@ fn add_syscall_to_linker<
                     Some(v) => v,
                     None => {
                         wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                        println!("signal rewind return {}", 0);
                         return 0;
                     }
                 };
                 // let signal handler finish rest of the rewinding process
                 wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                println!("signal rewind return {}", retval);
                 return retval;
             }
 
@@ -187,6 +190,9 @@ fn add_syscall_to_linker<
                 arg6,
                 arg6cageid,
             );
+            if call_number == 39 {
+                println!("[lind-common]: self_cageid: {}, target_cageid: {}, retval: {}", self_cageid, target_cageid, retval);
+            }
 
             // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
             // If fork is called within the signal handler, asyncify will unwind the stack;

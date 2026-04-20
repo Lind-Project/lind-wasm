@@ -656,6 +656,7 @@ pub extern "C" fn getpid_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    // println!("[rawposix] getpid syscall from cage {}", cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
