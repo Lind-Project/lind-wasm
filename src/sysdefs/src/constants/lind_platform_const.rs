@@ -125,8 +125,8 @@ pub enum DylinkErrorCode {
 
 pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 
-pub const MAX_GRATE_WORKERS: usize = 10;
-pub const GRATE_STACK_SLOT_SIZE: u32 = 128 * 1024;
+pub const MAX_GRATE_WORKERS: usize = 1000;
+pub const GRATE_STACK_SLOT_SIZE: u32 = 1280 * 1024;
 pub const GRATE_STACK_GUARD_SIZE: u32 = 4 * 1024;
 
 use std::sync::OnceLock;

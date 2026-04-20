@@ -143,7 +143,7 @@ impl<T: Clone> GrateHandler<T> {
         host: &T,
         cageid: u64,
     ) -> anyhow::Result<()> {
-        for handler_id in 1_u64..=10 {
+        for handler_id in 1_u64..=MAX_GRATE_WORKERS as u64 {
             let worker = create_worker(
                 template,
                 host.clone(),
