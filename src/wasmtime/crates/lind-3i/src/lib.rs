@@ -19,7 +19,6 @@ pub struct GrateTemplate<T> {
     pub engine: Engine,
     pub module: Module,
     pub linker: Linker<T>,
-    // pub stack_arena_base: u32,
 }
 
 pub struct GrateRequest {
@@ -71,7 +70,6 @@ struct GrateWorker<T> {
     pass_fptr_func: Option<PassFptrTyped>,
     stack_base: u32,
     stack_top: u32,
-    // stack_arena_base: u32,
 }
 
 fn worker_stack_base(workerid: WorkerId) -> u32 {
@@ -268,20 +266,6 @@ impl<T> GrateWorker<T> {
 
         self.reset_worker_stack();
 
-        // let func = self
-        //     .instance
-        //     .get_typed_func::<
-        //         (u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64),
-        //         i32,
-        //     >(&mut self.store, "pass_fptr_to_wt")
-        //     .map_err(|e| {
-        //         anyhow::anyhow!(
-        //             "failed to get pass_fptr_to_wt in worker {}: {:#}",
-        //             self.worker_id,
-        //             e
-        //         )
-        //     })?;
-
         let func = self.pass_fptr_func
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id))?;
@@ -441,9 +425,11 @@ pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
 /// - if `tid == 0`, remove all VMContext entries under `cage_id`.
 pub fn rm_vmctx_thread(cage_id: u64, tid: u64) -> bool {
     let Some(tables) = VMCTX_THREADS.get() else {
+        println!("rm_vmctx_thread: VMCTX_THREADS not initialized");
         return false;
     };
     let Some(t) = tables.get(cage_id as usize) else {
+        println!("rm_vmctx_thread: invalid cage_id {}", cage_id);
         return false;
     };
 

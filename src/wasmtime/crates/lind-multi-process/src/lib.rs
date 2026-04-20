@@ -1017,12 +1017,8 @@ impl<
                         .expect("_start function does not have a return value");
                     match exit_code {
                         Val::I32(val) => {
-                            if !rm_vmctx_thread(child_cageid as u64, next_tid as u64) {
-                                panic!(
-                                    "[wasmtime|thread] Failed to remove existing VMContext for cage_id {}, tid {}",
-                                    child_cageid, next_tid
-                                );
-                            }
+                            // we don't check the status here, since might be removed by group exit
+                            rm_vmctx_thread(child_cageid as u64, next_tid as u64);
                         }
                         _ => {
                             eprintln!("unexpected _start function return type: {:?}", exit_code);
