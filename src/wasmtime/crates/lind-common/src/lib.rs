@@ -326,8 +326,8 @@ fn add_environ_funcs_to_linker<
             if off_argc + 4 > mem_size || off_buf_size + 4 > mem_size {
                 return 21; // EFAULT
             }
-            if check_addr_write(cageid, ptr_argc as u32 as u64, 4).is_err()
-                || check_addr_write(cageid, ptr_buf_size as u32 as u64, 4).is_err()
+            if check_addr_write(cageid, base_u64 + off_argc as u64, 4).is_err()
+                || check_addr_write(cageid, base_u64 + off_buf_size as u64, 4).is_err()
             {
                 return 21; // EFAULT
             }
@@ -356,8 +356,8 @@ fn add_environ_funcs_to_linker<
                 if ptr_slot + 4 > mem_size || end > mem_size {
                     return 21; // EFAULT
                 }
-                if check_addr_write(cageid, ptr_slot as u64, 4).is_err()
-                    || check_addr_write(cageid, buf_offset as u64, bytes.len() + 1).is_err()
+                if check_addr_write(cageid, base_u64 + ptr_slot as u64, 4).is_err()
+                    || check_addr_write(cageid, base_u64 + buf_offset as u64, bytes.len() + 1).is_err()
                 {
                     return 21; // EFAULT
                 }
@@ -391,8 +391,8 @@ fn add_environ_funcs_to_linker<
             if off_count + 4 > mem_size || off_buf_size + 4 > mem_size {
                 return 21; // EFAULT
             }
-            if check_addr_write(cageid, ptr_count as u32 as u64, 4).is_err()
-                || check_addr_write(cageid, ptr_buf_size as u32 as u64, 4).is_err()
+            if check_addr_write(cageid, base_u64 + off_count as u64, 4).is_err()
+                || check_addr_write(cageid, base_u64 + off_buf_size as u64, 4).is_err()
             {
                 return 21; // EFAULT
             }
@@ -422,8 +422,8 @@ fn add_environ_funcs_to_linker<
                 if ptr_slot + 4 > mem_size || end > mem_size {
                     return 21; // EFAULT
                 }
-                if check_addr_write(cageid, ptr_slot as u64, 4).is_err()
-                    || check_addr_write(cageid, buf_offset as u64, bytes.len() + 1).is_err()
+                if check_addr_write(cageid, base_u64 + ptr_slot as u64, 4).is_err()
+                    || check_addr_write(cageid, base_u64 + buf_offset as u64, bytes.len() + 1).is_err()
                 {
                     return 21; // EFAULT
                 }
@@ -451,7 +451,7 @@ fn add_environ_funcs_to_linker<
             if offset + len > mem_size {
                 return 21; // EFAULT
             }
-            if check_addr_write(cageid, buf as u32 as u64, len).is_err() {
+            if check_addr_write(cageid, base_u64 + offset as u64, len).is_err() {
                 return 21; // EFAULT
             }
 
