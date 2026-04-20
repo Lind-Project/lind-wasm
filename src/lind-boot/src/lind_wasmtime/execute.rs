@@ -8,7 +8,8 @@ use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
-use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID};
+use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID, UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use sysdefs::constants::{
     DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX,
 };
@@ -384,60 +385,60 @@ fn register_wasmtime_syscall_entry() -> bool {
     let fp_clone = clone_syscall_entry;
     let clone_call_u64: u64 = fp_clone as *const () as usize as u64;
     let clone_ret = threei::register_handler(
-        0,
+        UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        56,                                  // clone syscall number
+        CLONE_SYSCALL,                                  // clone syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         clone_call_u64,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Register exec trampoline (syscall 59).
     let fp_exec = exec_syscall_entry;
     let exec_call_u64: u64 = fp_exec as *const () as usize as u64;
     let exec_ret = threei::register_handler(
-        0,
+        UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        59,                                  // exec syscall number
+        EXEC_SYSCALL,                                  // exec syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exec_call_u64,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Register exit trampoline (syscall 60).
     let fp_exit = exit_syscall_entry;
     let exit_call_u64: u64 = fp_exit as *const () as usize as u64;
     let exit_ret = threei::register_handler(
-        0,
+        UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        60,                                  // exit syscall number
+        EXIT_SYSCALL,                                  // exit syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exit_call_u64,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     );
 
     // Return false if registration failed
