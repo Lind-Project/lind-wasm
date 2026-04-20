@@ -1,10 +1,12 @@
 use sysdefs::constants::lind_platform_const;
+use sysdefs::constants::lind_platform_const::*;
 use threei::threei_const;
 use std::sync::{Condvar, Mutex, MutexGuard, Arc};
 use std::collections::HashMap;
 use anyhow::{Context, Result, anyhow};
-use wasmtime::{Engine, Module, Linker, Store, Instance, TypedFunc};
+use wasmtime::{Engine, Module, Linker, Store, Instance, TypedFunc, Val};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
 
 type PassFptrTyped = TypedFunc<
     (u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64),
@@ -17,6 +19,7 @@ pub struct GrateTemplate<T> {
     pub engine: Engine,
     pub module: Module,
     pub linker: Linker<T>,
+    // pub stack_arena_base: u32,
 }
 
 pub struct GrateRequest {
@@ -66,7 +69,23 @@ struct GrateWorker<T> {
     store: Store<T>,
     instance: Instance,
     pass_fptr_func: Option<PassFptrTyped>,
+    stack_base: u32,
+    stack_top: u32,
+    // stack_arena_base: u32,
 }
+
+fn worker_stack_base(workerid: WorkerId) -> u32 {
+        let stack_arena_base = STACK_ARENA_BASE.get().copied().unwrap_or_else(|| {
+            panic!("STACK_ARENA_BASE is not initialized");
+        });
+        stack_arena_base
+            + (workerid as u32 - 1) * (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)
+            + GRATE_STACK_GUARD_SIZE
+    }
+
+    fn worker_stack_top(workerid: WorkerId) -> u32 {
+        worker_stack_base(workerid) + GRATE_STACK_SLOT_SIZE
+    }
 
 struct WorkerLease<'a, T> {
     owner: &'a GrateHandler<T>,
@@ -165,8 +184,6 @@ impl<T> GrateHandler<T> {
 
     pub fn begin_shutdown(&self) {
         self.shutting_down.store(true, Ordering::Release);
-        // Interrupt currently running wasm in stores that have deadline=1.
-        self.engine.increment_epoch();
         self.cv.notify_all();
     }
 
@@ -184,14 +201,18 @@ impl<T> GrateHandler<T> {
         lease.worker_mut().run(req)
     }
 
+    fn submit_parallel(&self, req: GrateRequest) -> anyhow::Result<i32> {
+        let worker = self.take_worker_blocking();
+        let mut lease = WorkerLease::new(self, worker);
+        lease.worker_mut().run(req)
+    }
+
     pub fn submit(&self, req: GrateRequest) -> anyhow::Result<i32> {
         let _active_guard = ActiveCallGuard::new(self)?;
 
         match self.concurrency_mode {
             ConcurrencyMode::Serialized => self.submit_serialized(req),
-            ConcurrencyMode::Parallel => {
-                anyhow::bail!("parallel mode is not implemented yet")
-            }
+            ConcurrencyMode::Parallel => self.submit_parallel(req),
         }
     }
 }
@@ -227,11 +248,39 @@ impl<'a, T> Drop for ActiveCallGuard<'a, T> {
 }
 
 impl<T> GrateWorker<T> {
+    fn reset_worker_stack(&mut self) {
+        let sp = self.stack_top;
+        let stack_global = self
+            .instance
+            .get_global(&mut self.store, "__stack_pointer")
+            .expect("missing __stack_pointer");
+
+        stack_global
+            .set(&mut self.store, Val::I32(sp as i32))
+            .expect("failed to set __stack_pointer");
+    }
+
     fn run(&mut self, req: GrateRequest) -> anyhow::Result<i32> {
         println!(
             "Worker {} handling grate request for cage {}, handler_addr: {:#x}",
             self.worker_id, req.cageid, req.handler_addr
         );
+
+        self.reset_worker_stack();
+
+        // let func = self
+        //     .instance
+        //     .get_typed_func::<
+        //         (u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64),
+        //         i32,
+        //     >(&mut self.store, "pass_fptr_to_wt")
+        //     .map_err(|e| {
+        //         anyhow::anyhow!(
+        //             "failed to get pass_fptr_to_wt in worker {}: {:#}",
+        //             self.worker_id,
+        //             e
+        //         )
+        //     })?;
 
         let func = self.pass_fptr_func
             .as_ref()
@@ -282,7 +331,11 @@ where
 
     let mut linker: Linker<T> = template.linker.clone();
 
-    let (instance, _) = linker
+    let stack_arena_base = STACK_ARENA_BASE.get().copied().unwrap_or_else(|| {
+        panic!("STACK_ARENA_BASE is not initialized");
+    });
+
+    let (instance, _, _) = linker
         .instantiate_with_lind_thread(&mut store, &template.module, false)
         .context("failed to instantiate grate module")?;
 
@@ -296,11 +349,17 @@ where
         None => None,
     };
 
+    let stack_base = worker_stack_base(worker_id);
+    let stack_top = worker_stack_top(worker_id);
+
     Ok(GrateWorker {
         worker_id,
         store,
         instance,
         pass_fptr_func,
+        stack_base,
+        stack_top,
+        // stack_arena_base,
     })
 }
 

@@ -278,7 +278,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
         no_start: bool,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if !no_start {
@@ -287,7 +287,7 @@ impl Instance {
             }
         }
 
-        Ok((instance, instanceid))
+        Ok((instance, 0, instanceid))
     }
 
     /// This is a lind-wasm extension of Wasmtime’s internal instance creation path.
@@ -314,8 +314,9 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let dylink_enabled = module.dylink_meminfo().is_some();
+        let mut stack_arena_base = 0;
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
@@ -377,9 +378,18 @@ impl Instance {
 
                     let minimal_size = minimal_pages << PAGESHIFT;
 
-                    minimal_size
-                        .try_into()
-                        .expect("allocated memory is larger than 4GB")
+                    stack_arena_base = round_up_size(minimal_size as u32, PAGESIZE) as u32;
+
+                    let stack_arena_size =
+                        lind_platform_const::MAX_GRATE_WORKERS as usize * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+
+                    lind_platform_const::init_stack_arena_base(stack_arena_base);
+                    // let required_memory_size = stack_arena_base as usize + stack_arena_size;
+
+                    // minimal_size
+                    //     .try_into()
+                    //     .expect("allocated memory is larger than 4GB")
+                    (stack_arena_base as usize + stack_arena_size).try_into().expect("allocated memory is larger than 4GB")
                 };
 
                 let required_memory_page = required_memory_size >> PAGESHIFT;
@@ -523,7 +533,7 @@ impl Instance {
             }
         }
 
-        Ok((instance, instanceid))
+        Ok((instance, stack_arena_base, instanceid))
     }
 
     /// Internal function to create an instance and run the start function.
@@ -1403,7 +1413,7 @@ impl<T> InstancePre<T> {
         &self,
         mut store: impl AsContextMut<Data = T>,
         no_start: bool,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
             &mut store.0,
@@ -1430,7 +1440,7 @@ impl<T> InstancePre<T> {
         &self,
         mut store: impl AsContextMut<Data = T>,
         instantiate_type: InstantiateType,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
             &mut store.0,

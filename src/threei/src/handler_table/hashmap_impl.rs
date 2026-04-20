@@ -78,8 +78,8 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
 
     let call_map = handler_table.get(&self_cageid).unwrap_or_else(|| {
         panic!(
-            "[3i|_get_handler] no handler table for self_cageid: {}",
-            self_cageid
+            "[3i|_get_handler] no handler table for self_cageid: {}, syscall_num: {}, target_cageid: {}",
+            self_cageid, syscall_num, target_cageid
         )
     });
     let target_map = call_map.get(&syscall_num).unwrap_or_else(|| {

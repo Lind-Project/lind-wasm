@@ -124,3 +124,14 @@ pub enum DylinkErrorCode {
 }
 
 pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
+
+pub const MAX_GRATE_WORKERS: usize = 10;
+pub const GRATE_STACK_SLOT_SIZE: u32 = 128 * 1024;
+pub const GRATE_STACK_GUARD_SIZE: u32 = 4 * 1024;
+
+use std::sync::OnceLock;
+pub static STACK_ARENA_BASE: OnceLock<u32> = OnceLock::new();
+
+pub fn init_stack_arena_base(val: u32) {
+    let _ = STACK_ARENA_BASE.set(val);
+}

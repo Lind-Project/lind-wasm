@@ -460,7 +460,8 @@ impl<
                         store.set_is_thread(true);
                     }
 
-                    let (instance, grate_instanceid) = linker
+                    // don't use child's stack_arena_base since it is not initialized yet, use parent's stack_arena_base instead
+                    let (instance, _, grate_instanceid) = linker
                         .instantiate_with_lind(
                             &mut store,
                             &module,
@@ -534,10 +535,11 @@ impl<
                         engine: module.engine().clone(),
                         module: module.clone(),
                         linker: cloned_linker,
+                        // stack_arena_base: stack_arena_base,
                     };
 
                     // register grate workers for this cage
-                    create_handler_for_cage(&grate_template, store.data().clone(), child_cageid, ConcurrencyMode::Serialized)
+                    create_handler_for_cage(&grate_template, store.data().clone(), child_cageid, ConcurrencyMode::Parallel)
                         .with_context(|| format!("failed to register grate workers for cage {}", child_cageid));
 
                     // get the asyncify_rewind_start and module start function
@@ -881,7 +883,7 @@ impl<
                     store.set_is_thread(true);
 
                     // instantiate the module
-                    let (instance, grate_instanceid) = linker
+                    let (instance, _, grate_instanceid) = linker
                         .instantiate_with_lind_thread(&mut store, &module, false)
                         .unwrap();
 
