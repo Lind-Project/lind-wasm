@@ -45,6 +45,11 @@ def generate_rust_constants(syscalls: dict[str, int]) -> str:
     lines = [
         "//! Syscall number constants for the Lind platform.",
         "//!",
+        "//! Includes both standard Linux x86_64 syscalls and Lind-specific extensions:",
+        "//!   - REGISTER_HANDLER_SYSCALL (1001)",
+        "//!   - COPY_DATA_BETWEEN_CAGES_SYSCALL (1002)",
+        "//!   - COPY_HANDLER_TABLE_TO_CAGE_SYSCALL (1003)",
+        "//!",
         "//! Source of truth: Linux x86_64 syscall table",
         "//!   https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl",
         "//! (Historical overview: https://filippo.io/linux-syscall-table/)",

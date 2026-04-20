@@ -38,8 +38,7 @@ options.
 3. __Generate syscall mappings__ (see [`make generate-syscall-mappings`](https://github.com/Lind-Project/lind-wasm/blob/main/Makefile))
 
     Auto-generates syscall mapping constants from `src/glibc/lind_syscall/lind_syscall_num.h` 
-    and produces `src/sysdefs/src/constants/syscall_const.rs`. This must run before building *glibc* 
-    and *wasmtime* to ensure Rust code has the correct syscall definitions.
+    and produces `src/sysdefs/src/constants/syscall_const.rs`. This must run before building *lind-boot*, *glibc* and *wasmtime* to ensure Rust code has the correct syscall definitions.
 
     ```bash
     python3 scripts/generate_syscall_mappings.py
@@ -63,10 +62,10 @@ options.
         along with headers and a pre-built C runtime into a
         sysroot directory structure as required by *Clang*.
 
-5. __Build custom wasmtime__ (see [`make wasmtime`](https://github.com/Lind-Project/lind-wasm/blob/main/Makefile))
+5. __Build lind-boot__ (see [`make lind-boot`](https://github.com/Lind-Project/lind-wasm/blob/main/Makefile))
 
-      Builds `src/wasmtime` workspace. Custom dependencies `fdtables`, `RawPOSIX`
-      and `sysdefs` are included in the build automatically.
+      Builds `src/lind-boot` workspace, which provides the *WebAssembly* runtime (`wasmtime`).
+      Custom dependencies `fdtables`, `RawPOSIX` and `sysdefs` are included in the build automatically.
 
 
 A customized `wasm-opt` binary is included in the *lind-wasm* repo under

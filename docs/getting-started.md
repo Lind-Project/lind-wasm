@@ -38,9 +38,9 @@ EOF
 
 Lind-wasm runtime must be compiled before running the program. To compile the lind-wasm runtime, you will first go to the `lind-wasm/` directory. At there, you can choose:
 
-3.a. use `make all` to compile both lind-glibc and rust code at once.
+3.a. use `make all` to compile both lind-glibc and rust code at once. (this automatically generates syscall mappings)
 
-3.b. use `make lind-boot` to compile runtime(lind-boot/wasmtime/rawposix/3i/etc.), and `make sysroot` to compile lind-glibc.
+3.b. use `make generate-syscall-mappings` to auto-generate system call constants. Then use `make lind-boot` to compile runtime(lind-boot/wasmtime/rawposix/3i/etc.), and `make sysroot` to compile lind-glibc.
 
 **NOTES: More options can be found in lind-wasm/Makefile**
 

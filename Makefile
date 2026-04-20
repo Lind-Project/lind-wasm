@@ -29,12 +29,12 @@ build: generate-syscall-mappings lindfs lind-boot sysroot
 all: build
 
 .PHONY: sysroot
-sysroot: build-dir
+sysroot: build-dir generate-syscall-mappings
 	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
 .PHONY: lind-boot
-lind-boot: build-dir
+lind-boot: build-dir generate-syscall-mappings
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
@@ -50,14 +50,15 @@ lindfs:
 	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
 
 .PHONY: lind-debug
-lind-debug: lindfs build-dir
+lind-debug: lindfs build-dir generate-syscall-mappings
 	# Build lind-boot with the lind_debug feature enabled
 	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
 	$(MAKE) build_glibc LIND_DEBUG=1
-build_glibc:
+
+build_glibc: generate-syscall-mappings
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
 		echo "Building glibc with LIND_DEBUG enabled"; \
