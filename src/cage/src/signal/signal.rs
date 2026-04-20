@@ -337,6 +337,18 @@ pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
             // we only trigger epoch if the signal is not blocked
             if !signal_check_block(cageid, signo) {
                 signal_epoch_trigger(cageid);
+
+                // If the target thread is blocked in a host syscall (read, write,
+                // futex, etc.), the epoch check will never run because wasm isn't
+                // executing. Send SIGUSR2 to the main thread's OS tid to interrupt
+                // the blocking syscall with EINTR, allowing the thread to return
+                // to wasm and see the epoch change.
+                let main_tid = *cage.main_threadid.read();
+                if let Some(os_tid) = cage.os_tid_map.get(&main_tid) {
+                    unsafe {
+                        libc::syscall(libc::SYS_tkill, *os_tid as i32, libc::SIGUSR2);
+                    }
+                }
             }
         }
 

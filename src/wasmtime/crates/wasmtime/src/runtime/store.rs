@@ -109,6 +109,7 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use sysdefs::logging::lind_debug_panic;
 use wasmtime_environ::GlobalIndex;
 use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
@@ -358,6 +359,11 @@ pub struct StoreOpaque {
     // libraries symbol mapping
     library_symbols: SymbolTable,
 
+    // Tracks the InstanceId of every named module instance created in this store:
+    // preloaded libraries, the main module, and dlopen'd libraries. Used by
+    // get_global_snapshot to avoid iterating all INSTANCE_NUMBER slots.
+    named_module_instances: Vec<(String, InstanceId)>,
+
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
     stack_snapshots: HashMap<u64, Vec<u8>>,
@@ -562,6 +568,7 @@ impl<T> Store<T> {
                 signal_asyncify_data: Vec::new(),
                 signal_asyncify_counter: 0,
                 library_symbols: SymbolTable::new(),
+                named_module_instances: Vec::new(),
                 syscall_asyncify_data: Vec::new(),
                 syscall_asyncify_counter: 0,
                 #[cfg(feature = "component-model")]
@@ -665,7 +672,7 @@ impl<T> Store<T> {
     /// The store will limit the number of instances, linear memories, and
     /// tables created to 10,000. This can be overridden with the
     /// [`Store::limiter`] configuration method.
-    pub fn new_inner(engine: &Engine) -> StoreOpaque {
+    pub fn new_inner(engine: &Engine, symbol_table: SymbolTable) -> StoreOpaque {
         let pkey = engine.allocator().next_available_pkey();
 
         StoreOpaque {
@@ -676,7 +683,8 @@ impl<T> Store<T> {
             asyncify_state: super::AsyncifyState::Normal,
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
-            library_symbols: SymbolTable::new(),
+            library_symbols: symbol_table,
+            named_module_instances: Vec::new(),
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
@@ -1420,7 +1428,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // pop the signal callstack information
-    pub fn pop_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+    pub fn pop_signal_asyncify_data(&mut self, _signal_handler: i32, _signo: i32) {
         self.0.signal_asyncify_data.pop();
     }
 
@@ -1453,6 +1461,29 @@ impl<'a, T> StoreContextMut<'a, T> {
     // push new library instance
     pub fn push_library_symbols(&mut self, symbol_map: SymbolMap) -> Result<i32> {
         Ok(self.0.library_symbols.add(symbol_map))
+    }
+
+    // Register a named module instance so get_global_snapshot can find it
+    // without scanning all INSTANCE_NUMBER slots.
+    pub fn register_named_instance(&mut self, name: String, id: InstanceId) {
+        if let Some((_, existing_id)) = self
+            .0
+            .named_module_instances
+            .iter()
+            .find(|(n, _)| n == &name)
+        {
+            lind_debug_panic(&format!("[register_named_instance] wasm module with same name \"{}\" detected, currently not supported", name));
+        }
+        self.0.named_module_instances.push((name, id));
+    }
+
+    // get and set library symbol table, used for cloning symbol table across fork/thread
+    pub fn get_library_symbol_table(&self) -> &SymbolTable {
+        &self.0.library_symbols
+    }
+
+    pub fn set_library_symbol_table(&mut self, symbol_table: SymbolTable) {
+        self.0.library_symbols = symbol_table;
     }
 
     // find library symbol from local scope
@@ -1530,22 +1561,26 @@ impl<'a, T> StoreContextMut<'a, T> {
         self.0.stack_base = stack_base;
     }
 
-    pub fn get_global_snapshot(&mut self) -> Vec<(usize, Vec<(GlobalIndex, i64)>)> {
-        let mut collected = vec![];
-        let instance_length = self.0.instances.len();
-        for i in 0..instance_length {
-            let instance = self.0.instance_mut(InstanceId(i));
-            let mut globals = vec![];
-            for (index, global) in instance.all_globals() {
-                let val = unsafe { *(*global.definition).as_i64_mut() };
-                globals.push((index, val));
-            }
-            if globals.len() > 0 {
-                collected.push((i, globals));
+    pub fn get_global_snapshot(&mut self) -> HashMap<String, Vec<(GlobalIndex, i64)>> {
+        let mut map = HashMap::new();
+        // Iterate only the explicitly registered named instances (preloaded libs,
+        // main module, dlopen'd libs) rather than all INSTANCE_NUMBER slots.
+        // Backup instances are never registered, so they are excluded automatically.
+        for i in 0..self.0.named_module_instances.len() {
+            // Clone name and copy id to release the immutable borrow on
+            // named_module_instances before the mutable instance_mut call below.
+            let name = self.0.named_module_instances[i].0.clone();
+            let id = self.0.named_module_instances[i].1;
+            let instance = self.0.instance_mut(id);
+            let globals: Vec<(GlobalIndex, i64)> = instance
+                .all_globals()
+                .map(|(index, global)| (index, unsafe { *(*global.definition).as_i64_mut() }))
+                .collect();
+            if !globals.is_empty() {
+                map.insert(name, globals);
             }
         }
-
-        collected
+        map
     }
 
     /// Configures epoch-deadline expiration to yield to the async

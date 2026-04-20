@@ -1,7 +1,7 @@
 use super::invoke_wasm_and_catch_traps;
+use crate::prelude::*;
 use crate::runtime::vm::{VMFuncRef, VMOpaqueContext};
 use crate::store::{AutoAssertNoGc, StoreOpaque};
-use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, Engine, Func, FuncType, HeapType, NoFunc, RefType, StoreContextMut,
     ValRaw, ValType,
@@ -211,7 +211,7 @@ where
         // the memory go away, so the size matters here for performance.
         let mut captures = (func, storage);
 
-        let mut result;
+        let result;
 
         // Refer to loop in runtime/func.rs
         // This routine is another possible routine when the wasm module is launched, specifically,

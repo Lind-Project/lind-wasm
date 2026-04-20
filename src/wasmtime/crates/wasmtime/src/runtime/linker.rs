@@ -22,7 +22,6 @@ use wasmtime_environ::{EntityIndex, GlobalIndex};
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::LindGOT;
 
-use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
 
 /// Structure used to link wasm modules/instances together.
@@ -456,6 +455,7 @@ impl<T> Linker<T> {
     pub fn new_child_linker(
         mut store: impl AsContextMut<Data = T>,
         engine: &Engine,
+        got_table: &mut Option<LindGOT>,
         globals: &Vec<(String, String, GlobalType, Val)>,
         hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
         shared_memory: &Option<(String, String, ClonedMemory)>,
@@ -471,6 +471,13 @@ impl<T> Linker<T> {
         // define globals to the new linker
         for (module, name, ty, val) in globals {
             let cloned_global = Global::new(&mut store, ty.clone(), val.clone())?;
+
+            if let Some(got) = got_table.as_mut() {
+                if module == "GOT.func" || module == "GOT.mem" {
+                    let handler = cloned_global.get_handler_as_u32(&mut store);
+                    got.new_entry(name.clone(), handler);
+                }
+            }
 
             // collect library's memory base for quick look up when instantiate the child library
             if module == "lib.memory_base" {
@@ -953,6 +960,7 @@ impl<T> Linker<T> {
                         | "__wasm_apply_data_relocs"
                         | "__wasm_apply_global_relocs"
                         | "__wasm_apply_tls_relocs"
+                        | "__wasm_init_tls"
                         // asyncify symbols
                         | "asyncify_start_unwind"
                         | "asyncify_stop_unwind"
@@ -1234,6 +1242,16 @@ impl<T> Linker<T> {
                     },
                 )?;
 
+                // Register this instance under its intrinsic wasm name so
+                // get_global_snapshot can find it without scanning all INSTANCE_NUMBER slots.
+                // We use module.name() (the name embedded in the binary) because
+                // the snapshot lookup in child processes also uses module.name().
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
+
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };
 
@@ -1269,7 +1287,7 @@ impl<T> Linker<T> {
         table_base: i32,
         memory_base: i32,
         child_type: ChildLibraryType,
-        snapshots: &Vec<(GlobalIndex, i64)>,
+        snapshots: &[(GlobalIndex, i64)],
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1317,6 +1335,12 @@ impl<T> Linker<T> {
                 // since all the state are already copied from parent
                 let (instance, _stack_arena_size, _) =
                     module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
+
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
 
                 let fpcast_enabled = self.engine.config().fpcast_enabled;
                 // for child library, just append the library function into function table without doing GOT relocation
@@ -1426,6 +1450,12 @@ impl<T> Linker<T> {
                     },
                 )?;
 
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
+
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };
 
@@ -1486,6 +1516,11 @@ impl<T> Linker<T> {
                     }
                 }
                 for (name, global) in globals {
+                    // Only relocate globals that are actually registered in the GOT.
+                    // Applying memory_base to an unrelated exported global would overflow.
+                    if !got.has_entry(&name) {
+                        continue;
+                    }
                     // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
                     let val = global.get(&mut store);
                     // relocate the variable
@@ -1499,6 +1534,8 @@ impl<T> Linker<T> {
                     }
                 }
 
+                let is_local = symbol_map.is_local();
+
                 // append the symbol mapping of this library into the global lookup table
                 let handler = store.push_library_symbols(symbol_map).unwrap() as u64;
 
@@ -1510,7 +1547,10 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                self.instance_dylink(store, module_name, instance);
+                if !is_local {
+                    // only attach library symbol to Linker if it is global scope
+                    self.instance_dylink(store, module_name, instance);
+                }
 
                 Ok(handler)
             }
@@ -1963,7 +2003,7 @@ impl<T> Linker<T> {
     pub fn iter<'a: 'p, 'p>(
         &'a self,
         mut store: impl AsContextMut<Data = T> + 'p,
-    ) -> impl Iterator<Item = (&str, &str, Extern)> + 'p {
+    ) -> impl Iterator<Item = (&'a str, &'a str, Extern)> + 'p {
         self.map.iter().map(move |(key, item)| {
             let store = store.as_context_mut();
             (

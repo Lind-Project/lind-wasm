@@ -250,7 +250,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
     ) -> Result<Instance> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+        let (instance, start, _instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
@@ -341,7 +341,7 @@ impl Instance {
                 drop(memory_iter);
                 let memory_base = memory.data_ptr(&mut *store) as usize;
 
-                let required_memory_size = if dylink_enabled {
+                let (start_addr, required_memory_size) = if dylink_enabled {
                     // for dynamic builds, we manually calcuate the initial memory region
                     // which is stack size + data region size
                     let module_meminfo = module.dylink_meminfo().unwrap();
@@ -360,7 +360,7 @@ impl Instance {
                         rounded_stack_size, rounded_data_size
                     );
 
-                    rounded_stack_size + rounded_data_size
+                    (rounded_stack_size, rounded_data_size)
                 } else {
                     // retrieve the initial memory size for static module
                     let plans = module.compiled_module().module().memory_plans.clone();
@@ -392,7 +392,7 @@ impl Instance {
                     (stack_arena_base as usize + stack_arena_size).try_into().expect("allocated memory is larger than 4GB")
                 };
 
-                let required_memory_page = required_memory_size >> PAGESHIFT;
+                let required_memory_page = (start_addr + required_memory_size) >> PAGESHIFT;
 
                 init_vmmap(cageid, memory_base, Some(required_memory_page));
                 // Allocated memory should include stack AND constant data region
@@ -404,7 +404,7 @@ impl Instance {
                     (MMAP_SYSCALL) as u64, // syscall num
                     0, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     cageid, // target cageid (should be same)
-                    0, // the first memory region starts from 0
+                    start_addr as u64,
                     cageid,
                     required_memory_size as u64,
                     cageid,
@@ -1120,6 +1120,11 @@ impl Instance {
             let got_inner = got.as_ref().unwrap();
             let memory_base = memory_base.unwrap();
             for (name, global) in globals {
+                // Only relocate globals that are actually registered in the GOT.
+                // Applying memory_base to an unrelated exported global would overflow.
+                if !got_inner.has_entry(&name) {
+                    continue;
+                }
                 let val = global.get(&mut store);
                 // relocate the variable
                 let val = val.i32().unwrap() as u32 + memory_base;
@@ -1139,7 +1144,7 @@ impl Instance {
     pub fn apply_global_snapshots<'a>(
         &'a self,
         mut store: impl AsContextMut,
-        snapshots: &Vec<(GlobalIndex, i64)>,
+        snapshots: &[(GlobalIndex, i64)],
     ) {
         let mut collected_global = vec![];
         for (index, global) in self.all_globals(store.as_context_mut().0) {
