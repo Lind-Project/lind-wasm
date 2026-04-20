@@ -8,7 +8,9 @@ use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::{ffi::c_void, sync::Mutex};
-use sysdefs::constants::lind_platform_const::{INSTANCE_NUMBER, RAWPOSIX_CAGEID, WASMTIME_CAGEID, UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::lind_platform_const::{
+    INSTANCE_NUMBER, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
+};
 use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use sysdefs::constants::{
     DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX,
@@ -388,7 +390,7 @@ fn register_wasmtime_syscall_entry() -> bool {
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        CLONE_SYSCALL as u64,                                  // clone syscall number
+        CLONE_SYSCALL as u64,                // clone syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         clone_call_u64,
@@ -408,7 +410,7 @@ fn register_wasmtime_syscall_entry() -> bool {
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXEC_SYSCALL as u64,                                  // exec syscall number
+        EXEC_SYSCALL as u64,                 // exec syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exec_call_u64,
@@ -428,7 +430,7 @@ fn register_wasmtime_syscall_entry() -> bool {
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXIT_SYSCALL as u64,                                  // exit syscall number
+        EXIT_SYSCALL as u64,                 // exit syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exit_call_u64,
