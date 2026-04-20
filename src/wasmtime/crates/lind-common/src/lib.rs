@@ -357,7 +357,8 @@ fn add_environ_funcs_to_linker<
                     return 21; // EFAULT
                 }
                 if check_addr_write(cageid, base_u64 + ptr_slot as u64, 4).is_err()
-                    || check_addr_write(cageid, base_u64 + buf_offset as u64, bytes.len() + 1).is_err()
+                    || check_addr_write(cageid, base_u64 + buf_offset as u64, bytes.len() + 1)
+                        .is_err()
                 {
                     return 21; // EFAULT
                 }
@@ -423,7 +424,8 @@ fn add_environ_funcs_to_linker<
                     return 21; // EFAULT
                 }
                 if check_addr_write(cageid, base_u64 + ptr_slot as u64, 4).is_err()
-                    || check_addr_write(cageid, base_u64 + buf_offset as u64, bytes.len() + 1).is_err()
+                    || check_addr_write(cageid, base_u64 + buf_offset as u64, bytes.len() + 1)
+                        .is_err()
                 {
                     return 21; // EFAULT
                 }
