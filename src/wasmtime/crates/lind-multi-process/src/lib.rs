@@ -648,6 +648,7 @@ impl<
                     let new_child_ctx = get_cx(&mut new_child_host);
                     let cloned_linker = linker.clone();
                     new_child_ctx.attach_linker(linker);
+                    new_child_ctx.attach_got_table(child_got);
 
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
@@ -671,16 +672,7 @@ impl<
                     // register grate workers for this cage
                     create_handler_for_cage(&grate_template, store.data().clone(), child_cageid, ConcurrencyMode::Parallel)
                         .with_context(|| format!("failed to register grate workers for cage {}", child_cageid));
-                    // 4) Notify threei of the cage runtime type
-                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
-
-                    barrier_clone.wait();
-
-                    // update the linker for the child instance, since new linker contains some child-specific defines
-                    let mut new_child_host = store.data_mut();
-                    let new_child_ctx = get_cx(&mut new_child_host);
-                    new_child_ctx.attach_linker(linker);
-                    new_child_ctx.attach_got_table(child_got);
+                    
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;

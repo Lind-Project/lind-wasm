@@ -389,7 +389,7 @@ impl Instance {
                     // minimal_size
                     //     .try_into()
                     //     .expect("allocated memory is larger than 4GB")
-                    (stack_arena_base as usize + stack_arena_size).try_into().expect("allocated memory is larger than 4GB")
+                    (0, (stack_arena_base as usize + stack_arena_size).try_into().expect("allocated memory is larger than 4GB"))
                 };
 
                 let required_memory_page = (start_addr + required_memory_size) >> PAGESHIFT;

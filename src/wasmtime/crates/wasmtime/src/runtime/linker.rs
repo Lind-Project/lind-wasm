@@ -1233,7 +1233,7 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _, _) = module_linker.instantiate_with_lind(
+                let (instance, _, instance_id) = module_linker.instantiate_with_lind(
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
@@ -1333,7 +1333,7 @@ impl<T> Linker<T> {
                 module_linker.define_unknown_imports_as_traps(module);
                 // Instantiate the library module. Do not need to do any initialization for the module
                 // since all the state are already copied from parent
-                let (instance, _stack_arena_size, _) =
+                let (instance, _stack_arena_size, instance_id) =
                     module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
 
                 if let Some(wasm_name) = module.name() {
@@ -1441,7 +1441,7 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _stack_arena_size, _) = module_linker.instantiate_with_lind(
+                let (instance, _stack_arena_size, instance_id) = module_linker.instantiate_with_lind(
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
