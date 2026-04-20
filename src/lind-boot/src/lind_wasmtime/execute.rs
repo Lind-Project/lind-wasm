@@ -388,7 +388,7 @@ fn register_wasmtime_syscall_entry() -> bool {
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        CLONE_SYSCALL,                                  // clone syscall number
+        CLONE_SYSCALL as u64,                                  // clone syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         clone_call_u64,
@@ -408,7 +408,7 @@ fn register_wasmtime_syscall_entry() -> bool {
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXEC_SYSCALL,                                  // exec syscall number
+        EXEC_SYSCALL as u64,                                  // exec syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exec_call_u64,
@@ -428,7 +428,7 @@ fn register_wasmtime_syscall_entry() -> bool {
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXIT_SYSCALL,                                  // exit syscall number
+        EXIT_SYSCALL as u64,                                  // exit syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         exit_call_u64,
