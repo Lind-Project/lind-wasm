@@ -1225,7 +1225,7 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(
+                let (instance, _, _) = module_linker.instantiate_with_lind(
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
@@ -1315,7 +1315,7 @@ impl<T> Linker<T> {
                 module_linker.define_unknown_imports_as_traps(module);
                 // Instantiate the library module. Do not need to do any initialization for the module
                 // since all the state are already copied from parent
-                let (instance, _) =
+                let (instance, _stack_arena_size, _) =
                     module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
 
                 let fpcast_enabled = self.engine.config().fpcast_enabled;
@@ -1417,7 +1417,7 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _) = module_linker.instantiate_with_lind(
+                let (instance, _stack_arena_size, _) = module_linker.instantiate_with_lind(
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
@@ -1816,7 +1816,7 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
         no_start: bool,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate_with_lind_thread(store, no_start)
     }
@@ -1842,7 +1842,7 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
         instantiate_type: InstantiateType,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate_with_lind(store, instantiate_type)
     }

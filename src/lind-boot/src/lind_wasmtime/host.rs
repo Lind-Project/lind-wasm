@@ -82,7 +82,7 @@ pub fn register_grate_handler_for_cage(
         template,
         host,
         cageid,
-        ConcurrencyMode::Serialized,
+        ConcurrencyMode::Parallel,
     )?;
 
     let pool = GRATE_POOL

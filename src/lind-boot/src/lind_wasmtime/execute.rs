@@ -558,7 +558,7 @@ fn load_main_module(
     // I don't setup `epoch_handler` since it seems not being used by our previous implementation.
     // Not sure if this is related to our thread exit problem
     let linker = linker_guard.clone();
-    let (instance, cage_instanceid) = linker
+    let (instance, stack_arena_base, cage_instanceid) = linker
         .instantiate_with_lind(
             &mut *store,
             &module,
@@ -660,6 +660,7 @@ fn load_main_module(
         engine: module.engine().clone(),
         module: module.clone(),
         linker: linker_guard.clone(),
+        // stack_arena_base: stack_arena_base,
     };
 
     let host = store.data().clone();
