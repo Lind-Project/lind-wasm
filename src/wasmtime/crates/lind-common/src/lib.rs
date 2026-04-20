@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use cage::memory::check_addr_write;
 use rand::Rng;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -317,11 +318,17 @@ fn add_environ_funcs_to_linker<
             let cx = get_environ(caller.data());
             let argc = cx.args.len() as u32;
             let buf_size: u32 = cx.args.iter().map(|a| a.len() as u32 + 1).sum();
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
             let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
             let base = base_u64 as *mut u8;
             let off_argc = ptr_argc as u32 as usize;
             let off_buf_size = ptr_buf_size as u32 as usize;
             if off_argc + 4 > mem_size || off_buf_size + 4 > mem_size {
+                return 21; // EFAULT
+            }
+            if check_addr_write(cageid, ptr_argc as u32 as u64, 4).is_err()
+                || check_addr_write(cageid, ptr_buf_size as u32 as u64, 4).is_err()
+            {
                 return 21; // EFAULT
             }
             unsafe {
@@ -338,6 +345,7 @@ fn add_environ_funcs_to_linker<
         move |mut caller: Caller<'_, T>, argv_ptrs: i32, argv_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let args: Vec<String> = cx.args.clone();
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
             let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
             let base = base_u64 as *mut u8;
             let mut buf_offset = argv_buf as u32;
@@ -346,6 +354,11 @@ fn add_environ_funcs_to_linker<
                 let bytes = arg.as_bytes();
                 let end = buf_offset as usize + bytes.len() + 1;
                 if ptr_slot + 4 > mem_size || end > mem_size {
+                    return 21; // EFAULT
+                }
+                if check_addr_write(cageid, ptr_slot as u64, 4).is_err()
+                    || check_addr_write(cageid, buf_offset as u64, bytes.len() + 1).is_err()
+                {
                     return 21; // EFAULT
                 }
                 unsafe {
@@ -370,11 +383,17 @@ fn add_environ_funcs_to_linker<
                 .iter()
                 .map(|(k, v)| k.len() as u32 + 1 + v.len() as u32 + 1)
                 .sum();
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
             let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
             let base = base_u64 as *mut u8;
             let off_count = ptr_count as u32 as usize;
             let off_buf_size = ptr_buf_size as u32 as usize;
             if off_count + 4 > mem_size || off_buf_size + 4 > mem_size {
+                return 21; // EFAULT
+            }
+            if check_addr_write(cageid, ptr_count as u32 as u64, 4).is_err()
+                || check_addr_write(cageid, ptr_buf_size as u32 as u64, 4).is_err()
+            {
                 return 21; // EFAULT
             }
             unsafe {
@@ -391,6 +410,7 @@ fn add_environ_funcs_to_linker<
         move |mut caller: Caller<'_, T>, env_ptrs: i32, env_buf: i32| -> i32 {
             let cx = get_environ(caller.data());
             let env: Vec<(String, String)> = cx.env.clone();
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
             let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
             let base = base_u64 as *mut u8;
             let mut buf_offset = env_buf as u32;
@@ -400,6 +420,11 @@ fn add_environ_funcs_to_linker<
                 let bytes = entry.as_bytes();
                 let end = buf_offset as usize + bytes.len() + 1;
                 if ptr_slot + 4 > mem_size || end > mem_size {
+                    return 21; // EFAULT
+                }
+                if check_addr_write(cageid, ptr_slot as u64, 4).is_err()
+                    || check_addr_write(cageid, buf_offset as u64, bytes.len() + 1).is_err()
+                {
                     return 21; // EFAULT
                 }
                 unsafe {
@@ -417,12 +442,16 @@ fn add_environ_funcs_to_linker<
         module,
         "random_get",
         move |mut caller: Caller<'_, T>, buf: i32, buf_len: i32| -> i32 {
+            let cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
             let (base_u64, mem_size) = get_memory_base_and_size(&mut caller);
             let base = base_u64 as *mut u8;
             let offset = buf as u32 as usize;
             let len = buf_len as u32 as usize;
 
             if offset + len > mem_size {
+                return 21; // EFAULT
+            }
+            if check_addr_write(cageid, buf as u32 as u64, len).is_err() {
                 return 21; // EFAULT
             }
 
