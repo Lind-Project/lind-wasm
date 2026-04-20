@@ -108,7 +108,7 @@ jobs:
           path: |
             ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.REPORT_HTML_IN_REPORTS }}
             ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload wasm JSON report artifact
@@ -117,7 +117,7 @@ jobs:
         with:
           name: wasm-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.WASM_REPORT_JSON_FILE }}
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload grate JSON report artifact
@@ -126,7 +126,7 @@ jobs:
         with:
           name: grate-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.GRATE_REPORT_JSON_FILE }}
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload unified runner HTML report artifact
@@ -137,7 +137,7 @@ jobs:
           path: |
             ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.REPORT_HTML_IN_REPORTS }}
             ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
 
       - name: Post PR comment
