@@ -21,8 +21,8 @@ use super::net_calls::{
     accept4_syscall, accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall,
     epoll_create_syscall, epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall,
     getpeername_syscall, getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall,
-    recvfrom_syscall, recvmsg_syscall, select_syscall, sendmsg_syscall, sendto_syscall,
-    setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
+    ppoll_syscall, recvfrom_syscall, recvmsg_syscall, select_syscall, sendmsg_syscall,
+    sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
 };
 use super::sys_calls::{
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
@@ -149,6 +149,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::UNLINKAT_SYSCALL as u64, unlinkat_syscall),
     (syscall_const::SYMLINKAT_SYSCALL as u64, symlinkat_syscall),
     (syscall_const::READLINKAT_SYSCALL as u64, readlinkat_syscall),
+    (syscall_const::PPOLL_SYSCALL as u64, ppoll_syscall),
     (
         syscall_const::SYNC_FILE_RANGE_SYSCALL as u64,
         sync_file_range_syscall,

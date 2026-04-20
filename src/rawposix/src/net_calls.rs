@@ -1,4 +1,4 @@
-use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
+use cage::{get_cage, readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
 use fdtables;
 use lazy_static::lazy_static;
 use libc::*;
@@ -6,6 +6,7 @@ use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
@@ -235,6 +236,95 @@ pub extern "C" fn poll_syscall(
     }
 
     total_ready
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/ppoll.2.html
+///
+/// `ppoll` is like `poll` but atomically sets the signal mask during the wait.
+/// This implementation swaps the cage's signal mask before polling and restores
+/// it afterwards. The timeout is already converted to milliseconds by the glibc
+/// wrapper.
+///
+/// ## Arguments:
+///     - fds_arg: pointer to array of pollfd structs
+///     - nfds_arg: number of pollfd entries
+///     - timeout_arg: timeout in milliseconds (-1 = block indefinitely)
+///     - sigmask_arg: pointer to sigset_t to apply during poll, or 0 for NULL
+///
+/// ## Returns:
+///     - Number of ready fds on success, -1 on error
+pub extern "C" fn ppoll_syscall(
+    cageid: u64,
+    fds_arg: u64,
+    fds_cageid: u64,
+    nfds_arg: u64,
+    nfds_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
+    sigmask_arg: u64,
+    sigmask_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "ppoll_syscall"
+        );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let mut saved: Option<(u64, u64)> = None; // (old_mask, ppoll_mask)
+
+    // If sigmask is provided, atomically swap the signal mask
+    if sigmask_arg != 0 {
+        let sigmask_ptr = sc_convert_buf(sigmask_arg, sigmask_cageid, cageid) as *const u64;
+        let ppoll_mask = unsafe { *sigmask_ptr };
+        let old_mask = cage.sigset.load(std::sync::atomic::Ordering::Relaxed);
+        cage.sigset
+            .store(ppoll_mask, std::sync::atomic::Ordering::Relaxed);
+        saved = Some((old_mask, ppoll_mask));
+    }
+
+    // Call poll with the same args (fds, nfds, timeout)
+    let result = poll_syscall(
+        cageid,
+        fds_arg,
+        fds_cageid,
+        nfds_arg,
+        nfds_cageid,
+        timeout_arg,
+        timeout_cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    // Restore the original signal mask
+    if let Some((old_mask, ppoll_mask)) = saved {
+        cage.sigset
+            .store(old_mask, std::sync::atomic::Ordering::Relaxed);
+
+        // Check if any signals that were blocked during ppoll are now
+        // unblocked after restoring the original mask
+        let newly_unblocked = ppoll_mask & !old_mask;
+        if newly_unblocked != 0 {
+            let pending_signals = cage.pending_signals.read();
+            if pending_signals
+                .iter()
+                .any(|signo| (newly_unblocked & cage::convert_signal_mask(*signo)) != 0)
+            {
+                cage::signal_epoch_trigger(cageid);
+            }
+        }
+    }
+
+    result
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/select.2.html
