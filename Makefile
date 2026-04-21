@@ -103,6 +103,7 @@ test: lindfs
 	fi; \
 	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
+	./scripts/dlopen_smoke_test.sh && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
 	  python3 ./scripts/check_reports.py --debug; \
@@ -119,6 +120,7 @@ test: lindfs
 	  if [ ! -f reports/report.html ]; then cp report.html reports/report.html; fi; \
 	  if [ ! -f reports/wasm.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing wasm report"}' > reports/wasm.json; fi; \
 	  if [ ! -f reports/grates.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing grate report"}' > reports/grates.json; fi; \
+	  if [ ! -f reports/dlopen.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing dlopen report"}' > reports/dlopen.json; fi; \
 	fi; \
 	exit 0
 
