@@ -72,9 +72,8 @@ int main(void) {
 
     printf("PASS: shm intact after unaligned munmap\n");
 
-    // Cleanup disabled: lind-wasm shmdt has null pointer bug
-    // shmdt(shm2);
-    // shmctl(shmid, IPC_RMID, NULL);
+    shmdt(shm2);
+    shmctl(shmid, IPC_RMID, NULL);
 
     return 0;
 }
