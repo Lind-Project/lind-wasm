@@ -1105,44 +1105,42 @@ pub extern "C" fn munmap_syscall(
         return syscall_error(Errno::EINVAL, "munmap", "address it not aligned");
     }
 
-    let vmmap = cage.vmmap.read();
-    let sysaddr = rounded_addr;
-    drop(vmmap);
-
     let rounded_length = round_up_page(len as u64) as usize;
-
-    // we are replacing munmap with mmap because we do not want to really deallocate the memory region
-    // we just want to set the prot of the memory region back to PROT_NONE
-    let result = unsafe {
-        libc::mmap(
-            sysaddr as *mut c_void,
-            rounded_length,
-            PROT_NONE,
-            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-            -1,
-            0,
-        ) as usize
-    };
-    // Check for different failure modes with specific error messages
-    if result as isize == -1 {
-        let errno = get_errno();
-        panic!(
-            "munmap: mmap failed during memory protection reset with errno: {:?}",
-            errno
-        );
-    }
-
-    if result != sysaddr {
-        panic!(
-            "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-            result as *const c_void, sysaddr as *const c_void
-        );
-    }
 
     let mut vmmap = cage.vmmap.write();
 
-    let user_addr = vmmap.sys_to_user(rounded_addr) as u32;
-    vmmap.remove_entry(user_addr >> PAGESHIFT, (rounded_length as u32) >> PAGESHIFT);
+    let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
+    let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
+
+    let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
+
+    for (act_start, act_end) in overlaps {
+        let (act_start, act_end) = (act_start as usize, act_end as usize);
+        let act_start_addr = vmmap.user_to_sys((act_start as u32) << PAGESHIFT);
+        let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
+        let result = unsafe {
+            libc::mmap(
+                act_start_addr as *mut c_void,
+                act_len,
+                PROT_NONE,
+                (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+                -1,
+                0,
+            ) as usize
+        };
+        if result != act_start_addr {
+            lind_debug_panic(&format!(
+                "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
+                result as *const c_void, act_start_addr as *const c_void
+            ));
+        }
+        if result as isize == -1 {
+            let errno = get_errno();
+            return handle_errno(errno, "munmap");
+        }
+    }
+
+    vmmap.remove_entry(req_start, req_end - req_start);
 
     0
 }
@@ -4353,36 +4351,25 @@ pub extern "C" fn shmat_syscall(
     let result = vmmap.sys_to_user(result);
     drop(vmmap);
 
-    // If the syscall succeeded, update the vmmap entry.
-    if result as i32 >= 0 {
-        // Ensure the syscall attached the segment at the expected address.
-        if result as u32 != useraddr {
-            panic!("shmat did not attach at the expected address");
-        }
-        let mut vmmap = cage.vmmap.write();
-        let backing = MemoryBackingType::SharedMemory(shmid as u64);
-        // Use the effective protection (prot) for both the current and maximum protection.
-        let maxprot = prot;
-        // Add a new vmmap entry for the shared memory segment.
-        // Since shared memory is not file-backed, there are no extra mapping flags
-        // or file offset parameters to consider; thus, we pass 0 for both.
-        vmmap
-            .add_entry_with_overwrite(
-                useraddr >> PAGESHIFT,
-                (rounded_length >> PAGESHIFT) as u32,
-                prot,
-                maxprot,
-                0, // No flags for shared memory mapping
-                backing,
-                0, // Offset is not applicable for shared memory
-                len as i64,
-                cageid,
-            )
-            .expect("shmat: failed to add vmmap entry");
-    } else {
-        // If the syscall failed, propagate the error.
-        return result as i32;
+    if result as u32 != useraddr {
+        panic!("shmat did not attach at the expected address");
     }
+    let mut vmmap = cage.vmmap.write();
+    let backing = MemoryBackingType::SharedMemory(shmid as u64);
+    let maxprot = prot;
+    vmmap
+        .add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
+            prot,
+            maxprot,
+            0,
+            backing,
+            0,
+            len as i64,
+            cageid,
+        )
+        .expect("shmat: failed to add vmmap entry");
 
     useraddr as i32
 }
@@ -4427,7 +4414,11 @@ pub extern "C" fn shmdt_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let useraddr = sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid);
+    // NOTE: glibc's shmdt wrapper already calls TRANSLATE_GUEST_POINTER_TO_HOST,
+    // so shmaddr_arg is already a host/system pointer. Do NOT translate again.
+    // This avoids dependency on vmmap.base_address which can change after fork/exec.
+    let sysaddr = shmaddr_arg as usize;
+
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -4444,31 +4435,23 @@ pub extern "C" fn shmdt_syscall(
     let cage = get_cage(cageid).unwrap();
 
     // Check that the provided address is aligned on a page boundary.
-    let rounded_addr = round_up_page(useraddr as u64) as usize;
-    if rounded_addr != useraddr as usize {
+    if sysaddr & (PAGESIZE as usize - 1) != 0 {
         return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
     }
 
-    // Convert the user address into a system address using the vmmap.
-    let vmmap = cage.vmmap.read();
-    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
-    drop(vmmap);
-
-    // Call shmdt_helper which returns length of the detached segment
+    // Call shmdt_helper which returns length of the detached segment.
+    // Pass the host address directly - rev_shm stores host addresses from shmat.
     let length = shmdt_helper(cageid, sysaddr as *mut u8);
     if length < 0 {
         return length;
     }
 
     // Remove the mapping from the vmmap.
-    // This call removes the range starting at the page-aligned user address,
-    // for the number of pages that cover the shared memory region.
+    // Convert sys address back to user address for vmmap bookkeeping.
     let mut vmmap = cage.vmmap.write();
+    let useraddr = vmmap.sys_to_user(sysaddr);
     vmmap
-        .remove_entry(
-            rounded_addr as u32 >> PAGESHIFT,
-            (length as u32) >> PAGESHIFT,
-        )
+        .remove_entry(useraddr >> PAGESHIFT, (length as u32) >> PAGESHIFT)
         .expect("shmdt: remove_entry failed");
 
     0
