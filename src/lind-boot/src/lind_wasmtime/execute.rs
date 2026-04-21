@@ -697,8 +697,6 @@ fn load_main_module(
     drop(linker);
     drop(linker_guard);
 
-    println!("[lind-boot] Starting main module in cage {}", cageid);
-
     let ret = match func {
         Some(func) => invoke_func(store, func, &args),
         None => Ok(vec![]),

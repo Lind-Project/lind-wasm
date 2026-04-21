@@ -104,6 +104,7 @@ pub fn register_grate_handler_for_cage(
 }
 
 fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>> {
+    #[cfg(feature = "debug-grate-calls")]
     println!("[lind-boot] Retrieving grate handler for grate_id {}", grate_id);
     let pool = GRATE_POOL
         .get()
@@ -115,6 +116,7 @@ fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>
 
     let guard = slot.lock().unwrap();
 
+    #[cfg(feature = "debug-grate-calls")]
     println!("[lind-boot] Grate handler for grate_id {} is {}", grate_id, if guard.is_some() { "present" } else { "absent" });
 
     guard
@@ -124,9 +126,11 @@ fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>
 }
 
 pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<i32> {
+    #[cfg(feature = "debug-grate-calls")]
     println!("[lind-boot] Submitting grate request to cage {}, handler_addr: {:#x}", req.cageid, req.handler_addr);
     let handler = match get_grate_handler(grate_id) {
         Ok(handler) => {
+            #[cfg(feature = "debug-grate-calls")]
             println!("[lind-boot] got handler");
             handler
         }

@@ -52,11 +52,19 @@ impl SerialExecutor {
     fn enter(&self) -> MutexGuard<'_, ()> {
         match self.lock.lock() {
             Ok(guard) => {
-                println!("SerialExecutor: acquired lock");
+                #[cfg(feature = "debug-grate-calls")]
+                {
+                    println!("SerialExecutor: acquired lock");
+                }
+                
                 guard
             }
             Err(poisoned) => {
-                println!("Serial execution lock poisoned; continuing because it is only used as a gate");
+                #[cfg(feature = "debug-grate-calls")]
+                {
+                    println!("SerialExecutor: lock poisoned, but continuing anyway");
+                }
+                
                 poisoned.into_inner()
             }
         }
@@ -259,10 +267,13 @@ impl<T> GrateWorker<T> {
     }
 
     fn run(&mut self, req: GrateRequest) -> anyhow::Result<i32> {
-        println!(
-            "Worker {} handling grate request for cage {}, handler_addr: {:#x}",
-            self.worker_id, req.cageid, req.handler_addr
-        );
+        #[cfg(feature = "debug-grate-calls")]
+        {
+            println!(
+                "Worker {} handling grate request for cage {}, handler_addr: {:#x}",
+                self.worker_id, req.cageid, req.handler_addr
+            );
+        }
 
         self.reset_worker_stack();
 
@@ -294,6 +305,7 @@ impl<T> GrateWorker<T> {
             e
         ))?;
 
+        #[cfg(feature = "debug-grate-calls")]
         println!("Worker {} got result {} from pass_fptr_to_wt", self.worker_id, ret);
         Ok(ret)
     } 
@@ -308,10 +320,6 @@ where
     T: Clone,
 {
     let mut store = Store::new(&template.engine, host);
-
-    // store.epoch_deadline_trap();
-    // // interrupt at next trigger
-    // store.set_epoch_deadline(1);
 
     let mut linker: Linker<T> = template.linker.clone();
 
@@ -343,7 +351,6 @@ where
         pass_fptr_func,
         stack_base,
         stack_top,
-        // stack_arena_base,
     })
 }
 

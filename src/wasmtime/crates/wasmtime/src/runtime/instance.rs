@@ -384,11 +384,7 @@ impl Instance {
                         lind_platform_const::MAX_GRATE_WORKERS as usize * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
 
                     lind_platform_const::init_stack_arena_base(stack_arena_base);
-                    // let required_memory_size = stack_arena_base as usize + stack_arena_size;
-
-                    // minimal_size
-                    //     .try_into()
-                    //     .expect("allocated memory is larger than 4GB")
+                    
                     (0, (stack_arena_base as usize + stack_arena_size).try_into().expect("allocated memory is larger than 4GB"))
                 };
 
