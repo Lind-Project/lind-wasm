@@ -10,9 +10,9 @@ use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
     AT_FDCWD, FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS,
-    MAP_FIXED, MAP_HUGETLB, MAP_POPULATE, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE,
-    PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY,
-    STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
+    MAP_FIXED, MAP_POPULATE, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
+    PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
+    STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
@@ -854,10 +854,9 @@ pub extern "C" fn mmap_syscall(
         | MAP_SHARED as i32
         | MAP_PRIVATE as i32
         | MAP_ANONYMOUS as i32
-        | MAP_POPULATE as i32
-        | MAP_HUGETLB as i32;
+        | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic("Unsupported mmap flag detected! Only MAP_FIXED, MAP_SHARED, MAP_PRIVATE, MAP_POPULATE, MAP_ANONYMOUS and MAP_HUGETLB allowed");
+        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
     }
 
     if prot & PROT_EXEC > 0 {
