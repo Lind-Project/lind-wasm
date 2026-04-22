@@ -158,7 +158,7 @@ def generate_html_report(result: dict[str, Any]) -> str:
 <html><head><meta charset="UTF-8"><title>Libc++ integration report</title></head>
 <body>
 <h1>Libc++ integration report</h1>
-<p>Smoke test: <code>lind_compile_cpp --compile-only</code> on the repo C++ hello source.</p>
+<p>smoke test: <code>lind_compile_cpp --compile-only</code> on test file(s) in ./tests/unit-tests/cpp/... into .wasm.</p>
 <table border="1" cellspacing="0" cellpadding="6">
 <tr><th>Metric</th><th>Value</th></tr>
 <tr><td>Total</td><td>{total}</td></tr>
