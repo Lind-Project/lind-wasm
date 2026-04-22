@@ -856,7 +856,7 @@ pub extern "C" fn mmap_syscall(
         | MAP_ANONYMOUS as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic("Unsupported mmap flag detected! Only MAP_FIXED, MAP_SHARED, MAP_PRIVATE, MAP_POPULATE AND MAP_ANONYMOUS allowed");
+        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
     }
 
     if prot & PROT_EXEC > 0 {
