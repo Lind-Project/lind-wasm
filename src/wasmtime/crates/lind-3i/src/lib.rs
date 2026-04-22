@@ -1,15 +1,29 @@
+use anyhow::{anyhow, Context, Result};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
 use threei::threei_const;
-use std::sync::{Condvar, Mutex, MutexGuard, Arc};
-use std::collections::HashMap;
-use anyhow::{Context, Result, anyhow};
-use wasmtime::{Engine, Module, Linker, Store, Instance, TypedFunc, Val};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-
+use wasmtime::{Engine, Instance, Linker, Module, Store, TypedFunc, Val};
 
 type PassFptrTyped = TypedFunc<
-    (u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64),
+    (
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ),
     i32,
 >;
 
@@ -56,7 +70,7 @@ impl SerialExecutor {
                 {
                     println!("SerialExecutor: acquired lock");
                 }
-                
+
                 guard
             }
             Err(poisoned) => {
@@ -64,7 +78,7 @@ impl SerialExecutor {
                 {
                     println!("SerialExecutor: lock poisoned, but continuing anyway");
                 }
-                
+
                 poisoned.into_inner()
             }
         }
@@ -81,17 +95,17 @@ struct GrateWorker<T> {
 }
 
 fn worker_stack_base(workerid: WorkerId) -> u32 {
-        let stack_arena_base = STACK_ARENA_BASE.get().copied().unwrap_or_else(|| {
-            panic!("STACK_ARENA_BASE is not initialized");
-        });
-        stack_arena_base
-            + (workerid as u32 - 1) * (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)
-            + GRATE_STACK_GUARD_SIZE
-    }
+    let stack_arena_base = STACK_ARENA_BASE.get().copied().unwrap_or_else(|| {
+        panic!("STACK_ARENA_BASE is not initialized");
+    });
+    stack_arena_base
+        + (workerid as u32 - 1) * (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)
+        + GRATE_STACK_GUARD_SIZE
+}
 
-    fn worker_stack_top(workerid: WorkerId) -> u32 {
-        worker_stack_base(workerid) + GRATE_STACK_SLOT_SIZE
-    }
+fn worker_stack_top(workerid: WorkerId) -> u32 {
+    worker_stack_base(workerid) + GRATE_STACK_SLOT_SIZE
+}
 
 struct WorkerLease<'a, T> {
     owner: &'a GrateHandler<T>,
@@ -126,7 +140,6 @@ pub enum ConcurrencyMode {
 
 pub struct GrateHandler<T> {
     grate_id: u64,
-    engine: Engine, // needed by epoch to interrupt all workers of the handler
     main_worker: WorkerId,
     concurrency_mode: ConcurrencyMode,
     serial_executor: SerialExecutor,
@@ -150,12 +163,7 @@ impl<T: Clone> GrateHandler<T> {
         cageid: u64,
     ) -> anyhow::Result<()> {
         for handler_id in 1_u64..=MAX_GRATE_WORKERS as u64 {
-            let worker = create_worker(
-                template,
-                host.clone(),
-                handler_id,
-            )
-            .with_context(|| {
+            let worker = create_worker(template, host.clone(), handler_id).with_context(|| {
                 format!(
                     "failed to create worker {} for cageid {}",
                     handler_id, cageid
@@ -277,38 +285,45 @@ impl<T> GrateWorker<T> {
 
         self.reset_worker_stack();
 
-        let func = self.pass_fptr_func
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id))?;
+        let func = self.pass_fptr_func.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id)
+        })?;
 
-        let ret = func.call(
-            &mut self.store,
-            (
-                req.handler_addr,
-                req.cageid,
-                req.arg1,
-                req.arg1cageid,
-                req.arg2,
-                req.arg2cageid,
-                req.arg3,
-                req.arg3cageid,
-                req.arg4,
-                req.arg4cageid,
-                req.arg5,
-                req.arg5cageid,
-                req.arg6,
-                req.arg6cageid,
-            ),
-        ).map_err(|e| anyhow::anyhow!(
-            "pass_fptr_to_wt trapped in worker {}: {:#}",
-            self.worker_id,
-            e
-        ))?;
+        let ret = func
+            .call(
+                &mut self.store,
+                (
+                    req.handler_addr,
+                    req.cageid,
+                    req.arg1,
+                    req.arg1cageid,
+                    req.arg2,
+                    req.arg2cageid,
+                    req.arg3,
+                    req.arg3cageid,
+                    req.arg4,
+                    req.arg4cageid,
+                    req.arg5,
+                    req.arg5cageid,
+                    req.arg6,
+                    req.arg6cageid,
+                ),
+            )
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "pass_fptr_to_wt trapped in worker {}: {:#}",
+                    self.worker_id,
+                    e
+                )
+            })?;
 
         #[cfg(feature = "debug-grate-calls")]
-        println!("Worker {} got result {} from pass_fptr_to_wt", self.worker_id, ret);
+        println!(
+            "Worker {} got result {} from pass_fptr_to_wt",
+            self.worker_id, ret
+        );
         Ok(ret)
-    } 
+    }
 }
 
 pub fn create_worker<T>(
@@ -332,12 +347,22 @@ where
         .context("failed to instantiate grate module")?;
 
     let pass_fptr_func = match instance.get_export(&mut store, "pass_fptr_to_wt") {
-        Some(_) => Some(
-            instance.get_typed_func::<
-                (u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64),
-                i32,
-            >(&mut store, "pass_fptr_to_wt")?
-        ),
+        Some(_) => Some(instance.get_typed_func::<(
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+            u64,
+        ), i32>(&mut store, "pass_fptr_to_wt")?),
         None => None,
     };
 
@@ -362,7 +387,6 @@ pub fn create_handler_for_cage<T: Clone>(
 ) -> anyhow::Result<GrateHandler<T>> {
     let mut handler = GrateHandler {
         grate_id: cageid,
-        engine: template.engine.clone(),
         main_worker: 1,
         concurrency_mode,
         serial_executor: SerialExecutor::new(),
@@ -379,11 +403,10 @@ pub fn create_handler_for_cage<T: Clone>(
     Ok(handler)
 }
 
-
-use std::collections::{VecDeque};
+use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::{OnceLock};
+use std::sync::OnceLock;
 
 #[derive(Clone, Copy)]
 pub struct VmCtxWrapper {

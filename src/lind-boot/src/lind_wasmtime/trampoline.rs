@@ -1,4 +1,4 @@
-use crate::lind_wasmtime::host::{submit_grate_request};
+use crate::lind_wasmtime::host::submit_grate_request;
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx};
 use anyhow::anyhow;
 use threei::threei_const;
@@ -49,12 +49,18 @@ pub extern "C" fn grate_callback_trampoline(
     let req = GrateRequest {
         handler_addr: in_grate_fn_ptr_u64,
         cageid: cageid,
-        arg1, arg1cageid,
-        arg2, arg2cageid,
-        arg3, arg3cageid,
-        arg4, arg4cageid,
-        arg5, arg5cageid,
-        arg6, arg6cageid,
+        arg1,
+        arg1cageid,
+        arg2,
+        arg2cageid,
+        arg3,
+        arg3cageid,
+        arg4,
+        arg4cageid,
+        arg5,
+        arg5cageid,
+        arg6,
+        arg6cageid,
     };
 
     match submit_grate_request(cageid, req) {

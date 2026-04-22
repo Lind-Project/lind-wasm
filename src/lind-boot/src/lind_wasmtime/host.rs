@@ -1,11 +1,11 @@
 use crate::cli::CliOptions;
 use std::sync::{Arc, Mutex, OnceLock};
+use sysdefs::constants::lind_platform_const;
 use wasmtime::{Table, TypedFunc};
+use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_utils::LindGOT;
-use wasmtime_lind_3i::*;
-use sysdefs::constants::lind_platform_const;
 
 /// The HostCtx host structure stores all relevant execution context objects:
 /// `lind_environ`: argv/environ data served by the 4 host functions in lind-common;
@@ -57,7 +57,6 @@ impl DylinkMetadata {
     }
 }
 
-
 static GRATE_POOL: OnceLock<Vec<Mutex<Option<Arc<GrateHandler<HostCtx>>>>>> = OnceLock::new();
 
 /// Initialize the global `GrateHandler` pool.
@@ -76,14 +75,8 @@ pub fn register_grate_handler_for_cage(
     template: &GrateTemplate<HostCtx>,
     host: HostCtx,
     cageid: u64,
-) -> anyhow::Result<()>
-{
-    let handler = create_handler_for_cage(
-        template,
-        host,
-        cageid,
-        ConcurrencyMode::Parallel,
-    )?;
+) -> anyhow::Result<()> {
+    let handler = create_handler_for_cage(template, host, cageid, ConcurrencyMode::Parallel)?;
 
     let pool = GRATE_POOL
         .get()
@@ -105,7 +98,10 @@ pub fn register_grate_handler_for_cage(
 
 fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>> {
     #[cfg(feature = "debug-grate-calls")]
-    println!("[lind-boot] Retrieving grate handler for grate_id {}", grate_id);
+    println!(
+        "[lind-boot] Retrieving grate handler for grate_id {}",
+        grate_id
+    );
     let pool = GRATE_POOL
         .get()
         .ok_or_else(|| anyhow::anyhow!("GRATE_POOL is not initialized"))?;
@@ -117,7 +113,11 @@ fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>
     let guard = slot.lock().unwrap();
 
     #[cfg(feature = "debug-grate-calls")]
-    println!("[lind-boot] Grate handler for grate_id {} is {}", grate_id, if guard.is_some() { "present" } else { "absent" });
+    println!(
+        "[lind-boot] Grate handler for grate_id {} is {}",
+        grate_id,
+        if guard.is_some() { "present" } else { "absent" }
+    );
 
     guard
         .as_ref()
@@ -127,7 +127,10 @@ fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>
 
 pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<i32> {
     #[cfg(feature = "debug-grate-calls")]
-    println!("[lind-boot] Submitting grate request to cage {}, handler_addr: {:#x}", req.cageid, req.handler_addr);
+    println!(
+        "[lind-boot] Submitting grate request to cage {}, handler_addr: {:#x}",
+        req.cageid, req.handler_addr
+    );
     let handler = match get_grate_handler(grate_id) {
         Ok(handler) => {
             #[cfg(feature = "debug-grate-calls")]
@@ -141,9 +144,7 @@ pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<
     handler.submit(req)
 }
 
-pub fn unregister_grate_handler(
-    grate_id: u64,
-) -> anyhow::Result<Arc<GrateHandler<HostCtx>>> {
+pub fn unregister_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>> {
     let pool = GRATE_POOL
         .get()
         .ok_or_else(|| anyhow::anyhow!("GRATE_POOL is not initialized"))?;

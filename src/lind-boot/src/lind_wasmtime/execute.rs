@@ -1,5 +1,7 @@
 use crate::lind_wasmtime::host::DylinkMetadata;
-use crate::lind_wasmtime::host::{init_grate_pool, register_grate_handler_for_cage, cleanup_grate_handler};
+use crate::lind_wasmtime::host::{
+    cleanup_grate_handler, init_grate_pool, register_grate_handler_for_cage,
+};
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
@@ -22,7 +24,6 @@ use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
     Store, Val, ValType, WasmBacktraceDetails,
 };
-// use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
 use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
@@ -849,9 +850,14 @@ fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
     // When passing in a .wasm file, the ELF parsing unwinds early. (`ElfFile64::parse(&read_cache)?;`)
     // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
     match engine.detect_precompiled_file(path) {
-        Ok(_) => unsafe { Module::deserialize_file(engine, path) }
-            .with_context(|| format!("failed to deserialize precompiled module {}", path.display())),
-        Err(_) => Module::from_file(engine, path).with_context(|| format!("failed to compile module {}", path.display())),
+        Ok(_) => unsafe { Module::deserialize_file(engine, path) }.with_context(|| {
+            format!(
+                "failed to deserialize precompiled module {}",
+                path.display()
+            )
+        }),
+        Err(_) => Module::from_file(engine, path)
+            .with_context(|| format!("failed to compile module {}", path.display())),
     }
 }
 

@@ -1441,14 +1441,15 @@ impl<T> Linker<T> {
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _stack_arena_size, instance_id) = module_linker.instantiate_with_lind(
-                    &mut store,
-                    &module,
-                    InstantiateType::InstantiateLib {
-                        cageid,
-                        memory_base: handler,
-                    },
-                )?;
+                let (instance, _stack_arena_size, instance_id) = module_linker
+                    .instantiate_with_lind(
+                        &mut store,
+                        &module,
+                        InstantiateType::InstantiateLib {
+                            cageid,
+                            memory_base: handler,
+                        },
+                    )?;
 
                 if let Some(wasm_name) = module.name() {
                     store

@@ -75,7 +75,13 @@ lazy_static! {
 
 /// `register_trampoline` registers a trampoline function for the given runtime ID.
 pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn, cleanup_funcptr: u64) {
-    TRAMPOLINE_TABLE.insert(runtime, TrampolineEntry { trampoline: f, cleanup_funcptr });
+    TRAMPOLINE_TABLE.insert(
+        runtime,
+        TrampolineEntry {
+            trampoline: f,
+            cleanup_funcptr,
+        },
+    );
 }
 
 /// `get_runtime_trampoline` retrieves the trampoline function associated with the given runtime ID.
@@ -88,7 +94,9 @@ pub fn get_runtime_trampoline(runtime: u64) -> Option<GrateTrampolineFn> {
 }
 
 pub fn get_runtime_cleanup_funcptr(runtime: u64) -> Option<u64> {
-    TRAMPOLINE_TABLE.get(&runtime).map(|entry| entry.cleanup_funcptr)
+    TRAMPOLINE_TABLE
+        .get(&runtime)
+        .map(|entry| entry.cleanup_funcptr)
 }
 
 /// This table maintains a mapping from cage IDs to runtime IDs.

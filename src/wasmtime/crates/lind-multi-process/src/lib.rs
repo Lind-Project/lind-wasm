@@ -2,7 +2,7 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Context, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
@@ -11,10 +11,6 @@ use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
-// use wasmtime_lind_3i::{
-//     get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
-//     VmCtxWrapper,
-// };
 use wasmtime_lind_3i::*;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
@@ -637,7 +633,7 @@ impl<
 
                     // new cage created, increment the cage counter
                     lind_manager.increment();
-                    
+
                     // 4) Notify threei of the cage runtime type
                     threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
@@ -661,7 +657,7 @@ impl<
 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
-                    
+
                     let grate_template = GrateTemplate {
                         engine: module.engine().clone(),
                         module: module.clone(),
@@ -670,9 +666,15 @@ impl<
                     };
 
                     // register grate workers for this cage
-                    create_handler_for_cage(&grate_template, store.data().clone(), child_cageid, ConcurrencyMode::Parallel)
-                        .with_context(|| format!("failed to register grate workers for cage {}", child_cageid));
-                    
+                    create_handler_for_cage(
+                        &grate_template,
+                        store.data().clone(),
+                        child_cageid,
+                        ConcurrencyMode::Parallel,
+                    )
+                    .with_context(|| {
+                        format!("failed to register grate workers for cage {}", child_cageid)
+                    });
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -967,17 +969,16 @@ impl<
                         None
                     };
 
-                    let (mut linker,
-                         memory_base_table,
-                         epoch_handler,
-                         _,
-                        ) = Linker::new_child_linker(&mut store,
-                                &engine,
-                                &mut child_got,
-                                &snapshot.0,
-                                &snapshot.1,
-                                &snapshot.2
-                        ).expect("failed to create child linker");
+                    let (mut linker, memory_base_table, epoch_handler, _) =
+                        Linker::new_child_linker(
+                            &mut store,
+                            &engine,
+                            &mut child_got,
+                            &snapshot.0,
+                            &snapshot.1,
+                            &snapshot.2,
+                        )
+                        .expect("failed to create child linker");
 
                     let child_table = if dylink_enabled {
                         let mut table_size = 0;
@@ -986,7 +987,9 @@ impl<
                                 table_size = table.minimum();
                             }
                         }
-                        let mut child_table = linker.attach_function_table(&mut store, table_size).unwrap();
+                        let mut child_table = linker
+                            .attach_function_table(&mut store, table_size)
+                            .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
 
@@ -1008,21 +1011,29 @@ impl<
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
                             // to null funcref.
-                            child_table.grow(
-                                &mut store,
-                                dylink_info.table_size,
-                                wasmtime::Ref::Func(None),
-                            ).unwrap();
+                            child_table
+                                .grow(
+                                    &mut store,
+                                    dylink_info.table_size,
+                                    wasmtime::Ref::Func(None),
+                                )
+                                .unwrap();
 
-                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
-                            let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_memory_base = *memory_base_table
+                                .get(module_name)
+                                .expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
                             // Link the library instance into the main linker namespace.
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1033,8 +1044,12 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
-                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
-                                ).unwrap();
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
+                                )
+                                .unwrap();
                             linker.allow_shadowing(false);
                         }
 
@@ -1061,11 +1076,18 @@ impl<
                     //    Store/Instance, so globals must be explicitly synced from the parent's
                     //    snapshot. Snapshots are looked up by module name; backup instances are
                     //    never registered and are therefore naturally excluded.
-                    let main_module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
-                    store.as_context_mut().register_named_instance(main_module_name.to_string(), grate_instanceid);
+                    let main_module_name = module
+                        .name()
+                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    store
+                        .as_context_mut()
+                        .register_named_instance(main_module_name.to_string(), grate_instanceid);
                     instance.apply_global_snapshots(
                         &mut store,
-                        global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
+                        global_snapshots
+                            .get(main_module_name)
+                            .map(Vec::as_slice)
+                            .unwrap_or(&[]),
                     );
 
                     if dylink_enabled {
@@ -1090,7 +1112,9 @@ impl<
                                 )
                                 .unwrap();
 
-                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1106,25 +1130,31 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
-                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
                                 )
                                 .unwrap();
                             linker.allow_shadowing(false);
                         }
                     }
 
-                    if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
-                        store.as_context_mut(),
-                        "__wasm_init_tls",
-                    ) {
-                        let get_tls_size = instance.get_typed_func::<(), i32>(
-                            store.as_context_mut(),
-                            "__get_aligned_tls_size",
-                        ).unwrap();
+                    if let Ok(init_tls) = instance
+                        .get_typed_func::<i32, ()>(store.as_context_mut(), "__wasm_init_tls")
+                    {
+                        let get_tls_size = instance
+                            .get_typed_func::<(), i32>(
+                                store.as_context_mut(),
+                                "__get_aligned_tls_size",
+                            )
+                            .unwrap();
 
                         let tls_size = get_tls_size.call(store.as_context_mut(), ()).unwrap();
                         stack_addr -= tls_size as u32;
-                        let _ = init_tls.call(store.as_context_mut(), stack_addr as i32).unwrap();
+                        let _ = init_tls
+                            .call(store.as_context_mut(), stack_addr as i32)
+                            .unwrap();
                     }
 
                     // we might also want to perserve the offset of current stack pointer to stack bottom

@@ -380,12 +380,18 @@ impl Instance {
 
                     stack_arena_base = round_up_size(minimal_size as u32, PAGESIZE) as u32;
 
-                    let stack_arena_size =
-                        lind_platform_const::MAX_GRATE_WORKERS as usize * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                    let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
+                        * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
+                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
 
                     lind_platform_const::init_stack_arena_base(stack_arena_base);
-                    
-                    (0, (stack_arena_base as usize + stack_arena_size).try_into().expect("allocated memory is larger than 4GB"))
+
+                    (
+                        0,
+                        (stack_arena_base as usize + stack_arena_size)
+                            .try_into()
+                            .expect("allocated memory is larger than 4GB"),
+                    )
                 };
 
                 let required_memory_page = (start_addr + required_memory_size) >> PAGESHIFT;
