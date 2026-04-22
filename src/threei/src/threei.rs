@@ -58,24 +58,30 @@ pub type GrateTrampolineFn = extern "C" fn(
     arg6cageid: u64,
 ) -> i32;
 
+#[derive(Clone, Copy, Debug)]
+pub struct TrampolineEntry {
+    pub trampoline: GrateTrampolineFn,
+    pub cleanup_funcptr: u64,
+}
+
 /// This table stores trampoline functions associated with runtime identifiers, where a
-/// runtime identifier denotes the execution environment of the executable (e.g., Wasmtime)
+/// runtime identifier denotes the execution environment of the executable (e.g., Wasmtime).
 ///
-/// `TRAMPOLINE_TABLE` is a global map from `runtime_id` to `GrateTrampolineFn`.
-/// DashMap is used to allow concurrent registration and lookup without a global lock.
+/// Each runtime may also carry an associated cleanup function pointer.
 lazy_static! {
-    // <runtime_id, GrateTrampolineFn>
-    pub static ref TRAMPOLINE_TABLE: DashMap<u64, GrateTrampolineFn> = DashMap::new();
+    // <runtime_id, TrampolineEntry>
+    pub static ref TRAMPOLINE_TABLE: DashMap<u64, TrampolineEntry> = DashMap::new();
 }
 
 /// `register_trampoline` registers a trampoline function for the given runtime ID.
-///
-/// todo: In the current implementation, trampolines are registered during runtime
-/// initialization in [wasmtime/run.rs]. This registration logic is expected to move
-/// into lind-boot in the future so that trampoline setup is handled as part of the
-/// system bootstrap process rather than runtime startup.
-pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn) {
-    TRAMPOLINE_TABLE.insert(runtime, f);
+pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn, cleanup_funcptr: u64) {
+    TRAMPOLINE_TABLE.insert(
+        runtime,
+        TrampolineEntry {
+            trampoline: f,
+            cleanup_funcptr,
+        },
+    );
 }
 
 /// `get_runtime_trampoline` retrieves the trampoline function associated with the given runtime ID.
@@ -84,7 +90,13 @@ pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn) {
 ///
 /// This function is used when performing a grate call in `_call_grate_func`.
 pub fn get_runtime_trampoline(runtime: u64) -> Option<GrateTrampolineFn> {
-    TRAMPOLINE_TABLE.get(&runtime).map(|f| *f)
+    TRAMPOLINE_TABLE.get(&runtime).map(|f| f.trampoline)
+}
+
+pub fn get_runtime_cleanup_funcptr(runtime: u64) -> Option<u64> {
+    TRAMPOLINE_TABLE
+        .get(&runtime)
+        .map(|entry| entry.cleanup_funcptr)
 }
 
 /// This table maintains a mapping from cage IDs to runtime IDs.
