@@ -161,6 +161,8 @@ jobs:
           exit 1
 # new libcpp integration test job, using a similar pattern to the e2e job with multiple build attempts and backoff
   docker_libcpp:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     env:
       OUTPUT_LOCAL_DIR: libcpp-output
