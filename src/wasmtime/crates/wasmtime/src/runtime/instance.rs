@@ -795,6 +795,23 @@ impl Instance {
         return Err(());
     }
 
+    pub fn set_stack_pointer(&self, mut store: impl AsContextMut, sp: i32) -> Result<(), ()> {
+        if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_pointer") {
+            match sp_extern {
+                Extern::Global(sp_global) => {
+                    match sp_global.set(store.as_context_mut(), Val::I32(sp)) {
+                        Ok(()) => return Ok(()),
+                        Err(_) => return Err(()),
+                    }
+                }
+                _ => {
+                    return Err(());
+                }
+            }
+        }
+        Err(())
+    }
+
     pub fn get_stack_low(&self, mut store: impl AsContextMut) -> Result<i32, ()> {
         if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_low") {
             match sp_extern {
