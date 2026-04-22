@@ -48,6 +48,9 @@ lindfs:
 	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
 	cp -rT scripts/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
 	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
+	@if [ -d /usr/share/zoneinfo ]; then \
+		cp -r /usr/share/zoneinfo/* $(LINDFS_ROOT)/usr/share/zoneinfo/; \
+	fi
 
 .PHONY: lind-debug
 lind-debug: lindfs build-dir

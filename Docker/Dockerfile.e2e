@@ -35,8 +35,8 @@
 # - build-essential, ca-certificates, curl, libxml2 needed by rust and clang
 FROM ubuntu:22.04 AS base
 ARG WABT_VERSION="1.0.38"
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends -qq \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -qq \
         binutils \
         bison \
         cmake \
@@ -56,6 +56,7 @@ RUN apt-get update && \
         libtool \
         rsync \
         automake \
+        tzdata \
         wget \
     && rm -rf /var/lib/apt/lists/*
 
