@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Libc++ header / toolchain integration harness.
+"""Libc++ header / toolchain integration harness for the unified E2E report.
 
-Runs `scripts/lind_compile_cpp --compile-only` on a small C++ smoke test and
-records the outcome in JSON + HTML for the unified E2E report.
+Runs `scripts/lind_compile_cpp --compile-only` on a small C++ smoke test.
+Expects a full sysroot at `build/sysroot` (including libc++ merge), same as
+Dockerfile `libcpp-test` / E2E `test` stage setup.
 """
 
 from __future__ import annotations
@@ -81,7 +82,7 @@ def run_compile(source: Path) -> tuple[int, str]:
             text=True,
             cwd=str(REPO_ROOT),
         )
-    except Exception as exc:  # noqa: BLE001
+    except OSError as exc:
         return 127, f"Exception running lind_compile_cpp: {exc}"
     combined = ""
     if proc.stdout:
