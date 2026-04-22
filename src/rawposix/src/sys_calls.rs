@@ -23,9 +23,9 @@ use sysdefs::constants::lind_platform_const::{
     WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
-    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_DATA, RLIMIT_NOFILE,
-    RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK,
-    SIG_UNBLOCK, WNOHANG,
+    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_CORE, RLIMIT_DATA,
+    RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
+    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::constants::syscall_const;
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
@@ -1259,6 +1259,10 @@ pub extern "C" fn prlimit64_syscall(
             RLIMIT_NPROC => {
                 old_limit.rlim_cur = MAX_CAGEID as u32;
                 old_limit.rlim_max = MAX_CAGEID as u32;
+            }
+            RLIMIT_CORE => {
+                old_limit.rlim_cur = 0;
+                old_limit.rlim_max = 0;
             }
             _ => {
                 lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
