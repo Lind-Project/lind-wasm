@@ -1,11 +1,13 @@
 name: End-to-end testing
 
 on:
-  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
-
+    branches:
+      - main
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -13,6 +15,12 @@ permissions:
 
 jobs:
   docker_e2e:
+    # If the workflow was triggered by anything other than a pull_request event 
+    # (e.g., push, workflow_dispatch, schedule, pull_request_target), 
+    # github.event_name != 'pull_request' is true.
+    # github.event.pull_request is only populated on pull_request events. 
+    # It is true when the PR is not a draft (i.e., “Ready for review”).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     env:
       REPORT_LOCAL_DIR: test-reports
@@ -157,13 +165,13 @@ jobs:
         run: |
           echo "Tests failed; failing job after posting the report/comment."
           exit 1
-
+# new libcpp integration test job, using a similar pattern to the e2e job with multiple build attempts and backoff
   docker_libcpp:
     runs-on: ubuntu-latest
     env:
       OUTPUT_LOCAL_DIR: libcpp-output
       STATUS_FILE: libcpp_status
-      WASM_FILE_NAME: hello.cpp.wasm
+      WASM_FILE_NAME: hello.cpp.wasm  #TODO: allow this to be run-time configurable if we want to run different libcpp tests in the future
 
     steps:
       - name: Set up Docker Buildx
