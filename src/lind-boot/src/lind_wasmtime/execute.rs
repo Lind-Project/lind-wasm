@@ -1,6 +1,7 @@
 use crate::lind_wasmtime::host::DylinkMetadata;
 use crate::lind_wasmtime::host::{
     cleanup_grate_handler, init_grate_pool, register_grate_handler_for_cage,
+    unregister_grate_handler,
 };
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
@@ -15,9 +16,7 @@ use sysdefs::constants::lind_platform_const::{
     INSTANCE_NUMBER, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
 };
 use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
-use sysdefs::constants::{
-    DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, LINDFS_ROOT, TABLE_START_INDEX,
-};
+use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
 use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
@@ -29,7 +28,6 @@ use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{
     CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, early_init_stack,
-    get_memory_base,
 };
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
@@ -82,6 +80,9 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     if !register_wasmtime_syscall_entry() {
         panic!("[lind-boot] egister syscall handlers (clone/exec/exit) with 3i failed");
     }
+
+    // initialize the vmctx pool for exit/exec/clone reentry into wasmtime runtime
+    init_vmctx_pool();
 
     // -- Initialize the Wasmtime execution environment --
     let wasm_file_path = Path::new(lindboot_cli.wasm_file());
@@ -656,11 +657,6 @@ fn load_main_module(
     // see comments at signal_may_trigger for more details
     signal_may_trigger(cageid);
 
-    // initialize the grate pool and vmctx pool for later use in grate calls and
-    // other syscalls that require re-entry into wasmtime runtime.
-    init_grate_pool();
-    init_vmctx_pool();
-
     // See more details in [lind-3i/src/lib.rs]
     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
     let cage_storeopaque = store.inner_mut();
@@ -676,17 +672,25 @@ fn load_main_module(
     // This function will be called at either the first cage or exec-ed cages.
     set_vmctx_thread(cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-    // 4) register grate workers for this cage
-    let grate_template = GrateTemplate {
-        engine: module.engine().clone(),
-        module: module.clone(),
-        linker: linker_guard.clone(),
-    };
+    // Grate calls only supports static linking for now, so we only initialize the grate pool and register
+    // grate workers when dylink is not enabled.
+    if !dylink_metadata.dylink_enabled {
+        // 4) register grate workers for this cage
+        let grate_template = GrateTemplate {
+            engine: module.engine().clone(),
+            module: module.clone(),
+            linker: linker_guard.clone(),
+        };
+        let host = store.data().clone();
 
-    let host = store.data().clone();
+        // initialize the grate pool for later use in grate calls and
+        // other syscalls that require re-entry into wasmtime runtime.
+        init_grate_pool();
+        unregister_grate_handler(cageid);
 
-    register_grate_handler_for_cage(&grate_template, host, cageid)
-        .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
+        register_grate_handler_for_cage(&grate_template, host, cageid)
+            .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
+    }
 
     // 5) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);

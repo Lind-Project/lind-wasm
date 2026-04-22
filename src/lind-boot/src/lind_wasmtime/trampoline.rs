@@ -1,8 +1,6 @@
 use crate::lind_wasmtime::host::submit_grate_request;
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx};
-use anyhow::anyhow;
 use threei::threei_const;
-use wasmtime::{Caller, Instance};
 use wasmtime_lind_3i::*;
 use wasmtime_lind_multi_process;
 

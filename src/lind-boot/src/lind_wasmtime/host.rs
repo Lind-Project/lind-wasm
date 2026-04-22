@@ -1,7 +1,7 @@
 use crate::cli::CliOptions;
 use std::sync::{Arc, Mutex, OnceLock};
 use sysdefs::constants::lind_platform_const;
-use wasmtime::{Table, TypedFunc};
+use wasmtime::Table;
 use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
