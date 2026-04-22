@@ -706,13 +706,6 @@ fn load_main_module(
         None => Ok(vec![]),
     };
 
-    // if !rm_vmctx(cageid) {
-    //     panic!(
-    //         "[lind-boot] Failed to remove existing VMContext for cage_id {}",
-    //         cageid
-    //     );
-    // }
-
     ret
 }
 

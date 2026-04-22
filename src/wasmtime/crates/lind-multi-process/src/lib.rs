@@ -662,7 +662,6 @@ impl<
                         engine: module.engine().clone(),
                         module: module.clone(),
                         linker: cloned_linker,
-                        // stack_arena_base: stack_arena_base,
                     };
 
                     // register grate workers for this cage
@@ -674,7 +673,8 @@ impl<
                     )
                     .with_context(|| {
                         format!("failed to register grate workers for cage {}", child_cageid)
-                    });
+                    })
+                    .expect("create_handler_for_cage failed");
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
