@@ -1,4 +1,7 @@
 use crate::lind_wasmtime::host::DylinkMetadata;
+use crate::lind_wasmtime::host::{
+    cleanup_grate_handler, init_grate_pool, register_grate_handler_for_cage,
+};
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
@@ -21,7 +24,7 @@ use wasmtime::{
     AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
     Store, Val, ValType, WasmBacktraceDetails,
 };
-use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
+use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{
@@ -66,13 +69,13 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // new cage is created
     lind_manager.increment();
 
-    // Initialize vmctx pool
-    init_vmctx_pool();
+    let grate_cleanup_funcptr = cleanup_grate_handler as *const () as usize as u64;
     // Initialize trampoline entry function pointer for wasmtime runtime.
     // This is for grate calls to re-enter wasmtime runtime.
     threei::register_trampoline(
         threei_const::RUNTIME_TYPE_WASMTIME,
         grate_callback_trampoline,
+        grate_cleanup_funcptr,
     );
 
     // Register syscall handlers (clone/exec/exit) with 3i
@@ -570,7 +573,7 @@ fn load_main_module(
     // I don't setup `epoch_handler` since it seems not being used by our previous implementation.
     // Not sure if this is related to our thread exit problem
     let linker = linker_guard.clone();
-    let (instance, cage_instanceid) = linker
+    let (instance, stack_arena_base, cage_instanceid) = linker
         .instantiate_with_lind(
             &mut *store,
             &module,
@@ -653,6 +656,9 @@ fn load_main_module(
     // see comments at signal_may_trigger for more details
     signal_may_trigger(cageid);
 
+    init_grate_pool();
+    init_vmctx_pool();
+
     // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
     // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
     // instance boundaries particularly difficult. To overcome this, the design employs low-level context
@@ -672,32 +678,23 @@ fn load_main_module(
     // This function will be called at either the first cage or exec-ed cages.
     set_vmctx_thread(cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
+    let grate_template = GrateTemplate {
+        engine: module.engine().clone(),
+        module: module.clone(),
+        linker: linker_guard.clone(),
+    };
+
+    let host = store.data().clone();
+
+    // 4) register grate workers for this cage
+    register_grate_handler_for_cage(&grate_template, host, cageid)
+        .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
+
     // 4) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
     let mut linker = linker_guard.clone();
     linker.define_weak_imports_as_traps(&module);
-
-    // 5) Create backup instances to populate the vmctx pool
-    // See more comments in lind-3i/lib.rs
-    for _ in 0..INSTANCE_NUMBER {
-        let (instance, backup_cage_instanceid) = linker
-            .instantiate_with_lind_thread(&mut *store, &module, false)
-            .context(format!("failed to instantiate"))?;
-
-        // Extract vmctx pointer
-        let backup_cage_storeopaque = store.inner_mut();
-        let backup_cage_instancehandler = backup_cage_storeopaque.instance(backup_cage_instanceid);
-        let backup_vmctx_ptr: *mut c_void = backup_cage_instancehandler.vmctx().cast();
-
-        // Put vmctx in a Send+Sync wrapper
-        let backup_vmctx_wrapper = VmCtxWrapper {
-            vmctx: NonNull::new(backup_vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
-        };
-
-        // Store the vmctx wrapper in the global table for later retrieval during grate calls
-        set_vmctx(cageid, backup_vmctx_wrapper);
-    }
 
     // must drop linker before jump into wasm
     drop(linker);
@@ -707,13 +704,6 @@ fn load_main_module(
         Some(func) => invoke_func(store, func, &args),
         None => Ok(vec![]),
     };
-
-    if !rm_vmctx(cageid) {
-        panic!(
-            "[lind-boot] Failed to remove existing VMContext for cage_id {}",
-            cageid
-        );
-    }
 
     ret
 }
@@ -832,7 +822,7 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
         .with_context(|| format!("failed to read {}", wasm_path.display()))?;
     let cwasm_bytes = engine
         .precompile_module(&wasm_bytes)
-        .context("failed to precompile module")?;
+        .with_context(|| format!("failed to precompile module {}", wasm_path.display()))?;
     std::fs::write(&cwasm_path, cwasm_bytes)
         .with_context(|| format!("failed to write {}", cwasm_path.display()))?;
 
@@ -852,9 +842,14 @@ fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
     // When passing in a .wasm file, the ELF parsing unwinds early. (`ElfFile64::parse(&read_cache)?;`)
     // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
     match engine.detect_precompiled_file(path) {
-        Ok(_) => unsafe { Module::deserialize_file(engine, path) }
-            .context("failed to deserialize precompiled module"),
-        Err(_) => Module::from_file(engine, path).context("failed to compile module"),
+        Ok(_) => unsafe { Module::deserialize_file(engine, path) }.with_context(|| {
+            format!(
+                "failed to deserialize precompiled module {}",
+                path.display()
+            )
+        }),
+        Err(_) => Module::from_file(engine, path)
+            .with_context(|| format!("failed to compile module {}", path.display())),
     }
 }
 

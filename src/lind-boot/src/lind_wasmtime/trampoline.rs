@@ -1,10 +1,10 @@
-use crate::lind_wasmtime::host::PassFptrTyped;
+use crate::lind_wasmtime::host::submit_grate_request;
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx};
 use anyhow::anyhow;
 use threei::threei_const;
-use wasmtime::vm::{VMContext, VMOpaqueContext};
+// use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{Caller, Instance};
-use wasmtime_lind_3i::{VmCtxWrapper, get_vmctx, set_vmctx};
+use wasmtime_lind_3i::*;
 use wasmtime_lind_multi_process;
 
 /// The callback function registered with 3i uses a unified Wasm entry
@@ -46,77 +46,27 @@ pub extern "C" fn grate_callback_trampoline(
     arg6: u64,
     arg6cageid: u64,
 ) -> i32 {
-    let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
-        Some(v) => v,
-        None => {
-            panic!(
-                "[grate_trampoline] no VMContext found for cage_id {}",
-                cageid
-            );
-        }
+    let req = GrateRequest {
+        handler_addr: in_grate_fn_ptr_u64,
+        cageid: cageid,
+        arg1,
+        arg1cageid,
+        arg2,
+        arg2cageid,
+        arg3,
+        arg3cageid,
+        arg4,
+        arg4cageid,
+        arg5,
+        arg5cageid,
+        arg6,
+        arg6cageid,
     };
 
-    // Convert back to VMContext
-    let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
-
-    let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
-
-    // Re-enter Wasmtime using the stored vmctx pointer
-    let grate_ret = unsafe {
-        Caller::with(vmctx_raw, |caller: Caller<'_, HostCtx>| {
-            let Caller {
-                mut store,
-                caller: instance,
-            } = caller;
-
-            let typed_func: PassFptrTyped = match store.data().pass_fptr_func.clone() {
-                // Check if the dispatcher function is already cached.
-                Some(f) => f,
-                // Retrieve and store the dispatcher function. Done on the first syscall
-                // invocation.
-                None => {
-                    let entry_func = instance
-                        .host_state()
-                        .downcast_ref::<Instance>()
-                        .ok_or_else(|| anyhow!("bad host_state Instance"))?
-                        .get_export(&mut store, "pass_fptr_to_wt")
-                        .and_then(|f| f.into_func())
-                        .ok_or_else(|| anyhow!("missing export `pass_fptr_to_wt`"))?;
-
-                    let typed = entry_func.typed(&mut store)?;
-
-                    store.data_mut().pass_fptr_func = Some(typed.clone());
-
-                    typed
-                }
-            };
-
-            // Call the entry function with all arguments and in grate function pointer
-            typed_func.call(
-                &mut store,
-                (
-                    in_grate_fn_ptr_u64,
-                    cageid,
-                    arg1,
-                    arg1cageid,
-                    arg2,
-                    arg2cageid,
-                    arg3,
-                    arg3cageid,
-                    arg4,
-                    arg4cageid,
-                    arg5,
-                    arg5cageid,
-                    arg6,
-                    arg6cageid,
-                ),
-            )
-        })
-        .unwrap_or(threei_const::GRATE_ERR)
-    };
-    // Push the vmctx back to the global pool
-    set_vmctx(cageid, vmctx_wrapper);
-    grate_ret
+    match submit_grate_request(cageid, req) {
+        Ok(ret) => ret,
+        Err(_) => threei_const::GRATE_ERR,
+    }
 }
 
 /// Entry points for Wasmtime-backed multi-process syscalls.

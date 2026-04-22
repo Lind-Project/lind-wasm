@@ -2,7 +2,7 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
@@ -11,10 +11,7 @@ use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
-use wasmtime_lind_3i::{
-    get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
-    VmCtxWrapper,
-};
+use wasmtime_lind_3i::*;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
 use std::ffi::CStr;
@@ -505,7 +502,8 @@ impl<
                         store.set_is_thread(true);
                     }
 
-                    let (instance, grate_instanceid) = linker
+                    // don't use child's stack_arena_base since it is not initialized yet, use parent's stack_arena_base instead
+                    let (instance, _, grate_instanceid) = linker
                         .instantiate_with_lind(
                             &mut store,
                             &module,
@@ -635,12 +633,19 @@ impl<
 
                     // new cage created, increment the cage counter
                     lind_manager.increment();
-                    // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
-                    // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
-                    // instance boundaries particularly difficult. To overcome this, the design employs low-level context
-                    // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-                    // structures. See more details in [lind-3i/src/lib.rs]
-                    // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
+
+                    // 4) Notify threei of the cage runtime type
+                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+
+                    barrier_clone.wait();
+
+                    // update the linker for the child instance, since new linker contains some child-specific defines
+                    let mut new_child_host = store.data_mut();
+                    let new_child_ctx = get_cx(&mut new_child_host);
+                    let cloned_linker = linker.clone();
+                    new_child_ctx.attach_linker(linker);
+                    new_child_ctx.attach_got_table(child_got);
+
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
                     let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
@@ -653,35 +658,23 @@ impl<
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-                    // 4) Notify threei of the cage runtime type
-                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+                    let grate_template = GrateTemplate {
+                        engine: module.engine().clone(),
+                        module: module.clone(),
+                        linker: cloned_linker,
+                    };
 
-                    // 5) Create backup instances to populate the vmctx pool
-                    // See more comments in lind-3i/lib.rs
-                    for _ in 0..9 {
-                        let (_, backup_cage_instanceid) = linker
-                            .instantiate_with_lind_thread(&mut store, &module, false)
-                            .unwrap();
-                        let backup_cage_storeopaque = store.inner_mut();
-                        let backup_cage_instancehandler =
-                            backup_cage_storeopaque.instance(backup_cage_instanceid);
-                        let backup_vmctx_ptr: *mut c_void =
-                            backup_cage_instancehandler.vmctx().cast();
-
-                        let backup_vmctx_wrapper = VmCtxWrapper {
-                            vmctx: NonNull::new(backup_vmctx_ptr).unwrap(),
-                        };
-
-                        set_vmctx(child_cageid, backup_vmctx_wrapper);
-                    }
-
-                    barrier_clone.wait();
-
-                    // update the linker for the child instance, since new linker contains some child-specific defines
-                    let mut new_child_host = store.data_mut();
-                    let new_child_ctx = get_cx(&mut new_child_host);
-                    new_child_ctx.attach_linker(linker);
-                    new_child_ctx.attach_got_table(child_got);
+                    // register grate workers for this cage
+                    create_handler_for_cage(
+                        &grate_template,
+                        store.data().clone(),
+                        child_cageid,
+                        ConcurrencyMode::Parallel,
+                    )
+                    .with_context(|| {
+                        format!("failed to register grate workers for cage {}", child_cageid)
+                    })
+                    .expect("create_handler_for_cage failed");
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -745,7 +738,7 @@ impl<
                             threei::handler_table::_rm_grate_from_handler(child_cageid);
                             cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
                             cage::cage_finalize(child_cageid);
-                            if !rm_vmctx(child_cageid) {
+                            if !rm_vmctx_thread(child_cageid, 0) {
                                 eprintln!(
                                     "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
                                     child_cageid
@@ -976,17 +969,16 @@ impl<
                         None
                     };
 
-                    let (mut linker,
-                         memory_base_table,
-                         epoch_handler,
-                         _,
-                        ) = Linker::new_child_linker(&mut store,
-                                &engine,
-                                &mut child_got,
-                                &snapshot.0,
-                                &snapshot.1,
-                                &snapshot.2
-                        ).expect("failed to create child linker");
+                    let (mut linker, memory_base_table, epoch_handler, _) =
+                        Linker::new_child_linker(
+                            &mut store,
+                            &engine,
+                            &mut child_got,
+                            &snapshot.0,
+                            &snapshot.1,
+                            &snapshot.2,
+                        )
+                        .expect("failed to create child linker");
 
                     let child_table = if dylink_enabled {
                         let mut table_size = 0;
@@ -995,7 +987,9 @@ impl<
                                 table_size = table.minimum();
                             }
                         }
-                        let mut child_table = linker.attach_function_table(&mut store, table_size).unwrap();
+                        let mut child_table = linker
+                            .attach_function_table(&mut store, table_size)
+                            .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
 
@@ -1017,21 +1011,29 @@ impl<
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
                             // to null funcref.
-                            child_table.grow(
-                                &mut store,
-                                dylink_info.table_size,
-                                wasmtime::Ref::Func(None),
-                            ).unwrap();
+                            child_table
+                                .grow(
+                                    &mut store,
+                                    dylink_info.table_size,
+                                    wasmtime::Ref::Func(None),
+                                )
+                                .unwrap();
 
-                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
-                            let module_memory_base = *memory_base_table.get(module_name).expect("memory base not found for library");
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_memory_base = *memory_base_table
+                                .get(module_name)
+                                .expect("memory base not found for library");
 
                             linker.allow_shadowing(true);
                             // Link the library instance into the main linker namespace.
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1042,8 +1044,12 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
-                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
-                                ).unwrap();
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
+                                )
+                                .unwrap();
                             linker.allow_shadowing(false);
                         }
 
@@ -1056,7 +1062,7 @@ impl<
                     store.set_is_thread(true);
 
                     // instantiate the module
-                    let (instance, grate_instanceid) = linker
+                    let (instance, _, grate_instanceid) = linker
                         .instantiate_with_lind_thread(&mut store, &module, false)
                         .unwrap();
 
@@ -1070,11 +1076,18 @@ impl<
                     //    Store/Instance, so globals must be explicitly synced from the parent's
                     //    snapshot. Snapshots are looked up by module name; backup instances are
                     //    never registered and are therefore naturally excluded.
-                    let main_module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
-                    store.as_context_mut().register_named_instance(main_module_name.to_string(), grate_instanceid);
+                    let main_module_name = module
+                        .name()
+                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    store
+                        .as_context_mut()
+                        .register_named_instance(main_module_name.to_string(), grate_instanceid);
                     instance.apply_global_snapshots(
                         &mut store,
-                        global_snapshots.get(main_module_name).map(Vec::as_slice).unwrap_or(&[]),
+                        global_snapshots
+                            .get(main_module_name)
+                            .map(Vec::as_slice)
+                            .unwrap_or(&[]),
                     );
 
                     if dylink_enabled {
@@ -1099,7 +1112,9 @@ impl<
                                 )
                                 .unwrap();
 
-                            let module_name = module.name().unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module
+                                .name()
+                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1115,25 +1130,31 @@ impl<
                                     table_start,
                                     module_memory_base,
                                     ChildLibraryType::Thread(&mut stack_addr),
-                                    global_snapshots.get(module_name).map(Vec::as_slice).unwrap_or(&[]),
+                                    global_snapshots
+                                        .get(module_name)
+                                        .map(Vec::as_slice)
+                                        .unwrap_or(&[]),
                                 )
                                 .unwrap();
                             linker.allow_shadowing(false);
                         }
                     }
 
-                    if let Ok(init_tls) = instance.get_typed_func::<i32, ()>(
-                        store.as_context_mut(),
-                        "__wasm_init_tls",
-                    ) {
-                        let get_tls_size = instance.get_typed_func::<(), i32>(
-                            store.as_context_mut(),
-                            "__get_aligned_tls_size",
-                        ).unwrap();
+                    if let Ok(init_tls) = instance
+                        .get_typed_func::<i32, ()>(store.as_context_mut(), "__wasm_init_tls")
+                    {
+                        let get_tls_size = instance
+                            .get_typed_func::<(), i32>(
+                                store.as_context_mut(),
+                                "__get_aligned_tls_size",
+                            )
+                            .unwrap();
 
                         let tls_size = get_tls_size.call(store.as_context_mut(), ()).unwrap();
                         stack_addr -= tls_size as u32;
-                        let _ = init_tls.call(store.as_context_mut(), stack_addr as i32).unwrap();
+                        let _ = init_tls
+                            .call(store.as_context_mut(), stack_addr as i32)
+                            .unwrap();
                     }
 
                     // we might also want to perserve the offset of current stack pointer to stack bottom
@@ -1250,12 +1271,8 @@ impl<
                         .expect("_start function does not have a return value");
                     match exit_code {
                         Val::I32(val) => {
-                            if !rm_vmctx_thread(child_cageid as u64, next_tid as u64) {
-                                panic!(
-                                    "[wasmtime|thread] Failed to remove existing VMContext for cage_id {}, tid {}",
-                                    child_cageid, next_tid
-                                );
-                            }
+                            // we don't check the status here, since might be removed by group exit
+                            rm_vmctx_thread(child_cageid as u64, next_tid as u64);
                         }
                         _ => {
                             eprintln!("unexpected _start function return type: {:?}", exit_code);
@@ -1392,7 +1409,7 @@ impl<
             // for exec, we do not need to do rewind after unwinding is done
             store.set_asyncify_state(AsyncifyState::Normal);
 
-            if !rm_vmctx(cloned_cageid as u64) {
+            if !rm_vmctx_thread(cloned_cageid as u64, 0) {
                 panic!(
                     "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
                     cloned_cageid
@@ -1481,8 +1498,8 @@ impl<
                 // records zombie/SIGCHLD, removes fdtable + cage.
                 cage::cage_finalize(deferred_cageid);
 
-                // Remove the VMContext pool (backup instances).
-                if !rm_vmctx(deferred_cageid) {
+                // Remove the VMContext pool
+                if !rm_vmctx_thread(deferred_cageid, 0) {
                     eprintln!(
                         "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
                         deferred_cageid
