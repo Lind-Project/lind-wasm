@@ -1,6 +1,8 @@
 LINDFS_ROOT ?= lindfs
 BUILD_DIR ?= build
 SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
+# Prebuilt libc++ headers/libs; merged into $(SYSROOT_DIR) by sync-sysroot when present.
+ARTIFACTS_DIR ?= artifacts
 LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
 LINDBOOT_DEBUG_BIN ?= $(BUILD_DIR)/lind-boot-debug
 LINDFS_DIRS := \
@@ -72,10 +74,26 @@ build_glibc:
 build-dir:
 	mkdir -p $(BUILD_DIR)
 
+# After copying src/glibc/sysroot → $(SYSROOT_DIR), optionally merge libc++ from
+# $(ARTIFACTS_DIR) when that tree is present (same layout as Docker E2E).
+# Remove any existing c++ tree first: it may be a symlink into src/glibc/sysroot
+# (e.g. read-only in Docker), and cp -r into that path would hit EROFS.
+
 .PHONY: sync-sysroot
 sync-sysroot:
 	$(RM) -r $(SYSROOT_DIR)
 	cp -R src/glibc/sysroot $(SYSROOT_DIR)
+	@if [ -d "$(ARTIFACTS_DIR)/include/wasm32-wasi/c++" ] \
+	    && [ -f "$(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++.a" ] \
+	    && [ -f "$(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++abi.a" ]; then \
+	  echo "Merging libc++ from $(ARTIFACTS_DIR) into $(SYSROOT_DIR)"; \
+	  mkdir -p $(SYSROOT_DIR)/include/wasm32-wasi; \
+	  mkdir -p $(SYSROOT_DIR)/lib/wasm32-wasi; \
+	  $(RM) -r $(SYSROOT_DIR)/include/wasm32-wasi/c++; \
+	  cp -r $(ARTIFACTS_DIR)/include/wasm32-wasi/c++ $(SYSROOT_DIR)/include/wasm32-wasi/; \
+	  $(RM) -f $(SYSROOT_DIR)/lib/wasm32-wasi/libc++.a $(SYSROOT_DIR)/lib/wasm32-wasi/libc++abi.a; \
+	  cp $(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++.a $(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++abi.a $(SYSROOT_DIR)/lib/wasm32-wasi/; \
+	fi
 
 .PHONY: test
 test: lindfs
