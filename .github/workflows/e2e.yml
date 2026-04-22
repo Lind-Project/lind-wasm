@@ -11,10 +11,13 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  pull-requests: write
+  contents: read
 
 jobs:
   docker_e2e:
+    permissions:
+      contents: read
+      pull-requests: write
     # If the workflow was triggered by anything other than a pull_request event 
     # (e.g., push, workflow_dispatch, schedule, pull_request_target), 
     # github.event_name != 'pull_request' is true.
@@ -159,7 +162,8 @@ jobs:
         run: |
           echo "Tests failed; failing job after posting the report/comment."
           exit 1
-# new libcpp integration test job, using a similar pattern to the e2e job with multiple build attempts and backoff
+
+  # new libcpp integration test job, using a similar pattern to the e2e job with multiple build attempts and backoff
   docker_libcpp:
     permissions:
       contents: read
