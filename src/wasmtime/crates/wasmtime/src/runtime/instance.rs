@@ -484,16 +484,14 @@ impl Instance {
                 }
 
                 if dylink_enabled {
-                    // apply data relocations
-                    let reloc = instance
-                        .get_typed_func::<(), ()>(
-                            store.as_context_mut(),
-                            "__wasm_apply_data_relocs",
-                        )
-                        .unwrap();
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] main module start reloc func");
-                    let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+                    // apply data relocations if any
+                    if let Ok(reloc) = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
+                    {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] main module start __wasm_apply_data_relocs");
+                        let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+                    }
 
                     // apply tls relocations if any
                     if let Ok(init) = instance
@@ -1015,9 +1013,11 @@ impl Instance {
     ) -> Result<()> {
         // Apply data relocations emitted by the toolchain after exports/GOT have been patched.
         // This populates relocated pointers/data segments inside the library's memory.
-        let reloc =
-            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
-        let _ = reloc.call(store.as_context_mut(), ())?;
+        if let Ok(reloc) =
+            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")
+        {
+            let _ = reloc.call(store.as_context_mut(), ())?;
+        }
 
         // Apply TLS relocations if present.
         if let Ok(init) =
