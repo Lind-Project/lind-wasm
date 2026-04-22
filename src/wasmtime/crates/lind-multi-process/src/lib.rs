@@ -634,7 +634,7 @@ impl<
                     // new cage created, increment the cage counter
                     lind_manager.increment();
 
-                    // 4) Notify threei of the cage runtime type
+                    // Notify threei of the cage runtime type
                     threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
                     barrier_clone.wait();

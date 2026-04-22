@@ -125,13 +125,60 @@ pub enum DylinkErrorCode {
 
 pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 
+/// Maximum number of grate workers that may exist for one grate handler.
+///
+/// This is a platform-wide configuration constant. lind-wasm preallocates
+/// execution capacity for at most `MAX_GRATE_WORKERS` concurrent grate-call
+/// workers, and the stack arena is sized accordingly.
+///
+/// Because this value is global rather than per-instance, every grate-enabled
+/// instance reserves the same number of worker stack slots in linear memory.
 pub const MAX_GRATE_WORKERS: usize = 32;
+
+/// Size in bytes of the usable stack region assigned to one grate worker.
+///
+/// Each worker executes in its own `Store + Instance` context, but workers may
+/// still attach to the same underlying linear memory. Therefore, every worker
+/// must be given a disjoint stack slot inside the shared stack arena.
+///
+/// This constant specifies the usable portion of that per-worker slot.
 pub const GRATE_STACK_SLOT_SIZE: u32 = 8 * 1024 * 1024;
+
+/// Size in bytes of the guard region placed before each grate-worker stack slot.
+///
+/// The stack arena is laid out as repeated
+///
+/// `guard + usable stack slot`
+///
+/// segments, one per worker. The guard region exists to separate adjacent
+/// worker stacks inside shared linear memory and to reduce the risk that stack
+/// growth or stack corruption in one worker silently overlaps another worker’s
+/// usable stack region.
 pub const GRATE_STACK_GUARD_SIZE: u32 = 4 * 1024;
 
 use std::sync::OnceLock;
+
+/// Global base address of the grate stack arena in linear memory.
+///
+/// The stack arena is reserved once during instance initialization and then
+/// reused by grate-worker creation logic to derive each worker’s stack slot:
+///
+/// `worker_stack_base(i) = STACK_ARENA_BASE + (i - 1) * (guard + slot) + guard`
+///
+/// This value is stored globally because the worker stack layout is defined by
+/// a single shared arena formula rather than being recomputed independently by
+/// each worker from instance-local metadata.
+///
+/// This value is placed in `sysdefs` as a shared low-level platform constant
+/// rather than being owned by `lind-3i`, `lind-multi-process`, or Wasmtime
+/// directly. The main reason is dependency hygiene: all three components need
+/// to agree on the same stack-arena base, but placing it in any one of those
+/// layers would introduce circular dependency pressure between runtime,
+/// interposition, and process-management code.
 pub static STACK_ARENA_BASE: OnceLock<u32> = OnceLock::new();
 
+/// See [wasmtime/src/runtime/instance.rs] for the design and rationale
+/// behind this constant and its initialization.
 pub fn init_stack_arena_base(val: u32) {
     let _ = STACK_ARENA_BASE.set(val);
 }

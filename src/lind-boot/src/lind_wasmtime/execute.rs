@@ -656,14 +656,12 @@ fn load_main_module(
     // see comments at signal_may_trigger for more details
     signal_may_trigger(cageid);
 
+    // initialize the grate pool and vmctx pool for later use in grate calls and
+    // other syscalls that require re-entry into wasmtime runtime.
     init_grate_pool();
     init_vmctx_pool();
 
-    // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
-    // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
-    // instance boundaries particularly difficult. To overcome this, the design employs low-level context
-    // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-    // structures. See more details in [lind-3i/src/lib.rs]
+    // See more details in [lind-3i/src/lib.rs]
     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
     let cage_storeopaque = store.inner_mut();
     let cage_instancehandler = cage_storeopaque.instance(cage_instanceid);
@@ -678,6 +676,7 @@ fn load_main_module(
     // This function will be called at either the first cage or exec-ed cages.
     set_vmctx_thread(cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
+    // 4) register grate workers for this cage
     let grate_template = GrateTemplate {
         engine: module.engine().clone(),
         module: module.clone(),
@@ -686,11 +685,10 @@ fn load_main_module(
 
     let host = store.data().clone();
 
-    // 4) register grate workers for this cage
     register_grate_handler_for_cage(&grate_template, host, cageid)
         .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
 
-    // 4) Notify threei of the cage runtime type
+    // 5) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
     let mut linker = linker_guard.clone();
