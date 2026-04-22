@@ -35,8 +35,8 @@
 # - build-essential, ca-certificates, curl, libxml2 needed by rust and clang
 FROM ubuntu:22.04 AS base
 ARG WABT_VERSION="1.0.38"
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends -qq \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -qq \
         binutils \
         bison \
         cmake \
@@ -56,6 +56,7 @@ RUN apt-get update && \
         libtool \
         rsync \
         automake \
+        tzdata \
         wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -99,6 +100,7 @@ RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup component add rust-src --toolchain nightly-2026-02-11-x86_64-unknown-linux-gnu
 
 
 # Build lind-boot
@@ -124,12 +126,14 @@ RUN make lind-boot
 FROM base AS build-glibc
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
 COPY scripts ./scripts
+COPY tools ./tools
 COPY --parents src/glibc Makefile .
-RUN make sysroot
+COPY --from=build-lind-boot --parents build/lind-boot .
+RUN make sysroot \
+ && test -f lindfs/lib/libc.cwasm \
+ && test -f lindfs/lib/libm.cwasm
 
 
-# Build Docker image that includes the full lind-wasm toolchain
-# NOTE: Lind-wasm source code is not included
 # Build Docker image that includes the full lind-wasm toolchain
 # NOTE: Lind-wasm source code is not included
 FROM base AS release
@@ -139,14 +143,18 @@ COPY --from=build-lind-boot --parents build/lind-boot .
 RUN chmod 0755 /build/lind-boot
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --from=build-glibc --parents build/sysroot .
+COPY --from=build-glibc --parents lindfs .
 COPY --parents scripts tests tools skip_test_cases.txt .
 
 ENV LIND_WASM_ROOT=/
 
-RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
- && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run     \
+RUN chmod 0755 /scripts/lind_compile /scripts/lind_run /scripts/cargo-lind_compile \
+ && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
+ && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
- && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
+ && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
@@ -154,18 +162,26 @@ FROM base AS test
 ENV LIND_WASM_ROOT=/
 COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_run \
- && install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
- && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run \
+ && chmod 0755 /scripts/cargo-lind_compile \
+ && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
+ && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
- && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
+ && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
+# NOTE: Precompiled lindfs runtime libraries are mounted and copied into the
+# writable test lindfs so runtime preloads like /lib/libc.cwasm are available.
 # Create symlink so hardcoded paths in wasmtime match Docker environment
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
 # and cache layers. This means they are not preserved in the resulting image.
 RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lind-boot/target \
     --mount=from=build-lind-boot,source=build/lind-boot,destination=/build/lind-boot \
+    --mount=from=build-glibc,source=lindfs,destination=/prebuilt-lindfs,readonly \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
-    make test && \
+    make PREBUILT_LINDFS_ROOT=/prebuilt-lindfs \
+         LIND_RUNTIME_LINDFS_ALIAS=/home/lind/lind-wasm/lindfs \
+         test && \
     make md_generation OUT=/ REPORT=/report.html
 
 

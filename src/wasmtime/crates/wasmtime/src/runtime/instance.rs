@@ -1,44 +1,65 @@
 use crate::linker::{Definition, DefinitionType};
-use crate::prelude::*;
 use crate::runtime::vm::{
     Imports, InstanceAllocationRequest, ModuleRuntimeInfo, StorePtr, VMFuncRef, VMFunctionImport,
     VMGlobalImport, VMMemoryImport, VMOpaqueContext, VMTableImport,
 };
 use crate::store::{InstanceId, StoreOpaque, Stored};
 use crate::types::matching;
+use crate::{prelude::*, ValRaw, ValType};
 use crate::{
     AsContextMut, Engine, Export, Extern, Func, Global, Memory, Module, ModuleExport, SharedMemory,
     StoreContext, StoreContextMut, Table, TypedFunc,
 };
 use alloc::sync::Arc;
 use cage::memory::{fork_vmmap, init_vmmap};
+use cage::DashMap;
 use core::ptr::NonNull;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::LazyLock;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
-use sysdefs::constants::lind_platform_const;
+use sysdefs::constants::syscall_const::MMAP_SYSCALL;
+use sysdefs::constants::{
+    lind_platform_const, DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE,
+};
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
-use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
+use wasmtime_lind_utils::{round_up_size, LindGOT};
 
 use super::Val;
 
-/// Stores the __tls_base value set by __wasm_init_memory during the first
-/// instantiation. Forked children skip __wasm_init_memory (shared memory flag
-/// is already set in copied memory), leaving __tls_base at the module default
-/// of 0. This causes all TLS variable accesses to read/write wrong addresses.
-/// We save the value here and restore it for each forked child.
-static INIT_TLS_BASE: AtomicI32 = AtomicI32::new(0);
-
+/// Describes how a Lind-Wasm instance is being instantiated.
+///
+/// - `InstantiateFirst`:
+///     The first (root) Wasm instance in a process.  
+///     Argument: the cageid associated with this instance.
+///
+/// - `InstantiateChild`:
+///     A child Wasm instance created via a fork-like operation.  
+///     Arguments:
+///       - `parent_cageid`: the parent instance's cageid  
+///       - `child_cageid`: the newly created child instance's cageid
+///
+/// - `InstantiateLib`:
+///     A dynamically loaded library Wasm instance.  
+///     Argument:
+///         - `memory_base`: a pointer to the underlying `memory_base`, which will be
+///                          updated after `mmap` returns to reflect the actual linear memory base.
+///         - `cageid`: the cageid associated with the library
+///         - `needs_init`: whether initialization is needed. Used in alternative routine in multiprocess scenario
 pub enum InstantiateType {
     InstantiateFirst(u64),
     InstantiateChild {
         parent_cageid: u64,
         child_cageid: u64,
+    },
+    InstantiateLib {
+        cageid: u64,
+        memory_base: *mut u32,
     },
 }
 
@@ -59,6 +80,7 @@ pub enum InstantiateType {
 #[repr(transparent)]
 pub struct Instance(Stored<InstanceData>);
 
+#[derive(Clone)]
 pub(crate) struct InstanceData {
     /// The id of the instance within the store, used to find the original
     /// `InstanceHandle`.
@@ -228,7 +250,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
     ) -> Result<Instance> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+        let (instance, start, _instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
@@ -255,12 +277,16 @@ impl Instance {
         store: &mut StoreContextMut<'_, T>,
         module: &Module,
         imports: Imports<'_>,
+        no_start: bool,
     ) -> Result<(Instance, InstanceId)> {
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
-        if let Some(start) = start {
-            instance.start_raw(store, start)?;
+        if !no_start {
+            if let Some(start) = start {
+                instance.start_raw(store, start)?;
+            }
         }
+
         Ok((instance, instanceid))
     }
 
@@ -289,20 +315,7 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
-        // retrieve the initial memory size
-        let plans = module.compiled_module().module().memory_plans.clone();
-        let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
-        // in wasmtime, one page is 65536 bytes, so we need to convert to host pagesize
-        // 1. Get minimum bytes from Wasmtime’s own metadata.
-        let min_bytes = plan
-            .memory
-            .minimum_byte_size()
-            .expect("minimum memory size overflow");
-
-        // 2. Convert bytes to pages.
-        let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
-        let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
+        let dylink_enabled = module.dylink_meminfo().is_some();
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
@@ -322,11 +335,60 @@ impl Instance {
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
-                let handle = store.0.instance(InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let memory_base = defined_memory.base as usize;
+                let mut memory_iter = store.0.all_memories();
+                let memory = memory_iter.next().expect("no defined memory found").clone();
+                drop(memory_iter);
+                let memory_base = memory.data_ptr(&mut *store) as usize;
 
-                init_vmmap(cageid, memory_base, Some(minimal_pages as u32));
+                let (start_addr, required_memory_size) = if dylink_enabled {
+                    // for dynamic builds, we manually calcuate the initial memory region
+                    // which is stack size + data region size
+                    let module_meminfo = module.dylink_meminfo().unwrap();
+                    let rounded_data_size =
+                        round_up_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
+                    // module size is a memory region located after stack, used for storing constant data
+                    let rounded_data_size = round_up_size(rounded_data_size, PAGESIZE);
+                    // initial page includes the stack size and the guard size surrounded by it
+
+                    let stack_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
+                    let rounded_stack_size = round_up_size(stack_size, PAGESIZE);
+
+                    #[cfg(feature = "debug-dylink")]
+                    println!(
+                        "[debug] main module allocate {} + {} bytes",
+                        rounded_stack_size, rounded_data_size
+                    );
+
+                    (rounded_stack_size, rounded_data_size)
+                } else {
+                    // retrieve the initial memory size for static module
+                    let plans = module.compiled_module().module().memory_plans.clone();
+                    let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
+                    // in wasmtime, one page is 65536 bytes, so we need to convert to host pagesize
+                    // 1. Get minimum bytes from Wasmtime’s own metadata.
+                    let min_bytes = plan
+                        .memory
+                        .minimum_byte_size()
+                        .expect("minimum memory size overflow");
+
+                    // 2. Convert bytes to pages.
+                    let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
+                    let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
+
+                    let minimal_size = minimal_pages << PAGESHIFT;
+
+                    (
+                        0,
+                        minimal_size
+                            .try_into()
+                            .expect("allocated memory is larger than 4GB"),
+                    )
+                };
+
+                let required_memory_page = (start_addr + required_memory_size) >> PAGESHIFT;
+
+                init_vmmap(cageid, memory_base, Some(required_memory_page));
+                // Allocated memory should include stack AND constant data region
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
@@ -335,9 +397,9 @@ impl Instance {
                     (MMAP_SYSCALL) as u64, // syscall num
                     0, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     cageid, // target cageid (should be same)
-                    0, // the first memory region starts from 0
+                    start_addr as u64,
                     cageid,
-                    minimal_pages << PAGESHIFT, // size of first memory region
+                    required_memory_size as u64,
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
                     cageid,
@@ -361,67 +423,106 @@ impl Instance {
                 // therefore in this case, we only need to:
                 // 1. set memory base address
                 // 2. fork the memory space from parent
-                let handle = store.0.instance(InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let child_address = defined_memory.base as usize;
+                let mut memory_iter = store.0.all_memories();
+                let memory = memory_iter.next().expect("no defined memory found").clone();
+                drop(memory_iter);
+                let child_address = memory.data_ptr(&mut *store) as usize;
 
-                init_vmmap(child_cageid, child_address, None);
                 fork_vmmap(parent_cageid as u64, child_cageid);
+            }
+            InstantiateType::InstantiateLib {
+                cageid,
+                memory_base,
+            } => {
+                let dylink_meminfo = module.dylink_meminfo().unwrap();
+
+                let rounded_size =
+                    round_up_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
+                let rounded_size = round_up_size(rounded_size, PAGESIZE);
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library size round to {}", rounded_size);
+
+                let mut addr = make_syscall(
+                    cageid,                // self cageid
+                    (MMAP_SYSCALL) as u64, // syscall num
+                    0, // since wasmtime operates with lower level memory, it always interacts with underlying os
+                    cageid, // target cageid (should be same)
+                    0, // the first memory region starts from 0
+                    cageid,
+                    rounded_size as u64, // size of first memory region
+                    cageid,
+                    (PROT_READ | PROT_WRITE) as u64,
+                    cageid,
+                    (MAP_PRIVATE | MAP_ANONYMOUS) as u64,
+                    cageid,
+                    // we need to pass -1 here, but since make_syscall only accepts u64
+                    // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+                    (0 - 1) as u64,
+                    cageid,
+                    0,
+                    cageid,
+                ) as u32;
+
+                // update the address
+                // SAFETY: memory_base here is used in a synchrounous model, so there won't be concurrent access to it,
+                // and it's only updated once during instantiation, so it's safe to update the memory base address here.
+                unsafe {
+                    *memory_base = addr;
+                }
+
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] library memory starts at {}", addr);
             }
         }
 
-        let is_first = matches!(instantiate_type, InstantiateType::InstantiateFirst(_));
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
-        if let Some(start) = start {
-            instance.start_raw(store, start)?;
-        }
-
-        // Fix __tls_base for forked children.
-        //
-        // The module's start function (__wasm_init_memory) uses an atomic flag in
-        // shared linear memory to ensure data-segment initialization runs exactly
-        // once. For the first instance it sets global[1] (__tls_base) to the
-        // address where .tdata was placed. For forked children the flag is already
-        // set (copied from parent), so __wasm_init_memory skips initialization and
-        // __tls_base stays at 0 (the module default). With __tls_base=0 every TLS
-        // variable access (e.g. __ctype_b used by strtoul/isspace) hits the wrong
-        // address, reading garbage pointers and causing spurious memory faults.
-        //
-        // We look up __tls_base by export name rather than hardcoding a global
-        // index, since the index is an implementation detail of wasm-ld that
-        // could change across toolchain versions.
-        // References:
-        //   - LLVM commit implementing __tls_base:
-        //     https://github.com/llvm/llvm-project/commit/42bba4b852b1a63db4043798bba7d9fcea61cbaf
-        //   - WebAssembly tool-conventions TLS segment / __tls_base documentation:
-        //     https://github.com/WebAssembly/tool-conventions/blob/main/Linking.md
-        let tls_global_idx = {
-            let handle = store.0.instance(instanceid);
-            handle
-                .exports()
-                .find(|(name, _)| name.as_str() == "__tls_base")
-                .and_then(|(_, entity)| match entity {
-                    EntityIndex::Global(idx) => Some(*idx),
-                    _ => None,
-                })
-        };
-        if let Some(tls_idx) = tls_global_idx {
-            if is_first {
-                let handle = store.0.instance_mut(instanceid);
-                let export_global = handle.get_exported_global(tls_idx);
-                let val = unsafe { *(*export_global.definition).as_i32() };
-                if val != 0 {
-                    INIT_TLS_BASE.store(val, Ordering::SeqCst);
+        match instantiate_type {
+            InstantiateType::InstantiateFirst(_) => {
+                if let Some(start) = start {
+                    instance.start_raw(store, start)?;
                 }
-            } else {
-                let saved = INIT_TLS_BASE.load(Ordering::SeqCst);
-                if saved != 0 {
-                    let handle = store.0.instance_mut(instanceid);
-                    let export_global = handle.get_exported_global(tls_idx);
-                    unsafe {
-                        *(*export_global.definition).as_i32_mut() = saved;
+
+                if dylink_enabled {
+                    // apply data relocations
+                    let reloc = instance
+                        .get_typed_func::<(), ()>(
+                            store.as_context_mut(),
+                            "__wasm_apply_data_relocs",
+                        )
+                        .unwrap();
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] main module start reloc func");
+                    let _ = reloc.call(store.as_context_mut(), ()).unwrap();
+
+                    // apply tls relocations if any
+                    if let Ok(init) = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
+                    {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] main module start __wasm_apply_tls_relocs");
+                        let _ = init.call(store.as_context_mut(), ()).unwrap();
+                    }
+
+                    if let Ok(constructor) = instance
+                        .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+                    {
+                        let _ = constructor.call(store.as_context_mut(), ()).unwrap();
                     }
                 }
+            }
+            InstantiateType::InstantiateChild {
+                parent_cageid,
+                child_cageid,
+            } => {
+                // memory is already copied from parent, so no need to initialize the memory for child
+            }
+            InstantiateType::InstantiateLib {
+                cageid,
+                memory_base,
+            } => {
+                // for library instance, we have to update the GOT entries before relocation happens
+                // so relocation is moved to linker.rs
             }
         }
 
@@ -571,7 +672,7 @@ impl Instance {
         Instance(store.store_data_mut().insert(handle))
     }
 
-    fn start_raw<T>(&self, store: &mut StoreContextMut<'_, T>, start: FuncIndex) -> Result<()> {
+    pub fn start_raw<T>(&self, store: &mut StoreContextMut<'_, T>, start: FuncIndex) -> Result<()> {
         let id = store.0.store_data()[self.0].id;
         // If a start function is present, invoke it. Make sure we use all the
         // trap-handling configuration in `store` as well.
@@ -873,7 +974,7 @@ impl Instance {
     /// Returns both exported and non-exported globals.
     ///
     /// Gives access to the full globals space.
-    pub(crate) fn all_globals<'a>(
+    pub fn all_globals<'a>(
         &'a self,
         store: &'a mut StoreOpaque,
     ) -> impl ExactSizeIterator<Item = (GlobalIndex, Global)> + 'a {
@@ -904,6 +1005,172 @@ impl Instance {
             .collect::<Vec<_>>()
             .into_iter()
             .map(|(i, m)| (i, unsafe { Memory::from_wasmtime_memory(m, store) }))
+    }
+
+    /// run the data relocation function and constructor function if present
+    /// used for initialization phase of dynamically loaded library
+    pub fn apply_relocs_func_and_constructor<'a>(
+        &'a self,
+        mut store: impl AsContextMut,
+    ) -> Result<()> {
+        // Apply data relocations emitted by the toolchain after exports/GOT have been patched.
+        // This populates relocated pointers/data segments inside the library's memory.
+        let reloc =
+            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs")?;
+        let _ = reloc.call(store.as_context_mut(), ())?;
+
+        // Apply TLS relocations if present.
+        if let Ok(init) =
+            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
+        {
+            let _ = init.call(store.as_context_mut(), ())?;
+        }
+
+        // run the constructor function if present
+        if let Ok(constructor) =
+            self.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_call_ctors")
+        {
+            let _ = constructor.call(store.as_context_mut(), ())?;
+        }
+
+        Ok(())
+    }
+
+    pub fn apply_GOT_relocs<'a>(
+        &'a self,
+        mut store: impl AsContextMut,
+        got: Option<&LindGOT>,
+        table: &Table,
+        memory_base: Option<u32>,
+        fpcast_enabled: bool,
+    ) -> Result<()> {
+        // if updating GOT is not needed (in case of fork or thread creation, as the GOT is already cloned)
+        // just append the library function into function table
+        let need_update_got = got.is_some();
+
+        // Collect exports first to avoid mutating the store/linker while iterating exports.
+        // We split funcs and globals because they are relocated differently.
+        let mut funcs = vec![];
+        let mut globals = vec![];
+        for export in self.exports(&mut store) {
+            let name = export.name().to_owned();
+            match export.into_extern() {
+                Extern::Func(func) => {
+                    funcs.push((name, func));
+                }
+                Extern::Global(global) => {
+                    if need_update_got {
+                        globals.push((name, global));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Patch GOT function entries with the runtime table index of each exported function.
+        // We only update slots that are still unresolved to preserve first-definition-wins
+        // semantics (load-order precedence / interposition).
+        for (name, func) in funcs {
+            // skip updating GOT only if fpcast is enabled
+            // and the function is NOT a fpcast function
+            let should_skip = if fpcast_enabled {
+                if name.starts_with(FPCAST_FUNC_SIGNATURE) {
+                    false
+                } else {
+                    true
+                }
+            } else {
+                false
+            };
+
+            if !should_skip {
+                let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
+                if need_update_got {
+                    let final_name = {
+                        if fpcast_enabled {
+                            // restore to its original name
+                            name.strip_prefix(FPCAST_FUNC_SIGNATURE).unwrap()
+                        } else {
+                            &name
+                        }
+                    };
+
+                    // update GOT entry
+                    let got_inner = got.as_ref().unwrap();
+                    if got_inner.update_entry_if_unresolved(&final_name, index) {
+                        #[cfg(feature = "debug-dylink")]
+                        println!("[debug] update GOT.func.{} to {}", final_name, index);
+                    }
+                }
+            }
+        }
+
+        // Patch GOT memory entries for exported globals.
+        // The exported global value is treated as a module-relative offset; we relocate it by
+        // adding the resolved shared-memory base, producing an absolute address in Lind.
+        // Again, only update unresolved slots to preserve load-order precedence.
+        if need_update_got {
+            let got_inner = got.as_ref().unwrap();
+            let memory_base = memory_base.unwrap();
+            for (name, global) in globals {
+                // Only relocate globals that are actually registered in the GOT.
+                // Applying memory_base to an unrelated exported global would overflow.
+                if !got_inner.has_entry(&name) {
+                    continue;
+                }
+                let val = global.get(&mut store);
+                // relocate the variable
+                let val = val.i32().unwrap() as u32 + memory_base;
+                // update GOT entry
+                if got_inner.update_entry_if_unresolved(&name, val) {
+                    #[cfg(feature = "debug-dylink")]
+                    println!("[debug] update GOT.mem.{} to {}", name, val);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// update the wasm globals within the wasm instance given a snapshot
+    /// used for cloning the state of a wasm instance during fork
+    pub fn apply_global_snapshots<'a>(
+        &'a self,
+        mut store: impl AsContextMut,
+        snapshots: &[(GlobalIndex, i64)],
+    ) {
+        let mut collected_global = vec![];
+        for (index, global) in self.all_globals(store.as_context_mut().0) {
+            collected_global.push((index, global.clone()));
+        }
+        if collected_global.len() != snapshots.len() {
+            panic!("snapshot mismatch!");
+        }
+
+        for i in 0..snapshots.len() {
+            if snapshots[i].0 != collected_global[i].0 {
+                panic!("Global Index mismatch");
+            }
+            let ty = collected_global[i].1.ty(store.as_context());
+
+            let target_val = snapshots[i].1;
+
+            let target = match ty.content() {
+                ValType::I32 => {
+                    let raw = ValRaw::i32(target_val as u32 as i32);
+                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                }
+                ValType::I64 => {
+                    let raw = ValRaw::i64(target_val);
+                    unsafe { Val::from_raw(store.as_context_mut(), raw, ty.content().clone()) }
+                }
+                _ => {
+                    unreachable!()
+                }
+            };
+
+            collected_global[i].1.set(store.as_context_mut(), target);
+        }
     }
 }
 
@@ -1143,6 +1410,7 @@ impl<T> InstancePre<T> {
     pub fn instantiate_with_lind_thread(
         &self,
         mut store: impl AsContextMut<Data = T>,
+        no_start: bool,
     ) -> Result<(Instance, InstanceId)> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
@@ -1157,7 +1425,12 @@ impl<T> InstancePre<T> {
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
         unsafe {
-            Instance::new_started_impl_with_lind_thread(&mut store, &self.module, imports.as_ref())
+            Instance::new_started_impl_with_lind_thread(
+                &mut store,
+                &self.module,
+                imports.as_ref(),
+                no_start,
+            )
         }
     }
 

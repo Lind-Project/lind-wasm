@@ -302,7 +302,7 @@ pub extern "C" fn read_syscall(
 pub extern "C" fn close_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -362,15 +362,15 @@ pub extern "C" fn close_syscall(
 pub extern "C" fn futex_syscall(
     cageid: u64,
     uaddr_arg: u64,
-    uaddr_cageid: u64,
+    _uaddr_cageid: u64,
     futex_op_arg: u64,
     futex_op_cageid: u64,
     val_arg: u64,
     val_cageid: u64,
     timeout_arg: u64,
-    timeout_cageid: u64,
+    _timeout_cageid: u64,
     uaddr2_arg: u64,
-    uaddr2_cageid: u64,
+    _uaddr2_cageid: u64,
     val3_arg: u64,
     val3_cageid: u64,
 ) -> i32 {
@@ -608,7 +608,7 @@ pub extern "C" fn pipe_syscall(
     // Convert the u64 pointer into a mutable reference to PipeArray
     let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
         Ok(p) => p,
-        Err(e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
+        Err(_e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
     };
 
     // Create an array to hold the two kernel file descriptors
@@ -725,7 +725,7 @@ pub extern "C" fn pipe2_syscall(
     // Convert the u64 pointer into a mutable reference to PipeArray
     let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
         Ok(p) => p,
-        Err(e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
+        Err(_e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
     };
 
     // Create an array to hold the two kernel file descriptors
@@ -828,35 +828,42 @@ pub extern "C" fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = {
+    let addr = {
         if addr_arg == 0 {
             0 as *mut u8
         } else {
             sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
         }
     };
-    let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
-    let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
+    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
+    let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
     let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
-    let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
+    let off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 
-    // Validate flags - only these four flags are supported
-    // Note: We explicitly validate rather than silently strip unsupported flags to:
-    // 1. Prevent security issues (e.g., MAP_FIXED_NOREPLACE being ignored)
-    // 2. Maintain program correctness (e.g., MAP_SHARED_VALIDATE expects validation)
-    // 3. Make debugging easier by failing fast rather than having mysterious behavior later
+    // MAP_HUGETLB (and its size encoding in bits 26-31) is not supported.
+    // Return EINVAL to match Linux behavior on systems without huge page support.
+    if flags & libc::MAP_HUGETLB != 0 {
+        return syscall_error(Errno::EINVAL, "mmap", "MAP_HUGETLB not supported");
+    }
+
+    // Validate flags - only these flags are supported.
+    // Unsupported flags trigger a debug panic rather than a silent EINVAL
+    // so they surface during development instead of causing mysterious failures.
     let allowed_flags = MAP_FIXED as i32
         | MAP_SHARED as i32
         | MAP_PRIVATE as i32
         | MAP_ANONYMOUS as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic("Unsupported mmap flag detected! Only MAP_FIXED, MAP_SHARED, MAP_PRIVATE, MAP_POPULATE AND MAP_ANONYMOUS allowed");
+        lind_debug_panic(&format!(
+            "mmap: unsupported flags {:#x} (allowed: {:#x})",
+            flags, allowed_flags
+        ));
     }
 
     if prot & PROT_EXEC > 0 {
@@ -884,7 +891,7 @@ pub extern "C" fn mmap_syscall(
     let mut useraddr = addr as u32;
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
-        let mut vmmap = cage.vmmap.write();
+        let vmmap = cage.vmmap.write();
         let result;
 
         // pick an address of appropriate size, anywhere
@@ -1079,7 +1086,7 @@ pub extern "C" fn munmap_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -1105,44 +1112,42 @@ pub extern "C" fn munmap_syscall(
         return syscall_error(Errno::EINVAL, "munmap", "address it not aligned");
     }
 
-    let vmmap = cage.vmmap.read();
-    let sysaddr = rounded_addr;
-    drop(vmmap);
-
     let rounded_length = round_up_page(len as u64) as usize;
-
-    // we are replacing munmap with mmap because we do not want to really deallocate the memory region
-    // we just want to set the prot of the memory region back to PROT_NONE
-    let result = unsafe {
-        libc::mmap(
-            sysaddr as *mut c_void,
-            rounded_length,
-            PROT_NONE,
-            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-            -1,
-            0,
-        ) as usize
-    };
-    // Check for different failure modes with specific error messages
-    if result as isize == -1 {
-        let errno = get_errno();
-        panic!(
-            "munmap: mmap failed during memory protection reset with errno: {:?}",
-            errno
-        );
-    }
-
-    if result != sysaddr {
-        panic!(
-            "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-            result as *const c_void, sysaddr as *const c_void
-        );
-    }
 
     let mut vmmap = cage.vmmap.write();
 
-    let user_addr = vmmap.sys_to_user(rounded_addr) as u32;
-    vmmap.remove_entry(user_addr >> PAGESHIFT, (rounded_length as u32) >> PAGESHIFT);
+    let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
+    let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
+
+    let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
+
+    for (act_start, act_end) in overlaps {
+        let (act_start, act_end) = (act_start as usize, act_end as usize);
+        let act_start_addr = vmmap.user_to_sys((act_start as u32) << PAGESHIFT);
+        let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
+        let result = unsafe {
+            libc::mmap(
+                act_start_addr as *mut c_void,
+                act_len,
+                PROT_NONE,
+                (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+                -1,
+                0,
+            ) as usize
+        };
+        if result != act_start_addr {
+            lind_debug_panic(&format!(
+                "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
+                result as *const c_void, act_start_addr as *const c_void
+            ));
+        }
+        if result as isize == -1 {
+            let errno = get_errno();
+            return handle_errno(errno, "munmap");
+        }
+    }
+
+    vmmap.remove_entry(req_start, req_end - req_start);
 
     0
 }
@@ -1199,18 +1204,41 @@ pub extern "C" fn brk_syscall(
     let cage = get_cage(cageid).unwrap();
 
     let mut vmmap = cage.vmmap.write();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
+    let heap_opt = vmmap.find_page(vmmap.heap_start);
 
-    assert!(heap.npages == vmmap.program_break);
+    let heap = if heap_opt.is_none() {
+        // if heap page is not found, create an empty heap entry with 0 size
+        cage::VmmapEntry::new(
+            vmmap.heap_start,
+            0,
+            (PROT_READ | PROT_WRITE),
+            (PROT_READ | PROT_WRITE),
+            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+            false,
+            0,
+            0,
+            cageid,
+            MemoryBackingType::Anonymous,
+        )
+    } else {
+        heap_opt.unwrap().clone()
+    };
+
+    assert!(heap.page_num == vmmap.heap_start);
+
+    let old_brk_page = heap.page_num + heap.npages;
 
     // passing 0 to brk will always return the current brk
     if brk == 0 {
-        return (PAGESIZE * heap.npages) as i32;
+        return (PAGESIZE * old_brk_page) as i32;
     }
-
-    let old_brk_page = heap.npages;
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
+
+    // shrink heap below heap start is not allowed
+    if brk_page < vmmap.heap_start {
+        return syscall_error(Errno::ENOMEM, "brk", "no memory");
+    }
 
     // if we are incrementing program break, we need to check if we have enough space
     if brk_page > old_brk_page {
@@ -1220,12 +1248,12 @@ pub extern "C" fn brk_syscall(
     }
 
     // remove the old entries since new entry is overlapping with it.
-    vmmap.remove_entry(0, old_brk_page);
+    vmmap.remove_entry(heap.page_num, heap.npages);
 
     // update vmmap entry
     vmmap.add_entry_with_overwrite(
-        0,
-        brk_page,
+        heap.page_num,
+        brk_page - heap.page_num,
         heap.prot,
         heap.maxprot,
         heap.flags,
@@ -1240,8 +1268,6 @@ pub extern "C" fn brk_syscall(
 
     let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
-
-    vmmap.set_program_break(brk_page);
 
     drop(vmmap);
 
@@ -1359,13 +1385,13 @@ pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry
 pub extern "C" fn fcntl_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     cmd_arg: u64,
     cmd_cageid: u64,
     int_arg: u64, // arg3: integer value (for F_DUPFD, F_SETFD, F_GETFL, etc.)
-    int_arg_cageid: u64,
+    _int_arg_cageid: u64,
     ptr_arg: u64, // arg4: translated host pointer (for F_GETLK, F_SETLK, etc.)
-    ptr_arg_cageid: u64,
+    _ptr_arg_cageid: u64,
     arg5: u64,
     arg5_cageid: u64,
     arg6: u64,
@@ -1630,6 +1656,68 @@ pub extern "C" fn stat_syscall(
     libcret
 }
 
+//------------------------------------LSTAT SYSCALL------------------------------------
+/// `lstat` retrieves file status information without following symlinks.
+/// Reference: https://man7.org/linux/man-pages/man2/lstat.2.html
+///
+/// ## Arguments:
+///  - `pathname`: Path to the file or symlink to get status information for.
+///  - `statbuf`: Buffer to store the file status information.
+///
+/// ## Implementation Details:
+///  - Identical to `stat_syscall`, except `libc::lstat` is used instead of `libc::stat`,
+///    so symlinks are stat'd directly rather than following to the target.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub extern "C" fn lstat_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "lstat", "path conversion failed"),
+    };
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "lstat_syscall"
+        );
+    }
+
+    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    let libcret = unsafe { libc::lstat(path.as_ptr(), &mut libc_statbuf) }; // <-- only change
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "lstat");
+    }
+
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "lstat", "Bad address"),
+    }
+
+    libcret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
 ///
 /// Linux `statfs()` syscall returns information about a mounted filesystem
@@ -1658,7 +1746,7 @@ pub extern "C" fn statfs_syscall(
     path_arg: u64,
     path_cageid: u64,
     statbuf_arg: u64,
-    statbuf_cageid: u64,
+    _statbuf_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -1919,7 +2007,7 @@ pub extern "C" fn readlink_syscall(
     path_arg: u64,
     path_cageid: u64,
     buf_arg: u64,
-    buf_cageid: u64,
+    _buf_cageid: u64,
     buflen_arg: u64,
     buflen_cageid: u64,
     arg4: u64,
@@ -2223,7 +2311,7 @@ pub extern "C" fn unlinkat_syscall(
         );
     }
 
-    let mut c_path;
+    let c_path;
     // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
     let kernel_fd = if dirfd == AT_FDCWD {
         // Case 1: When AT_FDCWD is used.
@@ -2345,7 +2433,7 @@ pub extern "C" fn clock_gettime_syscall(
     clockid_arg: u64,
     clockid_cageid: u64,
     tp_arg: u64,
-    tp_cageid: u64,
+    _tp_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -2394,7 +2482,7 @@ pub extern "C" fn clock_gettime_syscall(
 pub extern "C" fn dup_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -2442,9 +2530,9 @@ pub extern "C" fn dup_syscall(
 pub extern "C" fn dup2_syscall(
     cageid: u64,
     old_vfd_arg: u64,
-    old_vfd_cageid: u64,
+    _old_vfd_cageid: u64,
     new_vfd_arg: u64,
-    new_vfd_cageid: u64,
+    _new_vfd_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -2763,6 +2851,112 @@ pub extern "C" fn readv_syscall(
     let ret = unsafe { libc::readv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "readv");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/preadv.2.html
+///
+/// `preadv()` combines the functionality of `readv()` and `pread()`: it performs
+/// scatter input from the file at the given offset without changing the file pointer.
+///
+/// ## Arguments:
+///     - vfd_arg: virtual file descriptor
+///     - iov_arg: pointer to an array of iovec structures
+///     - iovcnt_arg: number of iovec structures
+///     - offset_arg: file offset to read from
+///
+/// ## Returns:
+///     - On success, the number of bytes read.
+///     - On error, -1 with errno set.
+pub extern "C" fn preadv_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    iov_arg: u64,
+    iov_cageid: u64,
+    iovcnt_arg: u64,
+    iovcnt_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "preadv");
+    }
+
+    let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
+    let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "preadv_syscall"
+        );
+    }
+
+    let ret =
+        unsafe { libc::preadv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "preadv");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pwritev.2.html
+///
+/// `pwritev()` combines the functionality of `writev()` and `pwrite()`: it performs
+/// gather output to the file at the given offset without changing the file pointer.
+///
+/// ## Arguments:
+///     - vfd_arg: virtual file descriptor
+///     - iov_arg: pointer to an array of iovec structures
+///     - iovcnt_arg: number of iovec structures
+///     - offset_arg: file offset to write at
+///
+/// ## Returns:
+///     - On success, the number of bytes written.
+///     - On error, -1 with errno set.
+pub extern "C" fn pwritev_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    iov_arg: u64,
+    iov_cageid: u64,
+    iovcnt_arg: u64,
+    iovcnt_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "pwritev");
+    }
+
+    let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
+    let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "pwritev_syscall"
+        );
+    }
+
+    let ret =
+        unsafe { libc::pwritev(kernel_fd, iov_ptr as *const libc::iovec, iovcnt, offset) as i32 };
+    if ret < 0 {
+        return handle_errno(get_errno(), "pwritev");
     }
     ret
 }
@@ -3478,7 +3672,7 @@ pub extern "C" fn fchmod_syscall(
 pub extern "C" fn getcwd_syscall(
     cageid: u64,
     buf_arg: u64,
-    buf_cageid: u64,
+    _buf_cageid: u64,
     size_arg: u64,
     size_cageid: u64,
     arg3: u64,
@@ -3666,7 +3860,7 @@ pub extern "C" fn nanosleep_time64_syscall(
 pub extern "C" fn mprotect_syscall(
     cageid: u64,
     addr_arg: u64,
-    addr_cageid: u64,
+    _addr_cageid: u64,
     len_arg: u64,
     len_cageid: u64,
     prot_arg: u64,
@@ -3756,11 +3950,11 @@ pub extern "C" fn mprotect_syscall(
 pub extern "C" fn ioctl_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64,
+    _vfd_cageid: u64,
     req_arg: u64,
     req_cageid: u64,
     ptrunion_arg: u64,
-    ptrunion_cageid: u64,
+    _ptrunion_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -4117,7 +4311,7 @@ pub extern "C" fn shmat_syscall(
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
-    let mut vmmap = cage.vmmap.write();
+    let vmmap = cage.vmmap.write();
     let result;
     if useraddr == 0 {
         // Allocate a suitable space in the virtual memory map for the shared memory segment
@@ -4164,36 +4358,25 @@ pub extern "C" fn shmat_syscall(
     let result = vmmap.sys_to_user(result);
     drop(vmmap);
 
-    // If the syscall succeeded, update the vmmap entry.
-    if result as i32 >= 0 {
-        // Ensure the syscall attached the segment at the expected address.
-        if result as u32 != useraddr {
-            panic!("shmat did not attach at the expected address");
-        }
-        let mut vmmap = cage.vmmap.write();
-        let backing = MemoryBackingType::SharedMemory(shmid as u64);
-        // Use the effective protection (prot) for both the current and maximum protection.
-        let maxprot = prot;
-        // Add a new vmmap entry for the shared memory segment.
-        // Since shared memory is not file-backed, there are no extra mapping flags
-        // or file offset parameters to consider; thus, we pass 0 for both.
-        vmmap
-            .add_entry_with_overwrite(
-                useraddr >> PAGESHIFT,
-                (rounded_length >> PAGESHIFT) as u32,
-                prot,
-                maxprot,
-                0, // No flags for shared memory mapping
-                backing,
-                0, // Offset is not applicable for shared memory
-                len as i64,
-                cageid,
-            )
-            .expect("shmat: failed to add vmmap entry");
-    } else {
-        // If the syscall failed, propagate the error.
-        return result as i32;
+    if result as u32 != useraddr {
+        panic!("shmat did not attach at the expected address");
     }
+    let mut vmmap = cage.vmmap.write();
+    let backing = MemoryBackingType::SharedMemory(shmid as u64);
+    let maxprot = prot;
+    vmmap
+        .add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
+            prot,
+            maxprot,
+            0,
+            backing,
+            0,
+            len as i64,
+            cageid,
+        )
+        .expect("shmat: failed to add vmmap entry");
 
     useraddr as i32
 }
@@ -4238,7 +4421,11 @@ pub extern "C" fn shmdt_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let useraddr = sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid);
+    // NOTE: glibc's shmdt wrapper already calls TRANSLATE_GUEST_POINTER_TO_HOST,
+    // so shmaddr_arg is already a host/system pointer. Do NOT translate again.
+    // This avoids dependency on vmmap.base_address which can change after fork/exec.
+    let sysaddr = shmaddr_arg as usize;
+
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -4255,31 +4442,23 @@ pub extern "C" fn shmdt_syscall(
     let cage = get_cage(cageid).unwrap();
 
     // Check that the provided address is aligned on a page boundary.
-    let rounded_addr = round_up_page(useraddr as u64) as usize;
-    if rounded_addr != useraddr as usize {
+    if sysaddr & (PAGESIZE as usize - 1) != 0 {
         return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
     }
 
-    // Convert the user address into a system address using the vmmap.
-    let vmmap = cage.vmmap.read();
-    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
-    drop(vmmap);
-
-    // Call shmdt_helper which returns length of the detached segment
+    // Call shmdt_helper which returns length of the detached segment.
+    // Pass the host address directly - rev_shm stores host addresses from shmat.
     let length = shmdt_helper(cageid, sysaddr as *mut u8);
     if length < 0 {
         return length;
     }
 
     // Remove the mapping from the vmmap.
-    // This call removes the range starting at the page-aligned user address,
-    // for the number of pages that cover the shared memory region.
+    // Convert sys address back to user address for vmmap bookkeeping.
     let mut vmmap = cage.vmmap.write();
+    let useraddr = vmmap.sys_to_user(sysaddr);
     vmmap
-        .remove_entry(
-            rounded_addr as u32 >> PAGESHIFT,
-            (length as u32) >> PAGESHIFT,
-        )
+        .remove_entry(useraddr >> PAGESHIFT, (length as u32) >> PAGESHIFT)
         .expect("shmdt: remove_entry failed");
 
     0
@@ -4424,7 +4603,7 @@ pub extern "C" fn shmctl_syscall(
 pub extern "C" fn getrandom_syscall(
     cageid: u64,
     buf_arg: u64,
-    buf_arg_cageid: u64,
+    _buf_arg_cageid: u64,
     buflen_arg: u64,
     buflen_arg_cageid: u64,
     flags_arg: u64,
@@ -4460,4 +4639,166 @@ pub extern "C" fn getrandom_syscall(
     // convert isize to i32 safely, as ret shouldn't be larger than 32-bit
     // due to buflen being u32
     ret.try_into().unwrap()
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/symlink.2.html
+///
+/// Creates a symbolic link at `linkpath` that points to `target`.
+///
+/// ## Arguments
+/// * `cageid` – The ID of the calling cage.
+/// * `target_arg` / `target_arg_cageid` – Pointer to the target path string.
+/// * `linkpath_arg` / `linkpath_arg_cageid` – Pointer to the path where the
+///   symbolic link should be created.
+///
+/// ## Returns
+/// * `0` on success.
+/// * Negative errno (`EEXIST`, `ENOENT`, `EFAULT`, etc.) on failure.
+pub extern "C" fn symlink_syscall(
+    cageid: u64,
+    target_arg: u64,
+    target_cageid: u64,
+    linkpath_arg: u64,
+    linkpath_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // The symlink target is stored as-is and should NOT be path-normalized.
+    // Normalizing would resolve relative paths against cwd, but relative symlink
+    // targets are meant to resolve relative to the symlink's location at dereference
+    // time, not at creation time. So we use get_cstr directly instead of
+    // sc_convert_path_to_host.
+    let target = match get_cstr(target_arg) {
+        Ok(path) => path,
+        Err(_) => return syscall_error(Errno::EFAULT, "symlink", "target path conversion failed"),
+    };
+
+    // The linkpath is where the symlink is created, so it does need full path resolution.
+    let linkpath = match sc_convert_path_to_host(linkpath_arg, linkpath_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "symlink", "linkpath conversion failed"),
+    };
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "symlink_syscall"
+        );
+    }
+
+    let ret = unsafe { libc::symlink(target.as_ptr() as *const libc::c_char, linkpath.as_ptr()) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "symlink");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/symlink.2.html
+///
+/// Creates a symbolic link at `linkpath` relative to `dirfd` that points to `target`.
+/// This is the `dirfd`-relative variant of `symlink`.
+///
+/// If `dirfd` is `AT_FDCWD`, the call behaves identically to `symlink_syscall`,
+/// resolving `linkpath` relative to the current working directory.
+/// Otherwise, `linkpath` is resolved relative to the directory referred to by `dirfd`.
+///
+/// ## Arguments
+/// * `cageid` – The ID of the calling cage.
+/// * `target_arg` / `target_cageid` – Pointer to the target path string.
+/// * `dirfd_arg` / `dirfd_cageid` – File descriptor of the directory to resolve
+///   `linkpath` relative to, or `AT_FDCWD`.
+/// * `linkpath_arg` / `linkpath_cageid` – Pointer to the path where the
+///   symbolic link should be created, relative to `dirfd`.
+///
+/// ## Returns
+/// * `0` on success.
+/// * Negative errno (`EEXIST`, `ENOENT`, `EBADF`, `EFAULT`, etc.) on failure.
+pub extern "C" fn symlinkat_syscall(
+    cageid: u64,
+    target_arg: u64,
+    target_cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    linkpath_arg: u64,
+    linkpath_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // The symlink target is stored as-is and should NOT be path-normalized.
+    // Normalizing would resolve relative paths against cwd, but relative symlink
+    // targets are meant to resolve relative to the symlink's location at dereference
+    // time, not at creation time. So we use get_cstr directly instead of
+    // sc_convert_path_to_host.
+    let target = match get_cstr(target_arg) {
+        Ok(path) => path,
+        Err(_) => {
+            return syscall_error(Errno::EFAULT, "symlinkat", "target path conversion failed")
+        }
+    };
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+
+    // The linkpath is where the symlink is created, so it does need full path resolution.
+    let linkpath = match sc_convert_path_to_host(linkpath_arg, linkpath_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "symlinkat", "linkpath conversion failed"),
+    };
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "symlinkat_syscall"
+        );
+    }
+
+    let ret = if virtual_fd == libc::AT_FDCWD {
+        unsafe { libc::symlink(target.as_ptr() as *const libc::c_char, linkpath.as_ptr()) }
+    } else {
+        let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+        if kernel_fd < 0 {
+            return handle_errno(-kernel_fd, "symlinkat");
+        }
+
+        // Use the raw (untranslated) linkpath here intentionally — sc_convert_path_to_host
+        // resolves relative to CWD, but symlinkat interprets linkpath relative to dirfd.
+        // The kernel handles that resolution, so we pass the original guest pointer.
+        let raw_linkpath = match get_cstr(linkpath_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EINVAL, "symlinkat", "invalid linkpath"),
+        };
+
+        unsafe {
+            libc::symlinkat(
+                target.as_ptr() as *const libc::c_char,
+                kernel_fd,
+                raw_linkpath.as_ptr() as *const c_char,
+            )
+        }
+    };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "symlinkat");
+    }
+
+    ret
 }

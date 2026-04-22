@@ -7,7 +7,13 @@
 # - expects `clang` and other llvm binaries on $PATH
 # - expects GLIBC source in $PWD/src/glibc
 #
-set -x
+
+set -e
+
+shared_script_args=()
+if [[ "$1" == "--with-fpcast" ]]; then
+    shared_script_args+=(--with-fpcast)
+fi
 
 CC="clang"
 GLIBC="$PWD/src/glibc"
@@ -79,6 +85,7 @@ rm -rf $BUILD
 mkdir -p $BUILD
 cd $BUILD
 
+# do configure, we enable fPIC by default for dynamic build
 ../configure \
   --disable-werror \
   --disable-hidden-plt \
@@ -89,7 +96,7 @@ cd $BUILD
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
   libc_cv_complocaledir='/usr/lib/locale' \
-  CFLAGS=" -matomics -mbulk-memory -O2 -g" \
+  CFLAGS=" -matomics -mbulk-memory -O2 -g -fPIC" \
   CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
@@ -121,10 +128,25 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -o $BUILD/lind_debug.o \
     -c $GLIBC/lind_syscall/lind_debug.c
 
+# Compile lind utils module
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/lind_utils.o \
+    -c $GLIBC/lind_syscall/lind_utils.c
+
 # Compile crt1.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $GLIBC/lind_syscall/crt1.o \
+    -c $GLIBC/lind_syscall/crt1/crt1.c \
+ || { echo "ERROR: clang failed compiling crt1.c"; exit 1; }
+ [ -f "$GLIBC/lind_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/lind_syscall/crt1.o not produced"; exit 1; }
+
+# Compile crt1.c for shared target
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -DLIND_DYLINK \
+    -o $GLIBC/lind_syscall/crt1_shared.o \
     -c $GLIBC/lind_syscall/crt1/crt1.c \
  || { echo "ERROR: clang failed compiling crt1.c"; exit 1; }
  [ -f "$GLIBC/lind_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/lind_syscall/crt1.o not produced"; exit 1; }
@@ -162,12 +184,19 @@ rm -rf "$SYSROOT"
 
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
+cp "$BUILD/lind_utils.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$BUILD/csu/set_stack_pointer.o" "$SYSROOT/lib/wasm32-wasi/"
 
 "$SCRIPT_DIR/make_archive.sh"
+cd $SCRIPT_DIR
+cd ../
+"$SCRIPT_DIR/make_shared_glibc.sh" "${shared_script_args[@]}"
+"$SCRIPT_DIR/make_shared_libm.sh" "${shared_script_args[@]}"
 
 # Copy all files from the external include directory to the new sysroot include directory
 cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/"
 cp "$GLIBC/lind_syscall/lind_syscall.h" "$SYSROOT/include/wasm32-wasi/"

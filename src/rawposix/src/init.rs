@@ -324,15 +324,15 @@ pub fn rawposix_shutdown() {
             EXIT_SUCCESS as u64, // status arg
             cageid as u64,       // status arg's cageid
             MAIN_THREADID,       // always main thread
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
         );
     }
 }

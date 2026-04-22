@@ -23,9 +23,17 @@ pub const NOFILE_MAX: u64 = 4 * 1024; // Hard limit for number of open files
 pub const STACK_CUR: u64 = 8192 * 1024; // Soft limit for stack size (8MB)
 pub const STACK_MAX: u64 = 1 << 32; // Hard limit for stack size (4GB)
 
-// Resource identifiers
-pub const RLIMIT_STACK: u64 = 0; // Limit type for stack size
-pub const RLIMIT_NOFILE: u64 = 1; // Limit type for number of files
+// Resource identifiers (must match glibc bits/resource.h)
+pub const RLIMIT_CPU: u32 = 0;
+pub const RLIMIT_FSIZE: u32 = 1;
+pub const RLIMIT_DATA: u32 = 2;
+pub const RLIMIT_STACK: u32 = 3;
+pub const RLIMIT_CORE: u32 = 4;
+pub const RLIMIT_RSS: u32 = 5;
+pub const RLIMIT_NPROC: u32 = 6;
+pub const RLIMIT_NOFILE: u32 = 7;
+pub const RLIMIT_MEMLOCK: u32 = 8;
+pub const RLIMIT_AS: u32 = 9;
 
 // ===== Process Exit Status =====
 // Source: <stdlib.h> and POSIX standard
@@ -214,6 +222,32 @@ pub const CLONE_IO: u64 = 0x80000000; /* Clone I/O context.  */
 /* cloning flags intersect with CSIGNAL so can be used only with unshare and
 clone3 syscalls.  */
 pub const CLONE_NEWTIME: u64 = 0x00000080; /* New time namespace */
+
+// dlopen mode constants
+pub const RTLD_LAZY: i32 = 0x00001; /* Lazy function call binding.  */
+pub const RTLD_NOW: i32 = 0x00002; /* Immediate function call binding.  */
+pub const RTLD_NOLOAD: i32 = 0x00004; /* Do not load the object.  */
+pub const RTLD_DEEPBIND: i32 = 0x00008; /* Use deep binding.  */
+/* If the following bit is set in the MODE argument to `dlopen',
+the symbols of the loaded object and its dependencies are made
+visible as if the object were linked directly into the program.  */
+pub const RTLD_GLOBAL: i32 = 0x00100;
+/* Unix98 demands the following flag which is the inverse to RTLD_GLOBAL.
+The implementation does this by default and so we can define the
+value to zero.  */
+pub const RTLD_LOCAL: i32 = 0;
+pub const RTLD_NODELETE: i32 = 0x01000; /* Do not delete object when closed.  */
+
+// dlsym constants
+/* If the first argument of `dlsym' or `dlvsym' is set to RTLD_NEXT
+the run-time address of the symbol called NAME in the next shared
+object is returned.  The "next" relation is defined by the order
+the shared objects were loaded.  */
+pub const RTLD_NEXT: i32 = -1;
+/* If the first argument to `dlsym' or `dlvsym' is set to RTLD_DEFAULT
+the run-time address of the symbol called NAME in the global scope
+is returned.  */
+pub const RTLD_DEFAULT: i32 = 0;
 
 // Exit code
 // Source: src/glibc/misc/sysexits.h

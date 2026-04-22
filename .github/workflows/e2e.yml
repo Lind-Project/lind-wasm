@@ -36,8 +36,7 @@ jobs:
 
       - name: Build e2e (attempt 1)
         id: build_e2e_try1
-        continue-on-error: true
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -53,9 +52,8 @@ jobs:
 
       - name: Build e2e (attempt 2)
         id: build_e2e_try2
-        if: ${{ always() && steps.build_e2e_try1.outcome == 'failure' }}
-        continue-on-error: true
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        if: steps.build_e2e_try1.outcome == 'failure'
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -71,9 +69,8 @@ jobs:
 
       - name: Build e2e (attempt 3)
         id: build_e2e_try3
-        if: ${{ always() && steps.build_e2e_try2.outcome == 'failure' }}
-        continue-on-error: true
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        if: steps.build_e2e_try2.outcome == 'failure'
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -109,8 +106,7 @@ jobs:
           echo "----------------------------------"
 
       - name: Upload HTML report artifact to report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: wasm-e2e-report
           path: |
@@ -120,8 +116,7 @@ jobs:
           retention-days: 7
 
       - name: Upload wasm JSON report artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: wasm-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.WASM_REPORT_JSON_FILE }}
@@ -129,8 +124,7 @@ jobs:
           retention-days: 7
 
       - name: Upload grate JSON report artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: grate-e2e-json
           path: ${{ env.REPORT_LOCAL_DIR }}/reports/${{ env.GRATE_REPORT_JSON_FILE }}
@@ -138,8 +132,7 @@ jobs:
           retention-days: 7
 
       - name: Upload unified runner HTML report artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: wasm-e2e-unified-html
           path: |
@@ -149,8 +142,9 @@ jobs:
           retention-days: 7
 
       - name: Post PR comment
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        # Run only on branch PRs, not on fork PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
             const fs = require('fs');

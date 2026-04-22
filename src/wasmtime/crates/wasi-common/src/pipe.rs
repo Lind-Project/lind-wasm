@@ -70,7 +70,7 @@ impl<R: Read> ReadPipe<R> {
             }
         }
     }
-    fn borrow(&self) -> std::sync::RwLockWriteGuard<R> {
+    fn borrow(&self) -> std::sync::RwLockWriteGuard<'_, R> {
         RwLock::write(&self.reader).unwrap()
     }
 }
@@ -171,7 +171,7 @@ impl<W: Write> WritePipe<W> {
         }
     }
 
-    fn borrow(&self) -> std::sync::RwLockWriteGuard<W> {
+    fn borrow(&self) -> std::sync::RwLockWriteGuard<'_, W> {
         RwLock::write(&self.writer).unwrap()
     }
 }

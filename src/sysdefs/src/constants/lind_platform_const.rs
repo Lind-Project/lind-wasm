@@ -82,9 +82,45 @@ pub const WASMTIME_CAGEID: u64 = 888888;
 ///   the call through its internal control-layer logic rather than
 ///   forwarding it to RawPOSIX or Wasmtime.
 pub const THREEI_CAGEID: u64 = 999999;
+
+/// Default stack size assigned to each cage
+pub const DEFAULT_STACKSIZE: u32 = 8388608; // 8 MB
+/// Size of guard pages
+pub const GUARD_SIZE: u32 = 4096; // 4 KB
+
+/// The starting index for function tables of wasm modules in Lind.
+/// function index of 1 must be reserved for SIG_IGN constant for signal handling
+/// so the function table starts from index 2.
+pub const TABLE_START_INDEX: u32 = 2;
+
 /// Cage ID for the initial (bootstrap) cage created during `rawposix_start`.
 pub const INIT_CAGEID: u64 = 1;
 /// Thread ID for the main thread of a cage.
 pub const MAIN_THREADID: u64 = 1;
 /// Number of instances to pre-allocate for the initial cage
 pub const INSTANCE_NUMBER: usize = 5000;
+
+/// Maximum execve recursion depth for shebang execution, 4 is the typical value used in Linux.
+pub const MAX_SHEBANG_DEPTH: i32 = 4;
+
+// Custom Dynamic loading Error Code for communication between host loader and guest
+pub enum DylinkErrorCode {
+    // dlopen errors
+    EOPEN = 1,       // error opening the file
+    ETYPE = 2,       // wrong file type (not wasm file)
+    EDYLINKINFO = 3, // shared wasm module does not contain dylink section
+    EDEPENDENCY = 4, // error when loading dependencies
+    ESYMBOL = 5,     // undefined symbol
+
+    // dlsym errors
+    ENOHANDLE = 6, // invalid handle
+    ENOFOUND = 7,  // symbol not found
+
+    // dlclose errors
+    ENOOPEN = 8, // closed library is not open
+
+    // other errors
+    EINTERNAL = 9, // other internal error occurs in dynamic loader
+}
+
+pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";

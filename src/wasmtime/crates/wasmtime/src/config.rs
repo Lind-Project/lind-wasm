@@ -117,6 +117,7 @@ pub struct Config {
     pub(crate) features: WasmFeatures,
     pub(crate) wasm_backtrace: bool,
     pub(crate) wasm_backtrace_details_env_used: bool,
+    pub(crate) fpcast_enabled: bool,
     pub(crate) native_unwind_info: Option<bool>,
     #[cfg(feature = "async")]
     pub(crate) async_stack_size: usize,
@@ -236,6 +237,7 @@ impl Config {
             max_wasm_stack: 512 * 1024,
             wasm_backtrace: true,
             wasm_backtrace_details_env_used: false,
+            fpcast_enabled: false,
             native_unwind_info: None,
             features: WasmFeatures::default(),
             #[cfg(feature = "async")]
@@ -464,6 +466,13 @@ impl Config {
     /// [`WasmBacktrace`]: crate::WasmBacktrace
     pub fn wasm_backtrace(&mut self, enable: bool) -> &mut Self {
         self.wasm_backtrace = enable;
+        self
+    }
+
+    /// Configures whether fpcast-emu is enabled, this will affect
+    /// dynamic loading related logic
+    pub fn fpcast_enabled(&mut self, enable: bool) -> &mut Self {
+        self.fpcast_enabled = enable;
         self
     }
 
