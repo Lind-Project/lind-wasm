@@ -70,12 +70,12 @@
 //! a given (cage_id, tid), because execution must resume in the same continuation. For grate calls, by
 //! contrast, lind-3i only needs to obtain some available worker for the target grate, because correctness
 //! depends on entering a compatible grate instance, not on resuming a previously suspended continuation.
-use anyhow::{anyhow, Context, Result};
+use anyhow::Context;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
 use wasmtime::{Engine, Instance, Linker, Module, Store, TypedFunc, Val};
@@ -671,11 +671,7 @@ where
 {
     let mut store = Store::new(&template.engine, host);
 
-    let mut linker: Linker<T> = template.linker.clone();
-
-    let stack_arena_base = STACK_ARENA_BASE.get().copied().unwrap_or_else(|| {
-        panic!("STACK_ARENA_BASE is not initialized");
-    });
+    let linker: Linker<T> = template.linker.clone();
 
     let (instance, _, _) = linker
         .instantiate_with_lind_thread(&mut store, &template.module, false)
