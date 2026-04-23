@@ -968,9 +968,12 @@ impl VmmapOps for Vmmap {
         page_num: u32,
     ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &VmmapEntry)> {
         if let Some(last_entry) = self.last_entry() {
-            self.entries.overlapping(ie(page_num, last_entry.0.end()))
+            if page_num > last_entry.0.end() {
+                self.entries.overlapping(ie(page_num, page_num))
+            } else {
+                self.entries.overlapping(ie(page_num, last_entry.0.end()))
+            }
         } else {
-            // Return an empty iterator if no last_entry
             self.entries.overlapping(ie(page_num, page_num))
         }
     }
@@ -999,8 +1002,12 @@ impl VmmapOps for Vmmap {
     /// Finds anonymous page ranges overlapping [req_start, req_end) for munmap.
     /// SharedMemory-backed entries are excluded (handled by shmdt instead).
     fn find_unmappable_ranges(&self, req_start: u32, req_end: u32) -> Vec<(u32, u32)> {
-        self.find_page_iter(req_start)
-            .take_while(|(interval, _)| interval.start() < req_end)
+        if req_start >= req_end {
+            return Vec::new();
+        }
+
+        self.entries
+            .overlapping(ie(req_start, req_end))
             .filter(|(_, entry)| !matches!(entry.backing, MemoryBackingType::SharedMemory(_)))
             .map(|(interval, _)| {
                 let act_start = interval.start().max(req_start);
