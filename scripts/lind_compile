@@ -66,6 +66,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     $(basename "$0") --fpcast-emu hello.c
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --precompile-only build/hello.wasm
+    $(basename "$0") --output-dir tmp hello.c                # copy output to lindfs/tmp/
     $(basename "$0") --print-cmd hello.c
     $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
     $(basename "$0") hello.c -- -lm
@@ -81,6 +82,7 @@ PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
 COMPILE_LIBRARY="false"
+TARGET_DIR=""
 ORIGINAL_ARGS=("$@")
 
 set_mode() {
@@ -135,6 +137,10 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --compile-grate)
       COMPILE_GRATE="true"
+      ;;
+    --output-dir)
+      shift
+      TARGET_DIR="$1"
       ;;
     -h|--help)
       usage
@@ -258,6 +264,9 @@ CLANG_BIN="clang"  # must be on PATH
 WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
 LINDFS_ROOT="${REPO_ROOT}/lindfs/"
+if [[ -n "${TARGET_DIR}" ]]; then
+  LINDFS_ROOT="${REPO_ROOT}/lindfs/${TARGET_DIR}/"
+fi
 if [[ ! -x "${LINDBOOT_BIN}" ]]; then
   echo "ERROR: lind-boot missing: ${LINDBOOT_BIN}" >&2
   exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
