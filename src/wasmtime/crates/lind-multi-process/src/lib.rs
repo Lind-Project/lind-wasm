@@ -658,23 +658,27 @@ impl<
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-                    let grate_template = GrateTemplate {
-                        engine: module.engine().clone(),
-                        module: module.clone(),
-                        linker: cloned_linker,
-                    };
+                    // Grate calls only supports static linking for now, so we only register
+                    // grate workers when dylink is not enabled.
+                    if !dylink_enabled {
+                        let grate_template = GrateTemplate {
+                            engine: module.engine().clone(),
+                            module: module.clone(),
+                            linker: cloned_linker,
+                        };
 
-                    // register grate workers for this cage
-                    create_handler_for_cage(
-                        &grate_template,
-                        store.data().clone(),
-                        child_cageid,
-                        ConcurrencyMode::Parallel,
-                    )
-                    .with_context(|| {
-                        format!("failed to register grate workers for cage {}", child_cageid)
-                    })
-                    .expect("create_handler_for_cage failed");
+                        // register grate workers for this cage
+                        create_handler_for_cage(
+                            &grate_template,
+                            store.data().clone(),
+                            child_cageid,
+                            ConcurrencyMode::Parallel,
+                        )
+                        .with_context(|| {
+                            format!("failed to register grate workers for cage {}", child_cageid)
+                        })
+                        .expect("create_handler_for_cage failed");
+                    }
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
