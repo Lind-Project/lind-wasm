@@ -252,7 +252,13 @@ pub fn get_specific_virtual_fd(
 
     // Update the fdcount / close the old entry, if existed
     if let Some(entry) = myoptionentry {
-        _decrement_fdcount(entry);
+        match _decrement_fdcount(entry) {
+            Ok(()) => (),
+            Err(errno) => panic!(
+                "Error decrementing fd count for entry {:?} with error code {}",
+                entry, errno
+            ),
+        }
     }
 
     Ok(())
@@ -339,7 +345,13 @@ pub fn remove_cage_from_fdtable(cageid: u64) {
 
     // decrement the reference to items in the fdtable appropriately...
     for v in cagetable.values() {
-        _decrement_fdcount(*v);
+        match _decrement_fdcount(*v) {
+            Ok(()) => (),
+            Err(errno) => panic!(
+                "Error decrementing fd count for entry {:?} with error code {}",
+                v, errno
+            ),
+        }
     }
 }
 
@@ -379,7 +391,7 @@ pub fn empty_fds_for_exec(cageid: u64) {
 
     // Now call the close handlers on the others...
     for v in with_cloexec_vec {
-        _decrement_fdcount(v);
+        _decrement_fdcount(v).map_err(|errno| errno as threei::RetVal)?;
     }
 }
 
@@ -407,10 +419,10 @@ pub fn return_fdtable_copy(cageid: u64) -> HashMap<u64, FDTableEntry> {
 struct CloseHandlers {
     // Called when close is called, but at least one (fdkind,underfd)
     // reference still remains.  Called with (FDTableEntry,count)
-    intermediate: fn(FDTableEntry, u64),
+    intermediate: fn(FDTableEntry, u64) -> Result<(), i32>,
     // Called when close is called, and no (fdkind,underfd)
     // references remain. Called with (FDTableEntry,0)
-    last: fn(FDTableEntry, u64),
+    last: fn(FDTableEntry, u64) -> Result<(), i32>,
 }
 
 lazy_static! {
@@ -443,7 +455,7 @@ pub fn close_virtualfd(cageid: u64, virtfd: u64) -> Result<(), threei::RetVal> {
 
     match thisoption {
         Some(entry) => {
-            _decrement_fdcount(entry);
+            _decrement_fdcount(entry).map_err(|errno| errno as threei::RetVal)?;
             Ok(())
         }
         None => Err(threei::Errno::EBADFD as u64),
@@ -455,8 +467,8 @@ pub fn close_virtualfd(cageid: u64, virtfd: u64) -> Result<(), threei::RetVal> {
 #[doc = include_str!("../docs/register_close_handlers.md")]
 pub fn register_close_handlers(
     fdkind: u32,
-    intermediate: fn(FDTableEntry, u64),
-    last: fn(FDTableEntry, u64),
+    intermediate: fn(FDTableEntry, u64) -> Result<(), i32>,
+    last: fn(FDTableEntry, u64) -> Result<(), i32>,
 ) {
     // Unlock the table and set the handlers...
     let mut closehandlertable = CLOSEHANDLERTABLE.lock().unwrap();
@@ -467,7 +479,7 @@ pub fn register_close_handlers(
 
 // Helpers to track the count of times each (fdkind,underfd) is used
 #[doc(hidden)]
-fn _decrement_fdcount(entry: FDTableEntry) {
+fn _decrement_fdcount(entry: FDTableEntry) -> Result<(), i32> {
     let mytuple = (entry.fdkind, entry.underfd);
 
     let intermediatech;
@@ -506,9 +518,9 @@ fn _decrement_fdcount(entry: FDTableEntry) {
     drop(fdcount);
 
     if !call_last {
-        (intermediatech)(entry, newcount);
+        (intermediatech)(entry, newcount)
     } else {
-        (lastch)(entry, 0);
+        (lastch)(entry, 0)
     }
 }
 

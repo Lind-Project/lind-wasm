@@ -30,17 +30,19 @@ use typemap::path_conversion::*;
 /// reassign these ds, causing unintended behavior or errors.
 ///
 /// This function is registered in `fdtables` when creating the cage
-pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
+pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) -> Result<(), i32> {
     let kernel_fd = fdentry.underfd as i32;
 
     if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
-        return;
+        return Ok(());
     }
 
-    let ret = unsafe { libc::close(fdentry.underfd as i32) };
+    let ret = unsafe { libc::close(kernel_fd) };
     if ret < 0 {
-        return handle_errno(get_errno(), "close_syscall");
+        return Err(handle_errno(get_errno(), "close_syscall"));
     }
+
+    Ok(())
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/openat2.2.html
