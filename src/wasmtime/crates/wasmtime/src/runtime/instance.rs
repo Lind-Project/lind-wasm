@@ -278,7 +278,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
         no_start: bool,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if !no_start {
@@ -287,35 +287,69 @@ impl Instance {
             }
         }
 
-        Ok((instance, instanceid))
+        Ok((instance, 0, instanceid))
     }
 
-    /// This is a lind-wasm extension of Wasmtime’s internal instance creation path.
-    /// Unlike the upstream `new_started_impl`, this function performs lind-specific linear-memory
-    /// initialization so that new cages have the correct RawPOSIX / microvisor-managed memory
-    /// semantics. In lind-wasm, memory setup must happen inside the microvisor layer, so we
-    /// intentionally bypass/override Wasmtime’s default memory initialization behavior and
-    /// initialize the cage’s memory state ourselves.
+    /// This is a lind-wasm extension of Wasmtime’s internal instance-creation path.
     ///
-    /// This function returns `(Instance, InstanceId)` (instead of only `Instance`) because lind-wasm
-    /// needs the `InstanceId` later to recover the corresponding `VMContext` pointer and re-enter the
-    /// correct runtime state during cross-cage / cross-grate transitions. See more details in [lind-3i/src/lib.rs]
+    /// Unlike upstream `new_started_impl`, this function performs lind-specific
+    /// linear-memory initialization so that newly created cages obey RawPOSIX /
+    /// microvisor-managed memory semantics. In lind-wasm, linear memory must be
+    /// established inside the microvisor layer rather than through Wasmtime’s
+    /// default memory-initialization path, so the upstream behavior is
+    /// intentionally bypassed and replaced with lind-specific setup logic.
     ///
-    /// The concrete initialization steps depend on `InstantiateType`:
-    /// `InstantiateFirst(cageid)`: creates the first cage’s linear memory, records the memory base address,
-    /// initializes vmmap, and performs a RawPOSIX-backed mmap to establish the initial memory region.
-    /// `InstantiateChild { parent_cageid, child_cageid }`: corresponds to fork semantics. After initializing
-    /// the child’s vmmap using the child’s memory base address, we clone the parent’s memory mappings/state
-    /// into the child (`fork_vmmap`) so that the child starts with an identical address space. After
-    /// lind-specific memory setup is complete, this function runs the module’s start function (if present)
-    /// and returns both the created `instance` and its `InstanceId`.
+    /// This function returns `(Instance, stack_arena_base, InstanceId)` rather than
+    /// only `Instance`.
+    ///
+    /// - `InstanceId` is needed later to recover the corresponding `VMContext` and
+    ///   re-enter the correct runtime state during continuation-sensitive or
+    ///   cross-cage / cross-grate execution transfers. See `lind-3i/src/lib.rs`
+    ///   for more details.
+    /// - `stack_arena_base` records the base of the grate-worker stack arena
+    ///   reserved inside linear memory for this instance.
+    ///
+    /// The concrete initialization steps depend on `InstantiateType`.
+    ///
+    /// - `InstantiateFirst(cageid)` creates the first cage’s linear memory state.
+    ///   In this case, the function:
+    ///   1. discovers the instance’s linear-memory base address,
+    ///   2. computes and records the stack-arena base,
+    ///   3. reserves space for per-worker grate stacks inside linear memory, and
+    ///   4. initializes vmmap and establishes the initial memory region via the
+    ///      underlying RawPOSIX `mmap`.
+    ///
+    ///   The stack-arena setup is required because multiple Wasmtime stores may be
+    ///   attached to the same underlying linear memory. As a result, different
+    ///   grate workers cannot share one stack region. Instead, lind-wasm reserves
+    ///   a stack arena and later partitions it into per-worker stack slots, so
+    ///   each worker executes with its own independent Wasm stack range even
+    ///   though workers share the same linear-memory object.
+    ///
+    /// - `InstantiateChild { parent_cageid, child_cageid }` corresponds to fork
+    ///   semantics. After discovering the child instance’s memory base, lind-wasm
+    ///   clones the parent’s memory mappings / state into the child via
+    ///   `fork_vmmap`, so the child begins with the same address-space contents as
+    ///   the parent.
+    ///
+    /// - `InstantiateLib { cageid, memory_base }` initializes memory for a
+    ///   dynamically loaded library instance by allocating its linear-memory region
+    ///   through RawPOSIX and publishing the resolved base address through
+    ///   `memory_base`.
+    ///
+    /// After lind-specific memory setup is complete, the function creates the raw
+    /// instance, runs the module start function when required, performs dylink
+    /// relocation / constructor steps when applicable, and returns the created
+    /// `Instance`, the computed `stack_arena_base`, and the associated
+    /// `InstanceId`.
     pub(crate) unsafe fn new_started_impl_with_lind<T>(
         store: &mut StoreContextMut<'_, T>,
         module: &Module,
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let dylink_enabled = module.dylink_meminfo().is_some();
+        let mut stack_arena_base = 0;
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
@@ -377,9 +411,84 @@ impl Instance {
 
                     let minimal_size = minimal_pages << PAGESHIFT;
 
+                    // For statically linked main modules, we reserve a dedicated "grate stack arena"
+                    // at the end of the module's initially required memory region.
+                    //
+                    // Layout in linear memory:
+                    //
+                    //   0
+                    //   |
+                    //   |<---------------- minimal_size ---------------->|
+                    //   |                                                |
+                    //   +------------------------------------------------+
+                    //   |   module memory required by the main module    |
+                    //   |   (static data / heap-visible initial region)  |
+                    //   +------------------------------------------------+  <- stack_arena_base
+                    //   | guard | worker 1 stack slot | guard | worker 2 stack slot | ...
+                    //   +-------------------------------------------------------------
+                    //   | ... repeated for all grate workers ...
+                    //   +-------------------------------------------------------------
+                    //   | guard | worker N stack slot |
+                    //   +-------------------------------------------------------------
+                    //
+                    // where
+                    //
+                    //   `N = MAX_GRATE_WORKERS`
+                    //
+                    // and each worker consumes exactly:
+                    //
+                    //   `GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE`
+                    //
+                    // bytes inside the arena.
+                    //
+                    // Therefore, the total reserved arena size is:
+                    //
+                    //   `stack_arena_size = MAX_GRATE_WORKERS *
+                    //       (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)`
+                    //
+                    // The arena begins at `stack_arena_base`, which is chosen by rounding the
+                    // module's minimal required memory size upward to a host page boundary.
+                    // This guarantees that the worker-stack region starts at a page-aligned
+                    // location after the module's initial memory footprint.
+                    //
+                    // Why can `stack_arena_size` be globally constant?
+                    //
+                    // Because grate workers are created from one fixed runtime configuration:
+                    // every grate instance uses the same
+                    //
+                    //   - MAX_GRATE_WORKERS
+                    //   - GRATE_STACK_GUARD_SIZE
+                    //   - GRATE_STACK_SLOT_SIZE
+                    //
+                    // constants.
+                    //
+                    // In other words, the worker-pool width and the per-worker stack layout are
+                    // not instance-specific; they are part of the global lind-wasm platform
+                    // configuration. As a result, every grate-enabled instance reserves the same
+                    // total amount of stack-arena space, and worker `i` always maps to the same
+                    // slot formula relative to `stack_arena_base`.
+                    //
+                    // This uniform layout is especially important because multiple Wasmtime stores
+                    // may attach to the same underlying linear memory. Since workers do not get
+                    // separate linear memories, they must instead be isolated by assigning each
+                    // one a disjoint stack slot inside this shared arena.
+                    stack_arena_base = round_up_size(minimal_size as u32, PAGESIZE) as u32;
+
+                    let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
+                        * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
+                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+
+                    lind_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "failed to initialize stack arena base for cageid {}: {}",
+                                cageid, e
+                            )
+                        });
+
                     (
                         0,
-                        minimal_size
+                        (stack_arena_base as usize + stack_arena_size)
                             .try_into()
                             .expect("allocated memory is larger than 4GB"),
                     )
@@ -429,6 +538,18 @@ impl Instance {
                 let child_address = memory.data_ptr(&mut *store) as usize;
 
                 fork_vmmap(parent_cageid as u64, child_cageid);
+
+                // For child instances, the stack arena is inherited from the parent cage, and grate calls
+                // only works at static build, so we only need to fork the stack arena base if dylink is not enabled.
+                if !dylink_enabled {
+                    lind_platform_const::fork_stack_arena_base_for_child(parent_cageid as usize, child_cageid as usize)
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "failed to fork stack arena base from parent cageid {} to child cageid {}: {}",
+                                parent_cageid, child_cageid, e
+                            )
+                        });
+                }
             }
             InstantiateType::InstantiateLib {
                 cageid,
@@ -526,7 +647,7 @@ impl Instance {
             }
         }
 
-        Ok((instance, instanceid))
+        Ok((instance, stack_arena_base, instanceid))
     }
 
     /// Internal function to create an instance and run the start function.
@@ -1411,7 +1532,7 @@ impl<T> InstancePre<T> {
         &self,
         mut store: impl AsContextMut<Data = T>,
         no_start: bool,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
             &mut store.0,
@@ -1438,7 +1559,7 @@ impl<T> InstancePre<T> {
         &self,
         mut store: impl AsContextMut<Data = T>,
         instantiate_type: InstantiateType,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
             &mut store.0,

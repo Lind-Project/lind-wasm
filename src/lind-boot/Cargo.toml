@@ -8,6 +8,7 @@ disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_
 secure = ["typemap/secure"]
 lind_debug = ["wasmtime-lind-common/lind_debug"]
 debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
+debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }

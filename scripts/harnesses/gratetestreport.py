@@ -239,7 +239,7 @@ def run_subprocess(cmd: list[str], timeout: int | None = None, cwd: Path | None 
 
 
 def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
-    grate_compile_cmd = [GRATE_CLANG, "--compile-grate", test.grate_source.name]
+    grate_compile_cmd = [GRATE_CLANG, "-s", "--compile-grate", test.grate_source.name]
     cage_compile_cmd = [GRATE_CLANG, test.cage_source.name]
 
     try:
