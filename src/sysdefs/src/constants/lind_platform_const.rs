@@ -242,6 +242,28 @@ pub fn get_stack_arena_base(grate_id: usize) -> Option<u32> {
     bases.get(grate_id).copied().flatten()
 }
 
+/// Clears the recorded stack-arena base address for `grate_id`.
+///
+/// After this call, [`get_stack_arena_base`] will return `None` for the grate,
+/// and [`init_stack_arena_base`] may be used again to record a new base.
+///
+/// Returns an error if the grate ID is out of bounds or if the entry was not
+/// initialized.
+pub fn unset_stack_arena_base(grate_id: usize) -> Result<(), &'static str> {
+    let mut bases = stack_arena_bases().write().unwrap();
+
+    let entry = bases
+        .get_mut(grate_id)
+        .ok_or("grate stack arena base storage not allocated for this grate")?;
+
+    if entry.is_none() {
+        return Err("stack arena base not initialized for this grate");
+    }
+
+    *entry = None;
+    Ok(())
+}
+
 /// Copies the parent's recorded stack-arena base to a child cage during fork.
 ///
 /// This preserves the same resolved stack-arena layout across the fork
