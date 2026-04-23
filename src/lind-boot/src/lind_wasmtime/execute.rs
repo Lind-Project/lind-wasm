@@ -78,7 +78,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
 
     // Register syscall handlers (clone/exec/exit) with 3i
     if !register_wasmtime_syscall_entry() {
-        panic!("[lind-boot] egister syscall handlers (clone/exec/exit) with 3i failed");
+        panic!("[lind-boot] register syscall handlers (clone/exec/exit) with 3i failed");
     }
 
     // initialize the vmctx pool for exit/exec/clone reentry into wasmtime runtime

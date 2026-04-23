@@ -111,8 +111,8 @@ pub enum ConcurrencyMode {
     /// workers are available in the pool.
     Parallel,
 
-    /// Allow multiple calls to execute concurrently as long as distinct
-    /// workers are available in the pool.
+    /// A single call request is addressed at a time even though requests
+    /// are made concurrently.
     Serialized,
 }
 
@@ -406,7 +406,7 @@ impl<T: Clone> GrateHandler<T> {
     /// This worker replication is what enables grate-call concurrency: parallel
     /// calls execute in different Wasmtime stores rather than contending on a
     /// single shared execution context.
-    fn init_ten_workers(
+    fn init_workers(
         &mut self,
         template: &GrateTemplate<T>,
         host: &T,
@@ -742,7 +742,7 @@ pub fn create_handler_for_cage<T: Clone>(
         active_calls: AtomicUsize::new(0),
     };
 
-    handler.init_ten_workers(template, &host, cageid)?;
+    handler.init_workers(template, &host, cageid)?;
 
     Ok(handler)
 }
