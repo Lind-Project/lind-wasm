@@ -999,12 +999,26 @@ impl VmmapOps for Vmmap {
     /// Finds anonymous page ranges overlapping [req_start, req_end) for munmap.
     /// SharedMemory-backed entries are excluded (handled by shmdt instead).
     fn find_unmappable_ranges(&self, req_start: u32, req_end: u32) -> Vec<(u32, u32)> {
-        self.find_page_iter(req_start)
+        if req_start >= req_end {
+            return Vec::new();
+        }
+
+        let Some((last_interval, _)) = self.last_entry() else {
+            return Vec::new();
+        };
+
+        let last_end = last_interval.end(); // exclusive
+        if req_start >= last_end {
+            return Vec::new();
+        }
+
+        self.entries
+            .overlapping(ie(req_start, last_end))
             .take_while(|(interval, _)| interval.start() < req_end)
             .filter(|(_, entry)| !matches!(entry.backing, MemoryBackingType::SharedMemory(_)))
             .map(|(interval, _)| {
                 let act_start = interval.start().max(req_start);
-                let act_end = (interval.end() + 1).min(req_end);
+                let act_end = interval.end().min(req_end); // no +1
                 (act_start, act_end)
             })
             .collect()
