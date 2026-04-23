@@ -156,7 +156,8 @@ pub const GRATE_STACK_SLOT_SIZE: u32 = 8 * 1024 * 1024;
 /// usable stack region.
 pub const GRATE_STACK_GUARD_SIZE: u32 = 4 * 1024;
 
-use std::sync::OnceLock;
+/// ------------------------------------------------------------------
+use std::sync::{OnceLock, RwLock};
 
 /// Global base address of the grate stack arena in linear memory.
 ///
@@ -165,9 +166,12 @@ use std::sync::OnceLock;
 ///
 /// `worker_stack_base(i) = STACK_ARENA_BASE + (i - 1) * (guard + slot) + guard`
 ///
-/// This value is stored globally because the worker stack layout is defined by
-/// a single shared arena formula rather than being recomputed independently by
-/// each worker from instance-local metadata.
+/// One additional reason this base is recorded explicitly is that although the
+/// static worker-stack layout is retrieved from module metadata during instance
+/// construction, the underlying stack size is still a compile-time parameter.
+/// In other words, the arena geometry is not an immutable universal runtime
+/// constant: different compiled modules may encode different stack sizing
+/// choices.
 ///
 /// This value is placed in `sysdefs` as a shared low-level platform constant
 /// rather than being owned by `lind-3i`, `lind-multi-process`, or Wasmtime
@@ -175,10 +179,80 @@ use std::sync::OnceLock;
 /// to agree on the same stack-arena base, but placing it in any one of those
 /// layers would introduce circular dependency pressure between runtime,
 /// interposition, and process-management code.
-pub static STACK_ARENA_BASE: OnceLock<u32> = OnceLock::new();
+///
+/// ------------------------------------------------------------------
+///
+/// Global per-cage storage for grate stack-arena base addresses.
+///
+/// The vector index is the cage ID. Each entry is `Some(base)` once that
+/// cage's stack arena has been initialized, or `None` if it has not been
+/// initialized yet.
+///
+/// [`OnceLock`] initializes the container only once, and [`RwLock`] provides
+/// synchronized shared access to the per-cage entries.
+pub static STACK_ARENA_BASES: OnceLock<RwLock<Vec<Option<u32>>>> = OnceLock::new();
 
+/// Returns the global per-grate storage for stack-arena base addresses,
+/// initializing the container on first use.
+///
+/// The outer [`OnceLock`] ensures that the storage itself is created only once,
+/// while the inner [`RwLock<Vec<Option<u32>>>`] allows concurrent readers and
+/// serialized updates as grates are initialized over time.
+///
+/// Each vector index corresponds to a grate ID. A value of `None` means that
+/// the stack-arena base for that grate has not been initialized yet.
+///
 /// See [wasmtime/src/runtime/instance.rs] for the design and rationale
 /// behind this constant and its initialization.
-pub fn init_stack_arena_base(val: u32) {
-    let _ = STACK_ARENA_BASE.set(val);
+fn stack_arena_bases() -> &'static RwLock<Vec<Option<u32>>> {
+    STACK_ARENA_BASES.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+/// Records the stack-arena base address for `grate_id`.
+///
+/// The vector is grown as needed so that `grate_id` can be used directly as an
+/// index. This function preserves one-time initialization semantics per grate:
+/// if the given grate already has a recorded base, the function returns an
+/// error instead of overwriting the existing value.
+///
+/// This is intended to be called once during instance initialization, after the
+/// stack arena has been reserved and its resolved base address is known.
+pub fn init_stack_arena_base(grate_id: usize, val: u32) -> Result<(), &'static str> {
+    let mut bases = stack_arena_bases().write().unwrap();
+
+    if bases.len() <= grate_id {
+        bases.resize(grate_id + 1, None);
+    }
+
+    if bases[grate_id].is_some() {
+        return Err("stack arena base already initialized for this grate");
+    }
+
+    bases[grate_id] = Some(val);
+    Ok(())
+}
+
+/// Returns the recorded stack-arena base address for `cage_id`, if one exists.
+///
+/// `None` indicates that the grate has no initialized stack-arena base, either
+/// because the grate has not been initialized yet or because the requested grate
+/// ID is outside the current bounds of the global storage.
+pub fn get_stack_arena_base(grate_id: usize) -> Option<u32> {
+    let bases = stack_arena_bases().read().unwrap();
+    bases.get(grate_id).copied().flatten()
+}
+
+/// Copies the parent's recorded stack-arena base to a child cage during fork.
+///
+/// This preserves the same resolved stack-arena layout across the fork
+/// boundary, rather than requiring the child to reconstruct it independently.
+/// The operation fails if the parent has no initialized base or if the child
+/// already has one recorded.
+pub fn fork_stack_arena_base_for_child(
+    parent_grate_id: usize,
+    child_grate_id: usize,
+) -> Result<(), &'static str> {
+    let parent_base = get_stack_arena_base(parent_grate_id)
+        .ok_or("parent grate stack arena base not initialized")?;
+    init_stack_arena_base(child_grate_id, parent_base)
 }

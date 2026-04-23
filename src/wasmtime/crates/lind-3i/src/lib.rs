@@ -261,10 +261,11 @@ struct GrateWorker<T> {
 /// Each grate worker owns a dedicated stack slot inside the global stack arena.
 /// This function maps a logical `worker_id` to the first usable byte of that
 /// worker’s stack, skipping over the guard region placed before the slot.
-fn worker_stack_base(workerid: WorkerId) -> u32 {
-    let stack_arena_base = STACK_ARENA_BASE.get().copied().unwrap_or_else(|| {
-        panic!("STACK_ARENA_BASE is not initialized");
-    });
+fn worker_stack_base(cageid: u64, workerid: WorkerId) -> u32 {
+    let stack_arena_base = lind_platform_const::get_stack_arena_base(cageid as usize)
+        .unwrap_or_else(|| {
+            panic!("STACK_ARENA_BASE is not initialized for cageid {}", cageid);
+        });
     stack_arena_base
         + (workerid as u32 - 1) * (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)
         + GRATE_STACK_GUARD_SIZE
@@ -275,8 +276,8 @@ fn worker_stack_base(workerid: WorkerId) -> u32 {
 /// The returned address is used to reset the worker’s `__stack_pointer` before
 /// starting a new grate call, ensuring that each invocation begins with a clean
 /// stack state inside that worker’s private stack slot.
-fn worker_stack_top(workerid: WorkerId) -> u32 {
-    worker_stack_base(workerid) + GRATE_STACK_SLOT_SIZE
+fn worker_stack_top(cageid: u64, workerid: WorkerId) -> u32 {
+    worker_stack_base(cageid, workerid) + GRATE_STACK_SLOT_SIZE
 }
 
 /// Scoped ownership of a borrowed worker.
@@ -412,12 +413,13 @@ impl<T: Clone> GrateHandler<T> {
         cageid: u64,
     ) -> anyhow::Result<()> {
         for handler_id in 1_u64..=MAX_GRATE_WORKERS as u64 {
-            let worker = create_worker(template, host.clone(), handler_id).with_context(|| {
-                format!(
-                    "failed to create worker {} for cageid {}",
-                    handler_id, cageid
-                )
-            })?;
+            let worker =
+                create_worker(template, host.clone(), cageid, handler_id).with_context(|| {
+                    format!(
+                        "failed to create worker {} for cageid {}",
+                        handler_id, cageid
+                    )
+                })?;
 
             self.inner.lock().unwrap().workers.push_back(worker);
         }
@@ -664,6 +666,7 @@ impl<T> GrateWorker<T> {
 pub fn create_worker<T>(
     template: &GrateTemplate<T>,
     host: T,
+    cageid: u64,
     worker_id: WorkerId,
 ) -> anyhow::Result<GrateWorker<T>>
 where
@@ -697,8 +700,8 @@ where
         None => None,
     };
 
-    let stack_base = worker_stack_base(worker_id);
-    let stack_top = worker_stack_top(worker_id);
+    let stack_base = worker_stack_base(cageid, worker_id);
+    let stack_top = worker_stack_top(cageid, worker_id);
 
     Ok(GrateWorker {
         worker_id,

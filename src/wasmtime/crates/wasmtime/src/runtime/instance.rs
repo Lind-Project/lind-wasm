@@ -478,7 +478,13 @@ impl Instance {
                         * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
                             + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
 
-                    lind_platform_const::init_stack_arena_base(stack_arena_base);
+                    lind_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "failed to initialize stack arena base for cageid {}: {}",
+                                cageid, e
+                            )
+                        });
 
                     (
                         0,
@@ -532,6 +538,18 @@ impl Instance {
                 let child_address = memory.data_ptr(&mut *store) as usize;
 
                 fork_vmmap(parent_cageid as u64, child_cageid);
+
+                // For child instances, the stack arena is inherited from the parent cage, and grate calls
+                // only works at static build, so we only need to fork the stack arena base if dylink is not enabled.
+                if !dylink_enabled {
+                    lind_platform_const::fork_stack_arena_base_for_child(parent_cageid as usize, child_cageid as usize)
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "failed to fork stack arena base from parent cageid {} to child cageid {}: {}",
+                                parent_cageid, child_cageid, e
+                            )
+                        });
+                }
             }
             InstantiateType::InstantiateLib {
                 cageid,
