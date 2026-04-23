@@ -39,8 +39,7 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 
     let ret = unsafe { libc::close(fdentry.underfd as i32) };
     if ret < 0 {
-        let errno = get_errno();
-        panic!("kernel_close failed with errno: {:?}", errno);
+        return handle_errno(get_errno(), "close_syscall");
     }
 }
 
