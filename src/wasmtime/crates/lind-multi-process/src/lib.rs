@@ -5,7 +5,9 @@ use cfg_if::cfg_if;
 use anyhow::{anyhow, Context, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::lind_platform_const::{
+    unset_stack_arena_base, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+};
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
@@ -1333,6 +1335,10 @@ impl<
 
         // parse the wasm module as soon as possible to catch the error before unwinding, which is hard to unwind back if exec file has some problems
         let mut main_module = &self.modules.get(0).unwrap().2;
+
+        // detect if dynamic loading is enabled
+        let dylink_enabled = main_module.dylink_meminfo().is_some();
+
         let engine = main_module.engine().clone();
         let exec_file_path = Path::new(&path);
         let exec_module = match engine.detect_precompiled_file(exec_file_path) {
@@ -1413,11 +1419,24 @@ impl<
             // for exec, we do not need to do rewind after unwinding is done
             store.set_asyncify_state(AsyncifyState::Normal);
 
+            // Unset original vmctx for the grate, since the exec-ed module will have a new vmctx.
             if !rm_vmctx_thread(cloned_cageid as u64, 0) {
                 panic!(
                     "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
                     cloned_cageid
                 );
+            }
+
+            // Grate calls only supports static linking for now, so we only register
+            // grate workers when dylink is not enabled.
+            if !dylink_enabled {
+                // Unset original stack arena base for the grate, since the exec-ed module might have different memory layout
+                unset_stack_arena_base(cloned_cageid as usize).unwrap_or_else(|e| {
+                    panic!(
+                        "failed to unset stack arena base for grate {}: {}",
+                        cloned_cageid, e
+                    )
+                });
             }
 
             let ret = exec_call(
