@@ -828,6 +828,10 @@ pub extern "C" fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
+    eprintln!(
+        "[debug mmap] entry: addr_arg={:#x} len_arg={:#x} prot_arg={:#x} flags_arg={:#x} vfd_arg={:#x} off_arg={:#x}",
+        addr_arg, len_arg, prot_arg, flags_arg, vfd_arg, off_arg
+    );
     let addr = {
         if addr_arg == 0 {
             0 as *mut u8
@@ -990,6 +994,10 @@ pub extern "C" fn mmap_syscall(
             };
 
             // update vmmap entry
+            eprintln!(
+                "[debug mmap] add_entry: page_num={} npages={} useraddr={:#x} rounded_length={:#x} flags={:#x}",
+                useraddr >> PAGESHIFT, (rounded_length >> PAGESHIFT) as u32, useraddr, rounded_length, flags
+            );
             let _ = vmmap.add_entry_with_overwrite(
                 useraddr >> PAGESHIFT,
                 (rounded_length >> PAGESHIFT) as u32,
