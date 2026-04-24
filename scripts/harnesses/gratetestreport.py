@@ -239,7 +239,7 @@ def run_subprocess(cmd: list[str], timeout: int | None = None, cwd: Path | None 
 
 
 def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
-    grate_compile_cmd = [GRATE_CLANG, "-s", "--compile-grate", test.grate_source.name]
+    grate_compile_cmd = [GRATE_CLANG, "-s", "--compile-grate", "--output-dir", "grates", test.grate_source.name]
     cage_compile_cmd = [GRATE_CLANG, test.cage_source.name]
 
     try:
@@ -288,14 +288,16 @@ def build_grate_run_cmd(grate_wasm: Path, cage_wasm: Path) -> list[str]:
     grate_wasm = Path(grate_wasm)
     cage_wasm = Path(cage_wasm)
 
+    grate_arg = f"grates/{grate_wasm.name}"
+
     # Respect explicit override first.
     if "GRATE_RUNNER" in os.environ:
-        return [GRATE_RUNNER, str(grate_wasm.name), str(cage_wasm.name)]
+        return [GRATE_RUNNER, grate_arg, str(cage_wasm.name)]
 
     if lind_run_wrapper.is_file():
-        return [str(lind_run_wrapper), str(grate_wasm.name), str(cage_wasm.name)]
+        return [str(lind_run_wrapper), grate_arg, str(cage_wasm.name)]
 
-    return [GRATE_RUNNER, str(grate_wasm.name), str(cage_wasm.name)]
+    return [GRATE_RUNNER, grate_arg, str(cage_wasm.name)]
 
 
 def run_grate_test(test: GrateTestCase, timeout_sec: int) -> tuple[str, str, int | str]:
@@ -305,7 +307,7 @@ def run_grate_test(test: GrateTestCase, timeout_sec: int) -> tuple[str, str, int
     # lind_run/lind-boot resolves inputs from lindfs. lind_compile copies the
     # build artifact into LINDFS_ROOT, so run from that location rather than
     # source-tree absolute paths.
-    grate_runtime_module = (LINDFS_ROOT / grate_module.name).resolve()
+    grate_runtime_module = (LINDFS_ROOT / "grates" / grate_module.name).resolve()
     cage_runtime_module = (LINDFS_ROOT / cage_module.name).resolve()
 
     # Fall back to direct module paths when lindfs copy is unavailable.
