@@ -7,6 +7,7 @@ LINDFS_DIRS := \
 	       bin \
 	       dev \
 	       etc \
+	       grates \
 	       lib \
 	       sbin \
 	       tmp \
@@ -51,6 +52,14 @@ lindfs:
 	@if [ -d /usr/share/zoneinfo ]; then \
 		cp -r /usr/share/zoneinfo/* $(LINDFS_ROOT)/usr/share/zoneinfo/; \
 	fi
+
+.PHONY: clean-lindfs
+clean-lindfs:
+	@# Remove user files from lindfs while preserving preloaded system files.
+	@# Keeps: lib/ (shared libs), etc/, usr/, dev/null, directory structure
+	find $(LINDFS_ROOT) -maxdepth 1 -type f -delete
+	rm -rf $(LINDFS_ROOT)/bin/* $(LINDFS_ROOT)/sbin/* $(LINDFS_ROOT)/tmp/*
+	rm -rf $(LINDFS_ROOT)/home $(LINDFS_ROOT)/testfiles
 
 .PHONY: lind-debug
 lind-debug: lindfs build-dir

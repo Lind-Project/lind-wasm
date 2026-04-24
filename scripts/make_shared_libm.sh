@@ -48,8 +48,8 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.
 mkdir -p $REPO_ROOT/lindfs/lib
 
 # apply wasm-opt
-$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals $WITH_FPCAST -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.wasm
+$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals $WITH_FPCAST -O2 --debuginfo $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.so
 
-# do precompile
+# do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libm.cwasm
-$REPO_ROOT/scripts/lind_compile --precompile-only $REPO_ROOT/lindfs/lib/libm.wasm
+$REPO_ROOT/build/lind-boot --precompile $REPO_ROOT/lindfs/lib/libm.so
