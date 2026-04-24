@@ -76,7 +76,7 @@ In the current implementation, that compatible context is represented not by a s
 
 - its own Wasmtime `Store`
 - its own instantiated grate `Instance`
-- all works with same grateid are attached by same linear memory
+- all workers with same grateid are attached by same linear memory
 - its own independent Wasm call stack region inside the shared linear memory
 
 Operationally, a grate call is executed by leasing one available worker from the target grate’s `GrateHandler`, invoking the grate entry trampoline (`pass_fptr_to_wt`) inside that worker, and returning the worker to the pool after the call completes.
