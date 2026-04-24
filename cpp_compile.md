@@ -41,7 +41,7 @@ The script call signature is iffy, you must call it as: ``./scripts/lind_compile
 The script is intended to be used on .c files only. Alice modded the script to make it work on .cpp files only in this branch. A simple future fix is needed to make it work for both .c and .cpp. It won't be hard, but will be a bit tedious. what alice did can be seen here
 
 
-So, the necessary steps here are: creating and stepping into a docker container, creating the dummy hello.cpp file (you can do this before stepping into the docker container step; it really doesn't matter), and attempt to compile with the script and just watch it fail:
+So, the necessary steps here are: creating and stepping into a docker container, creating the dummy hello.cpp file (you can do this before stepping into the docker container step; it really doesn't matter), and attempt to compile with the script and just watch it fail: (note: now that .cpp unit test is moved to tests/unit-tests/cpp/ dir, please make corresponding changes when you try to test for it.)
 ```bash
 lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile trial/hello.cpp -- -fno-exceptions
 /home/lind/lind-wasm/trial/hello.cpp:1:10: fatal error: 'algorithm' file not found
