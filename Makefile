@@ -7,6 +7,7 @@ LINDFS_DIRS := \
 	       bin \
 	       dev \
 	       etc \
+	       grates \
 	       lib \
 	       sbin \
 	       tmp \
