@@ -54,13 +54,13 @@ wasm-ld \
 mkdir -p $REPO_ROOT/lindfs/lib
 
 # append `__wasm_apply_tls_relocs`, `__wasm_apply_global_relocs` and `__stack_pointer` export
-$REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/lindfs/lib/libc.wasm __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
-$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm $REPO_ROOT/lindfs/lib/libc.wasm __wasm_apply_global_relocs func __wasm_apply_global_relocs
-$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.wasm $REPO_ROOT/lindfs/lib/libc.wasm __stack_pointer global __stack_pointer
+$REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/lindfs/lib/libc.so __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
+$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __wasm_apply_global_relocs func __wasm_apply_global_relocs
+$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __stack_pointer global __stack_pointer
 
 # apply wasm-opt
-$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals $WITH_FPCAST -O2 --debuginfo $REPO_ROOT/lindfs/lib/libc.wasm -o $REPO_ROOT/lindfs/lib/libc.wasm
+$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals $WITH_FPCAST -O2 --debuginfo $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
 
-# do precompile
+# do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libc.cwasm
-$REPO_ROOT/scripts/lind_compile --precompile-only $REPO_ROOT/lindfs/lib/libc.wasm
+$REPO_ROOT/build/lind-boot --precompile $REPO_ROOT/lindfs/lib/libc.so
