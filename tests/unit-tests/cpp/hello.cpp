@@ -2,7 +2,9 @@
 #include <iostream>
 #include <vector>
 
-int main() {
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
     std::vector<int> v = {3, 1, 2};
     std::sort(v.begin(), v.end());
 
