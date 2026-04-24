@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Libc++ header / toolchain integration harness for the unified E2E report.
 
-Compiles a small C++ smoke test with `lind_compile_cpp --compile-only`, runs it
-via `lind_run`, and checks stdout for a canonical success line.
+Builds a small C++ smoke test with the full `lind_compile_cpp` pipeline (clang++
+→ wasm-opt epoch injection → lind-boot --precompile), runs the resulting
+`.cwasm` via `lind_run`, and checks stdout for a canonical success line.
 Expects a full sysroot at `build/sysroot` (including libc++ merge), same as
 Dockerfile `libcpp-test` / E2E `test` stage setup.
 """
@@ -94,9 +95,15 @@ def default_source_path() -> Path:
     return (REPO_ROOT / DEFAULT_CPP_REL).resolve()
 
 
-def run_compile(source: Path) -> tuple[int, str]:
+def cwasm_path_for_source(source: Path) -> Path:
+    """Match lind_compile_cpp naming: <name>.cpp -> <name>.cpp.cwasm (see ${SRC%.c}.cwasm)."""
+    return source.parent / f"{source.name}.cwasm"
+
+
+def run_lind_compile_cpp_full(source: Path) -> tuple[int, str]:
+    """Full pipeline (not --compile-only) so wasm-opt injects epoch globals lind_run expects."""
     script = REPO_ROOT / "scripts" / "lind_compile_cpp"
-    cmd = [str(script), "--compile-only", str(source)]
+    cmd = [str(script), str(source)]
     try:
         proc = subprocess.run(
             cmd,
@@ -144,17 +151,17 @@ def run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str]:
     return proc.returncode, combined
 
 
-def cleanup_wasm_artifacts(wasm_path: Path) -> None:
-    """Remove wasm from source tree and lindfs copy left by lind_compile_cpp."""
-    try:
-        wasm_path.unlink(missing_ok=True)
-    except OSError as exc:
-        logger.debug("Could not remove %s: %s", wasm_path, exc)
-    lindfs_copy = LINDFS_ROOT / wasm_path.name
-    try:
-        lindfs_copy.unlink(missing_ok=True)
-    except OSError as exc:
-        logger.debug("Could not remove %s: %s", lindfs_copy, exc)
+def cleanup_wasm_artifacts(wasm_path: Path, cwasm_path: Path) -> None:
+    """Remove wasm/cwasm from source tree and lindfs copies left by lind_compile_cpp."""
+    for path in (wasm_path, cwasm_path):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.debug("Could not remove %s: %s", path, exc)
+        try:
+            (LINDFS_ROOT / path.name).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.debug("Could not remove %s: %s", LINDFS_ROOT / path.name, exc)
 
 
 def run_libcpp_integration(result: dict[str, Any], source: Path, timeout_sec: int) -> None:
@@ -174,33 +181,35 @@ def run_libcpp_integration(result: dict[str, Any], source: Path, timeout_sec: in
         return
 
     wasm_path = source.parent / f"{source.name}.wasm"
-    wasm_basename = wasm_path.name
-    try:
-        wasm_path.unlink(missing_ok=True)
-    except OSError as exc:
-        logger.warning("Could not remove prior wasm %s: %s", wasm_path, exc)
+    cwasm_path = cwasm_path_for_source(source)
+    run_basename = cwasm_path.name
+    for p in (wasm_path, cwasm_path):
+        try:
+            p.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Could not remove prior artifact %s: %s", p, exc)
 
-    rc, compile_out = run_compile(source)
+    rc, compile_out = run_lind_compile_cpp_full(source)
     if rc != 0:
         add_test_result(result, rel_name, "Failure", "Compile_Failure", f"exit={rc}\n{compile_out}")
         return
 
-    if not wasm_path.is_file():
+    if not cwasm_path.is_file():
         add_test_result(
             result,
             rel_name,
             "Failure",
             "Compile_Failure",
-            f"Compiler exited 0 but wasm missing: {wasm_path}\n{compile_out}",
+            f"lind_compile_cpp exited 0 but .cwasm missing: {cwasm_path}\n{compile_out}",
         )
         return
 
-    run_rc, run_out = run_wasm_with_lind(wasm_basename, timeout_sec)
+    run_rc, run_out = run_wasm_with_lind(run_basename, timeout_sec)
 
     try:
-        wasm_disp = str(wasm_path.relative_to(REPO_ROOT))
+        wasm_disp = str(cwasm_path.relative_to(REPO_ROOT))
     except ValueError:
-        wasm_disp = str(wasm_path)
+        wasm_disp = str(cwasm_path)
 
     try:
         if run_rc == "timeout":
@@ -245,7 +254,7 @@ def run_libcpp_integration(result: dict[str, Any], source: Path, timeout_sec: in
         ).strip()
         add_test_result(result, rel_name, "Success", None, ok_msg)
     finally:
-        cleanup_wasm_artifacts(wasm_path)
+        cleanup_wasm_artifacts(wasm_path, cwasm_path)
 
 
 def generate_html_report(result: dict[str, Any]) -> str:
@@ -267,7 +276,7 @@ def generate_html_report(result: dict[str, Any]) -> str:
 <html><head><meta charset="UTF-8"><title>Libc++ integration report</title></head>
 <body>
 <h1>Libc++ integration report</h1>
-<p>Compiles with <code>lind_compile_cpp --compile-only</code>, runs via <code>lind_run</code>,
+<p>Builds with full <code>lind_compile_cpp</code> (wasm-opt + precompile), runs <code>lind_run</code> on the <code>.cwasm</code>,
 and checks for <code>{expected}</code> on a line of stdout.</p>
 <table border="1" cellspacing="0" cellpadding="6">
 <tr><th>Metric</th><th>Value</th></tr>
@@ -299,7 +308,7 @@ and checks for <code>{expected}</code> on a line of stdout.</p>
 
 
 def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Libc++ integration compile + run smoke test")
+    p = argparse.ArgumentParser(description="Libc++ integration: full lind_compile_cpp + lind_run smoke test")
     p.add_argument("--output", default=JSON_OUTPUT, help="JSON report path")
     p.add_argument("--report", default=HTML_OUTPUT, help="HTML report path")
     p.add_argument("--timeout", type=int, default=DEFAULT_RUN_TIMEOUT_SEC, help="lind_run timeout (seconds)")
