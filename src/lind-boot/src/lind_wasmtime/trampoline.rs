@@ -4,6 +4,8 @@ use threei::threei_const;
 use wasmtime_lind_3i::*;
 use wasmtime_lind_multi_process;
 
+use crate::perf;
+
 /// The callback function registered with 3i uses a unified Wasm entry
 /// function as the single re-entry point into the Wasm executable.
 ///
@@ -27,6 +29,10 @@ pub extern "C" fn grate_callback_trampoline(
     arg6: u64,
     arg6cageid: u64,
 ) -> i32 {
+    // This timer measures the entire function since it is never explicitly dropped. The timer
+    // therefore ends only when the function exits.
+    let _grate_callback_timer = lind_perf::get_timer!(perf::GRATE_CALLBACK_TRAMPOLINE);
+
     // Form the grate request with the provided arguments and the handler address
     let req = GrateRequest {
         handler_addr: in_grate_fn_ptr_u64,

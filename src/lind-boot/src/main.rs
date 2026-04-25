@@ -1,5 +1,6 @@
 mod cli;
 mod lind_wasmtime;
+mod perf;
 
 use crate::{
     cli::CliOptions,
@@ -64,9 +65,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         precompile_module(&lindboot_cli)?;
         return Ok(());
     }
-
     // Not a precompile command, chroot to lindfs
     chroot_to_lindfs();
+
+    // Check if --perf is enabled and avaible to decide whether to run in benchmarking mode.
+    if let Some(kind) = lindboot_cli.perf_timer_kind() {
+        // Initialize all counters.
+        perf::perf_init(kind);
+
+        let counters = perf::all_counter_names();
+
+        // Iterate over all counters:
+        // - Exclusively enable the counter
+        // - Run the program to gather timing data.
+        for counter in counters {
+            perf::enable_one_counter(counter);
+
+            // Each sample run gets a fresh RawPOSIX lifecycle boundary to imitate actual
+            // behaviour.
+            rawposix_start(0);
+            let _ = execute_wasmtime(lindboot_cli.clone());
+            rawposix_shutdown();
+        }
+
+        // Output final numbers to stdout.
+        perf::perf_report();
+
+        return Ok(());
+    }
 
     // Initialize RawPOSIX and register RawPOSIX syscalls with 3i
     rawposix_start(0);
