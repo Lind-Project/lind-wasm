@@ -18,6 +18,15 @@
 
 #include <stdint.h> // For uint64_t definition
 
+/*
+ * Flag to mark an argcageid as pointing into the grate's own linear memory
+ * rather than the calling cage's memory. OR this with the cageid when passing
+ * a pointer that lives in the grate's address space.
+ *
+ * Example: arg2cageid = my_cageid | GRATE_MEMORY_FLAG
+ */
+#define GRATE_MEMORY_FLAG ((uint64_t)1 << 63)
+
 int make_threei_call (unsigned int callnumber, 
     uint64_t callname, 
     uint64_t self_cageid, uint64_t target_cageid,

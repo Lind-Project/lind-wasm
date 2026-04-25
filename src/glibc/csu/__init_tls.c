@@ -210,13 +210,9 @@ void *__copy_tls(unsigned char *mem)
 	return td;
 #else
 	size_t tls_align = __builtin_wasm_tls_align();
-	volatile void* tls_base = __builtin_wasm_tls_base();
 	mem += tls_align;
 	mem -= (uintptr_t)mem & (tls_align-1);
 	__wasm_init_tls(mem);
-  	__asm__("local.get %0\n"
-			"global.set __tls_base\n"
-			:: "r"(tls_base));
 	return mem;
 #endif
 }

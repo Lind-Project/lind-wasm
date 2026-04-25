@@ -56,6 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends -qq \
     gdb \
     linux-tools-common \
     linux-tools-generic \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Install a pinned WABT version for wasm2wat/wat2wasm/wasm-objdump.
@@ -86,6 +87,7 @@ WORKDIR /home/${USERNAME}
 # --profile minimal tells rustup to install only the essentials for the toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal
+RUN /home/${USERNAME}/.cargo/bin/rustup component add rust-src --toolchain nightly-2026-02-11-x86_64-unknown-linux-gnu
 
 # --- Clone the repo as user ---
 RUN git clone --branch "${BRANCH_NAME}" --single-branch "${REPO_URL}" /home/${USERNAME}/lind-wasm
@@ -123,8 +125,14 @@ ENV LIND_WASM_ROOT=/home/${USERNAME}/lind-wasm
 USER root
 RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
  && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run     \
+ && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
- && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
+ && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
+# Replace copied helper scripts with symlinks so local edits are reflected.
+RUN rm -f /usr/local/bin/lind_compile /usr/local/bin/lind_run \
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run
 USER ${USERNAME}
 
 CMD ["/bin/bash"]

@@ -180,11 +180,24 @@ int __main_void(void) {
 // indexes in WebAssembly.
 // The workaround we are using here is to define an unused function pointer to occupy the function index of 1
 // so that normal function pointer could have their index starting from 2.
+// However, if dynamic loading is enabled, we have the ability to control the starting index of the table
+// and therefore this is not needed with dylink build
+#ifndef LIND_DYLINK
 int __unused_function_pointer() {
     return 42;
 }
 // explicitly marked this as "used" so it will not be optimized by compiler
 void *___dummy_reference __attribute__((used)) = __unused_function_pointer;
+#endif
+
+// Force-link signal_callback (defined in libc_sigaction.c) so that it is
+// always exported from the wasm binary.  The epoch-based signal delivery
+// mechanism in wasmtime looks up this export at runtime; without it, any
+// program that receives a signal but never called sigaction() would trap.
+#ifndef LIND_DYLINK
+extern void signal_callback(void (*)(int), int);
+void *__force_signal_callback __attribute__((used)) = (void *)signal_callback;
+#endif
 
 int _start() {
     __lind_init_addr_translation(); // iniatilize cageids before anything else executes
@@ -193,7 +206,7 @@ int _start() {
     __lind_initialize_environ();
     __ctype_init(); //lind-wasm: init ctypes for isalpha etc.
     #ifdef LIND_DEBUG
-    	__lind_debug_import();
+    	lind_debug_printf("Lind running in debug mode\n");
     #endif
 // Lind-Wasm: conditional compilation to ensure exit() is called before program termination,
 // and return __main_void() if NO_ASYNCIFY is defined. exit() depends on asyncify,

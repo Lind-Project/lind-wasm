@@ -3,16 +3,27 @@ set -e
 
 shift
 
-# Determine profile from arguments
+# Determine profile and output dir from arguments
 PROFILE="debug"
 CARGO_ARGS=("--target" "wasm32-wasip1")
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+LIND_TARGET_DIR=""
 
-for arg in "$@"; do
-    if [ "$arg" = "--release" ] || [ "$arg" = "-r" ]; then
-        PROFILE="release"
-    fi
-    CARGO_ARGS+=("$arg")
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --release|-r)
+            PROFILE="release"
+            CARGO_ARGS+=("$1")
+            ;;
+        --output-dir)
+            shift
+            LIND_TARGET_DIR="$1"
+            ;;
+        *)
+            CARGO_ARGS+=("$1")
+            ;;
+    esac
+    shift
 done
 
 # Set linker (allow override via environment variable)
@@ -37,10 +48,17 @@ WASM_OPT_BIN="${WASM_OPT_BIN:-wasm-opt}"
 WASMTIME_BIN="${WASMTIME_BIN:-wasmtime}"
 
 echo "Building with profile: $PROFILE"
-cargo +nightly build -Z build-std=std,panic_abort "${CARGO_ARGS[@]}"
+cargo +nightly-2026-02-11 build -Z build-std=std,panic_abort "${CARGO_ARGS[@]}"
 
 echo "-------------------------------"
-# Find the wasm files in the appropriate profile directory
-for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -name "*deps*" 2>/dev/null| sort -r); do
-        lind_compile --opt-only "$f" 2> /dev/null || true
+LIND_TARGET_ARGS=()
+if [ -n "$LIND_TARGET_DIR" ]; then
+    LIND_TARGET_ARGS=("--output-dir" "$LIND_TARGET_DIR")
+fi
+
+for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -path "*deps*" 2>/dev/null | sort -r); do
+        # Find the wasm files in the appropriate profile directory
+        lind_compile -s --opt-only "$f" &> /dev/null || true
+        # Precompile the optimized wasm file to cache it to LindFS
+        lind_compile "${LIND_TARGET_ARGS[@]}" --precompile-only "$f" &> /dev/null || true
 done

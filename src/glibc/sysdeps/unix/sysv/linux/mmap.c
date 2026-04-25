@@ -26,12 +26,12 @@
 #include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
-# include <mmap_internal.h>
+#  include <mmap_internal.h>
 
 /* An architecture may override this.  */
-# ifndef MMAP_ADJUST_OFFSET
-#  define MMAP_ADJUST_OFFSET(offset) offset
-# endif
+#  ifndef MMAP_ADJUST_OFFSET
+#    define MMAP_ADJUST_OFFSET(offset) offset
+#  endif
 
 // void *
 // __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
@@ -51,12 +51,16 @@
 // }
 
 // Edit: Dennis
+// Fix: Avoid translate addr - it's a guest virtual address, not a host
+// pointer. rawposix's mmap_syscall converts this guest address to a host
+// address via vmmap.user_to_sys() before calling the host mmap.
 void *
 __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 {
-  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
-  
-  return MAKE_LEGACY_SYSCALL(MMAP_SYSCALL, "syscall|mmap", host_addr, (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd, (uint64_t) offset, TRANSLATE_ERRNO_ON);
+  return MAKE_LEGACY_SYSCALL (MMAP_SYSCALL, "syscall|mmap",
+			      (uint64_t) (uintptr_t) addr, (uint64_t) len,
+			      (uint64_t) prot, (uint64_t) flags, (uint64_t) fd,
+			      (uint64_t) offset, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__mmap, mmap)
 libc_hidden_def (__mmap)
