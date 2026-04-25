@@ -529,6 +529,7 @@ fn attach_api(
         lind_manager.clone(),
         lindboot_cli.clone(),
         cageid,
+        lindboot_cli.thread_stack_size,
         |host| host.lind_fork_ctx.as_mut().unwrap(),
         |host| host.fork(),
         |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs| {

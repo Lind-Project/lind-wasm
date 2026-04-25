@@ -87,6 +87,9 @@ pub struct LindCtx<T, U> {
     // from lind-boot, used for exec call
     lindboot_cli: U,
 
+    // host thread stack size for spawned cage/thread processes
+    pub thread_stack_size: usize,
+
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
 
@@ -133,6 +136,7 @@ impl<
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
         cageid: i32,
+        thread_stack_size: usize,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
@@ -168,6 +172,7 @@ impl<
             next_threadid,
             lind_manager: lind_manager.clone(),
             lindboot_cli,
+            thread_stack_size,
             get_cx,
             fork_host,
             exec_host,
@@ -352,6 +357,7 @@ impl<
         let _cloned_address = address as u64;
 
         let parent_cageid = self.cageid;
+        let thread_stack_size = self.thread_stack_size;
 
         // use the same engine for parent and child
         let engine = main_module.engine().clone();
@@ -377,7 +383,9 @@ impl<
             let barrier = Arc::new(Barrier::new(2));
             let barrier_clone = Arc::clone(&barrier);
 
-            let builder = thread::Builder::new().name(format!("lind-fork-{}", child_cageid));
+            let builder = thread::Builder::new()
+                .name(format!("lind-fork-{}", child_cageid))
+                .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
                     // create a new instance
@@ -906,6 +914,7 @@ impl<
 
         // get current cageid, child should have the same cageid
         let child_cageid = self.cageid;
+        let thread_stack_size = self.thread_stack_size;
 
         // use the same engine for parent and child
         let engine = main_module.engine().clone();
@@ -947,7 +956,9 @@ impl<
                     child_unwind_data_start_usr + rewind_total_size as u64;
             }
 
-            let builder = thread::Builder::new().name(format!("lind-thread-{}", next_tid));
+            let builder = thread::Builder::new()
+                .name(format!("lind-thread-{}", next_tid))
+                .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
                     // create a new instance
@@ -1753,6 +1764,7 @@ impl<
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
@@ -1773,6 +1785,7 @@ impl<
             next_threadid: self.next_threadid.clone(),
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
