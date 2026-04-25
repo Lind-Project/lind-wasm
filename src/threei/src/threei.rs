@@ -16,6 +16,7 @@ use crate::handler_table::{
     _check_cage_handler_exists, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
     copy_handler_table_to_cage_impl, print_handler_table, register_handler_impl,
 };
+use crate::perf;
 use crate::threei_const;
 
 pub use sysdefs::constants::sys_const::{EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
@@ -215,6 +216,8 @@ fn _call_grate_func(
     arg6: u64,
     arg6_cageid: u64,
 ) -> Option<i32> {
+    let _timer = lind_perf::get_timer!(perf::CALL_GRATE_FUNC);
+
     let runtimeid = match get_cage_runtime(grateid) {
         Some(r) => r,
         None => panic!(
@@ -426,6 +429,13 @@ pub fn make_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    // Only enable timers for syscalls that are explicitly benchmarking related (2000-3000)
+    let _timer = if syscall_num > 2000 && syscall_num < 3000 {
+        Some(lind_perf::get_timer!(perf::MAKE_SYSCALL))
+    } else {
+        None
+    };
+
     // Block cross-cage calls to a dead or removed cage (e.g. grate-forwarded
     // syscalls).  The cage's own threads are allowed to keep making
     // syscalls until the epoch kill fires — without the self != target
@@ -451,6 +461,12 @@ pub fn make_syscall(
         if grateid == lind_platform_const::RAWPOSIX_CAGEID
             || grateid == lind_platform_const::WASMTIME_CAGEID
         {
+            let _rpx_dispatch_timer = if syscall_num > 2000 && syscall_num < 3000 {
+                Some(lind_perf::get_timer!(perf::RAWPOSIX_DISPATCH))
+            } else {
+                None
+            };
+
             // Second check: catch in-flight grate-forwarded calls that
             // passed the initial check before is_dead was set or the cage
             // was removed.
@@ -478,6 +494,9 @@ pub fn make_syscall(
                 arg6,
                 arg6_cageid,
             );
+            drop(_rpx_dispatch_timer);
+
+            return r;
         }
         // Threei special case: if the call is an interposed 3i call
         if grateid == lind_platform_const::THREEI_CAGEID {
