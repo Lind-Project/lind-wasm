@@ -220,6 +220,25 @@ pub fn rawposix_start(verbosity: isize) {
         libc::sigaction(libc::SIGUSR2, &sa, std::ptr::null_mut());
     }
 
+    // Raise the host process soft fd limit to the hard maximum. Lind supports up to 1024 cages
+    // each with up to 1024 fds, so the default soft limit (typically 1024) is too low.
+    unsafe {
+        let mut lim = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) != 0 {
+            panic!("getrlimit failed: {}", std::io::Error::last_os_error());
+        }
+
+        lim.rlim_cur = lim.rlim_max; // raise soft to hard
+
+        if libc::setrlimit(libc::RLIMIT_NOFILE, &lim) != 0 {
+            panic!("setrlimit failed: {}", std::io::Error::last_os_error());
+        }
+    }
+
     // init cage table
     cagetable_init();
 
