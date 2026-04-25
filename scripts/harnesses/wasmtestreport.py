@@ -59,6 +59,7 @@ FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 GLOBAL_COMPILE_FLAGS = []
+LIND_PRE_FLAGS = []
 DIR_FLAGS = []
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
 
@@ -461,7 +462,7 @@ def get_expected_output(source_file):
 def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file, *resolve_compile_flags(source_file, "lind")]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), *LIND_PRE_FLAGS, source_file, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -1183,6 +1184,7 @@ def parse_arguments(argv=None):
     parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
+    parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
 
     args = parser.parse_args(argv)
@@ -1343,6 +1345,18 @@ def setup_test_file_in_artifacts(original_source, artifacts_root):
             
     return dest_source
 
+
+def get_test_mode(source_file):
+    """Infer the harness mode from any ancestor folder under tests/unit-tests."""
+    for parent in source_file.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == DETERMINISTIC_PARENT_NAME:
+            return "deterministic"
+        if parent.name == FAIL_PARENT_NAME:
+            return "fail"
+    return None
+
 # ----------------------------------------------------------------------
 # Function: run_tests
 #
@@ -1364,10 +1378,10 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         dest_source = setup_test_file_in_artifacts(original_source, artifacts_root)
         
         # Determine test type and run appropriate test
-        parent_name = original_source.parent.name
-        if parent_name == DETERMINISTIC_PARENT_NAME:
+        test_mode = get_test_mode(original_source)
+        if test_mode == "deterministic":
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
-        elif parent_name == FAIL_PARENT_NAME:
+        elif test_mode == "fail":
             test_single_file_fail(dest_source, results["fail"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         else:
             # Log warning for tests not in deterministic/fail folders
@@ -1413,7 +1427,7 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
-    global GLOBAL_COMPILE_FLAGS, DIR_FLAGS
+    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
@@ -1428,6 +1442,7 @@ def main():
     artifacts_dir_arg = args.artifacts_dir
     keep_artifacts = args.keep_artifacts
     GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
+    LIND_PRE_FLAGS = ["--static"] if args.static_build else []
 
     if args.dir_flags:
         try:
@@ -1486,8 +1501,10 @@ def main():
         try:
             shutil.rmtree(TESTFILES_DST)
             logger.info(f"Testfiles at {TESTFILES_DST} deleted")
-        except FileNotFoundError as e:
-            logger.error(f"Testfiles not present at {TESTFILES_DST}")
+        except FileNotFoundError:
+            logger.info(f"Testfiles not present at {TESTFILES_DST}")
+        except PermissionError as e:
+            logger.warning(f"Could not remove testfiles at {TESTFILES_DST}: {e}")
         
         if clean_testfiles:
             return
@@ -1526,7 +1543,7 @@ def main():
         # ALWAYS clean up, regardless of success/failure/interruption
         try:
             shutil.rmtree(TESTFILES_DST)
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             pass
             
         # Remove artifacts directory if it was temp and not requested to keep

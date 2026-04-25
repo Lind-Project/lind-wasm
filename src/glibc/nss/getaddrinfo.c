@@ -2549,20 +2549,27 @@ getaddrinfo (const char *name, const char *service,
 			 IPv6 and the request is for IPv4.  */
 		      struct sockaddr_in6 *sin6
 			= (struct sockaddr_in6 *) &results[i].source_addr;
-		      struct sockaddr_in *sin
-			= (struct sockaddr_in *) &results[i].source_addr;
-		      assert (IN6_IS_ADDR_V4MAPPED (sin6->sin6_addr.s6_addr32));
-		      sin->sin_family = AF_INET;
-		      /* We do not have to initialize sin_port since this
-			 fields has the same position and size in the IPv6
-			 structure.  */
-		      assert (offsetof (struct sockaddr_in, sin_port)
-			      == offsetof (struct sockaddr_in6, sin6_port));
-		      assert (sizeof (sin->sin_port)
-			      == sizeof (sin6->sin6_port));
-		      memcpy (&sin->sin_addr,
-			      &sin6->sin6_addr.s6_addr32[3], INADDRSZ);
-		      results[i].source_addr_len = sizeof (struct sockaddr_in);
+		      /* lind-wasm: replaced assert(IN6_IS_ADDR_V4MAPPED)
+			 with a runtime check.  In container/WASM
+			 environments getsockname() on a dual-stack
+			 AF_INET6 socket connected to an IPv4 destination
+			 does not always return a V4-mapped source
+			 address, causing an intermittent fatal assert.
+			 When the address is not V4-mapped we simply
+			 discard the source-address info and let the RFC
+			 6724 sort fall back to label/precedence.  */
+		      if (IN6_IS_ADDR_V4MAPPED (sin6->sin6_addr.s6_addr32))
+			{
+			  struct sockaddr_in *sin
+			    = (struct sockaddr_in *) &results[i].source_addr;
+			  sin->sin_family = AF_INET;
+			  memcpy (&sin->sin_addr,
+				  &sin6->sin6_addr.s6_addr32[3], INADDRSZ);
+			  results[i].source_addr_len
+			    = sizeof (struct sockaddr_in);
+			}
+		      else
+			results[i].got_source_addr = false;
 		    }
 		}
 	      else

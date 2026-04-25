@@ -88,10 +88,12 @@ use crate::runtime::vm::{
     VMRuntimeLimits, WasmFault,
 };
 use crate::trampoline::VMHostGlobalContext;
+use crate::vm::ExportMemory;
 use crate::RootSet;
 use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
 use alloc::sync::Arc;
+use cage::DashMap;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
@@ -107,6 +109,9 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use sysdefs::logging::lind_debug_panic;
+use wasmtime_environ::GlobalIndex;
+use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 mod context;
 pub use self::context::*;
@@ -338,12 +343,26 @@ pub struct StoreOpaque {
     host_globals: Vec<StoreBox<VMHostGlobalContext>>,
 
     asyncify_state: AsyncifyState,
+    // signal asyncify data, holds the sequence of the parameters for signal handler
     signal_asyncify_data: Vec<SignalAsyncifyData>,
     signal_asyncify_counter: u64,
+    // syscall asyncify data, holds the sequence of syscall return values
+    // used to preserve syscall results across asyncify unwind/rewind cycles
+    // (e.g., when fork is called within a signal handler that interrupted a syscall)
+    syscall_asyncify_data: Vec<i32>,
+    syscall_asyncify_counter: u64,
+
     // stack top
     stack_top: u64,
     // stack bottom
     stack_base: u64,
+    // libraries symbol mapping
+    library_symbols: SymbolTable,
+
+    // Tracks the InstanceId of every named module instance created in this store:
+    // preloaded libraries, the main module, and dlopen'd libraries. Used by
+    // get_global_snapshot to avoid iterating all INSTANCE_NUMBER slots.
+    named_module_instances: Vec<(String, InstanceId)>,
 
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
@@ -548,6 +567,10 @@ impl<T> Store<T> {
                 asyncify_state: super::AsyncifyState::Normal,
                 signal_asyncify_data: Vec::new(),
                 signal_asyncify_counter: 0,
+                library_symbols: SymbolTable::new(),
+                named_module_instances: Vec::new(),
+                syscall_asyncify_data: Vec::new(),
+                syscall_asyncify_counter: 0,
                 #[cfg(feature = "component-model")]
                 num_component_instances: 0,
                 signal_handler: None,
@@ -649,7 +672,7 @@ impl<T> Store<T> {
     /// The store will limit the number of instances, linear memories, and
     /// tables created to 10,000. This can be overridden with the
     /// [`Store::limiter`] configuration method.
-    pub fn new_inner(engine: &Engine) -> StoreOpaque {
+    pub fn new_inner(engine: &Engine, symbol_table: SymbolTable) -> StoreOpaque {
         let pkey = engine.allocator().next_available_pkey();
 
         StoreOpaque {
@@ -660,6 +683,10 @@ impl<T> Store<T> {
             asyncify_state: super::AsyncifyState::Normal,
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
+            library_symbols: symbol_table,
+            named_module_instances: Vec::new(),
+            syscall_asyncify_data: Vec::new(),
+            syscall_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
             num_component_instances: 0,
             signal_handler: None,
@@ -1401,18 +1428,21 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // pop the signal callstack information
-    pub fn pop_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+    pub fn pop_signal_asyncify_data(&mut self, _signal_handler: i32, _signo: i32) {
         self.0.signal_asyncify_data.pop();
     }
 
     // get the current signal callstack information
     pub fn get_current_signal_rewind_data(&mut self) -> Option<SignalAsyncifyData> {
+        let length = self.0.signal_asyncify_data.len();
+        if length == 0 {
+            return None;
+        }
         let data = self
             .0
             .signal_asyncify_data
             .get(self.0.signal_asyncify_counter as usize)
             .cloned();
-        let length = self.0.signal_asyncify_data.len();
         if self.0.signal_asyncify_counter == (length - 1) as u64 {
             self.0.signal_asyncify_counter = 0;
         } else {
@@ -1426,6 +1456,89 @@ impl<'a, T> StoreContextMut<'a, T> {
     pub fn set_signal_asyncify_data(&mut self, data: Vec<SignalAsyncifyData>) {
         self.0.signal_asyncify_data = data;
         self.0.signal_asyncify_counter = 0;
+    }
+
+    // push new library instance
+    pub fn push_library_symbols(&mut self, symbol_map: SymbolMap) -> Result<i32> {
+        Ok(self.0.library_symbols.add(symbol_map))
+    }
+
+    // Register a named module instance so get_global_snapshot can find it
+    // without scanning all INSTANCE_NUMBER slots.
+    pub fn register_named_instance(&mut self, name: String, id: InstanceId) {
+        if let Some((_, existing_id)) = self
+            .0
+            .named_module_instances
+            .iter()
+            .find(|(n, _)| n == &name)
+        {
+            lind_debug_panic(&format!("[register_named_instance] wasm module with same name \"{}\" detected, currently not supported", name));
+        }
+        self.0.named_module_instances.push((name, id));
+    }
+
+    // get and set library symbol table, used for cloning symbol table across fork/thread
+    pub fn get_library_symbol_table(&self) -> &SymbolTable {
+        &self.0.library_symbols
+    }
+
+    pub fn set_library_symbol_table(&mut self, symbol_table: SymbolTable) {
+        self.0.library_symbols = symbol_table;
+    }
+
+    // find library symbol from local scope
+    pub fn find_library_symbol_from_local(&self, handler: i32, name: &str) -> Option<u32> {
+        self.0
+            .library_symbols
+            .find_symbol_from_handler(handler, name)
+    }
+
+    // find library symbol from global scope
+    pub fn find_library_symbol_from_global(&self, name: &str) -> Option<u32> {
+        self.0.library_symbols.find_symbol_from_global_scope(name)
+    }
+
+    // detach the library
+    pub fn detach_library(&mut self, handler: i32) {
+        self.0.library_symbols.delete_by_handler(handler);
+    }
+
+    /// check if the library is already loaded
+    pub fn check_library_loaded(&self, inode: u64) -> Option<i32> {
+        self.0.library_symbols.check_library_loaded(inode)
+    }
+
+    // append the syscall retval information
+    pub fn append_syscall_asyncify_data(&mut self, retval: i32) {
+        self.0.syscall_asyncify_data.push(retval);
+    }
+
+    // pop the syscall retval information
+    pub fn pop_syscall_asyncify_data(&mut self) {
+        self.0.syscall_asyncify_data.pop();
+    }
+
+    // get the current syscall retval information
+    pub fn get_current_syscall_rewind_data(&mut self) -> Option<i32> {
+        let data = self
+            .0
+            .syscall_asyncify_data
+            .get(self.0.syscall_asyncify_counter as usize)
+            .cloned();
+        let length = self.0.syscall_asyncify_data.len();
+        if self.0.syscall_asyncify_counter == (length - 1) as u64 {
+            self.0.syscall_asyncify_counter = 0;
+        } else {
+            self.0.syscall_asyncify_counter += 1;
+        }
+        data
+    }
+
+    // set the syscall retval information
+    // used by fork to copy asyncify information
+    pub fn set_syscall_asyncify_data(&mut self, data: Vec<i32>) {
+        self.0.syscall_asyncify_data = data;
+        self.0.syscall_asyncify_counter = 0;
     }
 
     /// get stack top
@@ -1446,6 +1559,28 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// set stack base
     pub fn set_stack_base(&mut self, stack_base: u64) {
         self.0.stack_base = stack_base;
+    }
+
+    pub fn get_global_snapshot(&mut self) -> HashMap<String, Vec<(GlobalIndex, i64)>> {
+        let mut map = HashMap::new();
+        // Iterate only the explicitly registered named instances (preloaded libs,
+        // main module, dlopen'd libs) rather than all INSTANCE_NUMBER slots.
+        // Backup instances are never registered, so they are excluded automatically.
+        for i in 0..self.0.named_module_instances.len() {
+            // Clone name and copy id to release the immutable borrow on
+            // named_module_instances before the mutable instance_mut call below.
+            let name = self.0.named_module_instances[i].0.clone();
+            let id = self.0.named_module_instances[i].1;
+            let instance = self.0.instance_mut(id);
+            let globals: Vec<(GlobalIndex, i64)> = instance
+                .all_globals()
+                .map(|(index, global)| (index, unsafe { *(*global.definition).as_i64_mut() }))
+                .collect();
+            if !globals.is_empty() {
+                map.insert(name, globals);
+            }
+        }
+        map
     }
 
     /// Configures epoch-deadline expiration to yield to the async
@@ -2986,6 +3121,10 @@ impl<T> StoreInner<T> {
     // get the signal asyncify information
     pub fn get_signal_asyncify_data(&mut self) -> Vec<SignalAsyncifyData> {
         self.signal_asyncify_data.clone()
+    }
+
+    pub fn get_syscall_asyncify_data(&mut self) -> Vec<i32> {
+        self.syscall_asyncify_data.clone()
     }
 
     pub fn is_thread(&self) -> bool {

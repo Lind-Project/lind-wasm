@@ -13,9 +13,12 @@ lind_perf = [
     "rawposix/lind_perf",
     "wasmtime-lind-common/lind_perf",
 ]
+debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
+debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
+wasmtime-lind-dylink = { path = "../wasmtime/crates/lind-dylink" }
 wasmtime-lind-multi-process = { path = "../wasmtime/crates/lind-multi-process" }
 wasmtime-lind-utils = { path = "../wasmtime/crates/lind-utils" }
 rawposix = { path = "../wasmtime/crates/rawposix" }
@@ -25,7 +28,6 @@ sysdefs = { path = "../wasmtime/crates/sysdefs" }
 typemap = { path = "../wasmtime/crates/typemap" }
 wasmtime-lind-3i = { path = "../wasmtime/crates/lind-3i" }
 wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads", "demangle", "addr2line", "cache"], default-features = false }
-wasmtime-wasi-threads = { path = "../wasmtime/crates/wasi-threads" }
 wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
 lind-perf = { path = "../wasmtime/crates/lind-perf" }
 

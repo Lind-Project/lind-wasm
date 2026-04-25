@@ -204,6 +204,11 @@ pub trait VmmapOps {
         page_num: u32,
     ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &mut VmmapEntry)>;
 
+    // Finds anonymous page ranges overlapping [req_start, req_end) for munmap.
+    // Returns Vec of (start_page, end_page) pairs for pages that can be unmapped.
+    // Excludes SharedMemory-backed entries (those are handled by shmdt).
+    fn find_unmappable_ranges(&self, req_start: u32, req_end: u32) -> Vec<(u32, u32)>;
+
     // Method to get the first entry in the memory map
     fn first_entry(&self) -> Option<(&Interval<u32>, &VmmapEntry)>;
 
@@ -255,7 +260,7 @@ pub struct Vmmap {
 
     pub start_address: u32, // start address of valid vmmap address range
     pub end_address: u32,   // end address of valid vmmap address range
-    pub program_break: u32, // program break (i.e. heap bottom) of the memory
+    pub heap_start: u32,    // start of heap memory
 }
 
 #[allow(dead_code)]
@@ -269,7 +274,7 @@ impl Vmmap {
             base_address: None,
             start_address: 0,
             end_address: DEFAULT_VMMAP_SIZE,
-            program_break: 0,
+            heap_start: 0,
         }
     }
 
@@ -284,7 +289,7 @@ impl Vmmap {
         self.base_address = None;
         self.start_address = 0;
         self.end_address = DEFAULT_VMMAP_SIZE;
-        self.program_break = 0;
+        self.heap_start = 0;
     }
 
     /// Rounds up a page number to the nearest multiple of pages_per_map
@@ -320,12 +325,12 @@ impl Vmmap {
         self.base_address = Some(base_address);
     }
 
-    /// Sets the program break for the memory
+    /// Sets the heap start page number for the memory
     ///
     /// Arguments:
-    /// - program_break: The program break to set
-    pub fn set_program_break(&mut self, program_break: u32) {
-        self.program_break = program_break;
+    /// - heap_start: The page number at which the heap begins
+    pub fn set_heap_start(&mut self, heap_start: u32) {
+        self.heap_start = heap_start;
     }
 
     /// Converts a user address to a system address
@@ -963,9 +968,12 @@ impl VmmapOps for Vmmap {
         page_num: u32,
     ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &VmmapEntry)> {
         if let Some(last_entry) = self.last_entry() {
-            self.entries.overlapping(ie(page_num, last_entry.0.end()))
+            if page_num > last_entry.0.end() {
+                self.entries.overlapping(ie(page_num, page_num))
+            } else {
+                self.entries.overlapping(ie(page_num, last_entry.0.end()))
+            }
         } else {
-            // Return an empty iterator if no last_entry
             self.entries.overlapping(ie(page_num, page_num))
         }
     }
@@ -989,6 +997,24 @@ impl VmmapOps for Vmmap {
             // Return an empty iterator if no last_entry
             self.entries.overlapping_mut(ie(page_num, page_num))
         }
+    }
+
+    /// Finds anonymous page ranges overlapping [req_start, req_end) for munmap.
+    /// SharedMemory-backed entries are excluded (handled by shmdt instead).
+    fn find_unmappable_ranges(&self, req_start: u32, req_end: u32) -> Vec<(u32, u32)> {
+        if req_start >= req_end {
+            return Vec::new();
+        }
+
+        self.entries
+            .overlapping(ie(req_start, req_end))
+            .filter(|(_, entry)| !matches!(entry.backing, MemoryBackingType::SharedMemory(_)))
+            .map(|(interval, _)| {
+                let act_start = interval.start().max(req_start);
+                let act_end = (interval.end() + 1).min(req_end);
+                (act_start, act_end)
+            })
+            .collect()
     }
 
     /// Finds available space in the memory map for a new mapping
