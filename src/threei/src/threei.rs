@@ -329,18 +329,18 @@ pub fn register_handler(
 /// interposable.
 ///
 /// ## Arguments:
-/// - targetcage: The ID of the cage receiving the copied handler mappings.
 /// - srccage: The ID of the cage whose handler mappings are being copied.
+/// - targetcage: The ID of the cage receiving the copied handler mappings.
 ///
 /// ## Returns:
 /// - 0 on success.
 /// - `ELINDESRCH` if either source or target cage is in the EXITING state.
 /// - `ELINDAPIABORTED` if srccage has no existing handler table.
 pub fn copy_handler_table_to_cage(
-    _callnum: u64,
-    targetcage: u64,
+    _thiscage: u64,
+    _targetcage: u64,
     srccage: u64,
-    _arg1cage: u64,
+    targetcage: u64,
     _arg2: u64,
     _arg2cage: u64,
     _arg3: u64,
