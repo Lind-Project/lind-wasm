@@ -5,6 +5,15 @@
 #include <stddef.h>
 #include <errno.h>
 
+// With the new semantics, a cageid with its MSB set indicates that the
+// associated argument should be translated. These helpers manage that flag.
+//
+// Flag indicating the argument requires translation (MSB set).
+#define LIND_ARG_TRANSLATE_FLAG (1ULL << 63)
+
+// Mask to extract the actual cageid (clear the translation flag).
+#define LIND_ARG_CAGEID_MASK (~LIND_ARG_TRANSLATE_FLAG)
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -45,7 +54,13 @@ extern "C"
   static inline uint64_t
   __lind_translate_uaddr_to_host (const uint64_t uaddr, const uint64_t cageid)
   {
-    if (cageid == __lind_cageid)
+    // Extract actual cageid (without the translation flag)
+    uint64_t __cageid = cageid & LIND_ARG_CAGEID_MASK;
+
+    // Translate only if:
+    // 1. The argument originates from the current cage, and
+    // 2. MSB of cageid is set.
+    if (__cageid == __lind_cageid && ((cageid & LIND_ARG_TRANSLATE_FLAG) != 0))
       return __lind_base + uaddr;
 
     return uaddr;
@@ -55,10 +70,24 @@ extern "C"
 #define TRANSLATE_GUEST_POINTER_TO_HOST(p)                                    \
   __lind_translate_ptr_to_host ((const void *) (p))
 
-// Converts (uaddr, cageid) pair to host address.
-// Useful when address space (cage vs host) is ambigious.
+// Convert a (uaddr, cageid) pair to (host_addr, cageid).
+//
+// Used by copy_data_between_cages where arguments are already addresses. This macro
+// sets the translation flag before invoking the helper.
+//
+// Input:  (uaddr, cageid)
+// Output: (host_addr, cageid)
 #define TRANSLATE_UADDR_TO_HOST(uaddr, cageid)                                \
-  __lind_translate_uaddr_to_host ((uaddr), (cageid))
+  __lind_translate_uaddr_to_host ((uaddr), ((cageid) | LIND_ARG_TRANSLATE_FLAG)), (cageid)
+
+// Used by make_threei_call to translate arguments if required.
+//
+// Translation occurs only when the MSB of cageid is set.
+//
+// Input:  (uaddr, cageid)
+// Output: (host_addr, actual_cageid)
+#define TRANSLATE_ARG_TO_HOST(uaddr, cageid)                                  \
+  __lind_translate_uaddr_to_host ((uaddr), (cageid)), ((cageid) & LIND_ARG_CAGEID_MASK)
 
 /* Translate an array of guest iovec structures to host layout.
    Each iov_base is a wasm32 guest pointer; we split the translated

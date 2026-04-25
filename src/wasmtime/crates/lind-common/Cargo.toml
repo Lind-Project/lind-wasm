@@ -16,6 +16,7 @@ wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 rawposix = { path = "../rawposix" }
 threei = { path = "../threei" }
+wasmtime-lind-dylink = { path = "../lind-dylink" }
 wasmtime-lind-multi-process = { path = "../lind-multi-process" }
 wasmtime-lind-utils = { path = "../lind-utils" }
 sysdefs = { path = "../sysdefs" }

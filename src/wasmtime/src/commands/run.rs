@@ -14,7 +14,6 @@ use clap::Parser;
 pub use once_cell::sync::Lazy;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
@@ -24,8 +23,8 @@ use wasmtime::{
 
 use wasmtime::{Caller, Instance};
 
+use sysdefs::constants::syscall_const::EXIT_SYSCALL;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_3i::{get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx, VmCtxWrapper};

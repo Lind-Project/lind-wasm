@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicU64, Ordering::Relaxed};
 // it only as `pub(crate)`. This avoids a ton of
 // crate-private-type-in-public-interface errors that aren't really too
 // interesting to deal with.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct InstanceId(pub(super) usize);
 
 impl InstanceId {

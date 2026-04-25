@@ -7,6 +7,8 @@ LINDFS_DIRS := \
 	       bin \
 	       dev \
 	       etc \
+	       grates \
+	       lib \
 	       sbin \
 	       tmp \
 	       usr/bin \
@@ -18,8 +20,10 @@ LINDFS_DIRS := \
 	       var/log \
 	       var/run
 
+WITH_FPCAST ?=
+
 .PHONY: build 
-build: sysroot lind-boot lindfs
+build: lindfs lind-boot sysroot
 	@echo "Build complete"
 
 .PHONY: all
@@ -27,7 +31,7 @@ all: build
 
 .PHONY: sysroot
 sysroot: build-dir
-	./scripts/make_glibc_and_sysroot.sh
+	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
 .PHONY: lind-boot
@@ -45,15 +49,26 @@ lindfs:
 	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
 	cp -rT scripts/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
 	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
+	@if [ -d /usr/share/zoneinfo ]; then \
+		cp -r /usr/share/zoneinfo/* $(LINDFS_ROOT)/usr/share/zoneinfo/; \
+	fi
+
+.PHONY: clean-lindfs
+clean-lindfs:
+	@# Remove user files from lindfs while preserving preloaded system files.
+	@# Keeps: lib/ (shared libs), etc/, usr/, dev/null, directory structure
+	find $(LINDFS_ROOT) -maxdepth 1 -type f -delete
+	rm -rf $(LINDFS_ROOT)/bin/* $(LINDFS_ROOT)/sbin/* $(LINDFS_ROOT)/tmp/*
+	rm -rf $(LINDFS_ROOT)/home $(LINDFS_ROOT)/testfiles
 
 .PHONY: lind-debug
-lind-debug: build-dir
-	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
-	$(MAKE) build_glibc LIND_DEBUG=1
-	
+lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
 	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
+
+	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
+	$(MAKE) build_glibc LIND_DEBUG=1
 build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
@@ -74,13 +89,48 @@ sync-sysroot:
 .PHONY: test
 test: lindfs
 	# Unified harness entry point (run all discovered harnesses for e2e signal)
-	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	alias_path='$(LIND_RUNTIME_LINDFS_ALIAS)'; \
+	prebuilt_lindfs_root='$(PREBUILT_LINDFS_ROOT)'; \
+	cleanup() { \
+	  if [ -n "$$alias_path" ]; then \
+	    alias_parent="$$(dirname "$$alias_path")"; \
+	    rm -f "$$alias_path"; \
+	    rmdir "$$alias_parent" 2>/dev/null || true; \
+	    rmdir "$$(dirname "$$alias_parent")" 2>/dev/null || true; \
+	  fi; \
+	}; \
+	if [ -n "$$alias_path" ]; then \
+	  mkdir -p "$$(dirname "$$alias_path")"; \
+	  rm -f "$$alias_path"; \
+	  case '$(LINDFS_ROOT)' in \
+	    /*) lindfs_root='$(LINDFS_ROOT)' ;; \
+	    *) lindfs_root="$$PWD/$(LINDFS_ROOT)" ;; \
+	  esac; \
+	  ln -s "$$lindfs_root" "$$alias_path"; \
+	  trap cleanup EXIT; \
+	fi; \
+	if [ -n "$$prebuilt_lindfs_root" ] && [ -d "$$prebuilt_lindfs_root/lib" ]; then \
+	  mkdir -p "$(LINDFS_ROOT)/lib"; \
+	  cp -a "$$prebuilt_lindfs_root/lib/." "$(LINDFS_ROOT)/lib/"; \
+	fi; \
+	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/test_runner.py --export-report report.html && \
-	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \;; \
-	if python3 -c "import glob,json,sys; paths=glob.glob('reports/*.json'); total=sum(int(json.load(open(p)).get('number_of_failures', 0)) for p in paths); print(f'total_failures={total}'); sys.exit(1 if total else 0)"; then \
+	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
+	if [ "$(LIND_DEBUG)" = "1" ]; then \
+	  python3 ./scripts/check_reports.py --debug; \
+	else \
+	  python3 ./scripts/check_reports.py; \
+	fi; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
 	else \
 	  echo "E2E_STATUS=fail" > e2e_status; \
+	  mkdir -p reports; \
+	  if [ ! -f report.html ]; then \
+	    printf '%s\n' '<!DOCTYPE html><html><body><h1>E2E failed before report generation</h1></body></html>' > report.html; \
+	  fi; \
+	  if [ ! -f reports/report.html ]; then cp report.html reports/report.html; fi; \
+	  if [ ! -f reports/wasm.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing wasm report"}' > reports/wasm.json; fi; \
+	  if [ ! -f reports/grates.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing grate report"}' > reports/grates.json; fi; \
 	fi; \
 	exit 0
 
@@ -98,6 +148,9 @@ md_generation:
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
 	cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
+	rustfmt --check src/fdtables/src/muthashmaxglobal.rs \
+	    src/fdtables/src/vanillaglobal.rs \
+	    src/fdtables/src/dashmapvecglobal.rs
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
 	    --all-features \
@@ -111,6 +164,9 @@ lint:
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
 	cargo fmt --all --manifest-path src/lind-boot/Cargo.toml
+	rustfmt src/fdtables/src/muthashmaxglobal.rs \
+	    src/fdtables/src/vanillaglobal.rs \
+	    src/fdtables/src/dashmapvecglobal.rs
  
 
 .PHONY: docs-serve

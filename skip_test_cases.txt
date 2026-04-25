@@ -1,6 +1,12 @@
-file_tests/deterministic/popen.c
-process_tests/deterministic/exit_failure.c
 signal_tests/deterministic/signal.c
 signal_tests/deterministic/signal_int_thread.c
 signal_tests/deterministic/signal_longjmp.c
 signal_tests/deterministic/signal_nodefer.c
+memory_tests/deterministic/tcache_test.c
+dylink_tests/deterministic/lib.c
+dylink_tests/deterministic/basic.c
+dylink_tests/deterministic/dlopen_fork.c
+dylink_tests/deterministic/dlopen_thread.c
+dylink_tests/deterministic/double_fork_dlopen.c
+dylink_tests/deterministic/fork_dlopen.c
+ci/deterministic/ci_intentional_failure_tmp.c

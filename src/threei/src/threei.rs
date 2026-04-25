@@ -1,11 +1,13 @@
 //! Threei (Three Interposition) module
 use cage::memory::{check_addr_read, check_addr_rw};
+use cage::with_cage;
 use core::panic;
 use dashmap::DashMap;
 use dashmap::DashSet;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use std::sync::RwLock;
+use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
@@ -16,7 +18,7 @@ use crate::handler_table::{
 };
 use crate::threei_const;
 
-pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
+pub use sysdefs::constants::sys_const::{EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = extern "C" fn(
@@ -56,24 +58,30 @@ pub type GrateTrampolineFn = extern "C" fn(
     arg6cageid: u64,
 ) -> i32;
 
+#[derive(Clone, Copy, Debug)]
+pub struct TrampolineEntry {
+    pub trampoline: GrateTrampolineFn,
+    pub cleanup_funcptr: u64,
+}
+
 /// This table stores trampoline functions associated with runtime identifiers, where a
-/// runtime identifier denotes the execution environment of the executable (e.g., Wasmtime)
+/// runtime identifier denotes the execution environment of the executable (e.g., Wasmtime).
 ///
-/// `TRAMPOLINE_TABLE` is a global map from `runtime_id` to `GrateTrampolineFn`.
-/// DashMap is used to allow concurrent registration and lookup without a global lock.
+/// Each runtime may also carry an associated cleanup function pointer.
 lazy_static! {
-    // <runtime_id, GrateTrampolineFn>
-    pub static ref TRAMPOLINE_TABLE: DashMap<u64, GrateTrampolineFn> = DashMap::new();
+    // <runtime_id, TrampolineEntry>
+    pub static ref TRAMPOLINE_TABLE: DashMap<u64, TrampolineEntry> = DashMap::new();
 }
 
 /// `register_trampoline` registers a trampoline function for the given runtime ID.
-///
-/// todo: In the current implementation, trampolines are registered during runtime
-/// initialization in [wasmtime/run.rs]. This registration logic is expected to move
-/// into lind-boot in the future so that trampoline setup is handled as part of the
-/// system bootstrap process rather than runtime startup.
-pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn) {
-    TRAMPOLINE_TABLE.insert(runtime, f);
+pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn, cleanup_funcptr: u64) {
+    TRAMPOLINE_TABLE.insert(
+        runtime,
+        TrampolineEntry {
+            trampoline: f,
+            cleanup_funcptr,
+        },
+    );
 }
 
 /// `get_runtime_trampoline` retrieves the trampoline function associated with the given runtime ID.
@@ -82,7 +90,13 @@ pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn) {
 ///
 /// This function is used when performing a grate call in `_call_grate_func`.
 pub fn get_runtime_trampoline(runtime: u64) -> Option<GrateTrampolineFn> {
-    TRAMPOLINE_TABLE.get(&runtime).map(|f| *f)
+    TRAMPOLINE_TABLE.get(&runtime).map(|f| f.trampoline)
+}
+
+pub fn get_runtime_cleanup_funcptr(runtime: u64) -> Option<u64> {
+    TRAMPOLINE_TABLE
+        .get(&runtime)
+        .map(|entry| entry.cleanup_funcptr)
 }
 
 /// This table maintains a mapping from cage IDs to runtime IDs.
@@ -412,10 +426,19 @@ pub fn make_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Return error if the target cage/grate is exiting. We need to add this check beforehead, because make_syscall will also
-    // contain cases that can directly redirect a syscall when self_cageid == target_id, which will bypass the handlertable check
-    if EXITING_TABLE.contains(&target_cageid) && syscall_num != EXIT_SYSCALL {
-        return threei_const::ELINDESRCH as i32;
+    // Block cross-cage calls to a dead or removed cage (e.g. grate-forwarded
+    // syscalls).  The cage's own threads are allowed to keep making
+    // syscalls until the epoch kill fires — without the self != target
+    // guard, the cage's own mmap/futex calls would get -ESRCH and glibc
+    // would misinterpret the error as a valid address.
+    // EXITING_TABLE persists after remove_cage, catching calls to fully
+    // removed cages that is_cage_dead misses (it returns false for None).
+    if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+        && syscall_num != EXIT_SYSCALL
+        && syscall_num != EXIT_GROUP_SYSCALL
+        && self_cageid != target_cageid
+    {
+        return -(Errno::ESRCH as i32);
     }
 
     // TODO:
@@ -428,10 +451,20 @@ pub fn make_syscall(
         if grateid == lind_platform_const::RAWPOSIX_CAGEID
             || grateid == lind_platform_const::WASMTIME_CAGEID
         {
+            // Second check: catch in-flight grate-forwarded calls that
+            // passed the initial check before is_dead was set or the cage
+            // was removed.
+            if (cage::is_cage_dead(target_cageid) || EXITING_TABLE.contains(&target_cageid))
+                && syscall_num != EXIT_SYSCALL
+                && syscall_num != EXIT_GROUP_SYSCALL
+                && self_cageid != target_cageid
+            {
+                return -(Errno::ESRCH as i32);
+            }
             let func: RawCallFunc =
                 unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
             return func(
-                self_cageid,
+                target_cageid,
                 arg1,
                 arg1_cageid,
                 arg2,
@@ -472,7 +505,29 @@ pub fn make_syscall(
         // Grate case: call into the corresponding grate function
         // <targetcage, targetcallnum, in_grate_fn_ptr_u64, this_grate_id>
         // Theoretically, the complexity is O(1), shouldn't affect performance a lot
-        if let Some(ret) = _call_grate_func(
+
+        // Track this in-flight grate dispatch so cage_finalize() waits
+        // for it to complete before removing the cage.
+        //
+        // If the cage is already dead, return early.
+        let cage_dead = with_cage(grateid, |grate| {
+            grate
+                .grate_inflight
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            if grate.is_dead.load(std::sync::atomic::Ordering::Acquire) {
+                grate
+                    .grate_inflight
+                    .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+                return -(Errno::ESRCH as i32);
+            }
+            0
+        });
+
+        if cage_dead != Some(0) {
+            return -(Errno::ESRCH as i32);
+        }
+
+        let grate_result = _call_grate_func(
             grateid,
             in_grate_fn_ptr_u64,
             arg1,
@@ -487,7 +542,16 @@ pub fn make_syscall(
             arg5_cageid,
             arg6,
             arg6_cageid,
-        ) {
+        );
+
+        // Decrement the in-flight counter now that the dispatch returned.
+        with_cage(grateid, |grate| {
+            grate
+                .grate_inflight
+                .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+        });
+
+        if let Some(ret) = grate_result {
             return ret;
         } else {
             // syscall has been registered to register_handler but grate's entry function
@@ -501,11 +565,11 @@ pub fn make_syscall(
         }
     }
 
+    // _get_handler returned None — the target_map for this
+    // (self_cageid, syscall_num) exists but has no dest_grateid entry.
     panic!(
-        "[3i|make_syscall] syscall number {} not found in handler table for cage {}, targetcage {}!",
-        syscall_num,
-        self_cageid,
-        target_cageid,
+        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
+        self_cageid, syscall_num
     );
 }
 
@@ -783,7 +847,7 @@ fn _strlen_in_cage(src: *const u8, max_len: usize) -> Option<usize> {
 ///     - Failed string validation (e.g., missing null terminator).
 ///     - Invalid copytype.
 pub fn copy_data_between_cages(
-    thiscage: u64,
+    _thiscage: u64,
     _targetcage: u64,
     srcaddr: u64,
     srccage: u64,
