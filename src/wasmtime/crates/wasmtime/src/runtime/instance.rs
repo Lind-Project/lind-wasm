@@ -795,6 +795,9 @@ impl Instance {
         return Err(());
     }
 
+    /// Updates the exported `__stack_pointer` global for this instance.
+    /// Returns `Err(())` if `__stack_pointer` is not exported, is not a global,
+    /// or cannot be updated.
     pub fn set_stack_pointer(&self, mut store: impl AsContextMut, sp: i32) -> Result<(), ()> {
         if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_pointer") {
             match sp_extern {
