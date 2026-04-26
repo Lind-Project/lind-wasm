@@ -451,6 +451,30 @@ pub extern "C" fn exit_group_syscall(
     )
 }
 
+// Sanitized representation of waitpid's child selector argument
+#[derive(Debug, Clone, Copy)]
+enum WaitpidChildSelector {
+    AnyChild,
+    SpecificChild(i32),
+}
+
+// Sanitize and interpret the raw child_cageid argument
+fn sanitize_waitpid_child_selector(
+    child_cageid_arg: u64,
+    child_cageid_arg_cageid: u64,
+    cageid: u64,
+) -> WaitpidChildSelector {
+    let raw_child_id = sc_convert_sysarg_to_i32(child_cageid_arg, child_cageid_arg_cageid, cageid);
+
+    // cageid <= 0 means wait for ANY child
+    // cageid > 0 means wait for specific child with that cage ID
+    if raw_child_id <= 0 {
+        WaitpidChildSelector::AnyChild
+    } else {
+        WaitpidChildSelector::SpecificChild(raw_child_id)
+    }
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/waitpid.3p.html
 ///
 /// waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
@@ -484,8 +508,9 @@ pub extern "C" fn waitpid_syscall(
         }
     };
     let options = sc_convert_sysarg_to_i32(options_arg, options_cageid, cageid);
-    let cage_id_to_wait =
-        sc_convert_sysarg_to_i32(child_cageid_arg, child_cageid_arg_cageid, cageid);
+    let child_selector =
+        sanitize_waitpid_child_selector(child_cageid_arg, child_cageid_arg_cageid, cageid);
+
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -515,107 +540,107 @@ pub extern "C" fn waitpid_syscall(
 
     let mut zombie_opt: Option<Zombie> = None;
 
-    // cageid <= 0 means wait for ANY child
-    // cageid < 0 actually refers to wait for any child process whose process group ID equals -pid
-    // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
-    if cage_id_to_wait <= 0 {
-        loop {
-            if zombies.len() == 0 && (options & WNOHANG > 0) {
-                // if there is no pending zombies and WNOHANG is set
-                // return immediately
-                return 0;
-            } else if zombies.len() == 0 {
-                // if there is no pending zombies and WNOHANG is not set
-                // then we need to wait for children to exit
-                // drop the zombies list before sleep to avoid deadlock
-                drop(zombies);
-                // TODO: replace busy waiting with more efficient mechanism
-                unsafe {
-                    sched_yield();
-                }
-                // Check for pending signals after yielding (only if WNOHANG is not set).
-                // Re-acquire the zombie lock first: the child's exit may have both
-                // added a zombie AND sent SIGCHLD, so the zombie could already be
-                // available. Prefer completing the wait over returning EINTR.
-                zombies = cage.zombies.write();
-                if zombies.len() > 0 {
-                    continue;
-                }
-                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
-                }
-                continue;
-            } else {
-                // there are zombies avaliable
-                // let's retrieve the first zombie
-                zombie_opt = Some(zombies.remove(0));
-                break;
-            }
-        }
-    }
-    // if cageid is specified, then we need to look up the zombie list for the id
-    else {
-        // first let's check if the cageid is in the zombie list
-        if let Some(index) = zombies
-            .iter()
-            .position(|zombie| zombie.cageid == cage_id_to_wait as u64)
-        {
-            // find the cage in zombie list, remove it from the list and break
-            zombie_opt = Some(zombies.remove(index));
-        } else {
-            // if the cageid is not in the zombie list, then we know either
-            // 1. the child is still running, or
-            // 2. the cage has exited, but it is not the child of this cage, or
-            // 3. the cage does not exist
-            // we need to make sure the child is still running, and it is the child of this cage
-            let child = get_cage(cage_id_to_wait as u64);
-            if let Some(child_cage) = child {
-                // make sure the child's parent is correct
-                if child_cage.parent != cage.cageid {
-                    return syscall_error(
-                        Errno::ECHILD,
-                        "waitpid",
-                        "waited cage is not the child of the cage",
-                    );
-                }
-            } else {
-                // cage does not exist
-                return syscall_error(Errno::ECHILD, "waitpid", "cage does not exist");
-            }
-
-            // now we have verified that the cage exists and is the child of the cage
+    // Now use the sanitized child_selector enum
+    match child_selector {
+        WaitpidChildSelector::AnyChild => {
             loop {
-                // the cage is not in the zombie list
-                // we need to wait for the cage to actually exit
-
-                // drop the zombies list before sleep to avoid deadlock
-                drop(zombies);
-                // TODO: replace busy waiting with more efficient mechanism
-                unsafe {
-                    sched_yield();
-                }
-                // Re-acquire the zombie lock before checking signals: the child's
-                // exit may have both added a zombie AND sent SIGCHLD atomically,
-                // so the zombie could already be available. Prefer completing the
-                // wait over returning EINTR.
-                zombies = cage.zombies.write();
-
-                // let's check if the zombie list contains the cage
-                if let Some(index) = zombies
-                    .iter()
-                    .position(|zombie| zombie.cageid == cage_id_to_wait as u64)
-                {
-                    // find the cage in zombie list, remove it from the list and break
-                    zombie_opt = Some(zombies.remove(index));
+                if zombies.len() == 0 && (options & WNOHANG > 0) {
+                    // if there is no pending zombies and WNOHANG is set
+                    // return immediately
+                    return 0;
+                } else if zombies.len() == 0 {
+                    // if there is no pending zombies and WNOHANG is not set
+                    // then we need to wait for children to exit
+                    // drop the zombies list before sleep to avoid deadlock
+                    drop(zombies);
+                    // TODO: replace busy waiting with more efficient mechanism
+                    unsafe {
+                        sched_yield();
+                    }
+                    // Check for pending signals after yielding (only if WNOHANG is not set).
+                    // Re-acquire the zombie lock first: the child's exit may have both
+                    // added a zombie AND sent SIGCHLD, so the zombie could already be
+                    // available. Prefer completing the wait over returning EINTR.
+                    zombies = cage.zombies.write();
+                    if zombies.len() > 0 {
+                        continue;
+                    }
+                    if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
+                    continue;
+                } else {
+                    // there are zombies avaliable
+                    // let's retrieve the first zombie
+                    zombie_opt = Some(zombies.remove(0));
                     break;
                 }
-
-                // Check for pending signals after yielding (only if WNOHANG is not set)
-                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+            }
+        }
+        WaitpidChildSelector::SpecificChild(cage_id_to_wait) => {
+            // if cageid is specified, then we need to look up the zombie list for the id
+            // first let's check if the cageid is in the zombie list
+            if let Some(index) = zombies
+                .iter()
+                .position(|zombie| zombie.cageid == cage_id_to_wait as u64)
+            {
+                // find the cage in zombie list, remove it from the list and break
+                zombie_opt = Some(zombies.remove(index));
+            } else {
+                // if the cageid is not in the zombie list, then we know either
+                // 1. the child is still running, or
+                // 2. the cage has exited, but it is not the child of this cage, or
+                // 3. the cage does not exist
+                // we need to make sure the child is still running, and it is the child of this cage
+                let child = get_cage(cage_id_to_wait as u64);
+                if let Some(child_cage) = child {
+                    // make sure the child's parent is correct
+                    if child_cage.parent != cage.cageid {
+                        return syscall_error(
+                            Errno::ECHILD,
+                            "waitpid",
+                            "waited cage is not the child of the cage",
+                        );
+                    }
+                } else {
+                    // cage does not exist
+                    return syscall_error(Errno::ECHILD, "waitpid", "cage does not exist");
                 }
 
-                continue;
+                // now we have verified that the cage exists and is the child of the cage
+                loop {
+                    // the cage is not in the zombie list
+                    // we need to wait for the cage to actually exit
+
+                    // drop the zombies list before sleep to avoid deadlock
+                    drop(zombies);
+                    // TODO: replace busy waiting with more efficient mechanism
+                    unsafe {
+                        sched_yield();
+                    }
+                    // Re-acquire the zombie lock before checking signals: the child's
+                    // exit may have both added a zombie AND sent SIGCHLD atomically,
+                    // so the zombie could already be available. Prefer completing the
+                    // wait over returning EINTR.
+                    zombies = cage.zombies.write();
+
+                    // let's check if the zombie list contains the cage
+                    if let Some(index) = zombies
+                        .iter()
+                        .position(|zombie| zombie.cageid == cage_id_to_wait as u64)
+                    {
+                        // find the cage in zombie list, remove it from the list and break
+                        zombie_opt = Some(zombies.remove(index));
+                        break;
+                    }
+
+                    // Check for pending signals after yielding (only if WNOHANG is not set)
+                    if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
+
+                    continue;
+                }
             }
         }
     }
