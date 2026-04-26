@@ -1003,6 +1003,57 @@ impl Func {
         unsafe { self.call_impl_do_call(&mut store, params, results) }
     }
 
+    /// Like [`call`], but does **not** process the `on_called` asyncify
+    /// callback when the WASM function returns.
+    ///
+    /// Use this when calling WASM re-entrantly from within a host function that
+    /// was itself called from WASM (nested/re-entrant boundary).  Any
+    /// fork/exec/exit `on_called` callback set inside the callee will be left
+    /// in the store for the outer [`call_unchecked_raw`] loop — which drives
+    /// the top-level `_start` invocation — to process.  This prevents the
+    /// nested call from stealing and executing the callback too early, which
+    /// would reset `__asyncify_state` before the outer WASM frames have saved
+    /// their asyncify context.
+    pub fn call_nested(
+        &self,
+        mut store: impl AsContextMut,
+        params: &[Val],
+        results: &mut [Val],
+    ) -> Result<()> {
+        let mut store = store.as_context_mut();
+        let need_gc = self.call_impl_check_args(&mut store, params, results)?;
+        if need_gc {
+            store.0.gc();
+        }
+        unsafe {
+            let (ty, _) = self.ty_ref(store.0);
+            let values_vec_size = params.len().max(ty.results().len());
+            let mut values_vec = store.0.take_wasm_val_raw_storage();
+            debug_assert!(values_vec.is_empty());
+            values_vec.resize_with(values_vec_size, || ValRaw::v128(0));
+            for (arg, slot) in params.iter().cloned().zip(&mut values_vec) {
+                *slot = arg.to_raw(&mut store)?;
+            }
+
+            let data = &store.0.store_data()[self.0];
+            let func_ref = data.export().func_ref;
+            Self::call_unchecked_raw_nested(
+                &mut store,
+                func_ref,
+                values_vec.as_mut_ptr(),
+                values_vec_size,
+            )?;
+
+            for ((i, slot), val) in results.iter_mut().enumerate().zip(&values_vec) {
+                let ty = self.ty_ref(store.0).0.results().nth(i).unwrap();
+                *slot = Val::from_raw(&mut store, *val, ty);
+            }
+            values_vec.truncate(0);
+            store.0.save_wasm_val_raw_storage(values_vec);
+            Ok(())
+        }
+    }
+
     /// Invokes this function in an "unchecked" fashion, reading parameters and
     /// writing results to `params_and_returns`.
     ///
@@ -1110,6 +1161,35 @@ impl Func {
         }
 
         result
+    }
+
+    /// Like [`call_unchecked_raw`], but does **not** process the `on_called`
+    /// asyncify callback when the WASM function returns.
+    ///
+    /// Use this when calling WASM re-entrantly from within a host function that
+    /// was itself called from WASM (i.e. a nested/re-entrant call boundary).
+    /// In that scenario, any `on_called` callback set by fork/exec/exit inside
+    /// the called WASM function must be handled by the **outer**
+    /// `call_unchecked_raw` loop — the one that invoked the top-level WASM
+    /// entry point (`_start`).  If the inner call also processes `on_called`,
+    /// it consumes the callback too early: `asyncify_stop_unwind` fires before
+    /// the outer WASM frames have saved their asyncify state, resetting
+    /// `__asyncify_state` to 0 and corrupting the unwind.
+    pub(crate) unsafe fn call_unchecked_raw_nested<T>(
+        store: &mut StoreContextMut<'_, T>,
+        func_ref: NonNull<VMFuncRef>,
+        params_and_returns: *mut ValRaw,
+        params_and_returns_capacity: usize,
+    ) -> Result<()> {
+        invoke_wasm_and_catch_traps(store, |caller| {
+            let func_ref = func_ref.as_ref();
+            (func_ref.array_call)(
+                func_ref.vmctx,
+                caller.cast::<VMOpaqueContext>(),
+                params_and_returns,
+                params_and_returns_capacity,
+            )
+        })
     }
 
     /// Converts the raw representation of a `funcref` into an `Option<Func>`

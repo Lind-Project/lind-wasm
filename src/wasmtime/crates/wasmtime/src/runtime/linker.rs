@@ -976,14 +976,34 @@ impl<T> Linker<T> {
                 {
                     None
                 } else {
+                    let name = e.name().to_string().clone();
                     Some((
                         self.import_key(module_name, Some(e.name())),
                         e.into_extern(),
+                        name,
                     ))
                 })
             })
             .collect::<Vec<_>>();
-        for (key, export) in exports {
+        for (key, export, name) in exports {
+            let export = match export {
+                Extern::Func(original_func) => {
+                    let func_ty = original_func.ty(&store);
+                    let wrapper = Func::new(&mut store, func_ty, move |mut caller, params, results| {
+                        // Use call_nested instead of call to avoid processing the on_called
+                        // asyncify callback (set by fork/exec/exit inside the library) at this
+                        // nested level. The callback must be handled by the outer
+                        // call_unchecked_raw loop that drives _start, not here. If we used
+                        // call() the inner loop would steal and execute the callback early,
+                        // resetting __asyncify_state to 0 before the caller's asyncify
+                        // instrumentation has saved its stack frame.
+                        println!("[interpose] interpose library call {}", name);
+                        original_func.call_nested(&mut caller, params, results)
+                    });
+                    Extern::Func(wrapper)
+                }
+                other => other,
+            };
             self.insert(key, Definition::new(store.0, export))?;
         }
         Ok(self)
