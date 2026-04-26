@@ -48,4 +48,5 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage,
     uint64_t destaddr, uint64_t destcage, 
     uint64_t len, uint64_t copytype);
 
+int copy_handler_table_to_cage(uint64_t srccage, uint64_t targetcage);
 #endif // _LIND_SYSCALL_H
