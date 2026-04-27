@@ -15,6 +15,7 @@
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+import html
 import json
 import os
 import subprocess
@@ -38,6 +39,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 30 # in seconds
+DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for lind_run on libc++ smoke .cwasm
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
@@ -62,6 +64,10 @@ GLOBAL_COMPILE_FLAGS = []
 LIND_PRE_FLAGS = []
 DIR_FLAGS = []
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
+
+# Libc++ smoke (tests/unit-tests/cpp/hello.cpp); must match program stdout
+LIBCPP_EXPECTED_STDOUT_LINE = "LIBCPP_SORT_OK 1 2 3"
+LIBCPP_DEFAULT_SOURCE_REL = Path("tests/unit-tests/cpp/hello.cpp")
 
 
 error_types = {
@@ -889,6 +895,267 @@ def get_row_time_values(result):
     return native_time, wasm_time
 
 
+# ---------------------------------------------------------------------------
+# Libc++ integration smoke (full lind_compile_cpp + lind_run + stdout check)
+# ---------------------------------------------------------------------------
+
+
+def _empty_libcpp_bucket() -> dict[str, Any]:
+    return {
+        "total_test_cases": 0,
+        "number_of_success": 0,
+        "success": [],
+        "number_of_failures": 0,
+        "failures": [],
+        "number_of_compile_failures": 0,
+        "compile_failures": [],
+        "number_of_runtime_failures": 0,
+        "runtime_failures": [],
+        "number_of_output_mismatch": 0,
+        "output_mismatch_failures": [],
+        "number_of_timeout_failures": 0,
+        "timeout_failures": [],
+        "test_cases": {},
+    }
+
+
+def _add_libcpp_test_result(
+    bucket: dict[str, Any], test_name: str, status: str, error_type: str | None, output: str
+) -> None:
+    bucket["total_test_cases"] += 1
+    bucket["test_cases"][test_name] = {
+        "status": status,
+        "error_type": error_type,
+        "output": output,
+    }
+    if status == "Success":
+        bucket["number_of_success"] += 1
+        bucket["success"].append(test_name)
+        logger.info("[libcpp] SUCCESS: %s", test_name)
+        return
+    bucket["number_of_failures"] += 1
+    bucket["failures"].append(test_name)
+    if error_type == "Compile_Failure":
+        bucket["number_of_compile_failures"] += 1
+        bucket["compile_failures"].append(test_name)
+    elif error_type == "Runtime_Failure":
+        bucket["number_of_runtime_failures"] += 1
+        bucket["runtime_failures"].append(test_name)
+    elif error_type == "Output_mismatch":
+        bucket["number_of_output_mismatch"] += 1
+        bucket["output_mismatch_failures"].append(test_name)
+    elif error_type == "Timeout":
+        bucket["number_of_timeout_failures"] += 1
+        bucket["timeout_failures"].append(test_name)
+    logger.error("[libcpp] FAILURE: %s — %s", test_name, error_type or "unknown")
+
+
+def _libcpp_default_source_path() -> Path:
+    override = os.environ.get("LIBCPP_TEST_CPP")
+    if override:
+        return Path(override).resolve()
+    return (LIND_WASM_BASE / LIBCPP_DEFAULT_SOURCE_REL).resolve()
+
+
+def _libcpp_cwasm_path_for_source(source: Path) -> Path:
+    return source.parent / f"{source.name}.cwasm"
+
+
+def _run_lind_compile_cpp_full(source: Path) -> tuple[int, str]:
+    script = LIND_WASM_BASE / "scripts" / "lind_compile_cpp"
+    cmd = [str(script), str(source)]
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(LIND_WASM_BASE),
+        )
+    except OSError as exc:
+        return 127, f"Exception running lind_compile_cpp: {exc}"
+    combined = ""
+    if proc.stdout:
+        combined += proc.stdout
+    if proc.stderr:
+        if combined:
+            combined += "\n"
+        combined += proc.stderr
+    return proc.returncode, combined
+
+
+def _libcpp_stdout_has_expected_line(text: str, expected: str = LIBCPP_EXPECTED_STDOUT_LINE) -> bool:
+    for line in text.splitlines():
+        if line.strip() == expected:
+            return True
+    return False
+
+
+def _run_libcpp_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str]:
+    run_cmd = [str(LIND_TOOL_PATH / "lind_run"), wasm_basename]
+    try:
+        proc = subprocess.run(
+            run_cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(LIND_WASM_BASE),
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired:
+        return "timeout", f"Timed out after {timeout_sec}s"
+    except OSError as exc:
+        return "error", f"Exception running lind_run: {exc}"
+    out = proc.stdout or ""
+    err = proc.stderr or ""
+    combined = out + (("\n" + err) if err else "")
+    return proc.returncode, combined
+
+
+def _cleanup_libcpp_artifacts(wasm_path: Path, cwasm_path: Path) -> None:
+    for path in (wasm_path, cwasm_path):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.debug("[libcpp] Could not remove %s: %s", path, exc)
+        try:
+            (LINDFS_ROOT / path.name).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.debug("[libcpp] Could not remove %s: %s", LINDFS_ROOT / path.name, exc)
+
+
+def run_libcpp_integration(bucket: dict[str, Any], source: Path | None, timeout_sec: int) -> None:
+    src = source if source is not None else _libcpp_default_source_path()
+    try:
+        rel_name = str(src.relative_to(LIND_WASM_BASE))
+    except ValueError:
+        rel_name = str(src)
+
+    if not src.is_file():
+        _add_libcpp_test_result(
+            bucket,
+            rel_name,
+            "Failure",
+            "Compile_Failure",
+            f"Source file not found: {src}",
+        )
+        return
+
+    wasm_path = src.parent / f"{src.name}.wasm"
+    cwasm_path = _libcpp_cwasm_path_for_source(src)
+    run_basename = cwasm_path.name
+    for p in (wasm_path, cwasm_path):
+        try:
+            p.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("[libcpp] Could not remove prior artifact %s: %s", p, exc)
+
+    rc, compile_out = _run_lind_compile_cpp_full(src)
+    if rc != 0:
+        _add_libcpp_test_result(bucket, rel_name, "Failure", "Compile_Failure", f"exit={rc}\n{compile_out}")
+        return
+
+    if not cwasm_path.is_file():
+        _add_libcpp_test_result(
+            bucket,
+            rel_name,
+            "Failure",
+            "Compile_Failure",
+            f"lind_compile_cpp exited 0 but .cwasm missing: {cwasm_path}\n{compile_out}",
+        )
+        return
+
+    run_rc, run_out = _run_libcpp_wasm_with_lind(run_basename, timeout_sec)
+
+    try:
+        wasm_disp = str(cwasm_path.relative_to(LIND_WASM_BASE))
+    except ValueError:
+        wasm_disp = str(cwasm_path)
+
+    try:
+        if run_rc == "timeout":
+            body = (
+                f"=== compile (ok) ===\n{compile_out.strip()}\n\n"
+                f"=== run ===\n{run_out}"
+            )
+            _add_libcpp_test_result(bucket, rel_name, "Failure", "Timeout", body.strip())
+            return
+
+        if isinstance(run_rc, str):
+            body = (
+                f"=== compile (ok) ===\n{compile_out.strip()}\n\n"
+                f"=== run ===\n{run_out}"
+            )
+            _add_libcpp_test_result(bucket, rel_name, "Failure", "Runtime_Failure", body.strip())
+            return
+
+        if run_rc != 0:
+            body = (
+                f"=== compile (ok) ===\n{compile_out.strip()}\n\n"
+                f"=== run (exit {run_rc}) ===\n{run_out.strip()}"
+            )
+            _add_libcpp_test_result(bucket, rel_name, "Failure", "Runtime_Failure", body.strip())
+            return
+
+        if not _libcpp_stdout_has_expected_line(run_out):
+            body = (
+                f"=== compile (ok) ===\n{compile_out.strip()}\n\n"
+                f"=== run (exit 0) ===\n"
+                f"Expected a line exactly: {LIBCPP_EXPECTED_STDOUT_LINE!r}\n"
+                f"--- stdout/stderr ---\n{run_out.strip()}"
+            )
+            _add_libcpp_test_result(bucket, rel_name, "Failure", "Output_mismatch", body.strip())
+            return
+
+        ok_msg = (
+            f"=== compile ===\n{compile_out.strip()}\n\n"
+            f"=== run (exit 0) ===\n{run_out.strip()}\n\n"
+            f"Verified: {LIBCPP_EXPECTED_STDOUT_LINE!r} present in output.\n"
+            f"Artifact: {wasm_disp}"
+        ).strip()
+        _add_libcpp_test_result(bucket, rel_name, "Success", None, ok_msg)
+    finally:
+        _cleanup_libcpp_artifacts(wasm_path, cwasm_path)
+
+
+def _generate_libcpp_html_section(libcpp: dict[str, Any]) -> str:
+    rows: list[str] = []
+    for test_name, test_result in sorted(libcpp.get("test_cases", {}).items()):
+        status = test_result.get("status", "Unknown")
+        error_type = test_result.get("error_type") or ""
+        out = html.escape(str(test_result.get("output", "")))
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(test_name)}</td>"
+            f"<td>{html.escape(status)}</td>"
+            f"<td>{html.escape(error_type)}</td>"
+            f"<td>N/A</td><td>N/A</td>"
+            f"<td><pre>{out}</pre></td>"
+            "</tr>"
+        )
+    rows_html = "\n".join(rows) if rows else "<tr><td colspan='6'><em>No cases</em></td></tr>"
+    return f"""
+    <div class="test-section">
+        <h2>Libc++ integration</h2>
+        <p>Full <code>lind_compile_cpp</code> (wasm-opt + precompile), <code>lind_run</code> on the <code>.cwasm</code>,
+        stdout must contain a line exactly <code>{html.escape(LIBCPP_EXPECTED_STDOUT_LINE)}</code>.</p>
+        <table border="1" cellspacing="0" cellpadding="6">
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Total</td><td>{libcpp.get("total_test_cases", 0)}</td></tr>
+        <tr><td>Success</td><td>{libcpp.get("number_of_success", 0)}</td></tr>
+        <tr><td>Failures</td><td>{libcpp.get("number_of_failures", 0)}</td></tr>
+        <tr><td>Compile failures</td><td>{libcpp.get("number_of_compile_failures", 0)}</td></tr>
+        <tr><td>Runtime failures</td><td>{libcpp.get("number_of_runtime_failures", 0)}</td></tr>
+        <tr><td>Output mismatch</td><td>{libcpp.get("number_of_output_mismatch", 0)}</td></tr>
+        <tr><td>Timeouts</td><td>{libcpp.get("number_of_timeout_failures", 0)}</td></tr>
+        </table>
+        <h3>Cases</h3>
+        <table border="1" cellspacing="0" cellpadding="6">
+        <tr><th>Test</th><th>Status</th><th>Error type</th><th>Native time</th><th>Wasm time</th><th>Output</th></tr>
+        {rows_html}
+        </table>
+    </div>
+    """
+
+
 # ----------------------------------------------------------------------
 # Function: generate_html_report
 #
@@ -971,8 +1238,11 @@ def generate_html_report(report):
 
     html_content.append(html_header)
 
-    # Generate sections for Deterministic/Non-Deterministic test type
-    for test_type, test_result in report.items():
+    # Generate sections for Deterministic/Non-Deterministic test type (skip embedded libcpp blob)
+    for test_type in ("deterministic", "fail"):
+        if test_type not in report:
+            continue
+        test_result = report[test_type]
         html_content.append(f'<div class="test-section">')
         html_content.append(f'<h2>{test_type.replace("_", " ").title()} Tests</h2>')
         
@@ -1048,7 +1318,10 @@ def generate_html_report(report):
                     )
             
             html_content.append('</table>')
-        html_content.append('</div>') 
+        html_content.append('</div>')
+
+    if "libcpp" in report:
+        html_content.append(_generate_libcpp_html_section(report["libcpp"]))
 
     html_content.append("</body>\n</html>")
     html_content.append("\n")
@@ -1186,6 +1459,17 @@ def parse_arguments(argv=None):
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
     parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
+    parser.add_argument(
+        "--libcpp-timeout",
+        type=check_timeout,
+        default=DEFAULT_LIBCPP_RUN_TIMEOUT,
+        help="Timeout in seconds for libc++ smoke test lind_run (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--skip-libcpp",
+        action="store_true",
+        help="Skip libc++ integration smoke (full lind_compile_cpp + lind_run)",
+    )
 
     args = parser.parse_args(argv)
     return args
@@ -1472,7 +1756,8 @@ def main():
 
     results = {
         "deterministic": get_empty_result(),
-        "fail": get_empty_result()
+        "fail": get_empty_result(),
+        "libcpp": _empty_libcpp_bucket(),
     }
 
     # Prepare artifacts root
@@ -1524,6 +1809,9 @@ def main():
 
         # Run all tests
         run_tests(config, artifacts_root, results, timeout_sec)
+
+        if not args.skip_libcpp:
+            run_libcpp_integration(results["libcpp"], None, args.libcpp_timeout)
 
         os.chdir(LIND_WASM_BASE)
         with open(output_file, "w") as fp:
