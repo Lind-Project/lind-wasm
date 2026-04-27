@@ -15,3 +15,4 @@ dashmap = { version = "5.1", features=["serde"] }
 
 [features]
 disable_signals = []
+lind_debug = []
