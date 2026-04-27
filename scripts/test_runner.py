@@ -162,7 +162,8 @@ def write_outputs(result: dict[str, Any], reports_dir: Path) -> dict[str, Any]:
 
 
 def extract_html_body(raw_html: str) -> str:
-    match = re.search(r"(?is)<\s*body\b[^>]*>(.*?)</\s*body\s*>", raw_html)
+    # Greedy body: use the last </body> so literal </body> inside <pre> cannot truncate.
+    match = re.search(r"(?is)<\s*body\b[^>]*>(.*)</\s*body\s*>", raw_html)
     return match.group(1) if match else raw_html
 
 

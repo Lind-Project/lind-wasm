@@ -1117,6 +1117,9 @@ def run_libcpp_integration(bucket: dict[str, Any], source: Path | None, timeout_
 
 
 def _generate_libcpp_html_section(libcpp: dict[str, Any]) -> str:
+    """Emit libc++ block; use class wasm-harness-subsection (not test-section) so
+    scripts/render_e2e_templates.wrap_sections_as_details does not split on </div>
+    inside earlier unescaped output."""
     rows: list[str] = []
     for test_name, test_result in sorted(libcpp.get("test_cases", {}).items()):
         status = test_result.get("status", "Unknown")
@@ -1131,29 +1134,33 @@ def _generate_libcpp_html_section(libcpp: dict[str, Any]) -> str:
             f"<td><pre>{out}</pre></td>"
             "</tr>"
         )
-    rows_html = "\n".join(rows) if rows else "<tr><td colspan='6'><em>No cases</em></td></tr>"
-    return f"""
-    <div class="test-section">
-        <h2>Libc++ integration</h2>
-        <p>Full <code>lind_compile_cpp</code> (wasm-opt + precompile), <code>lind_run</code> on the <code>.cwasm</code>,
-        stdout must contain a line exactly <code>{html.escape(LIBCPP_EXPECTED_STDOUT_LINE)}</code>.</p>
-        <table border="1" cellspacing="0" cellpadding="6">
-        <tr><th>Metric</th><th>Value</th></tr>
-        <tr><td>Total</td><td>{libcpp.get("total_test_cases", 0)}</td></tr>
-        <tr><td>Success</td><td>{libcpp.get("number_of_success", 0)}</td></tr>
-        <tr><td>Failures</td><td>{libcpp.get("number_of_failures", 0)}</td></tr>
-        <tr><td>Compile failures</td><td>{libcpp.get("number_of_compile_failures", 0)}</td></tr>
-        <tr><td>Runtime failures</td><td>{libcpp.get("number_of_runtime_failures", 0)}</td></tr>
-        <tr><td>Output mismatch</td><td>{libcpp.get("number_of_output_mismatch", 0)}</td></tr>
-        <tr><td>Timeouts</td><td>{libcpp.get("number_of_timeout_failures", 0)}</td></tr>
-        </table>
-        <h3>Cases</h3>
-        <table border="1" cellspacing="0" cellpadding="6">
-        <tr><th>Test</th><th>Status</th><th>Error type</th><th>Native time</th><th>Wasm time</th><th>Output</th></tr>
-        {rows_html}
-        </table>
-    </div>
-    """
+    rows_html = "\n".join(rows) if rows else '<tr><td colspan="6"><em>No cases</em></td></tr>'
+    exp = html.escape(LIBCPP_EXPECTED_STDOUT_LINE)
+    parts: list[str] = [
+        '<div class="wasm-harness-subsection">',
+        "<h2>Libc++ integration</h2>",
+        "<p>Full <code>lind_compile_cpp</code> (wasm-opt + precompile), <code>lind_run</code> on the "
+        "<code>.cwasm</code>, stdout must contain a line exactly <code>"
+        f"{exp}</code>.</p>",
+        '<h3>Summary</h3>',
+        '<table class="summary-table">',
+        "<tr><th>Metric</th><th>Value</th></tr>",
+        f'<tr><td>Total</td><td>{libcpp.get("total_test_cases", 0)}</td></tr>',
+        f'<tr><td>Success</td><td>{libcpp.get("number_of_success", 0)}</td></tr>',
+        f'<tr><td>Failures</td><td>{libcpp.get("number_of_failures", 0)}</td></tr>',
+        f'<tr><td>Compile failures</td><td>{libcpp.get("number_of_compile_failures", 0)}</td></tr>',
+        f'<tr><td>Runtime failures</td><td>{libcpp.get("number_of_runtime_failures", 0)}</td></tr>',
+        f'<tr><td>Output mismatch</td><td>{libcpp.get("number_of_output_mismatch", 0)}</td></tr>',
+        f'<tr><td>Timeouts</td><td>{libcpp.get("number_of_timeout_failures", 0)}</td></tr>',
+        "</table>",
+        "<h3>Cases</h3>",
+        '<table class="test-results-table">',
+        "<tr><th>Test</th><th>Status</th><th>Error type</th><th>Native time</th><th>Wasm time</th><th>Output</th></tr>",
+        rows_html,
+        "</table>",
+        "</div>",
+    ]
+    return "\n".join(parts)
 
 
 # ----------------------------------------------------------------------
@@ -1200,6 +1207,19 @@ def generate_html_report(report):
             padding: 20px;
         }
         .test-section h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        /* Same look as .test-section but not matched by PR-comment wrap_sections_as_details */
+        .wasm-harness-subsection {
+            margin: 30px 0;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .wasm-harness-subsection h2 {
             margin-top: 0;
             color: #2c3e50;
             border-bottom: 2px solid #3498db;
@@ -1303,18 +1323,21 @@ def generate_html_report(report):
                     # Extract just the test file name for display
                     test_name = test_path.split('/')[-1]
                     
-                    # For successful tests, just show "Success" instead of full output
-                    # For failures, show the full output for debugging
-                    output_display = "Success" if result['status'].lower() == "success" else result["output"]
-                    
+                    # Escape cell text and <pre> bodies so downstream HTML consumers
+                    # (e.g. PR comment wrap_sections_as_details) never see literal </div></body>.
+                    if result["status"].lower() == "success":
+                        output_display = "Success"
+                    else:
+                        output_display = html.escape(str(result.get("output", "")))
                     native_time, wasm_time = get_row_time_values(result)
 
                     html_content.append(
-                        f'<tr class="{row_class}"><td>{test_name}</td>'
-                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<tr class="{row_class}"><td>{html.escape(test_name)}</td>'
+                        f'<td>{html.escape(str(result["status"]))}</td>'
+                        f'<td>{html.escape(str(result["error_type"]))}</td>'
                         f'<td>{format_time_cell(native_time)}</td>'
                         f'<td>{format_time_cell(wasm_time)}</td>'
-                        f'<td><pre>{output_display}</pre></td></tr>'
+                        f"<td><pre>{output_display}</pre></td></tr>"
                     )
             
             html_content.append('</table>')
