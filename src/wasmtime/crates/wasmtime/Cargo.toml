@@ -64,6 +64,7 @@ rawposix = { path = "../rawposix" }
 wasmtime-lind-utils = { path = "../lind-utils" }
 cage.workspace = true
 threei = { path = "../threei" }
+lind-remote-lib = { path = "../lind-remote-lib", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
 workspace = true
@@ -276,4 +277,4 @@ call-hook = []
 memory-protection-keys = ["pooling-allocator"]
 
 debug-dylink = ["wasmtime-environ/debug-dylink"]
-remote-lib = ["dep:serde_json"]
+remote-lib = ["dep:lind-remote-lib"]

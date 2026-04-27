@@ -16,20 +16,16 @@
 //!   ]
 //! }
 //!
-//! Wire protocol (little-endian, one request per connection):
-//!   Request:  [call_id: u32][num_args: u32][arg0..argN: u64 each]
-//!   Response: [result: u64][errno: i32]
-//!
 //! Only integer (i32/i64) scalar functions are supported. Float arguments
 //! require XMM registers and are not handled by this initial implementation.
 
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
-use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 
 use anyhow::{anyhow, Result};
+use lind_remote_lib::{read_request, write_response};
 use serde::Deserialize;
 
 // ---- Config ----
@@ -114,30 +110,13 @@ unsafe fn call_scalar_native(func_ptr: *mut libc::c_void, args: &[u64], ret: &st
         }
     };
 
-    if ret == "void" {
-        0
-    } else {
-        raw as u64
-    }
+    if ret == "void" { 0 } else { raw as u64 }
 }
 
 // ---- Request handler ----
 
 fn handle_request(stream: &mut UnixStream, registry: &HashMap<u32, LoadedFn>) -> Result<()> {
-    let mut buf4 = [0u8; 4];
-
-    stream.read_exact(&mut buf4)?;
-    let call_id = u32::from_le_bytes(buf4);
-
-    stream.read_exact(&mut buf4)?;
-    let num_args = u32::from_le_bytes(buf4) as usize;
-
-    let mut args = vec![0u64; num_args];
-    for slot in &mut args {
-        let mut buf8 = [0u8; 8];
-        stream.read_exact(&mut buf8)?;
-        *slot = u64::from_le_bytes(buf8);
-    }
+    let (call_id, args) = read_request(stream)?;
 
     let entry = registry
         .get(&call_id)
@@ -146,11 +125,7 @@ fn handle_request(stream: &mut UnixStream, registry: &HashMap<u32, LoadedFn>) ->
     let result = unsafe { call_scalar_native(entry.ptr, &args, &entry.ret) };
     let errno_val = unsafe { *libc::__errno_location() } as i32;
 
-    stream.write_all(&result.to_le_bytes())?;
-    stream.write_all(&errno_val.to_le_bytes())?;
-    stream.flush()?;
-
-    Ok(())
+    write_response(stream, result, errno_val)
 }
 
 // ---- Server loop ----
@@ -204,7 +179,7 @@ fn run(config_path: &str) -> Result<()> {
     }
 
     // Bind the Unix socket
-    let _ = fs::remove_file(socket_path); // remove stale socket if any
+    let _ = fs::remove_file(socket_path);
     let listener = UnixListener::bind(socket_path)?;
     println!("remote-server: listening on {socket_path}");
 

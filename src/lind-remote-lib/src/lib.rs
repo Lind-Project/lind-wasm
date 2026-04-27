@@ -1,13 +1,17 @@
-use crate::prelude::*;
+//! Remote library call routing and RPC wire protocol.
+//!
+//! Used by:
+//! - wasmtime's `instance_dylink` wrapper to look up routing decisions and
+//!   send scalar RPC calls to a remote server
+//! - `lind-remote-server` to read requests from the wire and send responses back
+
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::sync::OnceLock;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use serde::Deserialize;
-
-use crate::{FuncType, Val, ValType};
 
 // ---- Routing config JSON structures ----
 
@@ -91,79 +95,70 @@ fn build_routing_table() -> (RouteDecision, HashMap<String, RouteDecision>) {
 /// was loaded or the symbol has no explicit route.
 pub fn get_route(symbol: &str) -> &'static RouteDecision {
     let (default, table) = ROUTING_TABLE.get_or_init(build_routing_table);
-    println!("[debug]: default: {:?}, table: {:?}, symbol: {:?}", default, table, symbol);
     table.get(symbol).unwrap_or(default)
 }
 
-// ---- RPC client (scalar-only) ----
+// ---- Wire protocol (shared between client and server) ----
+//
+// Request  (little-endian): [call_id: u32][num_args: u32][arg0..argN: u64 each]
+// Response (little-endian): [result: u64][errno: i32]
 
 fn parse_unix_path(endpoint: &str) -> Option<&str> {
     endpoint.strip_prefix("unix://")
 }
 
-fn val_to_u64(v: &Val) -> u64 {
-    match v {
-        Val::I32(i) => *i as u64,
-        Val::I64(i) => *i as u64,
-        Val::F32(bits) => *bits as u64,
-        Val::F64(bits) => *bits,
-        _ => 0,
-    }
-}
-
-fn u64_to_val(raw: u64, ty: ValType) -> Result<Val> {
-    Ok(match ty {
-        ValType::I32 => Val::I32(raw as i32),
-        ValType::I64 => Val::I64(raw as i64),
-        ValType::F32 => Val::F32(raw as u32),
-        ValType::F64 => Val::F64(raw),
-        other => return Err(anyhow!("unsupported return type for remote call: {other}")),
-    })
-}
-
-/// Send a scalar-only RPC call to a remote server and write results back.
-///
-/// Wire format (little-endian):
-///   Request:  [call_id: u32][num_args: u32][arg0..argN: u64 each]
-///   Response: [result: u64][errno: i32]
-///
-/// A new TCP/Unix connection is opened per call. Only the first result
-/// slot is populated; functions with multiple returns are unsupported.
-pub fn rpc_call_scalar(
-    endpoint: &str,
-    call_id: u32,
-    params: &[Val],
-    results: &mut [Val],
-    func_ty: &FuncType,
-) -> Result<()> {
+/// Client: open a connection to `endpoint`, send `(call_id, args)`,
+/// and return `(result_u64, errno)`.
+pub fn rpc_call(endpoint: &str, call_id: u32, args: &[u64]) -> Result<(u64, i32)> {
     let path = parse_unix_path(endpoint)
         .ok_or_else(|| anyhow!("invalid remote endpoint: {endpoint}"))?;
 
     let mut stream = UnixStream::connect(path)
         .map_err(|e| anyhow!("remote-lib: connect to {path}: {e}"))?;
 
-    // Send request
     stream.write_all(&call_id.to_le_bytes())?;
-    stream.write_all(&(params.len() as u32).to_le_bytes())?;
-    for param in params {
-        stream.write_all(&val_to_u64(param).to_le_bytes())?;
+    stream.write_all(&(args.len() as u32).to_le_bytes())?;
+    for &arg in args {
+        stream.write_all(&arg.to_le_bytes())?;
     }
     stream.flush()?;
 
-    // Receive response
     let mut result_buf = [0u8; 8];
     let mut errno_buf = [0u8; 4];
     stream.read_exact(&mut result_buf)?;
     stream.read_exact(&mut errno_buf)?;
 
-    let result_u64 = u64::from_le_bytes(result_buf);
-    // TODO: propagate errno back into WASM errno (requires access to caller memory)
-    let _errno_val = i32::from_le_bytes(errno_buf);
+    Ok((
+        u64::from_le_bytes(result_buf),
+        i32::from_le_bytes(errno_buf),
+    ))
+}
 
-    // Write result slots from the remote return value
-    for (slot, ty) in results.iter_mut().zip(func_ty.results()) {
-        *slot = u64_to_val(result_u64, ty)?;
+/// Server: read one request from an already-accepted stream.
+/// Returns `(call_id, args)`.
+pub fn read_request(stream: &mut UnixStream) -> Result<(u32, Vec<u64>)> {
+    let mut buf4 = [0u8; 4];
+
+    stream.read_exact(&mut buf4)?;
+    let call_id = u32::from_le_bytes(buf4);
+
+    stream.read_exact(&mut buf4)?;
+    let num_args = u32::from_le_bytes(buf4) as usize;
+
+    let mut args = vec![0u64; num_args];
+    for slot in &mut args {
+        let mut buf8 = [0u8; 8];
+        stream.read_exact(&mut buf8)?;
+        *slot = u64::from_le_bytes(buf8);
     }
 
+    Ok((call_id, args))
+}
+
+/// Server: write `(result, errno)` back to the caller.
+pub fn write_response(stream: &mut UnixStream, result: u64, errno: i32) -> Result<()> {
+    stream.write_all(&result.to_le_bytes())?;
+    stream.write_all(&errno.to_le_bytes())?;
+    stream.flush()?;
     Ok(())
 }

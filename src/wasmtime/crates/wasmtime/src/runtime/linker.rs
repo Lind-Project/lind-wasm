@@ -1001,14 +1001,28 @@ impl<T> Linker<T> {
                         // resetting __asyncify_state to 0 before the caller's asyncify
                         // instrumentation has saved its stack frame.
                         #[cfg(feature = "remote-lib")]
+                        if let lind_remote_lib::RouteDecision::Remote { call_id, endpoint } =
+                            lind_remote_lib::get_route(&name)
                         {
-                            use crate::runtime::remote_lib::{get_route, rpc_call_scalar, RouteDecision};
-                            if let RouteDecision::Remote { call_id, endpoint } = get_route(&name) {
-                                println!("[debug]: routing decistion: remote");
-                                return rpc_call_scalar(endpoint, *call_id, params, results, &func_ty_for_rpc);
-                            } else {
-                                println!("[debug]: routing decistion: local");
+                            let args: Vec<u64> = params.iter().map(|v| match v {
+                                Val::I32(i) => *i as u64,
+                                Val::I64(i) => *i as u64,
+                                Val::F32(b) => *b as u64,
+                                Val::F64(b) => *b,
+                                _ => 0,
+                            }).collect();
+                            let (result_u64, _errno) =
+                                lind_remote_lib::rpc_call(endpoint, *call_id, &args)?;
+                            for (slot, ty) in results.iter_mut().zip(func_ty_for_rpc.results()) {
+                                *slot = match ty {
+                                    ValType::I32 => Val::I32(result_u64 as i32),
+                                    ValType::I64 => Val::I64(result_u64 as i64),
+                                    ValType::F32 => Val::F32(result_u64 as u32),
+                                    ValType::F64 => Val::F64(result_u64),
+                                    other => return Err(anyhow!("unsupported result type for remote call: {other}")),
+                                };
                             }
+                            return Ok(());
                         }
                         original_func.call_nested(&mut caller, params, results)
                     });

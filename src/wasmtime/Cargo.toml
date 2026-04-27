@@ -165,6 +165,7 @@ members = [
   "crates/typemap",
   "crates/cage", 
   "crates/lind-3i",
+  "crates/lind-remote-lib",
 ]
 exclude = [
   'docs/rust_wasi_markdown_parser',
