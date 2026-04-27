@@ -80,6 +80,9 @@ mod coredump;
 #[cfg(feature = "coredump")]
 pub use coredump::*;
 
+#[cfg(feature = "remote-lib")]
+pub(crate) mod remote_lib;
+
 fn _assertions_runtime() {
     use crate::_assert_send_and_sync;
 

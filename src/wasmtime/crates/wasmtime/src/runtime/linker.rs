@@ -968,6 +968,7 @@ impl<T> Linker<T> {
                         | "asyncify_stop_rewind"
                         | "asyncify_get_state"
                         // lind custom symbols
+                        | "signal_callback"
                         | "__get_aligned_tls_size" => true,
                         // fpcast-emu exports, which shouldn't linked directly
                         | s if s.starts_with(FPCAST_FUNC_SIGNATURE) => true,
@@ -989,6 +990,8 @@ impl<T> Linker<T> {
             let export = match export {
                 Extern::Func(original_func) => {
                     let func_ty = original_func.ty(&store);
+                    #[cfg(feature = "remote-lib")]
+                    let func_ty_for_rpc = func_ty.clone();
                     let wrapper = Func::new(&mut store, func_ty, move |mut caller, params, results| {
                         // Use call_nested instead of call to avoid processing the on_called
                         // asyncify callback (set by fork/exec/exit inside the library) at this
@@ -997,7 +1000,13 @@ impl<T> Linker<T> {
                         // call() the inner loop would steal and execute the callback early,
                         // resetting __asyncify_state to 0 before the caller's asyncify
                         // instrumentation has saved its stack frame.
-                        println!("[interpose] interpose library call {}", name);
+                        #[cfg(feature = "remote-lib")]
+                        {
+                            use crate::runtime::remote_lib::{get_route, rpc_call_scalar, RouteDecision};
+                            if let RouteDecision::Remote { call_id, endpoint } = get_route(&name) {
+                                return rpc_call_scalar(endpoint, *call_id, params, results, &func_ty_for_rpc);
+                            }
+                        }
                         original_func.call_nested(&mut caller, params, results)
                     });
                     Extern::Func(wrapper)

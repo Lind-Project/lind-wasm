@@ -28,3 +28,9 @@ anyhow = { version = "1.0.66", default-features = false }
 clap = { version = "4", features = ["derive"] }
 cfg-if = "1.0"
 libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[[bin]]
+name = "lind-remote-server"
+path = "src/bin/remote_server.rs"

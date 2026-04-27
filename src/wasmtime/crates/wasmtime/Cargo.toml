@@ -276,4 +276,4 @@ call-hook = []
 memory-protection-keys = ["pooling-allocator"]
 
 debug-dylink = ["wasmtime-environ/debug-dylink"]
-remote-lib = []
+remote-lib = ["dep:serde_json"]

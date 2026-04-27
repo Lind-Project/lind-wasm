@@ -36,7 +36,7 @@ sysroot: build-dir
 .PHONY: lind-boot
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/lind-boot/Cargo.toml --release
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release --features remote-lib
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
