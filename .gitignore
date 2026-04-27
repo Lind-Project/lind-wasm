@@ -20,7 +20,3 @@ report.html
 
 #Ignore python cache
 __pycache__/
-
-#Ignore llvm external dependency needed for libcpp headers
-llvm-project/
-libcxx-*/
