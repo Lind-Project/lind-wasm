@@ -1,49 +1,53 @@
 # Start from commit [commit 337a15a](https://github.com/Lind-Project/lind-wasm/commit/337a15abc0d5a97a5050a46e50d1b69550181842) of libcpp-alice branch
 
-Usually I would document what I do in a linear, chronological manner, without a clear overarching narrative in mind, because I document as I explore each step in a project. But progress is non-linear, so sometimes this style of documenting is not… ideal. 
-
-For this documentation, I will take a structured narrative and do my best to explain everything. I wrote this for someone who hop on to the project with very little prior knowledge as to how or why things work in the way they do.
-
 ## Overarching Goal
 To be able to compile .wasm binary (and the .cwasm ELF files as a by-product) with clang++ compiler inside the Lind sandbox. 
 Where we start with
 Alice's issue [#245](https://github.com/Lind-Project/lind-wasm/issues/245) describes a slightly outdated solution to the above problem, Alice later started a new branch (libcpp-alice) and basically formalized that solution. This documentation by Ren will attempt to explain her solution (grossly) and document what is exactly done to achieve the overarching goal. 
 
 ## Existing problem
-Because we are really mixing the compilation environment for LLVM, Clang, and the binary developers will eventually want to compile from their own source code, we must introduce external dependencies, specifically LLVM ver 18 and its compiled binary. Such external dependencies, and other run-time compiled dependency files, are not tracked on git in any manner, thus the need of this documentation. What's worse is that, for LLVM, we need to modify its source code slightly. Which is 1. playing with fire and 2. totally not tracked by git.
+Because we are really mixing the compilation environment for LLVM, Clang, and the binary developers will eventually want to compile from their own source code, we must introduce external dependencies, specifically LLVM ver 18 and its compiled binary. Moreover, there are specific source code modifications made to the compiled llvm headers done by Alice. The workflow of curl llvm --> modification of llvm source code --> compilation --> cp the archive files into sysroot is overcomplicated.
+
+## Proposed solution
+Solution proposed by both Alice and Tasha: on local repo, curl, modify and compile llvm; then, create an artifacts/ directory that only stores necessary compiled archives; remove llvm and all other non-essential compiled artifacts and only preserve the necessary ones; then add Makefile command to push-buton copy over the archive artifacts to a compiled sysroot whenever needed. This workflow is relatively small, and easier to implemenent with Github Actions for CICD purposes.
 
 ## What i did
 ### Replicate the error
-Of course, the first step of dealing with a problem is to make sure we do have a problem. We start with what Nick points out in issue [#740](https://github.com/Lind-Project/lind-wasm/issues/740#issuecomment-3910086697): that some dummy .cpp file that has # include <algorithm> will fail to compile as the header libraries are just entirely missing, if a user attempts to compile .wasm binary. Thus, I simply created a new directory /trial and put a super simple dummy hello.cpp file there, which uses algorithm header:
+Of course, the first step of dealing with a problem is to make sure we do have a problem. We start with what Nick points out in issue [#740](https://github.com/Lind-Project/lind-wasm/issues/740#issuecomment-3910086697): that some dummy .cpp file that has # include <algorithm> will fail to compile as the header libraries are just entirely missing, if a user attempts to compile .wasm binary. Thus, I put a super simple dummy hello.cpp file in tests/unit-tests/cpp/ dir, which uses algorithm header:
 
 ```trial/hello.cpp
 #include <algorithm>
-#include <vector>
 #include <iostream>
+#include <vector>
 
-int main() {
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
     std::vector<int> v = {3, 1, 2};
     std::sort(v.begin(), v.end());
 
-    for (int each : v){
-        std::cout<< each<<' ' ;
+    if (v != std::vector<int>{1, 2, 3}) {
+        std::cout << "LIBCPP_SORT_FAIL" << std::endl;
+        return 1;
     }
-    std::cout<<std::endl;
+
+    std::cout << "LIBCPP_SORT_OK 1 2 3" << std::endl;
     return 0;
 }
 ```
-It also has a simple cout so that if we eventually execute a compiled binary, we would know it totally works.
+note: main function parameter list signature is very rigid as omiting it causes compiler warnings (not fatal); a simple stdout is used for easier test report generation. 
 
 ### Side note
 Compiling .wasm binary involves setting some pretty length and boring flags for clang++ command, the lind-wasm repo already provides a pretty convenient compile script in ``scripts/lind_compile`` which basically bundles up those flags for you. Here are a couple caveats:
 The script can only be used inside docker container
 The script call signature is iffy, you must call it as: ``./scripts/lind_compile main.cpp`` and cannot assume its global availability: ``./lind_compile main.cpp`` **will not do what you want**.
-The script is intended to be used on .c files only. Alice modded the script to make it work on .cpp files only in this branch. A simple future fix is needed to make it work for both .c and .cpp. It won't be hard, but will be a bit tedious. what alice did can be seen here
+The script is intended to be used on .c files only. I have made a spin-off ``lind_compile_cpp`` script based on it. A future improvevement would be to look at all flags allowed by that script and verify their functionalities.
 
 
-So, the necessary steps here are: creating and stepping into a docker container, creating the dummy hello.cpp file (you can do this before stepping into the docker container step; it really doesn't matter), and attempt to compile with the script and just watch it fail: (note: now that .cpp unit test is moved to tests/unit-tests/cpp/ dir, please make corresponding changes when you try to test for it.)
+So, the necessary steps here are: creating and stepping into a docker container, creating the dummy hello.cpp file (you can do this before stepping into the docker container step; it really doesn't matter), and attempt to compile with the script and just watch it fail.
+
 ```bash
-lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile trial/hello.cpp -- -fno-exceptions
+lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile trial/hello.cpp 
 /home/lind/lind-wasm/trial/hello.cpp:1:10: fatal error: 'algorithm' file not found
     1 | #include <algorithm>
       |          ^~~~~~~~~~~
@@ -90,7 +94,7 @@ tar -xf llvm18.tar.xz
 ```
 Where specifically the compiled 18.1.8 version is used. Again, don ask me why. I have no answer to that.
  
-Now, both external dependencies are retrieved.
+Now, both external dependencies are retrieved. Note that these are big, clunky, and will be removed once we get the desired archive files compiled and stored somewhere else.
 
 ## Modification of LLVM source code
 
@@ -126,20 +130,21 @@ We are missing a libunwind.a archive; it is, for native cpp binary, needed to ha
 At this point, we have all we need to make the .wasm compilation work. Manually setting the correct clang++ flags is too much work, and luckily we have a scripts/lind_compile script which, originally designed for .c compilation, is almost entirely reusable directly for our .cpp compilation. Again, Alice already made the necessary changes to it in her commit to repurpose it for .cpp compilation only, and so we only need to use it. One more thing: remember we cannot support throw-exception? We do need some manual flag-setting to suppress that part. Luckily our simple dummy program does not need the throw-except syntax anyways. now make sure your are in lind-wasm dir (or just use absolute path for bash script below if you are not – by this point you should be really familiar with the project file hierarchy already.)
 
 ```bash
-scripts/lind_compile trial/hello.cpp -- -fno-exceptions
+scripts/lind_compile_cpp tests/unit-tests/cpp/hello.cpp
 ```
+note that, I have added ``-fno-exceptions`` flag in that script. The throw-exception syntax is not supported at the moment, and that would be a **major area of improvement in the future**
 note you can also additionally add -fno-rtti flag to save memory and speed up the compilation a bit more, but the compilation is quite slow regardless (takes ~1 minute)
 
 And you should now have compiled result file:
 
-trial/hello.cpp.wasm
+tests/unit-tests/cpp/hello.cpp.wasm
 
 ### side note
 
-the vanilla version of compiling will still fail:
+exact fail message without ``-fno-exceptions`` flag:
 
 ```bash
-lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile trial/hello.cpp 
+lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile trial/hello.cpp # deprecated 
 wasm-ld: warning: function signature mismatch: main
 >>> defined as (i32, i32, i32) -> i32 in /home/lind/lind-wasm/build/sysroot/lib/wasm32-wasi/crt1.o
 >>> defined as (i32, i32) -> i32 in /tmp/hello-d53fbc.o
@@ -153,11 +158,16 @@ clang++: error: linker command failed with exit code 1 (use -v to see invocation
 
 which is a result of missing libunwind.a archive support. I looked into it and it seems it cannot be simply fixed by tweaking the compile flags in the Toolchain-WASI.cmake. This is something to be worked on in the future
 
+Also, the lind_run command on the compiled binary currently fails. This is another important thing to look into:
+```bash
+lind@e9a40a72b750:~/lind-wasm$ lind_run tests/unit-tests/cpp/hello.cpp.cwasm 
+failed to compile module
+
+Caused by:
+    0: failed to read input file: tests/unit-tests/cpp/hello.cpp.cwasm
+    1: No such file or directory (os error 2)
+```
+
 **And that is the entire workflow to get .wasm binary compiled!**
 
-–TODO for ren: document the exception error and explain overall why things are done the way they are under issue [#795](https://github.com/Lind-Project/lind-wasm/issues/795)
-
-
-
-
-
+related issue: [#795](https://github.com/Lind-Project/lind-wasm/issues/795)
