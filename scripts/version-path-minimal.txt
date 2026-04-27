@@ -27,3 +27,4 @@
 ./intl/Versions
 ./iconv/Versions
 ./wctype/Versions
+./resource/Versions
