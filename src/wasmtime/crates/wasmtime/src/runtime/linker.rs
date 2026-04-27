@@ -1004,7 +1004,10 @@ impl<T> Linker<T> {
                         {
                             use crate::runtime::remote_lib::{get_route, rpc_call_scalar, RouteDecision};
                             if let RouteDecision::Remote { call_id, endpoint } = get_route(&name) {
+                                println!("[debug]: routing decistion: remote");
                                 return rpc_call_scalar(endpoint, *call_id, params, results, &func_ty_for_rpc);
+                            } else {
+                                println!("[debug]: routing decistion: local");
                             }
                         }
                         original_func.call_nested(&mut caller, params, results)

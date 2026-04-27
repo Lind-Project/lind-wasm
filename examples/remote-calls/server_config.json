@@ -1,0 +1,8 @@
+{
+  "library": "/home/lind/lind-wasm/examples/remote-calls/libtoy.so",
+  "endpoint": "unix:////home/lind/lind-wasm/lindfs/tmp/test.sock",
+  "functions": [
+    { "call_id": 1, "symbol": "add", "num_args": 2, "ret": "i32" },
+    { "call_id": 2, "symbol": "mul", "num_args": 2, "ret": "i32" }
+  ]
+}

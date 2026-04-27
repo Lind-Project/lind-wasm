@@ -35,6 +35,7 @@ struct RouteEntryConfig {
 
 // ---- Resolved routing decisions ----
 
+#[derive(Debug)]
 pub enum RouteDecision {
     Local,
     Remote { call_id: u32, endpoint: String },
@@ -90,6 +91,7 @@ fn build_routing_table() -> (RouteDecision, HashMap<String, RouteDecision>) {
 /// was loaded or the symbol has no explicit route.
 pub fn get_route(symbol: &str) -> &'static RouteDecision {
     let (default, table) = ROUTING_TABLE.get_or_init(build_routing_table);
+    println!("[debug]: default: {:?}, table: {:?}, symbol: {:?}", default, table, symbol);
     table.get(symbol).unwrap_or(default)
 }
 
