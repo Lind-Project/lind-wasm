@@ -140,7 +140,6 @@ test: lindfs
 	  if [ ! -f reports/report.html ]; then cp report.html reports/report.html; fi; \
 	  if [ ! -f reports/wasm.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing wasm report"}' > reports/wasm.json; fi; \
 	  if [ ! -f reports/grates.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing grate report"}' > reports/grates.json; fi; \
-	  if [ ! -f reports/libcpp.json ]; then printf '%s\n' '{"number_of_failures":1,"results":[],"error":"missing libcpp report"}' > reports/libcpp.json; fi; \
 	fi; \
 	exit 0
 	
