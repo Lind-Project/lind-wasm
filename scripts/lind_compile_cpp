@@ -10,20 +10,20 @@ set -Eeuo pipefail
 #
 # Usage:
 #   # full pipeline (default)
-#   lind_compile hello.c
+#   lind_compile_cpp hello.cpp
 #
 #   # run individual steps
-#   lind_compile --compile-only hello.c      # .c -> .wasm
-#   lind_compile --opt-only hello.wasm       # optimize existing .wasm in place
-#   lind_compile --precompile-only hello.wasm  # .wasm -> .cwasm
+#   lind_compile_cpp --compile-only hello.cpp      # .cpp -> .wasm
+#   lind_compile_cpp --opt-only hello.wasm         # optimize existing .wasm in place
+#   lind_compile_cpp --precompile-only hello.wasm  # .wasm -> .cwasm
 #
 #   # print commands (any mode)
-#   lind_compile --print-cmd hello.c
-#   lind_compile --compile-only --verbose hello.c
+#   lind_compile_cpp --print-cmd hello.cpp
+#   lind_compile_cpp --compile-only --verbose hello.cpp
 #
 # Notes:
 #   - Options must be specified *before* the source path.
-#   - For compile-only and default modes, the input must be a .c file.
+#   - For compile-only and default modes, the input must be a .cpp file.
 #   - For opt-only and precompile-only modes, the input must be a .wasm file.
 #
 # No assumption about current working directory.
@@ -33,8 +33,8 @@ usage() {
 usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
 
   Modes (at most one, defaults to full pipeline):
-    (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
-    --compile-only      : .c -> .wasm
+    (no mode flag)      : .cpp -> .wasm -> (wasm-opt) -> .cwasm
+    --compile-only      : .cpp -> .wasm
     --opt-only          : .wasm -> .wasm  (in-place optimization)
     --precompile-only   : .wasm -> .cwasm (AOT compile via lind-boot)
 
@@ -42,23 +42,23 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     -v, --print-cmd, --verbose  print the underlying commands that are executed
     --print-args, --debug-args  print parsed arguments after option handling
     --compile-grate             add grate-specific clang flags automatically
-    --no-default-clang-flags    do not add lind_compile's optional clang flags
+    --no-default-clang-flags    do not add lind_compile_cpp default clang flags
     -h, --help              show this help
 
   Additional clang args:
     Any extra arguments after the source file are passed through to clang.
-    Use -- to separate lind_compile flags from clang flags if needed.
+    Use -- to separate lind_compile_cpp flags from clang flags if needed.
 
   Examples:
-    $(basename "$0") hello.c
-    $(basename "$0") --compile-only hello.c
-    $(basename "$0") --compile-grate hello.c
+    $(basename "$0") hello.cpp
+    $(basename "$0") --compile-only hello.cpp
+    $(basename "$0") --compile-grate hello.cpp
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --precompile-only build/hello.wasm
-    $(basename "$0") --print-cmd hello.c
-    $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
-    $(basename "$0") hello.c -- -lm
-    $(basename "$0") hello.c -lm
+    $(basename "$0") --print-cmd hello.cpp
+    $(basename "$0") --no-default-clang-flags hello.cpp -- -target=wasm32-unknown-wasi
+    $(basename "$0") hello.cpp -- -lm
+    $(basename "$0") hello.cpp -lm
 EOF
 }
 
@@ -200,7 +200,7 @@ OUT_CWASM=""
 case "${MODE}" in
   full|"compile-only")
     if [[ "${EXT}" != "cpp" ]]; then
-      echo "error: ${MODE} mode expects a .c file, got: ${SRC}" >&2
+      echo "error: ${MODE} mode expects a .cpp file, got: ${SRC}" >&2
       usage
       exit 2
     fi
@@ -256,35 +256,6 @@ fi
 
 if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
   [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
-fi
-
-# --- debug output (post-normalization) ---
-if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compile-only" ) ]]; then
-  debug_mandatory_clang_flags=(
-    "--sysroot=${SYSROOT}"
-    --target=wasm32-unknown-wasi
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base
-  )
-  debug_default_clang_flags=(
-    -pthread
-    -g
-    -O0
-  )
-  if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
-  fi
-  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
-    debug_default_clang_flags=()
-  fi
-  printf '[DEBUG] mandatory clang args: ' >&2
-  printf '%q ' "${debug_mandatory_clang_flags[@]}" >&2
-  printf '\n' >&2
-  printf '[DEBUG] default clang args: ' >&2
-  printf '%q ' "${debug_default_clang_flags[@]}" >&2
-  printf '\n' >&2
-  printf '[DEBUG] effective clang args: ' >&2
-  printf '%q ' "${debug_mandatory_clang_flags[@]}" "${debug_default_clang_flags[@]}" "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}" >&2
-  printf '\n' >&2
 fi
 
 # --- debug output (post-normalization) ---
