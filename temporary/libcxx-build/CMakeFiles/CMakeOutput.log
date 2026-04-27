@@ -1,0 +1,33 @@
+The target system is: Linux -  - wasm32
+The host system is: Linux - 6.11.0 - x86_64
+Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+Compiler: /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/clang 
+Build flags: -pthread;-matomics;-mbulk-memory;-static;-nostdlib;-nodefaultlibs;-fno-exceptions;-fno-unwind-tables
+Id flags: -c;--target=wasm32-unknown-wasi 
+
+The output was:
+0
+
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
+
+The C compiler identification is Clang, found in "/home/lind/lind-wasm/libcxx-build/CMakeFiles/3.22.1/CompilerIdC/CMakeCCompilerId.o"
+
+Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+Compiler: /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/clang++ 
+Build flags: -frtti;-pthread;-matomics;-mbulk-memory;-static;-nostdlib;-nodefaultlibs;-fno-exceptions;-stdlib=libc++;-fno-unwind-tables
+Id flags: -c;--target=wasm32-unknown-wasi 
+
+The output was:
+0
+
+
+Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
+
+The CXX compiler identification is Clang, found in "/home/lind/lind-wasm/libcxx-build/CMakeFiles/3.22.1/CompilerIdCXX/CMakeCXXCompilerId.o"
+
+Checking whether the ASM compiler is Clang using "--version" matched "(clang version)":
+clang version 18.1.8
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin

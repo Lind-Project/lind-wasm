@@ -1,0 +1,31 @@
+libcxx/src/CMakeFiles/cxx_static.dir/new_helpers.cpp.o: \
+  /home/lind/lind-wasm/llvm-project/libcxx/src/new_helpers.cpp \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__verbose_abort \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__availability \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__config \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__config_site \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/new \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__assert \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__assertion_handler \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__exception/exception.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/is_function.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/integral_constant.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/is_const.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/is_reference.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/is_same.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/remove_cv.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/remove_const.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/remove_volatile.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/cstddef \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/enable_if.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/__type_traits/is_integral.h \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/version \
+  /home/lind/lind-wasm/libcxx-build/include/c++/v1/stddef.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/stddef.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/__stddef_ptrdiff_t.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/__stddef_size_t.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/__stddef_wchar_t.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/__stddef_null.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/__stddef_nullptr_t.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/__stddef_max_align_t.h \
+  /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/include/__stddef_offsetof.h
