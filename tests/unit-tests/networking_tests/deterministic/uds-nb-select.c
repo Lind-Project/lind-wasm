@@ -8,6 +8,24 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <errno.h>
+#include <stdarg.h>
+
+#define LOG_SIZE 4096
+
+static char client_log[LOG_SIZE];
+static char server_log[LOG_SIZE];
+
+static void append_log(char *logbuf, size_t logbuf_size, const char *fmt, ...)
+{
+    size_t len = strlen(logbuf);
+    if (len >= logbuf_size)
+        return;
+
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(logbuf + len, logbuf_size - len, fmt, ap);
+    va_end(ap);
+}
 
 pthread_barrier_t barrier;
 #define SERVER_PATH "unix_sock.server"
@@ -60,8 +78,7 @@ void *client(void *v)
         if (isTCPConnectInProgress == 0)
         {
             send(client_sock, hello, strlen(hello), 0);
-            printf("Client: Hello message sent\n");
-            fflush(stdout);
+            append_log(client_log, sizeof(client_log), "Client: Hello message sent\n");
         }
         // TCP connection is happening in the background; our event-loop calls select() to block until it is ready
         while (1)
@@ -83,20 +100,17 @@ void *client(void *v)
             {
                 if ((FD_ISSET(client_sock, &socketsToWatchForWriteReady)) && (isTCPConnectInProgress))
                 {
-                    printf("Socket is ready for write!  Let's find out if the connection succeeded or not...\n");
+                    append_log(client_log, sizeof(client_log), "Socket is ready for write!  Let's find out if the connection succeeded or not...\n");
                     struct sockaddr_un junk;
                     socklen_t length = sizeof(junk);
                     memset(&junk, 0, sizeof(junk));
                     if (getpeername(client_sock, (struct sockaddr *)&junk, &length) == 0)
                     {
-                        printf("TCP Connection succeeded, socket is ready for use!\n");
-                        fflush(stdout);
-
+                        append_log(client_log, sizeof(client_log), "TCP Connection succeeded, socket is ready for use!\n");
                         isTCPConnectInProgress = 0;
 
                         send(client_sock, hello, strlen(hello), 0);
-                        printf("Client: Hello message sent\n");
-                        fflush(stdout);
+                        append_log(client_log, sizeof(client_log), "Client: Hello message sent\n");
                     }
                     else
                     {
@@ -113,13 +127,12 @@ void *client(void *v)
                     if (numBytesReceived > 0)
                     {
                         buf[numBytesReceived] = '\0'; // ensure NUL-termination before we call printf()
-                        printf("Client: recv() returned %i:  [%s]\n", numBytesReceived, buf);
-                        fflush(stdout);
+                        append_log(client_log, sizeof(client_log), 
+                            "Client: recv() returned %i:  [%s]\n", numBytesReceived, buf);
                     }
                     else if (numBytesReceived == 0)
                     {
-                        printf("TCP Connection severed!\n");
-                        fflush(stdout);
+                        append_log(client_log, sizeof(client_log), "TCP Connection severed!\n");
 
                         break;
                     }
@@ -185,9 +198,9 @@ void *server(void *v)
         exit(EXIT_FAILURE);
     }
     valread = recv(new_socket, buffer, 1024, 0);
-    printf("%s\n", buffer);
+    append_log(server_log, sizeof(server_log), "%s\n", buffer);
     send(new_socket, hello, strlen(hello), 0);
-    printf("Server: Hello message sent\n");
+    append_log(server_log, sizeof(server_log), "Server: Hello message sent\n");
     close(new_socket);
     return NULL;
 }
@@ -200,5 +213,9 @@ int main()
     pthread_create(&clientthread, NULL, client, NULL);
     pthread_join(clientthread, NULL);
     pthread_join(serverthread, NULL);
+
+    printf("%s", client_log);
+    printf("%s", server_log);
+    fflush(stdout);
     return 0;
 }
