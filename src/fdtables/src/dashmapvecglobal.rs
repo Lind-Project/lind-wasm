@@ -369,7 +369,13 @@ pub fn empty_fds_for_exec(cageid: u64) {
 
     // Now, we can call the close handlers!
     for entry in closevec {
-        _decrement_fdcount(entry).map_err(|errno| errno as threei::RetVal)?;
+        match _decrement_fdcount(entry) {
+            Ok(()) => (),
+            Err(errno) => panic!(
+                "Error decrementing fd count for entry {:?} with error code {}",
+                entry, errno
+            ),
+        }
     }
 }
 
@@ -433,22 +439,19 @@ pub fn close_virtualfd(cageid: u64, virtfd: u64) -> Result<(), threei::RetVal> {
         "Unknown cageid in fdtable access"
     );
 
-    // cloning this so I don't hold a lock and deadlock close handlers
-    let mut myfdrow = FDTABLE.get_mut(&cageid).unwrap().clone();
+    let entry = {
+        let mut myfdrow = FDTABLE.get_mut(&cageid).unwrap();
 
-    if myfdrow[virtfd as usize].is_some() {
-        let entry = myfdrow[virtfd as usize];
+        match myfdrow[virtfd as usize].take() {
+            Some(entry) => entry,
+            None => return Err(threei::Errno::EBADFD as u64),
+        }
+    };
 
-        // Zero out this entry before calling the close handler...
-        myfdrow[virtfd as usize] = None;
+    // Drop fdtable lock before calling close handlers.
+    _decrement_fdcount(entry).map_err(|errno| errno as threei::RetVal)?;
 
-        FDTABLE.insert(cageid, myfdrow.clone());
-
-        // always _decrement last as it may call the user handler...
-        _decrement_fdcount(entry.unwrap()).map_err(|errno| errno as threei::RetVal)?;
-        return Ok(());
-    }
-    Err(threei::Errno::EBADFD as u64)
+    Ok(())
 }
 
 // Register a series of helpers to be called for close.  Can be called
