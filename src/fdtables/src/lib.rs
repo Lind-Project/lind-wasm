@@ -155,7 +155,7 @@ mod tests {
     // Import the symbols, etc. in this file...
     use super::*;
 
-    fn do_panic(_: FDTableEntry, _: u64) {
+    fn do_panic(_: FDTableEntry, _: u64) -> Result<(), i32> {
         panic!("do_panic!");
     }
 
@@ -594,13 +594,15 @@ mod tests {
     }
 
     // Helper for the close handler recursion tests...
-    fn _test_close_handler_recursion_helper(_: FDTableEntry, _: u64) {
+    fn _test_close_handler_recursion_helper(_: FDTableEntry, _: u64) -> Result<(), i32> {
         // reset helpers
         register_close_handlers(0, NULL_FUNC, NULL_FUNC);
 
         const FD: u64 = 57;
         let my_virt_fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 0, FD, false, 10).unwrap();
         close_virtualfd(threei::TESTING_CAGEID, my_virt_fd).unwrap();
+
+        Ok(())
     }
 
     #[test]
@@ -1482,7 +1484,9 @@ mod tests {
         // considered passing the test
         let fd1 = get_unused_virtual_fd(threei::TESTING_CAGEID, 1, 123, false, 100).unwrap_or(1);
 
-        fn myfunc(_: FDTableEntry, _: u64) {}
+        fn myfunc(_: FDTableEntry, _: u64) -> Result<(), i32> {
+            Ok(())
+        }
 
         register_close_handlers(0, myfunc, myfunc);
 
