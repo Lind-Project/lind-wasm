@@ -46,10 +46,6 @@ lindfs:
 		mkdir -p $(LINDFS_ROOT)/$$d; \
 	done
 	touch $(LINDFS_ROOT)/dev/null
-	@if [ -c /dev/urandom ]; then \
-		cp -a /dev/urandom $(LINDFS_ROOT)/dev/; \
-		cp -a /dev/random $(LINDFS_ROOT)/dev/; \
-	fi
 	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
 	cp -rT scripts/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
 	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
