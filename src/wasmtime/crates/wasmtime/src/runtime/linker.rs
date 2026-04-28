@@ -989,57 +989,77 @@ impl<T> Linker<T> {
         for (key, export, name) in exports {
             let export = match export {
                 Extern::Func(original_func) => {
-                    let func_ty = original_func.ty(&store);
+                    // Decide at link time whether to install an RPC wrapper or link directly.
+                    // The routing config is static (OnceLock), so this decision is stable for
+                    // the lifetime of the linker and need not be re-evaluated on every call.
                     #[cfg(feature = "remote-lib")]
-                    let func_ty_for_rpc = func_ty.clone();
-                    let wrapper = Func::new(&mut store, func_ty, move |mut caller, params, results| {
-                        // Use call_nested instead of call to avoid processing the on_called
-                        // asyncify callback (set by fork/exec/exit inside the library) at this
-                        // nested level. The callback must be handled by the outer
-                        // call_unchecked_raw loop that drives _start, not here. If we used
-                        // call() the inner loop would steal and execute the callback early,
-                        // resetting __asyncify_state to 0 before the caller's asyncify
-                        // instrumentation has saved its stack frame.
-                        #[cfg(feature = "remote-lib")]
-                        if let lind_remote_lib::RouteDecision::Remote { call_id, endpoint } =
-                            lind_remote_lib::get_route(&name)
-                        {
-                            let raw_args: Vec<u64> = params.iter().map(|v| match v {
-                                Val::I32(i) => *i as u64,
-                                Val::I64(i) => *i as u64,
-                                Val::F32(b) => *b as u64,
-                                Val::F64(b) => *b,
-                                _ => 0,
-                            }).collect();
+                    let result = match lind_remote_lib::get_route(&name) {
+                        lind_remote_lib::RouteDecision::Remote { call_id, endpoint } => {
+                            let func_ty = original_func.ty(&store);
+                            let func_ty_for_rpc = func_ty.clone();
+                            let call_id = *call_id;
+                            let endpoint = endpoint.clone();
+                            let wrapper = Func::new(&mut store, func_ty, move |mut caller, params, results| {
+                                // Scheduler decides at call time whether to dispatch remotely or
+                                // fall back to the local implementation. Currently always Remote.
+                                if lind_remote_lib::Scheduler::decide(&name)
+                                    == lind_remote_lib::SchedulerDecision::Local
+                                {
+                                    return original_func.call_nested(&mut caller, params, results);
+                                }
 
-                            // In the dylink setup modules import (not export) memory, so
-                            // get_export("memory") returns None. Use all_memories() on the
-                            // StoreOpaque to get the shared linear memory directly.
-                            let mem_base = {
-                                let mut it = caller.as_context_mut().0.all_memories();
-                                let m = it.next().ok_or_else(|| anyhow!("remote-lib: no linear memory for call to {name}"))?;
-                                drop(it);
-                                m.data_ptr(caller.as_context())
-                            };
-
-                            let result_u64 = lind_remote_lib::dispatch_remote_call(
-                                endpoint, *call_id, &name, &raw_args, mem_base,
-                            )?;
-
-                            for (slot, ty) in results.iter_mut().zip(func_ty_for_rpc.results()) {
-                                *slot = match ty {
-                                    ValType::I32 => Val::I32(result_u64 as i32),
-                                    ValType::I64 => Val::I64(result_u64 as i64),
-                                    ValType::F32 => Val::F32(result_u64 as u32),
-                                    ValType::F64 => Val::F64(result_u64),
-                                    other => return Err(anyhow!("unsupported result type for remote call: {other}")),
+                                let raw_args: Vec<u64> = params.iter().map(|v| match v {
+                                    Val::I32(i) => *i as u64,
+                                    Val::I64(i) => *i as u64,
+                                    Val::F32(b) => *b as u64,
+                                    Val::F64(b) => *b,
+                                    _ => 0,
+                                }).collect();
+                                // In the dylink setup modules import (not export) memory, so
+                                // get_export("memory") returns None. Use all_memories() on the
+                                // StoreOpaque to get the shared linear memory directly.
+                                let mem_base = {
+                                    let mut it = caller.as_context_mut().0.all_memories();
+                                    let m = it.next().ok_or_else(|| anyhow!("remote-lib: no linear memory for call to {name}"))?;
+                                    drop(it);
+                                    m.data_ptr(caller.as_context())
                                 };
-                            }
-                            return Ok(());
+                                let result_u64 = lind_remote_lib::dispatch_remote_call(
+                                    &endpoint, call_id, &name, &raw_args, mem_base,
+                                )?;
+                                for (slot, ty) in results.iter_mut().zip(func_ty_for_rpc.results()) {
+                                    *slot = match ty {
+                                        ValType::I32 => Val::I32(result_u64 as i32),
+                                        ValType::I64 => Val::I64(result_u64 as i64),
+                                        ValType::F32 => Val::F32(result_u64 as u32),
+                                        ValType::F64 => Val::F64(result_u64),
+                                        other => return Err(anyhow!("unsupported result type for remote call: {other}")),
+                                    };
+                                }
+                                Ok(())
+                            });
+                            Extern::Func(wrapper)
                         }
-                        original_func.call_nested(&mut caller, params, results)
-                    });
-                    Extern::Func(wrapper)
+                        lind_remote_lib::RouteDecision::Local => {
+                            // Link the original wasm function directly with zero wrapper overhead.
+                            // Wasm-to-wasm calls handle asyncify instrumentation without a host trampoline.
+                            Extern::Func(original_func)
+                        }
+                    };
+
+                    // Without the remote-lib feature: always wrap with call_nested to ensure
+                    // asyncify callbacks from fork/exec/exit inside the library are deferred to
+                    // the outer call_unchecked_raw loop that drives _start, not processed here.
+                    #[cfg(not(feature = "remote-lib"))]
+                    let result = {
+                        let func_ty = original_func.ty(&store);
+                        let wrapper = Func::new(&mut store, func_ty, move |mut caller, params, results| {
+                            original_func.call_nested(&mut caller, params, results)
+                        });
+                        Extern::Func(wrapper)
+                    };
+
+                    result
                 }
                 other => other,
             };

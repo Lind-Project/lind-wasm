@@ -5,6 +5,9 @@
 //!   send RPC calls to a remote server
 //! - `lind-remote-server` to read requests from the wire and send responses back
 
+pub mod scheduler;
+pub use scheduler::{Scheduler, SchedulerDecision};
+
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
@@ -199,7 +202,9 @@ fn build_routing_state() -> RoutingState {
 pub fn get_route(symbol: &str) -> &'static RouteDecision {
     let state = ROUTING_STATE.get_or_init(build_routing_state);
     let decision = state.route_table.get(symbol).unwrap_or(&state.default_decision);
-    println!("[debug] routing decision for {}: {:?}", symbol, decision);
+    if let RouteDecision::Remote { call_id, endpoint } = decision {
+        println!("[debug] routing decision for {}: {:?}", symbol, decision);
+    }
     decision
 }
 
