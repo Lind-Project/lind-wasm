@@ -1,0 +1,16 @@
+{
+  "library":  "CUSTOM_HANDLERS_SO_PATH",
+  "endpoint": "unix:///home/lind/lind-wasm/lindfs/tmp/strcpy_test.sock",
+  "functions": [
+    {
+      "call_id":  1,
+      "symbol":   "custom_strcpy",
+      "num_args": 2,
+      "ret":      "i64",
+      "args": [
+        { "type": "ptr", "direction": "out" },
+        { "type": "ptr", "direction": "in"  }
+      ]
+    }
+  ]
+}

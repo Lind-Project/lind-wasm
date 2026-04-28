@@ -1,0 +1,19 @@
+{
+  "default_route": "local",
+  "remotes": {
+    "ptr_server": { "endpoint": "unix:///tmp/ptr_test.sock" }
+  },
+  "routes": [
+    {
+      "symbol":  "write",
+      "route":   "remote",
+      "remote":  "ptr_server",
+      "call_id": 1,
+      "args": [
+        { "type": "scalar" },
+        { "type": "ptr", "direction": "in", "size_arg": 2 },
+        { "type": "scalar" }
+      ]
+    }
+  ]
+}

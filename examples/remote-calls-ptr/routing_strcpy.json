@@ -1,0 +1,18 @@
+{
+  "default_route": "local",
+  "remotes": {
+    "ptr_server": { "endpoint": "unix:///tmp/strcpy_test.sock" }
+  },
+  "routes": [
+    {
+      "symbol":  "strcpy",
+      "route":   "remote",
+      "remote":  "ptr_server",
+      "call_id": 1,
+      "args": [
+        { "type": "ptr", "direction": "out", "same_as_arg": 1 },
+        { "type": "ptr", "direction": "in",  "null_terminated": true }
+      ]
+    }
+  ]
+}
