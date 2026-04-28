@@ -944,6 +944,8 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module_name: &str,
         instance: Instance,
+        // The cage that owns this linker. None means apply global routes only.
+        cage_id: Option<u64>,
     ) -> Result<&mut Self> {
         let mut store = store.as_context_mut();
         let exports = instance
@@ -993,7 +995,7 @@ impl<T> Linker<T> {
                     // The routing config is static (OnceLock), so this decision is stable for
                     // the lifetime of the linker and need not be re-evaluated on every call.
                     #[cfg(feature = "remote-lib")]
-                    let result = match lind_remote_lib::get_route(&name) {
+                    let result = match lind_remote_lib::get_route(&name, cage_id) {
                         lind_remote_lib::RouteDecision::Remote { call_id, endpoint } => {
                             let func_ty = original_func.ty(&store);
                             let func_ty_for_rpc = func_ty.clone();
@@ -1351,7 +1353,7 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                self.instance_dylink(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance, Some(cageid))
             }
         }
     }
@@ -1447,7 +1449,7 @@ impl<T> Linker<T> {
                     }
                 }
 
-                self.instance_dylink(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance, Some(cageid))
             }
         }
     }
@@ -1628,7 +1630,7 @@ impl<T> Linker<T> {
 
                 if !is_local {
                     // only attach library symbol to Linker if it is global scope
-                    self.instance_dylink(store, module_name, instance);
+                    let _ = self.instance_dylink(store, module_name, instance, Some(cageid));
                 }
 
                 Ok(handler)

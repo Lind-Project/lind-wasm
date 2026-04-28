@@ -96,6 +96,9 @@ struct RouteEntryConfig {
     call_id: Option<u32>,
     #[serde(default)]
     args: Vec<ArgSpecConfig>,
+    /// If present, this route applies only to the specified cage.
+    /// If absent, the route applies globally to all cages.
+    cageid: Option<u64>,
 }
 
 // ---- Resolved routing decisions ----
@@ -108,7 +111,11 @@ pub enum RouteDecision {
 
 struct RoutingState {
     default_decision: RouteDecision,
+    /// Global routes — apply to all cages unless overridden by a per-cage entry.
     route_table: HashMap<String, RouteDecision>,
+    /// Per-cage routes — keyed by cage_id, then symbol. Takes priority over global routes.
+    per_cage_route_table: HashMap<u64, HashMap<String, RouteDecision>>,
+    /// Argument metadata — describes pointer types/directions; always global (ABI doesn't vary by cage).
     meta_table: HashMap<String, FunctionMeta>,
 }
 
@@ -118,6 +125,7 @@ fn build_routing_state() -> RoutingState {
     let empty = || RoutingState {
         default_decision: RouteDecision::Local,
         route_table: HashMap::new(),
+        per_cage_route_table: HashMap::new(),
         meta_table: HashMap::new(),
     };
 
@@ -143,6 +151,7 @@ fn build_routing_state() -> RoutingState {
     let _ = &file.default_route; // only "local" default supported for now
 
     let mut route_table = HashMap::new();
+    let mut per_cage_route_table: HashMap<u64, HashMap<String, RouteDecision>> = HashMap::new();
     let mut meta_table = HashMap::new();
 
     for entry in file.routes {
@@ -187,23 +196,44 @@ fn build_routing_state() -> RoutingState {
             meta_table.insert(entry.symbol.clone(), FunctionMeta { args: specs });
         }
 
-        route_table.insert(entry.symbol, decision);
+        if let Some(cage_id) = entry.cageid {
+            per_cage_route_table
+                .entry(cage_id)
+                .or_default()
+                .insert(entry.symbol, decision);
+        } else {
+            route_table.insert(entry.symbol, decision);
+        }
     }
 
     RoutingState {
         default_decision: RouteDecision::Local,
         route_table,
+        per_cage_route_table,
         meta_table,
     }
 }
 
-/// Look up the routing decision for `symbol`. Returns `Local` if no config
-/// was loaded or the symbol has no explicit route.
-pub fn get_route(symbol: &str) -> &'static RouteDecision {
+/// Look up the routing decision for `symbol`.
+///
+/// If `cage_id` is `Some(id)`, per-cage routes for that cage are checked first.
+/// If no per-cage route matches, the global route table is consulted.
+/// Returns `Local` if no config was loaded or the symbol has no matching route.
+pub fn get_route(symbol: &str, cage_id: Option<u64>) -> &'static RouteDecision {
     let state = ROUTING_STATE.get_or_init(build_routing_state);
+    if let Some(id) = cage_id {
+        if let Some(cage_routes) = state.per_cage_route_table.get(&id) {
+            if let Some(decision) = cage_routes.get(symbol) {
+                if let RouteDecision::Remote { call_id, endpoint } = decision {
+                    println!("[debug] cage: {:?} routing decision for {} (cage {}): {:?}", cage_id, symbol, id, decision);
+                }
+                return decision;
+            }
+        }
+    }
     let decision = state.route_table.get(symbol).unwrap_or(&state.default_decision);
     if let RouteDecision::Remote { call_id, endpoint } = decision {
-        println!("[debug] routing decision for {}: {:?}", symbol, decision);
+        println!("[debug] cage: {:?} routing decision for {} (global): {:?}", cage_id, symbol, decision);
     }
     decision
 }
