@@ -1004,145 +1004,27 @@ impl<T> Linker<T> {
                         if let lind_remote_lib::RouteDecision::Remote { call_id, endpoint } =
                             lind_remote_lib::get_route(&name)
                         {
-                            let result_u64 = if let Some(meta) = lind_remote_lib::get_meta(&name) {
-                                // Pointer-aware path: read In/InOut buffers from WASM memory,
-                                // send extended request, write Out/InOut results back.
-                                let mut scalar_args: Vec<u64> = params.iter().map(|v| match v {
-                                    Val::I32(i) => *i as u64,
-                                    Val::I64(i) => *i as u64,
-                                    Val::F32(b) => *b as u64,
-                                    Val::F64(b) => *b,
-                                    _ => 0,
-                                }).collect();
+                            let raw_args: Vec<u64> = params.iter().map(|v| match v {
+                                Val::I32(i) => *i as u64,
+                                Val::I64(i) => *i as u64,
+                                Val::F32(b) => *b as u64,
+                                Val::F64(b) => *b,
+                                _ => 0,
+                            }).collect();
 
-                                // In the dylink setup modules import (not export) memory, so
-                                // get_export("memory") returns None. Use all_memories() on the
-                                // StoreOpaque to get the shared linear memory directly.
-                                let memory = {
-                                    let mut it = caller.as_context_mut().0.all_memories();
-                                    let m = it.next().ok_or_else(|| anyhow!("remote-lib: no linear memory for ptr call to {name}"))?;
-                                    drop(it);
-                                    m
-                                };
-
-                                // Collect (param_index, direction, wasm_ptr, size) for each Ptr
-                                // arg. Two passes: first resolve Arg/NullTerminated sizes, then
-                                // SameAsPtrArg which references another arg's computed size.
-                                let ptr_infos: Vec<(usize, lind_remote_lib::Direction, usize, usize)> = {
-                                    let mem = memory.data(caller.as_context());
-                                    let mut resolved: Vec<Option<usize>> = vec![None; meta.args.len()];
-                                    for (i, spec) in meta.args.iter().enumerate() {
-                                        if let lind_remote_lib::ArgSpec::Ptr { size, .. } = spec {
-                                            let wasm_ptr = match params.get(i) {
-                                                Some(Val::I32(p)) => *p as usize,
-                                                _ => 0,
-                                            };
-                                            let byte_len = match size {
-                                                lind_remote_lib::PtrSizeSpec::Arg(size_arg) => {
-                                                    match params.get(*size_arg) {
-                                                        Some(Val::I32(s)) => *s as usize,
-                                                        Some(Val::I64(s)) => *s as usize,
-                                                        _ => 0,
-                                                    }
-                                                }
-                                                lind_remote_lib::PtrSizeSpec::NullTerminated => {
-                                                    const MAX_SCAN: usize = 4096;
-                                                    let limit = (wasm_ptr + MAX_SCAN).min(mem.len());
-                                                    mem[wasm_ptr..limit]
-                                                        .iter()
-                                                        .position(|&b| b == 0)
-                                                        .map(|p| p + 1)
-                                                        .unwrap_or(limit - wasm_ptr)
-                                                }
-                                                lind_remote_lib::PtrSizeSpec::SameAsPtrArg(_) => continue,
-                                            };
-                                            resolved[i] = Some(byte_len);
-                                        }
-                                    }
-                                    for (i, spec) in meta.args.iter().enumerate() {
-                                        if let lind_remote_lib::ArgSpec::Ptr {
-                                            size: lind_remote_lib::PtrSizeSpec::SameAsPtrArg(j),
-                                            ..
-                                        } = spec
-                                        {
-                                            resolved[i] = resolved.get(*j).copied().flatten();
-                                        }
-                                    }
-                                    meta.args.iter().enumerate().filter_map(|(i, spec)| {
-                                        if let lind_remote_lib::ArgSpec::Ptr { direction, .. } = spec {
-                                            let wasm_ptr = match params.get(i) {
-                                                Some(Val::I32(p)) => *p as usize,
-                                                _ => 0,
-                                            };
-                                            let byte_len = resolved[i].unwrap_or(0);
-                                            scalar_args[i] = 0;
-                                            Some((i, direction.clone(), wasm_ptr, byte_len))
-                                        } else {
-                                            None
-                                        }
-                                    }).collect()
-                                };
-                                // mem borrow released here.
-
-                                // Read In/InOut buffer contents from WASM linear memory.
-                                let ptr_bufs: Vec<lind_remote_lib::PtrBuf> = {
-                                    let mem = memory.data(caller.as_context());
-                                    ptr_infos.iter().map(|(_, dir, wasm_ptr, size)| {
-                                        let data = if *dir != lind_remote_lib::Direction::Out {
-                                            let end = wasm_ptr + size;
-                                            if end <= mem.len() {
-                                                mem[*wasm_ptr..end].to_vec()
-                                            } else {
-                                                vec![0u8; *size]
-                                            }
-                                        } else {
-                                            Vec::new()
-                                        };
-                                        lind_remote_lib::PtrBuf {
-                                            direction: dir.clone(),
-                                            alloc_size: *size as u32,
-                                            data,
-                                        }
-                                    }).collect()
-                                };
-                                // mem borrow released here.
-
-                                let (res, _errno, out_bufs) = lind_remote_lib::rpc_call_with_ptrs(
-                                    endpoint, *call_id, &scalar_args, &ptr_bufs,
-                                )?;
-
-                                // Write Out/InOut results back into WASM linear memory.
-                                let mut out_idx = 0;
-                                {
-                                    let mem = memory.data_mut(caller.as_context_mut());
-                                    for (_, dir, wasm_ptr, _) in &ptr_infos {
-                                        if *dir == lind_remote_lib::Direction::Out
-                                            || *dir == lind_remote_lib::Direction::InOut
-                                        {
-                                            if let Some(buf) = out_bufs.get(out_idx) {
-                                                let end = wasm_ptr + buf.len();
-                                                if end <= mem.len() {
-                                                    mem[*wasm_ptr..end].copy_from_slice(buf);
-                                                }
-                                                out_idx += 1;
-                                            }
-                                        }
-                                    }
-                                }
-                                res
-                            } else {
-                                // Scalar-only path.
-                                let args: Vec<u64> = params.iter().map(|v| match v {
-                                    Val::I32(i) => *i as u64,
-                                    Val::I64(i) => *i as u64,
-                                    Val::F32(b) => *b as u64,
-                                    Val::F64(b) => *b,
-                                    _ => 0,
-                                }).collect();
-                                let (res, _errno) =
-                                    lind_remote_lib::rpc_call(endpoint, *call_id, &args)?;
-                                res
+                            // In the dylink setup modules import (not export) memory, so
+                            // get_export("memory") returns None. Use all_memories() on the
+                            // StoreOpaque to get the shared linear memory directly.
+                            let mem_base = {
+                                let mut it = caller.as_context_mut().0.all_memories();
+                                let m = it.next().ok_or_else(|| anyhow!("remote-lib: no linear memory for call to {name}"))?;
+                                drop(it);
+                                m.data_ptr(caller.as_context())
                             };
+
+                            let result_u64 = lind_remote_lib::dispatch_remote_call(
+                                endpoint, *call_id, &name, &raw_args, mem_base,
+                            )?;
 
                             for (slot, ty) in results.iter_mut().zip(func_ty_for_rpc.results()) {
                                 *slot = match ty {

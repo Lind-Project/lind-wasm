@@ -425,6 +425,127 @@ pub fn read_ptr_sections(
     Ok(ptr_bufs)
 }
 
+// ---- Client-side dispatch ----
+
+/// Dispatch a remote call, handling pointer argument marshaling directly via WASM linear memory.
+///
+/// Steps:
+///   1. If `meta` is present, resolve pointer sizes, read In/InOut buffers from memory, zero
+///      out pointer positions in the scalar args, send an extended RPC, and write Out/InOut
+///      results back into memory.
+///   2. If `meta` is absent, send a plain scalar RPC.
+///
+/// Returns the u64 return value of the remote call.
+///
+/// # Safety
+/// `mem_base` must point to the base of a valid WASM linear memory region.  In lind, linear
+/// memory is always 4 GB, so no explicit length guard is applied here.  The caller must ensure
+/// that all pointer arguments in `raw_args` are valid offsets within that region and that no
+/// other thread is concurrently mutating the same memory locations.
+pub fn dispatch_remote_call(
+    endpoint: &str,
+    call_id: u32,
+    symbol: &str,
+    raw_args: &[u64],
+    mem_base: *mut u8,
+) -> Result<u64> {
+    if let Some(meta) = get_meta(symbol) {
+        let mut scalar_args = raw_args.to_vec();
+
+        // First pass: resolve Arg(j) and NullTerminated sizes.
+        let mut resolved: Vec<Option<usize>> = vec![None; meta.args.len()];
+        for (i, spec) in meta.args.iter().enumerate() {
+            if let ArgSpec::Ptr { size, .. } = spec {
+                let wasm_ptr = raw_args.get(i).copied().unwrap() as usize;
+                let byte_len = match size {
+                    PtrSizeSpec::Arg(size_arg) => {
+                        raw_args.get(*size_arg).copied().unwrap() as usize
+                    }
+                    PtrSizeSpec::NullTerminated => {
+                        const MAX_SCAN: usize = 4096;
+                        // SAFETY: mem_base is the base of 4 GB WASM linear memory; wasm_ptr is
+                        // a guest offset so mem_base+wasm_ptr+MAX_SCAN is within that region.
+                        let slice = unsafe {
+                            std::slice::from_raw_parts(mem_base.add(wasm_ptr), MAX_SCAN)
+                        };
+                        slice.iter().position(|&b| b == 0).map(|p| p + 1).unwrap_or(MAX_SCAN)
+                    }
+                    PtrSizeSpec::SameAsPtrArg(_) => continue,
+                };
+                resolved[i] = Some(byte_len);
+            }
+        }
+        // Second pass: SameAsPtrArg references a size already resolved above.
+        for (i, spec) in meta.args.iter().enumerate() {
+            if let ArgSpec::Ptr { size: PtrSizeSpec::SameAsPtrArg(j), .. } = spec {
+                resolved[i] = resolved.get(*j).copied().flatten();
+            }
+        }
+
+        // Collect (param_index, direction, wasm_ptr, size) and zero out pointer positions.
+        let ptr_infos: Vec<(usize, Direction, usize, usize)> = meta
+            .args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, spec)| {
+                if let ArgSpec::Ptr { direction, .. } = spec {
+                    let wasm_ptr = raw_args.get(i).copied().unwrap() as usize;
+                    let byte_len = resolved[i].unwrap();
+                    scalar_args[i] = 0;
+                    Some((i, direction.clone(), wasm_ptr, byte_len))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Read In/InOut buffer contents from WASM linear memory.
+        let ptr_bufs: Vec<PtrBuf> = ptr_infos
+            .iter()
+            .map(|(_, dir, wasm_ptr, size)| {
+                let data = if *dir != Direction::Out {
+                    // SAFETY: mem_base is the base of 4 GB WASM linear memory; wasm_ptr and
+                    // size come from guest arguments that fit within that region.
+                    unsafe {
+                        std::slice::from_raw_parts(mem_base.add(*wasm_ptr), *size).to_vec()
+                    }
+                } else {
+                    Vec::new()
+                };
+                PtrBuf { direction: dir.clone(), alloc_size: *size as u32, data }
+            })
+            .collect();
+
+        let (res, _errno, out_bufs) =
+            rpc_call_with_ptrs(endpoint, call_id, &scalar_args, &ptr_bufs)?;
+
+        // Write Out/InOut results back into WASM linear memory.
+        let mut out_idx = 0;
+        for (_, dir, wasm_ptr, _) in &ptr_infos {
+            if *dir == Direction::Out || *dir == Direction::InOut {
+                if let Some(buf) = out_bufs.get(out_idx) {
+                    // SAFETY: mem_base is the base of 4 GB WASM linear memory; wasm_ptr is a
+                    // guest offset and buf.len() is the size returned by the remote server for
+                    // the same allocation, so the write stays within the linear memory region.
+                    unsafe {
+                        let dst = std::slice::from_raw_parts_mut(
+                            mem_base.add(*wasm_ptr),
+                            buf.len(),
+                        );
+                        dst.copy_from_slice(buf);
+                    }
+                    out_idx += 1;
+                }
+            }
+        }
+
+        Ok(res)
+    } else {
+        let (res, _errno) = rpc_call(endpoint, call_id, raw_args)?;
+        Ok(res)
+    }
+}
+
 /// Server: write an extended response with output pointer sections.
 pub fn write_response_with_ptrs(
     stream: &mut UnixStream,
