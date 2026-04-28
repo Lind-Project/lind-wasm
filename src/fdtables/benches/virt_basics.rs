@@ -20,9 +20,11 @@ pub fn run_benchmark(c: &mut Criterion) {
     // Shorten the warm up time as well from 3s to this...
     group.warm_up_time(Duration::from_secs(1));
 
-    let fd1 = get_unused_virtual_fd(threei::TESTING_CAGEID, 10, true, 100).unwrap();
-    let fd2 = get_unused_virtual_fd(threei::TESTING_CAGEID, 20, true, 1).unwrap();
-    let fd3 = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, true, 10).unwrap();
+    refresh();
+
+    let fd1 = get_unused_virtual_fd(threei::TESTING_CAGEID, 10, 10, true, 100).unwrap();
+    let fd2 = get_unused_virtual_fd(threei::TESTING_CAGEID, 20, 20, true, 1).unwrap();
+    let fd3 = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, true, 10).unwrap();
 
     // I'm going to insert three items, then do 10000 queries, then clean up...
     group.bench_function(format!("{}/st: trans (10K)", ALGONAME), |b| {
@@ -48,7 +50,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     group.bench_function(format!("{}/st: getvirt (1K)", ALGONAME), |b| {
         b.iter(|| {
             for _ in 0..1000 {
-                _ = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, true, 10).unwrap();
+                _ = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, true, 10).unwrap();
             }
             // unfortunately, we need to clean up, or else we will
             // get an exception due to the table being full...
@@ -56,25 +58,27 @@ pub fn run_benchmark(c: &mut Criterion) {
         })
     });
 
-    // Check get_optionalinfo...
-    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, true, 10).unwrap();
+    // Check perfdinfo via translate_virtual_fd...
+    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, true, 10).unwrap();
     group.bench_function(format!("{}/st: get_opt (10K)", ALGONAME), |b| {
         b.iter(|| {
             for _ in 0..10000 {
-                _ = get_optionalinfo(threei::TESTING_CAGEID, fd).unwrap();
+                _ = translate_virtual_fd(threei::TESTING_CAGEID, fd)
+                    .unwrap()
+                    .perfdinfo;
             }
         })
     });
 
     refresh();
 
-    // flip the set_optionalinfo data...
-    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, true, 10).unwrap();
+    // flip the set_perfdinfo data...
+    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, true, 10).unwrap();
     group.bench_function(format!("{}/st: set_opt (10K)", ALGONAME), |b| {
         b.iter(|| {
             for _ in 0..5000 {
-                _ = set_optionalinfo(threei::TESTING_CAGEID, fd, 100).unwrap();
-                _ = set_optionalinfo(threei::TESTING_CAGEID, fd, 200).unwrap();
+                _ = set_perfdinfo(threei::TESTING_CAGEID, fd, 100).unwrap();
+                _ = set_perfdinfo(threei::TESTING_CAGEID, fd, 200).unwrap();
             }
         })
     });
@@ -88,7 +92,7 @@ pub fn run_benchmark(c: &mut Criterion) {
     for fdcount in [1, 4, 16, 64, 256, 1024].iter() {
         // Setup the fds up front, outside of the benchmark...
         for _ in 0..*fdcount {
-            let _fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, false, 10).unwrap();
+            let _fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, false, 10).unwrap();
         }
         let mut cagenumtouse = 1;
         group.bench_with_input(
@@ -128,8 +132,9 @@ pub fn run_benchmark(c: &mut Criterion) {
                         // only want to check the empty_fds_for_exec() call
                         // time...
                         for _ in 0..*fdcount {
-                            let _fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, false, 10)
-                                .unwrap();
+                            let _fd =
+                                get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, false, 10)
+                                    .unwrap();
                         }
                         remove_cage_from_fdtable(threei::TESTING_CAGEID);
                         // need to re-add the cage...
@@ -156,8 +161,9 @@ pub fn run_benchmark(c: &mut Criterion) {
                         // only want to check the empty_fds_for_exec() call
                         // time...
                         for _ in 0..*fdcount {
-                            let _fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, false, 10)
-                                .unwrap(); // Notice the false here!
+                            let _fd =
+                                get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, false, 10)
+                                    .unwrap(); // Notice the false here!
                         }
                         empty_fds_for_exec(threei::TESTING_CAGEID);
                         refresh();
@@ -183,8 +189,9 @@ pub fn run_benchmark(c: &mut Criterion) {
                         // only want to check the empty_fds_for_exec() call
                         // time...
                         for _ in 0..*fdcount {
-                            let _fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, true, 10)
-                                .unwrap(); // Notice the true here!
+                            let _fd =
+                                get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, true, 10)
+                                    .unwrap(); // Notice the true here!
                         }
                         empty_fds_for_exec(threei::TESTING_CAGEID);
                         //refresh(); <- Don't need this because the prior
@@ -200,9 +207,9 @@ pub fn run_benchmark(c: &mut Criterion) {
 
     // -- Multithreaded benchmark 1: 100K translate calls --
 
-    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 10, true, 100).unwrap();
-    let fd2 = get_unused_virtual_fd(threei::TESTING_CAGEID, 20, true, 200).unwrap();
-    let fd3 = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, true, 300).unwrap();
+    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 10, 10, true, 100).unwrap();
+    let fd2 = get_unused_virtual_fd(threei::TESTING_CAGEID, 20, 20, true, 200).unwrap();
+    let fd3 = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, true, 300).unwrap();
 
     for threadcount in [1, 2, 4, 8, 16].iter() {
         group.bench_with_input(
@@ -272,6 +279,7 @@ pub fn run_benchmark(c: &mut Criterion) {
                                     let fd = get_unused_virtual_fd(
                                         threei::TESTING_CAGEID,
                                         10,
+                                        10,
                                         true,
                                         100,
                                     )
@@ -316,6 +324,7 @@ pub fn run_benchmark(c: &mut Criterion) {
                                     let fd = get_unused_virtual_fd(
                                         threei::TESTING_CAGEID,
                                         10,
+                                        10,
                                         true,
                                         100,
                                     )
@@ -337,9 +346,9 @@ pub fn run_benchmark(c: &mut Criterion) {
 
     // -- Multithreaded benchmark 1: 100K translate calls --
 
-    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 10, true, 100).unwrap();
-    let fd2 = get_unused_virtual_fd(threei::TESTING_CAGEID, 20, true, 200).unwrap();
-    let fd3 = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, true, 300).unwrap();
+    let fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 10, 10, true, 100).unwrap();
+    let fd2 = get_unused_virtual_fd(threei::TESTING_CAGEID, 20, 20, true, 200).unwrap();
+    let fd3 = get_unused_virtual_fd(threei::TESTING_CAGEID, 30, 30, true, 300).unwrap();
     for val in 1..16 {
         // I'm just going to assume I can increment these...
         copy_fdtable_for_cage(threei::TESTING_CAGEID, threei::TESTING_CAGEID + val).unwrap();
@@ -433,6 +442,7 @@ pub fn run_benchmark(c: &mut Criterion) {
                                     let fd = get_unused_virtual_fd(
                                         threei::TESTING_CAGEID + numthreads,
                                         10,
+                                        10,
                                         true,
                                         100,
                                     )
@@ -485,6 +495,7 @@ pub fn run_benchmark(c: &mut Criterion) {
                                 for _ in 0..10000 / thisthreadcount {
                                     let fd = get_unused_virtual_fd(
                                         threei::TESTING_CAGEID,
+                                        10,
                                         10,
                                         true,
                                         100,

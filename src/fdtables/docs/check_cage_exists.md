@@ -5,10 +5,10 @@ This is both an internal and exported helper function that checks whether a part
 Internally, this is helpful for runtime assertions, externally it's helpful when modules have more complicated `fork/exec` setups, such as the IMFS interposing on these syscalls.
 
 # Inputs
-    `cageid: u64`   The cageid being checked.
+The cageid being checked.
 
 # Returns
-    `bool`: `true` if `cageid` is registered, `false` if not.
+Returns true if cageid is registered, false if not.
 
 
 # Example
