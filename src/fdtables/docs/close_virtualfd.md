@@ -18,8 +18,8 @@ is appropriate given the status of the underlying realfd.  See
 # const underfd:u64 = 209;
 # const fdkind:u32 = 0;
 # const VIRTFD:u64= 345;
-fn one(_:FDTableEntry,_:u64) { }
-fn two(_:FDTableEntry,_:u64) { }
+fn one(_:FDTableEntry,_:u64) -> Result<(), i32> { Ok(()) }
+fn two(_:FDTableEntry,_:u64) -> Result<(), i32> { Ok(()) }
 register_close_handlers(fdkind, one, two);
 let my_virt_fd = get_unused_virtual_fd(cage_id, fdkind, underfd, false, 10).unwrap();
 // dup2 call made for fd 15...
