@@ -10,6 +10,7 @@ pub use scheduler::{Scheduler, SchedulerDecision};
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::os::unix::net::UnixStream;
 use std::sync::OnceLock;
 
@@ -264,8 +265,59 @@ pub fn get_meta(symbol: &str) -> Option<&'static FunctionMeta> {
 //     [size: u32][data: size bytes]
 //   ]
 
-fn parse_unix_path(endpoint: &str) -> Option<&str> {
-    endpoint.strip_prefix("unix://")
+// ---- Transport abstraction ----
+//
+// Supported endpoint schemes:
+//   unix://<path>      — Unix domain socket (same machine only)
+//   tcp://<host:port>  — TCP socket (local or remote machine)
+
+enum Transport {
+    Unix(UnixStream),
+    Tcp(TcpStream),
+}
+
+impl Read for Transport {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Transport::Unix(s) => s.read(buf),
+            Transport::Tcp(s) => s.read(buf),
+        }
+    }
+}
+
+impl Write for Transport {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Transport::Unix(s) => s.write(buf),
+            Transport::Tcp(s) => s.write(buf),
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Transport::Unix(s) => s.flush(),
+            Transport::Tcp(s) => s.flush(),
+        }
+    }
+}
+
+/// Open a connection to `endpoint`.
+///
+/// Accepts `unix://<path>` and `tcp://<host:port>`.
+fn connect(endpoint: &str) -> Result<Transport> {
+    if let Some(path) = endpoint.strip_prefix("unix://") {
+        let stream = UnixStream::connect(path)
+            .map_err(|e| anyhow!("remote-lib: connect to {path}: {e}"))?;
+        Ok(Transport::Unix(stream))
+    } else if let Some(addr) = endpoint.strip_prefix("tcp://") {
+        let stream = TcpStream::connect(addr)
+            .map_err(|e| anyhow!("remote-lib: connect to {addr}: {e}"))?;
+        // Disable Nagle: the protocol is strictly request-response, so we want
+        // each write to be sent immediately without waiting to coalesce packets.
+        stream.set_nodelay(true).ok();
+        Ok(Transport::Tcp(stream))
+    } else {
+        Err(anyhow!("remote-lib: invalid endpoint scheme in '{endpoint}' (expected unix:// or tcp://)"))
+    }
 }
 
 // ---- Scalar API (backward-compatible) ----
@@ -273,11 +325,7 @@ fn parse_unix_path(endpoint: &str) -> Option<&str> {
 /// Client: open a connection to `endpoint`, send `(call_id, args)`,
 /// and return `(result_u64, errno)`.
 pub fn rpc_call(endpoint: &str, call_id: u32, args: &[u64]) -> Result<(u64, i32)> {
-    let path = parse_unix_path(endpoint)
-        .ok_or_else(|| anyhow!("invalid remote endpoint: {endpoint}"))?;
-
-    let mut stream = UnixStream::connect(path)
-        .map_err(|e| anyhow!("remote-lib: connect to {path}: {e}"))?;
+    let mut stream = connect(endpoint)?;
 
     stream.write_all(&call_id.to_le_bytes())?;
     stream.write_all(&(args.len() as u32).to_le_bytes())?;
@@ -299,7 +347,7 @@ pub fn rpc_call(endpoint: &str, call_id: u32, args: &[u64]) -> Result<(u64, i32)
 
 /// Server: read one scalar request from an accepted stream.
 /// Returns `(call_id, args)`.
-pub fn read_request(stream: &mut UnixStream) -> Result<(u32, Vec<u64>)> {
+pub fn read_request<S: Read>(stream: &mut S) -> Result<(u32, Vec<u64>)> {
     let mut buf4 = [0u8; 4];
 
     stream.read_exact(&mut buf4)?;
@@ -319,7 +367,7 @@ pub fn read_request(stream: &mut UnixStream) -> Result<(u32, Vec<u64>)> {
 }
 
 /// Server: write `(result, errno)` back to the caller.
-pub fn write_response(stream: &mut UnixStream, result: u64, errno: i32) -> Result<()> {
+pub fn write_response<S: Write>(stream: &mut S, result: u64, errno: i32) -> Result<()> {
     stream.write_all(&result.to_le_bytes())?;
     stream.write_all(&errno.to_le_bytes())?;
     stream.flush()?;
@@ -350,11 +398,7 @@ pub fn rpc_call_with_ptrs(
     args: &[u64],
     ptr_bufs: &[PtrBuf],
 ) -> Result<(u64, i32, Vec<Vec<u8>>)> {
-    let path = parse_unix_path(endpoint)
-        .ok_or_else(|| anyhow!("invalid remote endpoint: {endpoint}"))?;
-
-    let mut stream = UnixStream::connect(path)
-        .map_err(|e| anyhow!("remote-lib: connect to {path}: {e}"))?;
+    let mut stream = connect(endpoint)?;
 
     // Scalar header
     stream.write_all(&call_id.to_le_bytes())?;
@@ -397,7 +441,7 @@ pub fn rpc_call_with_ptrs(
 
 /// Server: read the call_id from a stream without consuming the rest.
 /// Used to dispatch before reading args.
-pub fn read_call_id(stream: &mut UnixStream) -> Result<u32> {
+pub fn read_call_id<S: Read>(stream: &mut S) -> Result<u32> {
     let mut buf4 = [0u8; 4];
     stream.read_exact(&mut buf4)?;
     Ok(u32::from_le_bytes(buf4))
@@ -405,7 +449,7 @@ pub fn read_call_id(stream: &mut UnixStream) -> Result<u32> {
 
 /// Server: read scalar args (num_args + args) from a stream.
 /// Call after `read_call_id`.
-pub fn read_scalar_args(stream: &mut UnixStream) -> Result<Vec<u64>> {
+pub fn read_scalar_args<S: Read>(stream: &mut S) -> Result<Vec<u64>> {
     let mut buf4 = [0u8; 4];
     stream.read_exact(&mut buf4)?;
     let num_args = u32::from_le_bytes(buf4) as usize;
@@ -430,8 +474,8 @@ pub struct ReceivedPtrBuf {
 /// Server: read the ptr section from a stream after scalar args have been read.
 ///
 /// `ptr_directions` must list the direction of each `Ptr` arg in declaration order.
-pub fn read_ptr_sections(
-    stream: &mut UnixStream,
+pub fn read_ptr_sections<S: Read>(
+    stream: &mut S,
     ptr_directions: &[Direction],
 ) -> Result<Vec<ReceivedPtrBuf>> {
     let mut buf4 = [0u8; 4];
@@ -582,8 +626,8 @@ pub fn dispatch_remote_call(
 }
 
 /// Server: write an extended response with output pointer sections.
-pub fn write_response_with_ptrs(
-    stream: &mut UnixStream,
+pub fn write_response_with_ptrs<S: Write>(
+    stream: &mut S,
     result: u64,
     errno: i32,
     out_bufs: &[Vec<u8>],

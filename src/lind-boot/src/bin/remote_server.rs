@@ -28,6 +28,8 @@
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::{UnixListener, UnixStream};
 
 use anyhow::{anyhow, Result};
@@ -141,8 +143,8 @@ unsafe fn call_scalar_native(func_ptr: *mut libc::c_void, args: &[u64], ret: &st
 
 // ---- Request handlers ----
 
-fn handle_scalar_request(
-    stream: &mut UnixStream,
+fn handle_scalar_request<S: Read + Write>(
+    stream: &mut S,
     _call_id: u32,
     entry: &LoadedFn,
 ) -> Result<()> {
@@ -152,8 +154,8 @@ fn handle_scalar_request(
     write_response(stream, result, errno_val)
 }
 
-fn handle_ptr_request(
-    stream: &mut UnixStream,
+fn handle_ptr_request<S: Read + Write>(
+    stream: &mut S,
     _call_id: u32,
     entry: &LoadedFn,
 ) -> Result<()> {
@@ -211,7 +213,10 @@ fn handle_ptr_request(
     write_response_with_ptrs(stream, result, errno_val, &out_bufs)
 }
 
-fn handle_request(stream: &mut UnixStream, registry: &HashMap<u32, LoadedFn>) -> Result<()> {
+fn handle_request<S: Read + Write>(
+    stream: &mut S,
+    registry: &HashMap<u32, LoadedFn>,
+) -> Result<()> {
     let call_id = read_call_id(stream)?;
 
     let entry = registry
@@ -236,10 +241,7 @@ fn run(config_path: &str) -> Result<()> {
     let content = fs::read_to_string(config_path)?;
     let config: ServerConfig = serde_json::from_str(&content)?;
 
-    let socket_path = config
-        .endpoint
-        .strip_prefix("unix://")
-        .ok_or_else(|| anyhow!("invalid endpoint: {}", config.endpoint))?;
+    let endpoint = &config.endpoint;
 
     // Load the shared library.
     let lib_cstr = CString::new(config.library.as_str())?;
@@ -303,20 +305,38 @@ fn run(config_path: &str) -> Result<()> {
         );
     }
 
-    // Bind the Unix socket.
-    let _ = fs::remove_file(socket_path);
-    let listener = UnixListener::bind(socket_path)?;
-    println!("remote-server: listening on {socket_path}");
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut s) => {
-                if let Err(e) = handle_request(&mut s, &registry) {
-                    eprintln!("remote-server: request error: {e}");
+    if let Some(path) = endpoint.strip_prefix("unix://") {
+        let _ = fs::remove_file(path);
+        let listener = UnixListener::bind(path)?;
+        println!("remote-server: listening on {endpoint}");
+        for stream in listener.incoming() {
+            match stream {
+                Ok(mut s) => {
+                    if let Err(e) = handle_request(&mut s, &registry) {
+                        eprintln!("remote-server: request error: {e}");
+                    }
                 }
+                Err(e) => eprintln!("remote-server: accept error: {e}"),
             }
-            Err(e) => eprintln!("remote-server: accept error: {e}"),
         }
+    } else if let Some(addr) = endpoint.strip_prefix("tcp://") {
+        let listener = TcpListener::bind(addr)?;
+        println!("remote-server: listening on {endpoint}");
+        for stream in listener.incoming() {
+            match stream {
+                Ok(mut s) => {
+                    // Disable Nagle for the same reason as the client: strict
+                    // request-response means we want immediate packet delivery.
+                    s.set_nodelay(true).ok();
+                    if let Err(e) = handle_request(&mut s, &registry) {
+                        eprintln!("remote-server: request error: {e}");
+                    }
+                }
+                Err(e) => eprintln!("remote-server: accept error: {e}"),
+            }
+        }
+    } else {
+        return Err(anyhow!("invalid endpoint scheme in '{endpoint}' (expected unix:// or tcp://)"));
     }
 
     Ok(())
