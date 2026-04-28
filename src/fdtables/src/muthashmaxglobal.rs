@@ -489,26 +489,27 @@ pub fn close_virtualfd(cageid: u64, virtfd: u64) -> Result<(), threei::RetVal> {
         return Err(threei::Errno::EBADFD as u64);
     }
 
-    let mut fdtable = GLOBALFDTABLE.lock().unwrap();
+    let entry = {
+        let mut fdtable = GLOBALFDTABLE.lock().unwrap();
 
-    if !fdtable.contains_key(&cageid) {
-        panic!("Unknown cageid in fdtable access");
-    }
-
-    // remove the closed item from the fdtable (and inspect it)
-    let thisoption = fdtable
-        .get_mut(&cageid)
-        .unwrap()
-        .thisfdtable
-        .remove(&virtfd);
-    drop(fdtable);
-
-    match thisoption {
-        Some(entry) => {
-            _decrement_fdcount(entry).map_err(|errno| errno as threei::RetVal)?;
+        if !fdtable.contains_key(&cageid) {
+            panic!("Unknown cageid in fdtable access");
         }
-        None => Err(threei::Errno::EBADFD as u64),
-    }
+
+        match fdtable
+            .get_mut(&cageid)
+            .unwrap()
+            .thisfdtable
+            .remove(&virtfd)
+        {
+            Some(entry) => entry,
+            None => return Err(threei::Errno::EBADFD as u64),
+        }
+    };
+
+    _decrement_fdcount(entry).map_err(|errno| errno as threei::RetVal)?;
+
+    Ok(())
 }
 
 // Register a series of helpers to be called for close.  Can be called
