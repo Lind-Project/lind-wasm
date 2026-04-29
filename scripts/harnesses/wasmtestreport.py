@@ -27,6 +27,10 @@ import tempfile
 import sys
 import time
 from typing import Any, Callable
+try:
+    from harnesses import libcpptestreport
+except ImportError:
+    import libcpptestreport
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -1344,7 +1348,7 @@ def generate_html_report(report):
         html_content.append('</div>')
 
     if "libcpp" in report:
-        html_content.append(_generate_libcpp_html_section(report["libcpp"]))
+        html_content.append(libcpptestreport.generate_html_section(report["libcpp"]))
 
     html_content.append("</body>\n</html>")
     html_content.append("\n")
@@ -1780,7 +1784,7 @@ def main():
     results = {
         "deterministic": get_empty_result(),
         "fail": get_empty_result(),
-        "libcpp": _empty_libcpp_bucket(),
+        "libcpp": libcpptestreport.get_empty_result(),
     }
 
     # Prepare artifacts root
@@ -1834,7 +1838,9 @@ def main():
         run_tests(config, artifacts_root, results, timeout_sec)
 
         if not args.skip_libcpp:
-            run_libcpp_integration(results["libcpp"], None, args.libcpp_timeout)
+            libcpptestreport.run_libcpp_integration(
+                results["libcpp"], None, args.libcpp_timeout, logger=logger
+            )
 
         os.chdir(LIND_WASM_BASE)
         with open(output_file, "w") as fp:
