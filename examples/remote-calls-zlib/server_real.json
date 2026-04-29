@@ -1,0 +1,28 @@
+{
+  "library":  "/home/lind/lind-wasm/examples/remote-calls-zlib/remote_zlib.so",
+  "endpoint": "unix:///home/lind/lind-wasm/lindfs/tmp/zlib_remote.sock",
+  "functions": [
+    {
+      "call_id":  1,
+      "symbol":   "remote_crc32",
+      "num_args": 3,
+      "ret":      "i64",
+      "args": [
+        { "type": "scalar" },
+        { "type": "ptr", "direction": "in", "size_arg": 2 },
+        { "type": "scalar" }
+      ]
+    },
+    {
+      "call_id":  2,
+      "symbol":   "remote_adler32",
+      "num_args": 3,
+      "ret":      "i64",
+      "args": [
+        { "type": "scalar" },
+        { "type": "ptr", "direction": "in", "size_arg": 2 },
+        { "type": "scalar" }
+      ]
+    }
+  ]
+}
