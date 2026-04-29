@@ -1747,7 +1747,7 @@ pub extern "C" fn statfs_syscall(
     path_arg: u64,
     path_cageid: u64,
     statbuf_arg: u64,
-    _statbuf_cageid: u64,
+    statbuf_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -1775,16 +1775,23 @@ pub extern "C" fn statfs_syscall(
         );
     }
 
-    // Cast directly to libc::statfs and write kernel data into buffer.
-    let statbuf_ptr = statbuf_arg as *mut libc::statfs;
-    let ret = unsafe { libc::statfs(path.as_ptr(), statbuf_ptr) };
+    // Call host statfs into a local host-side buffer first. Do not let host libc
+    // write directly into guest memory, since host libc::statfs layout may differ
+    // from the wasm32 statfs layout.
+    let mut host_statfs: libc::statfs = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::statfs(path.as_ptr(), &mut host_statfs) };
 
     if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "statfs");
+        return handle_errno(get_errno(), "statfs");
     }
 
-    ret
+    match sc_convert_addr_to_fstatdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => {
+            convert_fstatdata_to_user(statbuf_addr, host_statfs);
+            ret
+        }
+        Err(e) => syscall_error(e, "statfs", "Bad address"),
+    }
 }
 
 //------------------------------------FSYNC SYSCALL------------------------------------
