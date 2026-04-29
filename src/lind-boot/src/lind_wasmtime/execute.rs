@@ -618,7 +618,9 @@ fn load_main_module(
             fpcast_enabled,
         );
 
-        linker_guard.instance_dylink(&mut store, "env", instance).unwrap();
+        linker_guard
+            .instance_dylink(&mut store, "env", instance)
+            .unwrap();
 
         // after all preloaded library are attached to the linker, update the linker in LindCtx
         // so that newly forked cage could use the Linker with necessary library loaded

@@ -954,7 +954,9 @@ impl<T> Linker<T> {
                         // stack pointer and tls base are per-module exclusive and should not be exposed to child module
                         "__stack_pointer"
                         | "__tls_base"
-                        // when rdynamic is enabled, these fields will be linked twice by main module and should prevent
+                        // when -rdynamic is used, the main module re-exports symbols it imported (e.g. `memory`,
+                        // `signal_callback`); these are already defined in the linker, so skip them here to avoid
+                        // duplicate-definition errors when child modules link against the same linker
                         | "memory"
                         | "signal_callback"
                         // constructor functions, which is module exclusive and should not be exposed to child module
