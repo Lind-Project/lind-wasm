@@ -54,6 +54,7 @@ const UNWIND_METADATA_SIZE: u64 = 16;
 // Define the trait with the required method
 pub trait LindHost<T, U> {
     fn get_ctx(&self) -> LindCtx<T, U>;
+    fn get_ctx_mut(&mut self) -> &mut LindCtx<T, U>;
 }
 
 // Closures are abused in this file, mainly because the architecture of wasmtime itself does not support
@@ -86,6 +87,30 @@ pub struct LindCtx<T, U> {
 
     // from lind-boot, used for exec call
     lindboot_cli: U,
+
+    // Optional parent-visible return value for a pending `clone`/`fork`.
+    //
+    // `fork` is special in the Lind/Wasmtime runtime because the guest-visible
+    // return value is not necessarily the immediate return value of the first
+    // hostcall. The logical fork operation is split by Asyncify:
+    //
+    // 1. the first normal `clone` hostcall performs the real fork setup and may
+    //    return through an interposed grate;
+    // 2. Wasmtime unwinds and later rewinds the guest stack;
+    // 3. the guest's actual `fork()` call site receives the value returned during
+    //    the rewind replay.
+    //
+    // This field is used to carry a grate-defined "visible" fork return value
+    // from the normal hostcall path to the later parent-side rewind replay path.
+    // The real child cage id is still used internally for RawPOSIX/Wasmtime
+    // bookkeeping; this value only affects what the parent guest observes as the
+    // return value of `fork()`.
+    //
+    // This must be shared state rather than a plain `Option<i32>` because the
+    // host/Lind context can be cloned during fork/rewind setup. Using an
+    // `Arc<Mutex<_>>` ensures that the normal path and the rewind replay path
+    // observe the same pending slot.
+    pending_clone_visible_retval: Arc<Mutex<Option<i32>>>,
 
     // host thread stack size for spawned cage/thread processes
     pub thread_stack_size: usize,
@@ -172,6 +197,7 @@ impl<
             next_threadid,
             lind_manager: lind_manager.clone(),
             lindboot_cli,
+            pending_clone_visible_retval: Arc::new(Mutex::new(None)),
             thread_stack_size,
             get_cx,
             fork_host,
@@ -1763,6 +1789,7 @@ impl<
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
             thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
@@ -1784,6 +1811,7 @@ impl<
             next_threadid: self.next_threadid.clone(),
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
             thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
@@ -2342,4 +2370,63 @@ fn has_correct_signature(module: &Module) -> bool {
     }
 
     true
+}
+
+/// Stores a pending parent-visible return value for the current logical
+/// `clone`/`fork`.
+///
+/// This should be called on the first, non-rewind execution path after the
+/// syscall/interposition layer has produced the value that should be exposed
+/// to the parent guest. For example, a grate may perform the real fork but
+/// return a spoofed value that should later be returned from the guest's
+/// `fork()` call site.
+///
+/// The value is not returned to the guest immediately here. Instead, it is
+/// saved until the parent-side Asyncify rewind replay reaches the same
+/// `make-syscall` import again. At that point, `take_pending_clone_visible_retval`
+/// consumes this value and uses it to override the positive real child cage id.
+///
+/// The slot is protected by a mutex and stored behind an `Arc` so that it
+/// survives `HostCtx`/`LindCtx` cloning across fork setup.
+pub fn set_pending_clone_visible_retval<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+    retval: i32,
+) -> Result<()> {
+    let ctx = caller.data_mut().get_ctx_mut();
+
+    let mut slot = ctx.pending_clone_visible_retval.lock().unwrap();
+
+    *slot = Some(retval);
+
+    Ok(())
+}
+
+/// Consumes the pending parent-visible `clone`/`fork` return value, if any.
+///
+/// This is intended to be called from the `CLONE_SYSCALL` rewind replay path,
+/// after `catch_rewind` returns a positive `rewind_res`. A positive rewind
+/// result means we are replaying the parent side of `fork`, where the default
+/// return value would be the real child cage id.
+///
+/// If a pending visible value exists, this function returns it and clears the
+/// slot, so the override applies to exactly one logical fork. If no pending
+/// value exists, the caller should fall back to the original `rewind_res`.
+///
+/// Child-side fork replay should not use this override: the child must still
+/// observe `fork()` returning 0.
+pub fn take_pending_clone_visible_retval<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+) -> Option<i32> {
+    let ctx = caller.data_mut().get_ctx_mut();
+
+    let mut slot = ctx.pending_clone_visible_retval.lock().unwrap();
+    let ret = slot.take();
+
+    ret
 }

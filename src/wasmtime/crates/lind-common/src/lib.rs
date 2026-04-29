@@ -129,6 +129,20 @@ fn add_syscall_to_linker<
             // check here to early-return when we are on a rewind replay path.
             if call_number as i32 == CLONE_SYSCALL {
                 if let Some(rewind_res) = wasmtime_lind_multi_process::catch_rewind(&mut caller) {
+                    if rewind_res > 0 {
+                        // On Asyncify rewind replay, `clone` must not be executed again.
+                        // The positive rewind result is the real child cage id returned to the
+                        // parent guest by default. If a grate supplied a pending visible return
+                        // value during the first normal execution, consume it here and return it
+                        // instead. The child-side rewind result is 0 and must not be overridden.
+                        if let Some(retval) = wasmtime_lind_multi_process::take_pending_clone_visible_retval(&mut caller) {
+                            // Only override the return value with the pending visible retval if it is actually set.
+                            // If it's not set, that means the clone syscall being replayed on rewind is the one in the child process, and we should return the actual syscall return value (0) instead of the pending visible retval from the parent process.
+                            if retval > 0 {
+                                return retval;
+                            }
+                        }
+                    }
                     return rewind_res;
                 }
             }
@@ -189,6 +203,17 @@ fn add_syscall_to_linker<
                 arg6,
                 arg6cageid,
             );
+
+            if call_number as i32 == CLONE_SYSCALL {
+                // Save the grate-defined return value produced by the normal clone execution. 
+                // The guest-visible parent return is produced later during Asyncify rewind 
+                // replay, so this value must be carried across that boundary.
+                wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval).unwrap_or_else(|e| {
+                    panic!("{}", format!(
+                        "failed to set pending_clone_visible_retval for retval={retval} with error: {e}"
+                    ));
+                });
+            }
 
             // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
             // If fork is called within the signal handler, asyncify will unwind the stack;
