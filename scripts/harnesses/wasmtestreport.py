@@ -15,6 +15,7 @@
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+import html
 import json
 import os
 import subprocess
