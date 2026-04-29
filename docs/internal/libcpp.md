@@ -190,3 +190,17 @@ Expected result in `reports/wasm.json`:
 - `libcpp.test_cases["tests/unit-tests/cpp/sort.cpp"].output` contains:
   - `Native/Wasm parity verified`
   - native and wasm outputs are identical (same exit code and text)
+
+## Future dev note
+
+There are so, so many things we need to look into.
+
+### Functional stuff
+- currently, .wasm are compiled with suppressed throw-exception syntax support, this will be the biggest fix we need in the future.
+
+### Maintenance stuff
+- currently, libcpp header support is done with customized compiler toolchain compilation (customized .cmake and .sh which compile WASI toolchain) and are no longer tracked in this repo. (Allegedly moved to lind-wasm-apps repo)
+- currently, we also modified llvm source code when compiling the archives. Keeping track of the entire llvm in git is unwise, and instead I have those precompiled archives tracked in artifacts/ dir (1k+ files, 11MB space) which is still kinda awkward. Any future patch to the same archive group can be re-applied via ``make sync-sysroot`` command. (assuming sysroot is already built. Otherwise build sysroot with ``make sysroot`` first before applying the patch.)
+
+### Optimization stuff
+The CI flow still have entire llvm curled. Not certain this can be removed, but if it can be done, we will massively cut down CI workload and time.
