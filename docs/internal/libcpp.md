@@ -171,3 +171,22 @@ Caused by:
 **And that is the entire workflow to get .wasm binary compiled!**
 
 related issue: [#795](https://github.com/Lind-Project/lind-wasm/issues/795)
+
+## Local Testing
+
+Short path to validate the integrated libc++ smoke check (including native-vs-wasm parity):
+
+```bash
+# 1) Prepare runtime libs used by lind_run preloads
+make sysroot
+
+# 2) Run only wasm harness (this also runs libc++ integration)
+python3 scripts/test_runner.py --harness wasmtestreport
+```
+
+Expected result in `reports/wasm.json`:
+- top-level `libcpp` object exists
+- `libcpp.number_of_failures` is `0`
+- `libcpp.test_cases["tests/unit-tests/cpp/hello.cpp"].output` contains:
+  - `Native/Wasm parity verified`
+  - `LIBCPP_SORT_OK 1 2 3`
