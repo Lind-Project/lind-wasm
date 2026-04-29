@@ -33,22 +33,21 @@ int main(void) {
      * The routing.json routes are keyed by cageid so each cage automatically
      * picks the right policy without any in-process branching logic.
      */
+    run_test("cage1/no-interpose ");
 
     pid_t pid1 = fork();
     if (pid1 < 0) { perror("fork1"); return 1; }
     if (pid1 == 0) {
-        run_test("cage2/unix-socket");
+        run_test("cage2/inter-process");
         return 0;
     }
 
     pid_t pid2 = fork();
     if (pid2 < 0) { perror("fork2"); return 1; }
     if (pid2 == 0) {
-        run_test("cage3/tcp-socket");
+        run_test("cage3/inter-machine");
         return 0;
     }
-
-    run_test("cage1/local");
 
     waitpid(pid1, NULL, 0);
     waitpid(pid2, NULL, 0);

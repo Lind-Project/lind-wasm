@@ -1,0 +1,16 @@
+{
+  "library":  "/home/lind/lind-wasm/examples/remote-calls-percage/remote_strcpy.so",
+  "endpoint": "unix:///home/lind/lind-wasm/lindfs/tmp/percage_unix.sock",
+  "functions": [
+    {
+      "call_id":  1,
+      "symbol":   "custom_strcpy",
+      "num_args": 2,
+      "ret":      "i64",
+      "args": [
+        { "type": "ptr", "direction": "out" },
+        { "type": "ptr", "direction": "in"  }
+      ]
+    }
+  ]
+}
