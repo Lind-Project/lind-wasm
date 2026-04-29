@@ -618,8 +618,10 @@ fn load_main_module(
             fpcast_enabled,
         );
 
+        // expose main module's exported symbol to linker
+        // skip `signal_callback` since this is not supposed to by exposed by main module
         linker_guard
-            .instance_dylink(&mut store, "env", instance)
+            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
             .unwrap();
 
         // after all preloaded library are attached to the linker, update the linker in LindCtx

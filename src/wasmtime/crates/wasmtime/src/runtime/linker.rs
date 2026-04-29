@@ -944,48 +944,46 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module_name: &str,
         instance: Instance,
+        skiplist: Vec<&str>,
     ) -> Result<&mut Self> {
         let mut store = store.as_context_mut();
         let exports = instance
             .exports(&mut store)
             .filter_map(|e| {
-                (if module_name == "env"
-                    && match e.name() {
-                        // stack pointer and tls base are per-module exclusive and should not be exposed to child module
-                        "__stack_pointer"
-                        | "__tls_base"
-                        // when -rdynamic is used, the main module re-exports symbols it imported (e.g. `memory`,
-                        // `signal_callback`); these are already defined in the linker, so skip them here to avoid
-                        // duplicate-definition errors when child modules link against the same linker
-                        | "memory"
-                        | "signal_callback"
-                        // constructor functions, which is module exclusive and should not be exposed to child module
-                        | "__wasm_call_ctors"
-                        // those symbols are used internally by wasmtime and shouldn't be exposed to the child module
-                        | "__wasm_apply_data_relocs"
-                        | "__wasm_apply_global_relocs"
-                        | "__wasm_apply_tls_relocs"
-                        | "__wasm_init_tls"
-                        // asyncify symbols
-                        | "asyncify_start_unwind"
-                        | "asyncify_stop_unwind"
-                        | "asyncify_start_rewind"
-                        | "asyncify_stop_rewind"
-                        | "asyncify_get_state"
-                        // lind custom symbols
-                        | "__get_aligned_tls_size" => true,
-                        // fpcast-emu exports, which shouldn't linked directly
-                        | s if s.starts_with(FPCAST_FUNC_SIGNATURE) => true,
-                        _ => false,
-                    }
-                {
+                let name = e.name();
+                let should_skip = module_name == "env"
+                    && (skiplist.contains(&name)
+                        || match name {
+                            // stack pointer and tls base are per-module exclusive and should not be exposed to child module
+                            "__stack_pointer"
+                            | "__tls_base"
+                            // memory is not supposed to be imported via this function
+                            | "memory"
+                            // constructor functions, which is module exclusive and should not be exposed to child module
+                            | "__wasm_call_ctors"
+                            // those symbols are used internally by wasmtime and shouldn't be exposed to the child module
+                            | "__wasm_apply_data_relocs"
+                            | "__wasm_apply_global_relocs"
+                            | "__wasm_apply_tls_relocs"
+                            | "__wasm_init_tls"
+                            // asyncify symbols
+                            | "asyncify_start_unwind"
+                            | "asyncify_stop_unwind"
+                            | "asyncify_start_rewind"
+                            | "asyncify_stop_rewind"
+                            | "asyncify_get_state"
+                            // lind custom symbols
+                            | "__get_aligned_tls_size" => true,
+                            // fpcast-emu exports, which shouldn't linked directly
+                            | s if s.starts_with(FPCAST_FUNC_SIGNATURE) => true,
+                            _ => false,
+                        });
+
+                if should_skip {
                     None
                 } else {
-                    Some((
-                        self.import_key(module_name, Some(e.name())),
-                        e.into_extern(),
-                    ))
-                })
+                    Some((self.import_key(module_name, Some(name)), e.into_extern()))
+                }
             })
             .collect::<Vec<_>>();
         for (key, export) in exports {
@@ -1277,7 +1275,7 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                self.instance_dylink(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance, vec![])
             }
         }
     }
@@ -1373,7 +1371,7 @@ impl<T> Linker<T> {
                     }
                 }
 
-                self.instance_dylink(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance, vec![])
             }
         }
     }
@@ -1555,7 +1553,7 @@ impl<T> Linker<T> {
 
                 if !is_local {
                     // only attach library symbol to Linker if it is global scope
-                    self.instance_dylink(store, module_name, instance);
+                    self.instance_dylink(store, module_name, instance, vec![]);
                 }
 
                 Ok(handler)
