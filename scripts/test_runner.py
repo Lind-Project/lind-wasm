@@ -82,7 +82,7 @@ def discover_harness_modules(selected: set[str] | None = None) -> list[str]:
     modules: list[str] = []
     for path in sorted(HARNESS_DIR.glob("*.py")):
         name = path.stem
-        if name == "__init__" or name.startswith("_"):
+        if name == "__init__" or name.startswith("_") or name == "libcpptestreport":
             continue
         if selected and name not in selected:
             continue
