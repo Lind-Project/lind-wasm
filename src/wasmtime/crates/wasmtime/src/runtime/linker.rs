@@ -954,6 +954,9 @@ impl<T> Linker<T> {
                         // stack pointer and tls base are per-module exclusive and should not be exposed to child module
                         "__stack_pointer"
                         | "__tls_base"
+                        // when rdynamic is enabled, these fields will be linked twice by main module and should prevent
+                        | "memory"
+                        | "signal_callback"
                         // constructor functions, which is module exclusive and should not be exposed to child module
                         | "__wasm_call_ctors"
                         // those symbols are used internally by wasmtime and shouldn't be exposed to the child module

@@ -378,10 +378,12 @@ do_dynamic_compile() {
     --target=wasm32-unknown-wasi
     "--sysroot=${SYSROOT}"
     "-nostartfiles" # we manually enforce the crt1 file for dynamic build
+    "-fvisibility=default"
     -Wl,-pie # required flag for compiling into shared wasm binary
     -Wl,--import-table # table needs to be shared across module in dynamic build
     -Wl,--import-memory # memory needs to be shared across module for threading support
     -Wl,--export-memory
+    -Wl,--export-dynamic
     -Wl,--max-memory=67108864
     -Wl,--allow-undefined # treat undefined symbol as external library symbol
     -Wl,--unresolved-symbols=import-dynamic
@@ -442,7 +444,7 @@ do_library_compile() {
   
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
-  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer optional
 }
 
 do_compile() {
