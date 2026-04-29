@@ -1074,8 +1074,10 @@ def generate_html_report(report):
             html_content.append('</table>')
         html_content.append('</div>')
 
-    if "libcpp" in report:
-        html_content.append(libcpptestreport.generate_html_section(report["libcpp"]))
+    # Omit libc++ HTML when skipped or never run (empty bucket still exists in JSON for schema).
+    libcpp_report = report.get("libcpp")
+    if libcpp_report and libcpp_report.get("total_test_cases", 0) > 0:
+        html_content.append(libcpptestreport.generate_html_section(libcpp_report))
 
     html_content.append("</body>\n</html>")
     html_content.append("\n")
