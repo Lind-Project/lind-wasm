@@ -20,6 +20,7 @@ REPO_ROOT = SCRIPT_DIR.parents[1]
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
+CXX = os.environ.get("CXX", "c++")
 
 EXPECTED_STDOUT_LINE = "LIBCPP_SORT_OK 1 2 3"
 DEFAULT_SOURCE_REL = Path("tests/unit-tests/cpp/hello.cpp")
@@ -103,6 +104,17 @@ def _run_lind_compile_cpp_full(source: Path) -> tuple[int, str]:
     return proc.returncode, out + (("\n" + err) if out and err else err)
 
 
+def _run_native_compile_cpp(source: Path, output_binary: Path) -> tuple[int, str]:
+    cmd = [CXX, "-std=c++17", str(source), "-o", str(output_binary)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(LIND_WASM_BASE))
+    except OSError as exc:
+        return 127, f"Exception running native C++ compiler ({CXX}): {exc}"
+    out = proc.stdout or ""
+    err = proc.stderr or ""
+    return proc.returncode, out + (("\n" + err) if out and err else err)
+
+
 def _stdout_has_expected_line(text: str) -> bool:
     for line in text.splitlines():
         if line.strip() == EXPECTED_STDOUT_LINE:
@@ -130,6 +142,24 @@ def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str]
     return proc.returncode, out + (("\n" + err) if err else "")
 
 
+def _run_native_binary(binary_path: Path, timeout_sec: int) -> tuple[Any, str]:
+    try:
+        proc = subprocess.run(
+            [str(binary_path)],
+            capture_output=True,
+            text=True,
+            cwd=str(binary_path.parent),
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired:
+        return "timeout", f"Timed out after {timeout_sec}s"
+    except OSError as exc:
+        return "error", f"Exception running native binary: {exc}"
+    out = proc.stdout or ""
+    err = proc.stderr or ""
+    return proc.returncode, out + (("\n" + err) if err else "")
+
+
 def _cleanup_artifacts(wasm_path: Path, cwasm_path: Path, logger: logging.Logger) -> None:
     for path in (wasm_path, cwasm_path):
         try:
@@ -140,6 +170,13 @@ def _cleanup_artifacts(wasm_path: Path, cwasm_path: Path, logger: logging.Logger
             (LINDFS_ROOT / path.name).unlink(missing_ok=True)
         except OSError as exc:
             logger.debug("[libcpp] Could not remove %s: %s", LINDFS_ROOT / path.name, exc)
+
+
+def _cleanup_native_artifact(native_path: Path, logger: logging.Logger) -> None:
+    try:
+        native_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.debug("[libcpp] Could not remove native artifact %s: %s", native_path, exc)
 
 
 def run_libcpp_integration(
@@ -161,10 +198,31 @@ def run_libcpp_integration(
     wasm_path = src.parent / f"{src.name}.wasm"
     cwasm_path = _cwasm_path_for_source(src)
     run_basename = cwasm_path.name
+    native_bin = src.parent / f"{src.stem}.native"
+
+    native_compile_rc, native_compile_out = _run_native_compile_cpp(src, native_bin)
+    if native_compile_rc != 0:
+        _add_test_result(
+            bucket,
+            rel_name,
+            "Failure",
+            "Compile_Failure",
+            f"Native compile failed (exit={native_compile_rc})\n{native_compile_out}",
+            logger,
+        )
+        return
 
     rc, compile_out = _run_lind_compile_cpp_full(src)
     if rc != 0:
-        _add_test_result(bucket, rel_name, "Failure", "Compile_Failure", f"exit={rc}\n{compile_out}", logger)
+        _add_test_result(
+            bucket,
+            rel_name,
+            "Failure",
+            "Compile_Failure",
+            f"lind_compile_cpp failed (exit={rc})\n{compile_out}",
+            logger,
+        )
+        _cleanup_native_artifact(native_bin, logger)
         return
     if not cwasm_path.is_file():
         _add_test_result(
@@ -175,10 +233,18 @@ def run_libcpp_integration(
             f"lind_compile_cpp exited 0 but .cwasm missing: {cwasm_path}\n{compile_out}",
             logger,
         )
+        _cleanup_native_artifact(native_bin, logger)
         return
 
+    native_rc, native_out = _run_native_binary(native_bin, timeout_sec)
     run_rc, run_out = _run_wasm_with_lind(run_basename, timeout_sec)
     try:
+        if native_rc == "timeout":
+            _add_test_result(bucket, rel_name, "Failure", "Timeout", "Native execution timed out", logger)
+            return
+        if isinstance(native_rc, str):
+            _add_test_result(bucket, rel_name, "Failure", "Runtime_Failure", f"Native execution failed\n{native_out}", logger)
+            return
         if run_rc == "timeout":
             _add_test_result(bucket, rel_name, "Failure", "Timeout", run_out, logger)
             return
@@ -188,9 +254,32 @@ def run_libcpp_integration(
         if not _stdout_has_expected_line(run_out):
             _add_test_result(bucket, rel_name, "Failure", "Output_mismatch", run_out, logger)
             return
-        _add_test_result(bucket, rel_name, "Success", None, run_out, logger)
+
+        if run_rc != native_rc or run_out != native_out:
+            mismatch = (
+                f"Native exit={native_rc}\nWasm exit={run_rc}\n\n"
+                "=== Native output ===\n"
+                f"{native_out}\n\n"
+                "=== Wasm output ===\n"
+                f"{run_out}"
+            )
+            _add_test_result(bucket, rel_name, "Failure", "Output_mismatch", mismatch, logger)
+            return
+
+        _add_test_result(
+            bucket,
+            rel_name,
+            "Success",
+            None,
+            (
+                f"Native/Wasm parity verified (exit={run_rc}).\n\n"
+                f"{run_out}"
+            ),
+            logger,
+        )
     finally:
         _cleanup_artifacts(wasm_path, cwasm_path, logger)
+        _cleanup_native_artifact(native_bin, logger)
 
 
 def generate_html_section(libcpp: dict[str, Any]) -> str:
