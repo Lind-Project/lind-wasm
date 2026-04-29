@@ -21,9 +21,7 @@ LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 CXX = os.environ.get("CXX", "c++")
-
-EXPECTED_STDOUT_LINE = "LIBCPP_SORT_OK 1 2 3"
-DEFAULT_SOURCE_REL = Path("tests/unit-tests/cpp/hello.cpp")
+DEFAULT_CPP_DIR = Path("tests/unit-tests/cpp")
 
 
 def get_empty_result() -> dict[str, Any]:
@@ -82,11 +80,14 @@ def _add_test_result(
     logger.error("[libcpp] FAILURE: %s — %s", test_name, error_type or "unknown")
 
 
-def _default_source_path() -> Path:
+def _discover_source_paths() -> list[Path]:
     override = os.environ.get("LIBCPP_TEST_CPP")
     if override:
-        return Path(override).resolve()
-    return (LIND_WASM_BASE / DEFAULT_SOURCE_REL).resolve()
+        p = Path(override).resolve()
+        if p.is_dir():
+            return sorted(p.glob("*.cpp"))
+        return [p]
+    return sorted((LIND_WASM_BASE / DEFAULT_CPP_DIR).glob("*.cpp"))
 
 
 def _cwasm_path_for_source(source: Path) -> Path:
@@ -113,13 +114,6 @@ def _run_native_compile_cpp(source: Path, output_binary: Path) -> tuple[int, str
     out = proc.stdout or ""
     err = proc.stderr or ""
     return proc.returncode, out + (("\n" + err) if out and err else err)
-
-
-def _stdout_has_expected_line(text: str) -> bool:
-    for line in text.splitlines():
-        if line.strip() == EXPECTED_STDOUT_LINE:
-            return True
-    return False
 
 
 def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str]:
@@ -179,13 +173,12 @@ def _cleanup_native_artifact(native_path: Path, logger: logging.Logger) -> None:
         logger.debug("[libcpp] Could not remove native artifact %s: %s", native_path, exc)
 
 
-def run_libcpp_integration(
+def _run_single_libcpp_test(
     bucket: dict[str, Any],
-    source: Path | None,
+    src: Path,
     timeout_sec: int,
     logger: logging.Logger,
 ) -> None:
-    src = source if source is not None else _default_source_path()
     try:
         rel_name = str(src.relative_to(LIND_WASM_BASE))
     except ValueError:
@@ -251,10 +244,6 @@ def run_libcpp_integration(
         if isinstance(run_rc, str) or run_rc != 0:
             _add_test_result(bucket, rel_name, "Failure", "Runtime_Failure", run_out, logger)
             return
-        if not _stdout_has_expected_line(run_out):
-            _add_test_result(bucket, rel_name, "Failure", "Output_mismatch", run_out, logger)
-            return
-
         if run_rc != native_rc or run_out != native_out:
             mismatch = (
                 f"Native exit={native_rc}\nWasm exit={run_rc}\n\n"
@@ -282,6 +271,27 @@ def run_libcpp_integration(
         _cleanup_native_artifact(native_bin, logger)
 
 
+def run_libcpp_integration(
+    bucket: dict[str, Any],
+    source: Path | None,
+    timeout_sec: int,
+    logger: logging.Logger,
+) -> None:
+    sources = [source.resolve()] if source is not None else _discover_source_paths()
+    if not sources:
+        _add_test_result(
+            bucket,
+            "tests/unit-tests/cpp",
+            "Failure",
+            "Compile_Failure",
+            "No .cpp tests discovered in tests/unit-tests/cpp",
+            logger,
+        )
+        return
+    for src in sources:
+        _run_single_libcpp_test(bucket, src, timeout_sec, logger)
+
+
 def generate_html_section(libcpp: dict[str, Any]) -> str:
     rows: list[str] = []
     for test_name, test_result in sorted(libcpp.get("test_cases", {}).items()):
@@ -298,13 +308,12 @@ def generate_html_section(libcpp: dict[str, Any]) -> str:
             "</tr>"
         )
     rows_html = "\n".join(rows) if rows else '<tr><td colspan="6"><em>No cases</em></td></tr>'
-    exp = html.escape(EXPECTED_STDOUT_LINE)
     return "\n".join(
         [
             '<div class="wasm-harness-subsection">',
             "<h2>Libc++ integration</h2>",
             "<p>Full <code>lind_compile_cpp</code> (wasm-opt + precompile), <code>lind_run</code> on the "
-            f"<code>.cwasm</code>, stdout must contain a line exactly <code>{exp}</code>.</p>",
+            "<code>.cwasm</code>, and verify native and wasm runs have identical exit codes and output.</p>",
             "<h3>Summary</h3>",
             '<table class="summary-table">',
             "<tr><th>Metric</th><th>Value</th></tr>",
