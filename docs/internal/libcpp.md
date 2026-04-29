@@ -13,9 +13,9 @@ Solution proposed by both Alice and Tasha: on local repo, curl, modify and compi
 
 ## What i did
 ### Replicate the error
-Of course, the first step of dealing with a problem is to make sure we do have a problem. We start with what Nick points out in issue [#740](https://github.com/Lind-Project/lind-wasm/issues/740#issuecomment-3910086697): that some dummy .cpp file that has # include <algorithm> will fail to compile as the header libraries are just entirely missing, if a user attempts to compile .wasm binary. Thus, I put a super simple dummy hello.cpp file in tests/unit-tests/cpp/ dir, which uses algorithm header:
+Of course, the first step of dealing with a problem is to make sure we do have a problem. We start with what Nick points out in issue [#740](https://github.com/Lind-Project/lind-wasm/issues/740#issuecomment-3910086697): that some dummy .cpp file that has # include <algorithm> will fail to compile as the header libraries are just entirely missing, if a user attempts to compile .wasm binary. Thus, I put a super simple dummy sort.cpp file in tests/unit-tests/cpp/ dir, which uses algorithm header:
 
-```trial/hello.cpp
+```tests/unit-tests/cpp/sort.cpp
 #include <algorithm>
 #include <iostream>
 #include <vector>
@@ -44,11 +44,11 @@ The script call signature is iffy, you must call it as: ``./scripts/lind_compile
 The script is intended to be used on .c files only. I have made a spin-off ``lind_compile_cpp`` script based on it. A future improvevement would be to look at all flags allowed by that script and verify their functionalities.
 
 
-So, the necessary steps here are: creating and stepping into a docker container, creating the dummy hello.cpp file (you can do this before stepping into the docker container step; it really doesn't matter), and attempt to compile with the script and just watch it fail.
+So, the necessary steps here are: creating and stepping into a docker container, creating the dummy sort.cpp file (you can do this before stepping into the docker container step; it really doesn't matter), and attempt to compile with the script and just watch it fail.
 
 ```bash
-lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile trial/hello.cpp 
-/home/lind/lind-wasm/trial/hello.cpp:1:10: fatal error: 'algorithm' file not found
+lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile sort.cpp 
+/home/lind/lind-wasm/sort.cpp:1:10: fatal error: 'algorithm' file not found
     1 | #include <algorithm>
       |          ^~~~~~~~~~~
 1 error generated.
@@ -69,11 +69,11 @@ docker exec -it WHATEVER /bin/bash
 ```
 Here, obviously, we never really pull down a docker container – one of the many perks of working on a remote SSH. 
 
-Creating the dummy hello.cpp, and try to compile
+Creating a dummy ``sort.cpp``, and try to compile
 This step is pretty self-explanatory. Just remember that we want to compile while assuming everything requires absolute path, so:
 
 ```bash
-/home/lind/lind-wasm/scripts/lind_compile /home/lind/lind-wasm/trial/hello.cpp
+/home/lind/lind-wasm/scripts/lind_compile /home/lind/lind-wasm/sort.cpp
 ```
  Then you will quickly see the error described in issue [#740](https://github.com/Lind-Project/lind-wasm/issues/740#issuecomment-3910086697).
 
@@ -130,29 +130,29 @@ We are missing a libunwind.a archive; it is, for native cpp binary, needed to ha
 At this point, we have all we need to make the .wasm compilation work. Manually setting the correct clang++ flags is too much work, and luckily we have a scripts/lind_compile script which, originally designed for .c compilation, is almost entirely reusable directly for our .cpp compilation. Again, Alice already made the necessary changes to it in her commit to repurpose it for .cpp compilation only, and so we only need to use it. One more thing: remember we cannot support throw-exception? We do need some manual flag-setting to suppress that part. Luckily our simple dummy program does not need the throw-except syntax anyways. now make sure your are in lind-wasm dir (or just use absolute path for bash script below if you are not – by this point you should be really familiar with the project file hierarchy already.)
 
 ```bash
-scripts/lind_compile_cpp tests/unit-tests/cpp/hello.cpp
+scripts/lind_compile_cpp tests/unit-tests/cpp/sort.cpp
 ```
 note that, I have added ``-fno-exceptions`` flag in that script. The throw-exception syntax is not supported at the moment, and that would be a **major area of improvement in the future**
 note you can also additionally add -fno-rtti flag to save memory and speed up the compilation a bit more, but the compilation is quite slow regardless (takes ~1 minute)
 
 And you should now have compiled result file:
 
-tests/unit-tests/cpp/hello.cpp.wasm
+tests/unit-tests/cpp/sort.cpp.wasm
 
 ### side note
 
 exact fail message without ``-fno-exceptions`` flag:
 
 ```bash
-lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile trial/hello.cpp # deprecated 
+lind@e9a40a72b750:~/lind-wasm$ scripts/lind_compile sort.cpp # deprecated 
 wasm-ld: warning: function signature mismatch: main
 >>> defined as (i32, i32, i32) -> i32 in /home/lind/lind-wasm/build/sysroot/lib/wasm32-wasi/crt1.o
->>> defined as (i32, i32) -> i32 in /tmp/hello-d53fbc.o
+>>> defined as (i32, i32) -> i32 in /tmp/sort-d53fbc.o
 
-wasm-ld: error: /tmp/hello-d53fbc.o: undefined symbol: __cxa_allocate_exception
-wasm-ld: error: /tmp/hello-d53fbc.o: undefined symbol: __cxa_throw
-wasm-ld: error: /tmp/hello-d53fbc.o: undefined symbol: __cxa_allocate_exception
-wasm-ld: error: /tmp/hello-d53fbc.o: undefined symbol: __cxa_throw
+wasm-ld: error: /tmp/sort-d53fbc.o: undefined symbol: __cxa_allocate_exception
+wasm-ld: error: /tmp/sort-d53fbc.o: undefined symbol: __cxa_throw
+wasm-ld: error: /tmp/sort-d53fbc.o: undefined symbol: __cxa_allocate_exception
+wasm-ld: error: /tmp/sort-d53fbc.o: undefined symbol: __cxa_throw
 clang++: error: linker command failed with exit code 1 (use -v to see invocation)
 ```
 
@@ -160,11 +160,11 @@ which is a result of missing libunwind.a archive support. I looked into it and i
 
 Also, the lind_run command on the compiled binary currently fails. This is another important thing to look into:
 ```bash
-lind@e9a40a72b750:~/lind-wasm$ lind_run tests/unit-tests/cpp/hello.cpp.cwasm 
+lind@e9a40a72b750:~/lind-wasm$ lind_run tests/unit-tests/cpp/sort.cpp.cwasm 
 failed to compile module
 
 Caused by:
-    0: failed to read input file: tests/unit-tests/cpp/hello.cpp.cwasm
+    0: failed to read input file: tests/unit-tests/cpp/sort.cpp.cwasm
     1: No such file or directory (os error 2)
 ```
 
@@ -187,6 +187,6 @@ python3 scripts/test_runner.py --harness wasmtestreport
 Expected result in `reports/wasm.json`:
 - top-level `libcpp` object exists
 - `libcpp.number_of_failures` is `0`
-- `libcpp.test_cases["tests/unit-tests/cpp/hello.cpp"].output` contains:
+- `libcpp.test_cases["tests/unit-tests/cpp/sort.cpp"].output` contains:
   - `Native/Wasm parity verified`
-  - `LIBCPP_SORT_OK 1 2 3`
+  - native and wasm outputs are identical (same exit code and text)
