@@ -173,10 +173,6 @@ $CC --target=wasm32-wasi-threads -matomics \
     -o $BUILD/csu/wasi_thread_start.o \
     -c $GLIBC/csu/wasm32/wasi_thread_start.s
 
-$CC --target=wasm32-wasi-threads -matomics \
-    -o $BUILD/csu/set_stack_pointer.o \
-    -c $GLIBC/csu/wasm32/set_stack_pointer.s
-
 # Generate sysroot
 # First, remove the existing sysroot directory to start cleanly
 rm -rf "$SYSROOT"
@@ -185,7 +181,6 @@ rm -rf "$SYSROOT"
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 cp "$BUILD/lind_utils.o" "$SYSROOT/lib/wasm32-wasi/"
-cp "$BUILD/csu/set_stack_pointer.o" "$SYSROOT/lib/wasm32-wasi/"
 
 "$SCRIPT_DIR/make_archive.sh"
 cd $SCRIPT_DIR

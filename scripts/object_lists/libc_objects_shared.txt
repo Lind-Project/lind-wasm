@@ -2,7 +2,6 @@ lind_syscall.os
 addr_translation.os
 lind_debug.os
 csu/wasi_thread_start.os
-csu/set_stack_pointer.os
 csu/libc-start.os
 csu/sysdep.os
 csu/version.os

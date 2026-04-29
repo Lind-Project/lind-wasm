@@ -1177,10 +1177,9 @@ impl<
                     // we might also want to perserve the offset of current stack pointer to stack bottom
                     // not very sure if this is required, but just keep everything the same from parent seems to be good
                     let offset = parent_stack_high_usr as u32 - stack_pointer;
-                    let stack_pointer_setter = instance
-                        .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
+                    instance
+                        .set_stack_pointer(&mut store, (stack_addr - offset) as i32)
                         .unwrap();
-                    let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
                     // TODO: set up __stack_low and __stack_high
                     // TODO: should share the imported wasm global
 

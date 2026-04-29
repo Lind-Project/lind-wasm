@@ -43,7 +43,6 @@ options.
         - `lind_syscall/lind_syscall.c`
         - `lind_syscall/addr_translation.c`
         - `csu/wasm32/wasi_thread_start.s`
-        - `csu/wasm32/set_stack_pointer.s`
 
     3. Generate sysroot
 
