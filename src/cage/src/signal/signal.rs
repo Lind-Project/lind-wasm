@@ -1,8 +1,7 @@
-use crate::cage::{get_cage, get_cage_or_debug_panic};
-use parking_lot::RwLock;
-use std::sync::atomic::Ordering;
+use crate::cage::get_cage;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use sysdefs::constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL};
-#[cfg(debug_assertions)]
+#[cfg(feature = "lind_debug")]
 use sysdefs::logging::lind_debug_panic;
 
 const EPOCH_NORMAL: u64 = 0;
@@ -17,8 +16,14 @@ pub fn signal_epoch_trigger(cageid: u64) {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let Some(cage) = get_cage_or_debug_panic(cageid, "signal_epoch_trigger") else {
-            return;
+        let cage = match get_cage(cageid) {
+            Some(c) => c,
+            None => {
+                #[cfg(feature = "lind_debug")]
+                lind_debug_panic(&format!("signal_epoch_trigger: cage {} not found", cageid));
+
+                return;
+            }
         };
 
         let threadid_guard = cage.main_threadid.read();
@@ -26,22 +31,34 @@ pub fn signal_epoch_trigger(cageid: u64) {
         let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
             Some(h) => h,
             None => {
-                #[cfg(debug_assertions)]
+                #[cfg(feature = "lind_debug")]
                 lind_debug_panic(&format!(
                     "signal_epoch_trigger: epoch_handler for thread {} not found",
                     main_threadid
                 ));
-                #[cfg(not(debug_assertions))]
+
                 return;
             }
         };
-        let guard = epoch_handler.write();
-        let epoch = *guard;
-        // SAFETY: the pointer is locked with write access so no one is able to modify it concurrently
-        // However, Potential BUG (TODO): We still need to verify the lifetime of the pointer. This pointer
-        // is created by wasmtime and will be destroyed at some point when the wasm instance is destroyed
-        // we still need to figure out when is the destroy happening and make sure it is destroyed after the
-        // information in rawposix is updated
+        let epoch = epoch_handler.load(Ordering::Acquire);
+
+        if epoch.is_null() {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "signal_epoch_trigger: epoch pointer for thread {} is null",
+                main_threadid
+            ));
+
+            return;
+        }
+        // SAFETY:
+        // `epoch` is a raw pointer into wasmtime-managed memory.
+        // AtomicPtr only makes loading/storing the pointer value thread-safe;
+        // it does not guarantee the lifetime or exclusive access of the pointed-to memory.
+        // The caller must ensure that:
+        // 1. the wasm instance / VMContext owning this epoch pointer is still alive;
+        // 2. no other thread concurrently frees or invalidates this pointer;
+        // 3. writing EPOCH_SIGNAL to this location is safe under wasmtime's epoch mechanism.
         unsafe {
             *epoch = EPOCH_SIGNAL;
         }
@@ -71,8 +88,17 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let Some(cage) = get_cage_or_debug_panic(cageid, "epoch_kill_all") else {
-            return;
+        let cage = match get_cage(cageid) {
+            Some(c) => c,
+            None => {
+                #[cfg(feature = "lind_debug")]
+                lind_debug_panic(&format!(
+                    "epoch_kill_all: cage {} not found for thread {}",
+                    cageid, caller_tid
+                ));
+
+                return;
+            }
         };
 
         // Set EPOCH_KILLED on every thread except the caller.
@@ -81,8 +107,16 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
                 continue;
             }
             let epoch_handler = entry.value();
-            let guard = epoch_handler.write();
-            let epoch = *guard;
+            let epoch = epoch_handler.load(Ordering::Acquire);
+            if epoch.is_null() {
+                #[cfg(feature = "lind_debug")]
+                lind_debug_panic(&format!(
+                    "epoch_kill_all: epoch pointer for thread {} is null",
+                    entry.key()
+                ));
+
+                continue;
+            }
             // SAFETY: see comment at `signal_epoch_trigger`
             unsafe {
                 *epoch = EPOCH_KILLED;
@@ -113,23 +147,40 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let Some(cage) = get_cage_or_debug_panic(cageid, "get_epoch_state") else {
-            return EPOCH_KILLED;
+        let cage = match get_cage(cageid) {
+            Some(c) => c,
+            None => {
+                #[cfg(feature = "lind_debug")]
+                lind_debug_panic(&format!(
+                    "get_epoch_state: cage {} not found for thread {}",
+                    cageid, thread_id
+                ));
+
+                return EPOCH_KILLED;
+            }
         };
         let epoch_handler = match cage.epoch_handler.get(&(thread_id as i32)) {
             Some(h) => h,
             None => {
-                #[cfg(debug_assertions)]
+                #[cfg(feature = "lind_debug")]
                 lind_debug_panic(&format!(
                     "get_epoch_state: epoch_handler for thread {} not found",
                     thread_id
                 ));
-                #[cfg(not(debug_assertions))]
+
                 return EPOCH_KILLED;
             }
         };
-        let guard = epoch_handler.read();
-        let epoch = *guard;
+        let epoch = epoch_handler.load(Ordering::Acquire);
+        if epoch.is_null() {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "get_epoch_state: epoch pointer for thread {} is null",
+                thread_id
+            ));
+
+            return EPOCH_KILLED;
+        }
         // SAFETY: see comment at `signal_epoch_trigger`
         unsafe { *epoch }
     }
@@ -143,23 +194,40 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let Some(cage) = get_cage_or_debug_panic(cageid, "thread_check_killed") else {
-            return true;
+        let cage = match get_cage(cageid) {
+            Some(c) => c,
+            None => {
+                #[cfg(feature = "lind_debug")]
+                lind_debug_panic(&format!(
+                    "thread_check_killed: cage {} not found for thread {}",
+                    cageid, thread_id
+                ));
+
+                return true;
+            }
         };
         let epoch_handler = match cage.epoch_handler.get(&(thread_id as i32)) {
             Some(h) => h,
             None => {
-                #[cfg(debug_assertions)]
+                #[cfg(feature = "lind_debug")]
                 lind_debug_panic(&format!(
                     "thread_check_killed: epoch_handler for thread {} not found",
                     thread_id
                 ));
-                #[cfg(not(debug_assertions))]
+
                 return true;
             }
         };
-        let guard = epoch_handler.write();
-        let epoch = *guard;
+        let epoch = epoch_handler.load(Ordering::Acquire);
+        if epoch.is_null() {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "thread_check_killed: epoch pointer for thread {} is null",
+                thread_id
+            ));
+
+            return true;
+        }
         // SAFETY: see comment at `signal_epoch_trigger`
         unsafe { *epoch == EPOCH_KILLED }
     }
@@ -176,8 +244,17 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
 /// call. The no-op handler causes the syscall to return EINTR, allowing the
 /// thread to re-enter wasm where it will see the epoch and exit.
 pub fn wait_all_threads_exited(cageid: u64, _except_tid: u64) {
-    let Some(cage) = get_cage_or_debug_panic(cageid, "wait_all_threads_exited") else {
-        return;
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "wait_all_threads_exited: cage {} not found for thread {}",
+                cageid, _except_tid
+            ));
+
+            return;
+        }
     };
     let my_tid = unsafe { libc::syscall(libc::SYS_gettid) };
 
@@ -211,8 +288,14 @@ pub fn signal_epoch_reset(cageid: u64) {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let Some(cage) = get_cage_or_debug_panic(cageid, "signal_epoch_reset") else {
-            return;
+        let cage = match get_cage(cageid) {
+            Some(c) => c,
+            None => {
+                #[cfg(feature = "lind_debug")]
+                lind_debug_panic(&format!("signal_epoch_reset: cage {} not found", cageid));
+
+                return;
+            }
         };
 
         let threadid_guard = cage.main_threadid.read();
@@ -220,17 +303,25 @@ pub fn signal_epoch_reset(cageid: u64) {
         let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
             Some(h) => h,
             None => {
-                #[cfg(debug_assertions)]
+                #[cfg(feature = "lind_debug")]
                 lind_debug_panic(&format!(
                     "signal_epoch_reset: epoch_handler for thread {} not found",
                     main_threadid
                 ));
-                #[cfg(not(debug_assertions))]
+
                 return;
             }
         };
-        let guard = epoch_handler.write();
-        let epoch = *guard;
+        let epoch = epoch_handler.load(Ordering::Acquire);
+        if epoch.is_null() {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "signal_epoch_reset: epoch pointer for thread {} is null",
+                main_threadid
+            ));
+
+            return;
+        }
         // SAFETY: see comment at `signal_epoch_trigger`
         unsafe {
             *epoch = EPOCH_NORMAL;
@@ -247,8 +338,14 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
 
     #[cfg(not(feature = "disable_signals"))]
     {
-        let Some(cage) = get_cage_or_debug_panic(cageid, "signal_check_trigger") else {
-            return false;
+        let cage = match get_cage(cageid) {
+            Some(c) => c,
+            None => {
+                #[cfg(feature = "lind_debug")]
+                lind_debug_panic(&format!("signal_check_trigger: cage {} not found", cageid));
+
+                return false;
+            }
         };
 
         let threadid_guard = cage.main_threadid.read();
@@ -257,17 +354,25 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
         let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
             Some(h) => h,
             None => {
-                #[cfg(debug_assertions)]
+                #[cfg(feature = "lind_debug")]
                 lind_debug_panic(&format!(
                     "signal_check_trigger: epoch_handler for thread {} not found",
                     main_threadid
                 ));
-                #[cfg(not(debug_assertions))]
+
                 return false;
             }
         };
-        let guard = epoch_handler.write();
-        let epoch = *guard;
+        let epoch = epoch_handler.load(Ordering::Acquire);
+        if epoch.is_null() {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "signal_check_trigger: epoch pointer for thread {} is null",
+                main_threadid
+            ));
+
+            return false;
+        }
         // SAFETY: see comment at `signal_epoch_trigger`
         unsafe { *epoch > EPOCH_NORMAL }
     }
@@ -277,8 +382,14 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
 // thread safety: this function will only be invoked by main thread of the cage
 //                but should still work fine if accessed by multiple threads
 pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
-    let Some(cage) = get_cage_or_debug_panic(cageid, "signal_check_block") else {
-        return false;
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!("signal_check_block: cage {} not found", cageid));
+
+            return false;
+        }
     };
     let sigset = cage.sigset.load(Ordering::Relaxed);
 
@@ -290,8 +401,14 @@ pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
 // if the signal handler does not exist, then return SIG_DFL
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
-    let Some(cage) = get_cage_or_debug_panic(cageid, "signal_get_handler") else {
-        return SIG_DFL as u32;
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!("signal_get_handler: cage {} not found", cageid));
+
+            return SIG_DFL as u32;
+        }
     };
     let handler = match cage.signalhandler.get(&signo) {
         Some(action_struct) => {
@@ -430,8 +547,17 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
 // return true if no pending unblocked signals are found
 // thread safety: this function will only be invoked by main thread of the cage
 pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
-    let Some(cage) = get_cage_or_debug_panic(cageid, "lind_check_no_pending_signal") else {
-        return true;
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "lind_check_no_pending_signal: cage {} not found",
+                cageid
+            ));
+
+            return true;
+        }
     };
     let pending_signals = cage.pending_signals.read();
 
@@ -449,8 +575,17 @@ pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
 // initialize the signal for a new thread
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_mainthread: bool) {
-    let Some(cage) = get_cage_or_debug_panic(cageid, "lind_signal_init") else {
-        return;
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "lind_signal_init: cage {} not found for thread {}",
+                cageid, threadid
+            ));
+
+            return;
+        }
     };
 
     // if this is specified as the main thread, then replace the main_threadid field in cage
@@ -458,7 +593,7 @@ pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_
         let mut threadid_guard = cage.main_threadid.write();
         *threadid_guard = threadid;
     }
-    let epoch_handler = RwLock::new(epoch_handler);
+    let epoch_handler = AtomicPtr::new(epoch_handler);
     cage.epoch_handler.insert(threadid, epoch_handler);
 
     // Store the OS thread ID so epoch_kill_all can send SIGUSR2 to interrupt
@@ -470,8 +605,16 @@ pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_
 // clean up signal stuff for an exited thread
 // return true if this is the last thread in the cage, otherwise return false
 pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
-    let Some(cage) = get_cage_or_debug_panic(cageid, "lind_thread_exit") else {
-        return false;
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!(
+                "lind_thread_exit: cage {} not found for thread {}",
+                cageid, thread_id
+            ));
+            return false;
+        }
     };
     // lock the main threadid until all the related fields including epoch_handler finishes its updating
     let mut threadid_guard = cage.main_threadid.write();
@@ -511,12 +654,19 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
                 // that EPOCH_KILLED state will only occur when all the threads is in EPOCH_KILLED state
                 // which holds true for now since EPOCH_KILLED is currently only used in epoch_kill_all
                 if saved_epoch_state == EPOCH_SIGNAL {
-                    let new_thread_epoch_handler = entry.value().write();
-                    let new_thread_epoch = *new_thread_epoch_handler;
+                    let new_thread_epoch_ptr = entry.value().load(Ordering::Acquire);
+                    if new_thread_epoch_ptr.is_null() {
+                        #[cfg(feature = "lind_debug")]
+                        lind_debug_panic(&format!(
+                            "lind_thread_exit: epoch pointer for new main thread {} is null",
+                            id
+                        ));
+                        return false;
+                    }
                     unsafe {
                         // make sure not to overwrite EPOCH_KILLED
-                        if *new_thread_epoch != EPOCH_KILLED {
-                            *new_thread_epoch = saved_epoch_state;
+                        if *new_thread_epoch_ptr != EPOCH_KILLED {
+                            *new_thread_epoch_ptr = saved_epoch_state;
                         }
                     };
                 }
@@ -535,8 +685,14 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
 // As a result, the new process may receive signals that were
 // pending in the previous process right after it starts.
 pub fn signal_may_trigger(cageid: u64) {
-    let Some(cage) = get_cage_or_debug_panic(cageid, "signal_may_trigger") else {
-        return;
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            #[cfg(feature = "lind_debug")]
+            lind_debug_panic(&format!("signal_may_trigger: cage {} not found", cageid));
+
+            return;
+        }
     };
     let pending_signals = cage.pending_signals.read();
     if !pending_signals.is_empty() {
