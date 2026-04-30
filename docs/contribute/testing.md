@@ -34,6 +34,7 @@ docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
 5. Build toolchain (glibc and wasmtime)
 ```
 # this may take a while ...
+make generate-syscall-mappings
 make lind-boot sysroot
 ```
 6. Run the test suite 

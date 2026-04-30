@@ -1,5 +1,10 @@
 //! Syscall number constants for the Lind platform.
 //!
+//! Includes both standard Linux x86_64 syscalls and Lind-specific extensions:
+//!   - REGISTER_HANDLER_SYSCALL (1001)
+//!   - COPY_DATA_BETWEEN_CAGES_SYSCALL (1002)
+//!   - COPY_HANDLER_TABLE_TO_CAGE_SYSCALL (1003)
+//!
 //! Source of truth: Linux x86_64 syscall table
 //!   https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
 //! (Historical overview: https://filippo.io/linux-syscall-table/)
@@ -91,8 +96,8 @@ pub const FSTATFS_SYSCALL: i32 = 138;
 pub const GETHOSTNAME_SYSCALL: i32 = 170;
 pub const FUTEX_SYSCALL: i32 = 202;
 pub const EPOLL_CREATE_SYSCALL: i32 = 213;
-pub const EXIT_GROUP_SYSCALL: i32 = 231;
 pub const CLOCK_GETTIME_SYSCALL: i32 = 228;
+pub const EXIT_GROUP_SYSCALL: i32 = 231;
 pub const EPOLL_WAIT_SYSCALL: i32 = 232;
 pub const EPOLL_CTL_SYSCALL: i32 = 233;
 pub const OPENAT_SYSCALL: i32 = 257;
@@ -102,10 +107,13 @@ pub const READLINKAT_SYSCALL: i32 = 267;
 pub const PPOLL_SYSCALL: i32 = 271;
 pub const SYNC_FILE_RANGE_SYSCALL: i32 = 277;
 pub const ACCEPT4_SYSCALL: i32 = 288;
-pub const PREADV_SYSCALL: i32 = 295;
-pub const PWRITEV_SYSCALL: i32 = 296;
-pub const PRLIMIT64_SYSCALL: i32 = 302;
 pub const EPOLL_CREATE1_SYSCALL: i32 = 291;
 pub const DUP3_SYSCALL: i32 = 292;
 pub const PIPE2_SYSCALL: i32 = 293;
+pub const PREADV_SYSCALL: i32 = 295;
+pub const PWRITEV_SYSCALL: i32 = 296;
+pub const PRLIMIT64_SYSCALL: i32 = 302;
 pub const GETRANDOM_SYSCALL: i32 = 318;
+pub const REGISTER_HANDLER_SYSCALL: i32 = 1001;
+pub const COPY_DATA_BETWEEN_CAGES_SYSCALL: i32 = 1002;
+pub const COPY_HANDLER_TABLE_TO_CAGE_SYSCALL: i32 = 1003;
