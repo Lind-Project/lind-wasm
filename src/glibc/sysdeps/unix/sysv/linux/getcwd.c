@@ -48,17 +48,30 @@
 char *
 __getcwd (char *buf, size_t size)
 {
-  // buf CAN be NULL - this means kernel should allocate the buffer
-  // Do NOT add null check here - NULL is valid
+  char *allocated = NULL;
+
+  if (buf == NULL)
+    {
+      /* POSIX: if buf is NULL, getcwd allocates the buffer.
+         If size is 0, use a reasonable default. */
+      if (size == 0)
+        size = PATH_MAX;
+      allocated = (char *) malloc (size);
+      if (allocated == NULL)
+        return NULL;
+      buf = allocated;
+    }
+
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  
+
   int ret = MAKE_LEGACY_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
-		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
-  
-  // kernel getcwd syscall returns the number of bytes copied
-  // while glibc wrapper should return the address of the string if success
+               host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+
   if (ret < 0)
+    {
+      free (allocated);
       return NULL;
+    }
 
   return buf;
 }
