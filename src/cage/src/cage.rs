@@ -380,7 +380,7 @@ static NEXT_CAGEID: AtomicU64 = AtomicU64::new(1);
 /// allocated ID, even under concurrent calls.
 pub fn alloc_cage_id() -> Option<u64> {
     match NEXT_CAGEID.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-        (v <= MAX_CAGEID as u64).then_some(v + 1)
+        (v + 1 < MAX_CAGEID as u64).then_some(v + 1)
     }) {
         Ok(v) => Some(v + 1),
         Err(_) => None,

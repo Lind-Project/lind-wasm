@@ -18,7 +18,7 @@ pub const FDKIND_KERNEL: u32 = 0;
 /// Maximum allowed Cage ID.  
 /// This limit is inherited from earlier implementations and may be
 /// adjusted in the future.
-pub const MAX_CAGEID: i32 = 1024;
+pub const MAX_CAGEID: i32 = 2048;
 pub const MAXFD: usize = 1024; // Maximum file descriptors per cage
 /// Maximum linear memory size for a single Wasm module in the current lind-wasm runtime.
 /// Since lind-wasm uses 32-bit memories, the linear memory address space is limited to 4 GiB.
