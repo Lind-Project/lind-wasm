@@ -10,4 +10,5 @@ dylink_tests/deterministic/dlopen_thread.c
 dylink_tests/deterministic/double_fork_dlopen.c
 dylink_tests/deterministic/fork_dlopen.c
 process_tests/deterministic/fork_max_cages.c
+file_tests/deterministic/statfs.c
 ci/deterministic/ci_intentional_failure_tmp.c

@@ -300,7 +300,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -329,7 +329,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -358,7 +358,7 @@ do_static_compile() {
   local -a default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
@@ -392,7 +392,7 @@ do_dynamic_compile() {
   local -a default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
     -fPIC
   )
 
@@ -429,7 +429,7 @@ do_library_compile() {
   )
   local -a default_clang_flags=(
     -g
-    -O0
+    -O2
     -fPIC
   )
 
