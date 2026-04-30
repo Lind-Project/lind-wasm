@@ -46,6 +46,8 @@ pub fn dlopen_call<
         Err(_) => return -(DylinkErrorCode::EOPEN as i32),
     };
 
+    println!("[debug] dlopen: {:?}", path);
+
     // retrieve the cageid of the caller
     let host = caller.data().clone();
     let ctx = host.get_ctx();
@@ -77,6 +79,7 @@ pub fn dlsym_call<
         Err(_) => return -(DylinkErrorCode::ENOFOUND as i32),
     };
 
+    println!("[debug] dlsym: {:?}", symbol);
     // Resolve symbol based on handle semantics.
     let val = if handle == RTLD_DEFAULT {
         match caller.find_library_symbol_from_global(symbol) {

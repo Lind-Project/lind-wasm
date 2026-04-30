@@ -1197,6 +1197,9 @@ impl Instance {
             let name = export.name().to_owned();
             match export.into_extern() {
                 Extern::Func(func) => {
+                    // if name.contains("namein") {
+                        // println!("[debug] apply_GOT_relocs: recognize {}", name);
+                    // }
                     funcs.push((name, func));
                 }
                 Extern::Global(global) => {
@@ -1212,6 +1215,10 @@ impl Instance {
         // We only update slots that are still unresolved to preserve first-definition-wins
         // semantics (load-order precedence / interposition).
         for (name, func) in funcs {
+            let mut trace = false;
+            // if name.contains("namein") {
+            //     trace = true;
+            // }
             // skip updating GOT only if fpcast is enabled
             // and the function is NOT a fpcast function
             let should_skip = if fpcast_enabled {
@@ -1224,8 +1231,15 @@ impl Instance {
                 false
             };
 
+            if trace {
+                println!("[debug] apply_GOT_relocs: {}: should_skip {}, need_update_got: {}", name, should_skip, need_update_got);
+            }
+
             if !should_skip {
                 let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
+                if trace {
+                    println!("[debug] apply_GOT_relocs: {}: index {}", name, index);
+                }
                 if need_update_got {
                     let final_name = {
                         if fpcast_enabled {
@@ -1236,9 +1250,9 @@ impl Instance {
                         }
                     };
 
-                    // update GOT entry
+                    // Cache the resolved table index; also updates the GOT cell if it exists.
                     let got_inner = got.as_ref().unwrap();
-                    if got_inner.update_entry_if_unresolved(&final_name, index) {
+                    if got_inner.cache_symbol(final_name, index) {
                         #[cfg(feature = "debug-dylink")]
                         println!("[debug] update GOT.func.{} to {}", final_name, index);
                     }
@@ -1249,21 +1263,19 @@ impl Instance {
         // Patch GOT memory entries for exported globals.
         // The exported global value is treated as a module-relative offset; we relocate it by
         // adding the resolved shared-memory base, producing an absolute address in Lind.
-        // Again, only update unresolved slots to preserve load-order precedence.
+        // We cache every i32 global unconditionally so that a later-loaded consumer (dlopen)
+        // whose GOT cell is created after this module was loaded can still be resolved.
         if need_update_got {
             let got_inner = got.as_ref().unwrap();
             let memory_base = memory_base.unwrap();
             for (name, global) in globals {
-                // Only relocate globals that are actually registered in the GOT.
-                // Applying memory_base to an unrelated exported global would overflow.
-                if !got_inner.has_entry(&name) {
-                    continue;
-                }
                 let val = global.get(&mut store);
+                // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
+                let Some(raw) = val.i32() else { continue };
                 // relocate the variable
-                let val = val.i32().unwrap() as u32 + memory_base;
-                // update GOT entry
-                if got_inner.update_entry_if_unresolved(&name, val) {
+                let val = raw as u32 + memory_base;
+                // Cache the resolved address; also updates the GOT cell if it already exists.
+                if got_inner.cache_symbol(&name, val) {
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] update GOT.mem.{} to {}", name, val);
                 }

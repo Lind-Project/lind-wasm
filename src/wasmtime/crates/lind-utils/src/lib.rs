@@ -92,6 +92,12 @@ pub fn round_up_size(base: u32, align: u32) -> u32 {
 /// That `u32` slot is the indirection point that generated code / trampolines can read from.
 /// When a symbol is resolved, we write the resolved address/value into the slot.
 /// Unresolved entries keep value 0 and can be warned about in `warning_undefined()`.
+///
+/// `symbol_cache` acts as a persistent export registry. When a module is loaded (preload or
+/// dlopen), its resolved symbol values are written here via `cache_symbol` regardless of whether
+/// a GOT cell for that name exists yet. When a later module is linked and creates a GOT cell for
+/// the same name (via `new_entry`), the cached value is written into the cell immediately.
+/// This covers the rdynamic / late-dlopen case where the provider loads before the consumer.
 #[derive(Default)]
 pub struct LindGOT {
     /// Concurrent hashmap because GOT resolution/patching may happen from multiple threads.
@@ -99,6 +105,10 @@ pub struct LindGOT {
     /// We store the pointer as `u64` instead of `*mut u32` so this struct can be shared across
     /// threads without Rust's raw-pointer `Send/Sync` friction.
     global_offset_table: DashMap<String, u64>,
+    /// All resolved symbol values seen so far, keyed by name.
+    /// Populated unconditionally during `apply_GOT_relocs` / `module_with_caller`.
+    /// Consulted in `new_entry` to pre-fill GOT cells for provider-before-consumer loads.
+    symbol_cache: DashMap<String, u32>,
 }
 
 impl LindGOT {
@@ -106,6 +116,14 @@ impl LindGOT {
     pub fn new() -> Self {
         Self {
             global_offset_table: DashMap::new(),
+            symbol_cache: DashMap::new(),
+        }
+    }
+
+    pub fn clone_with_cache(&self) -> Self {
+        Self {
+            global_offset_table: DashMap::new(),
+            symbol_cache: self.symbol_cache.clone(),
         }
     }
 
@@ -127,8 +145,26 @@ impl LindGOT {
     /// In our implementation, "first" means: the first time `new_entry()` is called for `name`.
     /// Later duplicates are ignored to keep the GOT mapping stable and consistent with
     /// load-order precedence.
+    ///
+    /// If `symbol_cache` already holds a resolved value for `name` (because a provider module
+    /// was loaded before any consumer created this GOT cell), the cached value is written into
+    /// the cell immediately so the consumer sees a non-zero value from the start.
     pub fn new_entry(&mut self, name: String, handler: *mut u32) {
         if !self.global_offset_table.contains_key(&name) {
+            // Pre-fill the cell if a provider module was already loaded.
+            if let Some(cached_val) = self.symbol_cache.get(&name) {
+                let val = *cached_val;
+                // println!("[debug] new_entry: update {:?} to cache: {}", name, val);
+                let cell = unsafe { &*(handler as *const AtomicU32) };
+                cell.store(val, Ordering::Release);
+                #[cfg(feature = "debug-dylink")]
+                println!(
+                    "[debug] pre-resolve GOT entry {} = {} from cache",
+                    name, *cached_val
+                );
+            } else {
+                // println!("[debug] new_entry: {:?} no cache", name);
+            }
             self.global_offset_table.insert(name, handler as u64);
         } else {
             #[cfg(feature = "debug-dylink")]
@@ -175,6 +211,25 @@ impl LindGOT {
             Ok(_) => true,   // we updated from 0 -> val
             Err(_) => false, // either already resolved or raced and lost
         }
+    }
+
+    /// Record the resolved value for an exported symbol and update any existing GOT cell.
+    ///
+    /// Called during `apply_GOT_relocs` / `module_with_caller` for every exported function or
+    /// data global, whether or not a GOT cell for that name exists yet.
+    ///
+    /// - If a GOT cell already exists (consumer loaded before provider): `update_entry_if_unresolved`
+    ///   fills it now, preserving first-definition-wins semantics.
+    /// - If no GOT cell exists yet (provider loaded before consumer): the value is stored in
+    ///   `symbol_cache` and `new_entry` will write it into the cell when the consumer is linked.
+    ///
+    /// Returns `true` if an existing GOT cell was updated (useful for debug logging at call sites).
+    pub fn cache_symbol(&self, name: &str, val: u32) -> bool {
+        // println!("[debug] cache_symbol: {} to {}", name, val);
+        if !self.symbol_cache.contains_key(name) {
+            self.symbol_cache.insert(name.to_string(), val);
+        }
+        self.update_entry_if_unresolved(name, val)
     }
 
     /// Read the GOT cell if the symbol exists.

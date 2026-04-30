@@ -9,7 +9,7 @@ use sysdefs::constants::lind_platform_const::{
     unset_stack_arena_base, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
-use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
+use sysdefs::constants::{DEFAULT_STACKSIZE, Errno, GUARD_SIZE, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
@@ -60,6 +60,7 @@ pub trait LindHost<T, U> {
 // the sub modules to directly interact with the top level runtime engine. But multi-processing, especially exec syscall,
 // would heavily require to do so. So the only convenient way to break the rule and communicate with the
 // top level runtime engine is abusing closures.
+#[derive(Clone)]
 pub struct LindCtx<T, U> {
     // linker used by the module
     pub linker: Option<Linker<T>>,
@@ -402,13 +403,16 @@ impl<
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
                     let dlopen_modules = child_ctx.dlopen_modules.clone();
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     let mut child_got = if dylink_enabled {
-                        Some(LindGOT::new())
+                        let got = child_ctx.got_table.as_ref().unwrap();
+                        let got_guard = got.lock().unwrap();
+                        Some(got_guard.clone_with_cache())
                     } else {
                         None
                     };
+
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
@@ -551,7 +555,12 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
+                        // instance.apply_GOT_relocs(&mut store, child_got.as_ref(), &child_table, Some(GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE), false);
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+
+                        linker
+                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
                             // Read dylink metadata for this dlopen'd module.
@@ -609,6 +618,9 @@ impl<
                                 .unwrap();
                             linker.allow_shadowing(false);
                         }
+
+                        let child_table_size = child_table.size(&mut store);
+                        println!("[debug] forked cage has table size: {}", child_table_size);
                     }
 
                     let epoch_pointer = if epoch_handler.is_some() {
@@ -739,8 +751,8 @@ impl<
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            let e = wasi_common::maybe_exit_on_error(err);
-                            eprintln!("Child Error: {:?}", e);
+                            // let e = wasi_common::maybe_exit_on_error(err);
+                            eprintln!("Child Error: {:?}", err);
                             cage::cage_record_exit_status(
                                 child_cageid,
                                 cage::ExitStatus::Exited(1),
@@ -815,6 +827,8 @@ impl<
         stack_size: u32,
         child_tid: u64,
     ) -> Result<i32> {
+        println!("[debug] pthread_create");
+        panic!("thread broken");
         // get the base address and size of the memory
         let (mem_base_u64, mem_size) = get_memory_base_and_size(&mut caller);
         let parent_address = mem_base_u64 as *mut u8;
@@ -879,6 +893,9 @@ impl<
 
         let get_cx = self.get_cx.clone();
 
+        // retrieve the child host
+        let mut child_host = caller.data().clone();
+
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
         let mut snapshot = {
             let mut parent_host = caller.data_mut();
@@ -891,9 +908,6 @@ impl<
 
             snapshot
         };
-
-        // retrieve the child host
-        let mut child_host = caller.data().clone();
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
 
@@ -1110,6 +1124,10 @@ impl<
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+
+                        linker
+                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
                             let dylink_info = module.dylink_meminfo();
@@ -1449,6 +1467,8 @@ impl<
                 });
             }
 
+            // println!("[debug] cageid {:?}: path: {:?}, argv: {:?}, environs: {:?}", cloned_cageid, path, argv, environs);
+
             let ret = exec_call(
                 &cloned_lindboot_cli,
                 &path,
@@ -1753,9 +1773,18 @@ impl<
 
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
+        // println!("[debug] fork process");
+        let cloned_got = if let Some(got) = self.got_table.as_ref() {
+            let got_guard = got.lock().unwrap();
+            // println!("[debug] fork process: clone_with_cache");
+            Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
+        } else {
+            None
+        };
+
         let forked_ctx = Self {
             linker: None,    // Linker is explicitly set up by the caller
-            got_table: None, // new process should use a new GOT
+            got_table: cloned_got, // new process should use a new GOT
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
@@ -1774,6 +1803,15 @@ impl<
 
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
+        println!("[debug] fork thread");
+        // let cloned_got = if let Some(got) = self.got_table.as_ref() {
+        //     let got_guard = got.lock().unwrap();
+        //     println!("[debug] fork thread: clone_with_cache");
+        //     Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
+        // } else {
+        //     None
+        // };
+
         let forked_ctx = Self {
             linker: None,    // Linker is explicitly set up by the caller
             got_table: None, // threads within a process should use same GOT
@@ -1794,15 +1832,15 @@ impl<
     }
 }
 
-impl<T, U> Clone for LindCtx<T, U>
-where
-    T: Clone + Send + Sync + 'static,
-    U: Clone + Send + Sync + 'static,
-{
-    fn clone(&self) -> Self {
-        self.fork_thread()
-    }
-}
+// impl<T, U> Clone for LindCtx<T, U>
+// where
+//     T: Clone + Send + Sync + 'static,
+//     U: Clone + Send + Sync + 'static,
+// {
+//     fn clone(&self) -> Self {
+//         self.fork_thread()
+//     }
+// }
 
 // get the base address of the wasm process
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
