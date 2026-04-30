@@ -15,7 +15,7 @@ int main()
     char buffer[WRITE_BUFFER_SIZE] = "";
     char readbuffer[WRITE_BUFFER_SIZE];
     for (int i = 0; i < WRITE_BUFFER_SIZE - 1; i++) buffer[i] = 'A';
-    buffer[WRITE_BUFFER_SIZE] = 0;
+    buffer[WRITE_BUFFER_SIZE - 1] = 0;
 	
     int test_fd = open(FILENAME, O_RDWR);
     write(test_fd, buffer, WRITE_BUFFER_SIZE);
