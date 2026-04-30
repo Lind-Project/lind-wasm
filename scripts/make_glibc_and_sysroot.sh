@@ -55,9 +55,7 @@ INCLUDE_PATHS="
     -I../sysdeps/x86/include
     -I../sysdeps/x86
     -I../sysdeps/wordsize-32
-    -I../sysdeps/ieee754/float128
-    -I../sysdeps/ieee754/ldbl-96/include
-    -I../sysdeps/ieee754/ldbl-96
+    -I../sysdeps/ieee754/ldbl-128
     -I../sysdeps/ieee754/dbl-64
     -I../sysdeps/ieee754/flt-32
     -I../sysdeps/ieee754
