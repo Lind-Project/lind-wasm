@@ -62,6 +62,8 @@ Here I must assume you have your SSH and IDE set up already. If not, refer to th
 ```bash
 docker run --privileged --ipc=host --cap-add=SYS_PTRACE --name WHATEVER -it securesystemslab/lind-wasm-dev /bin/bash
 ```
+Ater extensive testing and experimenting, the environment and dependency config for a fresh, clean-slate container would be much too onerous, and **starting a container on top of lind-wasm-dev is necessary** as it resolves numerous dependency issues such as clang, llvm, lld support with the correct versions. Please adhere to this.
+
 Just remember to name your container whatever unique name you want. In the future, you can find it by simply running docker ps and whenever you exit and want to come back to it, simply:
 
 ```bash
