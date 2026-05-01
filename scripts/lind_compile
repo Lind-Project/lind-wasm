@@ -307,7 +307,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -336,7 +336,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -365,7 +365,7 @@ do_static_compile() {
   local -a default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
@@ -399,7 +399,7 @@ do_dynamic_compile() {
   local -a default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
     -fPIC
   )
 
@@ -417,7 +417,7 @@ do_dynamic_compile() {
   fi
 
   run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
-    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" "$SYSROOT/lib/wasm32-wasi/lind_debug.o" -o "${OUT_WASM}"
   
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
@@ -441,7 +441,7 @@ do_library_compile() {
   )
   local -a default_clang_flags=(
     -g
-    -O0
+    -O2
     -fPIC
   )
 

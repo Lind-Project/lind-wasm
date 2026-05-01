@@ -9,13 +9,13 @@ pub use once_cell::sync::Lazy;
 /// interaction and increases efficiency.
 pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
-pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
 use sysdefs::constants::SIGCHLD;
 use sysdefs::data::fs_struct::SigactionStruct;
-#[cfg(debug_assertions)]
+#[cfg(feature = "lind_debug")]
 use sysdefs::logging::lind_debug_panic;
 
 /// Represents how a cage terminated, mirroring the two primary POSIX
@@ -121,12 +121,12 @@ pub fn cage_record_exit_status(cageid: u64, status: ExitStatus) {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "lind_debug")]
             lind_debug_panic(&format!(
                 "cage_record_exit_status: cage {} not found",
                 cageid
             ));
-            #[cfg(not(debug_assertions))]
+
             return;
         }
     };
@@ -161,10 +161,16 @@ pub struct Cage {
     pub sigset: AtomicU64,
     // pending_signals are signals that are pending to be handled
     pub pending_signals: RwLock<Vec<i32>>,
-    // epoch_handler is a hash map where key is the thread id of the cage, and the value is the epoch
-    // address of the wasm thread. The epoch is a u64 value that guest thread is frequently checking for
-    // and just to host once the value is changed
-    pub epoch_handler: DashMap<i32, RwLock<*mut u64>>,
+    // epoch_handler maps Lind thread IDs (key: i32) to raw pointers of
+    // each thread's Wasmtime epoch interruption state (value:
+    // AtomicPtr<u64>). It is used by epoch_kill_all during cage-wide
+    // termination, such as exit_group or signal-triggered exits, to mark
+    // every registered thread so that its Wasm execution observes the
+    // epoch kill and exits. Each thread registers its epoch pointer when
+    // entering the runtime and removes it during cleanup. This works
+    // together with os_tid_map, which interrupts threads blocked in host
+    // syscalls so they can re-enter Wasm and observe the epoch update.
+    pub epoch_handler: DashMap<i32, AtomicPtr<u64>>,
     // os_tid_map maps Lind thread IDs (key: i32) to OS thread IDs from
     // gettid (value: i64). Used by epoch_kill_all to send SIGUSR2 to
     // threads blocked in host syscalls, interrupting them so they can
@@ -311,17 +317,6 @@ pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
     }
 }
 
-/// Get a cage by ID, panicking in debug builds if the cage doesn't exist.
-/// Returns `None` in release builds so the caller can provide a fallback.
-pub fn get_cage_or_debug_panic(cageid: u64, caller: &str) -> Option<Arc<Cage>> {
-    let result = get_cage(cageid);
-    if result.is_none() {
-        #[cfg(debug_assertions)]
-        sysdefs::logging::lind_debug_panic(&format!("{}: cage {} not found", caller, cageid));
-    }
-    result
-}
-
 /// Borrows the `cageid` cage and applies a function `f` to it, return `Some(R)` or `None`
 /// depending on whether tha cage is out of range or does not exist.
 ///
@@ -385,7 +380,7 @@ static NEXT_CAGEID: AtomicU64 = AtomicU64::new(1);
 /// allocated ID, even under concurrent calls.
 pub fn alloc_cage_id() -> Option<u64> {
     match NEXT_CAGEID.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-        (v <= MAX_CAGEID as u64).then_some(v + 1)
+        (v + 1 < MAX_CAGEID as u64).then_some(v + 1)
     }) {
         Ok(v) => Some(v + 1),
         Err(_) => None,

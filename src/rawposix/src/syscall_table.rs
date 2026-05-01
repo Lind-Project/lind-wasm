@@ -8,13 +8,14 @@ use super::fs_calls::{
     close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
     fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
     ftruncate_syscall, futex_syscall, getcwd_syscall, getdents_syscall, getrandom_syscall,
-    ioctl_syscall, link_syscall, lseek_syscall, lstat_syscall, mkdir_syscall, mknod_syscall,
-    mmap_syscall, mprotect_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall,
-    openat_syscall, pipe2_syscall, pipe_syscall, pread_syscall, preadv_syscall, pwrite_syscall,
-    pwritev_syscall, read_syscall, readlink_syscall, readlinkat_syscall, readv_syscall,
-    rename_syscall, rmdir_syscall, shmat_syscall, shmctl_syscall, shmdt_syscall, shmget_syscall,
-    stat_syscall, statfs_syscall, symlink_syscall, symlinkat_syscall, sync_file_range_syscall,
-    truncate_syscall, unlink_syscall, unlinkat_syscall, write_syscall, writev_syscall,
+    ioctl_syscall, link_syscall, listxattr_syscall, lseek_syscall, lstat_syscall, mkdir_syscall,
+    mknod_syscall, mmap_syscall, mprotect_syscall, munmap_syscall, nanosleep_time64_syscall,
+    open_syscall, openat_syscall, pipe2_syscall, pipe_syscall, pread_syscall, preadv_syscall,
+    pwrite_syscall, pwritev_syscall, read_syscall, readlink_syscall, readlinkat_syscall,
+    readv_syscall, rename_syscall, rmdir_syscall, setxattr_syscall, shmat_syscall, shmctl_syscall,
+    shmdt_syscall, shmget_syscall, stat_syscall, statfs_syscall, symlink_syscall,
+    symlinkat_syscall, sync_file_range_syscall, truncate_syscall, unlink_syscall, unlinkat_syscall,
+    write_syscall, writev_syscall,
 };
 use super::init::RawCallFunc;
 use super::net_calls::{
@@ -133,6 +134,8 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         syscall_const::GETHOSTNAME_SYSCALL as u64,
         gethostname_syscall,
     ),
+    (188 as u64, setxattr_syscall),
+    (194 as u64, listxattr_syscall),
     (syscall_const::FUTEX_SYSCALL as u64, futex_syscall),
     (
         syscall_const::EPOLL_CREATE_SYSCALL as u64,
