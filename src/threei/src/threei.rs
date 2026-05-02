@@ -779,14 +779,22 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
 /// ## Returns:
 /// - Some(length) if a null terminator is found within max_len.
 /// - None if no null byte is found, indicating a malformed or unterminated string.
-fn _strlen_in_cage(src: *const u8, max_len: usize) -> Option<usize> {
-    unsafe {
-        for i in 0..max_len {
-            if *src.add(i) == 0 {
-                return Some(i);
-            }
+fn _strlen_in_cage(cageid: u64, srcaddr: u64, max_len: usize) -> Option<usize> {
+    for i in 0..max_len {
+        let addr = srcaddr.checked_add(i as u64)?;
+
+        // validate this byte before dereference
+        if check_addr_read(cageid, addr, 1).is_err() {
+            return None;
+        }
+
+        let byte = unsafe { *(addr as *const u8) };
+
+        if byte == 0 {
+            return Some(i);
         }
     }
+
     None // null terminator not found within max_len
 }
 
@@ -913,25 +921,16 @@ pub fn copy_data_between_cages(
             }
 
             // To safely determine the length of the string to copy, we need to scan for the null terminator.
-            let actual_len = match _strlen_in_cage(srcaddr as *const u8, len as usize) {
+            let actual_len = match _strlen_in_cage(srccage, srcaddr, len as usize) {
                 Some(n) => n + 1, // include '\0'
                 None => {
                     eprintln!(
-                        "[3i|copy] null terminator not found within max length: addr={:x}, max_len={}",
-                        srcaddr, len
+                        "[3i|copy] null terminator not found within max length: cage={}, addr={:x}, max_len={}",
+                        srccage, srcaddr, len
                     );
                     return threei_const::ELINDAPIABORTED;
                 }
             };
-
-            // validate that the entire string (up to and including the null terminator) is readable in the source cage
-            if let Err(_e) = check_addr_read(srccage, srcaddr, actual_len) {
-                eprintln!(
-                    "[3i|copy] src scan failed on addr={:x} with actual_len={}",
-                    actual_len, actual_len
-                );
-                return threei_const::ELINDAPIABORTED;
-            }
 
             actual_len
         }
