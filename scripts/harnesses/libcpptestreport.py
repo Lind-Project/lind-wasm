@@ -12,6 +12,7 @@ import html
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,38 @@ def get_empty_result() -> dict[str, Any]:
     }
 
 
+def _timing_fields_for_case(
+    native_compile_time_sec: float | None,
+    wasm_compile_time_sec: float | None,
+    native_run_time_sec: float | None,
+    wasm_run_time_sec: float | None,
+) -> dict[str, Any]:
+    """Match wasmtestreport.add_test_result timing shape (lazy import avoids import cycle)."""
+    from harnesses import wasmtestreport as wtr
+
+    merged = wtr.build_timing_info(
+        native_compile_time_sec=native_compile_time_sec,
+        wasm_compile_time_sec=wasm_compile_time_sec,
+        native_run_time_sec=native_run_time_sec,
+        wasm_run_time_sec=wasm_run_time_sec,
+    )
+    native_total = None
+    if merged["native_compile_time_sec"] is not None or merged["native_run_time_sec"] is not None:
+        native_total = (merged["native_compile_time_sec"] or 0.0) + (merged["native_run_time_sec"] or 0.0)
+    wasm_total = None
+    if merged["wasm_compile_time_sec"] is not None or merged["wasm_run_time_sec"] is not None:
+        wasm_total = (merged["wasm_compile_time_sec"] or 0.0) + (merged["wasm_run_time_sec"] or 0.0)
+    return {
+        "native_time": native_total,
+        "wasm_time": wasm_total,
+        "timing": {
+            **merged,
+            "native_time_sec": native_total,
+            "wasm_time_sec": wasm_total,
+        },
+    }
+
+
 def _add_test_result(
     bucket: dict[str, Any],
     test_name: str,
@@ -50,13 +83,33 @@ def _add_test_result(
     error_type: str | None,
     output: str,
     logger: logging.Logger,
+    *,
+    native_compile_time_sec: float | None = None,
+    wasm_compile_time_sec: float | None = None,
+    native_run_time_sec: float | None = None,
+    wasm_run_time_sec: float | None = None,
 ) -> None:
     bucket["total_test_cases"] += 1
-    bucket["test_cases"][test_name] = {
+    entry: dict[str, Any] = {
         "status": status,
         "error_type": error_type,
         "output": output,
     }
+    if (
+        native_compile_time_sec is not None
+        or wasm_compile_time_sec is not None
+        or native_run_time_sec is not None
+        or wasm_run_time_sec is not None
+    ):
+        entry.update(
+            _timing_fields_for_case(
+                native_compile_time_sec,
+                wasm_compile_time_sec,
+                native_run_time_sec,
+                wasm_run_time_sec,
+            )
+        )
+    bucket["test_cases"][test_name] = entry
     if status == "Success":
         bucket["number_of_success"] += 1
         bucket["success"].append(test_name)
@@ -94,30 +147,33 @@ def _cwasm_path_for_source(source: Path) -> Path:
     return source.parent / f"{source.name}.cwasm"
 
 
-def _run_lind_compile_cpp_full(source: Path) -> tuple[int, str]:
+def _run_lind_compile_cpp_full(source: Path) -> tuple[int, str, float]:
     cmd = [str(LIND_WASM_BASE / "scripts" / "lind_compile_cpp"), str(source)]
+    t0 = time.perf_counter()
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(LIND_WASM_BASE))
     except OSError as exc:
-        return 127, f"Exception running lind_compile_cpp: {exc}"
+        return 127, f"Exception running lind_compile_cpp: {exc}", time.perf_counter() - t0
     out = proc.stdout or ""
     err = proc.stderr or ""
-    return proc.returncode, out + (("\n" + err) if out and err else err)
+    return proc.returncode, out + (("\n" + err) if out and err else err), time.perf_counter() - t0
 
 
-def _run_native_compile_cpp(source: Path, output_binary: Path) -> tuple[int, str]:
+def _run_native_compile_cpp(source: Path, output_binary: Path) -> tuple[int, str, float]:
     cmd = [CXX, "-std=c++17", str(source), "-o", str(output_binary)]
+    t0 = time.perf_counter()
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(LIND_WASM_BASE))
     except OSError as exc:
-        return 127, f"Exception running native C++ compiler ({CXX}): {exc}"
+        return 127, f"Exception running native C++ compiler ({CXX}): {exc}", time.perf_counter() - t0
     out = proc.stdout or ""
     err = proc.stderr or ""
-    return proc.returncode, out + (("\n" + err) if out and err else err)
+    return proc.returncode, out + (("\n" + err) if out and err else err), time.perf_counter() - t0
 
 
-def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str]:
+def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str, float]:
     cmd = [str(LIND_TOOL_PATH / "lind_run"), wasm_basename]
+    t0 = time.perf_counter()
     try:
         proc = subprocess.run(
             cmd,
@@ -127,16 +183,17 @@ def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str]
             timeout=timeout_sec,
         )
     except subprocess.TimeoutExpired:
-        return "timeout", f"Timed out after {timeout_sec}s"
+        return "timeout", f"Timed out after {timeout_sec}s", time.perf_counter() - t0
     except OSError as exc:
-        return "error", f"Exception running lind_run: {exc}"
+        return "error", f"Exception running lind_run: {exc}", time.perf_counter() - t0
 
     out = proc.stdout or ""
     err = proc.stderr or ""
-    return proc.returncode, out + (("\n" + err) if err else "")
+    return proc.returncode, out + (("\n" + err) if err else ""), time.perf_counter() - t0
 
 
-def _run_native_binary(binary_path: Path, timeout_sec: int) -> tuple[Any, str]:
+def _run_native_binary(binary_path: Path, timeout_sec: int) -> tuple[Any, str, float]:
+    t0 = time.perf_counter()
     try:
         proc = subprocess.run(
             [str(binary_path)],
@@ -146,12 +203,12 @@ def _run_native_binary(binary_path: Path, timeout_sec: int) -> tuple[Any, str]:
             timeout=timeout_sec,
         )
     except subprocess.TimeoutExpired:
-        return "timeout", f"Timed out after {timeout_sec}s"
+        return "timeout", f"Timed out after {timeout_sec}s", time.perf_counter() - t0
     except OSError as exc:
-        return "error", f"Exception running native binary: {exc}"
+        return "error", f"Exception running native binary: {exc}", time.perf_counter() - t0
     out = proc.stdout or ""
     err = proc.stderr or ""
-    return proc.returncode, out + (("\n" + err) if err else "")
+    return proc.returncode, out + (("\n" + err) if err else ""), time.perf_counter() - t0
 
 
 def _cleanup_artifacts(wasm_path: Path, cwasm_path: Path, logger: logging.Logger) -> None:
@@ -193,7 +250,7 @@ def _run_single_libcpp_test(
     run_basename = cwasm_path.name
     native_bin = src.parent / f"{src.stem}.native"
 
-    native_compile_rc, native_compile_out = _run_native_compile_cpp(src, native_bin)
+    native_compile_rc, native_compile_out, t_native_compile = _run_native_compile_cpp(src, native_bin)
     if native_compile_rc != 0:
         _add_test_result(
             bucket,
@@ -202,10 +259,11 @@ def _run_single_libcpp_test(
             "Compile_Failure",
             f"Native compile failed (exit={native_compile_rc})\n{native_compile_out}",
             logger,
+            native_compile_time_sec=t_native_compile,
         )
         return
 
-    rc, compile_out = _run_lind_compile_cpp_full(src)
+    rc, compile_out, t_wasm_compile = _run_lind_compile_cpp_full(src)
     if rc != 0:
         _add_test_result(
             bucket,
@@ -214,6 +272,8 @@ def _run_single_libcpp_test(
             "Compile_Failure",
             f"lind_compile_cpp failed (exit={rc})\n{compile_out}",
             logger,
+            native_compile_time_sec=t_native_compile,
+            wasm_compile_time_sec=t_wasm_compile,
         )
         _cleanup_native_artifact(native_bin, logger)
         return
@@ -225,24 +285,68 @@ def _run_single_libcpp_test(
             "Compile_Failure",
             f"lind_compile_cpp exited 0 but .cwasm missing: {cwasm_path}\n{compile_out}",
             logger,
+            native_compile_time_sec=t_native_compile,
+            wasm_compile_time_sec=t_wasm_compile,
         )
         _cleanup_native_artifact(native_bin, logger)
         return
 
-    native_rc, native_out = _run_native_binary(native_bin, timeout_sec)
-    run_rc, run_out = _run_wasm_with_lind(run_basename, timeout_sec)
+    native_rc, native_out, t_native_run = _run_native_binary(native_bin, timeout_sec)
+    run_rc, run_out, t_wasm_run = _run_wasm_with_lind(run_basename, timeout_sec)
     try:
         if native_rc == "timeout":
-            _add_test_result(bucket, rel_name, "Failure", "Timeout", "Native execution timed out", logger)
+            _add_test_result(
+                bucket,
+                rel_name,
+                "Failure",
+                "Timeout",
+                "Native execution timed out",
+                logger,
+                native_compile_time_sec=t_native_compile,
+                wasm_compile_time_sec=t_wasm_compile,
+                native_run_time_sec=t_native_run,
+            )
             return
         if isinstance(native_rc, str):
-            _add_test_result(bucket, rel_name, "Failure", "Runtime_Failure", f"Native execution failed\n{native_out}", logger)
+            _add_test_result(
+                bucket,
+                rel_name,
+                "Failure",
+                "Runtime_Failure",
+                f"Native execution failed\n{native_out}",
+                logger,
+                native_compile_time_sec=t_native_compile,
+                wasm_compile_time_sec=t_wasm_compile,
+                native_run_time_sec=t_native_run,
+            )
             return
         if run_rc == "timeout":
-            _add_test_result(bucket, rel_name, "Failure", "Timeout", run_out, logger)
+            _add_test_result(
+                bucket,
+                rel_name,
+                "Failure",
+                "Timeout",
+                run_out,
+                logger,
+                native_compile_time_sec=t_native_compile,
+                wasm_compile_time_sec=t_wasm_compile,
+                native_run_time_sec=t_native_run,
+                wasm_run_time_sec=t_wasm_run,
+            )
             return
         if isinstance(run_rc, str) or run_rc != 0:
-            _add_test_result(bucket, rel_name, "Failure", "Runtime_Failure", run_out, logger)
+            _add_test_result(
+                bucket,
+                rel_name,
+                "Failure",
+                "Runtime_Failure",
+                run_out,
+                logger,
+                native_compile_time_sec=t_native_compile,
+                wasm_compile_time_sec=t_wasm_compile,
+                native_run_time_sec=t_native_run,
+                wasm_run_time_sec=t_wasm_run,
+            )
             return
         if run_rc != native_rc or run_out != native_out:
             mismatch = (
@@ -252,7 +356,18 @@ def _run_single_libcpp_test(
                 "=== Wasm output ===\n"
                 f"{run_out}"
             )
-            _add_test_result(bucket, rel_name, "Failure", "Output_mismatch", mismatch, logger)
+            _add_test_result(
+                bucket,
+                rel_name,
+                "Failure",
+                "Output_mismatch",
+                mismatch,
+                logger,
+                native_compile_time_sec=t_native_compile,
+                wasm_compile_time_sec=t_wasm_compile,
+                native_run_time_sec=t_native_run,
+                wasm_run_time_sec=t_wasm_run,
+            )
             return
 
         _add_test_result(
@@ -265,6 +380,10 @@ def _run_single_libcpp_test(
                 f"{run_out}"
             ),
             logger,
+            native_compile_time_sec=t_native_compile,
+            wasm_compile_time_sec=t_wasm_compile,
+            native_run_time_sec=t_native_run,
+            wasm_run_time_sec=t_wasm_run,
         )
     finally:
         _cleanup_artifacts(wasm_path, cwasm_path, logger)
@@ -293,17 +412,21 @@ def run_libcpp_integration(
 
 
 def generate_html_section(libcpp: dict[str, Any]) -> str:
+    from harnesses import wasmtestreport as wtr
+
     rows: list[str] = []
     for test_name, test_result in sorted(libcpp.get("test_cases", {}).items()):
         status = test_result.get("status", "Unknown")
         error_type = test_result.get("error_type") or ""
         out = html.escape(str(test_result.get("output", "")))
+        native_time, wasm_time = wtr.get_row_time_values(test_result)
         rows.append(
             "<tr>"
             f"<td>{html.escape(test_name)}</td>"
             f"<td>{html.escape(status)}</td>"
             f"<td>{html.escape(error_type)}</td>"
-            "<td>N/A</td><td>N/A</td>"
+            f"<td>{wtr.format_time_cell(native_time)}</td>"
+            f"<td>{wtr.format_time_cell(wasm_time)}</td>"
             f"<td><pre>{out}</pre></td>"
             "</tr>"
         )
@@ -313,7 +436,10 @@ def generate_html_section(libcpp: dict[str, Any]) -> str:
             '<div class="wasm-harness-subsection">',
             "<h2>Libc++ integration</h2>",
             "<p>Full <code>lind_compile_cpp</code> (wasm-opt + precompile), <code>lind_run</code> on the "
-            "<code>.cwasm</code>, and verify native and wasm runs have identical exit codes and output.</p>",
+            "<code>.cwasm</code>, and verify native and wasm runs have identical exit codes and output. "
+            "<strong>Native time</strong> / <strong>Wasm time</strong> are total wall time (native compile + "
+            "native run vs <code>lind_compile_cpp</code> + <code>lind_run</code>), same convention as the "
+            "deterministic/fail tables above.</p>",
             "<h3>Summary</h3>",
             '<table class="summary-table">',
             "<tr><th>Metric</th><th>Value</th></tr>",
