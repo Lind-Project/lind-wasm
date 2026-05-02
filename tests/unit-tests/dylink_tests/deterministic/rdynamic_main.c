@@ -1,7 +1,5 @@
 // main.c
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <dlfcn.h>
 
 // This function will be called from the shared library
@@ -14,7 +12,7 @@ int main(void) {
     void (*plugin_entry)(void);
 
     // Load the shared library
-    handle = dlopen("./rdynamic_lib.cwasm", RTLD_NOW);
+    handle = dlopen("./back_ref_lib.cwasm", RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "dlopen error: %s\n", dlerror());
         return 1;
@@ -26,8 +24,6 @@ int main(void) {
         fprintf(stderr, "dlsym error: %s\n", dlerror());
         return 1;
     }
-
-    int pid = fork();
 
     // Call into the plugin
     plugin_entry();

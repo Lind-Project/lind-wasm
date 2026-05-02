@@ -48,6 +48,10 @@ impl LindHost<HostCtx, CliOptions> for HostCtx {
     fn get_ctx(&self) -> LindCtx<HostCtx, CliOptions> {
         self.lind_fork_ctx.clone().unwrap()
     }
+
+    fn get_ctx_mut(&mut self) -> &mut LindCtx<HostCtx, CliOptions> {
+        self.lind_fork_ctx.as_mut().unwrap()
+    }
 }
 
 pub struct DylinkMetadata {

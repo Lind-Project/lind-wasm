@@ -33,9 +33,6 @@ static void wait_child(pid_t pid)
 	pid_t w = waitpid(pid, &status, 0);
 	assert(w >= 0);
 	assert(WIFEXITED(status));
-	if (WEXITSTATUS(status) != 0) {
-		printf("FAIL: child exited with status %d\n", WEXITSTATUS(status));
-	}
 	assert(WEXITSTATUS(status) == 0);
 }
 
@@ -73,7 +70,7 @@ int main(void)
 	}
 	wait_child(pid);
 	for (int i = 0; i < NCHUNKS; i++) free(chunks[i]);
-	printf("Test 1 PASS: large heap survives fork\n");
+	/* Test 1 PASS */
 
 	/* ---- Test 2: mmap region ---- */
 	#define MMAP_SIZE (4 * 1024 * 1024)
@@ -95,7 +92,7 @@ int main(void)
 	}
 	wait_child(pid);
 	munmap(mapped, MMAP_SIZE);
-	printf("Test 2 PASS: mmap region survives fork\n");
+	/* Test 2 PASS */
 
 	/* ---- Test 3: Nested fork with heap growth ---- */
 	char *pre = (char *)malloc(4 * 1024 * 1024);
@@ -124,7 +121,7 @@ int main(void)
 	}
 	wait_child(pid);
 	free(pre);
-	printf("Test 3 PASS: nested fork with heap growth\n");
+	/* Test 3 PASS */
 
 	/* ---- Test 4: Guard page pattern (mmap PROT_NONE + partial mprotect) ---- */
 	#define GUARD_TOTAL (16 * 4096)  /* 64 KB total */
@@ -155,7 +152,7 @@ int main(void)
 	}
 	wait_child(pid);
 	munmap(guarded, GUARD_TOTAL);
-	printf("Test 4 PASS: guard page + mprotect survives fork\n");
+	/* Test 4 PASS */
 
 	/* ---- Test 5: Many fragmented mmaps ---- */
 	#define FRAG_COUNT 64
@@ -182,7 +179,7 @@ int main(void)
 	}
 	wait_child(pid);
 	for (int i = 0; i < FRAG_COUNT; i++) munmap(frags[i], FRAG_SIZE);
-	printf("Test 5 PASS: fragmented mmaps survive fork\n");
+	/* Test 5 PASS */
 
 	/* ---- Test 6: Network sockets before fork (lmbench pattern) ---- */
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -222,7 +219,7 @@ int main(void)
 	wait_child(pid);
 	close(sockfd);
 	free(netbuf);
-	printf("Test 6 PASS: socket + large buffer survives fork\n");
+	/* Test 6 PASS */
 
 	/* ---- Test 7: mmap + munmap holes ---- */
 	#define HOLE_SIZE (8 * 4096)  /* 32 KB */
@@ -255,7 +252,7 @@ int main(void)
 	wait_child(pid);
 	munmap(a, HOLE_SIZE);
 	munmap(c, HOLE_SIZE);
-	printf("Test 7 PASS: mmap/munmap holes survive fork\n");
+	/* Test 7 PASS */
 
 	printf("All tests passed.\n");
 	return 0;
