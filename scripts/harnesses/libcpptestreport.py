@@ -4,6 +4,12 @@
 This module intentionally exposes helper functions only; it is invoked by
 `scripts/harnesses/wasmtestreport.py` so libc++ results remain embedded in the
 single wasm harness JSON/HTML output.
+
+Timing dicts and HTML time cells mirror `wasmtestreport` field names and
+formatting, but are implemented locally here: the harness is often run as
+``python3 scripts/harnesses/wasmtestreport.py``, so ``sys.path`` does not
+include the parent ``scripts/`` package and ``import harnesses.wasmtestreport``
+fails inside this module.
 """
 
 from __future__ import annotations
@@ -44,16 +50,42 @@ def get_empty_result() -> dict[str, Any]:
     }
 
 
+def _libcpp_build_timing_info(
+    native_compile_time_sec: float | None = None,
+    native_run_time_sec: float | None = None,
+    wasm_compile_time_sec: float | None = None,
+    wasm_run_time_sec: float | None = None,
+) -> dict[str, Any | None]:
+    """Same keys/merge rules as wasmtestreport.build_timing_info (kept local; see module docstring)."""
+    timing_info: dict[str, Any | None] = {
+        "native_compile_time_sec": None,
+        "native_run_time_sec": None,
+        "wasm_compile_time_sec": None,
+        "wasm_run_time_sec": None,
+    }
+    timing_info.update(
+        {
+            k: v
+            for k, v in (
+                ("native_compile_time_sec", native_compile_time_sec),
+                ("native_run_time_sec", native_run_time_sec),
+                ("wasm_compile_time_sec", wasm_compile_time_sec),
+                ("wasm_run_time_sec", wasm_run_time_sec),
+            )
+            if k in timing_info
+        }
+    )
+    return timing_info
+
+
 def _timing_fields_for_case(
     native_compile_time_sec: float | None,
     wasm_compile_time_sec: float | None,
     native_run_time_sec: float | None,
     wasm_run_time_sec: float | None,
 ) -> dict[str, Any]:
-    """Match wasmtestreport.add_test_result timing shape (lazy import avoids import cycle)."""
-    from harnesses import wasmtestreport as wtr
-
-    merged = wtr.build_timing_info(
+    """Match wasmtestreport.add_test_result timing shape."""
+    merged = _libcpp_build_timing_info(
         native_compile_time_sec=native_compile_time_sec,
         wasm_compile_time_sec=wasm_compile_time_sec,
         native_run_time_sec=native_run_time_sec,
@@ -131,6 +163,26 @@ def _add_test_result(
         bucket["number_of_timeout_failures"] += 1
         bucket["timeout_failures"].append(test_name)
     logger.error("[libcpp] FAILURE: %s — %s", test_name, error_type or "unknown")
+
+
+def _format_time_cell(value: Any) -> str:
+    """Same as wasmtestreport.format_time_cell."""
+    return "N/A" if value is None else f"{value:.6f}s"
+
+
+def _get_row_time_values(result: dict[str, Any]) -> tuple[Any, Any]:
+    """Same as wasmtestreport.get_row_time_values."""
+    timing = result.get("timing", {}) if isinstance(result, dict) else {}
+
+    native_time = timing.get("native_time_sec")
+    wasm_time = timing.get("wasm_time_sec")
+
+    if native_time is None:
+        native_time = result.get("native_time") if isinstance(result, dict) else None
+    if wasm_time is None:
+        wasm_time = result.get("wasm_time") if isinstance(result, dict) else None
+
+    return native_time, wasm_time
 
 
 def _discover_source_paths() -> list[Path]:
@@ -412,21 +464,19 @@ def run_libcpp_integration(
 
 
 def generate_html_section(libcpp: dict[str, Any]) -> str:
-    from harnesses import wasmtestreport as wtr
-
     rows: list[str] = []
     for test_name, test_result in sorted(libcpp.get("test_cases", {}).items()):
         status = test_result.get("status", "Unknown")
         error_type = test_result.get("error_type") or ""
         out = html.escape(str(test_result.get("output", "")))
-        native_time, wasm_time = wtr.get_row_time_values(test_result)
+        native_time, wasm_time = _get_row_time_values(test_result)
         rows.append(
             "<tr>"
             f"<td>{html.escape(test_name)}</td>"
             f"<td>{html.escape(status)}</td>"
             f"<td>{html.escape(error_type)}</td>"
-            f"<td>{wtr.format_time_cell(native_time)}</td>"
-            f"<td>{wtr.format_time_cell(wasm_time)}</td>"
+            f"<td>{_format_time_cell(native_time)}</td>"
+            f"<td>{_format_time_cell(wasm_time)}</td>"
             f"<td><pre>{out}</pre></td>"
             "</tr>"
         )
