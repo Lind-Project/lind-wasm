@@ -50,6 +50,9 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     --fpcast-emu                enable function-pointer-cast emulation via wasm-opt
                                 (applies to full and --opt-only modes; for dynamic/library
                                 builds also passes --pass-arg=relocatable-fpcast)
+    -rdynamic                   export all symbols from the main module so dynamically loaded
+                                libraries can resolve them at runtime; adds -fvisibility=default
+                                and -Wl,--export-dynamic (dynamic build only)
     --no-default-clang-flags    do not add lind_compile's optional clang flags
     -h, --help                  show this help
 
@@ -82,6 +85,7 @@ PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
 COMPILE_LIBRARY="false"
+RDYNAMIC="false"
 TARGET_DIR=""
 ORIGINAL_ARGS=("$@")
 
@@ -134,6 +138,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --compile-library)
       COMPILE_LIBRARY="true"
+      ;;
+    -rdynamic)
+      RDYNAMIC="true"
       ;;
     --compile-grate)
       COMPILE_GRATE="true"
@@ -300,7 +307,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -329,7 +336,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -358,7 +365,7 @@ do_static_compile() {
   local -a default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
@@ -392,9 +399,14 @@ do_dynamic_compile() {
   local -a default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
     -fPIC
   )
+
+  # -rdynamic: export all symbols so dynamically loaded libraries can resolve them at runtime
+  if [[ "${RDYNAMIC}" == "true" ]]; then
+    mandatory_clang_flags+=("-fvisibility=default" "-Wl,--export-dynamic")
+  fi
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -405,7 +417,7 @@ do_dynamic_compile() {
   fi
 
   run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
-    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" "$SYSROOT/lib/wasm32-wasi/lind_debug.o" -o "${OUT_WASM}"
   
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
@@ -429,7 +441,7 @@ do_library_compile() {
   )
   local -a default_clang_flags=(
     -g
-    -O0
+    -O2
     -fPIC
   )
 
@@ -442,7 +454,7 @@ do_library_compile() {
   
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
   run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
-  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer optional
 }
 
 do_compile() {

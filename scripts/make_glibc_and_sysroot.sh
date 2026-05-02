@@ -181,6 +181,7 @@ rm -rf "$SYSROOT"
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 cp "$BUILD/lind_utils.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$BUILD/lind_debug.o" "$SYSROOT/lib/wasm32-wasi/"
 
 "$SCRIPT_DIR/make_archive.sh"
 cd $SCRIPT_DIR

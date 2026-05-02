@@ -19,6 +19,7 @@ criterion = "0.5"
 
 [features]
 disable_signals = []
+lind_debug = []
 
 [[bench]]
 name = "cage_map_bench"

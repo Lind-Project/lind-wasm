@@ -29,6 +29,10 @@ build: lindfs lind-boot sysroot
 .PHONY: all
 all: build
 
+.PHONY: fpcast
+fpcast:
+	$(MAKE) build WITH_FPCAST=1
+
 .PHONY: sysroot
 sysroot: build-dir
 	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
