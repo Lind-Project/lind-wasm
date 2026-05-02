@@ -932,7 +932,7 @@ pub fn copy_data_between_cages(
                 );
                 return threei_const::ELINDAPIABORTED;
             }
-            
+
             actual_len
         }
         // Reject invalid copytype values
