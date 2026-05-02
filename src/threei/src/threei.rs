@@ -779,14 +779,22 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
 /// ## Returns:
 /// - Some(length) if a null terminator is found within max_len.
 /// - None if no null byte is found, indicating a malformed or unterminated string.
-fn _strlen_in_cage(src: *const u8, max_len: usize) -> Option<usize> {
-    unsafe {
-        for i in 0..max_len {
-            if *src.add(i) == 0 {
-                return Some(i);
-            }
+fn _strlen_in_cage(cageid: u64, srcaddr: u64, max_len: usize) -> Option<usize> {
+    for i in 0..max_len {
+        let addr = srcaddr.checked_add(i as u64)?;
+
+        // validate this byte before dereference
+        if check_addr_read(cageid, addr, 1).is_err() {
+            return None;
+        }
+
+        let byte = unsafe { *(addr as *const u8) };
+
+        if byte == 0 {
+            return Some(i);
         }
     }
+
     None // null terminator not found within max_len
 }
 
@@ -882,36 +890,49 @@ pub fn copy_data_between_cages(
         panic!("Dynamic allocation not yet supported in copy_data_between_cages");
     }
 
-    // Decide actual number of bytes to copy depending on CopyType
-    // `memcpy`: Copies exactly n bytes from src to dest.
-    // `strncpy`: Copies at most n bytes from src to dest.
-    // If grate doesn't know the length of the content beforehand, it should use `strncpy` and set len to maximum
-    // limits to avoid buffer overflow, so 3i needs to check the length of the content before copying.
-    // Otherwise, grate should know the exact length of the content, for example the complex data structure etc.
-    // In this case, it should use `memcpy` to copy the content.
-    // So we have to check the address range and permissions accordingly before copying the data.
+    // Decide the actual number of bytes to copy depending on CopyType.
+    //
+    // `RawMemcpy`:
+    //   Copies exactly `len` bytes from src to dest.
+    //   Use this when the caller already knows the exact byte length of the
+    //   source object, for example fixed-size structs, serialized buffers with
+    //   known size, or other non-string binary data.
+    //
+    // `Strncpy`:
+    //   Copies a NULL-terminated string from src to dest, bounded by `len`.
+    //   Use this only when the caller does not know the string length in advance,
+    //   but the source data is guaranteed to be a valid C string, i.e. it must
+    //   contain a `'\0'` terminator within the `len` byte limit.
+    //
+    //   `Strncpy` is not a general "unknown-length buffer" copy. If the source
+    //   length is unknown and the data is not NULL-terminated, then 3i has no safe
+    //   or well-defined way to determine where the object ends. In that case, the
+    //   caller must provide an explicit byte length and use `RawMemcpy`, or the
+    //   data format must carry its own length metadata, such as a length-prefixed
+    //   buffer.
     let copy_len: usize = match CopyType::try_from(copytype) {
         // memcpy: just copy exactly len bytes
         Ok(CopyType::RawMemcpy) => len as usize,
-        // strncpy: copy until '\0' or len limit, whichever comes first
+        // strncpy: copy until '\0'
         Ok(CopyType::Strncpy) => {
-            // Validate that the source range is readable for at least `len` bytes
-            if let Err(_e) = check_addr_read(srccage, srcaddr, len as usize) {
-                eprintln!("[3i|copy] src precheck failed at start {:x}", srcaddr);
+            if srcaddr == 0 {
+                eprintln!("[3i|copy] src null");
                 return threei_const::ELINDAPIABORTED;
             }
-            // Try to compute actual string length within limit
-            let max_scan = len as usize;
-            let host_src_try = srcaddr;
-            if host_src_try == 0 {
-                eprintln!("[3i|copy] host_src null");
-                return threei_const::ELINDAPIABORTED;
-            }
-            let actual = match _strlen_in_cage(host_src_try as *const u8, max_scan) {
-                Some(n) => n + 1,     // include '\0'
-                None => len as usize, // assume max length
+
+            // To safely determine the length of the string to copy, we need to scan for the null terminator.
+            let actual_len = match _strlen_in_cage(srccage, srcaddr, len as usize) {
+                Some(n) => n + 1, // include '\0'
+                None => {
+                    eprintln!(
+                        "[3i|copy] null terminator not found within max length: cage={}, addr={:x}, max_len={}",
+                        srccage, srcaddr, len
+                    );
+                    return threei_const::ELINDAPIABORTED;
+                }
             };
-            core::cmp::min(actual, len as usize)
+
+            actual_len
         }
         // Reject invalid copytype values
         Err(other) => {
