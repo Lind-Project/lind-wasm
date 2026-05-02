@@ -489,7 +489,7 @@ do_optimize() {
       --epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module \
       --asyncify --pass-arg=asyncify-import-globals \
       $FPCAST_ARG \
-      --debuginfo \
+      -O2 --debuginfo \
       "${OUT_WASM}" -o "${OUT_WASM}"
   else 
     if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
@@ -498,7 +498,7 @@ do_optimize() {
         --epoch-injection --pass-arg=epoch-import \
         --asyncify --pass-arg=asyncify-import-globals \
         $FPCAST_ARG \
-        --debuginfo \
+        -O2 --debuginfo \
         "${OUT_WASM}" -o "${OUT_WASM}"
     else
       run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify $FPCAST_ARG -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
