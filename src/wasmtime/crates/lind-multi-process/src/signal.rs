@@ -138,8 +138,7 @@ pub fn signal_handler<
                 signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
             // print errors if any when running the signal handler
             if let Err(err) = invoke_res {
-                let e = wasi_common::maybe_exit_on_error(err);
-                eprintln!("Error: {:?}", e);
+                eprintln!("Error: {:?}", err);
                 // if we encountered any error when executing the signal handler, we should terminate the cage
                 cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
                 if let Some(c) = cage::get_cage(cageid) {
