@@ -765,8 +765,7 @@ impl<
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            let e = wasi_common::maybe_exit_on_error(err);
-                            eprintln!("Child Error: {:?}", e);
+                            eprintln!("Child Error: {:?}", err);
                             cage::cage_record_exit_status(
                                 child_cageid,
                                 cage::ExitStatus::Exited(1),
@@ -1302,8 +1301,7 @@ impl<
 
                     // print errors if any when running the thread
                     if let Err(err) = invoke_res {
-                        let e = wasi_common::maybe_exit_on_error(err);
-                        eprintln!("Error: {:?}", e);
+                        eprintln!("Error: {:?}", err);
                         return 0;
                     }
 
