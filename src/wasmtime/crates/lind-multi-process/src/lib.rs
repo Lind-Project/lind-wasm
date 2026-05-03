@@ -9,7 +9,7 @@ use sysdefs::constants::lind_platform_const::{
     unset_stack_arena_base, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
-use sysdefs::constants::{Errno, DEFAULT_STACKSIZE, GUARD_SIZE, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
+use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
@@ -1800,7 +1800,7 @@ impl<
 
         let forked_ctx = Self {
             linker: None,          // Linker is explicitly set up by the caller
-            got_table: cloned_got, // new process should use a new GOT
+            got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
@@ -1829,7 +1829,7 @@ impl<
 
         let forked_ctx = Self {
             linker: None,    // Linker is explicitly set up by the caller
-            got_table: None, // threads within a process should use same GOT
+            got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: self.cageid,
