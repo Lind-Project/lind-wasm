@@ -12,7 +12,7 @@ use wasmtime_lind_utils::LindGOT;
 /// `lind_fork_ctx`: the multi-process management structure, encapsulating fork/exec state;
 #[derive(Default, Clone)]
 pub struct HostCtx {
-    pub lind_environ: Option<LindEnviron>,
+    pub lind_environ: Option<Arc<LindEnviron>>,
     pub lind_fork_ctx: Option<LindCtx<HostCtx, CliOptions>>,
 }
 
@@ -22,7 +22,7 @@ impl HostCtx {
     /// Other parts of the context, such as `wasi_threads`, are shared between forks
     /// since they are not required to be process-isolated.
     pub fn fork(&self) -> Self {
-        let forked_lind_environ = self.lind_environ.as_ref().map(|e| e.fork());
+        let forked_lind_environ = self.lind_environ.as_ref().map(|e| Arc::new(e.fork()));
 
         let forked_lind_fork_ctx = self.lind_fork_ctx.as_ref().map(|ctx| ctx.fork_process());
 
@@ -36,7 +36,7 @@ impl HostCtx {
         let forked_lind_fork_ctx = self.lind_fork_ctx.as_ref().map(|ctx| ctx.fork_thread());
 
         Self {
-            lind_environ: self.lind_environ.clone(),
+            lind_environ: self.lind_environ.clone(), // clones the Arc, sharing the same LindEnviron
             lind_fork_ctx: forked_lind_fork_ctx,
         }
     }
