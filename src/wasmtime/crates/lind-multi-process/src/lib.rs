@@ -581,7 +581,14 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
-                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+                        let fpcast_enabled = engine.fpcast_enabled();
+                        instance.apply_GOT_relocs(
+                            &mut store,
+                            None,
+                            &child_table,
+                            None,
+                            fpcast_enabled,
+                        );
 
                         linker
                             .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
@@ -1142,7 +1149,14 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
-                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+                        let fpcast_enabled = engine.fpcast_enabled();
+                        instance.apply_GOT_relocs(
+                            &mut store,
+                            None,
+                            &child_table,
+                            None,
+                            fpcast_enabled,
+                        );
 
                         linker
                             .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
