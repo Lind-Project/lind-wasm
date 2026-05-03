@@ -475,7 +475,10 @@ fn attach_api(
 ) -> Result<()> {
     // Initialize argv/environ data and attach all Lind host functions
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
-    wstore.data_mut().lind_environ = Some(LindEnviron::new(&lindboot_cli.args, &lindboot_cli.vars));
+    wstore.data_mut().lind_environ = Some(Arc::new(LindEnviron::new(
+        &lindboot_cli.args,
+        &lindboot_cli.vars,
+    )));
 
     // Build a dynamic loader closure that reads the current cage's linker and GOT
     // at dlopen call time. This ensures the correct per-cage linker is used
@@ -505,7 +508,7 @@ fn attach_api(
         &mut linker_guard,
         |s: &HostCtx| {
             s.lind_environ
-                .as_ref()
+                .as_deref()
                 .expect("lind_environ must be initialized")
         },
         dynamic_loader,
@@ -526,7 +529,13 @@ fn attach_api(
         cageid,
         lindboot_cli.thread_stack_size,
         |host| host.lind_fork_ctx.as_mut().unwrap(),
-        |host| host.fork(),
+        |host, is_thread| {
+            if is_thread {
+                host.fork_thread()
+            } else {
+                host.fork()
+            }
+        },
         |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs| {
             let mut new_lindboot_cli = lindboot_cli.clone();
             new_lindboot_cli.args = vec![String::from(path)];

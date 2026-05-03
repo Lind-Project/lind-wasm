@@ -139,7 +139,7 @@ while [[ "$#" -gt 0 ]]; do
     --compile-library)
       COMPILE_LIBRARY="true"
       ;;
-    -rdynamic)
+    -rdynamic|--rdynamic)
       RDYNAMIC="true"
       ;;
     --compile-grate)
