@@ -119,8 +119,8 @@ pub struct LindCtx<T, U> {
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
 
-    // fork the host
-    fork_host: Arc<dyn Fn(&T) -> T + Send + Sync + 'static>,
+    // fork the host; is_thread=true for thread creation, false for process fork
+    fork_host: Arc<dyn Fn(&T, bool) -> T + Send + Sync + 'static>,
 
     // exec the host
     exec_host: Arc<
@@ -164,7 +164,7 @@ impl<
         cageid: i32,
         thread_stack_size: usize,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
-        fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
+        fork_host: impl Fn(&T, bool) -> T + Send + Sync + 'static,
         exec: impl Fn(
                 &U,
                 &str,
@@ -356,7 +356,7 @@ impl<
 
         let get_cx = self.get_cx.clone();
         // retrieve the child host
-        let mut child_host = (self.fork_host)(caller.data());
+        let mut child_host = (self.fork_host)(caller.data(), false);
 
         let mut snapshot = {
             let mut parent_host = caller.data_mut();
@@ -914,7 +914,7 @@ impl<
         let get_cx = self.get_cx.clone();
 
         // retrieve the child host
-        let mut child_host = caller.data().clone();
+        let mut child_host = (self.fork_host)(caller.data(), true);
 
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
         let mut snapshot = {

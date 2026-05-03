@@ -33,12 +33,10 @@ impl HostCtx {
     }
 
     pub fn fork_thread(&self) -> Self {
-        let forked_lind_environ = self.lind_environ.as_ref().map(|e| e.fork());
-
         let forked_lind_fork_ctx = self.lind_fork_ctx.as_ref().map(|ctx| ctx.fork_thread());
 
         Self {
-            lind_environ: forked_lind_environ,
+            lind_environ: self.lind_environ.clone(),
             lind_fork_ctx: forked_lind_fork_ctx,
         }
     }

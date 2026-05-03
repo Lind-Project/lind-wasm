@@ -526,7 +526,7 @@ fn attach_api(
         cageid,
         lindboot_cli.thread_stack_size,
         |host| host.lind_fork_ctx.as_mut().unwrap(),
-        |host| host.fork(),
+        |host, is_thread| if is_thread { host.fork_thread() } else { host.fork() },
         |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs| {
             let mut new_lindboot_cli = lindboot_cli.clone();
             new_lindboot_cli.args = vec![String::from(path)];
