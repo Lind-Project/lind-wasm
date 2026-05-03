@@ -268,7 +268,7 @@ esac
 
 # --- tool paths & quick checks (anchored to repo) ---
 CLANG_BIN="clang"  # must be on PATH
-WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
+LIND_WASM_OPT_BIN="${REPO_ROOT}/scripts/lind-wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
 LINDFS_ROOT="${REPO_ROOT}/lindfs/"
 if [[ -n "${TARGET_DIR}" ]]; then
@@ -290,7 +290,7 @@ if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" ]]; then
 fi
 
 if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
-  [[ -x "${WASM_OPT_BIN}" ]] || { echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2; exit 2; }
+  [[ -x "${LIND_WASM_OPT_BIN}" ]] || { echo "error: lind-wasm-opt not found at ${LIND_WASM_OPT_BIN}" >&2; exit 2; }
 fi
 
 if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
@@ -470,39 +470,15 @@ do_compile() {
 }
 
 do_optimize() {
-  FPCAST_ARG=""
-  if [[ "${WITH_FPCAST}" == "true" ]]; then
-    if [[ "${SHARED_BUILD}" == "true" || "${COMPILE_LIBRARY}" == "true" ]]; then
-      FPCAST_ARG="--fpcast-emu --pass-arg=relocatable-fpcast"
-    else
-      FPCAST_ARG="--fpcast-emu"
-    fi
-  fi
+  local fpcast_flag=()
+  [[ "${WITH_FPCAST}" == "true" ]] && fpcast_flag=(--fpcast-emu)
 
   if [[ "${SHARED_BUILD}" == "true" ]]; then
-    # --enable-bulk-memory --enable-threads: required wasm feature enabled for lind
-    # --epoch-injection --pass-arg=epoch-import: enable signal support, with dynamic build feature (epoch-import), with hint for applying epoch on main module (epoch-main-module)
-    # --asyncify --pass-arg=asyncify-import-globals --pass-arg=epoch-main-module: enable asyncify for multiprocess, with dynamic build feature (import-globals)
-    # --debuginfo: retain debug information for better debugging experience 
-    run_cmd "${WASM_OPT_BIN}" \
-      --enable-bulk-memory --enable-threads \
-      --epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module \
-      --asyncify --pass-arg=asyncify-import-globals \
-      $FPCAST_ARG \
-      -O2 --debuginfo \
-      "${OUT_WASM}" -o "${OUT_WASM}"
-  else 
-    if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
-        run_cmd "${WASM_OPT_BIN}" \
-        --enable-bulk-memory --enable-threads \
-        --epoch-injection --pass-arg=epoch-import \
-        --asyncify --pass-arg=asyncify-import-globals \
-        $FPCAST_ARG \
-        -O2 --debuginfo \
-        "${OUT_WASM}" -o "${OUT_WASM}"
-    else
-      run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify $FPCAST_ARG -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
-    fi
+    run_cmd "${LIND_WASM_OPT_BIN}" --target=main "${fpcast_flag[@]}" "${OUT_WASM}" -o "${OUT_WASM}"
+  elif [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+    run_cmd "${LIND_WASM_OPT_BIN}" --target=library "${fpcast_flag[@]}" "${OUT_WASM}" -o "${OUT_WASM}"
+  else
+    run_cmd "${LIND_WASM_OPT_BIN}" --static "${fpcast_flag[@]}" "${OUT_WASM}" -o "${OUT_WASM}"
   fi
 }
 
