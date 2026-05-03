@@ -332,11 +332,6 @@ pub fn execute_with_lind(
         let mut linker_guard = linker.lock().unwrap();
         linker_guard.define_unknown_imports_as_traps(&module);
 
-        // after all preloaded library are attached to the linker, update the linker in LindCtx
-        // so that newly forked cage could use the Linker with necessary library loaded
-        let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
-        ctx.attach_linker(linker_guard.clone());
-
         drop(linker_guard);
 
         #[cfg(feature = "debug-dylink")]
@@ -574,15 +569,13 @@ fn load_main_module(
     // todo:
     // I don't setup `epoch_handler` since it seems not being used by our previous implementation.
     // Not sure if this is related to our thread exit problem
-    let linker = linker_guard.clone();
-    let (instance, stack_arena_base, cage_instanceid) = linker
+    let (instance, stack_arena_base, cage_instanceid) = linker_guard
         .instantiate_with_lind(
             &mut *store,
             &module,
             InstantiateType::InstantiateFirst(cageid),
         )
         .context(format!("failed to instantiate"))?;
-    drop(linker);
 
     // Register the main module so get_global_snapshot can find it by name.
     if let Some(name) = module.name() {
@@ -624,6 +617,17 @@ fn load_main_module(
             Some(memory_base),
             fpcast_enabled,
         );
+
+        // expose main module's exported symbol to linker
+        // skip `signal_callback` since this is not supposed to by exposed by main module
+        linker_guard
+            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+            .unwrap();
+
+        // after all preloaded library are attached to the linker, update the linker in LindCtx
+        // so that newly forked cage could use the Linker with necessary library loaded
+        let mut ctx = store.data_mut().lind_fork_ctx.as_mut().unwrap();
+        ctx.attach_linker(linker_guard.clone());
     }
 
     cfg_if! {

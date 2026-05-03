@@ -4810,3 +4810,147 @@ pub extern "C" fn symlinkat_syscall(
 
     ret
 }
+
+/// Linux reference: https://man7.org/linux/man-pages/man2/setxattr.2.html
+///
+/// Sets the value of an extended attribute identified by `name`
+/// and associated with the given `path` in the filesystem.
+///
+/// ## Arguments:
+/// * `cageid` - Cage identifier
+/// * `path_arg` - Path to the file
+/// * `path_cageid` - Cage ID for path
+/// * `name_arg` - Name of the extended attribute
+/// * `name_cageid` - Cage ID for name
+/// * `value_arg` - Pointer to the value to set
+/// * `value_cageid` - Cage ID for value
+/// * `size_arg` - Size of the value
+/// * `size_cageid` - Cage ID for size
+/// * `flags_arg` - Flags for setxattr (e.g., XATTR_CREATE, XATTR_REPLACE)
+/// * `flags_cageid` - Cage ID for flags
+///
+/// ## Returns:
+/// On success, 0 is returned. On error, -1 is returned and errno is set appropriately.
+pub extern "C" fn setxattr_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    name_arg: u64,
+    name_cageid: u64,
+    value_arg: u64,
+    value_cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion for path
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "setxattr", "path conversion failed"),
+    };
+
+    // Type conversion for name (attribute name, not a path - no path normalization needed)
+    let name_str = match get_cstr(name_arg) {
+        Ok(s) => s,
+        Err(_) => return syscall_error(Errno::EFAULT, "setxattr", "name conversion failed"),
+    };
+    let name = match std::ffi::CString::new(name_str) {
+        Ok(s) => s,
+        Err(_) => return syscall_error(Errno::EINVAL, "setxattr", "name contains null byte"),
+    };
+
+    // Type conversion for value buffer
+    let value = sc_convert_buf(value_arg, value_cageid, cageid) as *const libc::c_void;
+    let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // Validate unused arg
+    if !sc_unusedarg(arg6, arg6_cageid) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "setxattr_syscall"
+        );
+    }
+
+    // Call to kernel setxattr
+    let ret = unsafe { libc::setxattr(path.as_ptr(), name.as_ptr(), value, size, flags) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "setxattr");
+    }
+
+    ret
+}
+
+/// Linux reference: https://man7.org/linux/man-pages/man2/listxattr.2.html
+///
+/// Retrieves the list of extended attribute names associated with the given `path`.
+///
+/// ## Arguments:
+/// * `cageid` - Cage identifier
+/// * `path_arg` - Path to the file
+/// * `path_cageid` - Cage ID for path
+/// * `list_arg` - Pointer to buffer to store the list of attribute names
+/// * `list_cageid` - Cage ID for list
+/// * `size_arg` - Size of the buffer
+/// * `size_cageid` - Cage ID for size
+///
+/// ## Returns:
+/// On success, returns the size of the list of attribute names. If `list` is NULL and `size` is zero,
+/// returns the size of the buffer needed to store the list.
+/// On error, -1 is returned and errno is set appropriately.
+pub extern "C" fn listxattr_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    list_arg: u64,
+    list_cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion for path
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "listxattr", "path conversion failed"),
+    };
+
+    // Type conversion for list buffer (may be NULL)
+    let list = if list_arg == 0 {
+        std::ptr::null_mut()
+    } else {
+        sc_convert_to_u8_mut(list_arg, list_cageid, cageid) as *mut libc::c_char
+    };
+    let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "listxattr_syscall"
+        );
+    }
+
+    // Call to kernel listxattr
+    let ret = unsafe { libc::listxattr(path.as_ptr(), list, size) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "listxattr");
+    }
+
+    // Convert ssize_t to i32 safely
+    ret.try_into().unwrap_or(i32::MAX)
+}
