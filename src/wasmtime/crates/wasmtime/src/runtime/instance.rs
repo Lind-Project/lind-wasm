@@ -1257,7 +1257,10 @@ impl Instance {
             for (name, global) in globals {
                 let val = global.get(&mut store);
                 // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
-                let Some(raw) = val.i32() else { continue };
+                let Some(raw) = val.i32() else {
+                    eprintln!("[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32", name, val);
+                    continue;
+                };
                 // relocate the variable
                 let val = raw as u32 + memory_base;
                 // Cache the resolved address; also updates the GOT cell if it already exists.
