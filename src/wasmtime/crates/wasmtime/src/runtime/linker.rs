@@ -398,7 +398,6 @@ impl<T> Linker<T> {
                                 // NOTE: asyncify state is intentionally not copied
                                 let global_ty = global.ty(&store);
                                 let value = global.get(&mut store);
-                                // println!("[debug] get_linker_snapshot_for_child: append global: {}::{}: {:?}", module.to_string(), name.to_string(), value);
                                 globals.push((
                                     module.to_string(),
                                     name.to_string(),
@@ -450,7 +449,6 @@ impl<T> Linker<T> {
             }
         }
 
-        // println!("[debug]: get_linker_snapshot_for_child: globals: {:?}", globals);
         (globals, funcs, memory)
     }
 

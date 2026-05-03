@@ -1197,9 +1197,6 @@ impl Instance {
             let name = export.name().to_owned();
             match export.into_extern() {
                 Extern::Func(func) => {
-                    // if name.contains("namein") {
-                        // println!("[debug] apply_GOT_relocs: recognize {}", name);
-                    // }
                     funcs.push((name, func));
                 }
                 Extern::Global(global) => {
@@ -1215,10 +1212,6 @@ impl Instance {
         // We only update slots that are still unresolved to preserve first-definition-wins
         // semantics (load-order precedence / interposition).
         for (name, func) in funcs {
-            let mut trace = false;
-            // if name.contains("namein") {
-            //     trace = true;
-            // }
             // skip updating GOT only if fpcast is enabled
             // and the function is NOT a fpcast function
             let should_skip = if fpcast_enabled {
@@ -1231,15 +1224,8 @@ impl Instance {
                 false
             };
 
-            if trace {
-                println!("[debug] apply_GOT_relocs: {}: should_skip {}, need_update_got: {}", name, should_skip, need_update_got);
-            }
-
             if !should_skip {
                 let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
-                if trace {
-                    println!("[debug] apply_GOT_relocs: {}: index {}", name, index);
-                }
                 if need_update_got {
                     let final_name = {
                         if fpcast_enabled {

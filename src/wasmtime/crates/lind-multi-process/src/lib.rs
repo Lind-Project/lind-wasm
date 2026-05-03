@@ -581,7 +581,6 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
-                        // instance.apply_GOT_relocs(&mut store, child_got.as_ref(), &child_table, Some(GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE), false);
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
 
                         linker
@@ -645,8 +644,6 @@ impl<
                             linker.allow_shadowing(false);
                         }
 
-                        let child_table_size = child_table.size(&mut store);
-                        println!("[debug] forked cage has table size: {}", child_table_size);
                     }
 
                     let epoch_pointer = if epoch_handler.is_some() {
@@ -777,7 +774,6 @@ impl<
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            // let e = wasi_common::maybe_exit_on_error(err);
                             eprintln!("Child Error: {:?}", err);
                             cage::cage_record_exit_status(
                                 child_cageid,
@@ -853,8 +849,6 @@ impl<
         stack_size: u32,
         child_tid: u64,
     ) -> Result<i32> {
-        println!("[debug] pthread_create");
-        panic!("thread broken");
         // get the base address and size of the memory
         let (mem_base_u64, mem_size) = get_memory_base_and_size(&mut caller);
         let parent_address = mem_base_u64 as *mut u8;
@@ -1493,8 +1487,6 @@ impl<
                 });
             }
 
-            // println!("[debug] cageid {:?}: path: {:?}, argv: {:?}, environs: {:?}", cloned_cageid, path, argv, environs);
-
             let ret = exec_call(
                 &cloned_lindboot_cli,
                 &path,
@@ -1799,10 +1791,8 @@ impl<
 
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
-        // println!("[debug] fork process");
         let cloned_got = if let Some(got) = self.got_table.as_ref() {
             let got_guard = got.lock().unwrap();
-            // println!("[debug] fork process: clone_with_cache");
             Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
         } else {
             None
@@ -1830,14 +1820,12 @@ impl<
 
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
-        println!("[debug] fork thread");
-        // let cloned_got = if let Some(got) = self.got_table.as_ref() {
-        //     let got_guard = got.lock().unwrap();
-        //     println!("[debug] fork thread: clone_with_cache");
-        //     Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
-        // } else {
-        //     None
-        // };
+        let cloned_got = if let Some(got) = self.got_table.as_ref() {
+            let got_guard = got.lock().unwrap();
+            Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
+        } else {
+            None
+        };
 
         let forked_ctx = Self {
             linker: None,    // Linker is explicitly set up by the caller
@@ -1859,16 +1847,6 @@ impl<
         return forked_ctx;
     }
 }
-
-// impl<T, U> Clone for LindCtx<T, U>
-// where
-//     T: Clone + Send + Sync + 'static,
-//     U: Clone + Send + Sync + 'static,
-// {
-//     fn clone(&self) -> Self {
-//         self.fork_thread()
-//     }
-// }
 
 // get the base address of the wasm process
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(

@@ -154,7 +154,6 @@ impl LindGOT {
             // Pre-fill the cell if a provider module was already loaded.
             if let Some(cached_val) = self.symbol_cache.get(&name) {
                 let val = *cached_val;
-                // println!("[debug] new_entry: update {:?} to cache: {}", name, val);
                 let cell = unsafe { &*(handler as *const AtomicU32) };
                 cell.store(val, Ordering::Release);
                 #[cfg(feature = "debug-dylink")]
@@ -162,8 +161,6 @@ impl LindGOT {
                     "[debug] pre-resolve GOT entry {} = {} from cache",
                     name, *cached_val
                 );
-            } else {
-                // println!("[debug] new_entry: {:?} no cache", name);
             }
             self.global_offset_table.insert(name, handler as u64);
         } else {
@@ -225,7 +222,6 @@ impl LindGOT {
     ///
     /// Returns `true` if an existing GOT cell was updated (useful for debug logging at call sites).
     pub fn cache_symbol(&self, name: &str, val: u32) -> bool {
-        // println!("[debug] cache_symbol: {} to {}", name, val);
         if !self.symbol_cache.contains_key(name) {
             self.symbol_cache.insert(name.to_string(), val);
         }
