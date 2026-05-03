@@ -1828,7 +1828,7 @@ impl<
         };
 
         let forked_ctx = Self {
-            linker: None,    // Linker is explicitly set up by the caller
+            linker: None,          // Linker is explicitly set up by the caller
             got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
