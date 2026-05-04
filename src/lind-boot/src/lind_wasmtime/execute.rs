@@ -883,9 +883,16 @@ fn load_library_module(
                 }
             };
 
-            // Skip libraries that are already instantiated (checked by inode).
+            // Skip libraries already instantiated via dlopen (tracked by inode).
             if main_module.check_library_loaded(dep_inode).is_some() {
                 continue;
+            }
+            // Also skip libraries instantiated at boot time via --preload
+            // (tracked by wasm name in named_module_instances, not in the SymbolTable).
+            if let Some(wasm_name) = dep_module.name() {
+                if main_module.is_named_instance_registered(wasm_name) {
+                    continue;
+                }
             }
 
             let ret = link_library_into(
