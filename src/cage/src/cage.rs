@@ -3,14 +3,14 @@
 //! finialization required by wasmtime
 use crate::memory::vmmap::*;
 use crate::timer::*;
+use arc_swap::ArcSwapOption;
 use dashmap::DashMap;
-pub use once_cell::sync::Lazy;
 /// Uses spinlocks first (for short waits) and parks threads when blocking to reduce kernel
 /// interaction and increases efficiency.
 pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
-pub use std::sync::Arc;
+pub use std::sync::{Arc, LazyLock};
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
 use sysdefs::constants::SIGCHLD;
@@ -258,25 +258,18 @@ pub struct Cage {
     pub grate_inflight: AtomicU64,
 }
 
-/// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
+/// Global cage table indexed by cage ID.
 ///
-/// Direct Indexing with `cageid`:
-///     `cageid` directly as the index to access the `Vec`, allowing O(1) complexity for lookup, insertion,
-///     and deletion.
-/// `Vec<Option<Arc<Cage>>>` for Efficient Deletion:
-///     When deleting an entry, we replace it with `None` instead of restructuring the `Vec`. If we were to
-///     use `Vec<Arc<Cage>>`, there would be no empty slots after deletion, forcing us to use `retain()` to
-///     reallocate the `Vec`, which results in O(n) complexity. Using `Vec<Option<Arc<Cage>>>` allows us to
-///     maintain O(1) deletion complexity.
-/// `RwLock` for Concurrent Access Control:
-///     `RwLock` ensures thread-safe access to `CAGE_MAP`, providing control over concurrent reads and writes.
-///     Since writes occur only during initialization (`lindrustinit`) and `fork()` / `exec()`, and deletions
-///     happen only via `exit()`, the additional overhead introduced by `RwLock` should be minimal in terms
-///     of overall performance impact.
+/// Each slot stores an optional `Arc<Cage>` using `ArcSwapOption`, allowing
+/// readers to load cage references concurrently without taking a lock.
 ///
-/// Pre-allocate MAX_CAGEID elements, all initialized to None.
-
-pub static mut CAGE_MAP: Vec<Option<Arc<Cage>>> = Vec::new();
+/// Empty slots represent unused or finalized cage IDs. A cage is inserted
+/// with `add_cage()` and removed with `remove_cage()` during final teardown.
+///
+/// The table is lazily initialized on first use and contains one slot for
+/// every valid cage ID in `0..MAX_CAGEID`.
+pub static CAGE_MAP: LazyLock<Vec<ArcSwapOption<Cage>>> =
+    LazyLock::new(|| (0..MAX_CAGEID).map(|_| ArcSwapOption::empty()).collect());
 
 pub fn check_cageid(cageid: u64) {
     if cageid >= MAX_CAGEID as u64 {
@@ -284,37 +277,28 @@ pub fn check_cageid(cageid: u64) {
     }
 }
 
-#[allow(static_mut_refs)]
-// SAFETY: This code is single-threaded during initialization, and no other
-// mutable or immutable references to `CAGE_MAP` exist while this call executes.
 pub fn cagetable_init() {
-    unsafe {
-        for _cage in 0..MAX_CAGEID {
-            CAGE_MAP.push(None);
-        }
-    }
+    LazyLock::force(&CAGE_MAP);
 }
 
 pub fn add_cage(cageid: u64, cage: Cage) {
     check_cageid(cageid);
-    let _insertret = unsafe { CAGE_MAP[cageid as usize].insert(Arc::new(cage)) };
+
+    CAGE_MAP[cageid as usize].store(Some(Arc::new(cage)));
 }
 
 pub fn remove_cage(cageid: u64) {
     check_cageid(cageid);
-    unsafe { CAGE_MAP[cageid as usize].take() };
+
+    CAGE_MAP[cageid as usize].store(None);
 }
 
 pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
     if cageid >= MAX_CAGEID as u64 {
         return None;
     }
-    unsafe {
-        match CAGE_MAP[cageid as usize].as_ref() {
-            Some(cage) => Some(cage.clone()),
-            None => None,
-        }
-    }
+
+    CAGE_MAP[cageid as usize].load_full()
 }
 
 /// Borrows the `cageid` cage and applies a function `f` to it, return `Some(R)` or `None`
@@ -333,21 +317,20 @@ where
         return None;
     }
 
-    unsafe { CAGE_MAP[cageid as usize].as_deref().map(f) }
+    let guard = CAGE_MAP[cageid as usize].load();
+
+    guard.as_deref().map(f)
 }
 
-#[allow(static_mut_refs)]
 // SAFETY: This code is single-threaded during teardown, and no other
 // mutable or immutable references to `CAGE_MAP` exist while this call executes.
 pub fn cagetable_clear() -> Vec<usize> {
     let mut exitvec = Vec::new();
 
-    unsafe {
-        for (cageid, cage) in CAGE_MAP.iter_mut().enumerate() {
-            let cageopt = cage.take();
-            if !cageopt.is_none() {
-                exitvec.push(cageid)
-            }
+    for (cageid, slot) in CAGE_MAP.iter().enumerate() {
+        let old = slot.swap(None);
+        if old.is_some() {
+            exitvec.push(cageid);
         }
     }
 
