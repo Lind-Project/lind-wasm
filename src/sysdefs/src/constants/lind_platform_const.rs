@@ -125,6 +125,12 @@ pub enum DylinkErrorCode {
 
 pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 
+/// Guest environment variable name used to specify additional library search paths.
+pub const LD_LIBRARY_PATH_VAR: &str = "LD_LIBRARY_PATH";
+
+/// Default library search directories, consulted after LD_LIBRARY_PATH.
+pub const DEFAULT_LIBRARY_SEARCH_PATHS: &[&str] = &["/lib", "/usr/lib"];
+
 /// Maximum number of grate workers that may exist for one grate handler.
 ///
 /// This is a platform-wide configuration constant. lind-wasm preallocates

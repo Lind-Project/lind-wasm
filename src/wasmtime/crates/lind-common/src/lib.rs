@@ -63,6 +63,14 @@ impl LindEnviron {
         }
     }
 
+    /// Look up a guest environment variable by name.
+    pub fn get_var(&self, name: &str) -> Option<&str> {
+        self.env
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+    }
+
     /// Clone args + env for a forked cage.
     pub fn fork(&self) -> Self {
         self.clone()
