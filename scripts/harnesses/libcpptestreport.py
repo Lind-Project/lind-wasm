@@ -427,10 +427,7 @@ def _run_single_libcpp_test(
             rel_name,
             "Success",
             None,
-            (
-                f"Native/Wasm parity verified (exit={run_rc}).\n\n"
-                f"{run_out}"
-            ),
+            run_out,
             logger,
             native_compile_time_sec=t_native_compile,
             wasm_compile_time_sec=t_wasm_compile,
@@ -484,12 +481,7 @@ def generate_html_section(libcpp: dict[str, Any]) -> str:
     return "\n".join(
         [
             '<div class="wasm-harness-subsection">',
-            "<h2>Libc++ integration</h2>",
-            "<p>Full <code>lind_compile_cpp</code> (wasm-opt + precompile), <code>lind_run</code> on the "
-            "<code>.cwasm</code>, and verify native and wasm runs have identical exit codes and output. "
-            "<strong>Native time</strong> / <strong>Wasm time</strong> are total wall time (native compile + "
-            "native run vs <code>lind_compile_cpp</code> + <code>lind_run</code>), same convention as the "
-            "deterministic/fail tables above.</p>",
+            "<h2>C++ harness</h2>",
             "<h3>Summary</h3>",
             '<table class="summary-table">',
             "<tr><th>Metric</th><th>Value</th></tr>",
