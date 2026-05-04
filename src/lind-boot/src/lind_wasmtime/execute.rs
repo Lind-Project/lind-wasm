@@ -237,6 +237,21 @@ pub fn execute_with_lind(
         ));
     }
 
+    // Resolve all transitive library dependencies declared in the Needed sections
+    // of the main module and the explicit preloads. The resolver scans, loads, and
+    // topologically sorts every required shared library so that deps are linked
+    // before the libraries that depend on them.
+    if dylink_metadata.dylink_enabled {
+        let environ = LindEnviron::new(&lind_boot.args, &lind_boot.vars);
+        let resolved = crate::lind_wasmtime::dependency_resolver::resolve_load_order(
+            &modules, &engine, &environ,
+        )
+        .context("failed to resolve library dependencies")?;
+        // Replace modules[1..] with the full topologically-sorted library set.
+        modules.truncate(1);
+        modules.extend(resolved);
+    }
+
     attach_api(
         &mut wstore,
         &mut linker,
@@ -736,6 +751,75 @@ fn load_main_module(
 ///
 /// Returns an integer handle representing the identifier of the loaded library instance,
 /// which is used by dlsym symbol lookup
+/// Instantiate a single (already-loaded) library module into the running instance.
+///
+/// Grows the shared function table, registers GOT placeholders, instantiates
+/// the module, and records it in the cage's dlopen module list.
+/// `linker` is updated in-place with the library's exported symbols.
+///
+/// Returns the library handle on success, or a negative `DylinkErrorCode` on failure.
+/// Does NOT call `attach_linker` — the caller must do that after all libraries are linked.
+fn link_library_into(
+    main_module: &mut wasmtime::Caller<HostCtx>,
+    linker: &mut Linker<HostCtx>,
+    lind_got: &Arc<Mutex<LindGOT>>,
+    cageid: i32,
+    lib_name: &str,
+    lib_path: &str,
+    lib_module: Module,
+    lib_inode: u64,
+    dlopen_mode: i32,
+) -> i32 {
+    let dylink_info = match lib_module.dylink_meminfo() {
+        Some(info) => info,
+        None => return -(DylinkErrorCode::EDYLINKINFO as i32),
+    };
+
+    let table_size = main_module.get_table_size();
+    match main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None)) {
+        Ok(_) => {}
+        Err(_) => return -(DylinkErrorCode::EINTERNAL as i32),
+    }
+
+    let mut got_guard = lind_got.lock().unwrap();
+    let _ = linker.define_GOT_dispatcher(&mut *main_module, &lib_module, &mut *got_guard);
+
+    let symbol_map = SymbolMap::new(dlopen_mode, lib_inode);
+
+    let ret = match linker.module_with_caller(
+        &mut *main_module,
+        cageid as u64,
+        "env",
+        &lib_module,
+        table_size as i32,
+        &*got_guard,
+        symbol_map,
+        lib_path.to_string(),
+    ) {
+        Ok(handle) => handle as i32,
+        Err(_) => {
+            #[cfg(feature = "debug-dylink")]
+            println!("failed to link library '{}'", lib_name);
+            -(DylinkErrorCode::EINTERNAL as i32)
+        }
+    };
+    drop(got_guard);
+
+    let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
+    lind_ctx.append_module(lib_path.to_string(), lib_module);
+
+    ret
+}
+
+/// Dynamically load and instantiate a library module into a running main module.
+///
+/// This function implements Lind's runtime dynamic loading path (subroutine of `dlopen`).
+/// It loads the library using the same engine as the main module, resolves all transitive
+/// dependencies (in topological order), and then instantiates every library in the correct
+/// order before linking the requested library itself.
+///
+/// Returns an integer handle representing the identifier of the loaded library instance,
+/// which is used by dlsym symbol lookup.
 fn load_library_module(
     mut main_module: &mut wasmtime::Caller<HostCtx>,
     mut linker: Linker<HostCtx>,
@@ -763,63 +847,88 @@ fn load_library_module(
     }
 
     // Load and compile the library module (either wasm or cwasm format).
-    let lib_module = match read_wasm_or_cwasm(&engine, Path::new(library_path)) {
+    let lib_module = match read_wasm_or_cwasm(&engine, library_path) {
         Ok(module) => module,
-        Err(_) => return -(DylinkErrorCode::ETYPE as i32), // library is not a valid wasm module
+        Err(_) => return -(DylinkErrorCode::ETYPE as i32),
     };
 
-    // Extract dylink metadata from the library.
-    // This includes table and memory requirements declared by the toolchain.
-    let dylink_info = match lib_module.dylink_meminfo() {
-        Some(info) => info,
-        None => return -(DylinkErrorCode::EDYLINKINFO as i32), // dylink section is not found
-    };
+    // Resolve all transitive dependencies and link them in dependency-first order
+    // before instantiating the requested library.
+    {
+        let environ_arc = main_module.data().lind_environ.clone().unwrap();
+        let already_loaded = std::collections::HashSet::new();
+        let deps = match crate::lind_wasmtime::dependency_resolver::resolve_dlopen_dependencies(
+            library_name,
+            &lib_module,
+            &already_loaded,
+            engine,
+            &*environ_arc,
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!(
+                    "error: failed to resolve dependencies for '{}': {:#}",
+                    library_name, e
+                );
+                return -(DylinkErrorCode::EDEPENDENCY as i32);
+            }
+        };
 
-    // Record the current size of the shared indirect function table.
-    // The library's functions will be appended starting from this index.
-    let table_size = main_module.get_table_size();
-    match main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None)) {
-        Ok(_) => {}
-        Err(_) => return -(DylinkErrorCode::EINTERNAL as i32),
-    };
+        for (dep_name, dep_path, dep_module) in deps {
+            let dep_inode = match std::fs::metadata(&dep_path) {
+                Ok(m) => m.ino(),
+                Err(_) => {
+                    eprintln!("error: cannot stat resolved dependency '{}'", dep_path);
+                    return -(DylinkErrorCode::EOPEN as i32);
+                }
+            };
 
-    // Grow the shared function table to reserve space for this library's
-    // function entries, as declared in its dylink section.
-    let mut got_guard = lind_got.lock().unwrap();
+            // Skip libraries already instantiated via dlopen (tracked by inode).
+            if main_module.check_library_loaded(dep_inode).is_some() {
+                continue;
+            }
+            // Also skip libraries instantiated at boot time via --preload
+            // (tracked by wasm name in named_module_instances, not in the SymbolTable).
+            if let Some(wasm_name) = dep_module.name() {
+                if main_module.is_named_instance_registered(wasm_name) {
+                    continue;
+                }
+            }
 
-    // Install placeholder GOT globals for this library's imports.
-    // These placeholders allow instantiation to succeed before
-    // relocations are applied and symbols are fully resolved.
-    linker.define_GOT_dispatcher(&mut main_module, &lib_module, &mut *got_guard);
-
-    let mut symbol_map = SymbolMap::new(dlopen_mode, inode);
-
-    // Instantiate the library module in the context of the running main module.
-    // `table_size` is passed as the base index into the shared table so that
-    // the library's function references can be relocated correctly.
-    //
-    // The GOT is used to patch symbol addresses/indices after instantiation.
-    let ret = match linker.module_with_caller(
-        &mut main_module,
-        cageid as u64,
-        library_name,
-        &lib_module,
-        table_size as i32,
-        &*got_guard,
-        symbol_map,
-        library_name.to_string(),
-    ) {
-        Ok(handle) => handle as i32,
-        Err(_) => {
-            #[cfg(feature = "debug-dylink")]
-            println!("failed to process library `{}`", library_name);
-            -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
+            let ret = link_library_into(
+                &mut main_module,
+                &mut linker,
+                &lind_got,
+                cageid,
+                &dep_name,
+                &dep_path,
+                dep_module,
+                dep_inode,
+                dlopen_mode,
+            );
+            if ret < 0 {
+                return ret;
+            }
         }
-    };
+    }
 
+    // Instantiate the requested library itself.
+    let ret = link_library_into(
+        &mut main_module,
+        &mut linker,
+        &lind_got,
+        cageid,
+        library_name,
+        library_name,
+        lib_module,
+        inode,
+        dlopen_mode,
+    );
+
+    // Attach the updated linker (now containing all dep + library exports) back
+    // to the cage context so it is available for subsequent dlopen/dlsym calls.
     let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
     lind_ctx.attach_linker(linker);
-    lind_ctx.append_module(library_name.to_string(), lib_module);
 
     ret
 }
@@ -844,6 +953,11 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
 
     eprintln!("OK: {}", cwasm_path.display());
     Ok(())
+}
+
+/// Public re-export of the wasm/cwasm loader for use by the dependency resolver.
+pub fn read_wasm_or_cwasm_pub(engine: &Engine, path: &Path) -> Result<Module> {
+    read_wasm_or_cwasm(engine, path)
 }
 
 /// Load a Wasm module from disk, supporting both `.wasm` and precompiled `.cwasm` files.

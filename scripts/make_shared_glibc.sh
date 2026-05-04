@@ -59,8 +59,9 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __stack_pointer global __stack_pointer
 
 # apply wasm-opt
-$REPO_ROOT/scripts/lind-wasm-opt --target=library $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
+$REPO_ROOT/scripts/lind-wasm-opt --target=library $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.opt.wasm
 
 # do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libc.cwasm
-$REPO_ROOT/build/lind-boot --precompile $REPO_ROOT/lindfs/lib/libc.so
+$REPO_ROOT/build/lind-boot --precompile $REPO_ROOT/lindfs/lib/libc.opt.wasm
+mv $REPO_ROOT/lindfs/lib/libc.opt.cwasm $REPO_ROOT/lindfs/lib/libc.so
