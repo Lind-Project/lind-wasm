@@ -82,7 +82,7 @@ def discover_harness_modules(selected: set[str] | None = None) -> list[str]:
     modules: list[str] = []
     for path in sorted(HARNESS_DIR.glob("*.py")):
         name = path.stem
-        if name == "__init__" or name.startswith("_"):
+        if name == "__init__" or name.startswith("_") or name == "libcpptestreport":
             continue
         if selected and name not in selected:
             continue
@@ -162,7 +162,8 @@ def write_outputs(result: dict[str, Any], reports_dir: Path) -> dict[str, Any]:
 
 
 def extract_html_body(raw_html: str) -> str:
-    match = re.search(r"(?is)<\s*body\b[^>]*>(.*?)</\s*body\s*>", raw_html)
+    # Greedy body: use the last </body> so literal </body> inside <pre> cannot truncate.
+    match = re.search(r"(?is)<\s*body\b[^>]*>(.*)</\s*body\s*>", raw_html)
     return match.group(1) if match else raw_html
 
 
