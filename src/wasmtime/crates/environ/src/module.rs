@@ -510,6 +510,9 @@ pub struct Module {
 
     /// dylink import information
     pub dylink_import_info: Option<DylinkImportInfo>,
+
+    /// dylink needed (dependency) information
+    pub dylink_needed_info: Option<DylinkNeededInfo>,
 }
 
 /// lind-wasm addition: dylink memory information
@@ -556,6 +559,13 @@ impl DylinkImportInfo {
         }
         return false;
     }
+}
+
+/// lind-wasm addition: dylink needed (dependency) information
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DylinkNeededInfo {
+    /// list of shared library names this module depends on
+    pub needed: Vec<String>,
 }
 
 /// Initialization routines for creating an instance, encompassing imports,
