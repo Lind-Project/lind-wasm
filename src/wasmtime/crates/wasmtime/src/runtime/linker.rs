@@ -1509,8 +1509,8 @@ impl<T> Linker<T> {
                             }
                         };
 
-                        // update GOT entry
-                        if got.update_entry_if_unresolved(&final_name, index) {
+                        // Cache the resolved table index; also updates the GOT cell if it exists.
+                        if got.cache_symbol(final_name, index) {
                             #[cfg(feature = "debug-dylink")]
                             println!("[debug] update GOT.func.{} to {}", final_name, index);
                         }
@@ -1520,23 +1520,26 @@ impl<T> Linker<T> {
                     }
                 }
                 for (name, global) in globals {
-                    // Only relocate globals that are actually registered in the GOT.
-                    // Applying memory_base to an unrelated exported global would overflow.
-                    if !got.has_entry(&name) {
-                        continue;
-                    }
-                    // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
                     let val = global.get(&mut store);
+                    // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
+                    let Some(raw) = val.i32() else {
+                        eprintln!("[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32", name, val);
+                        continue;
+                    };
                     // relocate the variable
-                    let val = val.i32().unwrap() as u32 + memory_base;
-                    // append the symbol into mappings
-                    symbol_map.add(name.clone(), val);
-                    // update GOT entry
-                    if got.update_entry_if_unresolved(&name, val) {
+                    let val = raw as u32 + memory_base;
+                    // Cache the resolved address; also updates the GOT cell if it already exists.
+                    if got.cache_symbol(&name, val) {
                         #[cfg(feature = "debug-dylink")]
                         println!("[debug] update GOT.mem.{} to {}", name, val);
                     }
+                    // Only expose as dlsym-resolvable if it's a known GOT data symbol.
+                    if got.has_entry(&name) {
+                        symbol_map.add(name.clone(), val);
+                    }
                 }
+
+                got.warning_undefined();
 
                 let is_local = symbol_map.is_local();
 

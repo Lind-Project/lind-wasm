@@ -17,6 +17,7 @@
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+import html
 import json
 import os
 import subprocess
@@ -29,6 +30,10 @@ import tempfile
 import sys
 import time
 from typing import Any, Callable
+try:
+    from harnesses import libcpptestreport
+except ImportError:
+    import libcpptestreport
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -41,6 +46,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 30 # in seconds
+DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for lind_run on libc++ smoke .cwasm
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
@@ -67,7 +73,6 @@ DIR_FLAGS = []
 GRATE_PREFIX = None
 GRATE_ARGS = []
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
-
 
 error_types = {
     "Failure_native_compiling": "Compilation Failure Native",
@@ -947,6 +952,19 @@ def generate_html_report(report):
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
         }
+        /* Same look as .test-section but not matched by PR-comment wrap_sections_as_details */
+        .wasm-harness-subsection {
+            margin: 30px 0;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .wasm-harness-subsection h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
         .summary-table {
             width: 100%;
             margin-bottom: 20px;
@@ -980,8 +998,11 @@ def generate_html_report(report):
 
     html_content.append(html_header)
 
-    # Generate sections for Deterministic/Non-Deterministic test type
-    for test_type, test_result in report.items():
+    # Generate sections for Deterministic/Non-Deterministic test type (skip embedded libcpp blob)
+    for test_type in ("deterministic", "fail"):
+        if test_type not in report:
+            continue
+        test_result = report[test_type]
         html_content.append(f'<div class="test-section">')
         html_content.append(f'<h2>{test_type.replace("_", " ").title()} Tests</h2>')
         
@@ -1042,22 +1063,30 @@ def generate_html_report(report):
                     # Extract just the test file name for display
                     test_name = test_path.split('/')[-1]
                     
-                    # For successful tests, just show "Success" instead of full output
-                    # For failures, show the full output for debugging
-                    output_display = "Success" if result['status'].lower() == "success" else result["output"]
-                    
+                    # Escape cell text and <pre> bodies so downstream HTML consumers
+                    # (e.g. PR comment wrap_sections_as_details) never see literal </div></body>.
+                    if result["status"].lower() == "success":
+                        output_display = "Success"
+                    else:
+                        output_display = html.escape(str(result.get("output", "")))
                     native_time, wasm_time = get_row_time_values(result)
 
                     html_content.append(
-                        f'<tr class="{row_class}"><td>{test_name}</td>'
-                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<tr class="{row_class}"><td>{html.escape(test_name)}</td>'
+                        f'<td>{html.escape(str(result["status"]))}</td>'
+                        f'<td>{html.escape(str(result["error_type"]))}</td>'
                         f'<td>{format_time_cell(native_time)}</td>'
                         f'<td>{format_time_cell(wasm_time)}</td>'
-                        f'<td><pre>{output_display}</pre></td></tr>'
+                        f"<td><pre>{output_display}</pre></td></tr>"
                     )
             
             html_content.append('</table>')
-        html_content.append('</div>') 
+        html_content.append('</div>')
+
+    # Omit libc++ HTML when skipped or never run (empty bucket still exists in JSON for schema).
+    libcpp_report = report.get("libcpp")
+    if libcpp_report and libcpp_report.get("total_test_cases", 0) > 0:
+        html_content.append(libcpptestreport.generate_html_section(libcpp_report))
 
     html_content.append("</body>\n</html>")
     html_content.append("\n")
@@ -1197,6 +1226,17 @@ def parse_arguments(argv=None):
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
     parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
     parser.add_argument("--grate-args", default="", help="Extra args passed to the grate, between the grate cwasm and the test wasm (shlex-split). Example: --grate-args '--chroot-dir /tmp'")
+    parser.add_argument(
+        "--libcpp-timeout",
+        type=check_timeout,
+        default=DEFAULT_LIBCPP_RUN_TIMEOUT,
+        help="Timeout in seconds for libc++ smoke test lind_run (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--skip-libcpp",
+        action="store_true",
+        help="Skip libc++ integration smoke (full lind_compile_cpp + lind_run)",
+    )
 
     args = parser.parse_args(argv)
     return args
@@ -1498,7 +1538,8 @@ def main():
 
     results = {
         "deterministic": get_empty_result(),
-        "fail": get_empty_result()
+        "fail": get_empty_result(),
+        "libcpp": libcpptestreport.get_empty_result(),
     }
 
     # Prepare artifacts root
@@ -1550,6 +1591,11 @@ def main():
 
         # Run all tests
         run_tests(config, artifacts_root, results, timeout_sec)
+
+        if not args.skip_libcpp:
+            libcpptestreport.run_libcpp_integration(
+                results["libcpp"], None, args.libcpp_timeout, logger=logger
+            )
 
         os.chdir(LIND_WASM_BASE)
         with open(output_file, "w") as fp:
