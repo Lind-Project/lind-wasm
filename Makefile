@@ -157,35 +157,48 @@ test: lindfs
 	exit 0
 
 # Run wasmtestreport with a grate prefix.
-# Examples:
+# Single-grate examples:
 #   make test-grate GRATE=ipc-grate
 #   make test-grate GRATE=chroot-grate GRATE_ARGS="--chroot-dir /tmp"
 #   make test-grate GRATE=ipc-grate RUN=process_tests
 #   make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c
-# Build the grate first:  cd ../lind-wasm-example-grates && make rust/<name>
+# Grate chain (mutually exclusive with GRATE / GRATE_ARGS — the string is passed
+# verbatim before the test wasm, so any grate-side group syntax goes here too):
+#   make test-grate GRATE_PREFIX="grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm"
+# Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>
+# Run timeout defaults to 90s under any grate (vs 30s without), override with TIMEOUT=N.
 .PHONY: test-grate
 GRATE ?=
 GRATE_ARGS ?=
+GRATE_PREFIX ?=
 TESTFILES ?=
 RUN ?=
+TIMEOUT ?=
 test-grate:
-	@if [ -z "$(GRATE)" ]; then \
+	@if [ -z "$(GRATE)" ] && [ -z "$(GRATE_PREFIX)" ]; then \
 		echo "Usage: make test-grate GRATE=<name> [GRATE_ARGS='...'] [RUN=folder | TESTFILES=path/to/test.c]"; \
+		echo "   or: make test-grate GRATE_PREFIX='<raw chain>' [RUN=...]"; \
 		echo ""; \
 		echo "Examples:"; \
 		echo "  make test-grate GRATE=ipc-grate"; \
 		echo "  make test-grate GRATE=chroot-grate GRATE_ARGS=\"--chroot-dir /tmp\""; \
 		echo "  make test-grate GRATE=ipc-grate RUN=process_tests"; \
 		echo "  make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c"; \
+		echo "  make test-grate GRATE_PREFIX=\"grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm\""; \
 		echo ""; \
-		echo "Build the grate first:  cd ../lind-wasm-example-grates && make rust/<name>"; \
+		echo "Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>"; \
 		exit 1; \
+	fi
+	@if [ -n "$(GRATE)" ] && [ -n "$(GRATE_PREFIX)" ]; then \
+		echo "GRATE and GRATE_PREFIX are mutually exclusive"; exit 1; \
 	fi
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/harnesses/wasmtestreport.py \
-		--grate grates/$(GRATE).cwasm \
 		--allow-pre-compiled \
+		$(if $(GRATE),--grate grates/$(GRATE).cwasm) \
 		$(if $(GRATE_ARGS),--grate-args "$(GRATE_ARGS)") \
+		$(if $(GRATE_PREFIX),--grate-prefix "$(GRATE_PREFIX)") \
+		$(if $(TIMEOUT),--timeout $(TIMEOUT)) \
 		$(if $(TESTFILES),--testfiles $(TESTFILES)) \
 		$(if $(RUN),--run $(RUN))
 
