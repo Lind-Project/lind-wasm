@@ -273,11 +273,14 @@ pub fn get_specific_virtual_fd(
     _increment_fdcount(myentry);
 
     // always add the new entry.  insert returns the old entry.
-    let myoptionentry = fdtable
-        .get_mut(&cageid)
-        .unwrap()
-        .thisfdtable
-        .insert(requested_virtualfd, myentry);
+    let myfdentry = fdtable.get_mut(&cageid).unwrap();
+    let myoptionentry = myfdentry.thisfdtable.insert(requested_virtualfd, myentry);
+    // Bump highestneverusedfd past requested_virtualfd so the
+    // get_unused_virtual_fd fast path doesn't later hand out an fd
+    // that we just reserved here (e.g. stdio fds 0/1/2).
+    if requested_virtualfd >= myfdentry.highestneverusedfd {
+        myfdentry.highestneverusedfd = requested_virtualfd + 1;
+    }
     drop(fdtable);
 
     // Update the fdcount / close the old entry, if existed
