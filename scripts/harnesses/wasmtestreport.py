@@ -24,6 +24,7 @@ from pathlib import Path
 import argparse
 import shutil
 import logging
+import shlex
 import tempfile
 import sys
 import time
@@ -64,6 +65,7 @@ GLOBAL_COMPILE_FLAGS = []
 LIND_PRE_FLAGS = []
 DIR_FLAGS = []
 GRATE_PREFIX = None
+GRATE_ARGS = []
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
 
 
@@ -517,6 +519,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run")]
     if GRATE_PREFIX:
         run_cmd.append(GRATE_PREFIX)
+        run_cmd.extend(GRATE_ARGS)
     run_cmd.append(wasm_file.name)
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
@@ -1193,6 +1196,7 @@ def parse_arguments(argv=None):
     parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
     parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
+    parser.add_argument("--grate-args", default="", help="Extra args passed to the grate, between the grate cwasm and the test wasm (shlex-split). Example: --grate-args '--chroot-dir /tmp'")
 
     args = parser.parse_args(argv)
     return args
@@ -1434,7 +1438,7 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
-    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX
+    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX, GRATE_ARGS
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
@@ -1451,6 +1455,7 @@ def main():
     GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
     LIND_PRE_FLAGS = ["--static"] if args.static_build else []
     GRATE_PREFIX = args.grate
+    GRATE_ARGS = shlex.split(args.grate_args) if args.grate_args else []
 
     if GRATE_PREFIX:
         grate_full = LINDFS_ROOT / GRATE_PREFIX.lstrip("/")

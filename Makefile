@@ -141,19 +141,22 @@ test: lindfs
 # Run wasmtestreport with a grate prefix.
 # Examples:
 #   make test-grate GRATE=ipc-grate
+#   make test-grate GRATE=chroot-grate GRATE_ARGS="--chroot-dir /tmp"
 #   make test-grate GRATE=ipc-grate RUN=process_tests
 #   make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c
 # Build the grate first:  cd ../lind-wasm-example-grates && make rust/<name>
 .PHONY: test-grate
 GRATE ?=
+GRATE_ARGS ?=
 TESTFILES ?=
 RUN ?=
 test-grate:
 	@if [ -z "$(GRATE)" ]; then \
-		echo "Usage: make test-grate GRATE=<name> [RUN=folder | TESTFILES=path/to/test.c]"; \
+		echo "Usage: make test-grate GRATE=<name> [GRATE_ARGS='...'] [RUN=folder | TESTFILES=path/to/test.c]"; \
 		echo ""; \
 		echo "Examples:"; \
 		echo "  make test-grate GRATE=ipc-grate"; \
+		echo "  make test-grate GRATE=chroot-grate GRATE_ARGS=\"--chroot-dir /tmp\""; \
 		echo "  make test-grate GRATE=ipc-grate RUN=process_tests"; \
 		echo "  make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c"; \
 		echo ""; \
@@ -164,6 +167,7 @@ test-grate:
 	python3 ./scripts/harnesses/wasmtestreport.py \
 		--grate grates/$(GRATE).cwasm \
 		--allow-pre-compiled \
+		$(if $(GRATE_ARGS),--grate-args "$(GRATE_ARGS)") \
 		$(if $(TESTFILES),--testfiles $(TESTFILES)) \
 		$(if $(RUN),--run $(RUN))
 
