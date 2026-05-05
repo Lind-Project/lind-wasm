@@ -40,10 +40,24 @@ sysroot: build-dir
 	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
+# fdtables backend selector. One of: dashmaparray (default), dashmapvec,
+# muthashmax, vanilla. Threaded through lind-boot -> rawposix -> fdtables
+# via Cargo features.
+#
+# Examples:
+#   make                                  # default (dashmaparray)
+#   make build FDTABLES_IMPL=muthashmax   # full build with muthashmax
+#   make lind-boot FDTABLES_IMPL=vanilla  # rebuild only lind-boot with vanilla
+#   make fpcast FDTABLES_IMPL=dashmapvec  # fpcast variant with dashmapvec
+#   make lind-debug FDTABLES_IMPL=muthashmax   # debug build with muthashmax
+#   FDTABLES_IMPL=muthashmax make         # also works via env var
+FDTABLES_IMPL ?= dashmaparray
+
 .PHONY: lind-boot
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/lind-boot/Cargo.toml --release
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
+	    --no-default-features --features fdtables-$(FDTABLES_IMPL)
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
@@ -70,7 +84,8 @@ clean-lindfs:
 .PHONY: lind-debug
 lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
-	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
+	cargo build --manifest-path src/lind-boot/Cargo.toml \
+	    --no-default-features --features "lind_debug fdtables-$(FDTABLES_IMPL)"
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
@@ -157,35 +172,48 @@ test: lindfs
 	exit 0
 
 # Run wasmtestreport with a grate prefix.
-# Examples:
+# Single-grate examples:
 #   make test-grate GRATE=ipc-grate
 #   make test-grate GRATE=chroot-grate GRATE_ARGS="--chroot-dir /tmp"
 #   make test-grate GRATE=ipc-grate RUN=process_tests
 #   make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c
-# Build the grate first:  cd ../lind-wasm-example-grates && make rust/<name>
+# Grate chain (mutually exclusive with GRATE / GRATE_ARGS — the string is passed
+# verbatim before the test wasm, so any grate-side group syntax goes here too):
+#   make test-grate GRATE_PREFIX="grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm"
+# Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>
+# Run timeout defaults to 90s under any grate (vs 30s without), override with TIMEOUT=N.
 .PHONY: test-grate
 GRATE ?=
 GRATE_ARGS ?=
+GRATE_PREFIX ?=
 TESTFILES ?=
 RUN ?=
+TIMEOUT ?=
 test-grate:
-	@if [ -z "$(GRATE)" ]; then \
+	@if [ -z "$(GRATE)" ] && [ -z "$(GRATE_PREFIX)" ]; then \
 		echo "Usage: make test-grate GRATE=<name> [GRATE_ARGS='...'] [RUN=folder | TESTFILES=path/to/test.c]"; \
+		echo "   or: make test-grate GRATE_PREFIX='<raw chain>' [RUN=...]"; \
 		echo ""; \
 		echo "Examples:"; \
 		echo "  make test-grate GRATE=ipc-grate"; \
 		echo "  make test-grate GRATE=chroot-grate GRATE_ARGS=\"--chroot-dir /tmp\""; \
 		echo "  make test-grate GRATE=ipc-grate RUN=process_tests"; \
 		echo "  make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c"; \
+		echo "  make test-grate GRATE_PREFIX=\"grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm\""; \
 		echo ""; \
-		echo "Build the grate first:  cd ../lind-wasm-example-grates && make rust/<name>"; \
+		echo "Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>"; \
 		exit 1; \
+	fi
+	@if [ -n "$(GRATE)" ] && [ -n "$(GRATE_PREFIX)" ]; then \
+		echo "GRATE and GRATE_PREFIX are mutually exclusive"; exit 1; \
 	fi
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	python3 ./scripts/harnesses/wasmtestreport.py \
-		--grate grates/$(GRATE).cwasm \
 		--allow-pre-compiled \
+		$(if $(GRATE),--grate grates/$(GRATE).cwasm) \
 		$(if $(GRATE_ARGS),--grate-args "$(GRATE_ARGS)") \
+		$(if $(GRATE_PREFIX),--grate-prefix "$(GRATE_PREFIX)") \
+		$(if $(TIMEOUT),--timeout $(TIMEOUT)) \
 		$(if $(TESTFILES),--testfiles $(TESTFILES)) \
 		$(if $(RUN),--run $(RUN))
 
@@ -207,9 +235,13 @@ lint:
 	    src/fdtables/src/dashmapvecglobal.rs \
 	    src/fdtables/src/muthashmaxglobal.rs \
 	    src/fdtables/src/vanillaglobal.rs
+	# Note: --all-features can't be used here because it enables every
+	# fdtables-* impl simultaneously, which trips the fdtables impl-mutex
+	# compile_error guard. Enumerate the non-fdtables features explicitly
+	# and pin to the default fdtables impl.
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
-	    --all-features \
+	    --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
 	    --keep-going \
 	    -- \
 	    -A warnings \
