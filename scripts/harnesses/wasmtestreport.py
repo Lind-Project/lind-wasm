@@ -11,6 +11,8 @@
 #   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 30"
 #   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
 #   (flags are collected until the next option starting with "--")
+#   "./wasmtestreport.py --grate grates/ipc-grate.cwasm" to run each test under a grate
+#   (the grate path is forwarded to lind_run before the test wasm)
 #
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
@@ -61,6 +63,7 @@ SKIP_TESTS_FILE = "skip_test_cases.txt"
 GLOBAL_COMPILE_FLAGS = []
 LIND_PRE_FLAGS = []
 DIR_FLAGS = []
+GRATE_PREFIX = None
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
 
 
@@ -511,7 +514,10 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     wasm_file = Path(wasm_file)
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file.name]
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run")]
+    if GRATE_PREFIX:
+        run_cmd.append(GRATE_PREFIX)
+    run_cmd.append(wasm_file.name)
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
@@ -1186,6 +1192,7 @@ def parse_arguments(argv=None):
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
     parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
+    parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
 
     args = parser.parse_args(argv)
     return args
@@ -1427,7 +1434,7 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
-    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS
+    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
@@ -1443,6 +1450,20 @@ def main():
     keep_artifacts = args.keep_artifacts
     GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
     LIND_PRE_FLAGS = ["--static"] if args.static_build else []
+    GRATE_PREFIX = args.grate
+
+    if GRATE_PREFIX:
+        grate_full = LINDFS_ROOT / GRATE_PREFIX.lstrip("/")
+        if not grate_full.exists():
+            grate_name = Path(GRATE_PREFIX).stem
+            logger.error(
+                f"Grate not found at {grate_full}.\n"
+                f"  Build it in the lind-wasm-example-grates repo:\n"
+                f"      cd ../lind-wasm-example-grates && make rust/{grate_name}\n"
+                f"  (or `make c/{grate_name}` for a C grate, `make list` to see available targets).\n"
+                f"  The build installs the cwasm into {LINDFS_ROOT}/grates/."
+            )
+            return
 
     if args.dir_flags:
         try:
