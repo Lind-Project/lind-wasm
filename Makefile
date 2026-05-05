@@ -138,6 +138,35 @@ test: lindfs
 	fi; \
 	exit 0
 
+# Run wasmtestreport with a grate prefix.
+# Examples:
+#   make test-grate GRATE=ipc-grate
+#   make test-grate GRATE=ipc-grate RUN=process_tests
+#   make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c
+# Build the grate first:  cd ../lind-wasm-example-grates && make rust/<name>
+.PHONY: test-grate
+GRATE ?=
+TESTFILES ?=
+RUN ?=
+test-grate:
+	@if [ -z "$(GRATE)" ]; then \
+		echo "Usage: make test-grate GRATE=<name> [RUN=folder | TESTFILES=path/to/test.c]"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make test-grate GRATE=ipc-grate"; \
+		echo "  make test-grate GRATE=ipc-grate RUN=process_tests"; \
+		echo "  make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c"; \
+		echo ""; \
+		echo "Build the grate first:  cd ../lind-wasm-example-grates && make rust/<name>"; \
+		exit 1; \
+	fi
+	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	python3 ./scripts/harnesses/wasmtestreport.py \
+		--grate grates/$(GRATE).cwasm \
+		--allow-pre-compiled \
+		$(if $(TESTFILES),--testfiles $(TESTFILES)) \
+		$(if $(RUN),--run $(RUN))
+
 .PHONY: md_generation
 OUT ?= .
 REPORT ?= report.html
