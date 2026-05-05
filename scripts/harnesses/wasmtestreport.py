@@ -46,6 +46,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 30 # in seconds
+GRATE_DEFAULT_TIMEOUT = 90  # bumped default when running tests under a grate
 DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for lind_run on libc++ smoke .cwasm
 
 JSON_OUTPUT = "results.json"
@@ -72,6 +73,7 @@ LIND_PRE_FLAGS = []
 DIR_FLAGS = []
 GRATE_PREFIX = None
 GRATE_ARGS = []
+GRATE_CHAIN = []  # raw token list to prepend before the test wasm (set when --grate-prefix is used)
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
 
 error_types = {
@@ -522,7 +524,9 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     wasm_file = Path(wasm_file)
     run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run")]
-    if GRATE_PREFIX:
+    if GRATE_CHAIN:
+        run_cmd.extend(GRATE_CHAIN)
+    elif GRATE_PREFIX:
         run_cmd.append(GRATE_PREFIX)
         run_cmd.extend(GRATE_ARGS)
     run_cmd.append(wasm_file.name)
@@ -1209,7 +1213,7 @@ def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description="Specify folders to skip or run.")
     parser.add_argument("--skip", nargs="*", default=SKIP_FOLDERS, help="List of folders to be skipped")
     parser.add_argument("--run", nargs="*", default=RUN_FOLDERS, help="List of folders to be run")
-    parser.add_argument("--timeout", type=check_timeout, default=DEFAULT_TIMEOUT, help="Timeout in seconds")
+    parser.add_argument("--timeout", type=check_timeout, default=None, help=f"Timeout in seconds (default: {DEFAULT_TIMEOUT}, or {GRATE_DEFAULT_TIMEOUT} when running under a grate)")
     parser.add_argument("--output", default=JSON_OUTPUT, help="Name of the output file")
     parser.add_argument("--report", default=HTML_OUTPUT, help="Name of the report HTML file")
     parser.add_argument("--generate-html", action="store_true", help="Flag to generate HTML file")
@@ -1224,8 +1228,9 @@ def parse_arguments(argv=None):
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
     parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
-    parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
+    parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a single grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
     parser.add_argument("--grate-args", default="", help="Extra args passed to the grate, between the grate cwasm and the test wasm (shlex-split). Example: --grate-args '--chroot-dir /tmp'")
+    parser.add_argument("--grate-prefix", default=None, help="Raw prefix string of grates and their args, prepended verbatim before the test wasm (shlex-split). Use for chaining multiple grates including any grate-side group syntax. Example: --grate-prefix 'grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm'")
     parser.add_argument(
         "--libcpp-timeout",
         type=check_timeout,
@@ -1478,12 +1483,11 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
-    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX, GRATE_ARGS
+    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX, GRATE_ARGS, GRATE_CHAIN
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
-    timeout_sec = args.timeout
     output_file = str(Path(args.output).with_suffix('.json'))
     output_html_file = str(Path(args.report).with_suffix('.html'))
     should_generate_html = True
@@ -1496,6 +1500,11 @@ def main():
     LIND_PRE_FLAGS = ["--static"] if args.static_build else []
     GRATE_PREFIX = args.grate
     GRATE_ARGS = shlex.split(args.grate_args) if args.grate_args else []
+    GRATE_CHAIN = shlex.split(args.grate_prefix) if args.grate_prefix else []
+
+    if GRATE_CHAIN and (GRATE_PREFIX or args.grate_args):
+        logger.error("--grate-prefix is mutually exclusive with --grate / --grate-args")
+        return
 
     if GRATE_PREFIX:
         grate_full = LINDFS_ROOT / GRATE_PREFIX.lstrip("/")
@@ -1509,6 +1518,28 @@ def main():
                 f"  The build installs the cwasm into {LINDFS_ROOT}/grates/."
             )
             return
+
+    if GRATE_CHAIN:
+        missing = []
+        for tok in GRATE_CHAIN:
+            if tok.endswith(".cwasm") or tok.endswith(".wasm"):
+                full = LINDFS_ROOT / tok.lstrip("/")
+                if not full.exists():
+                    missing.append(full)
+        if missing:
+            paths = "\n    ".join(str(m) for m in missing)
+            logger.error(
+                f"Grate chain references missing cwasm/wasm files:\n"
+                f"    {paths}\n"
+                f"  Build them in the lind-wasm-example-grates repo (e.g. "
+                f"`cd ../lind-wasm-example-grates && make rust/<name>` per grate, "
+                f"or `make all`). Builds install into {LINDFS_ROOT}/grates/."
+            )
+            return
+
+    timeout_sec = args.timeout
+    if timeout_sec is None:
+        timeout_sec = GRATE_DEFAULT_TIMEOUT if (GRATE_PREFIX or GRATE_CHAIN) else DEFAULT_TIMEOUT
 
     if args.dir_flags:
         try:
