@@ -112,8 +112,55 @@
 //       ENFILE The system-wide limit on the total number of open files
 //              has been reached. (mostly unimplemented)
 
-// This includes the specific implementation of the algorithm chosen.
-include!("current_impl");
+// The specific implementation of the algorithm is selected via a Cargo feature
+// (see Cargo.toml `[features]`). Exactly one impl feature must be enabled; the
+// default is `dashmaparray`. To switch, build with e.g.
+//   cargo build --no-default-features --features muthashmax
+
+#[cfg(not(any(
+    feature = "dashmaparray",
+    feature = "dashmapvec",
+    feature = "muthashmax",
+    feature = "vanilla",
+)))]
+compile_error!(
+    "fdtables: no impl feature enabled; pick exactly one of \
+     `dashmaparray`, `dashmapvec`, `muthashmax`, or `vanilla`"
+);
+
+#[cfg(any(
+    all(feature = "dashmaparray", feature = "dashmapvec"),
+    all(feature = "dashmaparray", feature = "muthashmax"),
+    all(feature = "dashmaparray", feature = "vanilla"),
+    all(feature = "dashmapvec", feature = "muthashmax"),
+    all(feature = "dashmapvec", feature = "vanilla"),
+    all(feature = "muthashmax", feature = "vanilla"),
+))]
+compile_error!(
+    "fdtables: more than one impl feature enabled; pick exactly one of \
+     `dashmaparray`, `dashmapvec`, `muthashmax`, or `vanilla` \
+     (use --no-default-features when overriding the default)"
+);
+
+#[cfg(feature = "dashmaparray")]
+mod dashmaparrayglobal;
+#[cfg(feature = "dashmaparray")]
+pub use dashmaparrayglobal::*;
+
+#[cfg(feature = "dashmapvec")]
+mod dashmapvecglobal;
+#[cfg(feature = "dashmapvec")]
+pub use dashmapvecglobal::*;
+
+#[cfg(feature = "muthashmax")]
+mod muthashmaxglobal;
+#[cfg(feature = "muthashmax")]
+pub use muthashmaxglobal::*;
+
+#[cfg(feature = "vanilla")]
+mod vanillaglobal;
+#[cfg(feature = "vanilla")]
+pub use vanillaglobal::*;
 
 // This includes general constants and definitions for things that are
 // needed everywhere, like FDTableEntry.  I use the * import here to flatten

@@ -170,9 +170,10 @@ md_generation:
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
 	cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
-	rustfmt --check src/fdtables/src/muthashmaxglobal.rs \
-	    src/fdtables/src/vanillaglobal.rs \
-	    src/fdtables/src/dashmapvecglobal.rs
+	rustfmt --check src/fdtables/src/dashmaparrayglobal.rs \
+	    src/fdtables/src/dashmapvecglobal.rs \
+	    src/fdtables/src/muthashmaxglobal.rs \
+	    src/fdtables/src/vanillaglobal.rs
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
 	    --all-features \
@@ -186,9 +187,10 @@ lint:
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
 	cargo fmt --all --manifest-path src/lind-boot/Cargo.toml
-	rustfmt src/fdtables/src/muthashmaxglobal.rs \
-	    src/fdtables/src/vanillaglobal.rs \
-	    src/fdtables/src/dashmapvecglobal.rs
+	rustfmt src/fdtables/src/dashmaparrayglobal.rs \
+	    src/fdtables/src/dashmapvecglobal.rs \
+	    src/fdtables/src/muthashmaxglobal.rs \
+	    src/fdtables/src/vanillaglobal.rs
  
 
 .PHONY: docs-serve
