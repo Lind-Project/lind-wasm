@@ -40,10 +40,24 @@ sysroot: build-dir
 	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
+# fdtables backend selector. One of: dashmaparray (default), dashmapvec,
+# muthashmax, vanilla. Threaded through lind-boot -> rawposix -> fdtables
+# via Cargo features.
+#
+# Examples:
+#   make                                  # default (dashmaparray)
+#   make build FDTABLES_IMPL=muthashmax   # full build with muthashmax
+#   make lind-boot FDTABLES_IMPL=vanilla  # rebuild only lind-boot with vanilla
+#   make fpcast FDTABLES_IMPL=dashmapvec  # fpcast variant with dashmapvec
+#   make lind-debug FDTABLES_IMPL=muthashmax   # debug build with muthashmax
+#   FDTABLES_IMPL=muthashmax make         # also works via env var
+FDTABLES_IMPL ?= dashmaparray
+
 .PHONY: lind-boot
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/lind-boot/Cargo.toml --release
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
+	    --no-default-features --features fdtables-$(FDTABLES_IMPL)
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
@@ -70,7 +84,8 @@ clean-lindfs:
 .PHONY: lind-debug
 lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
-	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
+	cargo build --manifest-path src/lind-boot/Cargo.toml \
+	    --no-default-features --features "lind_debug fdtables-$(FDTABLES_IMPL)"
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
@@ -220,9 +235,13 @@ lint:
 	    src/fdtables/src/dashmapvecglobal.rs \
 	    src/fdtables/src/muthashmaxglobal.rs \
 	    src/fdtables/src/vanillaglobal.rs
+	# Note: --all-features can't be used here because it enables every
+	# fdtables-* impl simultaneously, which trips the fdtables impl-mutex
+	# compile_error guard. Enumerate the non-fdtables features explicitly
+	# and pin to the default fdtables impl.
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
-	    --all-features \
+	    --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
 	    --keep-going \
 	    -- \
 	    -A warnings \

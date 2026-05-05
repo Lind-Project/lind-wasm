@@ -4,11 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+default = ["fdtables-dashmaparray"]
 disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_signals"]
 secure = ["typemap/secure"]
 lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug" ]
 debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
 debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
+# Pass-through selectors for the fdtables backend. Pick exactly one.
+fdtables-dashmaparray = ["rawposix/fdtables-dashmaparray"]
+fdtables-dashmapvec = ["rawposix/fdtables-dashmapvec"]
+fdtables-muthashmax = ["rawposix/fdtables-muthashmax"]
+fdtables-vanilla = ["rawposix/fdtables-vanilla"]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
