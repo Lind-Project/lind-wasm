@@ -43,6 +43,14 @@ sysroot: build-dir
 # fdtables backend selector. One of: dashmaparray (default), dashmapvec,
 # muthashmax, vanilla. Threaded through lind-boot -> rawposix -> fdtables
 # via Cargo features.
+#
+# Examples:
+#   make                                  # default (dashmaparray)
+#   make build FDTABLES_IMPL=muthashmax   # full build with muthashmax
+#   make lind-boot FDTABLES_IMPL=vanilla  # rebuild only lind-boot with vanilla
+#   make fpcast FDTABLES_IMPL=dashmapvec  # fpcast variant with dashmapvec
+#   make lind-debug FDTABLES_IMPL=muthashmax   # debug build with muthashmax
+#   FDTABLES_IMPL=muthashmax make         # also works via env var
 FDTABLES_IMPL ?= dashmaparray
 
 .PHONY: lind-boot
