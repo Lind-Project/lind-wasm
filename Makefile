@@ -222,9 +222,13 @@ lint:
 	    src/fdtables/src/dashmapvecglobal.rs \
 	    src/fdtables/src/muthashmaxglobal.rs \
 	    src/fdtables/src/vanillaglobal.rs
+	# Note: --all-features can't be used here because it enables every
+	# fdtables-* impl simultaneously, which trips the fdtables impl-mutex
+	# compile_error guard. Enumerate the non-fdtables features explicitly
+	# and pin to the default fdtables impl.
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
-	    --all-features \
+	    --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
 	    --keep-going \
 	    -- \
 	    -A warnings \
