@@ -1262,7 +1262,7 @@ impl Instance {
                     continue;
                 };
                 // relocate the variable
-                let val = raw as u32 + memory_base;
+                let val = (raw as u32).wrapping_add(memory_base);
                 // Cache the resolved address; also updates the GOT cell if it already exists.
                 if got_inner.cache_symbol(&name, val) {
                     #[cfg(feature = "debug-dylink")]
