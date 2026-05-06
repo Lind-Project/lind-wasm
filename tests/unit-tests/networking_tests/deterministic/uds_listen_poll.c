@@ -1,23 +1,9 @@
 /*
- * Standalone repro for ipc-grate listen-fd poll bug.
+ * AF_UNIX listen-fd readiness test.
  *
- * Single binary; fork()s server + client.
- *
- *   Parent (server): socket → bind → listen → select(POLLIN) → accept → read
- *   Child  (client): sleep briefly → socket → connect → write
- *
- * Expected (works under strace-grate, kernel UDS): server's select wakes,
- * accept returns, "PASS" printed.
- *
- * Bug under ipc-grate: ipc_pipe_poll_state on a listening IPC socket
- * returns POLLNVAL because the socket has no recvpipe yet, so the server's
- * select never reports POLLIN and accept is never called → client's connect
- * queues a pending connection that never gets picked up → test hangs.
- *
- * Compile:
- *   lind-clang uds-listen-poll-repro.c -o uds-listen-poll-repro
- * Run under ipc-grate:
- *   lind-wasm grates/ipc-grate.cwasm uds-listen-poll-repro
+ * Single binary forks server + client.  Server: bind/listen, select(POLLIN)
+ * with a 5s timeout, accept, read.  Client: sleep briefly, connect, write.
+ * Passes iff the listening fd becomes readable once a connection is pending.
  */
 
 #define _GNU_SOURCE
