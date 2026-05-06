@@ -22,12 +22,16 @@
 #include <socket-constants-time64.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 static int
 getsockopt_syscall (int fd, int level, int optname, void *optval,
 		    socklen_t *len)
 {
-  return MAKE_LEGACY_SYSCALL(GETSOCKOPT_SYSCALL, "syscall|getsockopt", (uint64_t)fd, (uint64_t)level, (uint64_t)optname, (uint64_t)optval, (uint64_t)len, NOTUSED, TRANSLATE_ERRNO_ON);
+  uint64_t host_optval = TRANSLATE_GUEST_POINTER_TO_HOST (optval);
+  uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST (len);
+
+  return MAKE_LEGACY_SYSCALL(GETSOCKOPT_SYSCALL, "syscall|getsockopt", (uint64_t)fd, (uint64_t)level, (uint64_t)optname, host_optval, host_len, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS

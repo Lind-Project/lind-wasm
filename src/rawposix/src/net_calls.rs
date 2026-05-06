@@ -1969,17 +1969,21 @@ pub extern "C" fn getsockopt_syscall(
     optname_arg: u64,
     optname_cageid: u64,
     optval_arg: u64,
-    optval_cageid: u64,
+    _optval_cageid: u64,
     optlen_arg: u64,
-    optlen_cageid: u64,
+    _optlen_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_uaddr_to_host(optval_arg, optval_cageid, cageid) as *mut c_void;
-    let optlen = sc_convert_uaddr_to_host(optlen_arg, optlen_cageid, cageid) as *mut socklen_t;
+    // optval/optlen arrive as already-translated host pointers from glibc's
+    // getsockopt.c (matches setsockopt/sendto/recvfrom).  Re-translating here
+    // would break the grate forwarding path, where the grate has no way to
+    // translate cage offsets and relies on glibc having done so.
+    let optval = optval_arg as *mut c_void;
+    let optlen = optlen_arg as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
