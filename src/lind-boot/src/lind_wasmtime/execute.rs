@@ -922,6 +922,25 @@ fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Confi
 
     wt_config.wasm_backtrace_details(details);
 
+    // Disable AVX-512 lanes so the precompiled .cwasm is portable across
+    // GitHub Actions runners.  Cranelift's default is to auto-detect the
+    // host CPU and bake whatever features it has into the artifact; if a
+    // build runner has avx512bitalg but a runtime runner doesn't, the
+    // .cwasm fails to load with "compilation setting 'has_avx512bitalg'
+    // is enabled, but not available on the host".  AVX2 is universally
+    // available on x86-64 GHA runners, so capping at AVX2 is safe.
+    unsafe {
+        for flag in [
+            "has_avx512bitalg",
+            "has_avx512dq",
+            "has_avx512f",
+            "has_avx512vbmi",
+            "has_avx512vl",
+        ] {
+            wt_config.cranelift_flag_set(flag, "false");
+        }
+    }
+
     // Enable compilation cache — compiled .wasm artifacts are stored on disk
     // so subsequent runs skip compilation. Best-effort: if config loading
     // fails (e.g. no home dir), caching is simply disabled.
