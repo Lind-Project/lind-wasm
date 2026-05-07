@@ -3,6 +3,18 @@ use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 
 use crate::LindHost;
 
+macro_rules! lind_log {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true).append(true)
+            .open("/tmp/lind.log")
+        {
+            let _ = writeln!(f, $($arg)*);
+        }
+    }};
+}
+
 // handle all the epoch callback
 // this is where the wasm instance is directed when epoch is triggered
 // this function could possibly be on the callstack of the Asyncify operation
@@ -43,7 +55,24 @@ pub fn signal_handler<
         // Don't call lind_thread_exit here — it's deferred to exit_call's
         // OnCalledAction so the epoch_handler entry stays until asyncify
         // unwind completes and any grate dispatch has fully returned.
-        ctx.exit_call(caller, 0, 0);
+        //
+        // Use the cage's recorded exit status so that exit_group(N) from any
+        // thread (e.g. faulthandler calling _exit(1)) propagates the right
+        // code to the OS-level process exit.  Default to 0 when the cage is
+        // already gone (late wakeup after cage_finalize).
+        let cage_opt = cage::get_cage(cageid);
+        let status_opt = cage_opt.as_ref().and_then(|c| *c.final_exit_status.read());
+        let exit_code = status_opt
+            .map(|st| match st {
+                cage::ExitStatus::Exited(code) => code,
+                cage::ExitStatus::Signaled(_, _) => 1,
+            })
+            .unwrap_or(0);
+        lind_log!(
+            "[lind|epoch_kill] cage={} tid={} cage_exists={} status={:?} exit_code={}",
+            cageid, ctx.tid, cage_opt.is_some(), status_opt, exit_code
+        );
+        ctx.exit_call(caller, exit_code, 0);
         return 0;
     }
 

@@ -96,6 +96,7 @@ pub const CLOCK_GETTIME_SYSCALL: i32 = 228;
 pub const EPOLL_WAIT_SYSCALL: i32 = 232;
 pub const EPOLL_CTL_SYSCALL: i32 = 233;
 pub const OPENAT_SYSCALL: i32 = 257;
+pub const FSTATAT_SYSCALL: i32 = 262;
 pub const UNLINKAT_SYSCALL: i32 = 263;
 pub const SYMLINKAT_SYSCALL: i32 = 266;
 pub const READLINKAT_SYSCALL: i32 = 267;

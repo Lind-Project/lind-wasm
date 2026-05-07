@@ -1539,7 +1539,7 @@ impl<T> Linker<T> {
                     }
                 }
 
-                got.warning_undefined();
+                // got.warning_undefined();
 
                 let is_local = symbol_map.is_local();
 

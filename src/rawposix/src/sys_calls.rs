@@ -1,6 +1,19 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
+
+macro_rules! lind_log {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true).append(true)
+            .open("/tmp/lind.log")
+        {
+            let _ = writeln!(f, $($arg)*);
+        }
+    }};
+}
+
 use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
@@ -340,11 +353,15 @@ pub extern "C" fn exit_syscall(
         );
     }
 
-    let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
+    let _status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
 
-    // Thread-only exit: just record status and trigger asyncify unwind.
-    // No CAS, no epoch_kill_all — the cage stays alive for other threads.
-    cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
+    // Thread-only exit: trigger asyncify unwind for this thread only.
+    // Do NOT call cage_record_exit_status here — SYS_exit is only called by
+    // non-main threads when their thread function returns (glibc start_thread),
+    // and a thread's individual exit code does not determine the cage's
+    // process-level exit status.  Calling it here would race with and
+    // overwrite the exit_group(1) recorded by e.g. the faulthandler thread,
+    // causing the cage to exit with code 0 instead of 1.
 
     // Call wasmtime to trigger asyncify unwind for this thread.
     // OnCalledAction handles lind_thread_exit + cage_finalize if last.
@@ -404,6 +421,7 @@ pub extern "C" fn exit_group_syscall(
 
     // Only the first thread to win the CAS initiates cage shutdown.
     // Other threads just fall through and will be killed via epoch_kill_all.
+    lind_log!("[lind|exit_group] cage={} tid={} status={}", cageid, tid, status);
     if cage::signal::signal::try_initiate_exit_group(cageid) {
         cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
 
@@ -429,6 +447,18 @@ pub extern "C" fn exit_group_syscall(
         threei::handler_table::_rm_grate_from_handler(cageid);
     }
 
+    // Use the cage's authoritative recorded exit status so that whichever
+    // thread wins the CAS (e.g. faulthandler calling _exit(1)) determines
+    // the OS-level exit code.  Late threads calling exit_group(0) after
+    // the cage has already been marked Exited(1) will use code=1.
+    let canonical_status_arg = cage::get_cage(cageid)
+        .and_then(|c| *c.final_exit_status.read())
+        .map(|st| match st {
+            cage::ExitStatus::Exited(code) => code as u64,
+            cage::ExitStatus::Signaled(_, _) => 1u64,
+        })
+        .unwrap_or(status_arg as u64);
+
     // Call wasmtime to trigger asyncify unwind.
     // OnCalledAction handles lind_thread_exit + cage_finalize if last.
     threei::make_syscall(
@@ -436,7 +466,7 @@ pub extern "C" fn exit_group_syscall(
         60, // reuse exit trampoline in wasmtime
         UNUSED_NAME,
         WASMTIME_CAGEID,
-        status_arg,
+        canonical_status_arg,
         cageid,
         tid,
         UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction

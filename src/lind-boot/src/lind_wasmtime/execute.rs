@@ -1,3 +1,15 @@
+macro_rules! lind_log {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true).append(true)
+            .open("/tmp/lind.log")
+        {
+            let _ = writeln!(f, $($arg)*);
+        }
+    }};
+}
+
 use crate::lind_wasmtime::host::DylinkMetadata;
 use crate::lind_wasmtime::host::{
     cleanup_grate_handler, init_grate_pool, register_grate_handler_for_cage,
@@ -111,6 +123,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
                 Some(Val::I32(code)) => *code,
                 _ => 0,
             };
+            lind_log!("[lind|execute] main module returned ret_vals={:?} exit_code={}", ret_vals, exit_code);
             // Propagate the exit code to the main, which will translate it
             // into the host process exit status.
             Ok(exit_code)
@@ -491,9 +504,9 @@ fn attach_api(
                     let linker = lind_ctx.linker.clone().unwrap();
                     let got_table = lind_ctx.got_table.clone().unwrap();
 
-                    if lind_ctx.had_threads() {
-                        lind_debug_panic("dlopen within threads is currently not supported!");
-                    }
+                    // if lind_ctx.had_threads() {
+                    //     lind_debug_panic("dlopen within threads is currently not supported!");
+                    // }
 
                     load_library_module(caller, linker, got_table, cageid, library_name, mode)
                 });

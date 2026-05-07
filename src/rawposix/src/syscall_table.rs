@@ -6,7 +6,8 @@
 use super::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall,
     close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
-    fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
+    fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatat_syscall,
+    fstatfs_syscall, fsync_syscall,
     ftruncate_syscall, futex_syscall, getcwd_syscall, getdents_syscall, getrandom_syscall,
     ioctl_syscall, link_syscall, listxattr_syscall, lseek_syscall, lstat_syscall, mkdir_syscall,
     mknod_syscall, mmap_syscall, mprotect_syscall, munmap_syscall, nanosleep_time64_syscall,
@@ -149,6 +150,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::EPOLL_WAIT_SYSCALL as u64, epoll_wait_syscall),
     (syscall_const::EPOLL_CTL_SYSCALL as u64, epoll_ctl_syscall),
     (syscall_const::OPENAT_SYSCALL as u64, openat_syscall),
+    (syscall_const::FSTATAT_SYSCALL as u64, fstatat_syscall),
     (syscall_const::UNLINKAT_SYSCALL as u64, unlinkat_syscall),
     (syscall_const::SYMLINKAT_SYSCALL as u64, symlinkat_syscall),
     (syscall_const::READLINKAT_SYSCALL as u64, readlinkat_syscall),

@@ -1719,10 +1719,86 @@ pub extern "C" fn lstat_syscall(
     libcret
 }
 
+/// `fstatat` retrieves file status relative to a directory file descriptor.
+/// Reference: https://man7.org/linux/man-pages/man2/fstatat.2.html
+///
+/// ## Arguments:
+///  - `dirfd_arg`: directory fd (virtual), or AT_FDCWD (-100) to use CWD.
+///  - `path_arg`: path to the file; relative paths are resolved against `dirfd_arg`.
+///  - `statbuf_arg`: buffer to receive stat data.
+///  - `flags_arg`: e.g. AT_SYMLINK_NOFOLLOW (0x100).
+///
+/// ## Implementation Details:
+///  - AT_FDCWD: path is converted to an absolute host path (same as stat/lstat).
+///  - Real dirfd: raw relative path is kept so the host kernel resolves it against
+///    the (already-translated) host directory fd.  This mirrors `openat_syscall`.
+pub extern "C" fn fstatat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let dirfd_i32 = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fstatat_syscall"
+        );
+    }
+
+    let mut libc_statbuf: libc::stat = unsafe { std::mem::zeroed() };
+
+    let libcret = if dirfd_i32 == AT_FDCWD {
+        // Path is absolute (or CWD-relative on the host): convert to host path.
+        let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+            Ok(p) => p,
+            Err(e) => return syscall_error(e, "fstatat", "path conversion failed"),
+        };
+        unsafe { libc::fstatat(libc::AT_FDCWD, path.as_ptr(), &mut libc_statbuf, flags) }
+    } else {
+        // Real dirfd: translate fd, keep path relative so the host resolves it.
+        let host_fd = convert_fd_to_host(dirfd_arg, dirfd_cageid, cageid);
+        if host_fd < 0 {
+            return handle_errno(-host_fd, "fstatat");
+        }
+        let raw_path = match get_cstr(path_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EINVAL, "fstatat", "invalid path"),
+        };
+        let c_path = match std::ffi::CString::new(raw_path) {
+            Ok(c) => c,
+            Err(_) => return syscall_error(Errno::EINVAL, "fstatat", "invalid path"),
+        };
+        unsafe { libc::fstatat(host_fd, c_path.as_ptr(), &mut libc_statbuf, flags) }
+    };
+
+    if libcret < 0 {
+        return handle_errno(get_errno(), "fstatat");
+    }
+
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "fstatat", "Bad address"),
+    }
+
+    libcret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
 ///
 /// Linux `statfs()` syscall returns information about a mounted filesystem
-/// that contains the file or directory specified by `path`.  
+/// that contains the file or directory specified by `path`.
 /// In RawPOSIX, because each Cage has its own virtualized filesystem view,
 /// the path is first translated from the Cage's namespace into the host
 /// kernel namespace using `sc_convert_path_to_host`.  

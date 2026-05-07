@@ -470,6 +470,8 @@ impl CallThreadState {
             None => return TrapTest::NotWasm,
         };
 
+        eprintln!("[SIGILL] wasm trap at pc={:#x} trap_code={:?}", pc as usize, trap);
+
         // If all that passed then this is indeed a wasm trap, so return the
         // `jmp_buf` passed to `wasmtime_longjmp` to resume.
         TrapTest::Trap {
