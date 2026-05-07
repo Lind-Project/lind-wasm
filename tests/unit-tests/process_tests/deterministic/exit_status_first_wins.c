@@ -1,36 +1,52 @@
 /*
- * Test: exit_status_first_wins — the first exit() call's code is what
- * the parent sees, even if a competing thread later calls exit(0).
+ * Test: exit_status_first_wins — exit_syscall (SYS_exit) must not record
+ * the cage exit status; only exit_group_syscall should.
  *
- * Scenario:
- *   1. Parent forks a child.
- *   2. Child spawns a worker thread that calls exit(1).
- *   3. The main thread spins briefly then calls exit(0).
- *   4. Because exit_group_syscall uses a CAS to record the first caller's
- *      status, exit(1) wins and subsequent exit(0) uses the already-
- *      recorded code.
- *   5. Parent's waitpid() should observe exit status 1.
+ * Bug:
+ *   exit_syscall() called cage_record_exit_status(0) even though SYS_exit
+ *   is a thread-only exit (triggered by glibc start_thread when a non-main
+ *   pthread returns).  cage_record_exit_status uses first-write-wins
+ *   semantics, so if SYS_exit(0) fires before exit_group_syscall(1), the
+ *   cage's final_exit_status is locked at 0 and exit_group(1) cannot
+ *   overwrite it.  cage_finalize then reports exit code 0 to the parent.
  *
- * Before the fix:
- *   - exit_syscall (thread-only exit) also recorded cage exit status, so
- *     whichever thread ran last would overwrite the earlier code.
- *   - exit_group_syscall did not consult the CAS-recorded status, so
- *     exit(0) could clobber exit(1).
+ * Scenario that reliably triggers the bug:
+ *   1. Child forks.
+ *   2. Child creates thread A that immediately returns NULL.  glibc
+ *      start_thread does, in order:
+ *        atomic_store_release(&pd->tid, 0)  -- marks thread done
+ *        FUTEX_WAKE(&pd->tid, 1)            -- unblocks pthread_join
+ *        EXIT_SYSCALL(0)                    -- very next instruction
+ *      On the unfixed branch, exit_syscall calls cage_record_exit_status(0)
+ *      at the start of exit_syscall, before asyncify unwind.
+ *   3. pthread_join(ta) in the child main thread returns right after
+ *      FUTEX_WAKE, so thread A is still about to call EXIT_SYSCALL(0).
+ *      Main's path from pthread_join back to exit(1) requires asyncify
+ *      rewind and several library frames; thread A's
+ *      cage_record_exit_status(0) runs first and locks final_exit_status=0.
+ *   4. Child main calls exit(1).  exit_group_syscall tries to record 1
+ *      but final_exit_status is already Some(0) — no overwrite.
+ *
+ * Before fix: cage_finalize reads Some(0) → parent waitpid sees 0 (WRONG).
+ * After fix:  exit_syscall does not record status → exit_group(1) is the
+ *             first write → cage_finalize reads Some(1) → parent sees 1.
  */
 
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-static void *worker(void *arg)
+static void *thread_a(void *arg)
 {
     (void)arg;
-    /* Call exit(1) — this should record exit code 1 via CAS and win. */
-    exit(1);
-    return NULL; /* unreachable */
+    /*
+     * Return immediately.  glibc start_thread will call FUTEX_WAKE then
+     * EXIT_SYSCALL(0).  On the unfixed branch, exit_syscall records
+     * final_exit_status = Some(0) before main can call exit(1).
+     */
+    return NULL;
 }
 
 int main(void)
@@ -39,27 +55,33 @@ int main(void)
     assert(pid != -1 && "fork should succeed");
 
     if (pid == 0) {
-        pthread_t t;
-        int rc = pthread_create(&t, NULL, worker, NULL);
+        pthread_t ta;
+        int rc = pthread_create(&ta, NULL, thread_a, NULL);
         assert(rc == 0 && "pthread_create should succeed");
 
         /*
-         * Spin long enough for the worker to call exit(1) and have it
-         * recorded before we call exit(0).  The epoch-kill from exit(1)
-         * will terminate this thread regardless; exit(0) here should
-         * either never run or read the already-recorded status (1).
+         * pthread_join returns after FUTEX_WAKE but before EXIT_SYSCALL.
+         * Thread A will call EXIT_SYSCALL on its next instruction.
+         * Main's return path from pthread_join to exit(1) goes through
+         * asyncify rewind + multiple library frames, so on the unfixed
+         * branch thread A's cage_record_exit_status(0) reliably fires
+         * first, locking final_exit_status = Some(0).
+         *
+         * On the fixed branch exit_syscall does not call
+         * cage_record_exit_status, so exit_group(1) below records Some(1).
          */
-        sleep(1);
-        exit(0);
-        /* unreachable */
-        _exit(99);
+        pthread_join(ta, NULL);
+        exit(1);
+
+        _exit(99); /* unreachable */
     }
 
     int status;
     pid_t waited = waitpid(pid, &status, 0);
     assert(waited == pid && "waitpid should return child pid");
     assert(WIFEXITED(status) && "child should exit normally");
-    assert(WEXITSTATUS(status) == 1 && "first exit(1) should win over later exit(0)");
+    assert(WEXITSTATUS(status) == 1 &&
+           "exit_group(1) should win over thread SYS_exit(0)");
 
     printf("exit_status_first_wins: PASS\n");
     return 0;
