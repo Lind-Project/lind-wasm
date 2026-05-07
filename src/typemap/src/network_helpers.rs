@@ -4,7 +4,7 @@
 //! host-usable pointer and to compute the correct socklen_t for Linux. It is used by
 //! our socket-related syscalls to bridge from per-cage virtual memory to host libc calls.
 use crate::cage_helpers::validate_cageid;
-use cage::get_cage;
+use cage::{get_cage, translate_vmmap_addr};
 use libc::{
     sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t,
     strlen,
@@ -165,7 +165,17 @@ pub fn convert_sockpair<'a>(
         }
     }
 
-    let pointer = arg as *mut SockPair;
+    let updated_arg = if arg_cageid != cageid {
+        let cage = get_cage(arg_cageid).unwrap();
+        match translate_vmmap_addr(&cage, arg) {
+            Ok(host_addr) => host_addr,
+            Err(_) => panic!("Failed to translate vmmap address for sockpair argument"),
+        }
+    } else {
+        arg
+    };
+
+    let pointer = updated_arg as *mut SockPair;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
