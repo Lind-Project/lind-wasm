@@ -49,8 +49,7 @@ int main(void)
          * will terminate this thread regardless; exit(0) here should
          * either never run or read the already-recorded status (1).
          */
-        for (volatile int i = 0; i < 2000000; i++)
-            ;
+        sleep(1);
         exit(0);
         /* unreachable */
         _exit(99);
