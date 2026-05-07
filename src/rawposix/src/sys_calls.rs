@@ -1,19 +1,6 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
-
-macro_rules! lind_log {
-    ($($arg:tt)*) => {{
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true).append(true)
-            .open("/tmp/lind.log")
-        {
-            let _ = writeln!(f, $($arg)*);
-        }
-    }};
-}
-
 use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
@@ -421,12 +408,6 @@ pub extern "C" fn exit_group_syscall(
 
     // Only the first thread to win the CAS initiates cage shutdown.
     // Other threads just fall through and will be killed via epoch_kill_all.
-    lind_log!(
-        "[lind|exit_group] cage={} tid={} status={}",
-        cageid,
-        tid,
-        status
-    );
     if cage::signal::signal::try_initiate_exit_group(cageid) {
         cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
 

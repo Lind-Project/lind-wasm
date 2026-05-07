@@ -3,18 +3,6 @@ use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 
 use crate::LindHost;
 
-macro_rules! lind_log {
-    ($($arg:tt)*) => {{
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true).append(true)
-            .open("/tmp/lind.log")
-        {
-            let _ = writeln!(f, $($arg)*);
-        }
-    }};
-}
-
 // handle all the epoch callback
 // this is where the wasm instance is directed when epoch is triggered
 // this function could possibly be on the callstack of the Asyncify operation
@@ -68,14 +56,6 @@ pub fn signal_handler<
                 cage::ExitStatus::Signaled(_, _) => 1,
             })
             .unwrap_or(0);
-        lind_log!(
-            "[lind|epoch_kill] cage={} tid={} cage_exists={} status={:?} exit_code={}",
-            cageid,
-            ctx.tid,
-            cage_opt.is_some(),
-            status_opt,
-            exit_code
-        );
         ctx.exit_call(caller, exit_code, 0);
         return 0;
     }
