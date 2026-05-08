@@ -27,7 +27,7 @@ int main(void)
     assert(pid != -1 && "fork should succeed");
 
     if (pid == 0) {
-        char *argv[] = {"exec_crash_helper", NULL};
+        char *argv[] = {"exec_crash_helper.cwasm", NULL};
         execv("automated_tests/exec_crash_helper", argv);
         /* execv should not return */
         _exit(99);
@@ -37,6 +37,8 @@ int main(void)
     int status;
     pid_t waited = waitpid(pid, &status, 0);
     assert(waited == pid && "waitpid should return child pid");
+
+    printf("status = %d\n", status);
 
     /*
      * The crash finalize path calls cage_finalize with exit code 1,
