@@ -1,147 +1,90 @@
-/* Tests for utimensat / futimens / stat time-field plumbing.
+/* Tests for utimensat / futimens / utimes / stat time-field plumbing.
  *
  * Exercises:
- *   - utimensat with AT_FDCWD + a path: the explicit (atime, mtime) we
- *     pass must be readable via stat() afterwards.
- *   - futimens (which glibc implements as utimensat(fd, NULL, ts, 0)):
- *     same round-trip via fstat.
- *   - UTIME_NOW / UTIME_OMIT: setting atime to NOW while OMITting mtime
- *     must change atime but leave mtime untouched.
+ *   - utimensat with AT_FDCWD + a path: explicit (atime, mtime) round-trips
+ *     through stat.
+ *   - futimens (glibc routes via utimensat(fd, NULL, ts, 0)): same round
+ *     trip via fstat.
+ *   - UTIME_NOW / UTIME_OMIT semantics (atime advances, mtime preserved).
+ *   - utimes (legacy μs API) funnels through the same __utimensat64_helper
+ *     in lind-wasm glibc — exercising one legacy variant covers the funnel.
  *
- * Failure modes this catches:
- *   - utimensat unimplemented (silently no-ops, leaving mtime at 0).
- *   - convert_statdata_to_user not copying st_atim / st_mtim / st_ctim
- *     (so even a working utimensat would round-trip as 0).
+ * Catches utimensat being unimplemented (round-trips read 0) and
+ * convert_statdata_to_user not copying st_atim / st_mtim / st_ctim.
  */
 
 #undef _GNU_SOURCE
 #define _GNU_SOURCE
 
 #include <assert.h>
-#include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <utime.h>
 
 #define TEST_PATH "testfiles/utimensat-target"
 
-static void create_file(const char *path)
-{
-    int fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
-    if (fd < 0) {
-        perror("open(create)");
-        exit(1);
-    }
-    close(fd);
-}
-
-static void check_times(const struct stat *st, time_t want_atime,
-                        time_t want_mtime, const char *who)
-{
-    if (st->st_atime != want_atime) {
-        fprintf(stderr,
-                "FAIL [%s]: st_atime = %lld, expected %lld\n",
-                who, (long long)st->st_atime, (long long)want_atime);
-        exit(1);
-    }
-    if (st->st_mtime != want_mtime) {
-        fprintf(stderr,
-                "FAIL [%s]: st_mtime = %lld, expected %lld\n",
-                who, (long long)st->st_mtime, (long long)want_mtime);
-        exit(1);
-    }
-}
-
 int main(void)
 {
-    create_file(TEST_PATH);
-
-    /* ---- 1. utimensat(AT_FDCWD, path, [a, m], 0) round-trip ---- */
-    struct timespec ts1[2];
-    ts1[0].tv_sec = 1234567890;  /* atime: 2009-02-13 */
-    ts1[0].tv_nsec = 0;
-    ts1[1].tv_sec = 1000000000;  /* mtime: 2001-09-09 */
-    ts1[1].tv_nsec = 0;
-    if (utimensat(AT_FDCWD, TEST_PATH, ts1, 0) != 0) {
-        perror("utimensat(AT_FDCWD)");
-        exit(1);
-    }
-    struct stat st1;
-    if (stat(TEST_PATH, &st1) != 0) {
-        perror("stat after utimensat");
-        exit(1);
-    }
-    check_times(&st1, ts1[0].tv_sec, ts1[1].tv_sec, "utimensat round-trip");
-
-    /* ---- 2. futimens via an open fd ---- */
-    int fd = open(TEST_PATH, O_RDONLY);
-    if (fd < 0) {
-        perror("open for futimens");
-        exit(1);
-    }
-    struct timespec ts2[2];
-    ts2[0].tv_sec = 1500000000;  /* atime: 2017-07-14 */
-    ts2[0].tv_nsec = 0;
-    ts2[1].tv_sec = 1600000000;  /* mtime: 2020-09-13 */
-    ts2[1].tv_nsec = 0;
-    if (futimens(fd, ts2) != 0) {
-        perror("futimens");
-        close(fd);
-        exit(1);
-    }
-    struct stat st2;
-    if (fstat(fd, &st2) != 0) {
-        perror("fstat after futimens");
-        close(fd);
-        exit(1);
-    }
-    check_times(&st2, ts2[0].tv_sec, ts2[1].tv_sec, "futimens round-trip");
+    int fd = open(TEST_PATH, O_CREAT | O_TRUNC | O_RDWR, 0644);
+    assert(fd >= 0);
     close(fd);
 
-    /* ---- 3. UTIME_OMIT preserves the omitted field ---- */
-    /* Save current mtime, then bump only atime via UTIME_NOW + OMIT. */
+    /* 1. utimensat(AT_FDCWD, path, [a, m], 0) round-trip. */
+    struct timespec ts1[2];
+    ts1[0].tv_sec = 1234567890; ts1[0].tv_nsec = 0;  /* atime */
+    ts1[1].tv_sec = 1000000000; ts1[1].tv_nsec = 0;  /* mtime */
+    assert(utimensat(AT_FDCWD, TEST_PATH, ts1, 0) == 0);
+
+    struct stat st1;
+    assert(stat(TEST_PATH, &st1) == 0);
+    assert(st1.st_atime == ts1[0].tv_sec);
+    assert(st1.st_mtime == ts1[1].tv_sec);
+
+    /* 2. futimens via an open fd. */
+    fd = open(TEST_PATH, O_RDONLY);
+    assert(fd >= 0);
+
+    struct timespec ts2[2];
+    ts2[0].tv_sec = 1500000000; ts2[0].tv_nsec = 0;
+    ts2[1].tv_sec = 1600000000; ts2[1].tv_nsec = 0;
+    assert(futimens(fd, ts2) == 0);
+
+    struct stat st2;
+    assert(fstat(fd, &st2) == 0);
+    assert(st2.st_atime == ts2[0].tv_sec);
+    assert(st2.st_mtime == ts2[1].tv_sec);
+    close(fd);
+
+    /* 3. UTIME_OMIT preserves the omitted field; UTIME_NOW advances. */
     struct stat st_before;
-    if (stat(TEST_PATH, &st_before) != 0) {
-        perror("stat before UTIME_OMIT");
-        exit(1);
-    }
+    assert(stat(TEST_PATH, &st_before) == 0);
     time_t saved_mtime = st_before.st_mtime;
 
     struct timespec ts3[2];
-    ts3[0].tv_sec  = 0; ts3[0].tv_nsec = UTIME_NOW;
-    ts3[1].tv_sec  = 0; ts3[1].tv_nsec = UTIME_OMIT;
-    if (utimensat(AT_FDCWD, TEST_PATH, ts3, 0) != 0) {
-        perror("utimensat(UTIME_NOW/OMIT)");
-        exit(1);
-    }
-    struct stat st_after;
-    if (stat(TEST_PATH, &st_after) != 0) {
-        perror("stat after UTIME_OMIT");
-        exit(1);
-    }
-    if (st_after.st_mtime != saved_mtime) {
-        fprintf(stderr,
-                "FAIL [UTIME_OMIT]: st_mtime changed from %lld to %lld\n",
-                (long long)saved_mtime, (long long)st_after.st_mtime);
-        exit(1);
-    }
-    if (st_after.st_atime == st_before.st_atime
-        || st_after.st_atime <= ts2[0].tv_sec) {
-        /* atime should now reflect "now", which is well after our 2017 mark. */
-        fprintf(stderr,
-                "FAIL [UTIME_NOW]: st_atime did not advance "
-                "(before=%lld, after=%lld)\n",
-                (long long)st_before.st_atime,
-                (long long)st_after.st_atime);
-        exit(1);
-    }
+    ts3[0].tv_sec = 0; ts3[0].tv_nsec = UTIME_NOW;
+    ts3[1].tv_sec = 0; ts3[1].tv_nsec = UTIME_OMIT;
+    assert(utimensat(AT_FDCWD, TEST_PATH, ts3, 0) == 0);
 
-    /* ---- cleanup ---- */
+    struct stat st_after;
+    assert(stat(TEST_PATH, &st_after) == 0);
+    assert(st_after.st_mtime == saved_mtime);
+    /* atime should be "now", well after our 2017 mark from step 2. */
+    assert(st_after.st_atime > ts2[0].tv_sec);
+
+    /* 4. utimes (legacy API) funnels through __utimensat64_helper. */
+    struct timeval tv[2];
+    tv[0].tv_sec = 1700000000; tv[0].tv_usec = 0;
+    tv[1].tv_sec = 1750000000; tv[1].tv_usec = 0;
+    assert(utimes(TEST_PATH, tv) == 0);
+
+    struct stat st4;
+    assert(stat(TEST_PATH, &st4) == 0);
+    assert(st4.st_atime == tv[0].tv_sec);
+    assert(st4.st_mtime == tv[1].tv_sec);
+
     unlink(TEST_PATH);
-    printf("utimensat: PASS\n");
     return 0;
 }
