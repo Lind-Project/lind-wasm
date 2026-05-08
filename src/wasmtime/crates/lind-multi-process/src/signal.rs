@@ -43,7 +43,20 @@ pub fn signal_handler<
         // Don't call lind_thread_exit here — it's deferred to exit_call's
         // OnCalledAction so the epoch_handler entry stays until asyncify
         // unwind completes and any grate dispatch has fully returned.
-        ctx.exit_call(caller, 0, 0);
+        //
+        // Use the cage's recorded exit status so that exit_group(N) from any
+        // thread (e.g. faulthandler calling _exit(1)) propagates the right
+        // code to the OS-level process exit.  Default to 0 when the cage is
+        // already gone (late wakeup after cage_finalize).
+        let cage_opt = cage::get_cage(cageid);
+        let status_opt = cage_opt.as_ref().and_then(|c| *c.final_exit_status.read());
+        let exit_code = status_opt
+            .map(|st| match st {
+                cage::ExitStatus::Exited(code) => code,
+                cage::ExitStatus::Signaled(_, _) => 1,
+            })
+            .unwrap_or(0);
+        ctx.exit_call(caller, exit_code, 0);
         return 0;
     }
 
