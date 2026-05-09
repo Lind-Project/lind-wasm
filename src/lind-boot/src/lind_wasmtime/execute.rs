@@ -334,13 +334,10 @@ pub fn execute_with_lind(
 
         drop(linker_guard);
 
-        #[cfg(feature = "debug-dylink")]
-        {
-            // Emit warnings for any GOT slots that remain unresolved after processing
-            // preloads and defining trap stubs.
-            let mut got_guard = lind_got.lock().unwrap();
-            got_guard.warning_undefined();
-        }
+        // Emit warnings for any GOT slots that remain unresolved after processing
+        // preloads and defining trap stubs.
+        let mut got_guard = lind_got.lock().unwrap();
+        got_guard.warning_undefined();
     }
 
     // -- Run the module in the cage --
