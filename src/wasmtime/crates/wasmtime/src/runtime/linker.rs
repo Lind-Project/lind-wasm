@@ -24,6 +24,32 @@ use wasmtime_lind_utils::LindGOT;
 
 use super::{InstanceId, InstantiateType};
 
+/// Returns true if `name` is a module-internal symbol that must not be exposed
+/// through cross-module linking or GOT entries.
+pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
+    matches!(
+        name,
+        // per-module state — not shareable
+        "__stack_pointer"
+        | "__tls_base"
+        | "memory"
+        // constructor / relocation helpers — module-private
+        | "__wasm_call_ctors"
+        | "__wasm_apply_data_relocs"
+        | "__wasm_apply_global_relocs"
+        | "__wasm_apply_tls_relocs"
+        | "__wasm_init_tls"
+        // asyncify runtime — module-private
+        | "asyncify_start_unwind"
+        | "asyncify_stop_unwind"
+        | "asyncify_start_rewind"
+        | "asyncify_stop_rewind"
+        | "asyncify_get_state"
+        // lind-specific
+        | "__get_aligned_tls_size"
+    )
+}
+
 /// Structure used to link wasm modules/instances together.
 ///
 /// This structure is used to assist in instantiating a [`Module`]. A [`Linker`]
@@ -953,31 +979,8 @@ impl<T> Linker<T> {
                 let name = e.name();
                 let should_skip = module_name == "env"
                     && (skiplist.contains(&name)
-                        || match name {
-                            // stack pointer and tls base are per-module exclusive and should not be exposed to child module
-                            "__stack_pointer"
-                            | "__tls_base"
-                            // memory is not supposed to be imported via this function
-                            | "memory"
-                            // constructor functions, which is module exclusive and should not be exposed to child module
-                            | "__wasm_call_ctors"
-                            // those symbols are used internally by wasmtime and shouldn't be exposed to the child module
-                            | "__wasm_apply_data_relocs"
-                            | "__wasm_apply_global_relocs"
-                            | "__wasm_apply_tls_relocs"
-                            | "__wasm_init_tls"
-                            // asyncify symbols
-                            | "asyncify_start_unwind"
-                            | "asyncify_stop_unwind"
-                            | "asyncify_start_rewind"
-                            | "asyncify_stop_rewind"
-                            | "asyncify_get_state"
-                            // lind custom symbols
-                            | "__get_aligned_tls_size" => true,
-                            // fpcast-emu exports, which shouldn't linked directly
-                            | s if s.starts_with(FPCAST_FUNC_SIGNATURE) => true,
-                            _ => false,
-                        });
+                        || is_dylink_internal_symbol(name)
+                        || name.starts_with(FPCAST_FUNC_SIGNATURE));
 
                 if should_skip {
                     None
@@ -1472,6 +1475,9 @@ impl<T> Linker<T> {
                 let mut globals = vec![];
                 for export in instance.exports(&mut store) {
                     let name = export.name().to_owned();
+                    if is_dylink_internal_symbol(&name) {
+                        continue;
+                    }
                     match export.into_extern() {
                         Extern::Func(func) => {
                             funcs.push((name, func));
@@ -1487,17 +1493,12 @@ impl<T> Linker<T> {
                     // skip updating GOT only if fpcast is enabled
                     // and the function is NOT a fpcast function
                     let should_skip = if fpcast_enabled {
-                        if name.starts_with(FPCAST_FUNC_SIGNATURE) {
-                            false
-                        } else {
-                            true
-                        }
+                        !name.starts_with(FPCAST_FUNC_SIGNATURE)
                     } else {
                         false
                     };
 
                     if !should_skip {
-                        // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
                         let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)))?;
 
                         let final_name = {
@@ -1527,7 +1528,13 @@ impl<T> Linker<T> {
                         continue;
                     };
                     // relocate the variable
-                    let val = raw as u32 + memory_base;
+                    let val = match (raw as u32).checked_add(memory_base) {
+                        Some(val) => val,
+                        None => {
+                            eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                            continue;
+                        }
+                    };
                     // Cache the resolved address; also updates the GOT cell if it already exists.
                     if got.cache_symbol(&name, val) {
                         #[cfg(feature = "debug-dylink")]
