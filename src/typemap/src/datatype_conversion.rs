@@ -7,7 +7,7 @@
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use crate::cage_helpers::validate_cageid;
-use cage::get_cage;
+use cage::{get_cage, translate_vmmap_addr};
 use std::error::Error;
 use std::os::raw::c_char;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
@@ -679,7 +679,17 @@ pub fn sc_convert_addr_to_pipearray<'a>(
         }
     }
 
-    let pointer = arg as *mut PipeArray;
+    let updated_arg = if arg_cageid != cageid {
+        let cage = get_cage(arg_cageid).unwrap();
+        match translate_vmmap_addr(&cage, arg) {
+            Ok(host_addr) => host_addr,
+            Err(_) => panic!("Failed to translate vmmap address for sockpair argument"),
+        }
+    } else {
+        arg
+    };
+
+    let pointer = updated_arg as *mut PipeArray;
     Ok(unsafe { &mut *pointer })
 }
 
