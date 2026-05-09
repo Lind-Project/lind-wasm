@@ -260,7 +260,7 @@ impl LindGOT {
             let val = cell.load(Ordering::Acquire);
 
             if val == 0 {
-                eprintln!("[debug] Warning: GOT entry \"{}\" unresolved", name);
+                eprintln!("[lind] Warning: GOT entry \"{}\" unresolved", name);
             }
         }
     }
