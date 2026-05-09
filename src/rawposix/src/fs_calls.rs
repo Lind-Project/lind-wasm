@@ -3720,11 +3720,9 @@ pub extern "C" fn utimensat_syscall(
         if kernel_fd < 0 {
             return handle_errno(-kernel_fd, "utimensat");
         }
-        // futimens(): empty pathname + AT_EMPTY_PATH operates on the fd
-        // itself.  The kernel utimensat syscall accepts NULL path with
-        // a non-AT_FDCWD fd as a glibc-compat path, but the safer
-        // portable form is utimensat with empty path + AT_EMPTY_PATH.
-        // We use the libc::futimens wrapper to keep this kernel-portable.
+        // futimens(): glibc routes futimens(fd, ts) as utimensat(fd, NULL, ts, 0).
+        // The kernel utimensat syscall accepts NULL path with a real fd, so we
+        // forward to libc::futimens (its userspace wrapper around the same).
         unsafe { libc::futimens(kernel_fd, times) }
     } else {
         let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
@@ -3732,7 +3730,7 @@ pub extern "C" fn utimensat_syscall(
             Err(e) => return syscall_error(e, "utimensat", "path conversion failed"),
         };
         if virtual_fd == AT_FDCWD {
-            unsafe { libc::utimensat(libc::AT_FDCWD, path.as_ptr(), times, flags) }
+            unsafe { libc::utimensat(AT_FDCWD, path.as_ptr(), times, flags) }
         } else {
             let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
             if kernel_fd < 0 {

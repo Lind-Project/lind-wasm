@@ -22,9 +22,18 @@ pub fn convert_statdata_to_user(stat_ptr: &mut StatData, libc_statbuf: libc::sta
     stat_ptr.st_rdev = libc_statbuf.st_rdev as u64;
     stat_ptr.st_size = libc_statbuf.st_size as usize;
     stat_ptr.st_uid = libc_statbuf.st_uid;
-    stat_ptr.st_atim = (libc_statbuf.st_atime as u64, libc_statbuf.st_atime_nsec as u64);
-    stat_ptr.st_mtim = (libc_statbuf.st_mtime as u64, libc_statbuf.st_mtime_nsec as u64);
-    stat_ptr.st_ctim = (libc_statbuf.st_ctime as u64, libc_statbuf.st_ctime_nsec as u64);
+    stat_ptr.st_atim = (
+        libc_statbuf.st_atime as u64,
+        libc_statbuf.st_atime_nsec as u64,
+    );
+    stat_ptr.st_mtim = (
+        libc_statbuf.st_mtime as u64,
+        libc_statbuf.st_mtime_nsec as u64,
+    );
+    stat_ptr.st_ctim = (
+        libc_statbuf.st_ctime as u64,
+        libc_statbuf.st_ctime_nsec as u64,
+    );
 }
 
 /// Copies fields from a `libc::statfs` structure into a `FSData` located inside wasm linear memory.
