@@ -29,15 +29,36 @@
 
    Lind-specific: route through MAKE_LEGACY_SYSCALL with translated guest
    pointers so the host (rawposix or a forwarding grate) sees host
-   addresses for both `file` and `tsp64`.  Both pointers may be NULL —
-   `file == NULL` means "operate on `fd` itself" (the futimens path);
-   `tsp64 == NULL` means "set both times to now".  */
+   addresses for both `file` and the times buffer.  Both pointers may be
+   NULL — `file == NULL` means "operate on `fd` itself" (the futimens
+   path); `tsp64 == NULL` means "set both times to now".
+
+   The cage's `struct __timespec64` is `{ i64 tv_sec; i32 tv_nsec; i32
+   _pad; }` (long is 32-bit on wasm32).  The Linux kernel utimensat
+   syscall expects `struct __kernel_timespec` = `{ i64 tv_sec; i64
+   tv_nsec; }` — tv_nsec spanning 8 bytes.  Passing the cage pointer
+   verbatim would have the host read 4 bytes of stack-uninitialized
+   __padding as the high half of tv_nsec → garbage out-of-range nsec,
+   kernel returns EINVAL.  Copy into a kernel-ABI buffer here so the
+   host syscall path sees the layout it expects.  */
 int
 __utimensat64_helper (int fd, const char *file,
                       const struct __timespec64 tsp64[2], int flags)
 {
   uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
-  uint64_t host_tsp  = TRANSLATE_GUEST_POINTER_TO_HOST (tsp64);
+  uint64_t host_tsp;
+
+  struct { int64_t tv_sec; int64_t tv_nsec; } kts[2];
+  if (tsp64 != NULL)
+    {
+      kts[0].tv_sec  = tsp64[0].tv_sec;
+      kts[0].tv_nsec = tsp64[0].tv_nsec;
+      kts[1].tv_sec  = tsp64[1].tv_sec;
+      kts[1].tv_nsec = tsp64[1].tv_nsec;
+      host_tsp = TRANSLATE_GUEST_POINTER_TO_HOST (kts);
+    }
+  else
+    host_tsp = 0;
 
   return MAKE_LEGACY_SYSCALL (UTIMENSAT_SYSCALL, "syscall|utimensat",
 			      (uint64_t) fd, host_file, host_tsp,

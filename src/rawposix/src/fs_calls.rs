@@ -3702,8 +3702,10 @@ pub extern "C" fn utimensat_syscall(
         );
     }
 
-    // `times` may be NULL (= "now"); pass through verbatim.  When non-NULL,
-    // glibc has already translated the guest pointer to a host pointer.
+    // Glibc's __utimensat64_helper has already copied the cage's
+    // __timespec64 into a kernel-ABI layout { i64 tv_sec; i64 tv_nsec; }
+    // and passed that translated pointer through, so casting directly
+    // matches the host kernel's struct timespec.  May be NULL ("now").
     let times = times_arg as *const libc::timespec;
 
     // Two cases for the path/dirfd combination:
