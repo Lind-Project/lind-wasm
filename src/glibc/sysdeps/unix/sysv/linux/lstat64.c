@@ -26,16 +26,18 @@
 #include <lind_syscall_num.h>
 #include <addr_translation.h>
 
+/* Lind: route via NEWFSTATAT_SYSCALL so we get true lstat (don't-follow-symlink)
+   semantics.  Previously this used XSTAT_SYSCALL (regular stat), which followed
+   symlinks — wrong, but unavoidable until fstatat existed in rawposix.  */
 int
 __lstat64_time64 (const char *file, struct __stat64_t64 *buf)
 {
-  // BUG: we do not have fstatat syscall in rawposix
-  // so let's just use xstat - Qianxi Chen
   uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
-		       host_file, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return MAKE_LEGACY_SYSCALL (NEWFSTATAT_SYSCALL, "syscall|fstatat",
+		       (uint64_t) AT_FDCWD, host_file, host_buf,
+		       (uint64_t) AT_SYMLINK_NOFOLLOW,
+		       NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 #if __TIMESIZE != 64
 hidden_def (__lstat64_time64)
@@ -45,9 +47,10 @@ __lstat64 (const char *file, struct stat64 *buf)
 {
   uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
-		       host_file, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return MAKE_LEGACY_SYSCALL (NEWFSTATAT_SYSCALL, "syscall|fstatat",
+		       (uint64_t) AT_FDCWD, host_file, host_buf,
+		       (uint64_t) AT_SYMLINK_NOFOLLOW,
+		       NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 #endif
 hidden_def (__lstat64)
