@@ -379,7 +379,6 @@ impl<
 
         // mark the start of unwind
         let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
-        // println!("asyncify_start_unwind_func: res: {:?}", _res);
 
         // get the asyncify_stop_unwind and asyncify_start_rewind, which will later
         // be used when the unwind process finished
@@ -781,9 +780,7 @@ impl<
                             .as_context_mut()
                             .set_syscall_asyncify_data(syscall_asyncify_data);
 
-                        // println!("[debug] pid={} launch", child_cageid);
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
-                        // println!("[debug] pid={} exit", child_cageid);
                         // Wasm instance crashed — perform the same cleanup
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
@@ -1667,7 +1664,6 @@ impl<
             // store the unwind data
             let hash =
                 store.store_unwind_data(unwind_data_start_sys as *const u8, rewind_total_size);
-            // println!("[debug] setjmp hash: {}", hash);
             unsafe {
                 std::ptr::write_unaligned((cloned_address + jmp_buf as u64) as *mut u64, hash);
             }
