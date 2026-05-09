@@ -17,6 +17,7 @@
 #undef _GNU_SOURCE
 #define _GNU_SOURCE
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,13 +38,21 @@ int main(void)
     }
     close(fd);
     printf("setup ok\n");
+    fflush(stdout);
 
     struct stat st;
     memset(&st, 0, sizeof(st));
-    if (fstatat(AT_FDCWD, FILE_PATH, &st, 0) != 0) {
-        perror("fstatat"); return 1;
+    printf("calling fstatat\n");
+    fflush(stdout);
+    int r = fstatat(AT_FDCWD, FILE_PATH, &st, 0);
+    printf("fstatat returned %d\n", r);
+    fflush(stdout);
+    if (r != 0) {
+        printf("errno = %d\n", errno);
+        return 1;
     }
     printf("fstatat ok\n");
+    fflush(stdout);
 
     if ((size_t)st.st_size != sizeof(content) - 1) { printf("size wrong\n"); return 1; }
     if (!S_ISREG(st.st_mode)) { printf("not regular\n"); return 1; }
