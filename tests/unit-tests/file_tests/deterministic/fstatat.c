@@ -1,10 +1,13 @@
-/* Tests for fstatat (and lstat now that it's correctly routed through
- * NEWFSTATAT_SYSCALL with AT_SYMLINK_NOFOLLOW).
+/* Tests for fstatat.
  *
- * Catches:
- *   - fstatat being a silent 0 with an unfilled buffer (the centerpiece of #1173).
- *   - lstat following symlinks (the pre-fix bug in lstat64.c, which routed
- *     to XSTAT_SYSCALL with stat semantics).
+ * Catches fstatat being a silent 0 with an unfilled buffer (the
+ * centerpiece of #1173): fstatat must populate buf with file metadata
+ * matching what stat() reports.
+ *
+ * Symlink semantics for fstatat (AT_SYMLINK_NOFOLLOW vs follow) and
+ * lstat are already covered by tests/.../file_tests/deterministic/lstat.c,
+ * which now exercises the new NEWFSTATAT-routed lstat plumbing under
+ * the hood.  Dirfd resolution is covered by openat.c / readlinkat.c.
  */
 
 #undef _GNU_SOURCE
@@ -17,57 +20,33 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define DIR_PATH    "testfiles/fstatat-dir"
-#define FILE_NAME   "f"
-#define FILE_PATH   DIR_PATH "/" FILE_NAME
-#define LINK_NAME   "lnk"
-#define LINK_PATH   DIR_PATH "/" LINK_NAME
+#define FILE_PATH "testfiles/fstatat-target"
 
 static const char content[] = "hello fstatat";
 
 int main(void)
 {
-    /* Setup. */
-    mkdir(DIR_PATH, 0755);
     int fd = open(FILE_PATH, O_CREAT | O_TRUNC | O_RDWR, 0644);
     assert(fd >= 0);
     assert(write(fd, content, sizeof(content) - 1) == sizeof(content) - 1);
     close(fd);
 
-    /* 1. fstatat(AT_FDCWD, ...) — non-zero buf is the contract. */
+    /* fstatat(AT_FDCWD, ...) must populate buf — pre-fix this returned
+     * 0 with the buffer untouched.  Pre-fill with 0xff so a no-op is
+     * detectable. */
     struct stat st;
     memset(&st, 0xff, sizeof(st));
     assert(fstatat(AT_FDCWD, FILE_PATH, &st, 0) == 0);
     assert(st.st_size == (off_t)(sizeof(content) - 1));
     assert(S_ISREG(st.st_mode));
 
-    /* 2. fstatat with a real dirfd + relative name. */
-    int dirfd = open(DIR_PATH, O_RDONLY | O_DIRECTORY);
-    assert(dirfd >= 0);
-    memset(&st, 0xff, sizeof(st));
-    assert(fstatat(dirfd, FILE_NAME, &st, 0) == 0);
-    assert(st.st_size == (off_t)(sizeof(content) - 1));
-    close(dirfd);
+    /* Cross-check against stat() — same file, must agree on size and
+     * type. */
+    struct stat st_stat;
+    assert(stat(FILE_PATH, &st_stat) == 0);
+    assert(st.st_size == st_stat.st_size);
+    assert((st.st_mode & S_IFMT) == (st_stat.st_mode & S_IFMT));
 
-    /* 3. fstatat AT_SYMLINK_NOFOLLOW vs follow on a symlink:
-     *    follow → file size; nofollow → symlink size (= strlen(target)). */
-    assert(symlink(FILE_NAME, LINK_PATH) == 0);
-
-    struct stat st_follow, st_nofollow;
-    assert(fstatat(AT_FDCWD, LINK_PATH, &st_follow, 0) == 0);
-    assert(fstatat(AT_FDCWD, LINK_PATH, &st_nofollow, AT_SYMLINK_NOFOLLOW) == 0);
-    assert(S_ISREG(st_follow.st_mode));
-    assert(S_ISLNK(st_nofollow.st_mode));
-    assert(st_follow.st_size != st_nofollow.st_size);
-
-    /* 4. lstat — must equal the AT_SYMLINK_NOFOLLOW stat above. */
-    struct stat st_lstat;
-    assert(lstat(LINK_PATH, &st_lstat) == 0);
-    assert(S_ISLNK(st_lstat.st_mode));
-    assert(st_lstat.st_size == st_nofollow.st_size);
-
-    unlink(LINK_PATH);
     unlink(FILE_PATH);
-    rmdir(DIR_PATH);
     return 0;
 }
