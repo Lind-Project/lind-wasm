@@ -3656,6 +3656,98 @@ pub extern "C" fn fchmod_syscall(
     ret
 }
 
+//------------------------------------UTIMENSAT SYSCALL------------------------------------
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/utimensat.2.html
+///
+/// `utimensat` updates the access and modification times of a file with
+/// nanosecond precision.  Used by `touch`, `cp -p`, and any test that
+/// asserts on file timestamps.  `futimens(fd, ts)` is implemented in
+/// glibc by calling `utimensat(fd, NULL, ts, 0)`, so a single handler
+/// here covers both.
+///
+/// ## Arguments:
+/// - `dirfd`: directory fd; `AT_FDCWD` means "relative to the cage cwd";
+///   when `pathname` is NULL, `dirfd` itself is the target file (futimens).
+/// - `pathname`: path relative to `dirfd`, or NULL for the futimens form.
+/// - `times`: pointer to two `timespec` values [atime, mtime], or NULL
+///   meaning "set both to now".  `tv_nsec` may be the special values
+///   `UTIME_NOW` or `UTIME_OMIT`.
+/// - `flags`: 0 or `AT_SYMLINK_NOFOLLOW`.
+///
+/// ## Returns:
+/// - 0 on success.
+/// - negated errno on failure.
+pub extern "C" fn utimensat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    times_arg: u64,
+    _times_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "utimensat_syscall"
+        );
+    }
+
+    // Glibc's __utimensat64_helper has already copied the cage's
+    // __timespec64 into a kernel-ABI layout { i64 tv_sec; i64 tv_nsec; }
+    // and passed that translated pointer through, so casting directly
+    // matches the host kernel's struct timespec.  May be NULL ("now").
+    let times = times_arg as *const libc::timespec;
+
+    // Two cases for the path/dirfd combination:
+    //   (a) pathname == NULL:  futimens form — operate on the file
+    //       referred to by dirfd.  dirfd must be a real fd, not AT_FDCWD.
+    //   (b) pathname != NULL:  utimensat form — resolve via cage's path
+    //       conversion (handles cwd + chroot), then optionally relative
+    //       to dirfd if not AT_FDCWD.
+    let ret = if path_arg == 0 {
+        if virtual_fd == AT_FDCWD {
+            return syscall_error(Errno::EBADF, "utimensat", "AT_FDCWD with NULL path");
+        }
+        let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+        if kernel_fd < 0 {
+            return handle_errno(-kernel_fd, "utimensat");
+        }
+        // futimens(): glibc routes futimens(fd, ts) as utimensat(fd, NULL, ts, 0).
+        // The kernel utimensat syscall accepts NULL path with a real fd, so we
+        // forward to libc::futimens (its userspace wrapper around the same).
+        unsafe { libc::futimens(kernel_fd, times) }
+    } else {
+        let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+            Ok(p) => p,
+            Err(e) => return syscall_error(e, "utimensat", "path conversion failed"),
+        };
+        if virtual_fd == AT_FDCWD {
+            unsafe { libc::utimensat(AT_FDCWD, path.as_ptr(), times, flags) }
+        } else {
+            let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+            if kernel_fd < 0 {
+                return handle_errno(-kernel_fd, "utimensat");
+            }
+            unsafe { libc::utimensat(kernel_fd, path.as_ptr(), times, flags) }
+        }
+    };
+
+    if ret < 0 {
+        return handle_errno(get_errno(), "utimensat");
+    }
+    ret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getcwd.2.html
 ///
 /// `getcwd_syscall` retrieves the current working directory for the calling Cage.
