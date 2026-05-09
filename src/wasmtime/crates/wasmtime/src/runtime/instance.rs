@@ -1266,12 +1266,12 @@ impl Instance {
                 };
                 // relocate the variable
                 let val = match (raw as u32).checked_add(memory_base) {
-                Some(val) => val,
-                None => {
-                    eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
-                    continue;
-                }
-};
+                    Some(val) => val,
+                    None => {
+                        eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                        continue;
+                    }
+                };
                 // Cache the resolved address; also updates the GOT cell if it already exists.
                 if got_inner.cache_symbol(&name, val) {
                     #[cfg(feature = "debug-dylink")]

@@ -1490,6 +1490,8 @@ impl<T> Linker<T> {
                 }
 
                 for (name, func) in funcs {
+                    // skip updating GOT only if fpcast is enabled
+                    // and the function is NOT a fpcast function
                     let should_skip = if fpcast_enabled {
                         !name.starts_with(FPCAST_FUNC_SIGNATURE)
                     } else {
@@ -1526,7 +1528,13 @@ impl<T> Linker<T> {
                         continue;
                     };
                     // relocate the variable
-                    let val = raw as u32 + memory_base;
+                    let val = match (raw as u32).checked_add(memory_base) {
+                        Some(val) => val,
+                        None => {
+                            eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                            continue;
+                        }
+                    };
                     // Cache the resolved address; also updates the GOT cell if it already exists.
                     if got.cache_symbol(&name, val) {
                         #[cfg(feature = "debug-dylink")]
