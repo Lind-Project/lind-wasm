@@ -50,12 +50,43 @@ __libc_fcntl64 (int fd, int cmd, ...)
 
   cmd = FCNTL_ADJUST_CMD (cmd);
 
-  uint64_t host_arg = TRANSLATE_GUEST_POINTER_TO_HOST (arg);
+  if (cmd == F_GETOWN)
+    {
+      struct f_owner_ex fex;
+      int res = MAKE_LEGACY_SYSCALL (
+          FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
+          (uint64_t) F_GETOWN_EX, NOTUSED,
+          (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&fex),
+          NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+      if (!INTERNAL_SYSCALL_ERROR_P (res))
+        return fex.type == F_OWNER_GID ? -fex.pid : fex.pid;
+      return INLINE_SYSCALL_ERROR_RETURN_VALUE (INTERNAL_SYSCALL_ERRNO (res));
+    }
 
-  if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW)
-    return MAKE_LEGACY_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, host_arg, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  /* Polymorphic third arg: lock cmds take a pointer (translate it),
+     everything else takes an int (do NOT translate; that would add the
+     wasm linear-memory base to the integer value).  Mirrors the split
+     in __fcntl64_nocancel_adjusted; rawposix reads whichever slot the
+     command expects.  */
+  uint64_t int_arg = 0;
+  uint64_t ptr_arg = 0;
 
-  return MAKE_LEGACY_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, host_arg, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  if (cmd == F_GETLK || cmd == F_GETLK64
+      || cmd == F_SETLK || cmd == F_SETLK64
+      || cmd == F_SETLKW || cmd == F_SETLKW64
+      || cmd == F_OFD_GETLK || cmd == F_OFD_SETLK || cmd == F_OFD_SETLKW)
+    {
+      ptr_arg = (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (arg);
+    }
+  else
+    {
+      int_arg = (uint64_t) (uintptr_t) arg;
+    }
+
+  return MAKE_LEGACY_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl",
+                              (uint64_t) fd, (uint64_t) cmd,
+                              int_arg, ptr_arg, NOTUSED, NOTUSED,
+                              TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__libc_fcntl64)
 weak_alias (__libc_fcntl64, __fcntl64)
