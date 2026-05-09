@@ -1516,7 +1516,26 @@ impl<
                 &environs,
             );
 
-            return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
+            // If the exec'd module crashed (wasm trap, unreachable, etc.) rather
+            // than exiting cleanly, we must still finalize the cage so the parent's
+            // waitpid() unblocks.  Without this, the parent hangs forever because
+            // cage_finalize (which records the zombie and sends SIGCHLD) is never
+            // called.  Mirror the fork-crash cleanup path (see fork_call error
+            // handling) exactly.
+            if let Err(ref _e) = ret {
+                cage::cage_record_exit_status(cloned_cageid as u64, cage::ExitStatus::Exited(1));
+                if let Some(c) = cage::get_cage(cloned_cageid as u64) {
+                    c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                }
+                threei::EXITING_TABLE.insert(cloned_cageid as u64);
+                threei::handler_table::_rm_grate_from_handler(cloned_cageid as u64);
+                cage::signal::lind_thread_exit(cloned_cageid as u64, THREAD_START_ID as u64);
+                cage::cage_finalize(cloned_cageid as u64);
+                cloned_lind_manager.decrement();
+                return Ok(OnCalledAction::Finish(vec![Val::I32(1)]));
+            }
+
+            return Ok(OnCalledAction::Finish(ret.unwrap()));
         }));
 
         // set asyncify state to unwind
