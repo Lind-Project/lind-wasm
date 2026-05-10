@@ -354,8 +354,14 @@ impl<
             // Write buf[0] (start) and buf[4] (end) as u32 to match the 32-bit
             // asyncify data structure.  A u64 write would zero buf[4] (the high
             // word), making start > end and firing the bounds-check ud2 every time.
-            std::ptr::write_unaligned(unwind_data_start_sys as *mut u32, (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32);
-            std::ptr::write_unaligned((unwind_data_start_sys + 4) as *mut u32, stack_pointer as u32);
+            std::ptr::write_unaligned(
+                unwind_data_start_sys as *mut u32,
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32,
+            );
+            std::ptr::write_unaligned(
+                (unwind_data_start_sys + 4) as *mut u32,
+                stack_pointer as u32,
+            );
         }
 
         let get_cx = self.get_cx.clone();
@@ -884,8 +890,14 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            std::ptr::write_unaligned(parent_unwind_data_start_sys as *mut u32, (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32);
-            std::ptr::write_unaligned((parent_unwind_data_start_sys + 4) as *mut u32, stack_pointer as u32);
+            std::ptr::write_unaligned(
+                parent_unwind_data_start_sys as *mut u32,
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32,
+            );
+            std::ptr::write_unaligned(
+                (parent_unwind_data_start_sys + 4) as *mut u32,
+                stack_pointer as u32,
+            );
         }
 
         // set up child_tid
@@ -966,7 +978,8 @@ impl<
         store.set_on_called(Box::new(move |mut store| {
             // once unwind is finished, buf[0] (u32) holds the final write position
             let parent_unwind_data_end_usr =
-                unsafe { std::ptr::read_unaligned(parent_unwind_data_start_sys as *const u32) } as u64;
+                unsafe { std::ptr::read_unaligned(parent_unwind_data_start_sys as *const u32) }
+                    as u64;
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -997,8 +1010,14 @@ impl<
                 //               does not fire on asyncify_start_rewind.
                 let child_rewind_end =
                     (child_unwind_data_start_usr + rewind_total_size as u64) as u32;
-                std::ptr::write_unaligned(child_unwind_data_start_sys as *mut u32, child_rewind_end);
-                std::ptr::write_unaligned((child_unwind_data_start_sys as usize + 4) as *mut u32, child_rewind_end);
+                std::ptr::write_unaligned(
+                    child_unwind_data_start_sys as *mut u32,
+                    child_rewind_end,
+                );
+                std::ptr::write_unaligned(
+                    (child_unwind_data_start_sys as usize + 4) as *mut u32,
+                    child_rewind_end,
+                );
             }
 
             let builder = thread::Builder::new()
@@ -1455,8 +1474,14 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            std::ptr::write_unaligned(parent_unwind_data_start_sys as *mut u32, (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32);
-            std::ptr::write_unaligned((parent_unwind_data_start_sys + 4) as *mut u32, stack_pointer as u32);
+            std::ptr::write_unaligned(
+                parent_unwind_data_start_sys as *mut u32,
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32,
+            );
+            std::ptr::write_unaligned(
+                (parent_unwind_data_start_sys + 4) as *mut u32,
+                stack_pointer as u32,
+            );
         }
 
         // mark the start of unwind
@@ -1575,8 +1600,14 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            std::ptr::write_unaligned(parent_unwind_data_start_sys as *mut u32, (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32);
-            std::ptr::write_unaligned((parent_unwind_data_start_sys + 4) as *mut u32, stack_pointer as u32);
+            std::ptr::write_unaligned(
+                parent_unwind_data_start_sys as *mut u32,
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32,
+            );
+            std::ptr::write_unaligned(
+                (parent_unwind_data_start_sys + 4) as *mut u32,
+                stack_pointer as u32,
+            );
         }
 
         // mark the start of unwind
@@ -1649,8 +1680,14 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            std::ptr::write_unaligned(unwind_data_start_sys as *mut u32, (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32);
-            std::ptr::write_unaligned((unwind_data_start_sys + 4) as *mut u32, stack_pointer as u32);
+            std::ptr::write_unaligned(
+                unwind_data_start_sys as *mut u32,
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32,
+            );
+            std::ptr::write_unaligned(
+                (unwind_data_start_sys + 4) as *mut u32,
+                stack_pointer as u32,
+            );
         }
 
         // mark the start of unwind
@@ -1668,7 +1705,8 @@ impl<
         let store = caller.as_context_mut().0;
         store.set_on_called(Box::new(move |mut store| {
             // once unwind is finished, buf[0] (u32) holds the final write position
-            let unwind_data_end_usr = unsafe { std::ptr::read_unaligned(unwind_data_start_sys as *const u32) } as u64;
+            let unwind_data_end_usr =
+                unsafe { std::ptr::read_unaligned(unwind_data_start_sys as *const u32) } as u64;
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -1726,8 +1764,14 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            std::ptr::write_unaligned(unwind_data_start_sys as *mut u32, (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32);
-            std::ptr::write_unaligned((unwind_data_start_sys + 4) as *mut u32, stack_pointer as u32);
+            std::ptr::write_unaligned(
+                unwind_data_start_sys as *mut u32,
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32,
+            );
+            std::ptr::write_unaligned(
+                (unwind_data_start_sys + 4) as *mut u32,
+                stack_pointer as u32,
+            );
         }
 
         // mark the start of unwind
