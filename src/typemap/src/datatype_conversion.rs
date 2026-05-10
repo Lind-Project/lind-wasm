@@ -10,7 +10,7 @@ use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 use std::error::Error;
 use std::os::raw::c_char;
-use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_platform_const::{GRATE_MEMORY_FLAG, MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
@@ -258,6 +258,70 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
     }
 
     arg as *mut u8
+}
+
+/// Resolve a (uaddr, cageid) pair to a host system address, honoring
+/// `GRATE_MEMORY_FLAG`.
+///
+/// For path-style buffer args the runtime can just dereference the address as
+/// a host pointer (see `get_cstr`) — bytes are bytes. For address args that
+/// the runtime *interprets* rather than dereferences (mmap, munmap, mprotect,
+/// brk, shmat, shmdt), we need the actual host system address.
+///
+/// - **Flag unset** (the cage-side case): `arg` is a uaddr in the *calling*
+///   cage's linear memory; translate via that cage's vmmap base. Cage-side
+///   glibc wrappers like `mmap.c` pass raw uaddrs without translating.
+/// - **Flag set** (the grate-side case): `arg` is already a host system
+///   address. Either the grate computed it directly, or its glibc-side
+///   `TRANSLATE_ARG_TO_HOST` macro converted before the call.  Use as-is.
+///
+/// The `arg_cageid` is otherwise informational; the flag bit alone decides
+/// translation.
+///
+/// ## Returns
+/// - `Ok(sysaddr)` host system address.
+/// - `Err(Errno::EINVAL)` if the calling cage can't be looked up or its vmmap
+///   has no base address yet (only checked on the uaddr branch).
+pub fn sc_convert_addr_to_sys(arg: u64, arg_cageid: u64, cageid: u64) -> Result<usize, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            return Err(Errno::EINVAL);
+        }
+    }
+
+    if (arg_cageid & GRATE_MEMORY_FLAG) != 0 {
+        // Grate has supplied a host system address directly.
+        return Ok(arg as usize);
+    }
+
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
+    let vmmap = cage.vmmap.read();
+    let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
+    Ok(base + (arg as u32) as usize)
+}
+
+/// Inverse of `sc_convert_addr_to_sys` — translate a host system address back
+/// to a uaddr in the named cage's linear memory. Used for return values of
+/// mmap-family syscalls and for bookkeeping into the cage's vmmap.
+///
+/// ## Arguments
+/// - `sysaddr`: the host system address.
+/// - `cageid`: the cage whose user-address space we want.
+///
+/// ## Returns
+/// - `Ok(uaddr)` truncated to u32 (cage user addresses fit in 32 bits on
+///   wasm32 lind).
+/// - `Err(Errno::EINVAL)` if the cage can't be looked up, its vmmap has no
+///   base, or `sysaddr` is below the cage's base.
+pub fn sc_convert_sys_to_user(sysaddr: usize, cageid: u64) -> Result<u32, Errno> {
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
+    let vmmap = cage.vmmap.read();
+    let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
+    if sysaddr < base {
+        return Err(Errno::EINVAL);
+    }
+    Ok((sysaddr - base) as u32)
 }
 
 /// This function translates the buffer pointer from user buffer address to system address, because we are

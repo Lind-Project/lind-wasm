@@ -15,7 +15,9 @@ use sysdefs::constants::fs_const::{
     STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::lind_platform_const::{
+    FDKIND_KERNEL, GRATE_MEMORY_FLAG, MAXFD, UNUSED_ARG, UNUSED_ID,
+};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
 use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
@@ -829,13 +831,6 @@ pub extern "C" fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let addr = {
-        if addr_arg == 0 {
-            0 as *mut u8
-        } else {
-            sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
-        }
-    };
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -871,9 +866,11 @@ pub extern "C" fn mmap_syscall(
         lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
     }
 
-    // check if the provided address is multiple of pages
-    let rounded_addr = round_up_page(addr as u64);
-    if rounded_addr != addr as u64 {
+    // Page-align check on the low bits of addr_arg.  Page alignment is a
+    // numeric property of the low bits regardless of which cage's base
+    // address gets added, since base_address is itself page-aligned.
+    let rounded_addr = round_up_page(addr_arg);
+    if rounded_addr != addr_arg {
         return syscall_error(Errno::EINVAL, "mmap", "address it not aligned");
     }
 
@@ -889,31 +886,61 @@ pub extern "C" fn mmap_syscall(
     // round up length to be multiple of pages
     let rounded_length = round_up_page(len as u64);
 
-    let mut useraddr = addr as u32;
-    // if MAP_FIXED is not set, then we need to find an address for the user
-    if flags & MAP_FIXED as i32 == 0 {
-        let vmmap = cage.vmmap.write();
-        let result;
+    // Resolve (useraddr in calling cage, sysaddr host pointer).  Honors
+    // GRATE_MEMORY_FLAG on addr_cageid so a grate can supply an address
+    // it picked against its own (or any other cage's) vmmap.
+    let grate_supplied = (addr_cageid & GRATE_MEMORY_FLAG) != 0;
+    let mut useraddr: u32;
+    let sysaddr: usize;
 
-        // pick an address of appropriate size, anywhere
-        if useraddr == 0 {
-            result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
+    if flags & MAP_FIXED as i32 == 0 {
+        // No fixed address — runtime picks via the calling cage's vmmap.
+        // Use addr_arg as a hint (translated via the flag-aware helper if
+        // grate-supplied).
+        let hint_useraddr = if grate_supplied && addr_arg != 0 {
+            match sc_convert_addr_to_sys(addr_arg, addr_cageid, cageid)
+                .and_then(|s| sc_convert_sys_to_user(s, cageid))
+            {
+                Ok(u) => u,
+                Err(_) => 0,
+            }
         } else {
-            // use address user provided as hint to find address
-            result = vmmap.find_map_space_with_hint(
+            addr_arg as u32
+        };
+
+        let vmmap = cage.vmmap.write();
+        let result = if hint_useraddr == 0 {
+            vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1)
+        } else {
+            vmmap.find_map_space_with_hint(
                 rounded_length as u32 >> PAGESHIFT,
                 1,
-                addr as u32 >> PAGESHIFT,
-            );
-        }
+                hint_useraddr >> PAGESHIFT,
+            )
+        };
 
-        // did not find desired memory region
         if result.is_none() {
             return syscall_error(Errno::ENOMEM, "mmap", "no memory");
         }
 
-        let space = result.unwrap();
-        useraddr = (space.start() << PAGESHIFT) as u32;
+        useraddr = (result.unwrap().start() << PAGESHIFT) as u32;
+        sysaddr = vmmap.user_to_sys(useraddr);
+        drop(vmmap);
+    } else {
+        // Caller specified an exact address.  Use the flag-aware helper so
+        // a grate-supplied addr is resolved against the grate's base, and
+        // a cage-supplied addr against the calling cage's base.
+        sysaddr = match sc_convert_addr_to_sys(addr_arg, addr_cageid, cageid) {
+            Ok(s) => s,
+            Err(e) => return syscall_error(e, "mmap", "invalid addr"),
+        };
+        // Derive the calling cage's uaddr for the return value + vmmap
+        // bookkeeping.  Errors here mean the sysaddr is outside the cage's
+        // linear memory range — invalid for MAP_FIXED in this cage.
+        useraddr = match sc_convert_sys_to_user(sysaddr, cageid) {
+            Ok(u) => u,
+            Err(e) => return syscall_error(e, "mmap", "addr outside cage"),
+        };
     }
 
     flags |= MAP_FIXED as i32;
@@ -922,12 +949,6 @@ pub extern "C" fn mmap_syscall(
     if (flags & MAP_PRIVATE as i32 == 0) == (flags & MAP_SHARED as i32 == 0) {
         return syscall_error(Errno::EINVAL, "mmap", "invalid flags");
     }
-
-    let vmmap = cage.vmmap.read();
-
-    let sysaddr = vmmap.user_to_sys(useraddr);
-
-    drop(vmmap);
 
     if rounded_length > 0 {
         if flags & MAP_ANONYMOUS as i32 > 0 {
@@ -1188,7 +1209,18 @@ pub extern "C" fn brk_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let brk = sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid);
+    // Cage-side glibc brk.c passes a raw uaddr; the runtime page-aligns it
+    // and compares against vmmap.heap_start in user space.  A grate calling
+    // with GRATE_MEMORY_FLAG passes a host sysaddr instead — translate it
+    // back into the calling cage's user-address space before proceeding.
+    let brk = if (brk_cageid & GRATE_MEMORY_FLAG) != 0 {
+        match sc_convert_sys_to_user(brk_arg as usize, cageid) {
+            Ok(u) => u as i32,
+            Err(e) => return syscall_error(e, "brk", "addr outside cage"),
+        }
+    } else {
+        sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid)
+    };
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)

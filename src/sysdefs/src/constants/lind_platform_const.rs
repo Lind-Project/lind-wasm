@@ -32,6 +32,13 @@ pub const MAXFD: usize = 1024; // Maximum file descriptors per cage
 pub const MAX_LINEAR_MEMORY_SIZE: u64 = 0xFFFF_FFFF;
 /// Placeholder for unused syscall argument
 pub const UNUSED_ARG: u64 = 0xDEADBEEF_DEADBEEF;
+/// MSB of a syscall arg's cageid: signals that the arg should be treated as a
+/// host-side reference into the named cage's linear memory, not as a uaddr
+/// in the calling cage's memory. Mirrors `LIND_ARG_TRANSLATE_FLAG` in
+/// `src/glibc/lind_syscall/addr_translation.h`.
+pub const GRATE_MEMORY_FLAG: u64 = 1u64 << 63;
+/// Mask to recover the actual cageid by clearing `GRATE_MEMORY_FLAG`.
+pub const LIND_ARG_CAGEID_MASK: u64 = !GRATE_MEMORY_FLAG;
 /// Placeholder for unused cage/grate ID
 pub const UNUSED_ID: u64 = 0xCAFEBABE_CAFEBABE;
 /// Placeholder for unused syscall name
