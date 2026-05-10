@@ -53,16 +53,23 @@ int mmap_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	       uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
 	int self_grate_id = getpid();
 
-	/* Forward with arg1cage tagged GRATE_MEMORY_FLAG.  The cage's addr is
-	   NULL (no MAP_FIXED) so the runtime picks; we're testing that the
-	   flag-aware branch doesn't crash and returns the same useraddr the
-	   non-flag branch would. */
-	return make_threei_call(
+	printf("[Grate|mmap-flag] intercepting mmap: addr=0x%llx len=%llu "
+	       "prot=0x%llx flags=0x%llx fd=%lld off=%lld\n",
+	       (unsigned long long)arg1, (unsigned long long)arg2,
+	       (unsigned long long)arg3, (unsigned long long)arg4,
+	       (long long)arg5, (long long)arg6);
+	fflush(stdout);
+
+	/* Forward with arg1cage tagged GRATE_MEMORY_FLAG. */
+	int ret = make_threei_call(
 	    9 /* MMAP_SYSCALL */, 0, self_grate_id, cageid, arg1,
 	    self_grate_id | GRATE_MEMORY_FLAG, arg2, arg2cage, arg3, arg3cage,
 	    arg4, arg4cage, arg5, arg5cage, arg6, arg6cage,
 	    0 /* translate_errno off — propagate raw return */
 	);
+	printf("[Grate|mmap-flag] mmap returned %d\n", ret);
+	fflush(stdout);
+	return ret;
 }
 
 int main(int argc, char *argv[]) {
