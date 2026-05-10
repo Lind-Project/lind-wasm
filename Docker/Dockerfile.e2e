@@ -122,6 +122,11 @@ RUN rm -f src/wasmtime/crates/cage \
 RUN make lind-boot
 
 
+# Build debug lind-boot for debug-specific regression coverage
+FROM build-lind-boot as build-lind-boot-debug
+RUN make lind-boot-debug
+
+
 # Build glibc and generate sysroot
 FROM base AS build-glibc
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
@@ -157,8 +162,8 @@ RUN chmod 0755 /scripts/lind_compile /scripts/lind_run /scripts/cargo-lind_compi
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 
 
-# Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
-FROM base AS test
+# Shared test environment used by release and debug e2e test stages.
+FROM base AS test-base
 ENV LIND_WASM_ROOT=/
 COPY --parents scripts tests tools skip_test_cases.txt Makefile artifacts .
 RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_compile_cpp /scripts/lind_run \
@@ -179,8 +184,38 @@ RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # Mirrors local `make sysroot`: populate build/sysroot then merge libc++ from
 # artifacts/ (Makefile sync-sysroot does the same when ARTIFACTS_DIR is present).
 # lind_compile(_cpp) prefer SYSROOT under build/sysroot when present.
+# Run e2e tests with release lind-boot.
+FROM test-base AS test
 RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lind-boot/target \
     --mount=from=build-lind-boot,source=build/lind-boot,destination=/build/lind-boot \
+    --mount=from=build-glibc,source=lindfs,destination=/prebuilt-lindfs,readonly \
+    --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
+    --mount=from=build-glibc,source=build/sysroot,destination=/mnt/glibc-build-sysroot,readonly \
+    bash -lc 'set -euxo pipefail; \
+      cd /; \
+      test -d artifacts/include/wasm32-wasi/c++; \
+      test -f artifacts/lib/wasm32-wasi/libc++.a; \
+      test -f artifacts/lib/wasm32-wasi/libc++abi.a; \
+      rm -rf /build/sysroot; \
+      mkdir -p /build/sysroot; \
+      cp -a /mnt/glibc-build-sysroot/. /build/sysroot/; \
+      mkdir -p /build/sysroot/include/wasm32-wasi; \
+      mkdir -p /build/sysroot/lib/wasm32-wasi; \
+      rm -rf /build/sysroot/include/wasm32-wasi/c++; \
+      cp -r artifacts/include/wasm32-wasi/c++ /build/sysroot/include/wasm32-wasi/; \
+      rm -f /build/sysroot/lib/wasm32-wasi/libc++.a /build/sysroot/lib/wasm32-wasi/libc++abi.a; \
+      cp artifacts/lib/wasm32-wasi/libc++.a artifacts/lib/wasm32-wasi/libc++abi.a /build/sysroot/lib/wasm32-wasi/; \
+      make PREBUILT_LINDFS_ROOT=/prebuilt-lindfs \
+           LIND_RUNTIME_LINDFS_ALIAS=/home/lind/lind-wasm/lindfs \
+           test && \
+      make md_generation OUT=/ REPORT=/report.html'
+
+
+# Run e2e tests with debug lind-boot to catch debug-build-specific regressions.
+FROM test-base AS test-debug
+
+RUN --mount=from=build-lind-boot-debug,source=src/lind-boot/target,destination=src/lind-boot/target \
+    --mount=from=build-lind-boot-debug,source=build/lind-boot,destination=/build/lind-boot \
     --mount=from=build-glibc,source=lindfs,destination=/prebuilt-lindfs,readonly \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
     --mount=from=build-glibc,source=build/sysroot,destination=/mnt/glibc-build-sysroot,readonly \
@@ -209,3 +244,7 @@ COPY --from=test /report.html /wasm-e2e-report.html
 COPY --from=test /reports /reports
 COPY --from=test /e2e_comment.md /e2e_comment.md
 COPY --from=test /e2e_status /e2e_status
+
+
+# Force debug e2e stage to run as part of the artifacts target.
+COPY --from=test-debug /e2e_status /debug_e2e_status
