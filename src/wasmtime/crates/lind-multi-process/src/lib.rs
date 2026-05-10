@@ -350,8 +350,14 @@ impl<
         // -------------------------- <----- stack high
         unsafe {
             // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            std::ptr::write_unaligned(
+                unwind_data_start_sys as *mut u64,
+                unwind_data_start_usr + UNWIND_METADATA_SIZE,
+            );
+            std::ptr::write_unaligned(
+                (unwind_data_start_sys as *mut u64).add(1),
+                stack_pointer as u64,
+            );
         }
 
         let get_cx = self.get_cx.clone();
@@ -881,9 +887,14 @@ impl<
         // reference comments in fork_call
         unsafe {
             // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) =
-                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            std::ptr::write_unaligned(
+                parent_unwind_data_start_sys as *mut u64,
+                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE,
+            );
+            std::ptr::write_unaligned(
+                (parent_unwind_data_start_sys as *mut u64).add(1),
+                stack_pointer as u64,
+            );
         }
 
         // set up child_tid
@@ -964,7 +975,8 @@ impl<
         store.set_on_called(Box::new(move |mut store| {
             // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
             // end address of the unwind_data
-            let parent_unwind_data_end_usr = unsafe { *(parent_unwind_data_start_sys as *mut u64) };
+            let parent_unwind_data_end_usr =
+                unsafe { std::ptr::read_unaligned(parent_unwind_data_start_sys as *const u64) };
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -990,10 +1002,12 @@ impl<
             // so a seperate copy is needed for child. The unwind context also contains some absolute address that is relative to parent
             // hence we also need to translate it to be relative to child's stack
             unsafe {
-                // first 4 bytes in unwind data represent the address of the end of the unwind data
-                // we also need to change this for child
-                *(child_unwind_data_start_sys as *mut u64) =
-                    child_unwind_data_start_usr + rewind_total_size as u64;
+                // first 8 bytes in unwind data represent the address of the end of the unwind data.
+                // The unwind data may not be 8-byte aligned, so use unaligned write here.
+                std::ptr::write_unaligned(
+                    child_unwind_data_start_sys as *mut u64,
+                    child_unwind_data_start_usr + rewind_total_size as u64,
+                );
             }
 
             let builder = thread::Builder::new()
@@ -1451,9 +1465,14 @@ impl<
         // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) =
-                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            std::ptr::write_unaligned(
+                parent_unwind_data_start_sys as *mut u64,
+                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE,
+            );
+            std::ptr::write_unaligned(
+                (parent_unwind_data_start_sys as *mut u64).add(1),
+                stack_pointer as u64,
+            );
         }
 
         // mark the start of unwind
@@ -1554,8 +1573,14 @@ impl<
         // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            std::ptr::write_unaligned(
+                parent_unwind_data_start_sys as *mut u64,
+                parent_unwind_data_start_usr + 16,
+            );
+            std::ptr::write_unaligned(
+                (parent_unwind_data_start_sys as *mut u64).add(1),
+                stack_pointer as u64,
+            );
         }
 
         // mark the start of unwind
@@ -1629,8 +1654,14 @@ impl<
         // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            std::ptr::write_unaligned(
+                unwind_data_start_sys as *mut u64,
+                unwind_data_start_usr + UNWIND_METADATA_SIZE,
+            );
+            std::ptr::write_unaligned(
+                (unwind_data_start_sys as *mut u64).add(1),
+                stack_pointer as u64,
+            );
         }
 
         // mark the start of unwind
@@ -1649,7 +1680,8 @@ impl<
         store.set_on_called(Box::new(move |mut store| {
             // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
             // end address of the unwind_data
-            let unwind_data_end_usr = unsafe { *(unwind_data_start_sys as *mut u64) };
+            let unwind_data_end_usr =
+            unsafe { std::ptr::read_unaligned(unwind_data_start_sys as *const u64) };
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -1708,8 +1740,14 @@ impl<
         // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            std::ptr::write_unaligned(
+                unwind_data_start_sys as *mut u64,
+                unwind_data_start_usr + UNWIND_METADATA_SIZE,
+            );
+            std::ptr::write_unaligned(
+                (unwind_data_start_sys as *mut u64).add(1),
+                stack_pointer as u64,
+            );
         }
 
         // mark the start of unwind
@@ -1730,7 +1768,7 @@ impl<
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
             let hash =
-                unsafe { std::ptr::read_unaligned((cloned_address + jmp_buf as u64) as *mut u64) };
+                unsafe { std::ptr::read_unaligned((cloned_address + jmp_buf as u64) as *const u64) };
             // retrieve the unwind data
             let data = store.retrieve_unwind_data(hash);
 
