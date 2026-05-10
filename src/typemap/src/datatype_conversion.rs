@@ -290,6 +290,18 @@ pub fn sc_convert_addr_to_sys(arg: u64, arg_cageid: u64, cageid: u64) -> Result<
         }
     }
 
+    // arg=0 has cage-relative meaning ("no specific address" / "uaddr 0")
+    // regardless of the flag — a NULL host pointer would be meaningless.
+    // Resolve to the calling cage's base.  This matches the pre-flag
+    // behavior of `useraddr = addr as u32; sysaddr = user_to_sys(useraddr)`
+    // when addr was 0.
+    if arg == 0 {
+        let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
+        let vmmap = cage.vmmap.read();
+        let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
+        return Ok(base);
+    }
+
     if (arg_cageid & GRATE_MEMORY_FLAG) != 0 {
         // Grate has supplied a host system address directly.
         return Ok(arg as usize);
