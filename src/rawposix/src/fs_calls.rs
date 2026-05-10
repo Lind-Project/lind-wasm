@@ -2356,6 +2356,474 @@ pub extern "C" fn unlinkat_syscall(
     ret
 }
 
+//------------------------------------FCHMODAT SYSCALL------------------------------------
+/// Reference: https://man7.org/linux/man-pages/man2/fchmodat.2.html
+///
+/// `fchmodat` changes the permissions of a file relative to a directory fd.
+/// Modeled on `unlinkat_syscall` for the dirfd handling.
+pub extern "C" fn fchmodat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    pathname_arg: u64,
+    pathname_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fchmodat_syscall"
+        );
+    }
+
+    let c_path;
+    let kernel_fd = if dirfd == AT_FDCWD {
+        c_path = match sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "fchmodat", "path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, dirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "fchmodat", "Bad File Descriptor");
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = get_cstr(pathname_arg).unwrap();
+        c_path = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let ret = unsafe { libc::fchmodat(kernel_fd, c_path.as_ptr(), mode, flags) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "fchmodat");
+    }
+    ret
+}
+
+//------------------------------------FACCESSAT SYSCALL------------------------------------
+/// Reference: https://man7.org/linux/man-pages/man2/faccessat.2.html
+///
+/// `faccessat` checks accessibility of a file relative to a directory fd.
+pub extern "C" fn faccessat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    pathname_arg: u64,
+    pathname_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let mode = sc_convert_sysarg_to_i32(mode_arg, mode_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "faccessat_syscall"
+        );
+    }
+
+    let c_path;
+    let kernel_fd = if dirfd == AT_FDCWD {
+        c_path = match sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "faccessat", "path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, dirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "faccessat", "Bad File Descriptor");
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = get_cstr(pathname_arg).unwrap();
+        c_path = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let ret = unsafe { libc::faccessat(kernel_fd, c_path.as_ptr(), mode, flags) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "faccessat");
+    }
+    ret
+}
+
+//------------------------------------FSTATAT SYSCALL (newfstatat)------------------------------------
+/// Reference: https://man7.org/linux/man-pages/man2/fstatat.2.html
+///
+/// `fstatat` retrieves stat info for a path relative to a directory fd.
+/// Linux's `newfstatat` (262) is what `fts_open` uses for traversal.
+pub extern "C" fn fstatat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    pathname_arg: u64,
+    pathname_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fstatat_syscall"
+        );
+    }
+
+    let c_path;
+    let kernel_fd = if dirfd == AT_FDCWD {
+        c_path = match sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "fstatat", "path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, dirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "fstatat", "Bad File Descriptor");
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = get_cstr(pathname_arg).unwrap();
+        c_path = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::fstatat(kernel_fd, c_path.as_ptr(), &mut libc_statbuf, flags) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "fstatat");
+    }
+
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "fstatat", "Bad address"),
+    }
+
+    ret
+}
+
+//------------------------------------RENAMEAT / RENAMEAT2 SYSCALLS------------------------------------
+/// Internal helper used by both renameat and renameat2.
+fn renameat_inner(
+    cageid: u64,
+    olddirfd: i32,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newdirfd: i32,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    flags: u32,
+    use_renameat2: bool,
+    label: &'static str,
+) -> i32 {
+    let c_oldpath;
+    let old_kernel_fd = if olddirfd == AT_FDCWD {
+        c_oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, label, "old path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, olddirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, label, "Bad olddirfd");
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = get_cstr(oldpath_arg).unwrap();
+        c_oldpath = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let c_newpath;
+    let new_kernel_fd = if newdirfd == AT_FDCWD {
+        c_newpath = match sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, label, "new path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, newdirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, label, "Bad newdirfd");
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = get_cstr(newpath_arg).unwrap();
+        c_newpath = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let ret = unsafe {
+        if use_renameat2 {
+            libc::renameat2(
+                old_kernel_fd,
+                c_oldpath.as_ptr(),
+                new_kernel_fd,
+                c_newpath.as_ptr(),
+                flags,
+            )
+        } else {
+            libc::renameat(
+                old_kernel_fd,
+                c_oldpath.as_ptr(),
+                new_kernel_fd,
+                c_newpath.as_ptr(),
+            )
+        }
+    };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, label);
+    }
+    ret
+}
+
+pub extern "C" fn renameat_syscall(
+    cageid: u64,
+    olddirfd_arg: u64,
+    olddirfd_cageid: u64,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newdirfd_arg: u64,
+    newdirfd_cageid: u64,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let olddirfd = sc_convert_sysarg_to_i32(olddirfd_arg, olddirfd_cageid, cageid);
+    let newdirfd = sc_convert_sysarg_to_i32(newdirfd_arg, newdirfd_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "renameat_syscall"
+        );
+    }
+
+    renameat_inner(
+        cageid,
+        olddirfd,
+        oldpath_arg,
+        oldpath_cageid,
+        newdirfd,
+        newpath_arg,
+        newpath_cageid,
+        0,
+        false,
+        "renameat",
+    )
+}
+
+pub extern "C" fn renameat2_syscall(
+    cageid: u64,
+    olddirfd_arg: u64,
+    olddirfd_cageid: u64,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newdirfd_arg: u64,
+    newdirfd_cageid: u64,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let olddirfd = sc_convert_sysarg_to_i32(olddirfd_arg, olddirfd_cageid, cageid);
+    let newdirfd = sc_convert_sysarg_to_i32(newdirfd_arg, newdirfd_cageid, cageid);
+    let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
+
+    if !sc_unusedarg(arg6, arg6_cageid) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "renameat2_syscall"
+        );
+    }
+
+    renameat_inner(
+        cageid,
+        olddirfd,
+        oldpath_arg,
+        oldpath_cageid,
+        newdirfd,
+        newpath_arg,
+        newpath_cageid,
+        flags,
+        true,
+        "renameat2",
+    )
+}
+
+//------------------------------------CHOWN / LCHOWN / FCHOWNAT SYSCALLS------------------------------------
+/// `fchownat` changes the ownership of a file relative to a directory fd.
+/// Linux's `chown(path, uid, gid)` is implemented as `fchownat(AT_FDCWD, path, uid, gid, 0)`,
+/// and `lchown` as `fchownat(AT_FDCWD, path, uid, gid, AT_SYMLINK_NOFOLLOW)` — but glibc may
+/// route them via dedicated syscalls, so we expose all three.
+pub extern "C" fn fchownat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    pathname_arg: u64,
+    pathname_cageid: u64,
+    owner_arg: u64,
+    owner_cageid: u64,
+    group_arg: u64,
+    group_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let owner = sc_convert_sysarg_to_u32(owner_arg, owner_cageid, cageid);
+    let group = sc_convert_sysarg_to_u32(group_arg, group_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !sc_unusedarg(arg6, arg6_cageid) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fchownat_syscall"
+        );
+    }
+
+    let c_path;
+    let kernel_fd = if dirfd == AT_FDCWD {
+        c_path = match sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "fchownat", "path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, dirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "fchownat", "Bad File Descriptor");
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = get_cstr(pathname_arg).unwrap();
+        c_path = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let ret = unsafe { libc::fchownat(kernel_fd, c_path.as_ptr(), owner, group, flags) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "fchownat");
+    }
+    ret
+}
+
+pub extern "C" fn chown_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    owner_arg: u64,
+    owner_cageid: u64,
+    group_arg: u64,
+    group_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "chown", "path conversion failed"),
+    };
+    let owner = sc_convert_sysarg_to_u32(owner_arg, owner_cageid, cageid);
+    let group = sc_convert_sysarg_to_u32(group_arg, group_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "chown_syscall"
+        );
+    }
+
+    let ret = unsafe { libc::chown(path.as_ptr(), owner, group) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "chown");
+    }
+    ret
+}
+
+pub extern "C" fn lchown_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    owner_arg: u64,
+    owner_cageid: u64,
+    group_arg: u64,
+    group_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+        Ok(path) => path,
+        Err(e) => return syscall_error(e, "lchown", "path conversion failed"),
+    };
+    let owner = sc_convert_sysarg_to_u32(owner_arg, owner_cageid, cageid);
+    let group = sc_convert_sysarg_to_u32(group_arg, group_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "lchown_syscall"
+        );
+    }
+
+    let ret = unsafe { libc::lchown(path.as_ptr(), owner, group) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "lchown");
+    }
+    ret
+}
+
 //------------------------------------ACCESS SYSCALL------------------------------------
 /// `access` checks whether the calling process can access the file pathname.
 /// Reference: https://man7.org/linux/man-pages/man2/access.2.html
@@ -3652,6 +4120,98 @@ pub extern "C" fn fchmod_syscall(
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "fchmod");
+    }
+    ret
+}
+
+//------------------------------------UTIMENSAT SYSCALL------------------------------------
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/utimensat.2.html
+///
+/// `utimensat` updates the access and modification times of a file with
+/// nanosecond precision.  Used by `touch`, `cp -p`, and any test that
+/// asserts on file timestamps.  `futimens(fd, ts)` is implemented in
+/// glibc by calling `utimensat(fd, NULL, ts, 0)`, so a single handler
+/// here covers both.
+///
+/// ## Arguments:
+/// - `dirfd`: directory fd; `AT_FDCWD` means "relative to the cage cwd";
+///   when `pathname` is NULL, `dirfd` itself is the target file (futimens).
+/// - `pathname`: path relative to `dirfd`, or NULL for the futimens form.
+/// - `times`: pointer to two `timespec` values [atime, mtime], or NULL
+///   meaning "set both to now".  `tv_nsec` may be the special values
+///   `UTIME_NOW` or `UTIME_OMIT`.
+/// - `flags`: 0 or `AT_SYMLINK_NOFOLLOW`.
+///
+/// ## Returns:
+/// - 0 on success.
+/// - negated errno on failure.
+pub extern "C" fn utimensat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    times_arg: u64,
+    _times_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "utimensat_syscall"
+        );
+    }
+
+    // Glibc's __utimensat64_helper has already copied the cage's
+    // __timespec64 into a kernel-ABI layout { i64 tv_sec; i64 tv_nsec; }
+    // and passed that translated pointer through, so casting directly
+    // matches the host kernel's struct timespec.  May be NULL ("now").
+    let times = times_arg as *const libc::timespec;
+
+    // Two cases for the path/dirfd combination:
+    //   (a) pathname == NULL:  futimens form — operate on the file
+    //       referred to by dirfd.  dirfd must be a real fd, not AT_FDCWD.
+    //   (b) pathname != NULL:  utimensat form — resolve via cage's path
+    //       conversion (handles cwd + chroot), then optionally relative
+    //       to dirfd if not AT_FDCWD.
+    let ret = if path_arg == 0 {
+        if virtual_fd == AT_FDCWD {
+            return syscall_error(Errno::EBADF, "utimensat", "AT_FDCWD with NULL path");
+        }
+        let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+        if kernel_fd < 0 {
+            return handle_errno(-kernel_fd, "utimensat");
+        }
+        // futimens(): glibc routes futimens(fd, ts) as utimensat(fd, NULL, ts, 0).
+        // The kernel utimensat syscall accepts NULL path with a real fd, so we
+        // forward to libc::futimens (its userspace wrapper around the same).
+        unsafe { libc::futimens(kernel_fd, times) }
+    } else {
+        let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
+            Ok(p) => p,
+            Err(e) => return syscall_error(e, "utimensat", "path conversion failed"),
+        };
+        if virtual_fd == AT_FDCWD {
+            unsafe { libc::utimensat(AT_FDCWD, path.as_ptr(), times, flags) }
+        } else {
+            let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+            if kernel_fd < 0 {
+                return handle_errno(-kernel_fd, "utimensat");
+            }
+            unsafe { libc::utimensat(kernel_fd, path.as_ptr(), times, flags) }
+        }
+    };
+
+    if ret < 0 {
+        return handle_errno(get_errno(), "utimensat");
     }
     ret
 }

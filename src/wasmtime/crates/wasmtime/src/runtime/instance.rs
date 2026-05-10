@@ -1,4 +1,4 @@
-use crate::linker::{Definition, DefinitionType};
+use crate::linker::{is_dylink_internal_symbol, Definition, DefinitionType};
 use crate::runtime::vm::{
     Imports, InstanceAllocationRequest, ModuleRuntimeInfo, StorePtr, VMFuncRef, VMFunctionImport,
     VMGlobalImport, VMMemoryImport, VMOpaqueContext, VMTableImport,
@@ -1195,6 +1195,9 @@ impl Instance {
         let mut globals = vec![];
         for export in self.exports(&mut store) {
             let name = export.name().to_owned();
+            if is_dylink_internal_symbol(&name) {
+                continue;
+            }
             match export.into_extern() {
                 Extern::Func(func) => {
                     funcs.push((name, func));
@@ -1262,7 +1265,13 @@ impl Instance {
                     continue;
                 };
                 // relocate the variable
-                let val = (raw as u32).wrapping_add(memory_base);
+                let val = match (raw as u32).checked_add(memory_base) {
+                    Some(val) => val,
+                    None => {
+                        eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                        continue;
+                    }
+                };
                 // Cache the resolved address; also updates the GOT cell if it already exists.
                 if got_inner.cache_symbol(&name, val) {
                     #[cfg(feature = "debug-dylink")]
