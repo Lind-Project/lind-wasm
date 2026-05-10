@@ -301,7 +301,10 @@ impl Vmmap {
     /// Returns the rounded up page number
     fn round_page_num_up_to_map_multiple(&self, npages: u32, pages_per_map: u32) -> u32 {
         // Add (pages_per_map - 1) to npages and mask off lower bits to round up
-        (npages + pages_per_map - 1) & !(pages_per_map - 1)
+        npages
+        .checked_add(pages_per_map - 1)
+        .map(|n| n & !(pages_per_map - 1))
+        .unwrap_or(u32::MAX & !(pages_per_map - 1)) // clamp to max aligned value
     }
 
     /// Truncates a page number down to the nearest multiple of pages_per_map
@@ -341,7 +344,9 @@ impl Vmmap {
     /// Returns the corresponding system address
     pub fn user_to_sys(&self, address: u32) -> usize {
         // Add base address to user address to get system address
-        address as usize + self.base_address.unwrap()
+        let base = self.base_address.unwrap();
+        (address as usize).checked_add(base)
+            .expect("user_to_sys: address overflow")
     }
 
     /// Converts a system address to a user address
@@ -352,7 +357,11 @@ impl Vmmap {
     /// Returns the corresponding user space address
     pub fn sys_to_user(&self, address: usize) -> u32 {
         // Subtract base address from system address to get user address
-        (address as usize - self.base_address.unwrap()) as u32
+        let base = self.base_address.unwrap();
+        let user = address.checked_sub(base)
+            .expect("sys_to_user: address underflow");
+        assert!(user <= u32::MAX as usize, "sys_to_user: result exceeds 32-bit space");
+        user as u32
     }
 
     // Visits each entry in the vmmap, applying a visitor function to each entry
@@ -626,7 +635,13 @@ impl VmmapOps for Vmmap {
         }
 
         // Calculate page range
-        let new_region_end_page = page_num + npages;
+        let new_region_end_page = match page_num.checked_add(npages) {
+            Some(end) => end,
+            None => return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "page_num + npages overflows 32-bit address space",
+            )),
+        };
         let new_region_start_page = page_num;
 
         // Create new entry if not removing
@@ -675,7 +690,7 @@ impl VmmapOps for Vmmap {
     /// - Updates protection flags for fully contained pages
     fn change_prot(&mut self, page_num: u32, npages: u32, new_prot: i32) {
         // Calculate page range
-        let new_region_end_page = page_num + npages;
+        let new_region_end_page = page_num.saturating_add(npages).min(self.end_address); //if addition overflows, clamp to maximum integer value instead of wrapping
         let new_region_start_page = page_num;
 
         // Collect information about overlapping entries that need to be modified
@@ -778,7 +793,10 @@ impl VmmapOps for Vmmap {
     /// - false if mapping doesn't exist or protection is incompatible
     fn check_existing_mapping(&self, page_num: u32, npages: u32, prot: i32) -> bool {
         // Calculate end page and create interval for region
-        let region_end_page = page_num + npages;
+        let region_end_page = match page_num.checked_add(npages) {
+            Some(end) => end,
+            None => return false,
+        };
         let region_interval = ie(page_num, region_end_page);
 
         // Case 1: No overlapping entries exist
@@ -790,7 +808,7 @@ impl VmmapOps for Vmmap {
 
         // Iterate over overlapping intervals
         for (_interval, entry) in self.entries.overlapping(region_interval) {
-            let ent_end_page = entry.page_num + entry.npages;
+            let ent_end_page = entry.page_num.saturating_add(entry.npages);
             let flags = entry.maxprot;
 
             // Case 2: Region is fully inside existing entry
@@ -835,11 +853,14 @@ impl VmmapOps for Vmmap {
     /// - Handles partial overlaps and gaps
     fn check_addr_mapping(&mut self, page_num: u32, npages: u32, prot: i32) -> Option<u32> {
         // Calculate end page of region
-        let region_end_page = page_num + npages;
+        let region_end_page = match page_num.checked_add(npages) {
+            Some(end) => end,
+            None => return None,
+        };
 
         // Case 1: Check cached entry first for performance
         if let Some(ref cached_entry) = self.cached_entry {
-            let ent_end_page = cached_entry.page_num + cached_entry.npages;
+            let ent_end_page = cached_entry.page_num.saturating_add(cached_entry.npages);
             let mut flags = cached_entry.prot;
 
             // Enforce PROT_READ if any protection exists
@@ -858,7 +879,7 @@ impl VmmapOps for Vmmap {
         // Case 2: Check overlapping entries if cache miss
         let mut current_page = page_num;
         for (_, entry) in self.entries.overlapping(ie(page_num, region_end_page)) {
-            let ent_end_page = entry.page_num + entry.npages;
+            let ent_end_page = entry.page_num.saturating_add(entry.npages);
             let mut flags = entry.prot;
 
             // Enforce PROT_READ if any protection exists
@@ -1011,7 +1032,7 @@ impl VmmapOps for Vmmap {
             .filter(|(_, entry)| !matches!(entry.backing, MemoryBackingType::SharedMemory(_)))
             .map(|(interval, _)| {
                 let act_start = interval.start().max(req_start);
-                let act_end = (interval.end() + 1).min(req_end);
+                let act_end = interval.end().saturating_add(1).min(req_end);
                 (act_start, act_end)
             })
             .collect()
