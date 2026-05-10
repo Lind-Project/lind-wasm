@@ -1,15 +1,11 @@
 /* Cage side of the mmap-with-GRATE_MEMORY_FLAG test.
  *
- * This is a vanilla mmap → write → read → munmap round-trip.  Its job is
- * to exercise the mmap_syscall code path when the grate interposes and
- * forwards the call with `addr_cageid | GRATE_MEMORY_FLAG`.  Before the
- * runtime patch this trigggered a 32-bit-truncation bug in mmap_syscall
- * that landed the mapping at an arbitrary cage address and clobbered the
- * cage's stack — manifesting as e.g. an EBADF on a later syscall using a
- * stack-resident fd whose value got memcpy'd over.
+ * Vanilla mmap → write → read → munmap round-trip.  Exercises the
+ * mmap_syscall code path when the grate interposes and forwards with
+ * `addr_cage | GRATE_MEMORY_FLAG`.
  *
- * If the runtime handles the flag correctly, write-then-readback in the
- * mapped region preserves the data and munmap succeeds.
+ * Progress prints to stdout (not stderr) with explicit fflush so the
+ * harness can see where it died if any step fails.
  */
 
 #include <stdio.h>
@@ -19,27 +15,42 @@
 
 int main(void) {
 	const size_t size = 4096;
+
+	printf("[Cage|mmap-flag] calling mmap\n");
+	fflush(stdout);
+
 	void *p = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		       MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (p == MAP_FAILED) {
-		perror("mmap");
+		printf("[Cage|mmap-flag] mmap returned MAP_FAILED\n");
+		fflush(stdout);
 		return 1;
 	}
+	printf("[Cage|mmap-flag] mmap returned %p\n", p);
+	fflush(stdout);
 
 	memset(p, 0x42, size);
+	printf("[Cage|mmap-flag] memset done\n");
+	fflush(stdout);
+
 	for (size_t i = 0; i < size; i++) {
 		if (((unsigned char *)p)[i] != 0x42) {
-			fprintf(stderr, "byte %zu mismatch (got 0x%x)\n", i,
-				((unsigned char *)p)[i]);
+			printf("[Cage|mmap-flag] byte %zu mismatch (got 0x%x)\n",
+			       i, ((unsigned char *)p)[i]);
+			fflush(stdout);
 			return 1;
 		}
 	}
+	printf("[Cage|mmap-flag] readback ok\n");
+	fflush(stdout);
 
 	if (munmap(p, size) != 0) {
-		perror("munmap");
+		printf("[Cage|mmap-flag] munmap failed\n");
+		fflush(stdout);
 		return 1;
 	}
 
 	printf("[Cage|mmap-flag] PASS\n");
+	fflush(stdout);
 	return 0;
 }
