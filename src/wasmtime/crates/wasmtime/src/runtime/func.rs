@@ -2173,6 +2173,13 @@ impl<T> Caller<'_, T> {
         self.store.check_library_loaded(inode)
     }
 
+    /// Return true if a WASM module with the given intrinsic name is already instantiated.
+    /// Covers both preloaded libraries (module_with_preload) and dlopen'd libraries
+    /// (module_with_caller), since both call register_named_instance.
+    pub fn is_named_instance_registered(&self, name: &str) -> bool {
+        self.store.is_named_instance_registered(name)
+    }
+
     pub fn get_asyncify_start_unwind(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
         if let Some(asyncify_start_unwind_extern) = self.get_export("asyncify_start_unwind") {
             match asyncify_start_unwind_extern {

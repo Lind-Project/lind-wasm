@@ -10,8 +10,8 @@ use alloc::sync::Arc;
 use core::str;
 use wasmtime_environ::{
     CompiledFunctionInfo, CompiledModuleInfo, DefinedFuncIndex, DylinkImportInfo, DylinkMemInfo,
-    FuncIndex, FunctionLoc, FunctionName, Metadata, Module, ModuleInternedTypeIndex, PrimaryMap,
-    StackMapInformation, WasmFunctionInfo,
+    DylinkNeededInfo, FuncIndex, FunctionLoc, FunctionName, Metadata, Module,
+    ModuleInternedTypeIndex, PrimaryMap, StackMapInformation, WasmFunctionInfo,
 };
 
 /// A compiled wasm module, ready to be instantiated.
@@ -114,6 +114,11 @@ impl CompiledModule {
     /// lind-wasm: retrieve dynamic loading information
     pub fn dylink_import_info(&self) -> Option<&DylinkImportInfo> {
         self.module.dylink_import_info.as_ref()
+    }
+
+    /// lind-wasm: retrieve dynamic loading needed (dependency) information
+    pub fn dylink_needed_info(&self) -> Option<&DylinkNeededInfo> {
+        self.module.dylink_needed_info.as_ref()
     }
 
     /// Returns the text section of the ELF image for this compiled module.

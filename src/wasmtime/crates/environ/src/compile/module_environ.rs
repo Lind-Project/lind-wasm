@@ -785,8 +785,12 @@ and for re-adding support for interface types you can see this issue:
                                 });
                         }
                         wasmparser::Dylink0Subsection::Needed(needed) => {
-                            #[cfg(feature = "debug-dylink")]
-                            eprintln!("Warning: Dylink.0 Needed Section not handled: {:?}", needed);
+                            self.result
+                                .module
+                                .dylink_needed_info
+                                .insert(crate::DylinkNeededInfo {
+                                    needed: needed.iter().map(|s| s.to_string()).collect(),
+                                });
                         }
                         wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
                             #[cfg(feature = "debug-dylink")]
