@@ -64,34 +64,40 @@ int mmap_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	int fd = (int)(int64_t)arg5;
 	int is_anonymous = (fd < 0) || ((arg4 & MAP_ANON_FLAG) != 0);
 
+	/* `cageid` passed to the handler is the grate's id (3i's
+	   _call_grate_func passes grateid here).  The calling cage's id is
+	   reliably carried in an integer arg's cage tag — use arg5cage (fd)
+	   per the convention imfs follows. */
+	uint64_t calling_cage = arg5cage;
+
 	fprintf(stderr,
-		"[Grate|mmap-flag] entry cageid=%llu arg1=%#018llx "
-		"arg1cage=%#llx arg2=%#018llx arg3=%#llx arg4=%#llx "
-		"arg5=%#018llx arg6=%#018llx anon=%d\n",
-		(unsigned long long)cageid, (unsigned long long)arg1,
-		(unsigned long long)arg1cage, (unsigned long long)arg2,
-		(unsigned long long)arg3, (unsigned long long)arg4,
-		(unsigned long long)arg5, (unsigned long long)arg6,
-		is_anonymous);
+		"[Grate|mmap-flag] entry handler_cageid=%llu calling_cage=%llu "
+		"arg1=%#018llx arg1cage=%#llx arg2=%#018llx arg3=%#llx "
+		"arg4=%#llx arg5=%#018llx arg6=%#018llx anon=%d\n",
+		(unsigned long long)cageid, (unsigned long long)calling_cage,
+		(unsigned long long)arg1, (unsigned long long)arg1cage,
+		(unsigned long long)arg2, (unsigned long long)arg3,
+		(unsigned long long)arg4, (unsigned long long)arg5,
+		(unsigned long long)arg6, is_anonymous);
 	fflush(stderr);
 
 	uint64_t fwd_arg1cage =
 	    is_anonymous ? arg1cage : (self_grate_id | GRATE_MEMORY_FLAG);
 
 	fprintf(stderr,
-		"[Grate|mmap-flag] forwarding arg1=%#018llx fwd_arg1cage=%#llx "
-		"arg2=%#018llx arg3=%#llx arg4=%#llx arg5=%#018llx "
-		"arg6=%#018llx\n",
-		(unsigned long long)arg1,
+		"[Grate|mmap-flag] forwarding target=%llu arg1=%#018llx "
+		"fwd_arg1cage=%#llx arg2=%#018llx arg3=%#llx arg4=%#llx "
+		"arg5=%#018llx arg6=%#018llx\n",
+		(unsigned long long)calling_cage, (unsigned long long)arg1,
 		(unsigned long long)fwd_arg1cage, (unsigned long long)arg2,
 		(unsigned long long)arg3, (unsigned long long)arg4,
 		(unsigned long long)arg5, (unsigned long long)arg6);
 	fflush(stderr);
 
 	int ret = make_threei_call(
-	    9 /* MMAP_SYSCALL */, 0, self_grate_id, cageid, arg1, fwd_arg1cage,
-	    arg2, arg2cage, arg3, arg3cage, arg4, arg4cage, arg5, arg5cage,
-	    arg6, arg6cage,
+	    9 /* MMAP_SYSCALL */, 0, self_grate_id, calling_cage, arg1,
+	    fwd_arg1cage, arg2, arg2cage, arg3, arg3cage, arg4, arg4cage, arg5,
+	    arg5cage, arg6, arg6cage,
 	    0 /* translate_errno off — propagate raw return */
 	);
 	fprintf(stderr, "[Grate|mmap-flag] make_threei_call returned %d (%#x)\n",
