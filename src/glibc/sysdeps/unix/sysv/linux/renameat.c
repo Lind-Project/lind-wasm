@@ -20,15 +20,20 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <errno.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
+/* Lind: route renameat through 3i to RawPOSIX's renameat_syscall.  */
 int
 __renameat (int oldfd, const char *old, int newfd, const char *new)
 {
-#ifdef __NR_renameat
-  return INLINE_SYSCALL_CALL (renameat, oldfd, old, newfd, new);
-#else
-  return INLINE_SYSCALL_CALL (renameat2, oldfd, old, newfd, new, 0);
-#endif
+  return MAKE_LEGACY_SYSCALL (RENAMEAT_SYSCALL, "syscall|renameat",
+			      (uint64_t) oldfd,
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (old),
+			      (uint64_t) newfd,
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (new),
+			      NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__renameat)
 weak_alias (__renameat, renameat)

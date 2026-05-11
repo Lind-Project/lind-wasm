@@ -332,20 +332,12 @@ pub fn execute_with_lind(
         let mut linker_guard = linker.lock().unwrap();
         linker_guard.define_unknown_imports_as_traps(&module);
 
-        // after all preloaded library are attached to the linker, update the linker in LindCtx
-        // so that newly forked cage could use the Linker with necessary library loaded
-        let mut ctx = wstore.data_mut().lind_fork_ctx.as_mut().unwrap();
-        ctx.attach_linker(linker_guard.clone());
-
         drop(linker_guard);
 
-        #[cfg(feature = "debug-dylink")]
-        {
-            // Emit warnings for any GOT slots that remain unresolved after processing
-            // preloads and defining trap stubs.
-            let mut got_guard = lind_got.lock().unwrap();
-            got_guard.warning_undefined();
-        }
+        // Emit warnings for any GOT slots that remain unresolved after processing
+        // preloads and defining trap stubs.
+        let mut got_guard = lind_got.lock().unwrap();
+        got_guard.warning_undefined();
     }
 
     // -- Run the module in the cage --
@@ -480,7 +472,10 @@ fn attach_api(
 ) -> Result<()> {
     // Initialize argv/environ data and attach all Lind host functions
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
-    wstore.data_mut().lind_environ = Some(LindEnviron::new(&lindboot_cli.args, &lindboot_cli.vars));
+    wstore.data_mut().lind_environ = Some(Arc::new(LindEnviron::new(
+        &lindboot_cli.args,
+        &lindboot_cli.vars,
+    )));
 
     // Build a dynamic loader closure that reads the current cage's linker and GOT
     // at dlopen call time. This ensures the correct per-cage linker is used
@@ -510,7 +505,7 @@ fn attach_api(
         &mut linker_guard,
         |s: &HostCtx| {
             s.lind_environ
-                .as_ref()
+                .as_deref()
                 .expect("lind_environ must be initialized")
         },
         dynamic_loader,
@@ -529,8 +524,15 @@ fn attach_api(
         lind_manager.clone(),
         lindboot_cli.clone(),
         cageid,
+        lindboot_cli.thread_stack_size,
         |host| host.lind_fork_ctx.as_mut().unwrap(),
-        |host| host.fork(),
+        |host, is_thread| {
+            if is_thread {
+                host.fork_thread()
+            } else {
+                host.fork()
+            }
+        },
         |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs| {
             let mut new_lindboot_cli = lindboot_cli.clone();
             new_lindboot_cli.args = vec![String::from(path)];
@@ -573,15 +575,13 @@ fn load_main_module(
     // todo:
     // I don't setup `epoch_handler` since it seems not being used by our previous implementation.
     // Not sure if this is related to our thread exit problem
-    let linker = linker_guard.clone();
-    let (instance, stack_arena_base, cage_instanceid) = linker
+    let (instance, stack_arena_base, cage_instanceid) = linker_guard
         .instantiate_with_lind(
             &mut *store,
             &module,
             InstantiateType::InstantiateFirst(cageid),
         )
         .context(format!("failed to instantiate"))?;
-    drop(linker);
 
     // Register the main module so get_global_snapshot can find it by name.
     if let Some(name) = module.name() {
@@ -623,6 +623,17 @@ fn load_main_module(
             Some(memory_base),
             fpcast_enabled,
         );
+
+        // expose main module's exported symbol to linker
+        // skip `signal_callback` since this is not supposed to by exposed by main module
+        linker_guard
+            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+            .unwrap();
+
+        // after all preloaded library are attached to the linker, update the linker in LindCtx
+        // so that newly forked cage could use the Linker with necessary library loaded
+        let mut ctx = store.data_mut().lind_fork_ctx.as_mut().unwrap();
+        ctx.attach_linker(linker_guard.clone());
     }
 
     cfg_if! {
@@ -907,6 +918,25 @@ fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Confi
     };
 
     wt_config.wasm_backtrace_details(details);
+
+    // Disable AVX-512 lanes so the precompiled .cwasm is portable across
+    // GitHub Actions runners.  Cranelift's default is to auto-detect the
+    // host CPU and bake whatever features it has into the artifact; if a
+    // build runner has avx512bitalg but a runtime runner doesn't, the
+    // .cwasm fails to load with "compilation setting 'has_avx512bitalg'
+    // is enabled, but not available on the host".  AVX2 is universally
+    // available on x86-64 GHA runners, so capping at AVX2 is safe.
+    unsafe {
+        for flag in [
+            "has_avx512bitalg",
+            "has_avx512dq",
+            "has_avx512f",
+            "has_avx512vbmi",
+            "has_avx512vl",
+        ] {
+            wt_config.cranelift_flag_set(flag, "false");
+        }
+    }
 
     // Enable compilation cache — compiled .wasm artifacts are stored on disk
     // so subsequent runs skip compilation. Best-effort: if config loading

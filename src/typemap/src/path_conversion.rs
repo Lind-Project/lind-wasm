@@ -98,6 +98,18 @@ pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
     return Err(-1);
 }
 
+/// Like `get_cstr` but accepts non-UTF-8 data by using lossy conversion.
+/// Used in the execve path where argv/envp may contain arbitrary bytes
+/// (e.g. 8-bit delimiters in coreutils tests).
+pub fn get_cstr_lossy(arg: u64) -> Result<String, i32> {
+    let ptr = arg as *const std::ffi::c_char;
+    if !ptr.is_null() {
+        let cstr = unsafe { std::ffi::CStr::from_ptr(ptr) };
+        return Ok(cstr.to_string_lossy().into_owned());
+    }
+    Err(-1)
+}
+
 /// Convert received path pointer into a normalized `CString` path.
 ///
 /// This function first validates cross-cage access if `secure` feature is enabled.

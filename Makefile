@@ -1,6 +1,8 @@
 LINDFS_ROOT ?= lindfs
 BUILD_DIR ?= build
 SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
+# Prebuilt libc++ headers/libs; merged into $(SYSROOT_DIR) by sync-sysroot when present.
+ARTIFACTS_DIR ?= artifacts
 LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
 LINDBOOT_DEBUG_BIN ?= $(BUILD_DIR)/lind-boot-debug
 LINDFS_DIRS := \
@@ -29,15 +31,33 @@ build: lindfs lind-boot sysroot
 .PHONY: all
 all: build
 
+.PHONY: fpcast
+fpcast:
+	$(MAKE) build WITH_FPCAST=1
+
 .PHONY: sysroot
 sysroot: build-dir
 	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
+# fdtables backend selector. One of: dashmaparray (default), dashmapvec,
+# muthashmax, vanilla. Threaded through lind-boot -> rawposix -> fdtables
+# via Cargo features.
+#
+# Examples:
+#   make                                  # default (dashmaparray)
+#   make build FDTABLES_IMPL=muthashmax   # full build with muthashmax
+#   make lind-boot FDTABLES_IMPL=vanilla  # rebuild only lind-boot with vanilla
+#   make fpcast FDTABLES_IMPL=dashmapvec  # fpcast variant with dashmapvec
+#   make lind-debug FDTABLES_IMPL=muthashmax   # debug build with muthashmax
+#   FDTABLES_IMPL=muthashmax make         # also works via env var
+FDTABLES_IMPL ?= dashmaparray
+
 .PHONY: lind-boot
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/lind-boot/Cargo.toml --release
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
+	    --no-default-features --features fdtables-$(FDTABLES_IMPL)
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
@@ -64,7 +84,8 @@ clean-lindfs:
 .PHONY: lind-debug
 lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
-	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
+	cargo build --manifest-path src/lind-boot/Cargo.toml \
+	    --no-default-features --features "lind_debug fdtables-$(FDTABLES_IMPL)"
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
@@ -81,10 +102,26 @@ build_glibc:
 build-dir:
 	mkdir -p $(BUILD_DIR)
 
+# After copying src/glibc/sysroot → $(SYSROOT_DIR), optionally merge libc++ from
+# $(ARTIFACTS_DIR) when that tree is present (same layout as Docker E2E).
+# Remove any existing c++ tree first: it may be a symlink into src/glibc/sysroot
+# (e.g. read-only in Docker), and cp -r into that path would hit EROFS.
+
 .PHONY: sync-sysroot
 sync-sysroot:
 	$(RM) -r $(SYSROOT_DIR)
 	cp -R src/glibc/sysroot $(SYSROOT_DIR)
+	@if [ -d "$(ARTIFACTS_DIR)/include/wasm32-wasi/c++" ] \
+	    && [ -f "$(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++.a" ] \
+	    && [ -f "$(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++abi.a" ]; then \
+	  echo "Merging libc++ from $(ARTIFACTS_DIR) into $(SYSROOT_DIR)"; \
+	  mkdir -p $(SYSROOT_DIR)/include/wasm32-wasi; \
+	  mkdir -p $(SYSROOT_DIR)/lib/wasm32-wasi; \
+	  $(RM) -r $(SYSROOT_DIR)/include/wasm32-wasi/c++; \
+	  cp -r $(ARTIFACTS_DIR)/include/wasm32-wasi/c++ $(SYSROOT_DIR)/include/wasm32-wasi/; \
+	  $(RM) -f $(SYSROOT_DIR)/lib/wasm32-wasi/libc++.a $(SYSROOT_DIR)/lib/wasm32-wasi/libc++abi.a; \
+	  cp $(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++.a $(ARTIFACTS_DIR)/lib/wasm32-wasi/libc++abi.a $(SYSROOT_DIR)/lib/wasm32-wasi/; \
+	fi
 
 .PHONY: test
 test: lindfs
@@ -134,6 +171,52 @@ test: lindfs
 	fi; \
 	exit 0
 
+# Run wasmtestreport with a grate prefix.
+# Single-grate examples:
+#   make test-grate GRATE=ipc-grate
+#   make test-grate GRATE=chroot-grate GRATE_ARGS="--chroot-dir /tmp"
+#   make test-grate GRATE=ipc-grate RUN=process_tests
+#   make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c
+# Grate chain (mutually exclusive with GRATE / GRATE_ARGS — the string is passed
+# verbatim before the test wasm, so any grate-side group syntax goes here too):
+#   make test-grate GRATE_PREFIX="grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm"
+# Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>
+# Run timeout defaults to 90s under any grate (vs 30s without), override with TIMEOUT=N.
+.PHONY: test-grate
+GRATE ?=
+GRATE_ARGS ?=
+GRATE_PREFIX ?=
+TESTFILES ?=
+RUN ?=
+TIMEOUT ?=
+test-grate:
+	@if [ -z "$(GRATE)" ] && [ -z "$(GRATE_PREFIX)" ]; then \
+		echo "Usage: make test-grate GRATE=<name> [GRATE_ARGS='...'] [RUN=folder | TESTFILES=path/to/test.c]"; \
+		echo "   or: make test-grate GRATE_PREFIX='<raw chain>' [RUN=...]"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make test-grate GRATE=ipc-grate"; \
+		echo "  make test-grate GRATE=chroot-grate GRATE_ARGS=\"--chroot-dir /tmp\""; \
+		echo "  make test-grate GRATE=ipc-grate RUN=process_tests"; \
+		echo "  make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c"; \
+		echo "  make test-grate GRATE_PREFIX=\"grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm\""; \
+		echo ""; \
+		echo "Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>"; \
+		exit 1; \
+	fi
+	@if [ -n "$(GRATE)" ] && [ -n "$(GRATE_PREFIX)" ]; then \
+		echo "GRATE and GRATE_PREFIX are mutually exclusive"; exit 1; \
+	fi
+	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	python3 ./scripts/harnesses/wasmtestreport.py \
+		--allow-pre-compiled \
+		$(if $(GRATE),--grate grates/$(GRATE).cwasm) \
+		$(if $(GRATE_ARGS),--grate-args "$(GRATE_ARGS)") \
+		$(if $(GRATE_PREFIX),--grate-prefix "$(GRATE_PREFIX)") \
+		$(if $(TIMEOUT),--timeout $(TIMEOUT)) \
+		$(if $(TESTFILES),--testfiles $(TESTFILES)) \
+		$(if $(RUN),--run $(RUN))
+
 .PHONY: md_generation
 OUT ?= .
 REPORT ?= report.html
@@ -148,12 +231,17 @@ md_generation:
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
 	cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
-	rustfmt --check src/fdtables/src/muthashmaxglobal.rs \
-	    src/fdtables/src/vanillaglobal.rs \
-	    src/fdtables/src/dashmapvecglobal.rs
+	rustfmt --check src/fdtables/src/dashmaparrayglobal.rs \
+	    src/fdtables/src/dashmapvecglobal.rs \
+	    src/fdtables/src/muthashmaxglobal.rs \
+	    src/fdtables/src/vanillaglobal.rs
+	# Note: --all-features can't be used here because it enables every
+	# fdtables-* impl simultaneously, which trips the fdtables impl-mutex
+	# compile_error guard. Enumerate the non-fdtables features explicitly
+	# and pin to the default fdtables impl.
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
-	    --all-features \
+	    --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
 	    --keep-going \
 	    -- \
 	    -A warnings \
@@ -164,9 +252,10 @@ lint:
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
 	cargo fmt --all --manifest-path src/lind-boot/Cargo.toml
-	rustfmt src/fdtables/src/muthashmaxglobal.rs \
-	    src/fdtables/src/vanillaglobal.rs \
-	    src/fdtables/src/dashmapvecglobal.rs
+	rustfmt src/fdtables/src/dashmaparrayglobal.rs \
+	    src/fdtables/src/dashmapvecglobal.rs \
+	    src/fdtables/src/muthashmaxglobal.rs \
+	    src/fdtables/src/vanillaglobal.rs
  
 
 .PHONY: docs-serve

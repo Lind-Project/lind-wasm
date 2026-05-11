@@ -24,6 +24,32 @@ use wasmtime_lind_utils::LindGOT;
 
 use super::{InstanceId, InstantiateType};
 
+/// Returns true if `name` is a module-internal symbol that must not be exposed
+/// through cross-module linking or GOT entries.
+pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
+    matches!(
+        name,
+        // per-module state — not shareable
+        "__stack_pointer"
+        | "__tls_base"
+        | "memory"
+        // constructor / relocation helpers — module-private
+        | "__wasm_call_ctors"
+        | "__wasm_apply_data_relocs"
+        | "__wasm_apply_global_relocs"
+        | "__wasm_apply_tls_relocs"
+        | "__wasm_init_tls"
+        // asyncify runtime — module-private
+        | "asyncify_start_unwind"
+        | "asyncify_stop_unwind"
+        | "asyncify_start_rewind"
+        | "asyncify_stop_rewind"
+        | "asyncify_get_state"
+        // lind-specific
+        | "__get_aligned_tls_size"
+    )
+}
+
 /// Structure used to link wasm modules/instances together.
 ///
 /// This structure is used to assist in instantiating a [`Module`]. A [`Linker`]
@@ -944,43 +970,23 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module_name: &str,
         instance: Instance,
+        skiplist: Vec<&str>,
     ) -> Result<&mut Self> {
         let mut store = store.as_context_mut();
         let exports = instance
             .exports(&mut store)
             .filter_map(|e| {
-                (if module_name == "env"
-                    && match e.name() {
-                        // stack pointer and tls base are per-module exclusive and should not be exposed to child module
-                        "__stack_pointer"
-                        | "__tls_base"
-                        // constructor functions, which is module exclusive and should not be exposed to child module
-                        | "__wasm_call_ctors"
-                        // those symbols are used internally by wasmtime and shouldn't be exposed to the child module
-                        | "__wasm_apply_data_relocs"
-                        | "__wasm_apply_global_relocs"
-                        | "__wasm_apply_tls_relocs"
-                        | "__wasm_init_tls"
-                        // asyncify symbols
-                        | "asyncify_start_unwind"
-                        | "asyncify_stop_unwind"
-                        | "asyncify_start_rewind"
-                        | "asyncify_stop_rewind"
-                        | "asyncify_get_state"
-                        // lind custom symbols
-                        | "__get_aligned_tls_size" => true,
-                        // fpcast-emu exports, which shouldn't linked directly
-                        | s if s.starts_with(FPCAST_FUNC_SIGNATURE) => true,
-                        _ => false,
-                    }
-                {
+                let name = e.name();
+                let should_skip = module_name == "env"
+                    && (skiplist.contains(&name)
+                        || is_dylink_internal_symbol(name)
+                        || name.starts_with(FPCAST_FUNC_SIGNATURE));
+
+                if should_skip {
                     None
                 } else {
-                    Some((
-                        self.import_key(module_name, Some(e.name())),
-                        e.into_extern(),
-                    ))
-                })
+                    Some((self.import_key(module_name, Some(name)), e.into_extern()))
+                }
             })
             .collect::<Vec<_>>();
         for (key, export) in exports {
@@ -1272,7 +1278,7 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                self.instance_dylink(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance, vec![])
             }
         }
     }
@@ -1368,7 +1374,7 @@ impl<T> Linker<T> {
                     }
                 }
 
-                self.instance_dylink(store, module_name, instance)
+                self.instance_dylink(store, module_name, instance, vec![])
             }
         }
     }
@@ -1469,6 +1475,9 @@ impl<T> Linker<T> {
                 let mut globals = vec![];
                 for export in instance.exports(&mut store) {
                     let name = export.name().to_owned();
+                    if is_dylink_internal_symbol(&name) {
+                        continue;
+                    }
                     match export.into_extern() {
                         Extern::Func(func) => {
                             funcs.push((name, func));
@@ -1484,17 +1493,12 @@ impl<T> Linker<T> {
                     // skip updating GOT only if fpcast is enabled
                     // and the function is NOT a fpcast function
                     let should_skip = if fpcast_enabled {
-                        if name.starts_with(FPCAST_FUNC_SIGNATURE) {
-                            false
-                        } else {
-                            true
-                        }
+                        !name.starts_with(FPCAST_FUNC_SIGNATURE)
                     } else {
                         false
                     };
 
                     if !should_skip {
-                        // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
                         let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)))?;
 
                         let final_name = {
@@ -1506,8 +1510,8 @@ impl<T> Linker<T> {
                             }
                         };
 
-                        // update GOT entry
-                        if got.update_entry_if_unresolved(&final_name, index) {
+                        // Cache the resolved table index; also updates the GOT cell if it exists.
+                        if got.cache_symbol(final_name, index) {
                             #[cfg(feature = "debug-dylink")]
                             println!("[debug] update GOT.func.{} to {}", final_name, index);
                         }
@@ -1517,23 +1521,32 @@ impl<T> Linker<T> {
                     }
                 }
                 for (name, global) in globals {
-                    // Only relocate globals that are actually registered in the GOT.
-                    // Applying memory_base to an unrelated exported global would overflow.
-                    if !got.has_entry(&name) {
-                        continue;
-                    }
-                    // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
                     let val = global.get(&mut store);
+                    // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
+                    let Some(raw) = val.i32() else {
+                        eprintln!("[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32", name, val);
+                        continue;
+                    };
                     // relocate the variable
-                    let val = val.i32().unwrap() as u32 + memory_base;
-                    // append the symbol into mappings
-                    symbol_map.add(name.clone(), val);
-                    // update GOT entry
-                    if got.update_entry_if_unresolved(&name, val) {
+                    let val = match (raw as u32).checked_add(memory_base) {
+                        Some(val) => val,
+                        None => {
+                            eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                            continue;
+                        }
+                    };
+                    // Cache the resolved address; also updates the GOT cell if it already exists.
+                    if got.cache_symbol(&name, val) {
                         #[cfg(feature = "debug-dylink")]
                         println!("[debug] update GOT.mem.{} to {}", name, val);
                     }
+                    // Only expose as dlsym-resolvable if it's a known GOT data symbol.
+                    if got.has_entry(&name) {
+                        symbol_map.add(name.clone(), val);
+                    }
                 }
+
+                got.warning_undefined();
 
                 let is_local = symbol_map.is_local();
 
@@ -1550,7 +1563,7 @@ impl<T> Linker<T> {
 
                 if !is_local {
                     // only attach library symbol to Linker if it is global scope
-                    self.instance_dylink(store, module_name, instance);
+                    self.instance_dylink(store, module_name, instance, vec![]);
                 }
 
                 Ok(handler)

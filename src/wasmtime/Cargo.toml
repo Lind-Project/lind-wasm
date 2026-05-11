@@ -234,7 +234,7 @@ test-programs-artifacts = { path = 'crates/test-programs/artifacts' }
 threei = { path = "crates/threei" }
 rawposix = { path = "crates/rawposix" }
 typemap = { path = "crates/typemap", default-features = false }
-fdtables = { path = "crates/fdtables" }
+fdtables = { path = "crates/fdtables", default-features = false }
 sysdefs = { path = "crates/sysdefs" }
 cage = { path = "crates/cage" }
 

@@ -43,7 +43,20 @@ pub fn signal_handler<
         // Don't call lind_thread_exit here — it's deferred to exit_call's
         // OnCalledAction so the epoch_handler entry stays until asyncify
         // unwind completes and any grate dispatch has fully returned.
-        ctx.exit_call(caller, 0, 0);
+        //
+        // Use the cage's recorded exit status so that exit_group(N) from any
+        // thread (e.g. faulthandler calling _exit(1)) propagates the right
+        // code to the OS-level process exit.  Default to 0 when the cage is
+        // already gone (late wakeup after cage_finalize).
+        let cage_opt = cage::get_cage(cageid);
+        let status_opt = cage_opt.as_ref().and_then(|c| *c.final_exit_status.read());
+        let exit_code = status_opt
+            .map(|st| match st {
+                cage::ExitStatus::Exited(code) => code,
+                cage::ExitStatus::Signaled(_, _) => 1,
+            })
+            .unwrap_or(0);
+        ctx.exit_call(caller, exit_code, 0);
         return 0;
     }
 
@@ -138,8 +151,7 @@ pub fn signal_handler<
                 signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
             // print errors if any when running the signal handler
             if let Err(err) = invoke_res {
-                let e = wasi_common::maybe_exit_on_error(err);
-                eprintln!("Error: {:?}", e);
+                eprintln!("Error: {:?}", err);
                 // if we encountered any error when executing the signal handler, we should terminate the cage
                 cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
                 if let Some(c) = cage::get_cage(cageid) {

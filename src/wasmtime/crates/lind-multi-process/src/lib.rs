@@ -49,17 +49,21 @@ const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 
-const UNWIND_METADATA_SIZE: u64 = 16;
+// Two u32 fields: buf[0] = write/read position, buf[4] = end limit.
+// Binaryen's asyncify uses 32-bit pointers regardless of host word size.
+const UNWIND_METADATA_SIZE: u64 = 8;
 
 // Define the trait with the required method
 pub trait LindHost<T, U> {
     fn get_ctx(&self) -> LindCtx<T, U>;
+    fn get_ctx_mut(&mut self) -> &mut LindCtx<T, U>;
 }
 
 // Closures are abused in this file, mainly because the architecture of wasmtime itself does not support
 // the sub modules to directly interact with the top level runtime engine. But multi-processing, especially exec syscall,
 // would heavily require to do so. So the only convenient way to break the rule and communicate with the
 // top level runtime engine is abusing closures.
+#[derive(Clone)]
 pub struct LindCtx<T, U> {
     // linker used by the module
     pub linker: Option<Linker<T>>,
@@ -87,11 +91,38 @@ pub struct LindCtx<T, U> {
     // from lind-boot, used for exec call
     lindboot_cli: U,
 
+    // Optional parent-visible return value for a pending `clone`/`fork`.
+    //
+    // `fork` is special in the Lind/Wasmtime runtime because the guest-visible
+    // return value is not necessarily the immediate return value of the first
+    // hostcall. The logical fork operation is split by Asyncify:
+    //
+    // 1. the first normal `clone` hostcall performs the real fork setup and may
+    //    return through an interposed grate;
+    // 2. Wasmtime unwinds and later rewinds the guest stack;
+    // 3. the guest's actual `fork()` call site receives the value returned during
+    //    the rewind replay.
+    //
+    // This field is used to carry a grate-defined "visible" fork return value
+    // from the normal hostcall path to the later parent-side rewind replay path.
+    // The real child cage id is still used internally for RawPOSIX/Wasmtime
+    // bookkeeping; this value only affects what the parent guest observes as the
+    // return value of `fork()`.
+    //
+    // This must be shared state rather than a plain `Option<i32>` because the
+    // host/Lind context can be cloned during fork/rewind setup. Using an
+    // `Arc<Mutex<_>>` ensures that the normal path and the rewind replay path
+    // observe the same pending slot.
+    pending_clone_visible_retval: Arc<Mutex<Option<i32>>>,
+
+    // host thread stack size for spawned cage/thread processes
+    pub thread_stack_size: usize,
+
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
 
-    // fork the host
-    fork_host: Arc<dyn Fn(&T) -> T + Send + Sync + 'static>,
+    // fork the host; is_thread=true for thread creation, false for process fork
+    fork_host: Arc<dyn Fn(&T, bool) -> T + Send + Sync + 'static>,
 
     // exec the host
     exec_host: Arc<
@@ -133,8 +164,9 @@ impl<
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
         cageid: i32,
+        thread_stack_size: usize,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
-        fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
+        fork_host: impl Fn(&T, bool) -> T + Send + Sync + 'static,
         exec: impl Fn(
                 &U,
                 &str,
@@ -168,6 +200,8 @@ impl<
             next_threadid,
             lind_manager: lind_manager.clone(),
             lindboot_cli,
+            pending_clone_visible_retval: Arc::new(Mutex::new(None)),
+            thread_stack_size,
             get_cx,
             fork_host,
             exec_host,
@@ -317,14 +351,17 @@ impl<
         // |         .....          | |
         // -------------------------- <----- stack high
         unsafe {
-            // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            // Write buf[0] (start) and buf[4] (end) as u32 to match the 32-bit
+            // asyncify data structure.  A u64 write would zero buf[4] (the high
+            // word), making start > end and firing the bounds-check ud2 every time.
+            *(unwind_data_start_sys as *mut u32) =
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         let get_cx = self.get_cx.clone();
         // retrieve the child host
-        let mut child_host = (self.fork_host)(caller.data());
+        let mut child_host = (self.fork_host)(caller.data(), false);
 
         let mut snapshot = {
             let mut parent_host = caller.data_mut();
@@ -352,6 +389,7 @@ impl<
         let _cloned_address = address as u64;
 
         let parent_cageid = self.cageid;
+        let thread_stack_size = self.thread_stack_size;
 
         // use the same engine for parent and child
         let engine = main_module.engine().clone();
@@ -377,7 +415,9 @@ impl<
             let barrier = Arc::new(Barrier::new(2));
             let barrier_clone = Arc::clone(&barrier);
 
-            let builder = thread::Builder::new().name(format!("lind-fork-{}", child_cageid));
+            let builder = thread::Builder::new()
+                .name(format!("lind-fork-{}", child_cageid))
+                .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
                     // create a new instance
@@ -394,13 +434,16 @@ impl<
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
                     let dlopen_modules = child_ctx.dlopen_modules.clone();
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     let mut child_got = if dylink_enabled {
-                        Some(LindGOT::new())
+                        let got = child_ctx.got_table.as_ref().unwrap();
+                        let got_guard = got.lock().unwrap();
+                        Some(got_guard.clone_with_cache())
                     } else {
                         None
                     };
+
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
@@ -543,7 +586,18 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
-                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+                        let fpcast_enabled = engine.fpcast_enabled();
+                        instance.apply_GOT_relocs(
+                            &mut store,
+                            None,
+                            &child_table,
+                            None,
+                            fpcast_enabled,
+                        );
+
+                        linker
+                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
                             // Read dylink metadata for this dlopen'd module.
@@ -731,8 +785,7 @@ impl<
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            let e = wasi_common::maybe_exit_on_error(err);
-                            eprintln!("Child Error: {:?}", e);
+                            eprintln!("Child Error: {:?}", err);
                             cage::cage_record_exit_status(
                                 child_cageid,
                                 cage::ExitStatus::Exited(1),
@@ -832,10 +885,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) =
-                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(parent_unwind_data_start_sys as *mut u32) =
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((parent_unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // set up child_tid
@@ -871,6 +923,9 @@ impl<
 
         let get_cx = self.get_cx.clone();
 
+        // retrieve the child host
+        let mut child_host = (self.fork_host)(caller.data(), true);
+
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
         let mut snapshot = {
             let mut parent_host = caller.data_mut();
@@ -883,9 +938,6 @@ impl<
 
             snapshot
         };
-
-        // retrieve the child host
-        let mut child_host = caller.data().clone();
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
 
@@ -906,6 +958,7 @@ impl<
 
         // get current cageid, child should have the same cageid
         let child_cageid = self.cageid;
+        let thread_stack_size = self.thread_stack_size;
 
         // use the same engine for parent and child
         let engine = main_module.engine().clone();
@@ -913,9 +966,9 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         store.set_on_called(Box::new(move |mut store| {
-            // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
-            // end address of the unwind_data
-            let parent_unwind_data_end_usr = unsafe { *(parent_unwind_data_start_sys as *mut u64) };
+            // once unwind is finished, buf[0] (u32) holds the final write position
+            let parent_unwind_data_end_usr =
+                unsafe { *(parent_unwind_data_start_sys as *mut u32) } as u64;
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -941,13 +994,18 @@ impl<
             // so a seperate copy is needed for child. The unwind context also contains some absolute address that is relative to parent
             // hence we also need to translate it to be relative to child's stack
             unsafe {
-                // first 4 bytes in unwind data represent the address of the end of the unwind data
-                // we also need to change this for child
-                *(child_unwind_data_start_sys as *mut u64) =
-                    child_unwind_data_start_usr + rewind_total_size as u64;
+                // buf[0] (u32): backward read starts at the end of the copied data.
+                // buf[4] (u32): set equal to buf[0] so the bounds check (start > end)
+                //               does not fire on asyncify_start_rewind.
+                let child_rewind_end =
+                    (child_unwind_data_start_usr + rewind_total_size as u64) as u32;
+                *(child_unwind_data_start_sys as *mut u32) = child_rewind_end;
+                *((child_unwind_data_start_sys as usize + 4) as *mut u32) = child_rewind_end;
             }
 
-            let builder = thread::Builder::new().name(format!("lind-thread-{}", next_tid));
+            let builder = thread::Builder::new()
+                .name(format!("lind-thread-{}", next_tid))
+                .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
                     // create a new instance
@@ -1098,7 +1156,18 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
-                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+                        let fpcast_enabled = engine.fpcast_enabled();
+                        instance.apply_GOT_relocs(
+                            &mut store,
+                            None,
+                            &child_table,
+                            None,
+                            fpcast_enabled,
+                        );
+
+                        linker
+                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
                             let dylink_info = module.dylink_meminfo();
@@ -1166,10 +1235,9 @@ impl<
                     // we might also want to perserve the offset of current stack pointer to stack bottom
                     // not very sure if this is required, but just keep everything the same from parent seems to be good
                     let offset = parent_stack_high_usr as u32 - stack_pointer;
-                    let stack_pointer_setter = instance
-                        .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
+                    instance
+                        .set_stack_pointer(&mut store, (stack_addr - offset) as i32)
                         .unwrap();
-                    let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
                     // TODO: set up __stack_low and __stack_high
                     // TODO: should share the imported wasm global
 
@@ -1266,8 +1334,7 @@ impl<
 
                     // print errors if any when running the thread
                     if let Err(err) = invoke_res {
-                        let e = wasi_common::maybe_exit_on_error(err);
-                        eprintln!("Error: {:?}", e);
+                        eprintln!("Error: {:?}", err);
                         return 0;
                     }
 
@@ -1390,10 +1457,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) =
-                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(parent_unwind_data_start_sys as *mut u32) =
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((parent_unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1450,7 +1516,26 @@ impl<
                 &environs,
             );
 
-            return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
+            // If the exec'd module crashed (wasm trap, unreachable, etc.) rather
+            // than exiting cleanly, we must still finalize the cage so the parent's
+            // waitpid() unblocks.  Without this, the parent hangs forever because
+            // cage_finalize (which records the zombie and sends SIGCHLD) is never
+            // called.  Mirror the fork-crash cleanup path (see fork_call error
+            // handling) exactly.
+            if let Err(ref _e) = ret {
+                cage::cage_record_exit_status(cloned_cageid as u64, cage::ExitStatus::Exited(1));
+                if let Some(c) = cage::get_cage(cloned_cageid as u64) {
+                    c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                }
+                threei::EXITING_TABLE.insert(cloned_cageid as u64);
+                threei::handler_table::_rm_grate_from_handler(cloned_cageid as u64);
+                cage::signal::lind_thread_exit(cloned_cageid as u64, THREAD_START_ID as u64);
+                cage::cage_finalize(cloned_cageid as u64);
+                cloned_lind_manager.decrement();
+                return Ok(OnCalledAction::Finish(vec![Val::I32(1)]));
+            }
+
+            return Ok(OnCalledAction::Finish(ret.unwrap()));
         }));
 
         // set asyncify state to unwind
@@ -1493,9 +1578,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(parent_unwind_data_start_sys as *mut u32) =
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((parent_unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1568,9 +1653,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(unwind_data_start_sys as *mut u32) =
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1587,9 +1672,8 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         store.set_on_called(Box::new(move |mut store| {
-            // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
-            // end address of the unwind_data
-            let unwind_data_end_usr = unsafe { *(unwind_data_start_sys as *mut u64) };
+            // once unwind is finished, buf[0] (u32) holds the final write position
+            let unwind_data_end_usr = unsafe { *(unwind_data_start_sys as *mut u32) } as u64;
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -1647,9 +1731,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(unwind_data_start_sys as *mut u32) =
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1743,9 +1827,16 @@ impl<
 
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
+        let cloned_got = if let Some(got) = self.got_table.as_ref() {
+            let got_guard = got.lock().unwrap();
+            Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
+        } else {
+            None
+        };
+
         let forked_ctx = Self {
-            linker: None,    // Linker is explicitly set up by the caller
-            got_table: None, // new process should use a new GOT
+            linker: None,          // Linker is explicitly set up by the caller
+            got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
@@ -1753,6 +1844,8 @@ impl<
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
@@ -1763,9 +1856,16 @@ impl<
 
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
+        let cloned_got = if let Some(got) = self.got_table.as_ref() {
+            let got_guard = got.lock().unwrap();
+            Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
+        } else {
+            None
+        };
+
         let forked_ctx = Self {
-            linker: None,    // Linker is explicitly set up by the caller
-            got_table: None, // threads within a process should use same GOT
+            linker: None,          // Linker is explicitly set up by the caller
+            got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: self.cageid,
@@ -1773,22 +1873,14 @@ impl<
             next_threadid: self.next_threadid.clone(),
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
         };
 
         return forked_ctx;
-    }
-}
-
-impl<T, U> Clone for LindCtx<T, U>
-where
-    T: Clone + Send + Sync + 'static,
-    U: Clone + Send + Sync + 'static,
-{
-    fn clone(&self) -> Self {
-        self.fork_thread()
     }
 }
 
@@ -2330,4 +2422,63 @@ fn has_correct_signature(module: &Module) -> bool {
     }
 
     true
+}
+
+/// Stores a pending parent-visible return value for the current logical
+/// `clone`/`fork`.
+///
+/// This should be called on the first, non-rewind execution path after the
+/// syscall/interposition layer has produced the value that should be exposed
+/// to the parent guest. For example, a grate may perform the real fork but
+/// return a spoofed value that should later be returned from the guest's
+/// `fork()` call site.
+///
+/// The value is not returned to the guest immediately here. Instead, it is
+/// saved until the parent-side Asyncify rewind replay reaches the same
+/// `make-syscall` import again. At that point, `take_pending_clone_visible_retval`
+/// consumes this value and uses it to override the positive real child cage id.
+///
+/// The slot is protected by a mutex and stored behind an `Arc` so that it
+/// survives `HostCtx`/`LindCtx` cloning across fork setup.
+pub fn set_pending_clone_visible_retval<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+    retval: i32,
+) -> Result<()> {
+    let ctx = caller.data_mut().get_ctx_mut();
+
+    let mut slot = ctx.pending_clone_visible_retval.lock().unwrap();
+
+    *slot = Some(retval);
+
+    Ok(())
+}
+
+/// Consumes the pending parent-visible `clone`/`fork` return value, if any.
+///
+/// This is intended to be called from the `CLONE_SYSCALL` rewind replay path,
+/// after `catch_rewind` returns a positive `rewind_res`. A positive rewind
+/// result means we are replaying the parent side of `fork`, where the default
+/// return value would be the real child cage id.
+///
+/// If a pending visible value exists, this function returns it and clears the
+/// slot, so the override applies to exactly one logical fork. If no pending
+/// value exists, the caller should fall back to the original `rewind_res`.
+///
+/// Child-side fork replay should not use this override: the child must still
+/// observe `fork()` returning 0.
+pub fn take_pending_clone_visible_retval<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+) -> Option<i32> {
+    let ctx = caller.data_mut().get_ctx_mut();
+
+    let mut slot = ctx.pending_clone_visible_retval.lock().unwrap();
+    let ret = slot.take();
+
+    ret
 }

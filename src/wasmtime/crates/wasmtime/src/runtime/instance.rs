@@ -1,4 +1,4 @@
-use crate::linker::{Definition, DefinitionType};
+use crate::linker::{is_dylink_internal_symbol, Definition, DefinitionType};
 use crate::runtime::vm::{
     Imports, InstanceAllocationRequest, ModuleRuntimeInfo, StorePtr, VMFuncRef, VMFunctionImport,
     VMGlobalImport, VMMemoryImport, VMOpaqueContext, VMTableImport,
@@ -916,6 +916,26 @@ impl Instance {
         return Err(());
     }
 
+    /// Updates the exported `__stack_pointer` global for this instance.
+    /// Returns `Err(())` if `__stack_pointer` is not exported, is not a global,
+    /// or cannot be updated.
+    pub fn set_stack_pointer(&self, mut store: impl AsContextMut, sp: i32) -> Result<(), ()> {
+        if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_pointer") {
+            match sp_extern {
+                Extern::Global(sp_global) => {
+                    match sp_global.set(store.as_context_mut(), Val::I32(sp)) {
+                        Ok(()) => return Ok(()),
+                        Err(_) => return Err(()),
+                    }
+                }
+                _ => {
+                    return Err(());
+                }
+            }
+        }
+        Err(())
+    }
+
     pub fn get_stack_low(&self, mut store: impl AsContextMut) -> Result<i32, ()> {
         if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_low") {
             match sp_extern {
@@ -1175,6 +1195,9 @@ impl Instance {
         let mut globals = vec![];
         for export in self.exports(&mut store) {
             let name = export.name().to_owned();
+            if is_dylink_internal_symbol(&name) {
+                continue;
+            }
             match export.into_extern() {
                 Extern::Func(func) => {
                     funcs.push((name, func));
@@ -1216,9 +1239,9 @@ impl Instance {
                         }
                     };
 
-                    // update GOT entry
+                    // Cache the resolved table index; also updates the GOT cell if it exists.
                     let got_inner = got.as_ref().unwrap();
-                    if got_inner.update_entry_if_unresolved(&final_name, index) {
+                    if got_inner.cache_symbol(final_name, index) {
                         #[cfg(feature = "debug-dylink")]
                         println!("[debug] update GOT.func.{} to {}", final_name, index);
                     }
@@ -1229,21 +1252,28 @@ impl Instance {
         // Patch GOT memory entries for exported globals.
         // The exported global value is treated as a module-relative offset; we relocate it by
         // adding the resolved shared-memory base, producing an absolute address in Lind.
-        // Again, only update unresolved slots to preserve load-order precedence.
+        // We cache every i32 global unconditionally so that a later-loaded consumer (dlopen)
+        // whose GOT cell is created after this module was loaded can still be resolved.
         if need_update_got {
             let got_inner = got.as_ref().unwrap();
             let memory_base = memory_base.unwrap();
             for (name, global) in globals {
-                // Only relocate globals that are actually registered in the GOT.
-                // Applying memory_base to an unrelated exported global would overflow.
-                if !got_inner.has_entry(&name) {
-                    continue;
-                }
                 let val = global.get(&mut store);
+                // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
+                let Some(raw) = val.i32() else {
+                    eprintln!("[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32", name, val);
+                    continue;
+                };
                 // relocate the variable
-                let val = val.i32().unwrap() as u32 + memory_base;
-                // update GOT entry
-                if got_inner.update_entry_if_unresolved(&name, val) {
+                let val = match (raw as u32).checked_add(memory_base) {
+                    Some(val) => val,
+                    None => {
+                        eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                        continue;
+                    }
+                };
+                // Cache the resolved address; also updates the GOT cell if it already exists.
+                if got_inner.cache_symbol(&name, val) {
                     #[cfg(feature = "debug-dylink")]
                     println!("[debug] update GOT.mem.{} to {}", name, val);
                 }
