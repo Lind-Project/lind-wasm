@@ -893,6 +893,17 @@ pub extern "C" fn mmap_syscall(
     let mut useraddr: u32;
     let sysaddr: usize;
 
+    eprintln!(
+        "[mmap_syscall] cageid={} addr_arg={:#x} addr_cageid={:#x} flags={:#x} \
+         MAP_FIXED_bit={} grate_supplied={}",
+        cageid,
+        addr_arg,
+        addr_cageid,
+        flags,
+        flags & MAP_FIXED as i32,
+        grate_supplied
+    );
+
     if flags & MAP_FIXED as i32 == 0 {
         // No fixed address — runtime picks via the calling cage's vmmap.
         // Use addr_arg as a hint (translated via the flag-aware helper if
