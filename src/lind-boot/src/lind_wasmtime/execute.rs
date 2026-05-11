@@ -5,7 +5,9 @@ use crate::lind_wasmtime::host::{
 };
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
-use cage::signal::{lind_signal_init, signal_may_trigger};
+use cage::signal::{
+    epoch_dlopen_trigger_others, has_other_threads, lind_signal_init, signal_may_trigger,
+};
 use cfg_if::cfg_if;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
@@ -491,10 +493,6 @@ fn attach_api(
                     let linker = lind_ctx.linker.clone().unwrap();
                     let got_table = lind_ctx.got_table.clone().unwrap();
 
-                    if lind_ctx.had_threads() {
-                        lind_debug_panic("dlopen within threads is currently not supported!");
-                    }
-
                     load_library_module(caller, linker, got_table, cageid, library_name, mode)
                 });
             Some(dynamic_loader)
@@ -832,7 +830,7 @@ fn load_library_module(
     // the library's function references can be relocated correctly.
     //
     // The GOT is used to patch symbol addresses/indices after instantiation.
-    let ret = match linker.module_with_caller(
+    let (ret, memory_base, symbol_map_clone) = match linker.module_with_caller(
         &mut main_module,
         cageid as u64,
         library_name,
@@ -842,17 +840,35 @@ fn load_library_module(
         symbol_map,
         library_name.to_string(),
     ) {
-        Ok(handle) => handle as i32,
-        Err(e) => {
+        Ok((handle, memory_base, symbol_map_clone)) => {
+            (handle as i32, memory_base, symbol_map_clone)
+        }
+        Err(_) => {
             #[cfg(feature = "debug-dylink")]
-            println!("failed to process library `{}`: {:?}", library_name, e);
-            -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
+            println!("failed to process library `{}`", library_name);
+            return -(DylinkErrorCode::EINTERNAL as i32);
         }
     };
 
+    // Release the GOT lock before notifying workers.  Worker threads that receive
+    // EPOCH_DLOPEN will call handle_dlopen_replay, which also acquires got_arc.
+    // Dropping got_guard here ensures they can proceed without contention.
+    drop(got_guard);
+
+    let caller_tid = main_module.data().lind_fork_ctx.as_ref().unwrap().tid;
     let lind_ctx = main_module.data_mut().lind_fork_ctx.as_mut().unwrap();
     lind_ctx.attach_linker(linker);
-    lind_ctx.append_module(library_name.to_string(), lib_module);
+    lind_ctx.append_module(
+        library_name.to_string(),
+        lib_module,
+        memory_base,
+        symbol_map_clone,
+    );
+
+    // Fire-and-forget: notify other threads in this cage to replay the new library.
+    if has_other_threads(cageid as u64, caller_tid) {
+        epoch_dlopen_trigger_others(cageid as u64, caller_tid);
+    }
 
     ret
 }

@@ -14,7 +14,7 @@ use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
-use wasmtime_lind_utils::{LindCageManager, LindGOT};
+use wasmtime_lind_utils::{LindCageManager, LindGOT, symbol_table::SymbolMap};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -73,7 +73,16 @@ pub struct LindCtx<T, U> {
     // the module associated with the ctx
     modules: Vec<(String, String, Module)>,
 
-    dlopen_modules: Vec<(String, String, Module)>,
+    // Dynamically loaded modules from dlopen(), shared across threads of the same cage.
+    // Per-process (fork): child gets its own Arc with a snapshot of the parent's list.
+    // Per-thread (pthread_create): all threads share the same Arc so that cross-thread
+    // dlopen visibility works via the epoch-based replay mechanism.
+    // Tuple: (module_name, path, module, memory_base, symbol_map)
+    dlopen_modules: Arc<Mutex<Vec<(String, String, Module, i32, SymbolMap)>>>,
+
+    // Per-thread cursor into dlopen_modules. Entries from this index onward have not
+    // yet been replayed into this thread's store.
+    dlopen_replay_index: usize,
 
     // cage id
     pub cageid: i32,
@@ -191,7 +200,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             linker: Some(linker),
             got_table,
             modules: modules.clone(),
-            dlopen_modules: vec![],
+            dlopen_modules: Arc::new(Mutex::new(vec![])),
+            dlopen_replay_index: 0,
             cageid,
             tid,
             next_threadid,
@@ -219,12 +229,34 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         }
     }
 
-    // Record a dynamically loaded module (from dlopen) into this cage's module
-    // list. During fork() and pthread_create(), every entry in dlopen_modules
-    // is re-instantiated into the child/thread store so that the child inherits
-    // access to all libraries the parent opened at runtime.
-    pub fn append_module(&mut self, path: String, module: Module) {
-        self.dlopen_modules.push(("env".to_string(), path, module));
+    // Record a dynamically loaded module (from dlopen) into this cage's shared module list.
+    // During fork() and pthread_create(), entries are replayed into child/thread stores.
+    pub fn append_module(
+        &mut self,
+        path: String,
+        module: Module,
+        memory_base: i32,
+        symbol_map: SymbolMap,
+    ) {
+        let mut list = self.dlopen_modules.lock().unwrap();
+        list.push(("env".to_string(), path, module, memory_base, symbol_map));
+    }
+
+    // Returns true if this thread has pending dlopen entries to replay.
+    pub fn has_pending_dlopen_replay(&self) -> bool {
+        let list = self.dlopen_modules.lock().unwrap();
+        self.dlopen_replay_index < list.len()
+    }
+
+    // Snapshot the entries that have not yet been replayed into this thread's store.
+    pub fn pending_dlopen_entries(&self) -> Vec<(String, String, Module, i32, SymbolMap)> {
+        let list = self.dlopen_modules.lock().unwrap();
+        list[self.dlopen_replay_index..].to_vec()
+    }
+
+    // Advance the per-thread replay cursor after successful replay.
+    pub fn advance_dlopen_replay(&mut self, count: usize) {
+        self.dlopen_replay_index += count;
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -431,7 +463,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     let lind_manager = child_ctx.lind_manager.clone();
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
-                    let dlopen_modules = child_ctx.dlopen_modules.clone();
+                    let dlopen_modules = {
+                        let list = child_ctx.dlopen_modules.lock().unwrap();
+                        list.clone()
+                    };
 
                     let mut child_got = if dylink_enabled {
                         let got = child_ctx.got_table.as_ref().unwrap();
@@ -598,7 +633,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
                             .unwrap();
 
-                        for (name, _path, module) in dlopen_modules.iter() {
+                        for (name, _path, module, _memory_base, _symbol_map) in
+                            dlopen_modules.iter()
+                        {
                             // Read dylink metadata for this dlopen'd module.
                             // This contains the module's declared table/memory requirements.
                             let dylink_info = module.dylink_meminfo();
@@ -940,6 +977,19 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
 
+        // Snapshot dlopen_modules at the same point as global_snapshots so that
+        // memory_base_table (derived from global_snapshots) and dlopen_modules are
+        // consistent.  Reading dlopen_modules inside the spawned thread closure is
+        // racy: the main thread can call dlopen between pthread_create_call and when
+        // the Rust thread actually runs, causing memory_base_table to miss the new
+        // library's entry.
+        let dlopen_modules_snapshot = {
+            let mut parent_host = caller.data_mut();
+            let parent_ctx = get_cx(&mut parent_host);
+            let list = parent_ctx.dlopen_modules.lock().unwrap();
+            list.clone()
+        };
+
         // mark the start of unwind
         let _res =
             asyncify_start_unwind_func.call(&mut caller, parent_unwind_data_start_usr as i32);
@@ -1023,7 +1073,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
-                    let dlopen_modules = child_ctx.dlopen_modules.clone();
+                    // Use the snapshot taken before the asyncify unwind so that
+                    // memory_base_table and dlopen_modules are consistent.
+                    let dlopen_modules = dlopen_modules_snapshot;
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner)
                         .expect("failed to create store");
@@ -1170,7 +1222,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
                             .unwrap();
 
-                        for (name, _path, module) in dlopen_modules.iter() {
+                        for (name, _path, module, _memory_base, _symbol_map) in
+                            dlopen_modules.iter()
+                        {
                             let dylink_info = module.dylink_meminfo();
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;
@@ -1835,11 +1889,20 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             None
         };
 
+        // Child process gets its own independent copy of the dlopen list.
+        // replay_index starts at 0 because the child re-instantiates all libraries
+        // from scratch via the normal fork_call path.
+        let dlopen_snapshot = {
+            let list = self.dlopen_modules.lock().unwrap();
+            list.clone()
+        };
+
         let forked_ctx = Self {
             linker: None,          // Linker is explicitly set up by the caller
             got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
-            dlopen_modules: self.dlopen_modules.clone(),
+            dlopen_modules: Arc::new(Mutex::new(dlopen_snapshot)),
+            dlopen_replay_index: 0,
             cageid: 0,                                  // cageid is managed by lind-common
             tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
@@ -1864,11 +1927,21 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             None
         };
 
+        // New thread shares the same dlopen_modules Arc as the parent so it sees
+        // libraries opened after thread creation. replay_index starts at current
+        // length because the thread instantiation loop (pthread_create_call) will
+        // replay all existing entries; only future entries need epoch-based replay.
+        let current_len = {
+            let list = self.dlopen_modules.lock().unwrap();
+            list.len()
+        };
+
         let forked_ctx = Self {
             linker: None,          // Linker is explicitly set up by the caller
             got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
-            dlopen_modules: self.dlopen_modules.clone(),
+            dlopen_modules: self.dlopen_modules.clone(), // shared Arc
+            dlopen_replay_index: current_len, // already caught up via pthread_create_call
             cageid: self.cageid,
             tid: self.tid,
             next_threadid: self.next_threadid.clone(),

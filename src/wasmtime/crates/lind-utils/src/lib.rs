@@ -164,8 +164,19 @@ impl LindGOT {
             }
             self.global_offset_table.insert(name, handler as u64);
         } else {
-            #[cfg(feature = "debug-dylink")]
-            println!("[debug] Warning: ignore duplicated GOT entry {}", name);
+            // Symbol already registered (e.g. main thread's handler is primary).
+            // This new handler belongs to a different thread's store (dlopen replay).
+            // Pre-fill it from the cache so the replaying thread's GOT cell is live.
+            if let Some(cached_val) = self.symbol_cache.get(&name) {
+                let val = *cached_val;
+                let cell = unsafe { &*(handler as *const AtomicU32) };
+                cell.store(val, Ordering::Release);
+                #[cfg(feature = "debug-dylink")]
+                println!(
+                    "[debug] pre-resolve duplicate GOT entry {} = {} from cache",
+                    name, val
+                );
+            }
         }
     }
 
