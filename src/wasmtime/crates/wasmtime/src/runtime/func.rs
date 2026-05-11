@@ -2392,6 +2392,21 @@ impl<T> Caller<'_, T> {
 
     /// Return the current size of the library's function table (table index 0).
     ///
+    /// Get the indirect function table (index 0) as a `Table` usable from host code.
+    ///
+    /// Tries the fast path via `get_export("__indirect_function_table")` first,
+    /// then falls back to reading the compiled table at index 0 directly.
+    /// In Lind's dylink model the imported `__indirect_function_table` is always
+    /// table 0, so the fallback is always correct.
+    pub fn get_function_table(&mut self) -> Option<crate::Table> {
+        if let Some(crate::Extern::Table(t)) = self.get_export("__indirect_function_table") {
+            return Some(t);
+        }
+        let export = self.caller.get_exported_table(TableIndex::from_u32(0));
+        // SAFETY: `export` is derived from the same store/vmctx as `self`.
+        Some(unsafe { crate::Table::from_wasmtime_table(export, &mut *self.store.0) })
+    }
+
     /// This directly accesses the underlying VM table structure and queries its size.
     ///
     /// SAFETY:

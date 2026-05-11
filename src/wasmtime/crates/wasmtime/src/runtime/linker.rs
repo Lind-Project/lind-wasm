@@ -1353,7 +1353,11 @@ impl<T> Linker<T> {
                 instance.apply_GOT_relocs(&mut store, None, table, None, fpcast_enabled)?;
 
                 // clone the wasm global for the child instance
-                instance.apply_global_snapshots(&mut store, snapshots);
+                // Skip when snapshots is empty (dlopen replay path — globals
+                // are already set by attach_memory_base/attach_table_base).
+                if !snapshots.is_empty() {
+                    instance.apply_global_snapshots(&mut store, snapshots);
+                }
 
                 if let ChildLibraryType::Thread(stack_addr) = child_type {
                     // if the child library is a thread, we need to initialize the TLS for the library
@@ -1396,7 +1400,7 @@ impl<T> Linker<T> {
         got: &LindGOT,
         mut symbol_map: SymbolMap,
         path: String,
-    ) -> Result<u64>
+    ) -> Result<(u64, i32, SymbolMap)>
     where
         T: 'static,
     {
@@ -1550,6 +1554,9 @@ impl<T> Linker<T> {
 
                 let is_local = symbol_map.is_local();
 
+                // Clone before consuming so callers can store it for cross-thread replay.
+                let symbol_map_clone = symbol_map.clone();
+
                 // append the symbol mapping of this library into the global lookup table
                 let handler = store.push_library_symbols(symbol_map).unwrap() as u64;
 
@@ -1566,7 +1573,7 @@ impl<T> Linker<T> {
                     self.instance_dylink(store, module_name, instance, vec![]);
                 }
 
-                Ok(handler)
+                Ok((handler, memory_base as i32, symbol_map_clone))
             }
         }
     }

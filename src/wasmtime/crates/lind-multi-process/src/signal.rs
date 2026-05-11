@@ -1,7 +1,93 @@
+use sysdefs::constants::lind_platform_const::MAIN_THREADID;
 use sysdefs::constants::{SIG_DFL, SIG_IGN};
-use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Ref};
 
 use crate::LindHost;
+
+// Replay any dlopen'd modules that the current thread has not yet instantiated.
+//
+// When thread A calls dlopen() while threads B/C are running, A appends the
+// library to the shared dlopen_modules list and fires EPOCH_DLOPEN on B and C.
+// The next time B/C enter signal_handler (either via EPOCH_DLOPEN or an
+// already-pending EPOCH_SIGNAL), this function catches them up.
+//
+// Design constraints:
+// - Snapshot the list and release the Mutex before calling into Wasm.
+// - ChildLibraryType::Process is used (no TLS allocation — known limitation).
+// - The cloned linker's bookkeeping changes are discarded after replay; actual
+//   store mutations (GOT patches, new instances) are persistent.
+fn handle_dlopen_replay<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+    cageid: u64,
+) {
+    let entries = caller.data().get_ctx().pending_dlopen_entries();
+    if entries.is_empty() {
+        return;
+    }
+
+    let mut table = match caller.get_function_table() {
+        Some(t) => t,
+        None => return,
+    };
+
+    let got_arc = caller.data().get_ctx().got_table.clone();
+
+    for (name, _path, module, memory_base, symbol_map) in &entries {
+        let dylink_info = match module.dylink_meminfo() {
+            Some(d) => d,
+            None => continue,
+        };
+
+        // Mirror the main-thread dlopen path (load_library_module): record the
+        // table size before the pre-grow, then grow by dylink_info.table_size.
+        // module_with_child → apply_GOT_relocs then appends one slot per
+        // exported function, producing the same absolute indices that the
+        // main-thread's grow_table_lib calls used.  The GOT globals in this
+        // thread are pre-filled by LindGOT::new_entry from the symbol_cache,
+        // so they point to the correct indices without needing a GOT update here.
+        let table_start = table.size(caller.as_context_mut()) as i32;
+        let _ = table.grow(
+            caller.as_context_mut(),
+            dylink_info.table_size,
+            Ref::Func(None),
+        );
+
+        let mut linker = match caller.data().get_ctx().linker.clone() {
+            Some(l) => l,
+            None => continue,
+        };
+        linker.allow_shadowing(true);
+
+        if let Some(ref got_arc) = got_arc {
+            let mut got_guard = got_arc.lock().unwrap();
+            let _ = linker.define_GOT_dispatcher(&mut *caller, module, &mut *got_guard);
+        }
+
+        let _ = linker.module_with_child(
+            &mut *caller,
+            cageid,
+            name,
+            module,
+            &mut table,
+            table_start,
+            *memory_base,
+            ChildLibraryType::Process,
+            &[],
+        );
+        linker.allow_shadowing(false);
+
+        // Register the library's symbols so dlsym works in this thread.
+        let _ = caller.push_library_symbols(symbol_map.clone());
+    }
+
+    caller
+        .data_mut()
+        .get_ctx_mut()
+        .advance_dlopen_replay(entries.len());
+}
 
 // handle all the epoch callback
 // this is where the wasm instance is directed when epoch is triggered
@@ -31,8 +117,9 @@ pub fn signal_handler<
     let host = caller.data().clone();
     let ctx = host.get_ctx();
     let cageid = ctx.cageid as u64;
+    let tid = ctx.tid;
 
-    if cage::signal::thread_check_killed(cageid, ctx.tid as u64) {
+    if cage::signal::thread_check_killed(cageid, tid as u64) {
         // If asyncify is already unwinding (e.g. exit_call was already
         // triggered by a prior thread-only exit via syscall 60), don't
         // call exit_call again — a double asyncify_start_unwind corrupts
@@ -57,6 +144,23 @@ pub fn signal_handler<
             })
             .unwrap_or(0);
         ctx.exit_call(caller, exit_code, 0);
+        return 0;
+    }
+
+    // Priority: dlopen replay.
+    // Fires regardless of whether EPOCH_DLOPEN or EPOCH_SIGNAL triggered this
+    // callback.  If a thread was already handling a signal when dlopen fired,
+    // both the replay and the signal are handled in this single callback.
+    if caller.data().get_ctx().has_pending_dlopen_replay() {
+        handle_dlopen_replay(caller, cageid);
+    }
+
+    // Non-main threads only handle killed (above) and dlopen replay.
+    // After replay, reset the thread's epoch and return.
+    if tid != MAIN_THREADID as i32 {
+        if !caller.data().get_ctx().has_pending_dlopen_replay() {
+            cage::signal::epoch_thread_reset(cageid, tid);
+        }
         return 0;
     }
 
@@ -87,9 +191,11 @@ pub fn signal_handler<
             break;
         }
 
-        // if this is the last pending (unblocked) signal in list, we should reset epoch
-        if cage::signal::lind_check_no_pending_signal(cageid) {
-            cage::signal::signal_epoch_reset(cageid);
+        // Reset epoch when this is the last pending signal AND no dlopen replay is outstanding.
+        if cage::signal::lind_check_no_pending_signal(cageid)
+            && !caller.data().get_ctx().has_pending_dlopen_replay()
+        {
+            cage::signal::epoch_thread_reset(cageid, tid);
         }
 
         let (signo, signal_handler, restorer) = signal.unwrap();
@@ -179,6 +285,13 @@ pub fn signal_handler<
                     .pop_signal_asyncify_data(signal_handler as i32, signo);
             }
         }
+    }
+
+    // If the main thread had only a dlopen replay (no signals), reset the epoch here.
+    if cage::signal::lind_check_no_pending_signal(cageid)
+        && !caller.data().get_ctx().has_pending_dlopen_replay()
+    {
+        cage::signal::epoch_thread_reset(cageid, tid);
     }
 
     0
