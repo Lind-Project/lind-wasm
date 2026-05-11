@@ -884,26 +884,21 @@ pub extern "C" fn mmap_syscall(
     // round up length to be multiple of pages
     let rounded_length = round_up_page(len as u64);
 
-    // Resolve (useraddr in calling cage, sysaddr host pointer).  Addresses
-    // arrive as either a cage uaddr (≤ u32::MAX, from cage-side mmap.c) or
-    // a host sysaddr (above u32::MAX, from a grate-forwarded call whose
-    // GRATE_MEMORY_FLAG was already consumed by glibc's make_threei_call /
-    // TRANSLATE_ARG_TO_HOST).  sc_convert_addr_to_sys handles the split.
+    // Resolve (useraddr in calling cage, sysaddr host pointer).  The addr
+    // arrives in one of two forms, distinguished inside
+    // `sc_convert_uaddr_to_host` by comparison against `addr_cageid`'s base:
+    //   - cage uaddr (small, < base): translated via the cage's base.
+    //   - host pointer (>= base, e.g. glibc's TRANSLATE_*_TO_HOST already ran
+    //     inside a grate-forwarded call with GRATE_MEMORY_FLAG): passthrough.
     let mut useraddr: u32;
     let sysaddr: usize;
 
     if flags & MAP_FIXED as i32 == 0 {
         // No fixed address — runtime picks via the calling cage's vmmap.
-        // Use addr_arg as a hint; if a grate forwarded a host sysaddr
-        // (above u32 range), convert it back to a cage uaddr first.
-        let hint_useraddr = if addr_arg > u32::MAX as u64 {
-            match sc_convert_sys_to_user(addr_arg as usize, cageid) {
-                Ok(u) => u,
-                Err(_) => 0,
-            }
-        } else {
-            addr_arg as u32
-        };
+        // Treat addr_arg as a hint only if it looks like a cage uaddr (the
+        // calling cage's range); otherwise ignore (a grate-supplied host
+        // pointer hint isn't meaningful in the calling cage's address space).
+        let hint_useraddr = sc_convert_host_to_uaddr(addr_arg as usize, cageid).unwrap_or(0);
 
         let vmmap = cage.vmmap.write();
         let result = if hint_useraddr == 0 {
@@ -924,17 +919,12 @@ pub extern "C" fn mmap_syscall(
         sysaddr = vmmap.user_to_sys(useraddr);
         drop(vmmap);
     } else {
-        // Caller specified an exact address.  Use the flag-aware helper so
-        // a grate-supplied addr is resolved against the grate's base, and
-        // a cage-supplied addr against the calling cage's base.
-        sysaddr = match sc_convert_addr_to_sys(addr_arg, addr_cageid, cageid) {
-            Ok(s) => s,
-            Err(e) => return syscall_error(e, "mmap", "invalid addr"),
-        };
+        // Caller specified an exact address.
+        sysaddr = sc_convert_uaddr_to_host(addr_arg, addr_cageid, cageid) as usize;
         // Derive the calling cage's uaddr for the return value + vmmap
         // bookkeeping.  Errors here mean the sysaddr is outside the cage's
         // linear memory range — invalid for MAP_FIXED in this cage.
-        useraddr = match sc_convert_sys_to_user(sysaddr, cageid) {
+        useraddr = match sc_convert_host_to_uaddr(sysaddr, cageid) {
             Ok(u) => u,
             Err(e) => return syscall_error(e, "mmap", "addr outside cage"),
         };
@@ -1208,16 +1198,14 @@ pub extern "C" fn brk_syscall(
 ) -> i32 {
     // Cage-side glibc brk.c passes a raw uaddr (low 32 bits); the runtime
     // page-aligns it and compares against vmmap.heap_start in user space.
-    // A grate forwarding the call via make_threei_call goes through
-    // glibc's TRANSLATE_ARG_TO_HOST which produces a host sysaddr (above
-    // u32 range) — convert that back to a cage uaddr before proceeding.
-    let brk = if brk_arg > u32::MAX as u64 {
-        match sc_convert_sys_to_user(brk_arg as usize, cageid) {
-            Ok(u) => u as i32,
-            Err(e) => return syscall_error(e, "brk", "addr outside cage"),
-        }
-    } else {
-        sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid)
+    // A grate forwarding the call via make_threei_call goes through glibc's
+    // TRANSLATE_ARG_TO_HOST which produces a host sysaddr — convert back to a
+    // cage uaddr before proceeding.  `sc_convert_host_to_uaddr` returns Err
+    // when the arg is below the cage's base (i.e. already a small uaddr); in
+    // that case fall back to the standard u64→i32 cast.
+    let brk = match sc_convert_host_to_uaddr(brk_arg as usize, cageid) {
+        Ok(u) => u as i32,
+        Err(_) => sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid),
     };
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)

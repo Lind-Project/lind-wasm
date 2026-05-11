@@ -260,69 +260,9 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
     arg as *mut u8
 }
 
-/// Resolve a (uaddr, cageid) pair to a host system address, honoring
-/// `GRATE_MEMORY_FLAG`.
-///
-/// For path-style buffer args the runtime can just dereference the address as
-/// a host pointer (see `get_cstr`) — bytes are bytes. For address args that
-/// the runtime *interprets* rather than dereferences (mmap, munmap, mprotect,
-/// brk, shmat, shmdt), we need the actual host system address.
-///
-/// Distinguishes which form of address `arg` carries:
-///
-/// - **u32 range (`arg <= u32::MAX`)**: a uaddr in the calling cage's linear
-///   memory.  This is what cage-side glibc wrappers (e.g. `mmap.c`'s
-///   `(uintptr_t) addr`) pass — wasm32 uaddrs fit in u32. We translate via
-///   the calling cage's vmmap base.
-/// - **Above u32 range**: a host system address already, produced by glibc's
-///   `TRANSLATE_ARG_TO_HOST` macro inside `make_threei_call` (e.g. when a
-///   grate forwards with `GRATE_MEMORY_FLAG` set).  By the time the runtime
-///   sees the call, the FLAG bit has been stripped from `arg_cageid` and the
-///   arg is the resolved host pointer.  Use as-is.
-///
-/// The ranges don't overlap: cage linear memory occupies `[base, base + 4GB]`
-/// on the host, and host bases are typically far above 4GB.
-///
-/// arg=0 is special-cased to "start of the calling cage's memory" — a NULL
-/// host pointer would be meaningless.
-///
-/// ## Returns
-/// - `Ok(sysaddr)` host system address.
-/// - `Err(Errno::EINVAL)` if the calling cage can't be looked up or its vmmap
-///   has no base address yet (only on the uaddr branch).
-pub fn sc_convert_addr_to_sys(arg: u64, arg_cageid: u64, cageid: u64) -> Result<usize, Errno> {
-    #[cfg(feature = "secure")]
-    {
-        if !validate_cageid(arg_cageid, cageid) {
-            return Err(Errno::EINVAL);
-        }
-    }
-    let _ = arg_cageid; // FLAG is consumed glibc-side; runtime distinguishes by value range.
-
-    // arg=0 has cage-relative "start of cage memory" meaning — a NULL host
-    // pointer would be meaningless.  Anchor to the calling cage's base so
-    // early_init_stack-style mmaps (addr=0, MAP_FIXED) work.
-    if arg == 0 {
-        let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-        let vmmap = cage.vmmap.read();
-        let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
-        return Ok(base);
-    }
-
-    // Distinguish uaddr (≤ u32::MAX) from host sysaddr (above).  See doc above.
-    if arg <= u32::MAX as u64 {
-        let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-        let vmmap = cage.vmmap.read();
-        let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
-        return Ok(base + arg as usize);
-    }
-
-    Ok(arg as usize)
-}
-
-/// Inverse of `sc_convert_addr_to_sys` — translate a host system address back
-/// to a uaddr in the named cage's linear memory. Used for return values of
-/// mmap-family syscalls and for bookkeeping into the cage's vmmap.
+/// Inverse of `sc_convert_uaddr_to_host` — translate a host system address
+/// back to a uaddr in the named cage's linear memory. Used for return values
+/// of mmap-family syscalls and for bookkeeping into the cage's vmmap.
 ///
 /// ## Arguments
 /// - `sysaddr`: the host system address.
@@ -333,7 +273,7 @@ pub fn sc_convert_addr_to_sys(arg: u64, arg_cageid: u64, cageid: u64) -> Result<
 ///   wasm32 lind).
 /// - `Err(Errno::EINVAL)` if the cage can't be looked up, its vmmap has no
 ///   base, or `sysaddr` is below the cage's base.
-pub fn sc_convert_sys_to_user(sysaddr: usize, cageid: u64) -> Result<u32, Errno> {
+pub fn sc_convert_host_to_uaddr(sysaddr: usize, cageid: u64) -> Result<u32, Errno> {
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let vmmap = cage.vmmap.read();
     let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
@@ -356,15 +296,22 @@ pub fn sc_convert_buf(buf_arg: u64, _arg_cageid: u64, _cageid: u64) -> *const u8
     buf_arg as *const u8
 }
 
-// TODO: This function can be removed/revamped significantly
-// Leaving it in for now since it is used threei/
-/// ## Arguments:
-/// - `uaddr`: The user address to convert (u64).
-/// - `addr_cageid`: The cage ID associated with the address.
-/// - `cageid`: The calling cage ID (used for validation in secure mode).
+/// Resolve a `(uaddr, addr_cageid)` syscall arg to a host system address.
 ///
-/// ## Returns:
-/// - The host address as u64, or 0 if the address is null.
+/// Robust to either input form, distinguished by comparing against the named
+/// cage's base:
+///
+/// - `uaddr < base_addr`: a cage-relative address in `addr_cageid`'s linear
+///   memory.  Translate by adding the base.  `uaddr == 0` falls in this branch
+///   and resolves to the cage's base — that's what `early_init_stack`-style
+///   `MAP_FIXED at 0` mmaps need.
+/// - `uaddr >= base_addr`: a pre-translated host pointer (e.g. glibc's
+///   `TRANSLATE_*_TO_HOST` already ran inside a grate-forwarded call with
+///   `GRATE_MEMORY_FLAG` set).  Pass through unchanged.
+///
+/// `addr_cageid` picks the right cage's base: for a cage-userland call it's
+/// the calling cage; for a grate-forwarded call (FLAG stripped by glibc) it's
+/// the grate's id, which is what produced the host pointer in the first place.
 pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, _cageid: u64) -> u64 {
     #[cfg(feature = "secure")]
     {
@@ -373,21 +320,14 @@ pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, _cageid: u64) -> u
         }
     }
 
-    // Do not convert on NULL.
-    if uaddr == 0 {
-        return uaddr;
-    }
-
     let cage = get_cage(addr_cageid).unwrap();
     let vmmap = cage.vmmap.read();
     let base_addr = vmmap.base_address.unwrap() as u64;
 
-    // Only convert to host if not already converted.
     if uaddr >= base_addr {
-        panic!(
-            "sc_convert_uaddr_to_host: invalid uaddr {:#x} - expected a cage-relative address",
-            uaddr
-        );
+        // Already a host pointer — caller (e.g. glibc's TRANSLATE_*_TO_HOST)
+        // resolved it.  Pass through.
+        return uaddr;
     }
 
     uaddr + base_addr
