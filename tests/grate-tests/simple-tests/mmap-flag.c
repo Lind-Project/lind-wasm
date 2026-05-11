@@ -1,26 +1,40 @@
 /* Cage side of the mmap-with-GRATE_MEMORY_FLAG test.
  *
- * Vanilla mmap → write → read → munmap round-trip.  Exercises the
- * mmap_syscall code path when the grate interposes and forwards with
- * `addr_cage | GRATE_MEMORY_FLAG`.
+ * fd-backed mmap → write → read → munmap round-trip.  The grate hands
+ * this off to RawPOSIX with `addr_cage | GRATE_MEMORY_FLAG`, exercising
+ * the runtime's flag-aware path in mmap_syscall.
  *
- * Progress prints to stdout (not stderr) with explicit fflush so the
- * harness can see where it died if any step fails.
+ * Anonymous mmaps (including the runtime's own pre-main stack setup)
+ * are forwarded by the grate without the flag and aren't exercised here.
  */
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
+#define FILE_PATH "mmap-flag.tmp"
+
 int main(void) {
 	const size_t size = 4096;
 
-	printf("[Cage|mmap-flag] calling mmap\n");
+	int fd = open(FILE_PATH, O_RDWR | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0) {
+		printf("[Cage|mmap-flag] open failed\n");
+		fflush(stdout);
+		return 1;
+	}
+	if (ftruncate(fd, size) != 0) {
+		printf("[Cage|mmap-flag] ftruncate failed\n");
+		fflush(stdout);
+		return 1;
+	}
+
+	printf("[Cage|mmap-flag] calling fd-backed mmap (fd=%d)\n", fd);
 	fflush(stdout);
 
-	void *p = mmap(NULL, size, PROT_READ | PROT_WRITE,
-		       MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	void *p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (p == MAP_FAILED) {
 		printf("[Cage|mmap-flag] mmap returned MAP_FAILED\n");
 		fflush(stdout);
@@ -49,6 +63,9 @@ int main(void) {
 		fflush(stdout);
 		return 1;
 	}
+
+	close(fd);
+	unlink(FILE_PATH);
 
 	printf("[Cage|mmap-flag] PASS\n");
 	fflush(stdout);

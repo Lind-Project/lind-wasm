@@ -44,27 +44,40 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		  arg4cage, arg5, arg5cage, arg6, arg6cage);
 }
 
-/* mmap interception.  Forward to RawPOSIX (MMAP_SYSCALL = 9) with the
-   addr's cageid tagged with GRATE_MEMORY_FLAG, asserting the runtime
-   accepts the flag and returns a usable cage uaddr. */
+/* mmap interception.
+
+   Anonymous / fd == -1 mmaps (including the runtime's pre-main
+   early_init_stack call) are forwarded unchanged — the FLAG path is
+   meaningless for them and applying it would resolve addr against the
+   grate's base instead of the cage's, breaking those calls.
+
+   File-backed mmaps (fd >= 0, !MAP_ANON) are forwarded with arg1cage
+   tagged GRATE_MEMORY_FLAG, exercising the runtime's flag-aware path
+   in mmap_syscall. */
+#define MAP_ANON_FLAG 0x20
+
 int mmap_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	       uint64_t arg2cage, uint64_t arg3, uint64_t arg3cage,
 	       uint64_t arg4, uint64_t arg4cage, uint64_t arg5,
 	       uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
 	int self_grate_id = getpid();
+	int fd = (int)(int64_t)arg5;
+	int is_anonymous = (fd < 0) || ((arg4 & MAP_ANON_FLAG) != 0);
 
 	printf("[Grate|mmap-flag] intercepting mmap: addr=0x%llx len=%llu "
-	       "prot=0x%llx flags=0x%llx fd=%lld off=%lld\n",
+	       "prot=0x%llx flags=0x%llx fd=%d off=%lld flag_path=%d\n",
 	       (unsigned long long)arg1, (unsigned long long)arg2,
-	       (unsigned long long)arg3, (unsigned long long)arg4,
-	       (long long)arg5, (long long)arg6);
+	       (unsigned long long)arg3, (unsigned long long)arg4, fd,
+	       (long long)arg6, !is_anonymous);
 	fflush(stdout);
 
-	/* Forward with arg1cage tagged GRATE_MEMORY_FLAG. */
+	uint64_t fwd_arg1cage =
+	    is_anonymous ? arg1cage : (self_grate_id | GRATE_MEMORY_FLAG);
+
 	int ret = make_threei_call(
-	    9 /* MMAP_SYSCALL */, 0, self_grate_id, cageid, arg1,
-	    self_grate_id | GRATE_MEMORY_FLAG, arg2, arg2cage, arg3, arg3cage,
-	    arg4, arg4cage, arg5, arg5cage, arg6, arg6cage,
+	    9 /* MMAP_SYSCALL */, 0, self_grate_id, cageid, arg1, fwd_arg1cage,
+	    arg2, arg2cage, arg3, arg3cage, arg4, arg4cage, arg5, arg5cage,
+	    arg6, arg6cage,
 	    0 /* translate_errno off — propagate raw return */
 	);
 	printf("[Grate|mmap-flag] mmap returned %d\n", ret);
