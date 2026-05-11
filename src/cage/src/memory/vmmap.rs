@@ -380,6 +380,15 @@ impl Vmmap {
     /// This helper function converts a byte address range into page numbers,
     /// handling overflow safely with checked arithmetic.
     ///
+    /// `addr` may arrive as either:
+    /// - a pre-translated host pointer (`addr >= base_addr`, e.g. a buffer
+    ///   that already went through glibc's `TRANSLATE_GUEST_POINTER_TO_HOST`),
+    ///   in which case the cage uaddr is `addr - base_addr`, or
+    /// - a raw cage uaddr (`addr < base_addr`, e.g. a value returned from a
+    ///   previous mmap syscall that the caller is passing back in — POSIX
+    ///   doesn't translate return values), in which case `addr` is already
+    ///   the cage uaddr.
+    ///
     /// # Arguments
     /// * `addr` - Virtual memory address (in bytes)
     /// * `length` - Length of the memory region in bytes
@@ -389,7 +398,11 @@ impl Vmmap {
     /// * `None` - If the calculation would overflow
     fn calculate_page_range(&self, addr: u64, length: usize) -> Option<(u32, u32)> {
         let base_addr = self.base_address.unwrap() as u64;
-        let uaddr = addr - base_addr;
+        let uaddr = if addr >= base_addr {
+            addr - base_addr
+        } else {
+            addr
+        };
 
         let page_num = (uaddr >> PAGESHIFT) as u32;
         let end_addr = uaddr
