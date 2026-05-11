@@ -10,9 +10,7 @@ use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 use std::error::Error;
 use std::os::raw::c_char;
-use sysdefs::constants::lind_platform_const::{
-    GRATE_MEMORY_FLAG, LIND_ARG_CAGEID_MASK, MAX_CAGEID, PATH_MAX,
-};
+use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
@@ -270,25 +268,28 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 /// the runtime *interprets* rather than dereferences (mmap, munmap, mprotect,
 /// brk, shmat, shmdt), we need the actual host system address.
 ///
-/// Resolution rule, applied to both flag branches: `sysaddr = base(owner) + arg`,
-/// where the owner is identified by the flag bit:
+/// Distinguishes which form of address `arg` carries:
 ///
-/// - **Flag unset** (the cage-side case): owner = the calling cage. `arg` is
-///   a uaddr in the calling cage's linear memory. Cage-side glibc wrappers
-///   like `mmap.c` pass raw uaddrs without translating.
-/// - **Flag set** (the grate-side case): owner = the cage named by
-///   `arg_cageid & LIND_ARG_CAGEID_MASK`, typically a grate. `arg` is a uaddr
-///   in *that* cage's linear memory — e.g. a grate forwarding a shared-mmap
-///   region it already mapped against its own vmmap, asking the runtime to
-///   alias the same host pages into the calling cage's address space.
+/// - **u32 range (`arg <= u32::MAX`)**: a uaddr in the calling cage's linear
+///   memory.  This is what cage-side glibc wrappers (e.g. `mmap.c`'s
+///   `(uintptr_t) addr`) pass — wasm32 uaddrs fit in u32. We translate via
+///   the calling cage's vmmap base.
+/// - **Above u32 range**: a host system address already, produced by glibc's
+///   `TRANSLATE_ARG_TO_HOST` macro inside `make_threei_call` (e.g. when a
+///   grate forwards with `GRATE_MEMORY_FLAG` set).  By the time the runtime
+///   sees the call, the FLAG bit has been stripped from `arg_cageid` and the
+///   arg is the resolved host pointer.  Use as-is.
 ///
-/// arg=0 is special-cased to "start of the calling cage's memory" regardless
-/// of flag — a NULL host pointer would be meaningless.
+/// The ranges don't overlap: cage linear memory occupies `[base, base + 4GB]`
+/// on the host, and host bases are typically far above 4GB.
+///
+/// arg=0 is special-cased to "start of the calling cage's memory" — a NULL
+/// host pointer would be meaningless.
 ///
 /// ## Returns
 /// - `Ok(sysaddr)` host system address.
-/// - `Err(Errno::EINVAL)` if the owning cage can't be looked up or its vmmap
-///   has no base address yet.
+/// - `Err(Errno::EINVAL)` if the calling cage can't be looked up or its vmmap
+///   has no base address yet (only on the uaddr branch).
 pub fn sc_convert_addr_to_sys(arg: u64, arg_cageid: u64, cageid: u64) -> Result<usize, Errno> {
     #[cfg(feature = "secure")]
     {
@@ -296,11 +297,11 @@ pub fn sc_convert_addr_to_sys(arg: u64, arg_cageid: u64, cageid: u64) -> Result<
             return Err(Errno::EINVAL);
         }
     }
+    let _ = arg_cageid; // FLAG is consumed glibc-side; runtime distinguishes by value range.
 
-    // arg=0 has cage-relative "start of cage memory" meaning regardless of
-    // flag; a NULL host pointer would be meaningless. Anchor to the calling
-    // cage's base so early_init_stack-style mmaps (addr=0, MAP_FIXED) work
-    // whether or not a grate forwards the call with the flag set.
+    // arg=0 has cage-relative "start of cage memory" meaning — a NULL host
+    // pointer would be meaningless.  Anchor to the calling cage's base so
+    // early_init_stack-style mmaps (addr=0, MAP_FIXED) work.
     if arg == 0 {
         let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
         let vmmap = cage.vmmap.read();
@@ -308,16 +309,15 @@ pub fn sc_convert_addr_to_sys(arg: u64, arg_cageid: u64, cageid: u64) -> Result<
         return Ok(base);
     }
 
-    let owner_cageid = if (arg_cageid & GRATE_MEMORY_FLAG) != 0 {
-        arg_cageid & LIND_ARG_CAGEID_MASK
-    } else {
-        cageid
-    };
+    // Distinguish uaddr (≤ u32::MAX) from host sysaddr (above).  See doc above.
+    if arg <= u32::MAX as u64 {
+        let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
+        let vmmap = cage.vmmap.read();
+        let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
+        return Ok(base + arg as usize);
+    }
 
-    let owner = get_cage(owner_cageid).ok_or(Errno::EINVAL)?;
-    let vmmap = owner.vmmap.read();
-    let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
-    Ok(base + (arg as u32) as usize)
+    Ok(arg as usize)
 }
 
 /// Inverse of `sc_convert_addr_to_sys` — translate a host system address back

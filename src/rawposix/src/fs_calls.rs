@@ -15,9 +15,7 @@ use sysdefs::constants::fs_const::{
     STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
-use sysdefs::constants::lind_platform_const::{
-    FDKIND_KERNEL, GRATE_MEMORY_FLAG, MAXFD, UNUSED_ARG, UNUSED_ID,
-};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
 use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
@@ -886,34 +884,20 @@ pub extern "C" fn mmap_syscall(
     // round up length to be multiple of pages
     let rounded_length = round_up_page(len as u64);
 
-    // Resolve (useraddr in calling cage, sysaddr host pointer).  Honors
-    // GRATE_MEMORY_FLAG on addr_cageid so a grate can supply an address
-    // it picked against its own (or any other cage's) vmmap.
-    let grate_supplied = (addr_cageid & GRATE_MEMORY_FLAG) != 0;
+    // Resolve (useraddr in calling cage, sysaddr host pointer).  Addresses
+    // arrive as either a cage uaddr (≤ u32::MAX, from cage-side mmap.c) or
+    // a host sysaddr (above u32::MAX, from a grate-forwarded call whose
+    // GRATE_MEMORY_FLAG was already consumed by glibc's make_threei_call /
+    // TRANSLATE_ARG_TO_HOST).  sc_convert_addr_to_sys handles the split.
     let mut useraddr: u32;
     let sysaddr: usize;
 
-    eprintln!(
-        "[mmap_syscall DEBUG] cageid={} addr_arg=0x{:x} addr_cageid=0x{:x} flags=0x{:x} \
-         MAP_FIXED={:#x} MAP_FIXED_bit=0x{:x} take_fixed_branch={} grate_supplied={}",
-        cageid,
-        addr_arg,
-        addr_cageid,
-        flags,
-        MAP_FIXED as i32,
-        flags & MAP_FIXED as i32,
-        flags & MAP_FIXED as i32 != 0,
-        grate_supplied
-    );
-
     if flags & MAP_FIXED as i32 == 0 {
         // No fixed address — runtime picks via the calling cage's vmmap.
-        // Use addr_arg as a hint (translated via the flag-aware helper if
-        // grate-supplied).
-        let hint_useraddr = if grate_supplied && addr_arg != 0 {
-            match sc_convert_addr_to_sys(addr_arg, addr_cageid, cageid)
-                .and_then(|s| sc_convert_sys_to_user(s, cageid))
-            {
+        // Use addr_arg as a hint; if a grate forwarded a host sysaddr
+        // (above u32 range), convert it back to a cage uaddr first.
+        let hint_useraddr = if addr_arg > u32::MAX as u64 {
+            match sc_convert_sys_to_user(addr_arg as usize, cageid) {
                 Ok(u) => u,
                 Err(_) => 0,
             }
@@ -1222,11 +1206,12 @@ pub extern "C" fn brk_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Cage-side glibc brk.c passes a raw uaddr; the runtime page-aligns it
-    // and compares against vmmap.heap_start in user space.  A grate calling
-    // with GRATE_MEMORY_FLAG passes a host sysaddr instead — translate it
-    // back into the calling cage's user-address space before proceeding.
-    let brk = if (brk_cageid & GRATE_MEMORY_FLAG) != 0 {
+    // Cage-side glibc brk.c passes a raw uaddr (low 32 bits); the runtime
+    // page-aligns it and compares against vmmap.heap_start in user space.
+    // A grate forwarding the call via make_threei_call goes through
+    // glibc's TRANSLATE_ARG_TO_HOST which produces a host sysaddr (above
+    // u32 range) — convert that back to a cage uaddr before proceeding.
+    let brk = if brk_arg > u32::MAX as u64 {
         match sc_convert_sys_to_user(brk_arg as usize, cageid) {
             Ok(u) => u as i32,
             Err(e) => return syscall_error(e, "brk", "addr outside cage"),
