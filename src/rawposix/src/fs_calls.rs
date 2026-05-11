@@ -1206,19 +1206,7 @@ pub extern "C" fn brk_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Cage-side glibc brk.c passes a raw uaddr (low 32 bits); the runtime
-    // page-aligns it and compares against vmmap.heap_start in user space.
-    // A grate forwarding the call via make_threei_call goes through
-    // glibc's TRANSLATE_ARG_TO_HOST which produces a host sysaddr (above
-    // u32 range) — convert that back to a cage uaddr before proceeding.
-    let brk = if brk_arg > u32::MAX as u64 {
-        match sc_convert_sys_to_user(brk_arg as usize, cageid) {
-            Ok(u) => u as i32,
-            Err(e) => return syscall_error(e, "brk", "addr outside cage"),
-        }
-    } else {
-        sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid)
-    };
+    let brk = sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
