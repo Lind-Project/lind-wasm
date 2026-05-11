@@ -829,20 +829,6 @@ pub extern "C" fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    use std::io::Write;
-    eprintln!(
-        "[mmap] >> cage={} addr={:#018x} (acage={:#x}) len={:#x} prot={:#x} flags={:#x} fd={} off={:#x}",
-        cageid,
-        addr_arg,
-        addr_cageid,
-        len_arg,
-        prot_arg,
-        flags_arg,
-        vfd_arg as i32,
-        off_arg,
-    );
-    let _ = std::io::stderr().flush();
-
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -883,11 +869,6 @@ pub extern "C" fn mmap_syscall(
     // address gets added, since base_address is itself page-aligned.
     let rounded_addr = round_up_page(addr_arg);
     if rounded_addr != addr_arg {
-        eprintln!(
-            "[mmap] !! EINVAL addr-not-aligned cage={} addr={:#018x} rounded={:#018x}",
-            cageid, addr_arg, rounded_addr,
-        );
-        let _ = std::io::stderr().flush();
         return syscall_error(Errno::EINVAL, "mmap", "address it not aligned");
     }
 
@@ -923,11 +904,6 @@ pub extern "C" fn mmap_syscall(
         } else {
             addr_arg as u32
         };
-        eprintln!(
-            "[mmap]    find_map_space path cage={} hint_useraddr={:#x} rlen={:#x}",
-            cageid, hint_useraddr, rounded_length,
-        );
-        let _ = std::io::stderr().flush();
 
         let vmmap = cage.vmmap.write();
         let result = if hint_useraddr == 0 {
@@ -941,61 +917,27 @@ pub extern "C" fn mmap_syscall(
         };
 
         if result.is_none() {
-            eprintln!(
-                "[mmap] !! ENOMEM no-space cage={} hint={:#x} rlen={:#x}",
-                cageid, hint_useraddr, rounded_length,
-            );
-            let _ = std::io::stderr().flush();
             return syscall_error(Errno::ENOMEM, "mmap", "no memory");
         }
 
         useraddr = (result.unwrap().start() << PAGESHIFT) as u32;
         sysaddr = vmmap.user_to_sys(useraddr);
         drop(vmmap);
-        eprintln!(
-            "[mmap]    find_map_space ok cage={} useraddr={:#x} sysaddr={:#x}",
-            cageid, useraddr, sysaddr,
-        );
-        let _ = std::io::stderr().flush();
     } else {
-        eprintln!(
-            "[mmap]    MAP_FIXED path cage={} addr={:#018x} (acage={:#x})",
-            cageid, addr_arg, addr_cageid,
-        );
-        let _ = std::io::stderr().flush();
         // Caller specified an exact address.  Use the flag-aware helper so
         // a grate-supplied addr is resolved against the grate's base, and
         // a cage-supplied addr against the calling cage's base.
         sysaddr = match sc_convert_addr_to_sys(addr_arg, addr_cageid, cageid) {
             Ok(s) => s,
-            Err(e) => {
-                eprintln!(
-                    "[mmap] !! addr_to_sys failed cage={} addr={:#018x} err={:?}",
-                    cageid, addr_arg, e,
-                );
-                let _ = std::io::stderr().flush();
-                return syscall_error(e, "mmap", "invalid addr");
-            }
+            Err(e) => return syscall_error(e, "mmap", "invalid addr"),
         };
         // Derive the calling cage's uaddr for the return value + vmmap
         // bookkeeping.  Errors here mean the sysaddr is outside the cage's
         // linear memory range — invalid for MAP_FIXED in this cage.
         useraddr = match sc_convert_sys_to_user(sysaddr, cageid) {
             Ok(u) => u,
-            Err(e) => {
-                eprintln!(
-                    "[mmap] !! sys_to_user failed cage={} sysaddr={:#x} err={:?}",
-                    cageid, sysaddr, e,
-                );
-                let _ = std::io::stderr().flush();
-                return syscall_error(e, "mmap", "addr outside cage");
-            }
+            Err(e) => return syscall_error(e, "mmap", "addr outside cage"),
         };
-        eprintln!(
-            "[mmap]    MAP_FIXED ok cage={} useraddr={:#x} sysaddr={:#x}",
-            cageid, useraddr, sysaddr,
-        );
-        let _ = std::io::stderr().flush();
     }
 
     flags |= MAP_FIXED as i32;
@@ -1010,12 +952,6 @@ pub extern "C" fn mmap_syscall(
             fildes = -1;
         }
 
-        eprintln!(
-            "[mmap]    libc::mmap call cage={} sysaddr={:#x} rlen={:#x} prot={:#x} flags={:#x} fd={}",
-            cageid, sysaddr, rounded_length, prot, flags, fildes,
-        );
-        let _ = std::io::stderr().flush();
-
         let result = mmap_inner(
             cageid,
             sysaddr as *mut u8,
@@ -1026,28 +962,15 @@ pub extern "C" fn mmap_syscall(
             off,
         );
 
-        eprintln!(
-            "[mmap]    libc::mmap ret cage={} result={:#x} is_err={}",
-            cageid, result, is_mmap_error(result),
-        );
-        let _ = std::io::stderr().flush();
-
         // Check for error BEFORE sys_to_user conversion
         if is_mmap_error(result) {
             let errno = get_errno();
-            eprintln!("[mmap] !! libc::mmap errno cage={} errno={}", cageid, errno);
-            let _ = std::io::stderr().flush();
             return handle_errno(errno, "mmap");
         }
 
         let vmmap = cage.vmmap.read();
         let result = vmmap.sys_to_user(result);
         drop(vmmap);
-        eprintln!(
-            "[mmap] <<  ok cage={} ret_useraddr={:#x}",
-            cageid, result as u32,
-        );
-        let _ = std::io::stderr().flush();
 
         // if mmap addr is positive, that would mean the mapping is successful and we need to update the vmmap entry
         if result >= 0 {
