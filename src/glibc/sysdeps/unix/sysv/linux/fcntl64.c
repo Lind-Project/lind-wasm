@@ -63,11 +63,7 @@ __libc_fcntl64 (int fd, int cmd, ...)
       return INLINE_SYSCALL_ERROR_RETURN_VALUE (INTERNAL_SYSCALL_ERRNO (res));
     }
 
-  /* Polymorphic third arg: lock cmds take a pointer (translate it),
-     everything else takes an int (do NOT translate; that would add the
-     wasm linear-memory base to the integer value).  Mirrors the split
-     in __fcntl64_nocancel_adjusted; rawposix reads whichever slot the
-     command expects.  */
+  /* Polymorphic third arg: lock cmds take a pointer, everything else takes an int. */
   uint64_t int_arg = 0;
   uint64_t ptr_arg = 0;
 
