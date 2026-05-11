@@ -829,11 +829,6 @@ pub extern "C" fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    eprintln!(
-        "[mmap_syscall] entry cageid={} addr_arg={:#018x} addr_cageid={:#x} len_arg={:#018x} prot_arg={:#x} flags_arg={:#x} vfd_arg={:#018x} off_arg={:#018x}",
-        cageid, addr_arg, addr_cageid, len_arg, prot_arg, flags_arg, vfd_arg, off_arg
-    );
-
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -952,11 +947,6 @@ pub extern "C" fn mmap_syscall(
         return syscall_error(Errno::EINVAL, "mmap", "invalid flags");
     }
 
-    eprintln!(
-        "[mmap_syscall] resolved cageid={} sysaddr={:#x} useraddr={:#x} rounded_length={:#x} flags={:#x} fildes={}",
-        cageid, sysaddr, useraddr, rounded_length, flags, fildes
-    );
-
     if rounded_length > 0 {
         if flags & MAP_ANONYMOUS as i32 > 0 {
             fildes = -1;
@@ -970,11 +960,6 @@ pub extern "C" fn mmap_syscall(
             flags,
             fildes,
             off,
-        );
-
-        eprintln!(
-            "[mmap_syscall] mmap_inner returned cageid={} result={:#x} (errno_check={})",
-            cageid, result, is_mmap_error(result)
         );
 
         // Check for error BEFORE sys_to_user conversion
