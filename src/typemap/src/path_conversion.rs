@@ -41,6 +41,15 @@ fn preserve_trailing_separator(mut path: PathBuf, preserve: bool) -> PathBuf {
     path
 }
 
+pub fn path_without_trailing_slashes(path: &str) -> &str {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() {
+        "/"
+    } else {
+        trimmed
+    }
+}
+
 /// Normalize receiving path arguments to eliminating `./..` and generate a canonicalized (but not
 /// symlink-resolved) path. This function will adding the cage's current working directory at the
 /// beginning, if given path argument is relative; or adding the virtual root `/` if given path
@@ -203,5 +212,17 @@ mod tests {
     fn does_not_add_extra_separator_to_root() {
         let path = preserve_trailing_separator(PathBuf::from("/"), true);
         assert_eq!(path.to_str(), Some("/"));
+    }
+
+    #[test]
+    fn path_without_trailing_slashes_removes_extra_slashes() {
+        assert_eq!(path_without_trailing_slashes("/tmp/dir/"), "/tmp/dir");
+        assert_eq!(path_without_trailing_slashes("/tmp/dir///"), "/tmp/dir");
+    }
+
+    #[test]
+    fn path_without_trailing_slashes_preserves_root() {
+        assert_eq!(path_without_trailing_slashes("/"), "/");
+        assert_eq!(path_without_trailing_slashes("///"), "/");
     }
 }
