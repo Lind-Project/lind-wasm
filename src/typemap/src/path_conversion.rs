@@ -7,6 +7,7 @@ use cage::get_cage;
 pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};
+use std::os::unix::ffi::OsStrExt;
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
@@ -25,6 +26,21 @@ pub fn convpath(cpath: &str) -> PathBuf {
     PathBuf::from(cpath)
 }
 
+fn has_trailing_separator(path: &PathBuf) -> bool {
+    let bytes = path.as_os_str().as_bytes();
+    bytes.len() > 1 && bytes.ends_with(b"/")
+}
+
+fn preserve_trailing_separator(mut path: PathBuf, preserve: bool) -> PathBuf {
+    if preserve && !has_trailing_separator(&path) && path.as_os_str().as_bytes() != b"/" {
+        let mut os_path = path.into_os_string();
+        os_path.push("/");
+        path = PathBuf::from(os_path);
+    }
+
+    path
+}
+
 /// Normalize receiving path arguments to eliminating `./..` and generate a canonicalized (but not
 /// symlink-resolved) path. This function will adding the cage's current working directory at the
 /// beginning, if given path argument is relative; or adding the virtual root `/` if given path
@@ -38,6 +54,8 @@ pub fn convpath(cpath: &str) -> PathBuf {
 /// A `PathBuf` representing the normalized absolute path.
 pub fn normpath(origp: PathBuf, cageid: u64) -> PathBuf {
     let cage = cage::get_cage(cageid).unwrap();
+    let preserve_trailing_slash = has_trailing_separator(&origp);
+
     //If path is relative, prefix it with the current working directory, otherwise populate it with rootdir
     let mut newp = if origp.is_relative() {
         (**cage.cwd.read()).clone()
@@ -61,7 +79,8 @@ pub fn normpath(origp: PathBuf, cageid: u64) -> PathBuf {
             _ => {}
         };
     }
-    newp
+
+    preserve_trailing_separator(newp, preserve_trailing_slash)
 }
 
 /// This function provides two operations: first, it translates path pointer address from WASM environment
@@ -161,5 +180,28 @@ pub fn sc_convert_path_to_host(
     match CString::new(full_path) {
         Ok(c_path) => Ok(c_path),
         Err(_) => return Err(Errno::EINVAL),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserves_trailing_separator_on_normalized_non_root_path() {
+        let path = preserve_trailing_separator(PathBuf::from("/tmp/file"), true);
+        assert_eq!(path.to_str(), Some("/tmp/file/"));
+    }
+
+    #[test]
+    fn does_not_add_trailing_separator_without_original_separator() {
+        let path = preserve_trailing_separator(PathBuf::from("/tmp/file"), false);
+        assert_eq!(path.to_str(), Some("/tmp/file"));
+    }
+
+    #[test]
+    fn does_not_add_extra_separator_to_root() {
+        let path = preserve_trailing_separator(PathBuf::from("/"), true);
+        assert_eq!(path.to_str(), Some("/"));
     }
 }
