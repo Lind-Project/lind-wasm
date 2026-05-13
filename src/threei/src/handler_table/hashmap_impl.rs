@@ -72,11 +72,7 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// ## Panics:
 ///     - If no entry exists for `self_cageid`.
 ///     - If no entry exists for `syscall_num`.
-pub fn _get_handler(
-    self_cageid: u64,
-    syscall_num: u64,
-    _target_cageid: u64,
-) -> Option<(u64, u64)> {
+pub fn _get_handler(self_cageid: u64, syscall_num: u64, _target_cageid: u64) -> Option<(u64, u64)> {
     let handler_table = HANDLERTABLE.lock().unwrap();
 
     let call_map = handler_table.get(&self_cageid).unwrap_or_else(|| {
