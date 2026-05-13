@@ -104,10 +104,6 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         return Some((gid, addr));
     }
 
-    eprintln!(
-        "[popen-trace|3i dashmap get_handler] empty target map self={} syscall={} target={}",
-        self_cageid, syscall_num, target_cageid
-    );
     panic!(
         "No handlers for self_cageid={} syscall_num={} (target_cageid={})",
         self_cageid, syscall_num, target_cageid
@@ -128,20 +124,10 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
 /// todo: a more efficient way to do clean up
 pub fn _rm_grate_from_handler(grateid: u64) {
     for self_entry in HANDLERTABLE.iter() {
-        let self_cageid = *self_entry.key();
         let call_map: &CallnumMap = self_entry.value();
         for call_entry in call_map.iter() {
-            let callnum = *call_entry.key();
             let target_map: &TargetCageMap = call_entry.value();
-            let before = target_map.len();
             target_map.retain(|dest_grateid, _| *dest_grateid != grateid);
-            let after = target_map.len();
-            if before != after || callnum == 33 {
-                eprintln!(
-                    "[popen-trace|3i dashmap rm_grate] grate={} self={} syscall={} before={} after={}",
-                    grateid, self_cageid, callnum, before, after
-                );
-            }
         }
     }
 }
@@ -224,15 +210,7 @@ pub fn register_handler_impl(
     if handlefunccage == threei_const::THREEI_DEREGISTER {
         if let Some(self_entry) = HANDLERTABLE.get(&srccage) {
             let call_map: &CallnumMap = self_entry.value();
-            let before = call_map
-                .get(&targetcallnum)
-                .map(|target_map| target_map.value().len())
-                .unwrap_or(0);
             call_map.remove(&targetcallnum);
-            eprintln!(
-                "[popen-trace|3i dashmap register] deregister self={} syscall={} before={}",
-                srccage, targetcallnum, before
-            );
         }
         return 0;
     }
@@ -246,21 +224,9 @@ pub fn register_handler_impl(
 
     // Each (srccage, targetcallnum) pair keeps only one handler entry,
     // so we clear any existing mapping and replace it directly.
-    let before = target_map.len();
     target_map.clear();
 
     target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
-    if targetcallnum == 33 {
-        eprintln!(
-            "[popen-trace|3i dashmap register] self={} syscall={} handler_cage={} before={} after={} fn=0x{:x}",
-            srccage,
-            targetcallnum,
-            handlefunccage,
-            before,
-            target_map.len(),
-            in_grate_fn_ptr_u64
-        );
-    }
 
     0
 }
@@ -281,19 +247,9 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
         );
         return threei_const::ELINDAPIABORTED;
     };
-    let src_has_mmap = src_snapshot.contains_key(&9);
-    let src_dup2_size = src_snapshot
-        .get(&33)
-        .map(|target_map| target_map.value().len())
-        .unwrap_or(0);
 
     let dst_call_map_ref = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
     let dst_call_map: &CallnumMap = &*dst_call_map_ref;
-    let dst_had_mmap = dst_call_map.contains_key(&9);
-    let dst_dup2_size_before = dst_call_map
-        .get(&33)
-        .map(|target_map| target_map.value().len())
-        .unwrap_or(0);
 
     // Copy without overwriting existing destination handlers.
     for src_call_entry in src_snapshot.iter() {
@@ -311,23 +267,6 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
             dst_target_map.entry(handlefunccage).or_insert(addr);
         }
     }
-    let dst_has_mmap = dst_call_map.contains_key(&9);
-    let dst_dup2_size_after = dst_call_map
-        .get(&33)
-        .map(|target_map| target_map.value().len())
-        .unwrap_or(0);
-    eprintln!(
-        "[popen-trace|3i copy_impl] source={} target={} src_calls={} src_has_mmap={} dst_had_mmap={} dst_has_mmap={} src_dup2_size={} dst_dup2_before={} dst_dup2_after={}",
-        srccage,
-        targetcage,
-        src_snapshot.len(),
-        src_has_mmap,
-        dst_had_mmap,
-        dst_has_mmap,
-        src_dup2_size,
-        dst_dup2_size_before,
-        dst_dup2_size_after
-    );
 
     0
 }

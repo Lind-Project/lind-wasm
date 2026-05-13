@@ -1,7 +1,6 @@
 use crate::threei_const;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::sync::Mutex;
-use sysdefs::constants::lind_platform_const;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
@@ -73,7 +72,11 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// ## Panics:
 ///     - If no entry exists for `self_cageid`.
 ///     - If no entry exists for `syscall_num`.
-pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
+pub fn _get_handler(
+    self_cageid: u64,
+    syscall_num: u64,
+    _target_cageid: u64,
+) -> Option<(u64, u64)> {
     let handler_table = HANDLERTABLE.lock().unwrap();
 
     let call_map = handler_table.get(&self_cageid).unwrap_or_else(|| {
@@ -91,15 +94,6 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
 
     let grateid = target_map.keys().next().copied()?;
     let addr = target_map.values().next().copied()?;
-    if syscall_num == 33 {
-        eprintln!(
-            "[popen-trace|3i hashmap get_handler] self={} syscall={} target={} handlers={}",
-            self_cageid,
-            syscall_num,
-            target_cageid,
-            target_map.len()
-        );
-    }
     // Otherwise fallback to any registered handler
     return Some((grateid, addr));
 }
@@ -118,17 +112,9 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
 /// todo: a more efficient way to do clean up
 pub fn _rm_grate_from_handler(grateid: u64) {
     let mut table = HANDLERTABLE.lock().unwrap();
-    for (self_cageid, callmap) in table.iter_mut() {
-        for (callnum, target_map) in callmap.iter_mut() {
-            let before = target_map.len();
+    for (_self_cageid, callmap) in table.iter_mut() {
+        for (_callnum, target_map) in callmap.iter_mut() {
             target_map.retain(|dest_grateid, _| *dest_grateid != grateid);
-            let after = target_map.len();
-            if before != after || *callnum == 33 {
-                eprintln!(
-                    "[popen-trace|3i hashmap rm_grate] grate={} self={} syscall={} before={} after={}",
-                    grateid, self_cageid, callnum, before, after
-                );
-            }
         }
     }
 }
@@ -215,15 +201,7 @@ pub fn register_handler_impl(
     // for the given (targetcage, targetcallnum).
     if handlefunccage == threei_const::THREEI_DEREGISTER {
         if let Some(call_map) = table.get_mut(&srccage) {
-            let before = call_map
-                .get(&targetcallnum)
-                .map(|target_map| target_map.len())
-                .unwrap_or(0);
             call_map.remove(&targetcallnum);
-            eprintln!(
-                "[popen-trace|3i hashmap register] deregister self={} syscall={} before={}",
-                srccage, targetcallnum, before
-            );
 
             if call_map.is_empty() {
                 table.remove(&srccage);
@@ -238,21 +216,9 @@ pub fn register_handler_impl(
 
     // Each (srccage, targetcallnum) pair keeps only one handler entry,
     // so we clear any existing mapping and replace it directly.
-    let before = target_map.len();
     target_map.clear();
 
     target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
-    if targetcallnum == 33 {
-        eprintln!(
-            "[popen-trace|3i hashmap register] self={} syscall={} handler_cage={} before={} after={} fn=0x{:x}",
-            srccage,
-            targetcallnum,
-            handlefunccage,
-            before,
-            target_map.len(),
-            in_grate_fn_ptr_u64
-        );
-    }
 
     0
 }
@@ -266,12 +232,6 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
     // Does not overwrite any existing handlers in the target.
     if let Some(src_entry) = handler_table.get(&srccage).cloned() {
         let target_entry = handler_table.entry(targetcage).or_insert_with(HashMap::new);
-        let src_dup2_size = src_entry.get(&33).map(|target_map| target_map.len()).unwrap_or(0);
-        let dst_dup2_size_before = target_entry
-            .get(&33)
-            .map(|target_map| target_map.len())
-            .unwrap_or(0);
-        let src_calls = src_entry.len();
         for (callnum, callnum_map) in src_entry {
             let target_callnum_map = target_entry.entry(callnum).or_insert_with(HashMap::new);
             for (handlefunc, handlefunccage) in callnum_map {
@@ -281,19 +241,6 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
                     .or_insert(handlefunccage);
             }
         }
-        let dst_dup2_size_after = target_entry
-            .get(&33)
-            .map(|target_map| target_map.len())
-            .unwrap_or(0);
-        eprintln!(
-            "[popen-trace|3i hashmap copy_impl] source={} target={} src_calls={} src_dup2_size={} dst_dup2_before={} dst_dup2_after={}",
-            srccage,
-            targetcage,
-            src_calls,
-            src_dup2_size,
-            dst_dup2_size_before,
-            dst_dup2_size_after
-        );
         0
     } else {
         eprintln!(
