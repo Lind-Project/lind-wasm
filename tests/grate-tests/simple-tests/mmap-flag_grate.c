@@ -1,0 +1,121 @@
+/* Grate side of the mmap-with-GRATE_MEMORY_FLAG test.
+ *
+ * Registers an mmap handler that forwards the cage's mmap call to the
+ * runtime via make_threei_call, with `addr_cage` tagged with
+ * `GRATE_MEMORY_FLAG`.  This exercises the runtime's flag-aware path in
+ * mmap_syscall (skip the truncate-and-translate-via-cage-vmmap step, treat
+ * the addr as a host sysaddr when non-zero).
+ *
+ * The test uses MAP_ANONYMOUS|MAP_PRIVATE with addr=NULL; the runtime will
+ * pick an address.  We're testing that the flag doesn't break the path, not
+ * MAP_FIXED placement.
+ */
+
+#include <assert.h>
+#include <errno.h>
+#include <lind_syscall.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+/* Standard dispatcher used by every grate.  Unchanged from the other
+   simple-tests grates. */
+int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+		    uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
+		    uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
+		    uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
+		    uint64_t arg6, uint64_t arg6cage) {
+	if (fn_ptr_uint == 0) {
+		fprintf(stderr, "[Grate|mmap-flag] Invalid function ptr\n");
+		assert(0);
+	}
+
+	int (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+		  uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+		  uint64_t) =
+	    (int (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+		     uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+		     uint64_t))(uintptr_t)fn_ptr_uint;
+
+	return fn(cageid, arg1, arg1cage, arg2, arg2cage, arg3, arg3cage, arg4,
+		  arg4cage, arg5, arg5cage, arg6, arg6cage);
+}
+
+/* mmap interception.
+
+   Anonymous / fd == -1 mmaps (including the runtime's pre-main
+   early_init_stack call) are forwarded unchanged — the FLAG path is
+   meaningless for them and applying it would resolve addr against the
+   grate's base instead of the cage's, breaking those calls.
+
+   File-backed mmaps (fd >= 0, !MAP_ANON) are forwarded with arg1cage
+   tagged GRATE_MEMORY_FLAG, exercising the runtime's flag-aware path
+   in mmap_syscall. */
+#define MAP_ANON_FLAG 0x20
+
+int mmap_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
+	       uint64_t arg2cage, uint64_t arg3, uint64_t arg3cage,
+	       uint64_t arg4, uint64_t arg4cage, uint64_t arg5,
+	       uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
+	(void)cageid;
+	int self_grate_id = getpid();
+	int fd = (int)(int64_t)arg5;
+	int is_anonymous = (fd < 0) || ((arg4 & MAP_ANON_FLAG) != 0);
+
+	/* The handler's first `cageid` param is the grate's own id (3i's
+	   _call_grate_func passes grateid here).  The calling cage's id is
+	   carried in an integer arg's cage tag — use arg5cage (fd), which
+	   isn't subject to pointer-translation rewrites. */
+	uint64_t calling_cage = arg5cage;
+
+	uint64_t fwd_arg1cage =
+	    is_anonymous ? arg1cage : (self_grate_id | GRATE_MEMORY_FLAG);
+
+	return make_threei_call(
+	    9 /* MMAP_SYSCALL */, 0, self_grate_id, calling_cage, arg1,
+	    fwd_arg1cage, arg2, arg2cage, arg3, arg3cage, arg4, arg4cage, arg5,
+	    arg5cage, arg6, arg6cage,
+	    0 /* translate_errno off — propagate raw return */
+	);
+}
+
+int main(int argc, char *argv[]) {
+	if (argc < 2) {
+		fprintf(stderr, "Usage: %s <cage_file>\n", argv[0]);
+		assert(0);
+	}
+
+	int grateid = getpid();
+	pid_t pid = fork();
+	if (pid < 0) {
+		perror("fork failed");
+		assert(0);
+	} else if (pid == 0) {
+		int cageid = getpid();
+		uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&mmap_grate;
+		register_handler(cageid, 9 /* MMAP_SYSCALL */, grateid,
+				 fn_ptr_addr);
+
+		if (execv(argv[1], &argv[1]) == -1) {
+			perror("execv failed");
+			assert(0);
+		}
+	}
+
+	int status;
+	while (wait(&status) > 0) {
+		if (status != 0) {
+			fprintf(stderr,
+				"[Grate|mmap-flag] FAIL: child exited with "
+				"status %d\n",
+				status);
+			assert(0);
+		}
+	}
+
+	printf("[Grate|mmap-flag] PASS\n");
+	return 0;
+}
