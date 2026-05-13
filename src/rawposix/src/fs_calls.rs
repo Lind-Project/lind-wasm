@@ -3948,7 +3948,8 @@ pub extern "C" fn chdir_syscall(
 
     // Update the cage's current working directory
     if let Some(cage) = get_cage(cageid) {
-        let user_path = PathBuf::from(path.to_string_lossy().as_ref());
+        let path_string = path.to_string_lossy();
+        let user_path = PathBuf::from(path_without_trailing_slashes(path_string.as_ref()));
         let mut cwd = cage.cwd.write();
         *cwd = Arc::new(user_path);
     }
