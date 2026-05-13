@@ -886,11 +886,11 @@ pub extern "C" fn mmap_syscall(
 
     // Resolve (useraddr in calling cage, sysaddr host pointer).  The addr
     // arrives in one of two forms, distinguished inside
-    // `sc_convert_uaddr_to_host` by comparison against `addr_cageid`'s base:
-    //   - cage uaddr (small, < base): translated via the cage's base.
-    //   - host pointer (>= base, e.g. glibc's TRANSLATE_*_TO_HOST already ran
-    //     inside a grate-forwarded call with GRATE_MEMORY_FLAG): passthrough.
-    let mut useraddr: u32;
+    // `sc_convert_uaddr_to_host` by checking whether the address is already in
+    // `addr_cageid`'s host linear-memory reservation:
+    //   - cage uaddr outside that host reservation: translated via the cage's base.
+    //   - host pointer already inside that reservation: passthrough.
+    let useraddr: u32;
     let sysaddr: usize;
 
     if flags & MAP_FIXED as i32 == 0 {

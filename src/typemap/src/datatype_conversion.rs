@@ -10,7 +10,9 @@ use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 use std::error::Error;
 use std::os::raw::c_char;
-use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_platform_const::{
+    lind_arg_cageid, MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, PATH_MAX,
+};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
@@ -260,6 +262,26 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
     arg as *mut u8
 }
 
+#[inline]
+fn host_addr_offset(sysaddr: usize, base_addr: usize) -> Option<u32> {
+    let offset = (sysaddr as u64).checked_sub(base_addr as u64)?;
+    if offset <= MAX_LINEAR_MEMORY_SIZE {
+        Some(offset as u32)
+    } else {
+        None
+    }
+}
+
+/// Return true when `sysaddr` is inside the host reservation for the cage
+/// whose linear-memory base is `base_addr`.
+///
+/// For today's 4 GiB-aligned reservations this is equivalent to matching the
+/// high bits against `base_addr`; this range form keeps the check correct if
+/// the runtime stops requiring 4 GiB alignment.
+pub fn sc_is_host_addr_in_cage_memory(sysaddr: usize, base_addr: usize) -> bool {
+    host_addr_offset(sysaddr, base_addr).is_some()
+}
+
 /// Inverse of `sc_convert_uaddr_to_host` — translate a host system address
 /// back to a uaddr in the named cage's linear memory. Used for return values
 /// of mmap-family syscalls and for bookkeeping into the cage's vmmap.
@@ -272,15 +294,12 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 /// - `Ok(uaddr)` truncated to u32 (cage user addresses fit in 32 bits on
 ///   wasm32 lind).
 /// - `Err(Errno::EINVAL)` if the cage can't be looked up, its vmmap has no
-///   base, or `sysaddr` is below the cage's base.
+///   base, or `sysaddr` is outside the cage's linear memory reservation.
 pub fn sc_convert_host_to_uaddr(sysaddr: usize, cageid: u64) -> Result<u32, Errno> {
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let vmmap = cage.vmmap.read();
     let base = vmmap.base_address.ok_or(Errno::EINVAL)?;
-    if sysaddr < base {
-        return Err(Errno::EINVAL);
-    }
-    Ok((sysaddr - base) as u32)
+    host_addr_offset(sysaddr, base).ok_or(Errno::EINVAL)
 }
 
 /// This function translates the buffer pointer from user buffer address to system address, because we are
@@ -298,21 +317,22 @@ pub fn sc_convert_buf(buf_arg: u64, _arg_cageid: u64, _cageid: u64) -> *const u8
 
 /// Resolve a `(uaddr, addr_cageid)` syscall arg to a host system address.
 ///
-/// Robust to either input form, distinguished by comparing against the named
-/// cage's base:
+/// Robust to either input form, distinguished by checking whether the address
+/// is already inside the named cage's host linear-memory reservation:
 ///
-/// - `uaddr < base_addr`: a cage-relative address in `addr_cageid`'s linear
-///   memory.  Translate by adding the base.  `uaddr == 0` falls in this branch
-///   and resolves to the cage's base — that's what `early_init_stack`-style
-///   `MAP_FIXED at 0` mmaps need.
-/// - `uaddr >= base_addr`: a pre-translated host pointer (e.g. glibc's
-///   `TRANSLATE_*_TO_HOST` already ran inside a grate-forwarded call with
-///   `GRATE_MEMORY_FLAG` set).  Pass through unchanged.
+/// - inside cage host memory: a pre-translated host pointer. Pass through
+///   unchanged.
+/// - outside cage host memory: a cage-relative address in `addr_cageid`'s
+///   linear memory. Translate by adding the base. `uaddr == 0` falls in this
+///   branch and resolves to the cage's base — that's what
+///   `early_init_stack`-style `MAP_FIXED at 0` mmaps need.
 ///
 /// `addr_cageid` picks the right cage's base: for a cage-userland call it's
 /// the calling cage; for a grate-forwarded call (FLAG stripped by glibc) it's
 /// the grate's id, which is what produced the host pointer in the first place.
 pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, _cageid: u64) -> u64 {
+    let addr_cageid = lind_arg_cageid(addr_cageid);
+
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(addr_cageid, _cageid) {
@@ -324,7 +344,7 @@ pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, _cageid: u64) -> u
     let vmmap = cage.vmmap.read();
     let base_addr = vmmap.base_address.unwrap() as u64;
 
-    if uaddr >= base_addr {
+    if sc_is_host_addr_in_cage_memory(uaddr as usize, base_addr as usize) {
         // Already a host pointer — caller (e.g. glibc's TRANSLATE_*_TO_HOST)
         // resolved it.  Pass through.
         return uaddr;
