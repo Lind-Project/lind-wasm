@@ -368,8 +368,12 @@ pub fn copy_handler_table_to_cage(
     // Actual implementation is in handler_table module according to feature flag
     let ret = copy_handler_table_to_cage_impl(srccage, targetcage);
     eprintln!(
-        "[popen-trace|3i copy_handler_table] source={} target={} ret={}",
-        srccage, targetcage, ret
+        "[popen-trace|3i copy_handler_table] source={} target={} ret={} feature_hashmap={} feature_dashmap={}",
+        srccage,
+        targetcage,
+        ret,
+        cfg!(feature = "hashmap"),
+        cfg!(feature = "dashmap")
     );
     ret
 }
