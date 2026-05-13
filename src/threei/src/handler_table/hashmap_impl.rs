@@ -1,6 +1,7 @@
 use crate::threei_const;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Mutex;
+use sysdefs::constants::lind_platform_const;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
@@ -72,7 +73,7 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// ## Panics:
 ///     - If no entry exists for `self_cageid`.
 ///     - If no entry exists for `syscall_num`.
-pub fn _get_handler(self_cageid: u64, syscall_num: u64, _target_cageid: u64) -> Option<(u64, u64)> {
+pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
     let handler_table = HANDLERTABLE.lock().unwrap();
 
     let call_map = handler_table.get(&self_cageid).unwrap_or_else(|| {
@@ -108,8 +109,8 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, _target_cageid: u64) -> 
 /// todo: a more efficient way to do clean up
 pub fn _rm_grate_from_handler(grateid: u64) {
     let mut table = HANDLERTABLE.lock().unwrap();
-    for (_self_cageid, callmap) in table.iter_mut() {
-        for (_callnum, target_map) in callmap.iter_mut() {
+    for (_, callmap) in table.iter_mut() {
+        for (_, target_map) in callmap.iter_mut() {
             target_map.retain(|dest_grateid, _| *dest_grateid != grateid);
         }
     }
