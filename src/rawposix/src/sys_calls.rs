@@ -108,6 +108,12 @@ pub extern "C" fn fork_syscall(
     // otherwise, we are creating a process (i.e. fork)
     let flags = args.flags;
     let isthread = flags & (sys_const::CLONE_VM);
+    eprintln!(
+        "[popen-trace|rawposix fork_syscall] parent={} flags=0x{:x} isthread_by_clone_vm={}",
+        cageid,
+        flags,
+        isthread != 0
+    );
 
     // Effective parent cage ID.
     let parent_cageid = cageid;
@@ -161,7 +167,7 @@ pub extern "C" fn fork_syscall(
         // This ensures that the child process inherits all syscall
         // interposition and routing behavior, including RawPOSIX's
         // syscall implementation
-        threei::copy_handler_table_to_cage(
+        let copy_ret = threei::copy_handler_table_to_cage(
             UNUSED_ARG,
             child_cageid,
             parent_cageid,
@@ -176,6 +182,10 @@ pub extern "C" fn fork_syscall(
             UNUSED_ID,
             UNUSED_ARG,
             UNUSED_ID,
+        );
+        eprintln!(
+            "[popen-trace|rawposix fork_syscall] copied handlers parent={} child={} ret={}",
+            parent_cageid, child_cageid, copy_ret
         );
     }
 

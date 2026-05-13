@@ -355,11 +355,23 @@ pub fn copy_handler_table_to_cage(
     // Verifies that neither srccage nor targetcage are in the EXITING state to avoid
     // copying from or to a cage that may be invalid.
     if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&srccage) {
+        eprintln!(
+            "[popen-trace|3i copy_handler_table] rejected source={} target={} source_exiting={} target_exiting={}",
+            srccage,
+            targetcage,
+            EXITING_TABLE.contains(&srccage),
+            EXITING_TABLE.contains(&targetcage)
+        );
         return threei_const::ELINDESRCH as u64;
     }
 
     // Actual implementation is in handler_table module according to feature flag
-    copy_handler_table_to_cage_impl(srccage, targetcage)
+    let ret = copy_handler_table_to_cage_impl(srccage, targetcage);
+    eprintln!(
+        "[popen-trace|3i copy_handler_table] source={} target={} ret={}",
+        srccage, targetcage, ret
+    );
+    ret
 }
 
 /// actually performs a call.  Not interposable

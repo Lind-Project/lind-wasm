@@ -247,9 +247,11 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
         );
         return threei_const::ELINDAPIABORTED;
     };
+    let src_has_mmap = src_snapshot.contains_key(&9);
 
     let dst_call_map_ref = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
     let dst_call_map: &CallnumMap = &*dst_call_map_ref;
+    let dst_had_mmap = dst_call_map.contains_key(&9);
 
     // Copy without overwriting existing destination handlers.
     for src_call_entry in src_snapshot.iter() {
@@ -267,6 +269,16 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
             dst_target_map.entry(handlefunccage).or_insert(addr);
         }
     }
+    let dst_has_mmap = dst_call_map.contains_key(&9);
+    eprintln!(
+        "[popen-trace|3i copy_impl] source={} target={} src_calls={} src_has_mmap={} dst_had_mmap={} dst_has_mmap={}",
+        srccage,
+        targetcage,
+        src_snapshot.len(),
+        src_has_mmap,
+        dst_had_mmap,
+        dst_has_mmap
+    );
 
     0
 }
