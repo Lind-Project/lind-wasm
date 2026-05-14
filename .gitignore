@@ -20,3 +20,7 @@ report.html
 
 #Ignore python cache
 __pycache__/
+
+#Ignore local files
+.DS_Store
+target/
