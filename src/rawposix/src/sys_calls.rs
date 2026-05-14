@@ -163,9 +163,9 @@ pub extern "C" fn fork_syscall(
         // syscall implementation
         threei::copy_handler_table_to_cage(
             UNUSED_ARG,
-            child_cageid,
+            UNUSED_ARG,
             parent_cageid,
-            UNUSED_ID,
+            child_cageid,
             UNUSED_ARG,
             UNUSED_ID,
             UNUSED_ARG,

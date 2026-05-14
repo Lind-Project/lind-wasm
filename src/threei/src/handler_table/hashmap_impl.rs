@@ -226,9 +226,10 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
     let mut handler_table = HANDLERTABLE.lock().unwrap();
 
     // If srccage has a handler table, clones its contents into targetcage.
-    // Does not overwrite any existing handlers in the target.
+    // Overwrites any existing handlers in the target.
     if let Some(src_entry) = handler_table.get(&srccage).cloned() {
-        let target_entry = handler_table.entry(targetcage).or_insert_with(HashMap::new);
+        handler_table.insert(targetcage, HashMap::new()); // overwrite whole target
+        let target_entry = handler_table.get_mut(&targetcage).unwrap();
         for (callnum, callnum_map) in src_entry {
             let target_callnum_map = target_entry.entry(callnum).or_insert_with(HashMap::new);
             for (handlefunc, handlefunccage) in callnum_map {
