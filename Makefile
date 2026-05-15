@@ -57,8 +57,15 @@ FDTABLES_IMPL ?= dashmaparray
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
-	    --no-default-features --features fdtables-$(FDTABLES_IMPL)
+		--no-default-features --features fdtables-$(FDTABLES_IMPL)
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
+
+.PHONY: lind-boot-debug
+lind-boot-debug: build-dir
+	# Build lind-boot in debug mode for development/debugging.
+	cargo build --manifest-path src/lind-boot/Cargo.toml \
+		--no-default-features --features fdtables-$(FDTABLES_IMPL)
+	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
 lindfs:
