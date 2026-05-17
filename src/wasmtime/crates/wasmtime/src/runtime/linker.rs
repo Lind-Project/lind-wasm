@@ -572,6 +572,15 @@ impl<T> Linker<T> {
                 }
                 ClonedMemory::New(memory_type) => {
                     let mem = SharedMemory::new(&engine, memory_type.clone())?;
+                    // Grow to the declared max (65536 pages = 4 GiB) so that
+                    // fork_vmmap can copy parent data at any user address and wasm
+                    // bounds checks pass in the child.
+                    let max_pages = memory_type.maximum().unwrap_or(65536);
+                    let cur_pages = memory_type.minimum();
+                    let delta = max_pages.saturating_sub(cur_pages);
+                    if delta > 0 {
+                        mem.grow(delta)?;
+                    }
                     memory_base = Some(mem.get_memory_base());
                     new_linker.define(&mut store, &module, &name, mem)?;
                 }
