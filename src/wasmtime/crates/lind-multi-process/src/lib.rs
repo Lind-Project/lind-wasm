@@ -22,11 +22,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
-use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
     InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque,
-    Val, ValRaw, ValType,
+    Val, ValRaw, ValType, VMContext, VMOpaqueContext,
 };
 
 use cage::alloc_cage_id;
@@ -421,7 +420,8 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table)
+                        .expect("failed to create store inner");
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -443,7 +443,8 @@ impl<
                         None
                     };
 
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner)
+                        .expect("failed to create store");
 
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
@@ -463,14 +464,14 @@ impl<
                     // e.g. __stack_pointer, __indirect_function_table, etc.
 
                     let child_table = if dylink_enabled {
-                        let mut table_size = 0;
+                        let mut table_size: u64 = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
                                 table_size = table.minimum();
                             }
                         }
                         let mut child_table = linker
-                            .attach_function_table(&mut store, table_size)
+                            .attach_function_table(&mut store, table_size as u32)
                             .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
@@ -496,7 +497,7 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
@@ -620,7 +621,7 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
@@ -704,7 +705,7 @@ impl<
 
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().as_ptr().cast();
 
                     // 2) Extract vmctx pointer and put in a Send+Sync wrapper
                     let vmctx_wrapper = VmCtxWrapper {
@@ -1009,7 +1010,8 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table)
+                        .expect("failed to create store inner");
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -1025,7 +1027,8 @@ impl<
                     let modules = child_ctx.modules.clone();
                     let dlopen_modules = child_ctx.dlopen_modules.clone();
 
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner)
+                        .expect("failed to create store");
 
                     let mut child_got = if dylink_enabled {
                         Some(LindGOT::new())
@@ -1045,14 +1048,14 @@ impl<
                         .expect("failed to create child linker");
 
                     let child_table = if dylink_enabled {
-                        let mut table_size = 0;
+                        let mut table_size: u64 = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
                                 table_size = table.minimum();
                             }
                         }
                         let mut child_table = linker
-                            .attach_function_table(&mut store, table_size)
+                            .attach_function_table(&mut store, table_size as u32)
                             .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
@@ -1078,7 +1081,7 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
@@ -1182,7 +1185,7 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
@@ -1279,7 +1282,7 @@ impl<
                     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().as_ptr().cast();
 
                     // 2) Extract vmctx pointer and put in a Send+Sync wrapper
                     let vmctx_wrapper = VmCtxWrapper {
@@ -1408,7 +1411,7 @@ impl<
 
         let engine = main_module.engine().clone();
         let exec_file_path = Path::new(&path);
-        let exec_module = match engine.detect_precompiled_file(exec_file_path) {
+        let exec_module = match Engine::detect_precompiled_file(exec_file_path) {
             Ok(_) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
             Err(_) => Module::from_file(&engine, exec_file_path),
         };
@@ -1888,9 +1891,14 @@ impl<
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    let mut memory_iter = caller.as_context_mut().0.all_memories();
-    let memory = memory_iter.next().expect("no defined memory found").clone();
-    drop(memory_iter);
+    let memory = {
+        let mut memory_iter = caller.as_context_mut().0.all_memories();
+        memory_iter
+            .next()
+            .expect("no defined memory found")
+            .unshared()
+            .expect("expected unshared memory")
+    };
 
     memory.data_ptr(caller.as_context()) as usize as u64
 }
@@ -1901,9 +1909,14 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
 pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> (u64, usize) {
-    let mut memory_iter = caller.as_context_mut().0.all_memories();
-    let memory = memory_iter.next().expect("no defined memory found").clone();
-    drop(memory_iter);
+    let memory = {
+        let mut memory_iter = caller.as_context_mut().0.all_memories();
+        memory_iter
+            .next()
+            .expect("no defined memory found")
+            .unshared()
+            .expect("expected unshared memory")
+    };
 
     let base = memory.data_ptr(caller.as_context()) as usize as u64;
     let size = memory.data_size(caller.as_context());
@@ -2015,7 +2028,8 @@ where
 
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
-        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         let ret = Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             // Validate clone_arg inside Caller::with where memory bounds are available.
@@ -2132,7 +2146,8 @@ where
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
-        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             let host = caller.data().clone();
@@ -2239,7 +2254,8 @@ where
         // Convert the stored opaque pointer back into a concrete VMContext
         // so that we can safely re-enter Wasmtime execution.
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
-        let vmctx_raw: *mut VMContext = VMContext::from_opaque(opaque);
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         // Re-enter Wasmtime with the recovered VMContext.
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
@@ -2314,34 +2330,101 @@ where
 
 // attach a new SharedMemory to the Linker for multi-threading usage
 // Warning: only set need_init to true for first cage initialization
+//
+// `all_modules` should include the main module plus all preload library modules.
+// The shared memory is created with limits that satisfy every module's import
+// declaration: min = max(all declared mins), max = min(all declared maxes).
 pub fn attach_shared_memory<
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 >(
     store: impl AsContext<Data = T>,
     mut linker: &mut Linker<T>,
-    module: &Module,
+    all_modules: &[Module],
     need_init: bool,
     cageid: i32,
 ) -> Result<()> {
-    for import in module.imports() {
+    // Find the shared memory import in the first module (main module) to get
+    // the import namespace / name under which to register the memory.
+    let main_module = all_modules
+        .first()
+        .ok_or_else(|| anyhow!("no modules provided"))?;
+
+    let mut import_module_name = "";
+    let mut import_name = "";
+    let mut found = false;
+    for import in main_module.imports() {
         if let Some(m) = import.ty().memory() {
             if m.is_shared() {
-                let mem = SharedMemory::new(module.engine(), m.clone())?;
-                if need_init {
-                    // in case of first cage
-                    // Initialize vmmap immediately after creating the shared linear memory
-                    let memory_base = mem.get_memory_base();
-                    cage::init_vmmap(cageid as u64, memory_base as usize, None);
-                }
-                linker.define(&store, import.module(), import.name(), mem.clone())?;
+                import_module_name = import.module();
+                import_name = import.name();
+                found = true;
+                break;
+            }
+        }
+    }
+    if !found {
+        return Err(anyhow!("Main Module does not contain a shared memory"));
+    }
 
-                return Ok(());
+    // Compute the union memory type across all modules:
+    //   actual.min  = max(all declared mins)   — satisfies every module's minimum
+    //   actual.max  = min(all declared maxes)  — satisfies every module's max bound
+    //
+    // The wasmtime import check is: import.min <= actual.min && import.max >= actual.max
+    // so actual.min = max(mins) and actual.max = min(maxes) works for all importers.
+    let mut combined_min: u64 = 0;
+    let mut combined_max: Option<u64> = None;
+    for module in all_modules.iter() {
+        for import in module.imports() {
+            if let Some(m) = import.ty().memory() {
+                if m.is_shared() {
+                    let mod_min = m.minimum();
+                    let mod_max = m.maximum();
+                    combined_min = combined_min.max(mod_min);
+                    combined_max = match (combined_max, mod_max) {
+                        (None, x) => x,
+                        (x, None) => x,
+                        (Some(a), Some(b)) => Some(a.min(b)),
+                    };
+                    break;
+                }
             }
         }
     }
 
-    Err(anyhow!("Main Module does not contain a shared memory"))
+    let mem_type = wasmtime::MemoryTypeBuilder::new()
+        .shared(true)
+        .min(combined_min)
+        .max(combined_max)
+        .build()
+        .map_err(anyhow::Error::from)?;
+
+    let mem = SharedMemory::new(main_module.engine(), mem_type)?;
+
+    // Grow the shared memory to its maximum size immediately after creation.
+    // Without this, only `min * 64KiB` pages are committed. Library init code
+    // (`__wasm_apply_data_relocs`, constructors) writes data at addresses
+    // returned by RawPOSIX mmap, which can be well above `min * 64KiB` (e.g.
+    // after an 8MB stack region). Accessing uncommitted pages triggers SIGSEGV
+    // which wasmtime converts to a MemoryOutOfBounds trap. Growing to max here
+    // commits all pages upfront so every address in 0..max*64KiB is accessible.
+    if let Some(max_pages) = combined_max {
+        let delta = max_pages.saturating_sub(combined_min);
+        if delta > 0 {
+            mem.grow(delta)
+                .map_err(anyhow::Error::from)
+                .context("failed to grow shared memory to max pages")?;
+        }
+    }
+
+    if need_init {
+        let memory_base = mem.get_memory_base();
+        cage::init_vmmap(cageid as u64, memory_base as usize, None);
+    }
+    linker.define(&store, import_module_name, import_name, mem.clone())?;
+
+    Ok(())
 }
 
 pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {
