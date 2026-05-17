@@ -431,13 +431,14 @@ impl Instance {
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
                 let export_memory = store.0.all_memories().next().expect("no defined memory found");
-                let memory = match export_memory {
-                    crate::runtime::vm::ExportMemory::Unshared(m) => m,
+                let memory_base = match &export_memory {
                     crate::runtime::vm::ExportMemory::Shared(..) => {
-                        panic!("expected unshared memory")
+                        export_memory.shared_base_ptr().unwrap() as usize
+                    }
+                    crate::runtime::vm::ExportMemory::Unshared(_) => {
+                        export_memory.unshared().unwrap().data_ptr(&mut *store) as usize
                     }
                 };
-                let memory_base = memory.data_ptr(&mut *store) as usize;
 
                 let (start_addr, required_memory_size) = if dylink_enabled {
                     // for dynamic builds, we manually calcuate the initial memory region
@@ -596,11 +597,16 @@ impl Instance {
                 // therefore in this case, we only need to:
                 // 1. set memory base address
                 // 2. fork the memory space from parent
-                let memory = store.0.all_memories().next()
-                    .expect("no defined memory found")
-                    .unshared()
-                    .expect("expected unshared memory");
-                let child_address = memory.data_ptr(&*store) as usize;
+                let export_memory = store.0.all_memories().next()
+                    .expect("no defined memory found");
+                let child_address = match &export_memory {
+                    crate::runtime::vm::ExportMemory::Shared(..) => {
+                        export_memory.shared_base_ptr().unwrap() as usize
+                    }
+                    crate::runtime::vm::ExportMemory::Unshared(_) => {
+                        export_memory.unshared().unwrap().data_ptr(&*store) as usize
+                    }
+                };
 
                 fork_vmmap(parent_cageid as u64, child_cageid);
 

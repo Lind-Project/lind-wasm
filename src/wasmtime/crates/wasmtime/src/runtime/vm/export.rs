@@ -39,4 +39,16 @@ impl ExportMemory {
             ExportMemory::Shared(m, _) => Some(m),
         }
     }
+
+    /// Returns the base pointer of the memory without consuming self.
+    /// For shared memory the pointer is read directly from VMMemoryDefinition;
+    /// for unshared memory None is returned (caller must use data_ptr with a store).
+    pub fn shared_base_ptr(&self) -> Option<*mut u8> {
+        match self {
+            ExportMemory::Unshared(_) => None,
+            ExportMemory::Shared(vm, _) => {
+                Some(unsafe { (*vm.vmmemory_ptr().as_ptr()).base.as_ptr() })
+            }
+        }
+    }
 }

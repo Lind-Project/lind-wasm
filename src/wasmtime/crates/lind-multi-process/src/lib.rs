@@ -1891,16 +1891,12 @@ impl<
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    let memory = {
-        let mut memory_iter = caller.as_context_mut().0.all_memories();
-        memory_iter
-            .next()
-            .expect("no defined memory found")
-            .unshared()
-            .expect("expected unshared memory")
-    };
-
-    memory.data_ptr(caller.as_context()) as usize as u64
+    let em = caller.as_context_mut().0.all_memories().next().expect("no defined memory found");
+    if let Some(base) = em.shared_base_ptr() {
+        base as usize as u64
+    } else {
+        em.unshared().expect("expected memory").data_ptr(caller.as_context()) as usize as u64
+    }
 }
 
 /// Returns `(base_ptr_as_u64, data_size_in_bytes)` for the first guest linear
@@ -1909,18 +1905,19 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
 pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> (u64, usize) {
-    let memory = {
-        let mut memory_iter = caller.as_context_mut().0.all_memories();
-        memory_iter
-            .next()
-            .expect("no defined memory found")
-            .unshared()
-            .expect("expected unshared memory")
-    };
-
-    let base = memory.data_ptr(caller.as_context()) as usize as u64;
-    let size = memory.data_size(caller.as_context());
-    (base, size)
+    let em = caller.as_context_mut().0.all_memories().next().expect("no defined memory found");
+    if let Some(base) = em.shared_base_ptr() {
+        let size = unsafe {
+            let vm = em.shared().expect("shared memory");
+            (*vm.vmmemory_ptr().as_ptr()).current_length.load(std::sync::atomic::Ordering::SeqCst)
+        };
+        (base as usize as u64, size)
+    } else {
+        let m = em.unshared().expect("expected memory");
+        let base = m.data_ptr(caller.as_context()) as usize as u64;
+        let size = m.data_size(caller.as_context());
+        (base, size)
+    }
 }
 
 // entry point of fork syscall
@@ -2367,55 +2364,51 @@ pub fn attach_shared_memory<
         return Err(anyhow!("Main Module does not contain a shared memory"));
     }
 
-    // Compute the union memory type across all modules:
-    //   actual.min  = max(all declared mins)   — satisfies every module's minimum
-    //   actual.max  = min(all declared maxes)  — satisfies every module's max bound
+    // In lind-wasm the linear memory is always a fixed 4 GiB physical
+    // reservation (MmapMemory overrides max to MAX_MEMORY_SIZE = 4 GiB).
+    // The wasm modules may declare a smaller `max` (e.g. 1024 pages = 64 MiB)
+    // but that is a compiler artifact — the runtime must honour the full 4 GiB.
+    // We therefore always create the shared memory with max = 65536 pages (4 GiB)
+    // and grow to that size immediately, so that `current_length` reflects the
+    // true accessible extent.  The max-limit type check in matching.rs is
+    // relaxed for shared memories to allow this.
     //
-    // The wasmtime import check is: import.min <= actual.min && import.max >= actual.max
-    // so actual.min = max(mins) and actual.max = min(maxes) works for all importers.
+    // We still compute combined_min (= max of all declared mins) to satisfy
+    // every module's minimum requirement.
     let mut combined_min: u64 = 0;
-    let mut combined_max: Option<u64> = None;
     for module in all_modules.iter() {
         for import in module.imports() {
             if let Some(m) = import.ty().memory() {
                 if m.is_shared() {
-                    let mod_min = m.minimum();
-                    let mod_max = m.maximum();
-                    combined_min = combined_min.max(mod_min);
-                    combined_max = match (combined_max, mod_max) {
-                        (None, x) => x,
-                        (x, None) => x,
-                        (Some(a), Some(b)) => Some(a.min(b)),
-                    };
+                    combined_min = combined_min.max(m.minimum());
                     break;
                 }
             }
         }
     }
 
+    // Always use 65536 pages (4 GiB) as the declared maximum so that
+    // current_length can be grown to the full physical reservation.
+    const LIND_MAX_PAGES: u64 = 65536;
+
     let mem_type = wasmtime::MemoryTypeBuilder::new()
         .shared(true)
         .min(combined_min)
-        .max(combined_max)
+        .max(Some(LIND_MAX_PAGES))
         .build()
         .map_err(anyhow::Error::from)?;
 
     let mem = SharedMemory::new(main_module.engine(), mem_type)?;
 
-    // Grow the shared memory to its maximum size immediately after creation.
-    // Without this, only `min * 64KiB` pages are committed. Library init code
-    // (`__wasm_apply_data_relocs`, constructors) writes data at addresses
-    // returned by RawPOSIX mmap, which can be well above `min * 64KiB` (e.g.
-    // after an 8MB stack region). Accessing uncommitted pages triggers SIGSEGV
-    // which wasmtime converts to a MemoryOutOfBounds trap. Growing to max here
-    // commits all pages upfront so every address in 0..max*64KiB is accessible.
-    if let Some(max_pages) = combined_max {
-        let delta = max_pages.saturating_sub(combined_min);
-        if delta > 0 {
-            mem.grow(delta)
-                .map_err(anyhow::Error::from)
-                .context("failed to grow shared memory to max pages")?;
-        }
+    // Grow to the full 4 GiB so that every wasm address in [0, 4GiB) passes
+    // the current_length bounds check.  The physical pages are already reserved
+    // by MmapMemory; this just makes them PROT_READ|PROT_WRITE and updates
+    // current_length atomically.
+    let delta = LIND_MAX_PAGES.saturating_sub(combined_min);
+    if delta > 0 {
+        mem.grow(delta)
+            .map_err(anyhow::Error::from)
+            .context("failed to grow shared memory to 4 GiB")?;
     }
 
     if need_init {
