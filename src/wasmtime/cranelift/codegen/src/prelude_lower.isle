@@ -3,19 +3,15 @@
 
 ;;;; Primitive and External Types ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; `cranelift-entity`-based identifiers.
-(type Inst (primitive Inst))
-
 ;; ISLE representation of `Vec<u8>`
 (type VecMask extern (enum))
 
 (type ValueRegs (primitive ValueRegs))
 (type WritableValueRegs (primitive WritableValueRegs))
+(type ValueRegsVec extern (enum))
 
 ;; Instruction lowering result: a vector of `ValueRegs`.
 (type InstOutput (primitive InstOutput))
-;; (Mutable) builder to incrementally construct an `InstOutput`.
-(type InstOutputBuilder extern (enum))
 
 ;; Type to hold multiple Regs
 (type MultiReg
@@ -29,6 +25,7 @@
 
 ;;;; Registers ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(model Reg (type (bv)))
 (type Reg (primitive Reg))
 (type WritableReg (primitive WritableReg))
 (type OptionWritableReg (primitive OptionWritableReg))
@@ -37,6 +34,8 @@
 (type PReg (primitive PReg))
 
 ;; Construct a `ValueRegs` of one register.
+(spec (value_reg arg)
+    (provide (= result arg)))
 (decl value_reg (Reg) ValueRegs)
 (extern constructor value_reg value_reg)
 
@@ -61,6 +60,8 @@
 (extern constructor output_none output_none)
 
 ;; Construct a single-element `InstOutput`.
+(spec (output arg)
+      (provide (= arg (conv_to (widthof arg) result))))
 (decl output (ValueRegs) InstOutput)
 (extern constructor output output)
 
@@ -69,24 +70,24 @@
 (extern constructor output_pair output_pair)
 
 ;; Construct a single-element `InstOutput` from a single register.
+(spec (output_reg arg)
+      (provide (= result (conv_to (widthof result) arg))))
+(instantiate output_reg
+    ((args (bv 64)) (ret (bv 8)) (canon (bv 8)))
+    ((args (bv 64)) (ret (bv 16)) (canon (bv 16)))
+    ((args (bv 64)) (ret (bv 32)) (canon (bv 32)))
+    ((args (bv 64)) (ret (bv 64)) (canon (bv 64)))
+)
 (decl output_reg (Reg) InstOutput)
-(rule (output_reg reg) (output (value_reg reg)))
+(rule output_reg (output_reg reg) (output (value_reg reg)))
 
 ;; Construct a single-element `InstOutput` from a value.
 (decl output_value (Value) InstOutput)
 (rule (output_value val) (output (put_in_regs val)))
 
-;; Initially empty `InstOutput` builder.
-(decl output_builder_new () InstOutputBuilder)
-(extern constructor output_builder_new output_builder_new)
-
-;; Append a `ValueRegs` to an `InstOutput` under construction.
-(decl output_builder_push (InstOutputBuilder ValueRegs) Unit)
-(extern constructor output_builder_push output_builder_push)
-
-;; Finish building an `InstOutput` incrementally.
-(decl output_builder_finish (InstOutputBuilder) InstOutput)
-(extern constructor output_builder_finish output_builder_finish)
+;; Construct an `InstOutput` from a vector.
+(decl output_vec (ValueRegsVec) InstOutput)
+(extern constructor output_vec output_vec)
 
 ;; Get a temporary register for writing.
 (decl temp_writable_reg (Type) WritableReg)
@@ -103,11 +104,11 @@
 ;; Get or match the invalid register.
 (decl invalid_reg () Reg)
 (extern constructor invalid_reg invalid_reg)
-(extractor (invalid_reg) (is_valid_reg $false))
+(extractor (invalid_reg) (is_valid_reg false))
 
 ;; Match any register but the invalid register.
 (decl valid_reg (Reg) Reg)
-(extractor (valid_reg reg) (and (is_valid_reg $true) reg))
+(extractor (valid_reg reg) (and (is_valid_reg true) reg))
 
 ;; Mark this value as used, to ensure that it gets lowered.
 (decl mark_value_used (Value) Unit)
@@ -119,31 +120,31 @@
 ;; multiple registers for its representation (like `i128` on x64 for example).
 ;;
 ;; As a side effect, this marks the value as used.
+(spec (put_in_reg arg)
+      (provide (= result (conv_to 64 arg))))
 (decl put_in_reg (Value) Reg)
 (extern constructor put_in_reg put_in_reg)
 
 ;; Put the given value into one or more registers.
 ;;
 ;; As a side effect, this marks the value as used.
+(spec (put_in_regs arg) (provide (= (conv_to 64 arg) result)))
 (decl put_in_regs (Value) ValueRegs)
 (extern constructor put_in_regs put_in_regs)
 
-;; If the given reg is a real register, cause the value in reg to be in a virtual
-;; reg, by copying it into a new virtual reg.
-(decl ensure_in_vreg (Reg Type) Reg)
-(extern constructor ensure_in_vreg ensure_in_vreg)
+;; Put a slice of values into a vector of ValueRegs.
+(decl put_in_regs_vec (ValueSlice) ValueRegsVec)
+(extern constructor put_in_regs_vec put_in_regs_vec)
 
 ;; Get the `n`th register inside a `ValueRegs`.
+(spec (value_regs_get arg i)
+    (provide (= arg result) (= (widthof i) 1)))
 (decl value_regs_get (ValueRegs usize) Reg)
 (extern constructor value_regs_get value_regs_get)
 
 ;; Get the number of registers in a `ValueRegs`.
 (decl pure value_regs_len (ValueRegs) usize)
 (extern constructor value_regs_len value_regs_len)
-
-;; Get a range for the number of regs in a `ValueRegs`.
-(decl value_regs_range (ValueRegs) Range)
-(rule (value_regs_range regs) (range 0 (value_regs_len regs)))
 
 ;; Put the value into one or more registers and return the first register.
 ;;
@@ -178,11 +179,6 @@
 (rule (multi_reg_to_single (MultiReg.One a))
       (value_reg a))
 
-;; Add a range fact to a register, when compiling with
-;; proof-carrying-code enabled.
-(decl add_range_fact (Reg u16 u64 u64) Reg)
-(extern constructor add_range_fact add_range_fact)
-
 ;;;; Common Mach Types ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (type MachLabel (primitive MachLabel))
@@ -190,10 +186,11 @@
 (type UnwindInst (primitive UnwindInst))
 (type ExternalName (primitive ExternalName))
 (type BoxExternalName (primitive BoxExternalName))
-(type RelocDistance (primitive RelocDistance))
+(type RelocDistance extern (enum (Near) (Far)))
 (type VecArgPair extern (enum))
 (type VecRetPair extern (enum))
-(type CallArgList extern (enum))
+(type CallArgList (primitive CallArgList))
+(type CallRetList (primitive CallRetList))
 (type MachLabelSlice extern (enum))
 (type BoxVecMachLabel extern (enum))
 
@@ -255,13 +252,18 @@
 (decl inst_results (ValueSlice) Inst)
 (extern extractor infallible inst_results inst_results)
 
+;; Returns whether the given value is unused in this function and is a dead
+;; result.
+(decl pure value_is_unused (Value) bool)
+(extern constructor value_is_unused value_is_unused)
+
 ;; Extract the first result value of the given instruction.
 (decl first_result (Value) Inst)
 (extern extractor first_result first_result)
 
 ;; Extract the `InstructionData` for an `Inst`.
-(decl inst_data (InstructionData) Inst)
-(extern extractor infallible inst_data inst_data)
+(decl inst_data_value (Type InstructionData) Inst)
+(extern extractor infallible inst_data_value inst_data_value)
 
 ;; Extract the type of the instruction's first result.
 (decl result_type (Type) Inst)
@@ -270,24 +272,48 @@
 
 ;; Extract the type of the instruction's first result and pass along the
 ;; instruction as well.
+(spec (has_type ty arg)
+      (provide (= result arg))
+      (require (= ty (widthof arg))))
 (decl has_type (Type Inst) Inst)
 (extractor (has_type ty inst)
            (and (result_type ty)
                 inst))
 
-;; Match the instruction that defines the given value, if any.
-(decl def_inst (Inst) Value)
-(extern extractor def_inst def_inst)
+(decl u8_from_iconst (u8) Value)
+(extractor (u8_from_iconst x)
+           (u64_from_iconst (u8_from_u64 x)))
+
+(decl u16_from_iconst (u16) Value)
+(extractor (u16_from_iconst x)
+           (u64_from_iconst (u16_from_u64 x)))
+
+(decl u32_from_iconst (u32) Value)
+(extractor (u32_from_iconst x)
+           (u64_from_iconst (u32_from_u64 x)))
 
 ;; Extract a constant `u64` from a value defined by an `iconst`.
+(spec (u64_from_iconst arg) (provide (= arg (zero_ext 64 result))))
 (decl u64_from_iconst (u64) Value)
 (extractor (u64_from_iconst x)
-           (def_inst (iconst (u64_from_imm64 x))))
+           (def_inst (iconst _ (u64_from_imm64 x))))
+
+(decl i8_from_iconst (i8) Value)
+(extractor (i8_from_iconst x)
+           (i64_from_iconst (i8_from_i64 x)))
+
+(decl i16_from_iconst (i16) Value)
+(extractor (i16_from_iconst x)
+           (i64_from_iconst (i16_from_i64 x)))
 
 ;; Extract a constant `i32` from a value defined by an `iconst`.
 ;; The value is sign extended to 32 bits.
+(spec (i32_from_iconst arg)
+      (provide (= arg (extract 31 0 (sign_ext 64 result))))
+      (require (= result (sign_ext (widthof result) arg))))
 (decl i32_from_iconst (i32) Value)
-(extern extractor i32_from_iconst i32_from_iconst)
+(extractor (i32_from_iconst x)
+           (i64_from_iconst (i32_from_i64 x)))
 
 ;; Extract a constant `i64` from a value defined by an `iconst`.
 ;; The value is sign extended to 64 bits.
@@ -308,8 +334,46 @@
 (extern extractor maybe_uextend maybe_uextend)
 
 ;; Get an unsigned 8-bit immediate in a u8 from an Imm64, if possible.
+(spec (uimm8 arg)
+    (provide (= result (zero_ext 64 arg)))
+    (require (bvslt result #x0000000000000100)
+             (= (widthof arg) 8)))
 (decl uimm8 (u8) Imm64)
 (extern extractor uimm8 uimm8)
+
+(decl eq (Value Value) Value)
+(extractor (eq x y) (icmp (IntCC.Equal) x y))
+
+(decl ne (Value Value) Value)
+(extractor (ne x y) (icmp (IntCC.NotEqual) x y))
+
+(decl ult (Value Value) Value)
+(extractor (ult x y) (icmp _ (IntCC.UnsignedLessThan) x y))
+
+(decl ule (Value Value) Value)
+(extractor (ule x y) (icmp (IntCC.UnsignedLessThanOrEqual) x y))
+
+(decl ugt (Value Value) Value)
+(extractor (ugt x y) (icmp _ (IntCC.UnsignedGreaterThan) x y))
+
+(decl uge (Value Value) Value)
+(extractor (uge x y) (icmp (IntCC.UnsignedGreaterThanOrEqual) x y))
+
+(decl slt (Value Value) Value)
+(extractor (slt x y) (icmp (IntCC.SignedLessThan) x y))
+
+(decl sle (Value Value) Value)
+(extractor (sle x y) (icmp (IntCC.SignedLessThanOrEqual) x y))
+
+(decl sgt (Value Value) Value)
+(extractor (sgt x y) (icmp (IntCC.SignedGreaterThan) x y))
+
+(decl sge (Value Value) Value)
+(extractor (sge x y) (icmp (IntCC.SignedGreaterThanOrEqual) x y))
+
+;; Get the MachLabel for a particular CLIF block's indexed exception-handling successor.
+(decl block_exn_successor_label (Block u64) MachLabel)
+(extern constructor block_exn_successor_label block_exn_successor_label)
 
 ;; Instruction creation helpers ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -339,11 +403,23 @@
 (decl emit_u64_le_const (u64) VCodeConstant)
 (extern constructor emit_u64_le_const emit_u64_le_const)
 
+;; Add a u64 big-endian constant to the in-memory constant pool and
+;; return a VCodeConstant index that refers to it. This is
+;; side-effecting but idempotent (constants are deduplicated).
+(decl emit_u64_be_const (u64) VCodeConstant)
+(extern constructor emit_u64_be_const emit_u64_be_const)
+
 ;; Add a u128 little-endian constant to the in-memory constant pool and
 ;; return a VCodeConstant index that refers to it. This is
 ;; side-effecting but idempotent (constants are deduplicated).
 (decl emit_u128_le_const (u128) VCodeConstant)
 (extern constructor emit_u128_le_const emit_u128_le_const)
+
+;; Add a u128 big-endian constant to the in-memory constant pool and
+;; return a VCodeConstant index that refers to it. This is
+;; side-effecting but idempotent (constants are deduplicated).
+(decl emit_u128_be_const (u128) VCodeConstant)
+(extern constructor emit_u128_be_const emit_u128_be_const)
 
 ;; Fetch the VCodeConstant associated with a Constant.
 (decl const_to_vconst (Constant) VCodeConstant)
@@ -358,6 +434,8 @@
                           (Inst3 (inst1 MInst)
                                  (inst2 MInst)
                                  (inst3 MInst))))
+
+(model SideEffectNoResult (type Unit))
 
 ;; Emit given side-effectful instruction.
 (decl emit_side_effect (SideEffectNoResult) Unit)
@@ -374,6 +452,8 @@
 ;; Create an empty `InstOutput`, but do emit the given side-effectful
 ;; instruction.
 (decl side_effect (SideEffectNoResult) InstOutput)
+(spec (side_effect v)
+    (provide (= result v)))
 (rule (side_effect inst)
       (let ((_ Unit (emit_side_effect inst)))
         (output_none)))
@@ -385,6 +465,13 @@
       (SideEffectNoResult.Inst3 inst1 inst2 inst3))
 (rule (side_effect_concat (SideEffectNoResult.Inst2 inst1 inst2) (SideEffectNoResult.Inst inst3))
       (SideEffectNoResult.Inst3 inst1 inst2 inst3))
+
+;; In certain cases (e.g., RMW lowerings) it can be useful to emit an invalid
+;; register after a side-effectful instruction.
+(decl side_effect_as_invalid (SideEffectNoResult) InstOutput)
+(rule (side_effect_as_invalid inst)
+      (let ((_ InstOutput (side_effect inst)))
+        (invalid_reg)))
 
 ;;;; Helpers for Working with Flags ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -463,6 +550,12 @@
         (ConsumesFlags.ConsumesFlagsSideEffect inst1)
         (ConsumesFlags.ConsumesFlagsSideEffect inst2))
       (ConsumesFlags.ConsumesFlagsSideEffect2 inst1 inst2))
+
+;; Get the produced register out of a ConsumesFlags.
+(decl consumes_flags_get_reg (ConsumesFlags) Reg)
+(rule (consumes_flags_get_reg (ConsumesFlags.ConsumesFlagsReturnsReg _ reg)) reg)
+(decl consumes_flags_get_regs (ConsumesFlags) ValueRegs)
+(rule (consumes_flags_get_regs (ConsumesFlags.ConsumesFlagsTwiceReturnsValueRegs _ _ regs)) regs)
 
 ;; Combine flags-producing and -consuming instructions together, ensuring that
 ;; they are emitted back-to-back and no other instructions can be emitted
@@ -870,6 +963,13 @@
 (decl pure partial preserve_frame_pointers () Unit)
 (extern constructor preserve_frame_pointers preserve_frame_pointers)
 
+;; This definition should be kept up to date with the values defined in
+;; cranelift/codegen/meta/src/shared/settings.rs
+(type StackSwitchModel extern (enum (None) (Basic) (UpdateWindowsTib)))
+
+(decl pure partial stack_switch_model () StackSwitchModel)
+(extern constructor stack_switch_model stack_switch_model)
+
 ;;;; Helpers for accessing instruction data ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (decl box_external_name (ExternalName) BoxExternalName)
@@ -877,18 +977,17 @@
 
 ;; Accessor for `FuncRef`.
 
-(decl func_ref_data (SigRef ExternalName RelocDistance) FuncRef)
+(decl func_ref_data (SigRef ExternalName RelocDistance bool) FuncRef)
 (extern extractor infallible func_ref_data func_ref_data)
+
+;; Accessor for `ExceptionTable`.
+(decl exception_sig (SigRef) ExceptionTable)
+(extern extractor infallible exception_sig exception_sig)
 
 ;; Accessor for `GlobalValue`.
 
 (decl symbol_value_data (ExternalName RelocDistance i64) GlobalValue)
 (extern extractor symbol_value_data symbol_value_data)
-
-;; Accessor for `RelocDistance`.
-
-(decl reloc_distance_near () RelocDistance)
-(extern extractor reloc_distance_near reloc_distance_near)
 
 ;; Accessor for `Immediate` as a vector of u8 values.
 
@@ -962,11 +1061,20 @@
 (type RealReg (primitive RealReg))
 
 ;; Instruction on whether and how to extend an argument value.
+(model ArgumentExtension
+  (enum
+    (None)
+    (Uext)
+    (Sext)))
 (type ArgumentExtension extern
   (enum
     (None)
     (Uext)
     (Sext)))
+
+;; Create a Sig from a SigRef.
+(decl abi_sig (SigRef) Sig)
+(extern constructor abi_sig abi_sig)
 
 ;; Get the number of arguments expected.
 (decl abi_num_args (Sig) usize)
@@ -993,17 +1101,17 @@
 (decl abi_no_ret_arg () Sig)
 (extern extractor abi_no_ret_arg abi_no_ret_arg)
 
-;; Size of the argument area.
-(decl abi_sized_stack_arg_space (Sig) i64)
-(extern constructor abi_sized_stack_arg_space abi_sized_stack_arg_space)
-
-;; Size of the return-value area.
-(decl abi_sized_stack_ret_space (Sig) i64)
-(extern constructor abi_sized_stack_ret_space abi_sized_stack_ret_space)
+;; Incoming return area pointer (must be present).
+(decl abi_unwrap_ret_area_ptr () Reg)
+(extern constructor abi_unwrap_ret_area_ptr abi_unwrap_ret_area_ptr)
 
 ;; StackSlot addr
 (decl abi_stackslot_addr (WritableReg StackSlot Offset32) MInst)
 (extern constructor abi_stackslot_addr abi_stackslot_addr)
+
+;; StackSlot raw offset into slot region
+(decl abi_stackslot_offset_into_slot_region (StackSlot Offset32 Offset32) i32)
+(extern constructor abi_stackslot_offset_into_slot_region abi_stackslot_offset_into_slot_region)
 
 ;; DynamicStackSlot addr
 (decl abi_dynamic_stackslot_addr (WritableReg DynamicStackSlot) MInst)
@@ -1013,11 +1121,6 @@
 ;; return value only requires a single slot to be passed.
 (decl abi_arg_only_slot (ABIArgSlot) ABIArg)
 (extern extractor abi_arg_only_slot abi_arg_only_slot)
-
-;; Extractor to detect the special case where a struct argument
-;; is explicitly passed by reference using a hidden pointer.
-(decl abi_arg_struct_pointer (ABIArgSlot i64 u64) ABIArg)
-(extern extractor abi_arg_struct_pointer abi_arg_struct_pointer)
 
 ;; Extractor to detect the special case where a non-struct argument
 ;; is implicitly passed by reference using a hidden pointer.
@@ -1042,16 +1145,38 @@
       (let ((_ Unit (gen_return vals)))
         (output_none)))
 
-(decl gen_return (ValueSlice) Unit)
+(decl gen_return (ValueRegsVec) Unit)
 (extern constructor gen_return gen_return)
 
-(decl gen_return_call (SigRef ExternalName RelocDistance ValueSlice) InstOutput)
-(extern constructor gen_return_call gen_return_call)
+(decl gen_call_output (SigRef) ValueRegsVec)
+(extern constructor gen_call_output gen_call_output)
 
-(decl gen_return_call_indirect (SigRef Value ValueSlice) InstOutput)
-(extern constructor gen_return_call_indirect gen_return_call_indirect)
+(decl gen_call_args (Sig ValueRegsVec) CallArgList)
+(extern constructor gen_call_args gen_call_args)
+
+(decl gen_return_call_args (Sig ValueRegsVec) CallArgList)
+(extern constructor gen_return_call_args gen_return_call_args)
+
+(decl gen_call_rets (Sig ValueRegsVec) CallRetList)
+(extern constructor gen_call_rets gen_call_rets)
+
+(decl gen_try_call_rets (Sig) CallRetList)
+(extern constructor gen_try_call_rets gen_try_call_rets)
+
+(decl gen_patchable_call_rets () CallRetList)
+(extern constructor gen_patchable_call_rets gen_patchable_call_rets)
+
+(type OptionTryCallInfo (primitive OptionTryCallInfo))
+(decl try_call_info (ExceptionTable MachLabelSlice) OptionTryCallInfo)
+(extern constructor try_call_info try_call_info)
+(decl try_call_none () OptionTryCallInfo)
+(extern constructor try_call_none try_call_none)
 
 ;; Helper for extracting an immediate that's not 0 and not -1 from an imm64.
+ (spec (safe_divisor_from_imm64 t x)
+       (provide (= (sign_ext 64 x) result))
+       (require (not (= #x0000000000000000 result))
+                (not (= #x1111111111111111 result))))
 (decl pure partial safe_divisor_from_imm64 (Type Imm64) u64)
 (extern constructor safe_divisor_from_imm64 safe_divisor_from_imm64)
 
@@ -1062,9 +1187,11 @@
 (convert WritableReg WritableValueRegs writable_value_reg)
 (convert Value Reg put_in_reg)
 (convert Value ValueRegs put_in_regs)
+(convert ValueSlice ValueRegsVec put_in_regs_vec)
 (convert WritableReg Reg writable_reg_to_reg)
 (convert ValueRegs InstOutput output)
 (convert Reg InstOutput output_reg)
 (convert Value InstOutput output_value)
+(convert ValueRegsVec InstOutput output_vec)
 (convert ExternalName BoxExternalName box_external_name)
 (convert PReg Reg preg_to_reg)

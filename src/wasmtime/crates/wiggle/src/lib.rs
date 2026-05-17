@@ -1,14 +1,15 @@
-use anyhow::{bail, Result};
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
 use std::fmt;
 use std::mem;
 use std::ops::Range;
 use std::str;
+use anyhow::{bail, Result};
 
 pub use wiggle_macro::{async_trait, from_witx};
 
 pub use anyhow;
+pub use async_trait as async_trait_crate;
 pub use wiggle_macro::wasmtime_integration;
 
 pub use bitflags;
@@ -25,10 +26,6 @@ pub use tracing;
 pub use error::GuestError;
 pub use guest_type::{GuestErrorType, GuestType, GuestTypeTransparent};
 pub use region::Region;
-
-pub mod async_trait_crate {
-    pub use async_trait::*;
-}
 
 #[cfg(feature = "wasmtime")]
 pub mod wasmtime_crate {
@@ -55,13 +52,6 @@ unsafe impl Send for GuestMemory<'_> {}
 unsafe impl Sync for GuestMemory<'_> {}
 
 impl<'a> GuestMemory<'a> {
-    // Re-add the base function, for rustposix to translate the 32-bit addresses to actual addr
-    pub fn base(&self) -> *const u8 {
-        match self {
-            GuestMemory::Unshared(slice) => slice.as_ptr(),
-            GuestMemory::Shared(slice) => slice.as_ptr() as *const u8,
-        }
-    }
     /// Read a value from the provided pointer.
     ///
     /// This method will delegate to `T`'s implementation of `read` which will
@@ -97,7 +87,7 @@ impl<'a> GuestMemory<'a> {
     /// Acquires a slice or owned copy of the memory pointed to by `ptr`.
     ///
     /// This method will attempt to borrow `ptr` directly from linear memory. If
-    /// memory is shared and cannot be borrowed directy then an owned copy is
+    /// memory is shared and cannot be borrowed directly then an owned copy is
     /// returned instead.
     ///
     /// # Errors
@@ -557,7 +547,7 @@ pub trait Pointee: private::Sealed {
 impl<T> Pointee for T {
     type Pointer = u32;
     fn debug(pointer: Self::Pointer, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "*guest {:#x}", pointer)
+        write!(f, "*guest {pointer:#x}")
     }
 }
 
@@ -584,8 +574,9 @@ pub fn run_in_dummy_executor<F: std::future::Future>(future: F) -> Result<F::Out
     let mut cx = Context::from_waker(&waker);
     match f.as_mut().poll(&mut cx) {
         Poll::Ready(val) => return Ok(val),
-        Poll::Pending =>
-            bail!("Cannot wait on pending future: must enable wiggle \"async\" future and execute on an async Store"),
+        Poll::Pending => bail!(
+            "Cannot wait on pending future: must enable wiggle \"async\" future and execute on an async Store"
+        ),
     }
 
     fn dummy_waker() -> Waker {

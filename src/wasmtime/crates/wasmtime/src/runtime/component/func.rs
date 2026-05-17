@@ -1,19 +1,23 @@
-use crate::component::instance::{Instance, InstanceData};
+use crate::component::RuntimeInstance;
+use crate::component::instance::Instance;
+use crate::component::matching::InstanceType;
 use crate::component::storage::storage_as_slice;
-use crate::component::types::Type;
+use crate::component::types::ComponentFunc;
 use crate::component::values::Val;
 use crate::prelude::*;
-use crate::runtime::vm::component::ResourceTables;
-use crate::runtime::vm::{Export, ExportFunction};
-use crate::store::{StoreOpaque, Stored};
+use crate::runtime::vm::component::{ComponentInstance, InstanceFlags};
+use crate::runtime::vm::{Export, VMFuncRef};
+use crate::store::StoreOpaque;
 use crate::{AsContext, AsContextMut, StoreContextMut, ValRaw};
-use alloc::sync::Arc;
 use core::mem::{self, MaybeUninit};
 use core::ptr::NonNull;
 use wasmtime_environ::component::{
-    CanonicalOptions, ComponentTypes, CoreDef, InterfaceType, RuntimeComponentInstanceIndex,
-    TypeFuncIndex, TypeTuple, MAX_FLAT_PARAMS, MAX_FLAT_RESULTS,
+    CanonicalOptions, ExportIndex, InterfaceType, MAX_FLAT_PARAMS, MAX_FLAT_RESULTS, OptionsIndex,
+    TypeFuncIndex, TypeTuple,
 };
+
+#[cfg(feature = "component-model-async")]
+use crate::component::concurrent::{self, AsAccessor, PreparedCall};
 
 mod host;
 mod options;
@@ -21,12 +25,6 @@ mod typed;
 pub use self::host::*;
 pub use self::options::*;
 pub use self::typed::*;
-
-#[repr(C)]
-union ParamsAndResults<Params: Copy, Return: Copy> {
-    params: Params,
-    ret: Return,
-}
 
 /// A WebAssembly component function which can be called.
 ///
@@ -36,53 +34,27 @@ union ParamsAndResults<Params: Copy, Return: Copy> {
 /// [`wasmtime::Func`](crate::Func) it's possible to call functions either
 /// synchronously or asynchronously and either typed or untyped.
 #[derive(Copy, Clone, Debug)]
-pub struct Func(Stored<FuncData>);
-
-#[doc(hidden)]
-pub struct FuncData {
-    export: ExportFunction,
-    ty: TypeFuncIndex,
-    types: Arc<ComponentTypes>,
-    options: Options,
+#[repr(C)] // here for the C API.
+pub struct Func {
     instance: Instance,
-    component_instance: RuntimeComponentInstanceIndex,
-    post_return: Option<ExportFunction>,
-    post_return_arg: Option<ValRaw>,
+    index: ExportIndex,
 }
 
+// Double-check that the C representation in `component/instance.h` matches our
+// in-Rust representation here in terms of size/alignment/etc.
+const _: () = {
+    #[repr(C)]
+    struct T(u64, u32);
+    #[repr(C)]
+    struct C(T, u32);
+    assert!(core::mem::size_of::<C>() == core::mem::size_of::<Func>());
+    assert!(core::mem::align_of::<C>() == core::mem::align_of::<Func>());
+    assert!(core::mem::offset_of!(Func, instance) == 0);
+};
+
 impl Func {
-    pub(crate) fn from_lifted_func(
-        store: &mut StoreOpaque,
-        instance: &Instance,
-        data: &InstanceData,
-        ty: TypeFuncIndex,
-        func: &CoreDef,
-        options: &CanonicalOptions,
-    ) -> Func {
-        let export = match data.lookup_def(store, func) {
-            Export::Function(f) => f,
-            _ => unreachable!(),
-        };
-        let memory = options
-            .memory
-            .map(|i| NonNull::new(data.instance().runtime_memory(i)).unwrap());
-        let realloc = options.realloc.map(|i| data.instance().runtime_realloc(i));
-        let post_return = options.post_return.map(|i| {
-            let func_ref = data.instance().runtime_post_return(i);
-            ExportFunction { func_ref }
-        });
-        let component_instance = options.instance;
-        let options = unsafe { Options::new(store.id(), memory, realloc, options.string_encoding) };
-        Func(store.store_data_mut().insert(FuncData {
-            export,
-            options,
-            ty,
-            types: data.component_types().clone(),
-            instance: *instance,
-            component_instance,
-            post_return,
-            post_return_arg: None,
-        }))
+    pub(crate) fn from_lifted_func(instance: Instance, index: ExportIndex) -> Func {
+        Func { instance, index }
     }
 
     /// Attempt to cast this [`Func`] to a statically typed [`TypedFunc`] with
@@ -131,7 +103,7 @@ impl Func {
     /// ```
     /// # use wasmtime::component::Func;
     /// # use wasmtime::Store;
-    /// # fn foo(func: &Func, store: &mut Store<()>) -> anyhow::Result<()> {
+    /// # fn foo(func: &Func, store: &mut Store<()>) -> wasmtime::Result<()> {
     /// let typed = func.typed::<(), ()>(&store)?;
     /// typed.call(store, ())?;
     /// # Ok(())
@@ -144,7 +116,7 @@ impl Func {
     /// ```
     /// # use wasmtime::component::Func;
     /// # use wasmtime::Store;
-    /// # fn foo(func: &Func, mut store: Store<()>) -> anyhow::Result<()> {
+    /// # fn foo(func: &Func, mut store: Store<()>) -> wasmtime::Result<()> {
     /// let typed = func.typed::<(&str,), (String,)>(&store)?;
     /// let ret = typed.call(&mut store, ("Hello, ",))?.0;
     /// println!("returned string was: {}", ret);
@@ -157,7 +129,7 @@ impl Func {
     /// ```
     /// # use wasmtime::component::Func;
     /// # use wasmtime::Store;
-    /// # fn foo(func: &Func, mut store: Store<()>) -> anyhow::Result<()> {
+    /// # fn foo(func: &Func, mut store: Store<()>) -> wasmtime::Result<()> {
     /// let typed = func.typed::<(u32, Option<&str>, &[u8]), (bool,)>(&store)?;
     /// let ok: bool = typed.call(&mut store, (1, Some("hello"), b"bytes!"))?.0;
     /// println!("return value was: {ok}");
@@ -175,7 +147,7 @@ impl Func {
     pub(crate) fn _typed<Params, Return>(
         &self,
         store: &StoreOpaque,
-        instance: Option<&InstanceData>,
+        instance: Option<&ComponentInstance>,
     ) -> Result<TypedFunc<Params, Return>>
     where
         Params: ComponentNamedList + Lower,
@@ -188,17 +160,14 @@ impl Func {
     fn typecheck<Params, Return>(
         &self,
         store: &StoreOpaque,
-        instance: Option<&InstanceData>,
+        instance: Option<&ComponentInstance>,
     ) -> Result<()>
     where
         Params: ComponentNamedList + Lower,
         Return: ComponentNamedList + Lift,
     {
-        let data = &store[self.0];
-        let cx = instance
-            .unwrap_or_else(|| &store[data.instance.0].as_ref().unwrap())
-            .ty();
-        let ty = &cx.types[data.ty];
+        let cx = InstanceType::new(instance.unwrap_or_else(|| self.instance.id().get(store)));
+        let ty = &cx.types[self.ty_index(store)];
 
         Params::typecheck(&InterfaceType::Tuple(ty.params), &cx)
             .context("type mismatch with parameters")?;
@@ -208,28 +177,21 @@ impl Func {
         Ok(())
     }
 
-    /// Get the parameter types for this function.
-    pub fn params(&self, store: impl AsContext) -> Box<[Type]> {
-        let store = store.as_context();
-        let data = &store[self.0];
-        let instance = store[data.instance.0].as_ref().unwrap();
-        data.types[data.types[data.ty].params]
-            .types
-            .iter()
-            .map(|ty| Type::from(ty, &instance.ty()))
-            .collect()
+    /// Get the type of this function.
+    pub fn ty(&self, store: impl AsContext) -> ComponentFunc {
+        self.ty_(store.as_context().0)
     }
 
-    /// Get the result types for this function.
-    pub fn results(&self, store: impl AsContext) -> Box<[Type]> {
-        let store = store.as_context();
-        let data = &store[self.0];
-        let instance = store[data.instance.0].as_ref().unwrap();
-        data.types[data.types[data.ty].results]
-            .types
-            .iter()
-            .map(|ty| Type::from(ty, &instance.ty()))
-            .collect()
+    fn ty_(&self, store: &StoreOpaque) -> ComponentFunc {
+        let cx = InstanceType::new(self.instance.id().get(store));
+        let ty = self.ty_index(store);
+        ComponentFunc::from(ty, &cx)
+    }
+
+    fn ty_index(&self, store: &StoreOpaque) -> TypeFuncIndex {
+        let instance = self.instance.id().get(store);
+        let (ty, _, _) = instance.component().export_lifted_function(self.index);
+        ty
     }
 
     /// Invokes this function with the `params` given and returns the result.
@@ -242,10 +204,7 @@ impl Func {
     /// size of `results` exactly matches the number of results that this
     /// function produces.
     ///
-    /// Note that after a function is invoked the embedder needs to invoke
-    /// [`Func::post_return`] to execute any final cleanup required by the
-    /// guest. This function call is required to either call the function again
-    /// or to call another function.
+    /// This will also call the corresponding `post-return` function, if any.
     ///
     /// For more detailed information see the documentation of
     /// [`TypedFunc::call`].
@@ -258,15 +217,15 @@ impl Func {
     /// * `results` is not the right size
     /// * A trap occurs while executing the function
     /// * The function calls a host function which returns an error
+    /// * The `store` used requires the use of [`Func::call_async`] instead. See
+    ///   [store documentation](crate#async) for more information.
     ///
     /// See [`TypedFunc::call`] for more information in addition to
     /// [`wasmtime::Func::call`](crate::Func::call).
     ///
     /// # Panics
     ///
-    /// Panics if this is called on a function in an asynchronous store. This
-    /// only works with functions defined within a synchronous store. Also
-    /// panics if `store` does not own this function.
+    /// Panics if `store` does not own this function.
     pub fn call(
         &self,
         mut store: impl AsContextMut,
@@ -274,41 +233,225 @@ impl Func {
         results: &mut [Val],
     ) -> Result<()> {
         let mut store = store.as_context_mut();
-        assert!(
-            !store.0.async_support(),
-            "must use `call_async` when async support is enabled on the config"
-        );
-        self.call_impl(&mut store.as_context_mut(), params, results)
+        store.0.validate_sync_call()?;
+        self.call_impl(store.as_context_mut(), params, results)?;
+        Ok(())
     }
 
     /// Exactly like [`Self::call`] except for use on async stores.
     ///
-    /// Note that after this [`Func::post_return_async`] will be used instead of
-    /// the synchronous version at [`Func::post_return`].
-    ///
     /// # Panics
     ///
-    /// Panics if this is called on a function in a synchronous store. This
-    /// only works with functions defined within an asynchronous store. Also
-    /// panics if `store` does not own this function.
+    /// Panics if `store` does not own this function.
     #[cfg(feature = "async")]
-    pub async fn call_async<T>(
+    pub async fn call_async(
         &self,
-        mut store: impl AsContextMut<Data = T>,
+        mut store: impl AsContextMut<Data: Send>,
         params: &[Val],
         results: &mut [Val],
-    ) -> Result<()>
-    where
-        T: Send,
-    {
-        let mut store = store.as_context_mut();
-        assert!(
-            store.0.async_support(),
-            "cannot use `call_async` without enabling async support in the config"
-        );
+    ) -> Result<()> {
+        let store = store.as_context_mut();
+
+        #[cfg(feature = "component-model-async")]
+        if store.0.concurrency_support() {
+            return store
+                .run_concurrent_trap_on_idle(async |store| {
+                    self.call_concurrent_dynamic(store, params, results)
+                        .await
+                        .map(drop)
+                })
+                .await?;
+        }
+
+        let mut store = store;
         store
             .on_fiber(|store| self.call_impl(store, params, results))
             .await?
+    }
+
+    fn check_params_results<T>(
+        &self,
+        store: StoreContextMut<T>,
+        params: &[Val],
+        results: &mut [Val],
+    ) -> Result<()> {
+        let ty = self.ty(&store);
+        if ty.params().len() != params.len() {
+            bail!(
+                "expected {} argument(s), got {}",
+                ty.params().len(),
+                params.len(),
+            );
+        }
+
+        if ty.results().len() != results.len() {
+            bail!(
+                "expected {} result(s), got {}",
+                ty.results().len(),
+                results.len(),
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Start a concurrent call to this function.
+    ///
+    /// Concurrency is achieved by relying on the [`Accessor`] argument, which
+    /// can be obtained by calling [`StoreContextMut::run_concurrent`].
+    ///
+    /// Unlike [`Self::call`] and [`Self::call_async`] (both of which require
+    /// exclusive access to the store until the completion of the call), calls
+    /// made using this method may run concurrently with other calls to the same
+    /// instance.  In addition, the runtime will call the `post-return` function
+    /// (if any) automatically when the guest task completes.
+    ///
+    /// # Progress
+    ///
+    /// For the wasm task being created in `call_concurrent` to make progress it
+    /// must be run within the scope of [`run_concurrent`]. If there are no
+    /// active calls to [`run_concurrent`] then the wasm task will appear as
+    /// stalled. This is typically not a concern as an [`Accessor`] is bound
+    /// by default to a scope of [`run_concurrent`].
+    ///
+    /// One situation in which this can arise, for example, is that if a
+    /// [`run_concurrent`] computation finishes its async closure before all
+    /// wasm tasks have completed, then there will be no scope of
+    /// [`run_concurrent`] anywhere. In this situation the wasm tasks that have
+    /// not yet completed will not make progress until [`run_concurrent`] is
+    /// called again.
+    ///
+    /// Embedders will need to ensure that this future is `await`'d within the
+    /// scope of [`run_concurrent`] to ensure that the value can be produced
+    /// during the `await` call.
+    ///
+    /// # Cancellation
+    ///
+    /// Cancelling an async task created via `call_concurrent`, at this time, is
+    /// only possible by dropping the store that the computation runs within.
+    /// With [#11833] implemented then it will be possible to request
+    /// cancellation of a task, but that is not yet implemented. Hard-cancelling
+    /// a task will only ever be possible by dropping the entire store and it is
+    /// not possible to remove just one task from a store.
+    ///
+    /// This async function behaves more like a "spawn" than a normal Rust async
+    /// function. When this function is invoked then metadata for the function
+    /// call is recorded in the store connected to the `accessor` argument and
+    /// the wasm invocation is from then on connected to the store. If the
+    /// future created by this function is dropped it does not cancel the
+    /// in-progress execution of the wasm task. Dropping the future
+    /// relinquishes the host's ability to learn about the result of the task
+    /// but the task will still progress and invoke callbacks and such until
+    /// completion.
+    ///
+    /// This function will return an error if [`Config::concurrency_support`] is
+    /// disabled.
+    ///
+    /// [`Config::concurrency_support`]: crate::Config::concurrency_support
+    /// [`run_concurrent`]: crate::Store::run_concurrent
+    /// [#11833]: https://github.com/bytecodealliance/wasmtime/issues/11833
+    /// [`Accessor`]: crate::component::Accessor
+    ///
+    /// # Panics
+    ///
+    /// Panics if the store that the [`Accessor`] is derived from does not own
+    /// this function.
+    ///
+    /// # Example
+    ///
+    /// Using [`StoreContextMut::run_concurrent`] to get an [`Accessor`]:
+    ///
+    /// ```
+    /// # use {
+    /// #   wasmtime::{
+    /// #     error::{Result},
+    /// #     component::{Component, Linker, ResourceTable},
+    /// #     Config, Engine, Store
+    /// #   },
+    /// # };
+    /// #
+    /// # struct Ctx { table: ResourceTable }
+    /// #
+    /// # async fn foo() -> Result<()> {
+    /// # let mut config = Config::new();
+    /// # let engine = Engine::new(&config)?;
+    /// # let mut store = Store::new(&engine, Ctx { table: ResourceTable::new() });
+    /// # let mut linker = Linker::new(&engine);
+    /// # let component = Component::new(&engine, "")?;
+    /// # let instance = linker.instantiate_async(&mut store, &component).await?;
+    /// let my_func = instance.get_func(&mut store, "my_func").unwrap();
+    /// store.run_concurrent(async |accessor| -> wasmtime::Result<_> {
+    ///    my_func.call_concurrent(accessor, &[], &mut Vec::new()).await?;
+    ///    Ok(())
+    /// }).await??;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "component-model-async")]
+    pub async fn call_concurrent(
+        self,
+        accessor: impl AsAccessor<Data: Send>,
+        params: &[Val],
+        results: &mut [Val],
+    ) -> Result<()> {
+        self.call_concurrent_dynamic(accessor, params, results)
+            .await
+    }
+
+    /// Internal helper function for `call_async` and `call_concurrent`.
+    #[cfg(feature = "component-model-async")]
+    async fn call_concurrent_dynamic(
+        self,
+        accessor: impl AsAccessor<Data: Send>,
+        params: &[Val],
+        results: &mut [Val],
+    ) -> Result<()> {
+        let result = accessor.as_accessor().with(|mut store| {
+            self.check_params_results(store.as_context_mut(), params, results)?;
+            let prepared = self.prepare_call_dynamic(store.as_context_mut(), params.to_vec())?;
+            concurrent::queue_call(store.as_context_mut(), prepared)
+        })?;
+
+        let run_results = result.await?;
+        assert_eq!(run_results.len(), results.len());
+        for (result, slot) in run_results.into_iter().zip(results) {
+            *slot = result;
+        }
+        Ok(())
+    }
+
+    /// Calls `concurrent::prepare_call` with monomorphized functions for
+    /// lowering the parameters and lifting the result.
+    #[cfg(feature = "component-model-async")]
+    fn prepare_call_dynamic<'a, T: Send + 'static>(
+        self,
+        mut store: StoreContextMut<'a, T>,
+        params: Vec<Val>,
+    ) -> Result<PreparedCall<Vec<Val>>> {
+        let store = store.as_context_mut();
+
+        concurrent::prepare_call(
+            store,
+            self,
+            MAX_FLAT_PARAMS,
+            false,
+            move |func, store, params_out| {
+                func.with_lower_context(store, |cx, ty| {
+                    Self::lower_args(cx, &params, ty, params_out)
+                })
+            },
+            move |func, store, results| {
+                let max_flat = if func.abi_async(store) {
+                    MAX_FLAT_PARAMS
+                } else {
+                    MAX_FLAT_RESULTS
+                };
+                let results = func.with_lift_context(store, |cx, ty| {
+                    Self::lift_results(cx, ty, results, max_flat)?.collect::<Result<Vec<_>>>()
+                })?;
+                Ok(Box::new(results))
+            },
+        )
     }
 
     fn call_impl(
@@ -317,63 +460,103 @@ impl Func {
         params: &[Val],
         results: &mut [Val],
     ) -> Result<()> {
-        let store = &mut store.as_context_mut();
+        let mut store = store.as_context_mut();
 
-        let param_tys = self.params(&store);
-        let result_tys = self.results(&store);
+        self.check_params_results(store.as_context_mut(), params, results)?;
 
-        if param_tys.len() != params.len() {
-            bail!(
-                "expected {} argument(s), got {}",
-                param_tys.len(),
-                params.len()
-            );
-        }
-        if result_tys.len() != results.len() {
-            bail!(
-                "expected {} results(s), got {}",
-                result_tys.len(),
-                results.len()
+        if self.abi_async(store.0) {
+            unreachable!(
+                "async-lifted exports should have failed validation \
+                 when `component-model-async` feature disabled"
             );
         }
 
-        self.call_raw(
-            store,
-            params,
-            |cx, params, params_ty, dst: &mut MaybeUninit<[ValRaw; MAX_FLAT_PARAMS]>| {
-                let params_ty = match params_ty {
-                    InterfaceType::Tuple(i) => &cx.types[i],
-                    _ => unreachable!(),
-                };
-                if params_ty.abi.flat_count(MAX_FLAT_PARAMS).is_some() {
-                    let dst = &mut unsafe {
-                        mem::transmute::<_, &mut [MaybeUninit<ValRaw>; MAX_FLAT_PARAMS]>(dst)
-                    }
-                    .iter_mut();
-
-                    params
-                        .iter()
-                        .zip(params_ty.types.iter())
-                        .try_for_each(|(param, ty)| param.lower(cx, *ty, dst))
-                } else {
-                    self.store_args(cx, &params_ty, params, dst)
-                }
-            },
-            |cx, results_ty, src: &[ValRaw; MAX_FLAT_RESULTS]| {
-                let results_ty = match results_ty {
-                    InterfaceType::Tuple(i) => &cx.types[i],
-                    _ => unreachable!(),
-                };
-                if results_ty.abi.flat_count(MAX_FLAT_RESULTS).is_some() {
-                    let mut flat = src.iter();
-                    for (ty, slot) in results_ty.types.iter().zip(results) {
-                        *slot = Val::lift(cx, *ty, &mut flat)?;
+        // SAFETY: the chosen representations of type parameters to `call_raw`
+        // here should be generally safe to work with:
+        //
+        // * parameters use `MaybeUninit<[MaybeUninit<ValRaw>; MAX_FLAT_PARAMS]>`
+        //   which represents the maximal possible number of parameters that can
+        //   be passed to lifted component functions. This is modeled with
+        //   `MaybeUninit` to represent how it all starts as uninitialized and
+        //   thus can't be safely read during lowering.
+        //
+        // * results are modeled as `[ValRaw; MAX_FLAT_RESULTS]` which
+        //   represents the maximal size of values that can be returned. Note
+        //   that if the function doesn't actually have a return value then the
+        //   `ValRaw` inside the array will have undefined contents. That is
+        //   safe in Rust, however, due to `ValRaw` being a `union`. The
+        //   contents should dynamically not be read due to the type of the
+        //   function used here matching the actual lift.
+        let (_, post_return_arg) = unsafe {
+            self.call_raw(
+                store.as_context_mut(),
+                |cx, ty, dst: &mut MaybeUninit<[MaybeUninit<ValRaw>; MAX_FLAT_PARAMS]>| {
+                    // SAFETY: it's safe to assume that
+                    // `MaybeUninit<array-of-maybe-uninit>` is initialized because
+                    // each individual element is still considered uninitialized.
+                    let dst: &mut [MaybeUninit<ValRaw>] = dst.assume_init_mut();
+                    Self::lower_args(cx, params, ty, dst)
+                },
+                |cx, results_ty, src: &[ValRaw; MAX_FLAT_RESULTS]| {
+                    let max_flat = MAX_FLAT_RESULTS;
+                    for (result, slot) in
+                        Self::lift_results(cx, results_ty, src, max_flat)?.zip(results)
+                    {
+                        *slot = result?;
                     }
                     Ok(())
-                } else {
-                    Self::load_results(cx, results_ty, results, &mut src.iter())
-                }
-            },
+                },
+            )?
+        };
+
+        self.post_return_impl(store, post_return_arg)
+    }
+
+    pub(crate) fn lifted_core_func(&self, store: &mut StoreOpaque) -> NonNull<VMFuncRef> {
+        let def = {
+            let instance = self.instance.id().get(store);
+            let (_ty, def, _options) = instance.component().export_lifted_function(self.index);
+            def.clone()
+        };
+        match self.instance.lookup_vmdef(store, &def) {
+            Export::Function(f) => f.vm_func_ref(store),
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn post_return_core_func(&self, store: &StoreOpaque) -> Option<NonNull<VMFuncRef>> {
+        let instance = self.instance.id().get(store);
+        let component = instance.component();
+        let (_ty, _def, options) = component.export_lifted_function(self.index);
+        let post_return = component.env_component().options[options].post_return;
+        post_return.map(|i| instance.runtime_post_return(i))
+    }
+
+    pub(crate) fn abi_async(&self, store: &StoreOpaque) -> bool {
+        let instance = self.instance.id().get(store);
+        let component = instance.component();
+        let (_ty, _def, options) = component.export_lifted_function(self.index);
+        component.env_component().options[options].async_
+    }
+
+    pub(crate) fn abi_info<'a>(
+        &self,
+        store: &'a StoreOpaque,
+    ) -> (
+        OptionsIndex,
+        InstanceFlags,
+        TypeFuncIndex,
+        &'a CanonicalOptions,
+    ) {
+        let vminstance = self.instance.id().get(store);
+        let component = vminstance.component();
+        let (ty, _def, options_index) = component.export_lifted_function(self.index);
+        let raw_options = &component.env_component().options[options_index];
+        (
+            options_index,
+            vminstance.instance_flags(raw_options.instance),
+            ty,
+            raw_options,
         )
     }
 
@@ -385,32 +568,48 @@ impl Func {
     /// are what will be allocated on the stack for this function call. They
     /// should be appropriately sized for the lowering/lifting operation
     /// happening.
-    fn call_raw<T, Params: ?Sized, Return, LowerParams, LowerReturn>(
+    ///
+    /// # Safety
+    ///
+    /// The safety of this function relies on the correct definitions of the
+    /// `LowerParams` and `LowerReturn` type. They must match the type of `self`
+    /// for the params/results that are going to be produced. Additionally
+    /// these types must be representable with a sequence of `ValRaw` values.
+    unsafe fn call_raw<T, Return, LowerParams, LowerReturn>(
         &self,
-        store: &mut StoreContextMut<'_, T>,
-        params: &Params,
+        mut store: StoreContextMut<'_, T>,
         lower: impl FnOnce(
             &mut LowerContext<'_, T>,
-            &Params,
             InterfaceType,
             &mut MaybeUninit<LowerParams>,
         ) -> Result<()>,
         lift: impl FnOnce(&mut LiftContext<'_>, InterfaceType, &LowerReturn) -> Result<Return>,
-    ) -> Result<Return>
+    ) -> Result<(Return, ValRaw)>
     where
         LowerParams: Copy,
         LowerReturn: Copy,
     {
-        let FuncData {
-            export,
-            options,
-            instance,
-            component_instance,
-            ty,
-            ..
-        } = store.0[self.0];
+        let export = self.lifted_core_func(store.0);
+        let (_options, _flags, _ty, raw_options) = self.abi_info(store.0);
+        let instance = RuntimeInstance {
+            instance: self.instance.id().instance(),
+            index: raw_options.instance,
+        };
 
-        let space = &mut MaybeUninit::<ParamsAndResults<LowerParams, LowerReturn>>::uninit();
+        if !store.0.may_enter(instance)? {
+            bail!(crate::Trap::CannotEnterComponent);
+        }
+
+        let async_type = self.abi_async(store.0);
+        store.0.enter_guest_sync_call(None, async_type, instance)?;
+
+        #[repr(C)]
+        union Union<Params: Copy, Return: Copy> {
+            params: Params,
+            ret: Return,
+        }
+
+        let space = &mut MaybeUninit::<Union<LowerParams, LowerReturn>>::uninit();
 
         // Double-check the size/alignment of `space`, just in case.
         //
@@ -427,224 +626,125 @@ impl Func {
         assert!(mem::align_of_val(map_maybe_uninit!(space.params)) == val_align);
         assert!(mem::align_of_val(map_maybe_uninit!(space.ret)) == val_align);
 
-        let instance = store.0[instance.0].as_ref().unwrap();
-        let types = instance.component_types().clone();
-        let mut flags = instance.instance().instance_flags(component_instance);
+        self.with_lower_context(store.as_context_mut(), |cx, ty| {
+            lower(cx, ty, map_maybe_uninit!(space.params))
+        })?;
 
+        // SAFETY: We are providing the guarantee that all the inputs are valid.
+        // The various pointers passed in for the function are all valid since
+        // they're coming from our store, and the `params_and_results` should
+        // have the correct layout for the core wasm function we're calling.
+        // Note that this latter point relies on the correctness of this module
+        // and `ComponentType` implementations, hence `ComponentType` being an
+        // `unsafe` trait.
         unsafe {
-            // Test the "may enter" flag which is a "lock" on this instance.
-            // This is immediately set to `false` afterwards and note that
-            // there's no on-cleanup setting this flag back to true. That's an
-            // intentional design aspect where if anything goes wrong internally
-            // from this point on the instance is considered "poisoned" and can
-            // never be entered again. The only time this flag is set to `true`
-            // again is after post-return logic has completed successfully.
-            if !flags.may_enter() {
-                bail!(crate::Trap::CannotEnterComponent);
-            }
-            flags.set_may_enter(false);
-
-            debug_assert!(flags.may_leave());
-            flags.set_may_leave(false);
-            let instance_ptr = instance.instance_ptr();
-            let mut cx = LowerContext::new(store.as_context_mut(), &options, &types, instance_ptr);
-            cx.enter_call();
-            let result = lower(
-                &mut cx,
-                params,
-                InterfaceType::Tuple(types[ty].params),
-                map_maybe_uninit!(space.params),
-            );
-            flags.set_may_leave(true);
-            result?;
-
-            // This is unsafe as we are providing the guarantee that all the
-            // inputs are valid. The various pointers passed in for the function
-            // are all valid since they're coming from our store, and the
-            // `params_and_results` should have the correct layout for the core
-            // wasm function we're calling. Note that this latter point relies
-            // on the correctness of this module and `ComponentType`
-            // implementations, hence `ComponentType` being an `unsafe` trait.
             crate::Func::call_unchecked_raw(
-                store,
-                export.func_ref,
-                space.as_mut_ptr().cast(),
-                mem::size_of_val(space) / mem::size_of::<ValRaw>(),
+                &mut store,
+                export,
+                NonNull::new(core::ptr::slice_from_raw_parts_mut(
+                    space.as_mut_ptr().cast(),
+                    mem::size_of_val(space) / mem::size_of::<ValRaw>(),
+                ))
+                .unwrap(),
             )?;
-
-            // Note that `.assume_init_ref()` here is unsafe but we're relying
-            // on the correctness of the structure of `LowerReturn` and the
-            // type-checking performed to acquire the `TypedFunc` to make this
-            // safe. It should be the case that `LowerReturn` is the exact
-            // representation of the return value when interpreted as
-            // `[ValRaw]`, and additionally they should have the correct types
-            // for the function we just called (which filled in the return
-            // values).
-            let ret = map_maybe_uninit!(space.ret).assume_init_ref();
-
-            // Lift the result into the host while managing post-return state
-            // here as well.
-            //
-            // After a successful lift the return value of the function, which
-            // is currently required to be 0 or 1 values according to the
-            // canonical ABI, is saved within the `Store`'s `FuncData`. This'll
-            // later get used in post-return.
-            flags.set_needs_post_return(true);
-            let val = lift(
-                &mut LiftContext::new(store.0, &options, &types, instance_ptr),
-                InterfaceType::Tuple(types[ty].results),
-                ret,
-            )?;
-            let ret_slice = storage_as_slice(ret);
-            let data = &mut store.0[self.0];
-            assert!(data.post_return_arg.is_none());
-            match ret_slice.len() {
-                0 => data.post_return_arg = Some(ValRaw::i32(0)),
-                1 => data.post_return_arg = Some(ret_slice[0]),
-                _ => unreachable!(),
-            }
-            return Ok(val);
         }
+
+        // Validate that the task, after returning, has no more active borrows
+        // as they're required to have been dropped by this point.
+        store
+            .0
+            .component_resource_tables(Some(self.instance))
+            .validate_scope_exit()?;
+
+        // SAFETY: We're relying on the correctness of the structure of
+        // `LowerReturn` and the type-checking performed to acquire the
+        // `TypedFunc` to make this safe. It should be the case that
+        // `LowerReturn` is the exact representation of the return value when
+        // interpreted as `[ValRaw]`, and additionally they should have the
+        // correct types for the function we just called (which filled in the
+        // return values).
+        let ret: &LowerReturn = unsafe { map_maybe_uninit!(space.ret).assume_init_ref() };
+
+        // Lift the result into the host while managing post-return state
+        // here as well.
+        //
+        // After a successful lift the return value of the function, which
+        // is currently required to be 0 or 1 values according to the
+        // canonical ABI, is saved within the `Store`'s `FuncData`. This'll
+        // later get used in post-return.
+        let val = self.with_lift_context(store.0, |cx, ty| lift(cx, ty, ret))?;
+
+        // SAFETY: it's a contract of this function that `LowerReturn` is an
+        // appropriate representation of the result of this function.
+        let ret_slice = unsafe { storage_as_slice(ret) };
+
+        Ok((
+            val,
+            match ret_slice.len() {
+                0 => ValRaw::i32(0),
+                1 => ret_slice[0],
+                _ => unreachable!(),
+            },
+        ))
     }
 
-    /// Invokes the `post-return` canonical ABI option, if specified, after a
-    /// [`Func::call`] has finished.
-    ///
-    /// This function is a required method call after a [`Func::call`] completes
-    /// successfully. After the embedder has finished processing the return
-    /// value then this function must be invoked.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error in the case of a WebAssembly trap
-    /// happening during the execution of the `post-return` function, if
-    /// specified.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if it's not called under the correct
-    /// conditions. This can only be called after a previous invocation of
-    /// [`Func::call`] completes successfully, and this function can only
-    /// be called for the same [`Func`] that was `call`'d.
-    ///
-    /// If this function is called when [`Func::call`] was not previously
-    /// called, then it will panic. If a different [`Func`] for the same
-    /// component instance was invoked then this function will also panic
-    /// because the `post-return` needs to happen for the other function.
-    ///
-    /// Panics if this is called on a function in an asynchronous store.
-    /// This only works with functions defined within a synchronous store.
-    #[inline]
-    pub fn post_return(&self, mut store: impl AsContextMut) -> Result<()> {
-        let store = store.as_context_mut();
-        assert!(
-            !store.0.async_support(),
-            "must use `post_return_async` when async support is enabled on the config"
-        );
-        self.post_return_impl(store)
+    #[doc(hidden)]
+    #[deprecated(note = "no longer needs to be called; this function has no effect")]
+    pub fn post_return(&self, _store: impl AsContextMut) -> Result<()> {
+        Ok(())
     }
 
-    /// Exactly like [`Self::post_return`] except for use on async stores.
-    ///
-    /// # Panics
-    ///
-    /// Panics if this is called on a function in a synchronous store. This
-    /// only works with functions defined within an asynchronous store.
+    #[doc(hidden)]
+    #[deprecated(note = "no longer needs to be called; this function has no effect")]
     #[cfg(feature = "async")]
-    pub async fn post_return_async<T: Send>(
-        &self,
-        mut store: impl AsContextMut<Data = T>,
-    ) -> Result<()> {
-        let mut store = store.as_context_mut();
-        assert!(
-            store.0.async_support(),
-            "cannot use `call_async` without enabling async support in the config"
-        );
-        // Future optimization opportunity: conditionally use a fiber here since
-        // some func's post_return will not need the async context (i.e. end up
-        // calling async host functionality)
-        store.on_fiber(|store| self.post_return_impl(store)).await?
+    pub async fn post_return_async(&self, _store: impl AsContextMut<Data: Send>) -> Result<()> {
+        Ok(())
     }
 
-    fn post_return_impl(&self, mut store: impl AsContextMut) -> Result<()> {
+    pub(crate) fn post_return_impl(&self, mut store: impl AsContextMut, arg: ValRaw) -> Result<()> {
         let mut store = store.as_context_mut();
-        let data = &mut store.0[self.0];
-        let instance = data.instance;
-        let post_return = data.post_return;
-        let component_instance = data.component_instance;
-        let post_return_arg = data.post_return_arg.take();
-        let instance = store.0[instance.0].as_ref().unwrap().instance_ptr();
+
+        let index = self.index;
+        let vminstance = self.instance.id().get(store.0);
+        let component = vminstance.component();
+        let (_ty, _def, options) = component.export_lifted_function(index);
+        let post_return = self.post_return_core_func(store.0);
+        let flags = vminstance.instance_flags(component.env_component().options[options].instance);
 
         unsafe {
-            let mut flags = (*instance).instance_flags(component_instance);
-
-            // First assert that the instance is in a "needs post return" state.
-            // This will ensure that the previous action on the instance was a
-            // function call above. This flag is only set after a component
-            // function returns so this also can't be called (as expected)
-            // during a host import for example.
-            //
-            // Note, though, that this assert is not sufficient because it just
-            // means some function on this instance needs its post-return
-            // called. We need a precise post-return for a particular function
-            // which is the second assert here (the `.expect`). That will assert
-            // that this function itself needs to have its post-return called.
-            //
-            // The theory at least is that these two asserts ensure component
-            // model semantics are upheld where the host properly calls
-            // `post_return` on the right function despite the call being a
-            // separate step in the API.
-            assert!(
-                flags.needs_post_return(),
-                "post_return can only be called after a function has previously been called",
-            );
-            let post_return_arg = post_return_arg.expect("calling post_return on wrong function");
-
-            // This is a sanity-check assert which shouldn't ever trip.
-            assert!(!flags.may_enter());
-
-            // Unset the "needs post return" flag now that post-return is being
-            // processed. This will cause future invocations of this method to
-            // panic, even if the function call below traps.
-            flags.set_needs_post_return(false);
-
-            // If the function actually had a `post-return` configured in its
-            // canonical options that's executed here.
-            //
-            // Note that if this traps (returns an error) this function
-            // intentionally leaves the instance in a "poisoned" state where it
-            // can no longer be entered because `may_enter` is `false`.
-            if let Some(func) = post_return {
-                crate::Func::call_unchecked_raw(
-                    &mut store,
-                    func.func_ref,
-                    &post_return_arg as *const ValRaw as *mut ValRaw,
-                    1,
-                )?;
-            }
-
-            // And finally if everything completed successfully then the "may
-            // enter" flag is set to `true` again here which enables further use
-            // of the component.
-            flags.set_may_enter(true);
-
-            let (calls, host_table, _) = store.0.component_resource_state();
-            ResourceTables {
-                calls,
-                host_table: Some(host_table),
-                tables: Some((*instance).component_resource_tables()),
-            }
-            .exit_call()?;
+            call_post_return(&mut store, post_return, arg, flags)?;
+            store.0.exit_guest_sync_call()?;
         }
         Ok(())
     }
 
+    fn lower_args<T>(
+        cx: &mut LowerContext<'_, T>,
+        params: &[Val],
+        params_ty: InterfaceType,
+        dst: &mut [MaybeUninit<ValRaw>],
+    ) -> Result<()> {
+        let params_ty = match params_ty {
+            InterfaceType::Tuple(i) => &cx.types[i],
+            _ => unreachable!(),
+        };
+        if params_ty.abi.flat_count(MAX_FLAT_PARAMS).is_some() {
+            let dst = &mut dst.iter_mut();
+
+            params
+                .iter()
+                .zip(params_ty.types.iter())
+                .try_for_each(|(param, ty)| param.lower(cx, *ty, dst))
+        } else {
+            Self::store_args(cx, &params_ty, params, dst)
+        }
+    }
+
     fn store_args<T>(
-        &self,
         cx: &mut LowerContext<'_, T>,
         params_ty: &TypeTuple,
         args: &[Val],
-        dst: &mut MaybeUninit<[ValRaw; MAX_FLAT_PARAMS]>,
+        dst: &mut [MaybeUninit<ValRaw>],
     ) -> Result<()> {
         let size = usize::try_from(params_ty.abi.size32).unwrap();
         let ptr = cx.realloc(0, 0, params_ty.abi.align32, size)?;
@@ -654,20 +754,43 @@ impl Func {
             arg.store(cx, *ty, abi.next_field32_size(&mut offset))?;
         }
 
-        map_maybe_uninit!(dst[0]).write(ValRaw::i64(ptr as i64));
+        dst[0].write(ValRaw::i64(ptr as i64));
 
         Ok(())
     }
 
-    fn load_results(
-        cx: &mut LiftContext<'_>,
-        results_ty: &TypeTuple,
-        results: &mut [Val],
+    fn lift_results<'a, 'b>(
+        cx: &'a mut LiftContext<'b>,
+        results_ty: InterfaceType,
+        src: &'a [ValRaw],
+        max_flat: usize,
+    ) -> Result<Box<dyn Iterator<Item = Result<Val>> + 'a>> {
+        let results_ty = match results_ty {
+            InterfaceType::Tuple(i) => &cx.types[i],
+            _ => unreachable!(),
+        };
+        if results_ty.abi.flat_count(max_flat).is_some() {
+            let mut flat = src.iter();
+            Ok(Box::new(
+                results_ty
+                    .types
+                    .iter()
+                    .map(move |ty| Val::lift(cx, *ty, &mut flat)),
+            ))
+        } else {
+            let iter = Self::load_results(cx, results_ty, &mut src.iter())?;
+            Ok(Box::new(iter))
+        }
+    }
+
+    fn load_results<'a, 'b>(
+        cx: &'a mut LiftContext<'b>,
+        results_ty: &'a TypeTuple,
         src: &mut core::slice::Iter<'_, ValRaw>,
-    ) -> Result<()> {
-        // FIXME: needs to read an i64 for memory64
-        let ptr = usize::try_from(src.next().unwrap().get_u32()).err2anyhow()?;
-        if ptr % usize::try_from(results_ty.abi.align32).err2anyhow()? != 0 {
+    ) -> Result<impl Iterator<Item = Result<Val>> + use<'a, 'b>> {
+        // FIXME(#4311): needs to read an i64 for memory64
+        let ptr = usize::try_from(src.next().unwrap().get_u32())?;
+        if ptr % usize::try_from(results_ty.abi.align32)? != 0 {
             bail!("return pointer not aligned");
         }
 
@@ -675,14 +798,90 @@ impl Func {
             .memory()
             .get(ptr..)
             .and_then(|b| b.get(..usize::try_from(results_ty.abi.size32).unwrap()))
-            .ok_or_else(|| anyhow::anyhow!("pointer out of bounds of memory"))?;
+            .ok_or_else(|| crate::format_err!("pointer out of bounds of memory"))?;
 
         let mut offset = 0;
-        for (ty, slot) in results_ty.types.iter().zip(results) {
+        Ok(results_ty.types.iter().map(move |ty| {
             let abi = cx.types.canonical_abi(ty);
             let offset = abi.next_field32_size(&mut offset);
-            *slot = Val::load(cx, *ty, &bytes[offset..][..abi.size32 as usize])?;
-        }
-        Ok(())
+            Val::load(cx, *ty, &bytes[offset..][..abi.size32 as usize])
+        }))
     }
+
+    #[cfg(feature = "component-model-async")]
+    pub(crate) fn instance(self) -> Instance {
+        self.instance
+    }
+
+    /// Creates a `LowerContext` using the configuration values of this lifted
+    /// function.
+    ///
+    /// The `lower` closure provided should perform the actual lowering and
+    /// return the result of the lowering operation which is then returned from
+    /// this function as well.
+    fn with_lower_context<T>(
+        self,
+        mut store: StoreContextMut<T>,
+        lower: impl FnOnce(&mut LowerContext<T>, InterfaceType) -> Result<()>,
+    ) -> Result<()> {
+        let (options_idx, mut flags, ty, _) = self.abi_info(store.0);
+
+        // Perform the actual lowering, where while this is running the
+        // component is forbidden from calling imports.
+        unsafe {
+            debug_assert!(flags.may_leave());
+            flags.set_may_leave(false);
+        }
+        let mut cx = LowerContext::new(store.as_context_mut(), options_idx, self.instance);
+        let param_ty = InterfaceType::Tuple(cx.types[ty].params);
+        let result = lower(&mut cx, param_ty);
+        unsafe { flags.set_may_leave(true) };
+        result
+    }
+
+    /// Creates a `LiftContext` using the configuration values with this lifted
+    /// function.
+    ///
+    /// The closure `lift` provided should actually perform the lift itself and
+    /// the result of that closure is returned from this function call as well.
+    fn with_lift_context<R>(
+        self,
+        store: &mut StoreOpaque,
+        lift: impl FnOnce(&mut LiftContext, InterfaceType) -> Result<R>,
+    ) -> Result<R> {
+        let (options, _flags, ty, _) = self.abi_info(store);
+        let mut cx = LiftContext::new(store, options, self.instance);
+        let ty = InterfaceType::Tuple(cx.types[ty].results);
+        lift(&mut cx, ty)
+    }
+}
+
+pub(crate) unsafe fn call_post_return(
+    mut store: impl AsContextMut,
+    func: Option<NonNull<VMFuncRef>>,
+    arg: ValRaw,
+    mut flags: InstanceFlags,
+) -> Result<()> {
+    unsafe {
+        // Post return functions are forbidden from calling imports or
+        // intrinsics.
+        flags.set_may_leave(false);
+
+        // If the function actually had a `post-return` configured in its
+        // canonical options that's executed here.
+        if let Some(func) = func {
+            crate::Func::call_unchecked_raw(
+                &mut store.as_context_mut(),
+                func,
+                core::slice::from_ref(&arg).into(),
+            )?;
+        }
+
+        // And finally if everything completed successfully then the "may
+        // leave" flags is set to `true` again here which enables further
+        // use of the component.
+        flags.set_may_leave(true);
+    }
+
+    Ok(())
 }

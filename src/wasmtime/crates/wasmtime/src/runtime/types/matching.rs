@@ -1,8 +1,8 @@
 use crate::prelude::*;
-use crate::{linker::DefinitionType, Engine, FuncType};
+use crate::{Engine, linker::DefinitionType};
 use wasmtime_environ::{
-    EntityType, Global, Memory, ModuleTypes, Table, TypeTrace, VMSharedTypeIndex,
-    WasmCompositeType, WasmFieldType, WasmHeapType, WasmRefType, WasmSubType, WasmValType,
+    EntityType, Global, IndexType, Memory, Table, Tag, TypeTrace, VMSharedTypeIndex, WasmHeapType,
+    WasmRefType, WasmSubType, WasmValType,
 };
 
 pub struct MatchCx<'a> {
@@ -15,35 +15,11 @@ impl MatchCx<'_> {
         MatchCx { engine }
     }
 
-    fn type_reference(&self, expected: VMSharedTypeIndex, actual: VMSharedTypeIndex) -> Result<()> {
-        // Avoid matching on structure for subtyping checks when we have
-        // precisely the same type.
-        let matches = expected == actual || {
-            let expected = FuncType::from_shared_type_index(self.engine, expected);
-            let actual = FuncType::from_shared_type_index(self.engine, actual);
-            actual.matches(&expected)
-        };
-        if matches {
-            return Ok(());
-        }
-        let msg = "function types incompatible";
-        let expected = match self.engine.signatures().borrow(expected) {
-            Some(ty) => ty,
-            None => panic!("{expected:?} is not registered"),
-        };
-        let actual = match self.engine.signatures().borrow(actual) {
-            Some(ty) => ty,
-            None => panic!("{actual:?} is not registered"),
-        };
-
-        Err(concrete_type_mismatch(msg, &expected, &actual))
-    }
-
     /// Validates that the `expected` type matches the type of `actual`
     pub(crate) fn definition(&self, expected: &EntityType, actual: &DefinitionType) -> Result<()> {
         match expected {
             EntityType::Global(expected) => match actual {
-                DefinitionType::Global(actual) => global_ty(expected, actual),
+                DefinitionType::Global(actual) => global_ty(self.engine, expected, actual),
                 _ => bail!("expected global, but found {}", actual.desc()),
             },
             EntityType::Table(expected) => match actual {
@@ -60,29 +36,49 @@ impl MatchCx<'_> {
             },
             EntityType::Function(expected) => match actual {
                 DefinitionType::Func(actual) => {
-                    self.type_reference(expected.unwrap_engine_type_index(), *actual)
+                    type_reference(self.engine, expected.unwrap_engine_type_index(), *actual)
                 }
                 _ => bail!("expected func, but found {}", actual.desc()),
             },
-            EntityType::Tag(_) => unimplemented!(),
+            EntityType::Tag(expected) => match actual {
+                DefinitionType::Tag(actual) => tag_ty(expected, actual),
+                _ => bail!("expected tag, but found {}", actual.desc()),
+            },
         }
     }
 }
 
-#[cfg_attr(not(feature = "component-model"), allow(dead_code))]
-pub fn entity_ty(
-    expected: &EntityType,
-    expected_types: &ModuleTypes,
-    actual: &EntityType,
-    actual_types: &ModuleTypes,
+fn type_reference(
+    engine: &Engine,
+    expected: VMSharedTypeIndex,
+    actual: VMSharedTypeIndex,
 ) -> Result<()> {
+    if engine.signatures().is_subtype(actual, expected) {
+        return Ok(());
+    }
+
+    let msg = "types incompatible";
+    let expected = match engine.signatures().borrow(expected) {
+        Some(ty) => ty,
+        None => panic!("{expected:?} is not registered"),
+    };
+    let actual = match engine.signatures().borrow(actual) {
+        Some(ty) => ty,
+        None => panic!("{actual:?} is not registered"),
+    };
+
+    Err(concrete_type_mismatch(msg, &expected, &actual))
+}
+
+#[cfg(feature = "component-model")]
+pub fn entity_ty(engine: &Engine, expected: &EntityType, actual: &EntityType) -> Result<()> {
     match expected {
         EntityType::Memory(expected) => match actual {
             EntityType::Memory(actual) => memory_ty(expected, actual, None),
             _ => bail!("expected memory found {}", entity_desc(actual)),
         },
         EntityType::Global(expected) => match actual {
-            EntityType::Global(actual) => global_ty(expected, actual),
+            EntityType::Global(actual) => global_ty(engine, expected, actual),
             _ => bail!("expected global found {}", entity_desc(actual)),
         },
         EntityType::Table(expected) => match actual {
@@ -91,93 +87,31 @@ pub fn entity_ty(
         },
         EntityType::Function(expected) => match actual {
             EntityType::Function(actual) => {
-                let expected = &expected_types[expected.unwrap_module_type_index()];
-                let actual = &actual_types[actual.unwrap_module_type_index()];
-                if expected == actual {
-                    Ok(())
-                } else {
-                    Err(concrete_type_mismatch(
-                        "function types incompatible",
-                        expected,
-                        actual,
-                    ))
-                }
+                let expected = expected.unwrap_engine_type_index();
+                let actual = actual.unwrap_engine_type_index();
+                type_reference(engine, expected, actual)
             }
             _ => bail!("expected func found {}", entity_desc(actual)),
         },
-        EntityType::Tag(_) => unimplemented!(),
+        EntityType::Tag(expected) => match actual {
+            EntityType::Tag(actual) => tag_ty(expected, actual),
+            _ => bail!("expected tag found {}", entity_desc(actual)),
+        },
     }
 }
 
-fn concrete_type_mismatch(
-    msg: &str,
-    expected: &WasmSubType,
-    actual: &WasmSubType,
-) -> anyhow::Error {
-    let render_field = |ty: &WasmFieldType| {
-        if ty.mutable {
-            format!("(mut {})", ty.element_type)
-        } else {
-            ty.element_type.to_string()
-        }
-    };
-
-    let render = |ty: &WasmSubType| match &ty.composite_type {
-        WasmCompositeType::Array(ty) => {
-            format!("(array {})", render_field(&ty.0))
-        }
-        WasmCompositeType::Func(ty) => {
-            let params = if ty.params().is_empty() {
-                String::new()
-            } else {
-                format!(
-                    " (param {})",
-                    ty.params()
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                )
-            };
-            let returns = if ty.returns().is_empty() {
-                String::new()
-            } else {
-                format!(
-                    " (result {})",
-                    ty.returns()
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                )
-            };
-            format!("(func{params}{returns})")
-        }
-        WasmCompositeType::Struct(ty) => {
-            let mut s = "(struct".to_string();
-            for f in ty.fields.iter() {
-                s.push_str(&format!(" {}", render_field(f)));
-            }
-            s.push(')');
-            s
-        }
-    };
-
-    anyhow!(
-        "{msg}: expected type `{}`, found type `{}`",
-        render(expected),
-        render(actual)
-    )
+fn concrete_type_mismatch(msg: &str, expected: &WasmSubType, actual: &WasmSubType) -> crate::Error {
+    format_err!("{msg}: expected type `{expected}`, found type `{actual}`")
 }
 
-fn global_ty(expected: &Global, actual: &Global) -> Result<()> {
+fn global_ty(engine: &Engine, expected: &Global, actual: &Global) -> Result<()> {
     // Subtyping is only sound on immutable global
     // references. Therefore if either type is mutable we perform a
     // strict equality check on the types.
     if expected.mutability || actual.mutability {
         equal_ty(expected.wasm_ty, actual.wasm_ty, "global")?;
     } else {
-        match_ty(expected.wasm_ty, actual.wasm_ty, "global")?;
+        match_ty(engine, expected.wasm_ty, actual.wasm_ty, "global")?;
     }
     match_bool(
         expected.mutability,
@@ -189,17 +123,18 @@ fn global_ty(expected: &Global, actual: &Global) -> Result<()> {
     Ok(())
 }
 
-fn table_ty(expected: &Table, actual: &Table, actual_runtime_size: Option<u32>) -> Result<()> {
+fn table_ty(expected: &Table, actual: &Table, actual_runtime_size: Option<u64>) -> Result<()> {
     equal_ty(
-        WasmValType::Ref(expected.wasm_ty),
-        WasmValType::Ref(actual.wasm_ty),
+        WasmValType::Ref(expected.ref_type),
+        WasmValType::Ref(actual.ref_type),
         "table",
     )?;
+    match_index(expected.idx_type, actual.idx_type, "table")?;
     match_limits(
-        expected.minimum.into(),
-        expected.maximum.map(|i| i.into()),
-        actual_runtime_size.unwrap_or(actual.minimum).into(),
-        actual.maximum.map(|i| i.into()),
+        expected.limits.min,
+        expected.limits.max,
+        actual_runtime_size.unwrap_or(actual.limits.min),
+        actual.limits.max,
         "table",
     )?;
     Ok(())
@@ -213,18 +148,12 @@ fn memory_ty(expected: &Memory, actual: &Memory, actual_runtime_size: Option<u64
         "shared",
         "non-shared",
     )?;
-    match_bool(
-        expected.memory64,
-        actual.memory64,
-        "memory",
-        "64-bit",
-        "32-bit",
-    )?;
+    match_index(expected.idx_type, actual.idx_type, "memory")?;
     match_limits(
-        expected.minimum,
-        expected.maximum,
-        actual_runtime_size.unwrap_or(actual.minimum),
-        actual.maximum,
+        expected.limits.min,
+        expected.limits.max,
+        actual_runtime_size.unwrap_or(actual.limits.min),
+        actual.limits.max,
         "memory",
     )?;
     if expected.page_size_log2 != actual.page_size_log2 {
@@ -238,14 +167,31 @@ fn memory_ty(expected: &Memory, actual: &Memory, actual_runtime_size: Option<u64
     Ok(())
 }
 
-fn match_heap(expected: WasmHeapType, actual: WasmHeapType, desc: &str) -> Result<()> {
+fn tag_ty(expected: &Tag, actual: &Tag) -> Result<()> {
+    if expected.signature == actual.signature {
+        Ok(())
+    } else {
+        bail!("incompatible tag types")
+    }
+}
+
+fn match_heap(
+    engine: &Engine,
+    expected: WasmHeapType,
+    actual: WasmHeapType,
+    desc: &str,
+) -> Result<()> {
     use WasmHeapType as H;
     let result = match (actual, expected) {
-        // TODO: Wasm GC introduces subtyping between function types, so it will
-        // no longer suffice to check whether canonicalized type IDs are equal.
-        (H::ConcreteArray(actual), H::ConcreteArray(expected)) => actual == expected,
-        (H::ConcreteFunc(actual), H::ConcreteFunc(expected)) => actual == expected,
-        (H::ConcreteStruct(actual), H::ConcreteStruct(expected)) => actual == expected,
+        (H::ConcreteArray(actual), H::ConcreteArray(expected))
+        | (H::ConcreteFunc(actual), H::ConcreteFunc(expected))
+        | (H::ConcreteStruct(actual), H::ConcreteStruct(expected))
+        | (H::ConcreteCont(actual), H::ConcreteCont(expected))
+        | (H::ConcreteExn(actual), H::ConcreteExn(expected)) => {
+            let actual = actual.unwrap_engine_type_index();
+            let expected = expected.unwrap_engine_type_index();
+            engine.signatures().is_subtype(actual, expected)
+        }
 
         (H::NoFunc, H::NoFunc) => true,
         (_, H::NoFunc) => false,
@@ -302,6 +248,24 @@ fn match_heap(expected: WasmHeapType, actual: WasmHeapType, desc: &str) -> Resul
         (H::None, H::ConcreteStruct(_)) => true,
         (_, H::ConcreteStruct(_)) => false,
 
+        (H::NoCont | H::ConcreteCont(_) | H::Cont, H::Cont) => true,
+        (_, H::Cont) => false,
+
+        (H::NoCont, H::ConcreteCont(_)) => true,
+        (H::NoCont, H::NoCont) => true,
+
+        (_, H::NoCont) => false,
+        (_, H::ConcreteCont(_)) => false,
+
+        (H::NoExn | H::ConcreteExn(_) | H::Exn, H::Exn) => true,
+        (_, H::Exn) => false,
+
+        (H::NoExn, H::ConcreteExn(_)) => true,
+        (H::NoExn, H::NoExn) => true,
+
+        (_, H::NoExn) => false,
+        (_, H::ConcreteExn(_)) => false,
+
         (H::None, H::None) => true,
         (_, H::None) => false,
     };
@@ -315,9 +279,14 @@ fn match_heap(expected: WasmHeapType, actual: WasmHeapType, desc: &str) -> Resul
     }
 }
 
-fn match_ref(expected: WasmRefType, actual: WasmRefType, desc: &str) -> Result<()> {
+fn match_ref(
+    engine: &Engine,
+    expected: WasmRefType,
+    actual: WasmRefType,
+    desc: &str,
+) -> Result<()> {
     if actual.nullable == expected.nullable || expected.nullable {
-        return match_heap(expected.heap_type, actual.heap_type, desc);
+        return match_heap(engine, expected.heap_type, actual.heap_type, desc);
     }
     bail!(
         "{desc} types incompatible: expected {desc} of type `{expected}`, \
@@ -327,7 +296,7 @@ fn match_ref(expected: WasmRefType, actual: WasmRefType, desc: &str) -> Result<(
 
 // Checks whether actual is a subtype of expected, i.e. `actual <: expected`
 // (note the parameters are given the other way around in code).
-fn match_ty(expected: WasmValType, actual: WasmValType, desc: &str) -> Result<()> {
+fn match_ty(engine: &Engine, expected: WasmValType, actual: WasmValType, desc: &str) -> Result<()> {
     // Assert that both our types are engine-level canonicalized. We can't
     // compare types otherwise.
     debug_assert!(
@@ -340,7 +309,9 @@ fn match_ty(expected: WasmValType, actual: WasmValType, desc: &str) -> Result<()
     );
 
     match (actual, expected) {
-        (WasmValType::Ref(actual), WasmValType::Ref(expected)) => match_ref(expected, actual, desc),
+        (WasmValType::Ref(actual), WasmValType::Ref(expected)) => {
+            match_ref(engine, expected, actual, desc)
+        }
         (actual, expected) => equal_ty(expected, actual, desc),
     }
 }
@@ -384,6 +355,28 @@ fn match_bool(
     )
 }
 
+fn match_index(expected: IndexType, actual: IndexType, desc: &str) -> Result<()> {
+    if expected == actual {
+        return Ok(());
+    }
+    const S64: &str = "64-bit";
+    const S32: &str = "32-bit";
+    let expected = if matches!(expected, IndexType::I64) {
+        S64
+    } else {
+        S32
+    };
+    let actual = if matches!(actual, IndexType::I64) {
+        S64
+    } else {
+        S32
+    };
+    bail!(
+        "{desc} types incompatible: expected {expected} {desc}, \
+         found {actual} {desc}",
+    )
+}
+
 fn match_limits(
     expected_min: u64,
     expected_max: Option<u64>,
@@ -417,6 +410,7 @@ fn match_limits(
     )
 }
 
+#[cfg(feature = "component-model")]
 fn entity_desc(ty: &EntityType) -> &'static str {
     match ty {
         EntityType::Global(_) => "global",

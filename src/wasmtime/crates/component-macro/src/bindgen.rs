@@ -1,14 +1,15 @@
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use syn::parse::{Error, Parse, ParseStream, Result};
 use syn::punctuated::Punctuated;
-use syn::{braced, token, Token};
-use wasmtime_wit_bindgen::{AsyncConfig, Opts, Ownership, TrappableError, TrappableImports};
+use syn::{Token, braced, token};
+use wasmtime_wit_bindgen::{
+    FunctionConfig, FunctionFilter, FunctionFlags, Opts, Ownership, TrappableError,
+};
 use wit_parser::{PackageId, Resolve, UnresolvedPackageGroup, WorldId};
 
 pub struct Config {
@@ -20,13 +21,6 @@ pub struct Config {
 }
 
 pub fn expand(input: &Config) -> Result<TokenStream> {
-    if !cfg!(feature = "async") && input.opts.async_.maybe_async() {
-        return Err(Error::new(
-            Span::call_site(),
-            "cannot enable async bindings unless `async` crate feature is active",
-        ));
-    }
-
     let mut src = match input.opts.generate(&input.resolve, input.world) {
         Ok(s) => s,
         Err(e) => return Err(Error::new(Span::call_site(), e.to_string())),
@@ -40,7 +34,10 @@ pub fn expand(input: &Config) -> Result<TokenStream> {
     // place a formatted version of the expanded code into a file. This file
     // will then show up in rustc error messages for any codegen issues and can
     // be inspected manually.
-    if input.include_generated_code_from_file || std::env::var("WASMTIME_DEBUG_BINDGEN").is_ok() {
+    if input.include_generated_code_from_file
+        || input.opts.debug
+        || std::env::var("WASMTIME_DEBUG_BINDGEN").is_ok()
+    {
         static INVOCATION: AtomicUsize = AtomicUsize::new(0);
         let root = Path::new(env!("DEBUG_OUTPUT_DIR"));
         let world_name = &input.resolve.worlds[input.world].name;
@@ -61,13 +58,16 @@ pub fn expand(input: &Config) -> Result<TokenStream> {
     }
     let mut contents = src.parse::<TokenStream>().unwrap();
 
-    // Include a dummy `include_str!` for any files we read so rustc knows that
+    // Include a dummy `include_bytes!` for any files we read so rustc knows that
     // we depend on the contents of those files.
     for file in input.files.iter() {
         contents.extend(
-            format!("const _: &str = include_str!(r#\"{}\"#);\n", file.display())
-                .parse::<TokenStream>()
-                .unwrap(),
+            format!(
+                "const _: &[u8] = include_bytes!(r#\"{}\"#);\n",
+                file.display()
+            )
+            .parse::<TokenStream>()
+            .unwrap(),
         );
     }
 
@@ -80,9 +80,9 @@ impl Parse for Config {
         let mut opts = Opts::default();
         let mut world = None;
         let mut inline = None;
-        let mut path = None;
-        let mut async_configured = false;
-        let mut features = Vec::new();
+        let mut paths = Vec::new();
+        let mut imports_configured = false;
+        let mut exports_configured = false;
         let mut include_generated_code_from_file = false;
 
         if input.peek(token::Brace) {
@@ -91,11 +91,8 @@ impl Parse for Config {
             let fields = Punctuated::<Opt, Token![,]>::parse_terminated(&content)?;
             for field in fields.into_pairs() {
                 match field.into_value() {
-                    Opt::Path(s) => {
-                        if path.is_some() {
-                            return Err(Error::new(s.span(), "cannot specify second path"));
-                        }
-                        path = Some(s.value());
+                    Opt::Path(p) => {
+                        paths.extend(p.into_iter().map(|p| p.value()));
                     }
                     Opt::World(s) => {
                         if world.is_some() {
@@ -109,16 +106,8 @@ impl Parse for Config {
                         }
                         inline = Some(s.value());
                     }
-                    Opt::Tracing(val) => opts.tracing = val,
-                    Opt::Async(val, span) => {
-                        if async_configured {
-                            return Err(Error::new(span, "cannot specify second async config"));
-                        }
-                        async_configured = true;
-                        opts.async_ = val;
-                    }
+                    Opt::Debug(val) => opts.debug = val,
                     Opt::TrappableErrorType(val) => opts.trappable_error_type = val,
-                    Opt::TrappableImports(val) => opts.trappable_imports = val,
                     Opt::Ownership(val) => opts.ownership = val,
                     Opt::Interfaces(s) => {
                         if inline.is_some() {
@@ -141,7 +130,7 @@ impl Parse for Config {
                                 "cannot specify a world with `interfaces`",
                             ));
                         }
-                        world = Some("interfaces".to_string());
+                        world = Some("wasmtime:component-macro-synthesized/interfaces".to_string());
 
                         opts.only_interfaces = true;
                     }
@@ -154,23 +143,37 @@ impl Parse for Config {
                     }
                     Opt::Stringify(val) => opts.stringify = val,
                     Opt::SkipMutForwardingImpls(val) => opts.skip_mut_forwarding_impls = val,
-                    Opt::Features(f) => {
-                        features.extend(f.into_iter().map(|f| f.value()));
-                    }
                     Opt::RequireStoreDataSend(val) => opts.require_store_data_send = val,
                     Opt::WasmtimeCrate(f) => {
                         opts.wasmtime_crate = Some(f.into_token_stream().to_string())
                     }
+                    Opt::Anyhow(val) => {
+                        opts.anyhow = val;
+                    }
                     Opt::IncludeGeneratedCodeFromFile(i) => include_generated_code_from_file = i,
+                    Opt::Imports(config, span) => {
+                        if imports_configured {
+                            return Err(Error::new(span, "cannot specify imports configuration"));
+                        }
+                        opts.imports = config;
+                        imports_configured = true;
+                    }
+                    Opt::Exports(config, span) => {
+                        if exports_configured {
+                            return Err(Error::new(span, "cannot specify exports configuration"));
+                        }
+                        opts.exports = config;
+                        exports_configured = true;
+                    }
                 }
             }
         } else {
             world = input.parse::<Option<syn::LitStr>>()?.map(|s| s.value());
             if input.parse::<Option<syn::token::In>>()?.is_some() {
-                path = Some(input.parse::<syn::LitStr>()?.value());
+                paths.push(input.parse::<syn::LitStr>()?.value());
             }
         }
-        let (resolve, pkgs, files) = parse_source(&path, &inline, &features)
+        let (resolve, pkgs, files) = parse_source(&paths, &inline)
             .map_err(|err| Error::new(call_site, format!("{err:?}")))?;
 
         let world = resolve
@@ -187,36 +190,54 @@ impl Parse for Config {
 }
 
 fn parse_source(
-    path: &Option<String>,
+    paths: &Vec<String>,
     inline: &Option<String>,
-    features: &[String],
 ) -> anyhow::Result<(Resolve, Vec<PackageId>, Vec<PathBuf>)> {
     let mut resolve = Resolve::default();
-    resolve.features.extend(features.iter().cloned());
+    resolve.all_features = true;
     let mut files = Vec::new();
+    let mut pkgs = Vec::new();
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let default = root.join("wit");
 
-    let mut parse = |resolve: &mut Resolve, path: &Path| -> anyhow::Result<_> {
-        let (pkg, sources) = resolve.push_path(path)?;
-        files.extend(sources);
-        Ok(pkg)
+    let parse = |resolve: &mut Resolve,
+                 files: &mut Vec<PathBuf>,
+                 pkgs: &mut Vec<PackageId>,
+                 paths: &[PathBuf]|
+     -> anyhow::Result<_> {
+        for path in paths {
+            let p = root.join(path);
+            // Try to normalize the path to make the error message more understandable when
+            // the path is not correct. Fallback to the original path if normalization fails
+            // (probably return an error somewhere else).
+            let normalized_path = match std::fs::canonicalize(&p) {
+                Ok(p) => p,
+                Err(_) => p.to_path_buf(),
+            };
+            let (pkg, sources) = resolve.push_path(normalized_path)?;
+            pkgs.push(pkg);
+            files.extend(sources.paths().map(|p| p.to_owned()));
+        }
+        Ok(())
     };
 
-    let path_pkg = if let Some(path) = path {
-        Some(parse(&mut resolve, &root.join(path))?)
+    if paths.is_empty() {
+        if default.exists() {
+            parse(&mut resolve, &mut files, &mut pkgs, &[default])?;
+        }
     } else {
-        None
-    };
+        parse(
+            &mut resolve,
+            &mut files,
+            &mut pkgs,
+            &paths.iter().map(|s| s.into()).collect::<Vec<_>>(),
+        )?;
+    }
 
-    let inline_pkgs = if let Some(inline) = inline {
-        Some(resolve.push_group(UnresolvedPackageGroup::parse("macro-input", inline)?)?)
-    } else {
-        None
-    };
-
-    let pkgs = inline_pkgs
-        .or(path_pkg)
-        .map_or_else(|| parse(&mut resolve, &root.join("wit")), Ok)?;
+    if let Some(inline) = inline {
+        pkgs.truncate(0);
+        pkgs.push(resolve.push_group(UnresolvedPackageGroup::parse("macro-input", inline)?)?);
+    }
 
     Ok((resolve, pkgs, files))
 }
@@ -225,6 +246,7 @@ mod kw {
     syn::custom_keyword!(inline);
     syn::custom_keyword!(path);
     syn::custom_keyword!(tracing);
+    syn::custom_keyword!(verbose_tracing);
     syn::custom_keyword!(trappable_error_type);
     syn::custom_keyword!(world);
     syn::custom_keyword!(ownership);
@@ -232,43 +254,69 @@ mod kw {
     syn::custom_keyword!(with);
     syn::custom_keyword!(except_imports);
     syn::custom_keyword!(only_imports);
-    syn::custom_keyword!(trappable_imports);
     syn::custom_keyword!(additional_derives);
     syn::custom_keyword!(stringify);
     syn::custom_keyword!(skip_mut_forwarding_impls);
-    syn::custom_keyword!(features);
     syn::custom_keyword!(require_store_data_send);
     syn::custom_keyword!(wasmtime_crate);
+    syn::custom_keyword!(anyhow);
     syn::custom_keyword!(include_generated_code_from_file);
+    syn::custom_keyword!(debug);
+    syn::custom_keyword!(imports);
+    syn::custom_keyword!(exports);
+    syn::custom_keyword!(store);
+    syn::custom_keyword!(trappable);
+    syn::custom_keyword!(ignore_wit);
+    syn::custom_keyword!(exact);
 }
 
 enum Opt {
     World(syn::LitStr),
-    Path(syn::LitStr),
+    Path(Vec<syn::LitStr>),
     Inline(syn::LitStr),
-    Tracing(bool),
-    Async(AsyncConfig, Span),
     TrappableErrorType(Vec<TrappableError>),
     Ownership(Ownership),
     Interfaces(syn::LitStr),
     With(HashMap<String, String>),
-    TrappableImports(TrappableImports),
     AdditionalDerives(Vec<syn::Path>),
     Stringify(bool),
     SkipMutForwardingImpls(bool),
-    Features(Vec<syn::LitStr>),
     RequireStoreDataSend(bool),
     WasmtimeCrate(syn::Path),
+    Anyhow(bool),
     IncludeGeneratedCodeFromFile(bool),
+    Debug(bool),
+    Imports(FunctionConfig, Span),
+    Exports(FunctionConfig, Span),
 }
 
 impl Parse for Opt {
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let l = input.lookahead1();
-        if l.peek(kw::path) {
+        if l.peek(kw::debug) {
+            input.parse::<kw::debug>()?;
+            input.parse::<Token![:]>()?;
+            Ok(Opt::Debug(input.parse::<syn::LitBool>()?.value))
+        } else if l.peek(kw::path) {
             input.parse::<kw::path>()?;
             input.parse::<Token![:]>()?;
-            Ok(Opt::Path(input.parse()?))
+
+            let mut paths: Vec<syn::LitStr> = vec![];
+
+            let l = input.lookahead1();
+            if l.peek(syn::LitStr) {
+                paths.push(input.parse()?);
+            } else if l.peek(syn::token::Bracket) {
+                let contents;
+                syn::bracketed!(contents in input);
+                let list = Punctuated::<_, Token![,]>::parse_terminated(&contents)?;
+
+                paths.extend(list);
+            } else {
+                return Err(l.error());
+            };
+
+            Ok(Opt::Path(paths))
         } else if l.peek(kw::inline) {
             input.parse::<kw::inline>()?;
             input.parse::<Token![:]>()?;
@@ -277,48 +325,6 @@ impl Parse for Opt {
             input.parse::<kw::world>()?;
             input.parse::<Token![:]>()?;
             Ok(Opt::World(input.parse()?))
-        } else if l.peek(kw::tracing) {
-            input.parse::<kw::tracing>()?;
-            input.parse::<Token![:]>()?;
-            Ok(Opt::Tracing(input.parse::<syn::LitBool>()?.value))
-        } else if l.peek(Token![async]) {
-            let span = input.parse::<Token![async]>()?.span;
-            input.parse::<Token![:]>()?;
-            if input.peek(syn::LitBool) {
-                match input.parse::<syn::LitBool>()?.value {
-                    true => Ok(Opt::Async(AsyncConfig::All, span)),
-                    false => Ok(Opt::Async(AsyncConfig::None, span)),
-                }
-            } else {
-                let contents;
-                syn::braced!(contents in input);
-
-                let l = contents.lookahead1();
-                let ctor: fn(HashSet<String>) -> AsyncConfig = if l.peek(kw::except_imports) {
-                    contents.parse::<kw::except_imports>()?;
-                    contents.parse::<Token![:]>()?;
-                    AsyncConfig::AllExceptImports
-                } else if l.peek(kw::only_imports) {
-                    contents.parse::<kw::only_imports>()?;
-                    contents.parse::<Token![:]>()?;
-                    AsyncConfig::OnlyImports
-                } else {
-                    return Err(l.error());
-                };
-
-                let list;
-                syn::bracketed!(list in contents);
-                let fields: Punctuated<syn::LitStr, Token![,]> =
-                    list.parse_terminated(Parse::parse, Token![,])?;
-
-                if contents.peek(Token![,]) {
-                    contents.parse::<Token![,]>()?;
-                }
-                Ok(Opt::Async(
-                    ctor(fields.iter().map(|s| s.value()).collect()),
-                    span,
-                ))
-            }
         } else if l.peek(kw::ownership) {
             input.parse::<kw::ownership>()?;
             input.parse::<Token![:]>()?;
@@ -377,22 +383,6 @@ impl Parse for Opt {
             let fields: Punctuated<(String, String), Token![,]> =
                 contents.parse_terminated(with_field_parse, Token![,])?;
             Ok(Opt::With(HashMap::from_iter(fields)))
-        } else if l.peek(kw::trappable_imports) {
-            input.parse::<kw::trappable_imports>()?;
-            input.parse::<Token![:]>()?;
-            let config = if input.peek(syn::LitBool) {
-                match input.parse::<syn::LitBool>()?.value {
-                    true => TrappableImports::All,
-                    false => TrappableImports::None,
-                }
-            } else {
-                let contents;
-                syn::bracketed!(contents in input);
-                let fields: Punctuated<syn::LitStr, Token![,]> =
-                    contents.parse_terminated(Parse::parse, Token![,])?;
-                TrappableImports::Only(fields.iter().map(|s| s.value()).collect())
-            };
-            Ok(Opt::TrappableImports(config))
         } else if l.peek(kw::additional_derives) {
             input.parse::<kw::additional_derives>()?;
             input.parse::<Token![:]>()?;
@@ -410,13 +400,6 @@ impl Parse for Opt {
             Ok(Opt::SkipMutForwardingImpls(
                 input.parse::<syn::LitBool>()?.value,
             ))
-        } else if l.peek(kw::features) {
-            input.parse::<kw::features>()?;
-            input.parse::<Token![:]>()?;
-            let contents;
-            syn::bracketed!(contents in input);
-            let list = Punctuated::<_, Token![,]>::parse_terminated(&contents)?;
-            Ok(Opt::Features(list.into_iter().collect()))
         } else if l.peek(kw::require_store_data_send) {
             input.parse::<kw::require_store_data_send>()?;
             input.parse::<Token![:]>()?;
@@ -427,12 +410,24 @@ impl Parse for Opt {
             input.parse::<kw::wasmtime_crate>()?;
             input.parse::<Token![:]>()?;
             Ok(Opt::WasmtimeCrate(input.parse()?))
+        } else if l.peek(kw::anyhow) {
+            input.parse::<kw::anyhow>()?;
+            input.parse::<Token![:]>()?;
+            Ok(Opt::Anyhow(input.parse::<syn::LitBool>()?.value))
         } else if l.peek(kw::include_generated_code_from_file) {
             input.parse::<kw::include_generated_code_from_file>()?;
             input.parse::<Token![:]>()?;
             Ok(Opt::IncludeGeneratedCodeFromFile(
                 input.parse::<syn::LitBool>()?.value,
             ))
+        } else if l.peek(kw::imports) {
+            let span = input.parse::<kw::imports>()?.span;
+            input.parse::<Token![:]>()?;
+            Ok(Opt::Imports(parse_function_config(input)?, span))
+        } else if l.peek(kw::exports) {
+            let span = input.parse::<kw::exports>()?.span;
+            input.parse::<Token![:]>()?;
+            Ok(Opt::Exports(parse_function_config(input)?, span))
         } else {
             Err(l.error())
         }
@@ -490,4 +485,75 @@ fn with_field_parse(input: ParseStream<'_>) -> Result<(String, String)> {
     }
 
     Ok((interface, buf))
+}
+
+fn parse_function_config(input: ParseStream<'_>) -> Result<FunctionConfig> {
+    let content;
+    syn::braced!(content in input);
+    let mut ret = FunctionConfig::new();
+
+    let list = Punctuated::<FunctionConfigSyntax, Token![,]>::parse_terminated(&content)?;
+    for item in list.into_iter() {
+        ret.push(item.filter, item.flags);
+    }
+
+    return Ok(ret);
+
+    struct FunctionConfigSyntax {
+        filter: FunctionFilter,
+        flags: FunctionFlags,
+    }
+
+    impl Parse for FunctionConfigSyntax {
+        fn parse(input: ParseStream<'_>) -> Result<Self> {
+            let l = input.lookahead1();
+            let filter = if l.peek(syn::LitStr) {
+                FunctionFilter::Name(input.parse::<syn::LitStr>()?.value())
+            } else if l.peek(Token![default]) {
+                input.parse::<Token![default]>()?;
+                FunctionFilter::Default
+            } else {
+                return Err(l.error());
+            };
+
+            input.parse::<Token![:]>()?;
+
+            let mut flags = FunctionFlags::empty();
+            while !input.is_empty() {
+                let l = input.lookahead1();
+                if l.peek(Token![async]) {
+                    input.parse::<Token![async]>()?;
+                    flags |= FunctionFlags::ASYNC;
+                } else if l.peek(kw::tracing) {
+                    input.parse::<kw::tracing>()?;
+                    flags |= FunctionFlags::TRACING;
+                } else if l.peek(kw::verbose_tracing) {
+                    input.parse::<kw::verbose_tracing>()?;
+                    flags |= FunctionFlags::VERBOSE_TRACING;
+                } else if l.peek(kw::store) {
+                    input.parse::<kw::store>()?;
+                    flags |= FunctionFlags::STORE;
+                } else if l.peek(kw::trappable) {
+                    input.parse::<kw::trappable>()?;
+                    flags |= FunctionFlags::TRAPPABLE;
+                } else if l.peek(kw::ignore_wit) {
+                    input.parse::<kw::ignore_wit>()?;
+                    flags |= FunctionFlags::IGNORE_WIT;
+                } else if l.peek(kw::exact) {
+                    input.parse::<kw::exact>()?;
+                    flags |= FunctionFlags::EXACT;
+                } else {
+                    return Err(l.error());
+                }
+
+                if input.peek(Token![|]) {
+                    input.parse::<Token![|]>()?;
+                } else {
+                    break;
+                }
+            }
+
+            Ok(FunctionConfigSyntax { filter, flags })
+        }
+    }
 }

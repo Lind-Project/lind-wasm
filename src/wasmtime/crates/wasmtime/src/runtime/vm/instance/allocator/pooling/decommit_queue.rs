@@ -11,16 +11,17 @@
 use super::PoolingInstanceAllocator;
 use crate::vm::{MemoryAllocationIndex, MemoryImageSlot, Table, TableAllocationIndex};
 use smallvec::SmallVec;
+use std::io;
 
 #[cfg(feature = "async")]
 use wasmtime_fiber::FiberStack;
 
 #[cfg(unix)]
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types, reason = "matching libc naming")]
 type iovec = libc::iovec;
 
 #[cfg(not(unix))]
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types, reason = "matching libc naming")]
 struct iovec {
     iov_base: *mut libc::c_void,
     iov_len: libc::size_t,
@@ -51,10 +52,10 @@ unsafe impl Sync for SendSyncStack {}
 #[derive(Default)]
 pub struct DecommitQueue {
     raw: SmallVec<[IoVec; 2]>,
-    memories: SmallVec<[(MemoryAllocationIndex, MemoryImageSlot); 1]>,
-    tables: SmallVec<[(TableAllocationIndex, Table); 1]>,
+    memories: SmallVec<[(MemoryAllocationIndex, MemoryImageSlot, usize); 1]>,
+    tables: SmallVec<[(TableAllocationIndex, Table, usize); 1]>,
     #[cfg(feature = "async")]
-    stacks: SmallVec<[SendSyncStack; 1]>,
+    stacks: SmallVec<[(SendSyncStack, usize); 1]>,
     //
     // TODO: GC heaps are not well-integrated with the pooling allocator
     // yet. Once we better integrate them, we should start (optionally) zeroing
@@ -123,8 +124,10 @@ impl DecommitQueue {
         &mut self,
         allocation_index: MemoryAllocationIndex,
         image: MemoryImageSlot,
+        bytes_resident: usize,
     ) {
-        self.memories.push((allocation_index, image));
+        self.memories
+            .push((allocation_index, image, bytes_resident));
     }
 
     /// Push a table into the queue.
@@ -133,8 +136,13 @@ impl DecommitQueue {
     ///
     /// This table should not be in use, and its decommit regions must have
     /// already been enqueued via `self.enqueue_raw`.
-    pub unsafe fn push_table(&mut self, allocation_index: TableAllocationIndex, table: Table) {
-        self.tables.push((allocation_index, table));
+    pub unsafe fn push_table(
+        &mut self,
+        allocation_index: TableAllocationIndex,
+        table: Table,
+        bytes_resident: usize,
+    ) {
+        self.tables.push((allocation_index, table, bytes_resident));
     }
 
     /// Push a stack into the queue.
@@ -144,22 +152,18 @@ impl DecommitQueue {
     /// This stack should not be in use, and its decommit regions must have
     /// already been enqueued via `self.enqueue_raw`.
     #[cfg(feature = "async")]
-    pub unsafe fn push_stack(&mut self, stack: FiberStack) {
-        self.stacks.push(SendSyncStack(stack));
+    pub unsafe fn push_stack(&mut self, stack: FiberStack, bytes_resident: usize) {
+        self.stacks.push((SendSyncStack(stack), bytes_resident));
     }
 
-    fn decommit_all_raw(&mut self) {
+    /// Returns if any decommit call failed.
+    fn decommit_all_raw(&mut self) -> io::Result<()> {
         for iovec in self.raw.drain(..) {
             unsafe {
-                crate::vm::sys::vm::decommit_pages(iovec.0.iov_base.cast(), iovec.0.iov_len)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "failed to decommit ptr={:#p}, len={:#x}: {e}",
-                            iovec.0.iov_base, iovec.0.iov_len
-                        )
-                    });
+                crate::vm::sys::vm::decommit_pages(iovec.0.iov_base.cast(), iovec.0.iov_len)?;
             }
         }
+        Ok(())
     }
 
     /// Flush this queue, decommitting all enqueued regions in batch.
@@ -168,29 +172,43 @@ impl DecommitQueue {
     /// the associated free lists; `false` if the queue was empty.
     pub fn flush(mut self, pool: &PoolingInstanceAllocator) -> bool {
         // First, do the raw decommit syscall(s).
-        self.decommit_all_raw();
+        let decommit_succeeded = self.decommit_all_raw().is_ok();
 
         // Second, restore the various entities to their associated pools' free
         // lists. This is safe, and they are ready for reuse, now that their
         // memory regions have been decommitted.
+        //
+        // Note that for memory images the images are all dropped here and
+        // ignored if any decommits failed. This signifies how the state of the
+        // slot is unknown and needs to be paved over in the future. Also note
+        // that `bytes_resident` is probably too low, but there's no other
+        // precise way to know, so it's left here as-is and it'll get reset when
+        // the slot is reused.
         let mut deallocated_any = false;
-        for (allocation_index, image) in self.memories {
+        for (allocation_index, image, bytes_resident) in self.memories {
             deallocated_any = true;
+            let image = if decommit_succeeded {
+                Some(image)
+            } else {
+                None
+            };
             unsafe {
-                pool.memories.deallocate(allocation_index, image);
+                pool.memories
+                    .deallocate(allocation_index, image, bytes_resident);
             }
         }
-        for (allocation_index, table) in self.tables {
+        for (allocation_index, table, bytes_resident) in self.tables {
             deallocated_any = true;
             unsafe {
-                pool.tables.deallocate(allocation_index, table);
+                pool.tables
+                    .deallocate(allocation_index, table, bytes_resident);
             }
         }
         #[cfg(feature = "async")]
-        for stack in self.stacks {
+        for (stack, bytes_resident) in self.stacks {
             deallocated_any = true;
             unsafe {
-                pool.stacks.deallocate(stack.0);
+                pool.stacks.deallocate(stack.0, bytes_resident);
             }
         }
 

@@ -8,7 +8,7 @@ use crate::machinst::{Reg, RegClass, Writable};
 use regalloc2::PReg;
 use regalloc2::VReg;
 
-use std::string::{String, ToString};
+use alloc::string::{String, ToString};
 
 //=============================================================================
 // Registers, the Universe thereof, and printing
@@ -20,8 +20,8 @@ pub const PINNED_REG: u8 = 21;
 
 /// Get a reference to an X-register (integer register). Do not use
 /// this for xsp / xzr; we have two special registers for those.
-pub fn xreg(num: u8) -> Reg {
-    Reg::from(xreg_preg(num))
+pub const fn xreg(num: u8) -> Reg {
+    Reg::from_real_reg(xreg_preg(num))
 }
 
 /// Get the given X-register as a PReg.
@@ -36,8 +36,8 @@ pub fn writable_xreg(num: u8) -> Writable<Reg> {
 }
 
 /// Get a reference to a V-register (vector/FP register).
-pub fn vreg(num: u8) -> Reg {
-    Reg::from(vreg_preg(num))
+pub const fn vreg(num: u8) -> Reg {
+    Reg::from_real_reg(vreg_preg(num))
 }
 
 /// Get the given V-register as a PReg.
@@ -154,7 +154,7 @@ fn show_ireg(reg: RealReg) -> String {
         63 => "sp".to_string(),
         x => {
             debug_assert!(x < 29);
-            format!("x{}", x)
+            format!("x{x}")
         }
     }
 }
@@ -171,12 +171,24 @@ fn show_reg(reg: Reg) -> String {
             RegClass::Vector => unreachable!(),
         }
     } else {
-        format!("%{:?}", reg)
+        format!("%{reg:?}")
     }
 }
 
 pub fn pretty_print_reg(reg: Reg) -> String {
     show_reg(reg)
+}
+
+fn show_reg_sized(reg: Reg, size: OperandSize) -> String {
+    match reg.class() {
+        RegClass::Int => show_ireg_sized(reg, size),
+        RegClass::Float => show_reg(reg),
+        RegClass::Vector => unreachable!(),
+    }
+}
+
+pub fn pretty_print_reg_sized(reg: Reg, size: OperandSize) -> String {
+    show_reg_sized(reg, size)
 }
 
 /// If `ireg` denotes an Int-classed reg, make a best-effort attempt to show
@@ -247,9 +259,9 @@ pub fn show_vreg_element(reg: Reg, idx: u8, size: ScalarSize) -> String {
         ScalarSize::Size16 => ".h",
         ScalarSize::Size32 => ".s",
         ScalarSize::Size64 => ".d",
-        _ => panic!("Unexpected vector element size: {:?}", size),
+        _ => panic!("Unexpected vector element size: {size:?}"),
     };
-    format!("{}{}[{}]", s, suffix, idx)
+    format!("{s}{suffix}[{idx}]")
 }
 
 pub fn pretty_print_ireg(reg: Reg, size: OperandSize) -> String {

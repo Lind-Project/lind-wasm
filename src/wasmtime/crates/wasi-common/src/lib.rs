@@ -97,6 +97,7 @@ pub use file::WasiFile;
 pub use sched::{Poll, WasiSched};
 pub use string_array::{StringArray, StringArrayError};
 pub use table::Table;
+pub use anyhow::Error as EnvError;
 
 // The only difference between these definitions for sync vs async is whether
 // the wasmtime::Funcs generated are async (& therefore need an async Store and an executor to run)
@@ -110,7 +111,7 @@ macro_rules! define_wasi {
 
     use wasmtime::Linker;
 
-    pub fn add_to_linker<T, U>(
+    pub fn add_to_linker<T: 'static, U>(
         linker: &mut Linker<T>,
         get_cx: impl Fn(&mut T) -> &mut U + Send + Sync + Copy + 'static,
     ) -> anyhow::Result<()>

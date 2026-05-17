@@ -1,26 +1,30 @@
 use super::cvt;
 use crate::prelude::*;
-use crate::runtime::vm::sys::capi;
 use crate::runtime::vm::SendSyncPtr;
+use crate::runtime::vm::sys::capi;
 use crate::vm::sys::DecommitBehavior;
 use core::ptr::{self, NonNull};
 #[cfg(feature = "std")]
 use std::{fs::File, sync::Arc};
 
+pub use crate::runtime::vm::pagemap_disabled::{PageMap, reset_with_pagemap};
+
 pub unsafe fn expose_existing_mapping(ptr: *mut u8, len: usize) -> Result<()> {
-    cvt(capi::wasmtime_mprotect(
-        ptr.cast(),
-        len,
-        capi::PROT_READ | capi::PROT_WRITE,
-    ))
+    unsafe {
+        cvt(capi::wasmtime_mprotect(
+            ptr.cast(),
+            len,
+            capi::PROT_READ | capi::PROT_WRITE,
+        ))
+    }
 }
 
 pub unsafe fn hide_existing_mapping(ptr: *mut u8, len: usize) -> Result<()> {
-    cvt(capi::wasmtime_mprotect(ptr.cast(), len, 0))
+    unsafe { cvt(capi::wasmtime_mprotect(ptr.cast(), len, 0)) }
 }
 
 pub unsafe fn erase_existing_mapping(ptr: *mut u8, len: usize) -> Result<()> {
-    cvt(capi::wasmtime_mmap_remap(ptr.cast(), len, 0))
+    unsafe { cvt(capi::wasmtime_mmap_remap(ptr.cast(), len, 0)) }
 }
 
 #[cfg(feature = "pooling-allocator")]
@@ -30,16 +34,19 @@ pub unsafe fn commit_pages(_addr: *mut u8, _len: usize) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "pooling-allocator")]
 pub unsafe fn decommit_pages(addr: *mut u8, len: usize) -> Result<()> {
     if len == 0 {
         return Ok(());
     }
 
-    cvt(capi::wasmtime_mmap_remap(
-        addr,
-        len,
-        capi::PROT_READ | capi::PROT_WRITE,
-    ))
+    unsafe {
+        cvt(capi::wasmtime_mmap_remap(
+            addr,
+            len,
+            capi::PROT_READ | capi::PROT_WRITE,
+        ))
+    }
 }
 
 pub fn get_page_size() -> usize {
@@ -78,21 +85,19 @@ impl MemoryImageSource {
         }
     }
 
-    pub unsafe fn map_at(&self, base: *mut u8, len: usize, offset: u64) -> Result<()> {
-        assert_eq!(offset, 0);
-        cvt(capi::wasmtime_memory_image_map_at(
-            self.data.as_ptr(),
-            base,
-            len,
-        ))
+    #[inline]
+    pub(super) fn image_ptr(&self) -> SendSyncPtr<capi::wasmtime_memory_image> {
+        self.data
     }
 
     pub unsafe fn remap_as_zeros_at(&self, base: *mut u8, len: usize) -> Result<()> {
-        cvt(capi::wasmtime_mmap_remap(
-            base.cast(),
-            len,
-            capi::PROT_READ | capi::PROT_WRITE,
-        ))
+        unsafe {
+            cvt(capi::wasmtime_mmap_remap(
+                base.cast(),
+                len,
+                capi::PROT_READ | capi::PROT_WRITE,
+            ))
+        }
     }
 }
 

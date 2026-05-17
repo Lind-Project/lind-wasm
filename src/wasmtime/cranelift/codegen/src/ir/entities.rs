@@ -42,11 +42,7 @@ impl Block {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -56,10 +52,11 @@ impl Block {
 /// [`InstBuilder`](super::InstBuilder) instructions:
 ///
 /// - [`iconst`](super::InstBuilder::iconst) for integer constants
+/// - [`f16const`](super::InstBuilder::f16const) for 16-bit float constants
 /// - [`f32const`](super::InstBuilder::f32const) for 32-bit float constants
 /// - [`f64const`](super::InstBuilder::f64const) for 64-bit float constants
+/// - [`f128const`](super::InstBuilder::f128const) for 128-bit float constants
 /// - [`vconst`](super::InstBuilder::vconst) for vector constants
-/// - [`null`](super::InstBuilder::null) for null reference constants
 ///
 /// Any `InstBuilder` instruction that has an output will also return a `Value`.
 ///
@@ -126,11 +123,7 @@ impl StackSlot {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -145,11 +138,7 @@ impl DynamicStackSlot {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -164,11 +153,7 @@ impl DynamicType {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -179,13 +164,10 @@ impl DynamicType {
 ///
 /// You can create a `GlobalValue` in the following ways:
 ///
-/// - When compiling to WASM, you can use it to load values from a
-/// [`VmContext`](super::GlobalValueData::VMContext) using
-/// [`FuncEnvironment::make_global`](https://docs.rs/cranelift-wasm/*/cranelift_wasm/trait.FuncEnvironment.html#tymethod.make_global).
 /// - When compiling to native code, you can use it for objects in static memory with
-/// [`Module::declare_data_in_func`](https://docs.rs/cranelift-module/*/cranelift_module/trait.Module.html#method.declare_data_in_func).
+///   [`Module::declare_data_in_func`](https://docs.rs/cranelift-module/*/cranelift_module/trait.Module.html#method.declare_data_in_func).
 /// - For any compilation target, it can be registered with
-/// [`FunctionBuilder::create_global_value`](https://docs.rs/cranelift-frontend/*/cranelift_frontend/struct.FunctionBuilder.html#method.create_global_value).
+///   [`FunctionBuilder::create_global_value`](https://docs.rs/cranelift-frontend/*/cranelift_frontend/struct.FunctionBuilder.html#method.create_global_value).
 ///
 /// `GlobalValue`s can be retrieved with
 /// [`InstBuilder:global_value`](super::InstBuilder::global_value).
@@ -201,34 +183,7 @@ impl GlobalValue {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
-    }
-}
-
-/// An opaque reference to a memory type.
-///
-/// A `MemoryType` is a descriptor of a struct layout in memory, with
-/// types and proof-carrying-code facts optionally attached to the
-/// fields.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-pub struct MemoryType(u32);
-entity_impl!(MemoryType, "mt");
-
-impl MemoryType {
-    /// Create a new memory type reference from its number.
-    ///
-    /// This method is for use by the parser.
-    pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -250,11 +205,7 @@ impl Constant {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -276,11 +227,7 @@ impl Immediate {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -306,11 +253,7 @@ impl JumpTable {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -323,13 +266,10 @@ impl JumpTable {
 /// `FuncRef`s can be created with
 ///
 /// - [`FunctionBuilder::import_function`](https://docs.rs/cranelift-frontend/*/cranelift_frontend/struct.FunctionBuilder.html#method.import_function)
-/// for external functions
+///   for external functions
 /// - [`Module::declare_func_in_func`](https://docs.rs/cranelift-module/*/cranelift_module/trait.Module.html#method.declare_func_in_func)
-/// for functions declared elsewhere in the same native
-/// [`Module`](https://docs.rs/cranelift-module/*/cranelift_module/trait.Module.html)
-/// - [`FuncEnvironment::make_direct_func`](https://docs.rs/cranelift-wasm/*/cranelift_wasm/trait.FuncEnvironment.html#tymethod.make_direct_func)
-/// for functions declared in the same WebAssembly
-/// [`FuncEnvironment`](https://docs.rs/cranelift-wasm/*/cranelift_wasm/trait.FuncEnvironment.html#tymethod.make_direct_func)
+///   for functions declared elsewhere in the same native
+///   [`Module`](https://docs.rs/cranelift-module/*/cranelift_module/trait.Module.html)
 ///
 /// While the order is stable, it is arbitrary.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -342,11 +282,7 @@ impl FuncRef {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -380,11 +316,48 @@ impl SigRef {
     ///
     /// This method is for use by the parser.
     pub fn with_number(n: u32) -> Option<Self> {
-        if n < u32::MAX {
-            Some(Self(n))
-        } else {
-            None
-        }
+        if n < u32::MAX { Some(Self(n)) } else { None }
+    }
+}
+
+/// An opaque exception tag.
+///
+/// Exception tags are used to denote the identity of an exception for
+/// matching by catch-handlers in exception tables.
+///
+/// The index space is arbitrary and is given meaning only by the
+/// embedder of Cranelift. Cranelift will carry through these tags
+/// from exception tables to the handler metadata produced as output
+/// (for use by the embedder's unwinder).
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+pub struct ExceptionTag(u32);
+entity_impl!(ExceptionTag, "tag");
+
+impl ExceptionTag {
+    /// Create a new exception tag from its arbitrary index.
+    ///
+    /// This method is for use by the parser.
+    pub fn with_number(n: u32) -> Option<Self> {
+        if n < u32::MAX { Some(Self(n)) } else { None }
+    }
+}
+
+/// An opaque reference to an exception table.
+///
+/// `ExceptionTable`s are used for describing exception catch handlers on
+/// `try_call` and `try_call_indirect` instructions.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+pub struct ExceptionTable(u32);
+entity_impl!(ExceptionTable, "extable");
+
+impl ExceptionTable {
+    /// Create a new exception table reference from its number.
+    ///
+    /// This method is for use by the parser.
+    pub fn with_number(n: u32) -> Option<Self> {
+        if n < u32::MAX { Some(Self(n)) } else { None }
     }
 }
 
@@ -408,8 +381,6 @@ pub enum AnyEntity {
     DynamicType(DynamicType),
     /// A Global value.
     GlobalValue(GlobalValue),
-    /// A memory type.
-    MemoryType(MemoryType),
     /// A jump table.
     JumpTable(JumpTable),
     /// A constant.
@@ -418,6 +389,8 @@ pub enum AnyEntity {
     FuncRef(FuncRef),
     /// A function call signature.
     SigRef(SigRef),
+    /// An exception table.
+    ExceptionTable(ExceptionTable),
     /// A function's stack limit
     StackLimit,
 }
@@ -433,11 +406,11 @@ impl fmt::Display for AnyEntity {
             Self::DynamicStackSlot(r) => r.fmt(f),
             Self::DynamicType(r) => r.fmt(f),
             Self::GlobalValue(r) => r.fmt(f),
-            Self::MemoryType(r) => r.fmt(f),
             Self::JumpTable(r) => r.fmt(f),
             Self::Constant(r) => r.fmt(f),
             Self::FuncRef(r) => r.fmt(f),
             Self::SigRef(r) => r.fmt(f),
+            Self::ExceptionTable(r) => r.fmt(f),
             Self::StackLimit => write!(f, "stack_limit"),
         }
     }
@@ -491,12 +464,6 @@ impl From<GlobalValue> for AnyEntity {
     }
 }
 
-impl From<MemoryType> for AnyEntity {
-    fn from(r: MemoryType) -> Self {
-        Self::MemoryType(r)
-    }
-}
-
 impl From<JumpTable> for AnyEntity {
     fn from(r: JumpTable) -> Self {
         Self::JumpTable(r)
@@ -518,6 +485,12 @@ impl From<FuncRef> for AnyEntity {
 impl From<SigRef> for AnyEntity {
     fn from(r: SigRef) -> Self {
         Self::SigRef(r)
+    }
+}
+
+impl From<ExceptionTable> for AnyEntity {
+    fn from(r: ExceptionTable) -> Self {
+        Self::ExceptionTable(r)
     }
 }
 

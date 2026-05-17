@@ -1,4 +1,4 @@
-package wasi:nn;
+package wasi:nn@0.2.0-rc-2024-10-28;
 
 /// `wasi-nn` is a WASI API for performing machine learning (ML) inference. The API is not (yet)
 /// capable of performing ML training. WebAssembly programs that want to use a host's ML
@@ -43,16 +43,18 @@ interface tensor {
     /// memory--e.g., using row-major ordering--and could perhaps be improved.
     type tensor-data = list<u8>;
 
-    record tensor {
+    resource tensor {
+        constructor(dimensions: tensor-dimensions, ty: tensor-type, data: tensor-data);
+
         // Describe the size of the tensor (e.g., 2x2x2x2 -> [2, 2, 2, 2]). To represent a tensor
         // containing a single value, use `[1]` for the tensor dimensions.
-        dimensions: tensor-dimensions,
+        dimensions: func() -> tensor-dimensions;
 
         // Describe the type of element in the tensor (e.g., `f32`).
-        tensor-type: tensor-type,
+        ty: func() -> tensor-type;
 
-        // Contains the tensor data.
-        data: tensor-data,
+        // Return the tensor data.
+        data: func() -> tensor-data;
     }
 }
 
@@ -61,11 +63,12 @@ interface tensor {
 interface graph {
     use errors.{error};
     use tensor.{tensor};
+    use inference.{graph-execution-context};
 
     /// An execution graph for performing inference (i.e., a model).
-    ///
-    /// TODO: replace with `resource` (https://github.com/WebAssembly/wasi-nn/issues/47).
-    type graph = u32;
+    resource graph {
+        init-execution-context: func() -> result<graph-execution-context, error>;
+    }
 
     /// Describes the encoding of the graph. This allows the API to be implemented by various
     /// backends that encode (i.e., serialize) their graph IR with different formats.
@@ -75,6 +78,7 @@ interface graph {
         tensorflow,
         pytorch,
         tensorflowlite,
+        ggml,
         autodetect,
     }
 
@@ -106,38 +110,31 @@ interface graph {
 /// `graph` to input tensors before `compute`-ing an inference:
 interface inference {
     use errors.{error};
-    use tensor.{tensor, tensor-data};
-    use graph.{graph};
+    use tensor.{tensor};
+
+    /// Identify a tensor by name; this is necessary to associate tensors to
+    /// graph inputs and outputs.
+    type named-tensor = tuple<string, tensor>;
 
     /// Bind a `graph` to the input and output tensors for an inference.
     ///
-    /// TODO: this is no longer necessary in WIT (https://github.com/WebAssembly/wasi-nn/issues/43)
-    type graph-execution-context = u32;
-
-    /// Create an execution instance of a loaded graph.
-    init-execution-context: func(graph: graph) -> result<graph-execution-context, error>;
-
-    /// Define the inputs to use for inference.
-    set-input: func(ctx: graph-execution-context, index: u32, tensor: tensor) -> result<_, error>;
-
-    /// Compute the inference on the given inputs.
-    ///
-    /// Note the expected sequence of calls: `set-input`, `compute`, `get-output`. TODO: this
-    /// expectation could be removed as a part of https://github.com/WebAssembly/wasi-nn/issues/43.
-    compute: func(ctx: graph-execution-context) -> result<_, error>;
-
-    /// Extract the outputs after inference.
-    get-output: func(ctx: graph-execution-context, index: u32) -> result<tensor-data, error>;
+    /// TODO: this may no longer be necessary in WIT
+    /// (https://github.com/WebAssembly/wasi-nn/issues/43)
+    resource graph-execution-context {
+        /// Compute the inference on the given inputs.
+        compute: func(inputs: list<named-tensor>) -> result<list<named-tensor>, error>;
+    }
 }
 
 /// TODO: create function-specific errors (https://github.com/WebAssembly/wasi-nn/issues/42)
 interface errors {
-    enum error {
+    enum error-code {
         // Caller module passed an invalid argument.
         invalid-argument,
         // Invalid encoding.
         invalid-encoding,
-        busy,
+        // The operation timed out.
+        timeout,
         // Runtime Error.
         runtime-error,
         // Unsupported operation.
@@ -145,6 +142,19 @@ interface errors {
         // Graph is too large.
         too-large,
         // Graph not found.
-        not-found
+        not-found,
+        // The operation is insecure or has insufficient privilege to be performed.
+        // e.g., cannot access a hardware feature requested
+        security,
+        // The operation failed for an unspecified reason.
+        unknown
+    }
+
+    resource error {
+        /// Return the error code.
+        code: func() -> error-code;
+
+        /// Errors can propagated with backend specific status through a string value.
+        data: func() -> string;
     }
 }

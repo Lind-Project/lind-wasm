@@ -1,23 +1,24 @@
 [package]
-name = "wasmtime-fiber"
+name = "wasmtime-internal-fiber"
 version.workspace = true
 authors.workspace = true
-description = "Fiber support for Wasmtime"
+description = "INTERNAL: Fiber support for Wasmtime"
 license = "Apache-2.0 WITH LLVM-exception"
 repository = "https://github.com/bytecodealliance/wasmtime"
 edition.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 cfg-if = { workspace = true }
+wasmtime-environ = { workspace = true }
 wasmtime-versioned-export-macros = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["mm", "param"] }
-wasmtime-asm-macros = { workspace = true }
+rustix = { workspace = true, features = ["mm"] }
+libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 workspace = true
@@ -32,3 +33,9 @@ wasmtime-versioned-export-macros = { workspace = true }
 
 [dev-dependencies]
 backtrace = "0.3.68"
+
+[features]
+
+# Assume presence of the standard library. Allows propagating
+# panic-unwinds across fiber invocations.
+std = []

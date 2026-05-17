@@ -9,7 +9,7 @@ use core::fmt;
 use serde_derive::{Deserialize, Serialize};
 
 /// Information about a global value declaration.
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub enum GlobalValueData {
     /// Value is the address of the VM context struct.
@@ -111,12 +111,12 @@ impl fmt::Display for GlobalValueData {
                 offset,
                 global_type,
                 flags,
-            } => write!(f, "load.{}{} {}{}", global_type, flags, base, offset),
+            } => write!(f, "load.{global_type}{flags} {base}{offset}"),
             Self::IAddImm {
                 global_type,
                 base,
                 offset,
-            } => write!(f, "iadd_imm.{} {}, {}", global_type, base, offset),
+            } => write!(f, "iadd_imm.{global_type} {base}, {offset}"),
             Self::Symbol {
                 ref name,
                 offset,
@@ -135,12 +135,12 @@ impl fmt::Display for GlobalValueData {
                     write!(f, "+")?;
                 }
                 if offset_val != 0 {
-                    write!(f, "{}", offset)?;
+                    write!(f, "{offset}")?;
                 }
                 Ok(())
             }
             Self::DynScaleTargetConst { vector_type } => {
-                write!(f, "dyn_scale_target_const.{}", vector_type)
+                write!(f, "dyn_scale_target_const.{vector_type}")
             }
         }
     }

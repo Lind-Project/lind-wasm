@@ -7,13 +7,11 @@
 //!
 //! - Floating-point immediates (FIMM instruction).
 
-use crate::ir::condcodes::{FloatCC, IntCC};
-use crate::ir::pcc::{FactContext, PccResult};
 use crate::ir::Inst as IRInst;
+use crate::ir::condcodes::{FloatCC, IntCC};
 use crate::ir::{Opcode, Value};
-use crate::isa::aarch64::inst::*;
-use crate::isa::aarch64::pcc;
 use crate::isa::aarch64::AArch64Backend;
+use crate::isa::aarch64::inst::*;
 use crate::machinst::lower::*;
 use crate::machinst::*;
 
@@ -97,14 +95,14 @@ pub(crate) fn lower_fp_condcode(cc: FloatCC) -> Cond {
         FloatCC::GreaterThan => Cond::Gt,
         // GT | EQ. Ge => N = V.
         FloatCC::GreaterThanOrEqual => Cond::Ge,
-        // UN | LT
-        FloatCC::UnorderedOrLessThan => unimplemented!(),
-        // UN | LT | EQ
-        FloatCC::UnorderedOrLessThanOrEqual => unimplemented!(),
-        // UN | GT
-        FloatCC::UnorderedOrGreaterThan => unimplemented!(),
-        // UN | GT | EQ
-        FloatCC::UnorderedOrGreaterThanOrEqual => unimplemented!(),
+        // UN | LT. Lt => N != V.
+        FloatCC::UnorderedOrLessThan => Cond::Lt,
+        // UN | LT | EQ. Le => not (Z clear, N = V).
+        FloatCC::UnorderedOrLessThanOrEqual => Cond::Le,
+        // UN | GT. Hi => C set, Z clear.
+        FloatCC::UnorderedOrGreaterThan => Cond::Hi,
+        // UN | GT | EQ. Pl => N clear.
+        FloatCC::UnorderedOrGreaterThanOrEqual => Cond::Pl,
     }
 }
 
@@ -130,16 +128,4 @@ impl LowerBackend for AArch64Backend {
     fn maybe_pinned_reg(&self) -> Option<Reg> {
         Some(regs::pinned_reg())
     }
-
-    fn check_fact(
-        &self,
-        ctx: &FactContext<'_>,
-        vcode: &mut VCode<Self::MInst>,
-        inst: InsnIndex,
-        state: &mut pcc::FactFlowState,
-    ) -> PccResult<()> {
-        pcc::check(ctx, vcode, inst, state)
-    }
-
-    type FactFlowState = pcc::FactFlowState;
 }

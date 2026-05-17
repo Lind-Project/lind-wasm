@@ -2,6 +2,7 @@ use crate::sched::subscription::{RwEventFlags, Subscription};
 use crate::{sched::Poll, Error, ErrorExt};
 use cap_std::time::Duration;
 use rustix::event::{PollFd, PollFlags};
+use rustix::time::Timespec;
 
 pub async fn poll_oneoff<'a>(poll: &mut Poll<'a>) -> Result<(), Error> {
     if poll.is_empty() {
@@ -30,13 +31,17 @@ pub async fn poll_oneoff<'a>(poll: &mut Poll<'a>) -> Result<(), Error> {
     }
 
     let ready = loop {
+        let poll_timespec;
         let poll_timeout = if let Some(t) = poll.earliest_clock_deadline() {
             let duration = t.duration_until().unwrap_or(Duration::from_secs(0));
-            (duration.as_millis() + 1) // XXX try always rounding up?
-                .try_into()
-                .map_err(|_| Error::overflow().context("poll timeout"))?
+            // Round up by 1 nanosecond to avoid busy-waiting at the boundary.
+            let nanos = duration.subsec_nanos().saturating_add(1);
+            let secs = duration.as_secs() + if nanos >= 1_000_000_000 { 1 } else { 0 };
+            let nanos = if nanos >= 1_000_000_000 { nanos - 1_000_000_000 } else { nanos };
+            poll_timespec = Timespec { tv_sec: secs as i64, tv_nsec: nanos as i64 };
+            Some(&poll_timespec)
         } else {
-            std::os::raw::c_int::max_value()
+            None
         };
         tracing::debug!(
             poll_timeout = tracing::field::debug(poll_timeout),

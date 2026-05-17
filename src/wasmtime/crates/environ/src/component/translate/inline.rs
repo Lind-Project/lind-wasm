@@ -46,8 +46,10 @@
 //! final `Component`.
 
 use crate::component::translate::*;
+use crate::{EntityType, IndexType};
+use core::str::FromStr;
 use std::borrow::Cow;
-use wasmparser::types::{ComponentAnyTypeId, ComponentCoreModuleTypeId};
+use wasmparser::component_types::{ComponentAnyTypeId, ComponentCoreModuleTypeId};
 
 pub(super) fn run(
     types: &mut ComponentTypesBuilder,
@@ -133,7 +135,9 @@ pub(super) fn run(
         inliner.record_export(name, def, types, &mut export_map)?;
     }
     inliner.result.exports = export_map;
-    inliner.result.num_resource_tables = types.num_resource_tables();
+    inliner.result.num_future_tables = types.num_future_tables();
+    inliner.result.num_stream_tables = types.num_stream_tables();
+    inliner.result.num_error_context_tables = types.num_error_context_tables();
 
     Ok(inliner.result)
 }
@@ -196,10 +200,11 @@ struct InlinerFrame<'a> {
     args: HashMap<&'a str, ComponentItemDef<'a>>,
 
     // core wasm index spaces
-    funcs: PrimaryMap<FuncIndex, dfg::CoreDef>,
+    funcs: PrimaryMap<FuncIndex, (ModuleInternedTypeIndex, dfg::CoreDef)>,
     memories: PrimaryMap<MemoryIndex, dfg::CoreExport<EntityIndex>>,
     tables: PrimaryMap<TableIndex, dfg::CoreExport<EntityIndex>>,
     globals: PrimaryMap<GlobalIndex, dfg::CoreExport<EntityIndex>>,
+    tags: PrimaryMap<TagIndex, dfg::CoreExport<EntityIndex>>,
     modules: PrimaryMap<ModuleIndex, ModuleDef<'a>>,
 
     // component model index spaces
@@ -298,19 +303,29 @@ enum ModuleInstanceDef<'a> {
 
 #[derive(Clone)]
 enum ComponentFuncDef<'a> {
+    /// A compile-time builtin intrinsic.
+    UnsafeIntrinsic(UnsafeIntrinsic),
+
     /// A host-imported component function.
     Import(ImportPath<'a>),
 
     /// A core wasm function was lifted into a component function.
     Lifted {
+        /// The component function type.
         ty: TypeFuncIndex,
+        /// The core Wasm function.
         func: dfg::CoreDef,
+        /// Canonical options.
         options: AdapterOptions,
     },
 }
 
 #[derive(Clone)]
 enum ComponentInstanceDef<'a> {
+    /// The `__wasmtime_intrinsics` instance that exports all of our
+    /// compile-time builtin intrinsics.
+    Intrinsics,
+
     /// A host-imported instance.
     ///
     /// This typically means that it's "just" a map of named values. It's not
@@ -371,7 +386,7 @@ impl<'a> Inliner<'a> {
                 // Process the initializer and if it started the instantiation
                 // of another component then we push that frame on the stack to
                 // continue onwards.
-                Some(init) => match self.initializer(frame, types, init)? {
+                Some(init) => match self.initializer(frames, types, init)? {
                     Some(new_frame) => {
                         frames.push((new_frame, types.resources_mut().clone()));
                     }
@@ -407,12 +422,13 @@ impl<'a> Inliner<'a> {
 
     fn initializer(
         &mut self,
-        frame: &mut InlinerFrame<'a>,
+        frames: &mut Vec<(InlinerFrame<'a>, ResourcesBuilder)>,
         types: &mut ComponentTypesBuilder,
         initializer: &'a LocalInitializer,
     ) -> Result<Option<InlinerFrame<'a>>> {
         use LocalInitializer::*;
 
+        let (frame, _) = frames.last_mut().unwrap();
         match initializer {
             // When a component imports an item the actual definition of the
             // item is looked up here (not at runtime) via its name. The
@@ -478,6 +494,12 @@ impl<'a> Inliner<'a> {
                 frame.push_item(arg.clone());
             }
 
+            IntrinsicsImport => {
+                frame
+                    .component_instances
+                    .push(ComponentInstanceDef::Intrinsics);
+            }
+
             // Lowering a component function to a core wasm function is
             // generally what "triggers compilation". Here various metadata is
             // recorded and then the final component gets an initializer
@@ -487,12 +509,13 @@ impl<'a> Inliner<'a> {
             Lower {
                 func,
                 options,
-                canonical_abi,
                 lower_ty,
             } => {
                 let lower_ty =
                     types.convert_component_func_type(frame.translation.types_ref(), *lower_ty)?;
-                let options_lower = self.adapter_options(frame, types, options);
+                let options_lower = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let lower_core_type = options_lower.core_type;
                 let func = match &frame.component_funcs[*func] {
                     // If this component function was originally a host import
                     // then this is a lowered host function which needs a
@@ -502,7 +525,7 @@ impl<'a> Inliner<'a> {
                         let import = self.runtime_import(path);
                         let options = self.canonical_options(options_lower);
                         let index = self.result.trampolines.push((
-                            *canonical_abi,
+                            lower_core_type,
                             dfg::Trampoline::LowerImport {
                                 import,
                                 options,
@@ -512,45 +535,8 @@ impl<'a> Inliner<'a> {
                         dfg::CoreDef::Trampoline(index)
                     }
 
-                    // This case handles when a lifted function is later
-                    // lowered, and both the lowering and the lifting are
-                    // happening within the same component instance.
-                    //
-                    // In this situation if the `canon.lower`'d function is
-                    // called then it immediately sets `may_enter` to `false`.
-                    // When calling the callee, however, that's `canon.lift`
-                    // which immediately traps if `may_enter` is `false`. That
-                    // means that this pairing of functions creates a function
-                    // that always traps.
-                    //
-                    // When closely reading the spec though the precise trap
-                    // that comes out can be somewhat variable. Technically the
-                    // function yielded here is one that should validate the
-                    // arguments by lifting them, and then trap. This means that
-                    // the trap could be different depending on whether all
-                    // arguments are valid for now. This was discussed in
-                    // WebAssembly/component-model#51 somewhat and the
-                    // conclusion was that we can probably get away with "always
-                    // trap" here.
-                    //
-                    // The `CoreDef::AlwaysTrap` variant here is used to
-                    // indicate that this function is valid but if something
-                    // actually calls it then it just generates a trap
-                    // immediately.
-                    ComponentFuncDef::Lifted {
-                        options: options_lift,
-                        ..
-                    } if options_lift.instance == options_lower.instance => {
-                        let index = self
-                            .result
-                            .trampolines
-                            .push((*canonical_abi, dfg::Trampoline::AlwaysTrap));
-                        dfg::CoreDef::Trampoline(index)
-                    }
-
-                    // Lowering a lifted function where the destination
-                    // component is different than the source component means
-                    // that a "fused adapter" was just identified.
+                    // Lowering a lifted function means that a "fused adapter"
+                    // was just identified.
                     //
                     // Metadata about this fused adapter is recorded in the
                     // `Adapters` output of this compilation pass. Currently the
@@ -590,8 +576,12 @@ impl<'a> Inliner<'a> {
                         });
                         dfg::CoreDef::Adapter(adapter_idx)
                     }
+
+                    ComponentFuncDef::UnsafeIntrinsic(intrinsic) => {
+                        dfg::CoreDef::UnsafeIntrinsic(options.core_type, *intrinsic)
+                    }
                 };
-                frame.funcs.push(func);
+                frame.funcs.push((lower_core_type, func));
             }
 
             // Lifting a core wasm function is relatively easy for now in that
@@ -599,12 +589,12 @@ impl<'a> Inliner<'a> {
             // plumbed through to exports or a fused adapter later on.
             Lift(ty, func, options) => {
                 let ty = types.convert_component_func_type(frame.translation.types_ref(), *ty)?;
-                let options = self.adapter_options(frame, types, options);
-                frame.component_funcs.push(ComponentFuncDef::Lifted {
-                    ty,
-                    func: frame.funcs[*func].clone(),
-                    options,
-                });
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let func = frame.funcs[*func].1.clone();
+                frame
+                    .component_funcs
+                    .push(ComponentFuncDef::Lifted { ty, func, options });
             }
 
             // A new resource type is being introduced, so it's recorded as a
@@ -620,7 +610,7 @@ impl<'a> Inliner<'a> {
             Resource(ty, rep, dtor) => {
                 let idx = self.result.resources.push(dfg::Resource {
                     rep: *rep,
-                    dtor: dtor.map(|i| frame.funcs[i].clone()),
+                    dtor: dtor.map(|i| frame.funcs[i].1.clone()),
                     instance: frame.instance,
                 });
                 self.result
@@ -644,29 +634,544 @@ impl<'a> Inliner<'a> {
             // information and then new entries for each intrinsic are recorded.
             ResourceNew(id, ty) => {
                 let id = types.resource_id(id.resource());
-                let index = self
-                    .result
-                    .trampolines
-                    .push((*ty, dfg::Trampoline::ResourceNew(id)));
-                frame.funcs.push(dfg::CoreDef::Trampoline(index));
+                let index = self.result.trampolines.push((
+                    *ty,
+                    dfg::Trampoline::ResourceNew {
+                        instance: frame.instance,
+                        ty: id,
+                    },
+                ));
+                frame.funcs.push((*ty, dfg::CoreDef::Trampoline(index)));
             }
             ResourceRep(id, ty) => {
                 let id = types.resource_id(id.resource());
-                let index = self
-                    .result
-                    .trampolines
-                    .push((*ty, dfg::Trampoline::ResourceRep(id)));
-                frame.funcs.push(dfg::CoreDef::Trampoline(index));
+                let index = self.result.trampolines.push((
+                    *ty,
+                    dfg::Trampoline::ResourceRep {
+                        instance: frame.instance,
+                        ty: id,
+                    },
+                ));
+                frame.funcs.push((*ty, dfg::CoreDef::Trampoline(index)));
             }
             ResourceDrop(id, ty) => {
                 let id = types.resource_id(id.resource());
+                let index = self.result.trampolines.push((
+                    *ty,
+                    dfg::Trampoline::ResourceDrop {
+                        instance: frame.instance,
+                        ty: id,
+                    },
+                ));
+                frame.funcs.push((*ty, dfg::CoreDef::Trampoline(index)));
+            }
+            BackpressureInc { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::BackpressureInc {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            BackpressureDec { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::BackpressureDec {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            TaskReturn { result, options } => {
+                let results = result
+                    .iter()
+                    .map(|ty| types.valtype(frame.translation.types_ref(), ty))
+                    .collect::<Result<_>>()?;
+                let results = types.new_tuple_type(results);
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::TaskReturn {
+                        instance: frame.instance,
+                        results,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            TaskCancel { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::TaskCancel {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            WaitableSetNew { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::WaitableSetNew {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            WaitableSetWait { options } => {
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::WaitableSetWait {
+                        instance: frame.instance,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            WaitableSetPoll { options } => {
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::WaitableSetPoll {
+                        instance: frame.instance,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            WaitableSetDrop { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::WaitableSetDrop {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            WaitableJoin { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::WaitableJoin {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ThreadYield { func, cancellable } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ThreadYield {
+                        instance: frame.instance,
+                        cancellable: *cancellable,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            SubtaskDrop { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::SubtaskDrop {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            SubtaskCancel { func, async_ } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::SubtaskCancel {
+                        instance: frame.instance,
+                        async_: *async_,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            StreamNew { ty, func } => {
+                let InterfaceType::Stream(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::StreamNew {
+                        instance: frame.instance,
+                        ty,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            StreamRead { ty, options } => {
+                let InterfaceType::Stream(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::StreamRead {
+                        instance: frame.instance,
+                        ty,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            StreamWrite { ty, options } => {
+                let InterfaceType::Stream(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::StreamWrite {
+                        instance: frame.instance,
+                        ty,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            StreamCancelRead { ty, func, async_ } => {
+                let InterfaceType::Stream(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::StreamCancelRead {
+                        instance: frame.instance,
+                        ty,
+                        async_: *async_,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            StreamCancelWrite { ty, func, async_ } => {
+                let InterfaceType::Stream(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::StreamCancelWrite {
+                        instance: frame.instance,
+                        ty,
+                        async_: *async_,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            StreamDropReadable { ty, func } => {
+                let InterfaceType::Stream(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::StreamDropReadable {
+                        instance: frame.instance,
+                        ty,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            StreamDropWritable { ty, func } => {
+                let InterfaceType::Stream(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::StreamDropWritable {
+                        instance: frame.instance,
+                        ty,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            FutureNew { ty, func } => {
+                let InterfaceType::Future(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::FutureNew {
+                        instance: frame.instance,
+                        ty,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            FutureRead { ty, options } => {
+                let InterfaceType::Future(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::FutureRead {
+                        instance: frame.instance,
+                        ty,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            FutureWrite { ty, options } => {
+                let InterfaceType::Future(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::FutureWrite {
+                        instance: frame.instance,
+                        ty,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            FutureCancelRead { ty, func, async_ } => {
+                let InterfaceType::Future(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::FutureCancelRead {
+                        instance: frame.instance,
+                        ty,
+                        async_: *async_,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            FutureCancelWrite { ty, func, async_ } => {
+                let InterfaceType::Future(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::FutureCancelWrite {
+                        instance: frame.instance,
+                        ty,
+                        async_: *async_,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            FutureDropReadable { ty, func } => {
+                let InterfaceType::Future(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::FutureDropReadable {
+                        instance: frame.instance,
+                        ty,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            FutureDropWritable { ty, func } => {
+                let InterfaceType::Future(ty) =
+                    types.defined_type(frame.translation.types_ref(), *ty)?
+                else {
+                    unreachable!()
+                };
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::FutureDropWritable {
+                        instance: frame.instance,
+                        ty,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ErrorContextNew { options } => {
+                let ty = types.error_context_table_type()?;
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::ErrorContextNew {
+                        instance: frame.instance,
+                        ty,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            ErrorContextDebugMessage { options } => {
+                let ty = types.error_context_table_type()?;
+                let func = options.core_type;
+                let options = self.adapter_options(frames, types, options);
+                let (frame, _) = frames.last_mut().unwrap();
+                let options = self.canonical_options(options);
+                let index = self.result.trampolines.push((
+                    func,
+                    dfg::Trampoline::ErrorContextDebugMessage {
+                        instance: frame.instance,
+                        ty,
+                        options,
+                    },
+                ));
+                frame.funcs.push((func, dfg::CoreDef::Trampoline(index)));
+            }
+            ErrorContextDrop { func } => {
+                let ty = types.error_context_table_type()?;
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ErrorContextDrop {
+                        instance: frame.instance,
+                        ty,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ContextGet { func, i } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ContextGet {
+                        instance: frame.instance,
+                        slot: *i,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ContextSet { func, i } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ContextSet {
+                        instance: frame.instance,
+                        slot: *i,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ThreadIndex { func } => {
                 let index = self
                     .result
                     .trampolines
-                    .push((*ty, dfg::Trampoline::ResourceDrop(id)));
-                frame.funcs.push(dfg::CoreDef::Trampoline(index));
+                    .push((*func, dfg::Trampoline::ThreadIndex));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
             }
+            ThreadNewIndirect {
+                func,
+                start_func_table_index,
+                start_func_ty,
+            } => {
+                let table_export = frame.tables[*start_func_table_index]
+                    .clone()
+                    .map_index(|i| match i {
+                        EntityIndex::Table(i) => i,
+                        _ => unreachable!(),
+                    });
 
+                let table_id = self.result.tables.push(table_export);
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ThreadNewIndirect {
+                        instance: frame.instance,
+                        start_func_ty_idx: *start_func_ty,
+                        start_func_table_id: table_id,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ThreadSuspendToSuspended { func, cancellable } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ThreadSuspendToSuspended {
+                        instance: frame.instance,
+                        cancellable: *cancellable,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ThreadSuspendTo { func, cancellable } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ThreadSuspendTo {
+                        instance: frame.instance,
+                        cancellable: *cancellable,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ThreadSuspend { func, cancellable } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ThreadSuspend {
+                        instance: frame.instance,
+                        cancellable: *cancellable,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ThreadUnsuspend { func } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ThreadUnsuspend {
+                        instance: frame.instance,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
+            ThreadYieldToSuspended { func, cancellable } => {
+                let index = self.result.trampolines.push((
+                    *func,
+                    dfg::Trampoline::ThreadYieldToSuspended {
+                        instance: frame.instance,
+                        cancellable: *cancellable,
+                    },
+                ));
+                frame.funcs.push((*func, dfg::CoreDef::Trampoline(index)));
+            }
             ModuleStatic(idx, ty) => {
                 frame.modules.push(ModuleDef::Static(*idx, *ty));
             }
@@ -683,8 +1188,7 @@ impl<'a> Inliner<'a> {
             // and an initializer is recorded to indicate that it's being
             // instantiated.
             ModuleInstantiate(module, args) => {
-                let instance_module;
-                let init = match &frame.modules[*module] {
+                let (instance_module, init) = match &frame.modules[*module] {
                     ModuleDef::Static(idx, _ty) => {
                         let mut defs = Vec::new();
                         for (module, name, _ty) in self.nested_modules[*idx].module.imports() {
@@ -693,8 +1197,10 @@ impl<'a> Inliner<'a> {
                                 self.core_def_of_module_instance_export(frame, instance, name),
                             );
                         }
-                        instance_module = InstanceModule::Static(*idx);
-                        dfg::Instance::Static(*idx, defs.into())
+                        (
+                            InstanceModule::Static(*idx),
+                            dfg::Instance::Static(*idx, defs.into()),
+                        )
                     }
                     ModuleDef::Import(path, ty) => {
                         let mut defs = IndexMap::new();
@@ -707,20 +1213,24 @@ impl<'a> Inliner<'a> {
                                 .insert(name.to_string(), def);
                         }
                         let index = self.runtime_import(path);
-                        instance_module = InstanceModule::Import(*ty);
-                        dfg::Instance::Import(index, defs)
+                        (
+                            InstanceModule::Import(*ty),
+                            dfg::Instance::Import(index, defs),
+                        )
                     }
                 };
 
-                let idx = self.result.instances.push(init);
+                let instance = self.result.instances.push(init);
+                let instance2 = self.runtime_instances.push(instance_module);
+                assert_eq!(instance, instance2);
+
                 self.result
                     .side_effects
-                    .push(dfg::SideEffect::Instance(idx));
-                let idx2 = self.runtime_instances.push(instance_module);
-                assert_eq!(idx, idx2);
+                    .push(dfg::SideEffect::Instance(instance, frame.instance));
+
                 frame
                     .module_instances
-                    .push(ModuleInstanceDef::Instantiated(idx, *module));
+                    .push(ModuleInstanceDef::Instantiated(instance, *module));
             }
 
             ModuleSynthetic(map) => {
@@ -796,9 +1306,46 @@ impl<'a> Inliner<'a> {
             // can create a unique identifier pointing to each core wasm export
             // with the instance and relevant index/name as necessary.
             AliasExportFunc(instance, name) => {
-                frame
-                    .funcs
-                    .push(self.core_def_of_module_instance_export(frame, *instance, *name));
+                let (ty, def) = match &frame.module_instances[*instance] {
+                    ModuleInstanceDef::Instantiated(instance, module) => {
+                        let (ty, item) = match &frame.modules[*module] {
+                            ModuleDef::Static(idx, _ty) => {
+                                let name = self.nested_modules[*idx]
+                                    .module
+                                    .strings
+                                    .get_atom(name)
+                                    .unwrap();
+                                let entity = self.nested_modules[*idx].module.exports[&name];
+                                let ty = match entity {
+                                    EntityIndex::Function(f) => {
+                                        self.nested_modules[*idx].module.functions[f]
+                                            .signature
+                                            .unwrap_module_type_index()
+                                    }
+                                    _ => unreachable!(),
+                                };
+                                (ty, ExportItem::Index(entity))
+                            }
+                            ModuleDef::Import(_path, module_ty) => {
+                                let module_ty = &types.component_types()[*module_ty];
+                                let entity_ty = &module_ty.exports[&**name];
+                                let ty = entity_ty.unwrap_func().unwrap_module_type_index();
+                                (ty, ExportItem::Name((*name).to_string()))
+                            }
+                        };
+                        let def = dfg::CoreExport {
+                            instance: *instance,
+                            item,
+                        }
+                        .into();
+                        (ty, def)
+                    }
+                    ModuleInstanceDef::Synthetic(instance) => match instance[*name] {
+                        EntityIndex::Function(i) => frame.funcs[i].clone(),
+                        _ => unreachable!(),
+                    },
+                };
+                frame.funcs.push((ty, def));
             }
 
             AliasExportTable(instance, name) => {
@@ -828,8 +1375,23 @@ impl<'a> Inliner<'a> {
                 );
             }
 
+            AliasExportTag(instance, name) => {
+                frame.tags.push(
+                    match self.core_def_of_module_instance_export(frame, *instance, *name) {
+                        dfg::CoreDef::Export(e) => e,
+                        _ => unreachable!(),
+                    },
+                );
+            }
+
             AliasComponentExport(instance, name) => {
                 match &frame.component_instances[*instance] {
+                    ComponentInstanceDef::Intrinsics => {
+                        frame.push_item(ComponentItemDef::Func(ComponentFuncDef::UnsafeIntrinsic(
+                            UnsafeIntrinsic::from_str(name)?,
+                        )));
+                    }
+
                     // Aliasing an export from an imported instance means that
                     // we're extending the `ImportPath` by one name, represented
                     // with the clone + push here. Afterwards an appropriate
@@ -924,7 +1486,12 @@ impl<'a> Inliner<'a> {
             ModuleInstanceDef::Instantiated(instance, module) => {
                 let item = match frame.modules[*module] {
                     ModuleDef::Static(idx, _ty) => {
-                        let entity = self.nested_modules[idx].module.exports[name];
+                        let name = self.nested_modules[idx]
+                            .module
+                            .strings
+                            .get_atom(name)
+                            .unwrap();
+                        let entity = self.nested_modules[idx].module.exports[&name];
                         ExportItem::Index(entity)
                     }
                     ModuleDef::Import(..) => ExportItem::Name(name.to_string()),
@@ -939,78 +1506,126 @@ impl<'a> Inliner<'a> {
             // This is a synthetic instance so the canonical definition of the
             // original item is returned.
             ModuleInstanceDef::Synthetic(instance) => match instance[name] {
-                EntityIndex::Function(i) => frame.funcs[i].clone(),
+                EntityIndex::Function(i) => frame.funcs[i].1.clone(),
                 EntityIndex::Table(i) => frame.tables[i].clone().into(),
                 EntityIndex::Global(i) => frame.globals[i].clone().into(),
                 EntityIndex::Memory(i) => frame.memories[i].clone().into(),
+                EntityIndex::Tag(i) => frame.tags[i].clone().into(),
             },
         }
+    }
+
+    fn memory(
+        &mut self,
+        frame: &InlinerFrame<'a>,
+        types: &ComponentTypesBuilder,
+        memory: MemoryIndex,
+    ) -> (dfg::CoreExport<MemoryIndex>, bool) {
+        let memory = frame.memories[memory].clone().map_index(|i| match i {
+            EntityIndex::Memory(i) => i,
+            _ => unreachable!(),
+        });
+        let memory64 = match &self.runtime_instances[memory.instance] {
+            InstanceModule::Static(idx) => match &memory.item {
+                ExportItem::Index(i) => {
+                    let ty = &self.nested_modules[*idx].module.memories[*i];
+                    match ty.idx_type {
+                        IndexType::I32 => false,
+                        IndexType::I64 => true,
+                    }
+                }
+                ExportItem::Name(_) => unreachable!(),
+            },
+            InstanceModule::Import(ty) => match &memory.item {
+                ExportItem::Name(name) => match types[*ty].exports[name] {
+                    EntityType::Memory(m) => match m.idx_type {
+                        IndexType::I32 => false,
+                        IndexType::I64 => true,
+                    },
+                    _ => unreachable!(),
+                },
+                ExportItem::Index(_) => unreachable!(),
+            },
+        };
+        (memory, memory64)
     }
 
     /// Translates a `LocalCanonicalOptions` which indexes into the `frame`
     /// specified into a runtime representation.
     fn adapter_options(
         &mut self,
-        frame: &InlinerFrame<'a>,
+        frames: &mut Vec<(InlinerFrame<'a>, ResourcesBuilder)>,
         types: &ComponentTypesBuilder,
         options: &LocalCanonicalOptions,
     ) -> AdapterOptions {
-        let memory = options.memory.map(|i| {
-            frame.memories[i].clone().map_index(|i| match i {
-                EntityIndex::Memory(i) => i,
-                _ => unreachable!(),
-            })
-        });
-        let memory64 = match &memory {
-            Some(memory) => match &self.runtime_instances[memory.instance] {
-                InstanceModule::Static(idx) => match &memory.item {
-                    ExportItem::Index(i) => {
-                        let plan = &self.nested_modules[*idx].module.memory_plans[*i];
-                        plan.memory.memory64
-                    }
-                    ExportItem::Name(_) => unreachable!(),
-                },
-                InstanceModule::Import(ty) => match &memory.item {
-                    ExportItem::Name(name) => match types[*ty].exports[name] {
-                        wasmtime_types::EntityType::Memory(m) => m.memory64,
-                        _ => unreachable!(),
-                    },
-                    ExportItem::Index(_) => unreachable!(),
-                },
-            },
-            None => false,
+        let (frame, _) = frames.last_mut().unwrap();
+        let data_model = match options.data_model {
+            LocalDataModel::Gc {} => DataModel::Gc {},
+            LocalDataModel::LinearMemory { memory, realloc } => {
+                let (memory, memory64) = memory
+                    .map(|i| {
+                        let (memory, memory64) = self.memory(frame, types, i);
+                        (Some(memory), memory64)
+                    })
+                    .unwrap_or((None, false));
+                let realloc = realloc.map(|i| frame.funcs[i].1.clone());
+                DataModel::LinearMemory {
+                    memory,
+                    memory64,
+                    realloc,
+                }
+            }
         };
-        let realloc = options.realloc.map(|i| frame.funcs[i].clone());
-        let post_return = options.post_return.map(|i| frame.funcs[i].clone());
+        let callback = options.callback.map(|i| frame.funcs[i].1.clone());
+        let post_return = options.post_return.map(|i| frame.funcs[i].1.clone());
         AdapterOptions {
             instance: frame.instance,
+            ancestors: frames
+                .iter()
+                .rev()
+                .skip(1)
+                .map(|(frame, _)| frame.instance)
+                .collect(),
             string_encoding: options.string_encoding,
-            memory,
-            memory64,
-            realloc,
+            callback,
             post_return,
+            async_: options.async_,
+            cancellable: options.cancellable,
+            core_type: options.core_type,
+            data_model,
         }
     }
 
-    /// Translatees an `AdapterOptions` into a `CanonicalOptions` where
+    /// Translates an `AdapterOptions` into a `CanonicalOptions` where
     /// memories/functions are inserted into the global initializer list for
     /// use at runtime. This is only used for lowered host functions and lifted
     /// functions exported to the host.
-    fn canonical_options(&mut self, options: AdapterOptions) -> dfg::CanonicalOptions {
-        let memory = options
-            .memory
-            .map(|export| self.result.memories.push(export));
-        let realloc = options.realloc.map(|def| self.result.reallocs.push(def));
+    fn canonical_options(&mut self, options: AdapterOptions) -> dfg::OptionsId {
+        let data_model = match options.data_model {
+            DataModel::Gc {} => dfg::CanonicalOptionsDataModel::Gc {},
+            DataModel::LinearMemory {
+                memory,
+                memory64: _,
+                realloc,
+            } => dfg::CanonicalOptionsDataModel::LinearMemory {
+                memory: memory.map(|export| self.result.memories.push(export)),
+                realloc: realloc.map(|def| self.result.reallocs.push(def)),
+            },
+        };
+        let callback = options.callback.map(|def| self.result.callbacks.push(def));
         let post_return = options
             .post_return
             .map(|def| self.result.post_returns.push(def));
-        dfg::CanonicalOptions {
+        self.result.options.push(dfg::CanonicalOptions {
             instance: options.instance,
             string_encoding: options.string_encoding,
-            memory,
-            realloc,
+            callback,
             post_return,
-        }
+            async_: options.async_,
+            cancellable: options.cancellable,
+            core_type: options.core_type,
+            data_model,
+        })
     }
 
     fn record_export(
@@ -1047,13 +1662,27 @@ impl<'a> Inliner<'a> {
                 // somewhat tricky and needs something like temporary scratch
                 // space that isn't implemented.
                 ComponentFuncDef::Import(_) => {
-                    bail!("component export `{name}` is a reexport of an imported function which is not implemented")
+                    bail!(
+                        "component export `{name}` is a reexport of an imported function which is not implemented"
+                    )
+                }
+
+                ComponentFuncDef::UnsafeIntrinsic(_) => {
+                    bail!(
+                        "component export `{name}` is a reexport of an intrinsic function which is not supported"
+                    )
                 }
             },
 
             ComponentItemDef::Instance(instance) => {
                 let mut exports = IndexMap::new();
                 match instance {
+                    ComponentInstanceDef::Intrinsics => {
+                        bail!(
+                            "component export `{name}` is a reexport of the intrinsics instance which is not supported"
+                        )
+                    }
+
                     // If this instance is one that was originally imported by
                     // the component itself then the imports are translated here
                     // by converting to a `ComponentItemDef` and then
@@ -1120,6 +1749,7 @@ impl<'a> InlinerFrame<'a> {
             memories: Default::default(),
             tables: Default::default(),
             globals: Default::default(),
+            tags: Default::default(),
 
             component_instances: Default::default(),
             component_funcs: Default::default(),
@@ -1315,18 +1945,22 @@ impl<'a> ComponentItemDef<'a> {
                     ComponentItemDef::from_import(path.push(element), types[ty].exports[element])
                         .unwrap()
                 }
+                ComponentInstanceDef::Intrinsics => {
+                    unreachable!("intrinsics do not define resources")
+                }
             };
         }
 
         // Once `path` has been iterated over it must be the case that the final
         // item is a resource type, in which case a lookup can be performed.
         match cur {
-            ComponentItemDef::Type(TypeDef::Resource(idx)) => types[idx].ty,
+            ComponentItemDef::Type(TypeDef::Resource(idx)) => types[idx].unwrap_concrete_ty(),
             _ => unreachable!(),
         }
     }
 }
 
+#[derive(Clone, Copy)]
 enum InstanceModule {
     Static(StaticModuleIndex),
     Import(TypeModuleIndex),

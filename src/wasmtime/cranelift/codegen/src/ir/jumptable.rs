@@ -3,8 +3,8 @@
 //! Jump tables are declared in the preamble and assigned an `ir::entities::JumpTable` reference.
 //! The actual table of destinations is stored in a `JumpTableData` struct defined in this module.
 
-use crate::ir::instructions::ValueListPool;
 use crate::ir::BlockCall;
+use crate::ir::instructions::ValueListPool;
 use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
 use core::slice::{Iter, IterMut};
@@ -20,7 +20,7 @@ use serde_derive::{Deserialize, Serialize};
 /// It can be accessed through the `default_block` and `default_block_mut` functions. All blocks
 /// may be iterated using the `all_branches` and `all_branches_mut` functions, which will both
 /// iterate over the default block first.
-#[derive(Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct JumpTableData {
     // Table entries.
@@ -31,7 +31,7 @@ impl JumpTableData {
     /// Create a new jump table with the provided blocks.
     pub fn new(def: BlockCall, table: &[BlockCall]) -> Self {
         Self {
-            table: std::iter::once(def).chain(table.iter().copied()).collect(),
+            table: core::iter::once(def).chain(table.iter().copied()).collect(),
         }
     }
 
@@ -68,13 +68,13 @@ impl JumpTableData {
 
     /// Returns an iterator to the jump table, excluding the default block.
     #[deprecated(since = "7.0.0", note = "please use `.as_slice()` instead")]
-    pub fn iter(&self) -> Iter<BlockCall> {
+    pub fn iter(&self) -> Iter<'_, BlockCall> {
         self.as_slice().iter()
     }
 
     /// Returns an iterator that allows modifying each value, excluding the default block.
     #[deprecated(since = "7.0.0", note = "please use `.as_mut_slice()` instead")]
-    pub fn iter_mut(&mut self) -> IterMut<BlockCall> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, BlockCall> {
         self.as_mut_slice().iter_mut()
     }
 
@@ -113,13 +113,14 @@ mod tests {
     use super::JumpTableData;
     use crate::entity::EntityRef;
     use crate::ir::instructions::ValueListPool;
-    use crate::ir::{Block, BlockCall, Value};
-    use std::string::ToString;
+    use crate::ir::{Block, BlockArg, BlockCall, Value};
+    use alloc::string::ToString;
+    use alloc::vec::Vec;
 
     #[test]
     fn empty() {
         let mut pool = ValueListPool::default();
-        let def = BlockCall::new(Block::new(0), &[], &mut pool);
+        let def = BlockCall::new(Block::new(0), core::iter::empty(), &mut pool);
 
         let jt = JumpTableData::new(def, &[]);
 
@@ -145,10 +146,10 @@ mod tests {
         let e1 = Block::new(1);
         let e2 = Block::new(2);
 
-        let def = BlockCall::new(e0, &[], &mut pool);
-        let b1 = BlockCall::new(e1, &[v0], &mut pool);
-        let b2 = BlockCall::new(e2, &[], &mut pool);
-        let b3 = BlockCall::new(e1, &[v1], &mut pool);
+        let def = BlockCall::new(e0, core::iter::empty(), &mut pool);
+        let b1 = BlockCall::new(e1, core::iter::once(v0.into()), &mut pool);
+        let b2 = BlockCall::new(e2, core::iter::empty(), &mut pool);
+        let b3 = BlockCall::new(e1, core::iter::once(v1.into()), &mut pool);
 
         let jt = JumpTableData::new(def, &[b1, b2, b3]);
 
@@ -161,8 +162,14 @@ mod tests {
         assert_eq!(jt.all_branches(), [def, b1, b2, b3]);
         assert_eq!(jt.as_slice(), [b1, b2, b3]);
 
-        assert_eq!(jt.as_slice()[0].args_slice(&pool), [v0]);
-        assert_eq!(jt.as_slice()[1].args_slice(&pool), []);
-        assert_eq!(jt.as_slice()[2].args_slice(&pool), [v1]);
+        assert_eq!(
+            jt.as_slice()[0].args(&pool).collect::<Vec<_>>(),
+            [BlockArg::Value(v0)]
+        );
+        assert_eq!(jt.as_slice()[1].args(&pool).collect::<Vec<_>>(), []);
+        assert_eq!(
+            jt.as_slice()[2].args(&pool).collect::<Vec<_>>(),
+            [BlockArg::Value(v1)]
+        );
     }
 }

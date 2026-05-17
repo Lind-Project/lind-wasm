@@ -64,8 +64,8 @@ use crate::dominator_tree::DominatorTree;
 use crate::entity::SecondaryMap;
 use crate::inst_predicates::visit_block_succs;
 use crate::ir::{Block, Function, Inst, Opcode};
+use crate::{FxHashMap, FxHashSet};
 use crate::{machinst::*, trace};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Mapping from CLIF BBs to VCode BBs.
 #[derive(Debug)]
@@ -78,7 +78,9 @@ pub struct BlockLoweringOrder {
     lowered_succ_indices: Vec<BlockIndex>,
     /// Ranges in `lowered_succ_indices` giving the successor lists for each lowered
     /// block. Indexed by lowering-order index (`BlockIndex`).
-    lowered_succ_ranges: Vec<(Option<Inst>, std::ops::Range<usize>)>,
+    lowered_succ_ranges: Vec<(Option<Inst>, core::ops::Range<usize>)>,
+    /// BlockIndex for each original Block.
+    blockindex_by_block: SecondaryMap<Block, BlockIndex>,
     /// Cold blocks. These blocks are not reordered in the
     /// `lowered_order` above; the lowered order must respect RPO
     /// (uses after defs) in order for lowering to be
@@ -174,12 +176,19 @@ impl BlockLoweringOrder {
                 }
             });
 
-            // Ensure that blocks terminated by br_table instructions with an empty jump table are
-            // still treated like conditional blocks from the point of view of critical edge
-            // splitting.
+            // Ensure that blocks terminated by br_table instructions
+            // with an empty jump table are still treated like
+            // conditional blocks from the point of view of critical
+            // edge splitting. Also do the same for TryCall and
+            // TryCallIndirect: we cannot have edge moves before the
+            // branch, even if they have empty handler tables and thus
+            // would otherwise have only one successor.
             if let Some(inst) = f.layout.last_inst(block) {
-                if Opcode::BrTable == f.dfg.insts[inst].opcode() {
-                    block_out_count[block] = block_out_count[block].max(2);
+                match f.dfg.insts[inst].opcode() {
+                    Opcode::BrTable | Opcode::TryCall | Opcode::TryCallIndirect => {
+                        block_out_count[block] = block_out_count[block].max(2);
+                    }
+                    _ => {}
                 }
             }
 
@@ -191,9 +200,11 @@ impl BlockLoweringOrder {
         // lowering order, identifying critical edges to split along the way.
 
         let mut lowered_order = Vec::new();
-
-        for &block in domtree.cfg_postorder().iter().rev() {
+        let mut blockindex_by_block = SecondaryMap::with_default(BlockIndex::invalid());
+        for &block in domtree.cfg_rpo() {
+            let idx = BlockIndex::new(lowered_order.len());
             lowered_order.push(LoweredBlock::Orig { block });
+            blockindex_by_block[block] = idx;
 
             if block_out_count[block] > 1 {
                 let range = block_succ_range[block].clone();
@@ -290,6 +301,7 @@ impl BlockLoweringOrder {
             lowered_order,
             lowered_succ_indices,
             lowered_succ_ranges,
+            blockindex_by_block,
             cold_blocks,
             indirect_branch_targets,
         };
@@ -303,10 +315,19 @@ impl BlockLoweringOrder {
         &self.lowered_order[..]
     }
 
+    /// Get the BlockIndex, if any, for a given Block.
+    ///
+    /// The result will be `None` if the given Block is unreachable
+    /// (and thus does not appear in the lowered order).
+    pub fn lowered_index_for_block(&self, block: Block) -> Option<BlockIndex> {
+        let idx = self.blockindex_by_block[block];
+        if idx.is_valid() { Some(idx) } else { None }
+    }
+
     /// Get the successor indices for a lowered block.
     pub fn succ_indices(&self, block: BlockIndex) -> (Option<Inst>, &[BlockIndex]) {
         let (opt_inst, range) = &self.lowered_succ_ranges[block.index()];
-        (opt_inst.clone(), &self.lowered_succ_indices[range.clone()])
+        (*opt_inst, &self.lowered_succ_indices[range.clone()])
     }
 
     /// Determine whether the given lowered-block index is cold.
@@ -326,8 +347,8 @@ mod test {
     use super::*;
     use crate::cursor::{Cursor, FuncCursor};
     use crate::flowgraph::ControlFlowGraph;
-    use crate::ir::types::*;
     use crate::ir::UserFuncName;
+    use crate::ir::types::*;
     use crate::ir::{AbiParam, InstBuilder, Signature};
     use crate::isa::CallConv;
 
