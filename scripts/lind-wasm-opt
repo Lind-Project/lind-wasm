@@ -135,7 +135,9 @@ fi
 LIND_FLAGS=()
 
 if [[ "${STATIC}" == "true" ]]; then
-  LIND_FLAGS+=(--enable-exception-handling --enable-reference-types)
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-exception-handling --enable-reference-types)
+  fi
   [[ "${WITHOUT_EPOCH}" == "false" ]] && LIND_FLAGS+=(--epoch-injection)
   [[ "${WITHOUT_ASYNCIFY}" == "false" ]] && LIND_FLAGS+=(--asyncify)
   if [[ "${WITH_FPCAST}" == "true" ]]; then
@@ -145,9 +147,13 @@ if [[ "${STATIC}" == "true" ]]; then
   # asyncify: asyncify handles legacy EH natively but Cranelift only supports standard EH.
   # --enable-reference-types is required because --translate-to-exnref emits (ref exn) blocks
   # (via catch_all_ref) when setjmp frames are nested across function calls.
-  LIND_FLAGS+=(--translate-to-exnref)
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 elif [[ "${TARGET}" == "main" ]]; then
-  LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  else
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  fi
   if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
     LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module)
   fi
@@ -161,9 +167,13 @@ elif [[ "${TARGET}" == "main" ]]; then
   # asyncify: asyncify handles legacy EH natively but Cranelift only supports standard EH.
   # --enable-reference-types is required because --translate-to-exnref emits (ref exn) blocks
   # (via catch_all_ref) when setjmp frames are nested across function calls.
-  LIND_FLAGS+=(--translate-to-exnref)
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 else  # library
-  LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  else
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  fi
   if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
     LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import)
   fi
@@ -177,7 +187,7 @@ else  # library
   # asyncify: asyncify handles legacy EH natively but Cranelift only supports standard EH.
   # --enable-reference-types is required because --translate-to-exnref emits (ref exn) blocks
   # (via catch_all_ref) when setjmp frames are nested across function calls.
-  LIND_FLAGS+=(--translate-to-exnref)
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 fi
 
 LIND_FLAGS+=(-O2 --debuginfo)

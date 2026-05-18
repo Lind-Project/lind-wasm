@@ -447,3 +447,4 @@ rr = [
 ]
 
 debug-dylink = ["wasmtime-environ/debug-dylink"]
+asyncify-setjmp = []

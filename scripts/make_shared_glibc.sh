@@ -49,11 +49,12 @@ wasm-ld \
     --export-if-defined=copy_handler_table_to_cage \
     --export-if-defined=make_threei_call \
     --export-if-defined=register_handler \
-    --export-if-defined=saveSetjmp \
-    --export-if-defined=testSetjmp \
-    --export-if-defined=getTempRet0 \
-    --export-if-defined=setTempRet0 \
-    --export-if-defined=__wasm_longjmp \
+    $([ -z "${LIND_ASYNCIFY_SETJMP:-}" ] && printf '%s\n' \
+        --export-if-defined=saveSetjmp \
+        --export-if-defined=testSetjmp \
+        --export-if-defined=getTempRet0 \
+        --export-if-defined=setTempRet0 \
+        --export-if-defined=__wasm_longjmp) \
     -o "$SYSROOT/lib/wasm32-wasi/libc.so" "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
 
 mkdir -p $REPO_ROOT/lindfs/lib

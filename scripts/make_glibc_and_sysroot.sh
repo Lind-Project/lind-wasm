@@ -151,13 +151,16 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
  || { echo "ERROR: clang failed compiling crt1.c"; exit 1; }
  [ -f "$GLIBC/lind_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/lind_syscall/crt1.o not produced"; exit 1; }
 
-# Compile wasm EH setjmp/longjmp runtime (needs -fwasm-exceptions for __builtin_wasm_throw)
-mkdir -p $BUILD/setjmp
-$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
-    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -fwasm-exceptions -mllvm -wasm-enable-sjlj \
-    -o $BUILD/setjmp/wasm_eh_setjmp.o \
-    -c $GLIBC/setjmp/wasm_eh_setjmp.c
+# Compile wasm EH setjmp/longjmp runtime (needs -fwasm-exceptions for __builtin_wasm_throw).
+# Skipped when LIND_ASYNCIFY_SETJMP is set (asyncify-based setjmp is used instead).
+if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    mkdir -p $BUILD/setjmp
+    $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+        $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+        -fwasm-exceptions -mllvm -wasm-enable-sjlj \
+        -o $BUILD/setjmp/wasm_eh_setjmp.o \
+        -c $GLIBC/setjmp/wasm_eh_setjmp.c
+fi
 
 # Compile elision-lock.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \

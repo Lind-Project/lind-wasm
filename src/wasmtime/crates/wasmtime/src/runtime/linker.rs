@@ -5,10 +5,12 @@ use crate::store::{StoreId, StoreOpaque};
 use crate::{
     prelude::*, AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType,
     Global, GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result,
-    SharedMemory, StoreContextMut, Table, Tag, TagType, Val, ValRaw, ValType,
+    SharedMemory, StoreContextMut, Table, Val, ValRaw, ValType,
 };
 use std::collections::HashMap;
 use alloc::sync::Arc;
+#[cfg(not(feature = "asyncify-setjmp"))]
+use crate::{Tag, TagType};
 use cage::DashMap;
 use core::fmt::{self, Debug};
 #[cfg(feature = "async")]
@@ -590,9 +592,12 @@ impl<T> Linker<T> {
         // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp in the child.
         // Each Store owns its tag objects, so the forked child needs its own instance of
         // the tag even though it's functionally identical to the parent's.
-        let tag_type = TagType::new(FuncType::new(engine, [ValType::I32], []));
-        let tag = Tag::new(&mut store, &tag_type)?;
-        new_linker.define(&mut store, "env", "__c_longjmp", tag)?;
+        #[cfg(not(feature = "asyncify-setjmp"))]
+        {
+            let tag_type = TagType::new(FuncType::new(engine, [ValType::I32], []));
+            let tag = Tag::new(&mut store, &tag_type)?;
+            new_linker.define(&mut store, "env", "__c_longjmp", tag)?;
+        }
 
         Ok((new_linker, memory_base_table, epoch_handler, memory_base))
     }

@@ -360,9 +360,11 @@ do_static_compile() {
   local -a mandatory_clang_flags=(
     "--sysroot=${SYSROOT}"
     --target=wasm32-unknown-wasi
-    -fwasm-exceptions
-    -mllvm
-    -wasm-enable-sjlj
+  )
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    mandatory_clang_flags+=(-fwasm-exceptions -mllvm -wasm-enable-sjlj)
+  fi
+  mandatory_clang_flags+=(
     -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base,--export=__wasm_init_tls
   )
   local -a default_clang_flags=(
@@ -387,9 +389,11 @@ do_dynamic_compile() {
   local -a mandatory_clang_flags=(
     --target=wasm32-unknown-wasi
     "--sysroot=${SYSROOT}"
-    -fwasm-exceptions
-    -mllvm
-    -wasm-enable-sjlj
+  )
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    mandatory_clang_flags+=(-fwasm-exceptions -mllvm -wasm-enable-sjlj)
+  fi
+  mandatory_clang_flags+=(
     "-nostartfiles" # we manually enforce the crt1 file for dynamic build
     -Wl,-pie # required flag for compiling into shared wasm binary
     -Wl,--import-table # table needs to be shared across module in dynamic build

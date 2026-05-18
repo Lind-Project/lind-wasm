@@ -523,6 +523,7 @@ fn attach_api(
     // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp.
     // libc.so (wasm_eh_setjmp.o) and user programs both import "env"."__c_longjmp";
     // the host must supply one shared tag object so throw/catch identity matches.
+    #[cfg(not(feature = "asyncify-setjmp"))]
     {
         use wasmtime::{FuncType, Tag, TagType};
         let engine = wstore.engine().clone();
@@ -937,6 +938,7 @@ fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Confi
     wt_config.shared_memory(true);
     // wasm-opt --translate-to-exnref converts clang 18's legacy EH to the standard proposal.
     // The standard EXCEPTIONS proposal is supported by Cranelift; the legacy proposal is not.
+    #[cfg(not(feature = "asyncify-setjmp"))]
     wt_config.wasm_exceptions(true);
 
     let details = if backtrace {
