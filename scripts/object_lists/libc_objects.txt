@@ -144,6 +144,7 @@ setjmp/longjmp.o
 setjmp/__longjmp.o
 setjmp/jmp-unwind.o
 setjmp/__longjmp_cancel.o
+setjmp/wasm_eh_setjmp.o
 signal/signal.o
 signal/raise.o
 signal/killpg.o

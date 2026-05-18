@@ -106,15 +106,13 @@ impl MmapMemory {
             .and_then(|i| i.checked_add(offset_guard_bytes))
             .with_context(|| format!("cannot allocate {minimum} with guard regions"))?;
 
-        let mmap = Mmap::accessible_reserved(HostAlignedByteCount::ZERO, request_bytes)?;
-
-        if minimum > 0 {
-            let accessible = HostAlignedByteCount::new_rounded_up(minimum)?;
-            // SAFETY: mmap is not in use right now so it's safe to make it accessible.
-            unsafe {
-                mmap.make_accessible(pre_guard_bytes, accessible)?;
-            }
-        }
+        // lind-wasm: make_accessible is a no-op because rawposix manages wasm memory
+        // permissions. Pre-allocate the entire region (including guards) as
+        // PROT_READ|PROT_WRITE so both wasm memories and host-internal allocations
+        // like the GC heap are accessible from the start. Guard regions being
+        // host-accessible is safe because lind-wasm relies on explicit bounds checks,
+        // not SIGSEGV-on-PROT_NONE, for out-of-bounds detection.
+        let mmap = Mmap::accessible_reserved(request_bytes, request_bytes)?;
 
         Ok(Self {
             mmap: try_new::<Arc<_>>(mmap)?,
@@ -207,13 +205,11 @@ impl RuntimeLinearMemory for MmapMemory {
             if let Ok(difference) = new_accessible.checked_sub(self.accessible()) {
                 // SAFETY: the difference was previously inaccessible so we
                 // never handed out any references to within it.
+                let mprotect_start = self.pre_guard_size
+                    .checked_add(self.accessible())
+                    .context("overflow calculating new accessible region")?;
                 unsafe {
-                    self.mmap.make_accessible(
-                        self.pre_guard_size
-                            .checked_add(self.accessible())
-                            .context("overflow calculating new accessible region")?,
-                        difference,
-                    )?;
+                    self.mmap.make_accessible(mprotect_start, difference)?;
                 }
             }
         }
