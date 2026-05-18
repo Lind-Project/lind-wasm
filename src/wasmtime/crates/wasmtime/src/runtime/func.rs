@@ -1,18 +1,20 @@
 use crate::error::OutOfMemory;
 use crate::prelude::*;
+use crate::runtime::Uninhabited;
 use crate::runtime::vm::{
     self, InterpreterRef, SendSyncPtr, StoreBox, VMArrayCallHostFuncContext,
     VMCommonStackInformation, VMContext, VMFuncRef, VMFunctionImport, VMOpaqueContext,
     VMStoreContext,
 };
-use crate::runtime::Uninhabited;
-use crate::store::{Asyncness, AutoAssertNoGc, InstanceId, StoreData, StoreId, StoreInner, StoreOpaque};
+use crate::store::{
+    Asyncness, AutoAssertNoGc, InstanceId, StoreData, StoreId, StoreInner, StoreOpaque,
+};
 use crate::type_registry::RegisteredType;
-use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, CallHook, Engine, Extern, FuncType, Instance, ModuleExport, Ref,
     StoreContext, StoreContextMut, Val, ValRaw, ValType,
 };
+use crate::{OnCalledAction, prelude::*};
 use alloc::sync::Arc;
 use cage::DashMap;
 use core::convert::Infallible;
@@ -1045,7 +1047,12 @@ impl Func {
                         let retval = ret.get(0).unwrap();
                         if let Val::I32(res) = retval {
                             // SAFETY: params_and_returns is a valid, non-null slice pointer
-                            unsafe { params_and_returns.as_ptr().cast::<ValRaw>().write(ValRaw::i32(*res)) };
+                            unsafe {
+                                params_and_returns
+                                    .as_ptr()
+                                    .cast::<ValRaw>()
+                                    .write(ValRaw::i32(*res))
+                            };
                         }
                         break;
                     }
@@ -2073,8 +2080,7 @@ impl<T> Caller<'_, T> {
     }
 
     pub fn get_stack_pointer(&mut self) -> Result<u32, ()> {
-        self.caller
-            .get_stack_pointer(&mut self.store)
+        self.caller.get_stack_pointer(&mut self.store)
     }
 
     /// append library's symbols into lookup table
@@ -2120,7 +2126,10 @@ impl<T> Caller<'_, T> {
                             return Ok(func);
                         }
                         Err(err) => {
-                            eprintln!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
+                            eprintln!(
+                                "the signature of asyncify_start_unwind function is not correct: {:?}",
+                                err
+                            );
                             return Err(());
                         }
                     }
@@ -2145,7 +2154,10 @@ impl<T> Caller<'_, T> {
                             return Ok(func);
                         }
                         Err(err) => {
-                            eprintln!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
+                            eprintln!(
+                                "the signature of asyncify_stop_unwind function is not correct: {:?}",
+                                err
+                            );
                             return Err(());
                         }
                     }
@@ -2170,7 +2182,10 @@ impl<T> Caller<'_, T> {
                             return Ok(func);
                         }
                         Err(err) => {
-                            eprintln!("the signature of asyncify_start_rewind function is not correct: {:?}", err);
+                            eprintln!(
+                                "the signature of asyncify_start_rewind function is not correct: {:?}",
+                                err
+                            );
                             return Err(());
                         }
                     }
@@ -2394,19 +2409,29 @@ impl<T> Caller<'_, T> {
     /// - The element type is incompatible,
     /// - Or the grow operation fails.
     pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> Result<u32> {
-        let table = self.caller
+        match self
+            .caller
             .get_table(&mut self.store, "__indirect_function_table")
-            .ok_or_else(|| format_err!("cannot grow table: no indirect function table"))?;
-        let old_size = table.grow(&mut self.store, delta as u64, init_value)?;
-        Ok(old_size as u32)
+        {
+            Some(table) => {
+                let old_size = table.grow(&mut self.store, delta as u64, init_value)?;
+                Ok(old_size as u32)
+            }
+            None if delta == 0 => Ok(0),
+            None => bail!("cannot grow table: no indirect function table"),
+        }
     }
 
     /// Return the current size of the library's function table (table index 0).
+    /// Returns 0 if the module has no indirect function table.
     pub fn get_table_size(&mut self) -> u32 {
-        let table = self.caller
+        match self
+            .caller
             .get_table(&mut self.store, "__indirect_function_table")
-            .expect("no indirect function table");
-        table.size(&self.store) as u32
+        {
+            Some(table) => table.size(&self.store) as u32,
+            None => 0,
+        }
     }
 
     /// Reconstruct a `Caller<'_, T>` from a raw VMContext pointer.

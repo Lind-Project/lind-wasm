@@ -3,11 +3,10 @@ use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::{StoreId, StoreOpaque};
 use crate::{
-    prelude::*, AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType,
-    Global, GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result,
-    SharedMemory, StoreContextMut, Table, Val, ValRaw, ValType,
+    AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, Global,
+    GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result, SharedMemory,
+    StoreContextMut, Table, Val, ValRaw, ValType, prelude::*,
 };
-use std::collections::HashMap;
 use alloc::sync::Arc;
 use cage::DashMap;
 use core::fmt::{self, Debug};
@@ -16,11 +15,12 @@ use core::future::Future;
 use core::marker;
 use core::mem::MaybeUninit;
 use log::warn;
+use std::collections::HashMap;
 use std::sync::LazyLock;
 use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
-use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::LindGOT;
+use wasmtime_lind_utils::symbol_table::SymbolMap;
 
 use super::{InstanceId, InstantiateType};
 
@@ -1008,7 +1008,9 @@ impl<T> Linker<T> {
                 if should_skip {
                     None
                 } else {
-                    self.import_key(module_name, Some(name)).ok().map(|key| (key, e.into_extern()))
+                    self.import_key(module_name, Some(name))
+                        .ok()
+                        .map(|key| (key, e.into_extern()))
                 }
             })
             .collect::<Vec<_>>();
@@ -1514,6 +1516,21 @@ impl<T> Linker<T> {
                     }
                 }
 
+                // Get the shared function table from the linker.
+                // Cannot use store.grow_table_lib() because Instance::get_table only
+                // finds *exported* items; the main module imports __indirect_function_table
+                // but does not re-export it.
+                let shared_table = self
+                    .get(&mut *store, "env", "__indirect_function_table")
+                    .ok()
+                    .and_then(|e| {
+                        if let Extern::Table(t) = e {
+                            Some(t)
+                        } else {
+                            None
+                        }
+                    });
+
                 for (name, func) in funcs {
                     // skip updating GOT only if fpcast is enabled
                     // and the function is NOT a fpcast function
@@ -1524,7 +1541,13 @@ impl<T> Linker<T> {
                     };
 
                     if !should_skip {
-                        let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)))?;
+                        let index = match shared_table.as_ref() {
+                            Some(t) => {
+                                t.grow(store.as_context_mut(), 1, crate::Ref::Func(Some(func)))?
+                                    as u32
+                            }
+                            None => bail!("cannot grow table: no indirect function table"),
+                        };
 
                         let final_name = {
                             if fpcast_enabled {
@@ -1549,7 +1572,10 @@ impl<T> Linker<T> {
                     let val = global.get(&mut store);
                     // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                     let Some(raw) = val.i32() else {
-                        eprintln!("[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32", name, val);
+                        eprintln!(
+                            "[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
+                            name, val
+                        );
                         continue;
                     };
                     // relocate the variable
