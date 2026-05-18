@@ -20,8 +20,8 @@ use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_S
 use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
-    AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled,
-    SharedMemory, Store, Val, ValType, WasmBacktraceDetails,
+    AsContext, AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module,
+    Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
@@ -789,13 +789,44 @@ fn load_library_module(
         None => return -(DylinkErrorCode::EDYLINKINFO as i32), // dylink section is not found
     };
 
-    // Record the current size of the shared indirect function table.
-    // The library's functions will be appended starting from this index.
-    let table_size = main_module.get_table_size();
-    match main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None)) {
-        Ok(_) => {}
-        Err(_) => return -(DylinkErrorCode::EINTERNAL as i32),
-    };
+    // Look up the shared indirect function table from the linker.
+    // Instance::get_table only finds *exported* items; the main module imports
+    // __indirect_function_table from env but does not re-export it.
+    let table = linker
+        .get(&mut *main_module, "env", "__indirect_function_table")
+        .ok()
+        .and_then(|e| {
+            if let wasmtime::Extern::Table(t) = e {
+                Some(t)
+            } else {
+                None
+            }
+        });
+
+    let table_size = table
+        .as_ref()
+        .map_or(0, |t| t.size(main_module.as_context()) as u32);
+
+    if dylink_info.table_size > 0 {
+        match table {
+            Some(t) => {
+                if t.grow(
+                    main_module.as_context_mut(),
+                    dylink_info.table_size as u64,
+                    wasmtime::Ref::Func(None),
+                )
+                .is_err()
+                {
+                    return -(DylinkErrorCode::EINTERNAL as i32);
+                }
+            }
+            None => {
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] no __indirect_function_table in linker; cannot load library");
+                return -(DylinkErrorCode::EINTERNAL as i32);
+            }
+        }
+    }
 
     // Grow the shared function table to reserve space for this library's
     // function entries, as declared in its dylink section.
@@ -824,9 +855,9 @@ fn load_library_module(
         library_name.to_string(),
     ) {
         Ok(handle) => handle as i32,
-        Err(_) => {
+        Err(e) => {
             #[cfg(feature = "debug-dylink")]
-            println!("failed to process library `{}`", library_name);
+            println!("failed to process library `{}`: {:?}", library_name, e);
             -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
         }
     };
