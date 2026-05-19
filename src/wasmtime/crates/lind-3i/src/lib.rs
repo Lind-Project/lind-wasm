@@ -103,7 +103,7 @@ type PassFptrTyped = TypedFunc<
 
 type WorkerId = u64;
 
-const DEFAULT_GRATE_WORKERS: usize = 1;
+const DEFAULT_GRATE_WORKERS: usize = MAX_GRATE_WORKERS;
 const GRATE_WORKERS_ENV: &str = "LIND_GRATE_WORKERS";
 
 /// Concurrency policy for a grate handler.
