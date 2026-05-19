@@ -1,10 +1,10 @@
+use anyhow::{Result, bail};
 use std::borrow::Cow;
 use std::cell::UnsafeCell;
 use std::fmt;
 use std::mem;
 use std::ops::Range;
 use std::str;
-use anyhow::{bail, Result};
 
 pub use wiggle_macro::{async_trait, from_witx};
 

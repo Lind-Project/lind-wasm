@@ -28,8 +28,7 @@ pub enum MemoryStyle {
 impl MemoryStyle {
     /// Decide on an implementation style for the given `Memory`.
     pub fn for_memory(memory: Memory, tunables: &Tunables) -> (Self, u64) {
-        let is_static =
-            memory.page_size_log2 >= Memory::DEFAULT_PAGE_SIZE_LOG2
+        let is_static = memory.page_size_log2 >= Memory::DEFAULT_PAGE_SIZE_LOG2
             && !tunables.memory_may_move
             && match memory.maximum_byte_size() {
                 Ok(maximum) => {

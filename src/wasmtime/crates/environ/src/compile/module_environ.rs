@@ -12,18 +12,18 @@ use crate::{
     Tunables, TypeConvert, TypeIndex, WasmError, WasmHeapTopType, WasmHeapType, WasmResult,
     WasmValType, WasmparserTypeConverter,
 };
+use cranelift_entity::EntityRef;
 use cranelift_entity::SecondaryMap;
 use cranelift_entity::packed_option::ReservedValue;
-use cranelift_entity::EntityRef;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem;
 use std::path::PathBuf;
 use std::sync::Arc;
 use wasmparser::{
-    types::Types, CustomSectionReader, DataKind, ElementItems, ElementKind, Encoding, ExternalKind,
-    FuncToValidate, FunctionBody, KnownCustom, NameSectionReader, Naming, Operator, Parser, Payload, TypeRef,
-    Validator, ValidatorResources,
+    CustomSectionReader, DataKind, ElementItems, ElementKind, Encoding, ExternalKind,
+    FuncToValidate, FunctionBody, KnownCustom, NameSectionReader, Naming, Operator, Parser,
+    Payload, TypeRef, Validator, ValidatorResources, types::Types,
 };
 
 /// Object containing the standalone environment information.
@@ -411,7 +411,10 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                     let table = self.convert_table_type(&ty)?;
                     self.result.module.needs_gc_heap |= table.ref_type.is_vmgcref_type();
                     self.result.module.tables.push(table)?;
-                    self.result.module.table_plans.push(TablePlan::for_table(table, &self.tunables))?;
+                    self.result
+                        .module
+                        .table_plans
+                        .push(TablePlan::for_table(table, &self.tunables))?;
                     let init = match init {
                         wasmparser::TableInit::RefNull => TableInitialValue::Null {
                             precomputed: TryVec::new(),
@@ -880,7 +883,11 @@ and for re-adding support for interface types you can see this issue:
                             #[cfg(feature = "debug-dylink")]
                             eprintln!("Warning: Dylink.0 RuntimePath Section not handled");
                         }
-                        wasmparser::Dylink0Subsection::Unknown { ty: _, data: _, range: _ } => {
+                        wasmparser::Dylink0Subsection::Unknown {
+                            ty: _,
+                            data: _,
+                            range: _,
+                        } => {
                             #[cfg(feature = "debug-dylink")]
                             eprintln!("Dylink.0 Unknown Section Encountered!");
                         }
@@ -987,7 +994,11 @@ and for re-adding support for interface types you can see this issue:
                 func_index
             }),
             EntityType::Table(ty) => {
-                self.result.module.table_plans.push(TablePlan::for_table(ty, &self.tunables)).panic_on_oom();
+                self.result
+                    .module
+                    .table_plans
+                    .push(TablePlan::for_table(ty, &self.tunables))
+                    .panic_on_oom();
                 EntityIndex::Table(self.result.module.tables.push(ty).panic_on_oom())
             }
             EntityType::Memory(ty) => {
@@ -1232,7 +1243,6 @@ impl ModuleTranslation<'_> {
             if self.module.memories[i].page_size() < page_size {
                 return;
             }
-
 
             // If the range of memory being initialized is less than twice the
             // total size of the data itself then it's assumed that static

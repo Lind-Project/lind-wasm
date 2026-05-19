@@ -1,6 +1,6 @@
 use super::regs;
-use crate::abi::{align_to, ABIOperand, ABIParams, ABIResults, ABISig, ParamsOrReturns, ABI};
-use crate::isa::{reg::Reg, CallingConvention};
+use crate::abi::{ABI, ABIOperand, ABIParams, ABIResults, ABISig, ParamsOrReturns, align_to};
+use crate::isa::{CallingConvention, reg::Reg};
 use wasmtime_environ::{WasmHeapType, WasmValType};
 
 #[derive(Default)]
@@ -185,10 +185,10 @@ impl Aarch64ABI {
 mod tests {
     use super::{Aarch64ABI, RegIndexEnv};
     use crate::{
-        abi::{ABIOperand, ABI},
+        abi::{ABI, ABIOperand},
+        isa::CallingConvention,
         isa::aarch64::regs,
         isa::reg::Reg,
-        isa::CallingConvention,
     };
     use wasmtime_environ::{
         WasmFuncType,

@@ -5,6 +5,7 @@
 //! > Wasmtime repository to start a discussion about doing so, but otherwise
 //! > be aware that your usage of this crate is not supported.
 
+use anyhow::Result;
 use base64::Engine;
 use log::{debug, trace, warn};
 use serde::{Deserialize, Serialize};
@@ -17,7 +18,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::time::Duration;
 use std::{fs, io};
-use anyhow::Result;
 
 #[macro_use] // for tests
 mod config;

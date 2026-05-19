@@ -88,6 +88,7 @@ pub mod table;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
+pub use anyhow::Error as EnvError;
 pub use cap_rand::RngCore;
 pub use clocks::{SystemTimeSpec, WasiClocks, WasiMonotonicClock, WasiSystemClock};
 pub use ctx::WasiCtx;
@@ -97,7 +98,6 @@ pub use file::WasiFile;
 pub use sched::{Poll, WasiSched};
 pub use string_array::{StringArray, StringArrayError};
 pub use table::Table;
-pub use anyhow::Error as EnvError;
 
 // The only difference between these definitions for sync vs async is whether
 // the wasmtime::Funcs generated are async (& therefore need an async Store and an executor to run)

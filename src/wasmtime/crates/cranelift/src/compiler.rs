@@ -315,7 +315,11 @@ impl wasmtime_environ::Compiler for Compiler {
                 func_env.stack_limit_at_function_entry = Some(stack_limit);
             }
         }
-        let FunctionBodyData { validator, body, call_indirect_start: _ } = input;
+        let FunctionBodyData {
+            validator,
+            body,
+            call_indirect_start: _,
+        } = input;
         let mut validator =
             validator.into_validator(mem::take(&mut compiler.cx.validator_allocations));
         compiler.cx.func_translator.translate_body(
