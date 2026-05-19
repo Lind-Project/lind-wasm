@@ -1,5 +1,5 @@
 use crate::sched::subscription::{RwEventFlags, Subscription};
-use crate::{sched::Poll, Error, ErrorExt};
+use crate::{Error, ErrorExt, sched::Poll};
 use cap_std::time::Duration;
 use rustix::event::{PollFd, PollFlags};
 use rustix::time::Timespec;
@@ -37,8 +37,15 @@ pub async fn poll_oneoff<'a>(poll: &mut Poll<'a>) -> Result<(), Error> {
             // Round up by 1 nanosecond to avoid busy-waiting at the boundary.
             let nanos = duration.subsec_nanos().saturating_add(1);
             let secs = duration.as_secs() + if nanos >= 1_000_000_000 { 1 } else { 0 };
-            let nanos = if nanos >= 1_000_000_000 { nanos - 1_000_000_000 } else { nanos };
-            poll_timespec = Timespec { tv_sec: secs as i64, tv_nsec: nanos as i64 };
+            let nanos = if nanos >= 1_000_000_000 {
+                nanos - 1_000_000_000
+            } else {
+                nanos
+            };
+            poll_timespec = Timespec {
+                tv_sec: secs as i64,
+                tv_nsec: nanos as i64,
+            };
             Some(&poll_timespec)
         } else {
             None

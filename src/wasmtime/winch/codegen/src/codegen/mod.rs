@@ -1,5 +1,5 @@
 use crate::{
-    abi::{vmctx, ABIOperand, ABISig, RetArea, ABI},
+    abi::{ABI, ABIOperand, ABISig, RetArea, vmctx},
     codegen::BlockSig,
     isa::reg::Reg,
     masm::{
@@ -13,8 +13,8 @@ use wasmparser::{
     BinaryReader, FuncValidator, MemArg, Operator, ValidatorResources, VisitOperator,
 };
 use wasmtime_environ::{
-    GlobalIndex, MemoryIndex, PtrSize, TableIndex, TypeIndex, WasmHeapType, WasmValType,
-    FUNCREF_MASK,
+    FUNCREF_MASK, GlobalIndex, MemoryIndex, PtrSize, TableIndex, TypeIndex, WasmHeapType,
+    WasmValType,
 };
 
 use cranelift_codegen::{

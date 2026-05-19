@@ -1,4 +1,4 @@
-use crate::linker::{is_dylink_internal_symbol, Definition, DefinitionType};
+use crate::linker::{Definition, DefinitionType, is_dylink_internal_symbol};
 use crate::runtime::vm::{
     self, Imports, ModuleRuntimeInfo, VMFuncRef, VMFunctionImport, VMGlobalImport, VMMemoryImport,
     VMStore, VMTableImport, VMTagImport,
@@ -7,30 +7,30 @@ use crate::store::{
     AllocateInstanceKind, Asyncness, InstanceId, StoreInstanceId, StoreOpaque, StoreResourceLimiter,
 };
 use crate::types::matching;
-use crate::{prelude::*, ValRaw, ValType};
 use crate::{
     AsContextMut, Engine, Export, Extern, Func, Global, Memory, Module, ModuleExport, SharedMemory,
     StoreContext, StoreContextMut, Table, Tag, TypedFunc,
 };
+use crate::{ValRaw, ValType, prelude::*};
 use alloc::sync::Arc;
-use cage::memory::{fork_vmmap, init_vmmap};
 use cage::DashMap;
+use cage::memory::{fork_vmmap, init_vmmap};
 use core::ptr::NonNull;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicI32, Ordering};
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use sysdefs::constants::{
-    lind_platform_const, DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE,
+    DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE, lind_platform_const,
 };
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, TableIndex, TagIndex, TypeTrace,
 };
-use wasmtime_lind_utils::{round_up_size, LindGOT};
+use wasmtime_lind_utils::{LindGOT, round_up_size};
 
 use super::Val;
 
@@ -430,7 +430,11 @@ impl Instance {
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
-                let export_memory = store.0.all_memories().next().expect("no defined memory found");
+                let export_memory = store
+                    .0
+                    .all_memories()
+                    .next()
+                    .expect("no defined memory found");
                 let memory_base = match &export_memory {
                     crate::runtime::vm::ExportMemory::Shared(..) => {
                         export_memory.shared_base_ptr().unwrap() as usize
@@ -597,7 +601,10 @@ impl Instance {
                 // therefore in this case, we only need to:
                 // 1. set memory base address
                 // 2. fork the memory space from parent
-                let export_memory = store.0.all_memories().next()
+                let export_memory = store
+                    .0
+                    .all_memories()
+                    .next()
                     .expect("no defined memory found");
                 let child_address = match &export_memory {
                     crate::runtime::vm::ExportMemory::Shared(..) => {
@@ -1296,7 +1303,10 @@ impl Instance {
                 let val = global.get(&mut store);
                 // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                 let Some(raw) = val.i32() else {
-                    eprintln!("[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32", name, val);
+                    eprintln!(
+                        "[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
+                        name, val
+                    );
                     continue;
                 };
                 // relocate the variable

@@ -360,7 +360,7 @@ pub trait FuncEnvironment: TargetEnvironment {
 
     /// Translate a `table.size` WebAssembly instruction.
     fn translate_table_size(&mut self, pos: FuncCursor, index: TableIndex)
-        -> WasmResult<ir::Value>;
+    -> WasmResult<ir::Value>;
 
     /// Translate a `table.grow` WebAssembly instruction.
     fn translate_table_grow(
@@ -815,7 +815,7 @@ pub trait ModuleEnvironment<'data>: TypeConvert {
 
     /// Declares a table export to the environment.
     fn declare_table_export(&mut self, table_index: TableIndex, name: &'data str)
-        -> WasmResult<()>;
+    -> WasmResult<()>;
 
     /// Declares a memory export to the environment.
     fn declare_memory_export(

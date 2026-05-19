@@ -71,7 +71,6 @@
 //! contrast, lind-3i only needs to obtain some available worker for the target grate, because correctness
 //! depends on entering a compatible grate instance, not on resuming a previously suspended continuation.
 use anyhow::Context;
-use wasmtime::error::Context as WasmtimeContext;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -79,6 +78,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
+use wasmtime::error::Context as WasmtimeContext;
 use wasmtime::{Engine, Instance, Linker, Module, Store, TypedFunc, Val};
 
 type PassFptrTyped = TypedFunc<

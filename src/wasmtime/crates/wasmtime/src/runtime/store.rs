@@ -112,9 +112,6 @@ use core::fmt;
 use core::future::Future;
 use core::hash::Hash;
 use core::hash::Hasher;
-use sysdefs::logging::lind_debug_panic;
-use wasmtime_environ::GlobalIndex;
-use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 use core::marker;
 use core::mem::{self, ManuallyDrop, MaybeUninit};
 use core::num::NonZeroU64;
@@ -126,7 +123,10 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use sysdefs::logging::lind_debug_panic;
+use wasmtime_environ::GlobalIndex;
 use wasmtime_environ::{DefinedGlobalIndex, DefinedTableIndex, EntityRef, TripleExt};
+use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 mod context;
 pub use self::context::*;
@@ -1754,7 +1754,10 @@ impl<'a, T> StoreContextMut<'a, T> {
             .iter()
             .find(|(n, _)| n == &name)
         {
-            lind_debug_panic(&format!("[register_named_instance] wasm module with same name \"{}\" detected, currently not supported", name));
+            lind_debug_panic(&format!(
+                "[register_named_instance] wasm module with same name \"{}\" detected, currently not supported",
+                name
+            ));
         }
         self.0.named_module_instances.push((name, id));
     }
@@ -2415,9 +2418,9 @@ impl StoreOpaque {
 
             // Then, allocate the actual GC heap, passing in that memory
             // storage.
-            let gc_runtime = engine
-                .gc_runtime()
-                .ok_or_else(|| format_err!("no GC runtime: GC disabled at compile time or configuration time"))?;
+            let gc_runtime = engine.gc_runtime().ok_or_else(|| {
+                format_err!("no GC runtime: GC disabled at compile time or configuration time")
+            })?;
             let (index, heap) =
                 engine
                     .allocator()

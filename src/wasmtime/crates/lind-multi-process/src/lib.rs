@@ -2,11 +2,11 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{
-    unset_stack_arena_base, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
@@ -25,7 +25,7 @@ use std::thread;
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
     InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque,
-    Val, ValRaw, ValType, VMContext, VMOpaqueContext,
+    VMContext, VMOpaqueContext, Val, ValRaw, ValType,
 };
 
 use cage::alloc_cage_id;
@@ -141,10 +141,8 @@ pub struct LindCtx<T, U> {
     >,
 }
 
-impl<
-        T: Clone + Send + 'static + std::marker::Sync,
-        U: Clone + Send + 'static + std::marker::Sync,
-    > LindCtx<T, U>
+impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+    LindCtx<T, U>
 {
     // create a new LindContext
     // Function Argument:
@@ -167,18 +165,18 @@ impl<
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T, bool) -> T + Send + Sync + 'static,
         exec: impl Fn(
-                &U,
-                &str,
-                &Vec<String>,
-                Engine,
-                Module,
-                i32,
-                &Arc<LindCageManager>,
-                &Option<Vec<(String, Option<String>)>>,
-            ) -> Result<Vec<Val>>
-            + Send
-            + Sync
-            + 'static,
+            &U,
+            &str,
+            &Vec<String>,
+            Engine,
+            Module,
+            i32,
+            &Arc<LindCageManager>,
+            &Option<Vec<(String, Option<String>)>>,
+        ) -> Result<Vec<Val>>
+        + Send
+        + Sync
+        + 'static,
     ) -> Result<Self> {
         // this method should only be called once from run.rs, other instances of LindCtx
         // are supposed to be created from fork() method
@@ -1891,11 +1889,18 @@ impl<
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    let em = caller.as_context_mut().0.all_memories().next().expect("no defined memory found");
+    let em = caller
+        .as_context_mut()
+        .0
+        .all_memories()
+        .next()
+        .expect("no defined memory found");
     if let Some(base) = em.shared_base_ptr() {
         base as usize as u64
     } else {
-        em.unshared().expect("expected memory").data_ptr(caller.as_context()) as usize as u64
+        em.unshared()
+            .expect("expected memory")
+            .data_ptr(caller.as_context()) as usize as u64
     }
 }
 
@@ -1905,11 +1910,18 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
 pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> (u64, usize) {
-    let em = caller.as_context_mut().0.all_memories().next().expect("no defined memory found");
+    let em = caller
+        .as_context_mut()
+        .0
+        .all_memories()
+        .next()
+        .expect("no defined memory found");
     if let Some(base) = em.shared_base_ptr() {
         let size = unsafe {
             let vm = em.shared().expect("shared memory");
-            (*vm.vmmemory_ptr().as_ptr()).current_length.load(std::sync::atomic::Ordering::SeqCst)
+            (*vm.vmmemory_ptr().as_ptr())
+                .current_length
+                .load(std::sync::atomic::Ordering::SeqCst)
         };
         (base as usize as u64, size)
     } else {
