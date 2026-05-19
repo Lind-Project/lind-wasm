@@ -142,26 +142,31 @@ pub fn signal_handler<
             continue;
         } else {
             // we should invoke user's custom signal handler
-            #[cfg(feature = "asyncify-setjmp")]
+            // Always push signal asyncify data: fork() always uses asyncify even in
+            // EH mode, so the signal frame must be saved for the rewind path.
             caller
                 .as_context_mut()
                 .append_signal_asyncify_data(signal_handler as i32, signo);
             let invoke_res =
                 signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
             if let Err(err) = invoke_res {
-                // Propagate any error (including wasm exceptions from siglongjmp in
-                // EH mode) back through the epoch host boundary.  For ThrownException,
-                // wasmtime re-throws the pending wasm exception in the calling wasm
-                // context so the sigsetjmp catch block can handle it.  For any other
-                // unexpected error, propagating is still the right behavior.
+                // Pop the frame before propagating: the signal handler threw a wasm
+                // exception (siglongjmp in EH mode) — the asyncify rewind path will
+                // not run so we clean up here.
+                caller
+                    .as_context_mut()
+                    .pop_signal_asyncify_data(signal_handler as i32, signo);
+                // Propagate back through the epoch host boundary so wasmtime
+                // re-throws the pending exception in the calling wasm context.
                 return Err(err);
             }
 
             if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
+                // asyncify unwind in progress (e.g. fork inside signal handler).
+                // Leave the frame on the stack — the rewind path will consume it.
                 return Ok(0);
             } else {
                 restorer(cageid);
-                #[cfg(feature = "asyncify-setjmp")]
                 caller
                     .as_context_mut()
                     .pop_signal_asyncify_data(signal_handler as i32, signo);
