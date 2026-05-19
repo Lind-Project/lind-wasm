@@ -176,8 +176,10 @@ if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
     # cause the LLVM SjLj pass to emit an import instead of a local weak Tag
     # definition, which would leave __c_longjmp undefined in programs that
     # don't call setjmp themselves).
+    # EXTRA_FLAGS contains -fPIE (from line 29), so strip it before use here.
     CFLAGS_NO_PIC="--target=wasm32-unknown-wasi -Wno-int-conversion -DNO_HIDDEN -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g"
-    clang $CFLAGS_NO_PIC $WARNINGS $EXTRA_FLAGS \
+    EXTRA_FLAGS_NO_PIE="${EXTRA_FLAGS//-fPIE/}"
+    clang $CFLAGS_NO_PIC $WARNINGS $EXTRA_FLAGS_NO_PIE \
         $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
         -fwasm-exceptions -mllvm -wasm-enable-sjlj \
         -o $BUILD/setjmp/wasm_eh_c_longjmp_tag.o \
