@@ -3,7 +3,7 @@ name: Test and release on Docker Hub
 on:
   workflow_dispatch:
   schedule:
-  - cron: "0 8 1 * *"
+  - cron: "0 8 * * 1" # Run at 08:00, every Monday
 
 permissions: {}
 
