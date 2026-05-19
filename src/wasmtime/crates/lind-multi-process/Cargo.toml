@@ -28,3 +28,4 @@ cfg-if = { workspace = true }
 default = []
 disable_signals = []
 debug-dylink = []
+asyncify-setjmp = []

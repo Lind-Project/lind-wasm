@@ -69,9 +69,33 @@ extern void _longjmp (struct __jmp_buf_tag __env[1], int __val)
    or not `longjmp' will restore the signal mask.  */
 typedef struct __jmp_buf_tag sigjmp_buf[1];
 
-/* Store the calling environment in ENV, also saving the
-   signal mask if SAVEMASK is nonzero.  Return 0.  */
-# define sigsetjmp(env, savemask)	__sigsetjmp (env, savemask)
+/* Forward-declared here so the sigsetjmp macro can call it without requiring
+   the user to include <signal.h>.  Guarded by _SIGNAL_H so that glibc's own
+   internal compilation (which includes <signal.h> first) does not see a
+   conflicting redeclaration — glibc's signal.h uses sigset_t while we use
+   __sigset_t, and clang treats them as distinct even though they are the same
+   underlying type.  User code that includes only <setjmp.h> (no _SIGNAL_H)
+   gets the forward declaration it needs.  Use sigprocmask (the public POSIX
+   name) so that dynamic builds resolve it from libc.so's "sigprocmask" export
+   rather than the private "__sigprocmask" alias.  */
+#ifndef _SIGNAL_H
+extern int sigprocmask (int __how, const __sigset_t *__restrict __set,
+                        __sigset_t *__restrict __oset) __THROW;
+#endif
+
+/* Set ENV to the current position and return 0, saving signal mask if
+   SAVEMASK is set.
+   Use _setjmp directly so the LLVM WebAssemblyLowerEmscriptenEHSjLj pass
+   inserts the EH try/catch at the call site.  __sigsetjmp is not transformed
+   by that pass, so sigsetjmp must expand to a _setjmp call in user code.  */
+# define sigsetjmp(env, savemask)                                             \
+  (__extension__ ({                                                            \
+    int __sm = (savemask);                                                    \
+    (env)[0].__mask_was_saved =                                               \
+      __sm && (sigprocmask (SIG_BLOCK, (__sigset_t *) NULL,                   \
+                            (__sigset_t *) &(env)[0].__saved_mask) == 0);     \
+    _setjmp (env);                                                            \
+  }))
 
 /* Jump to the environment saved in ENV, making the
    sigsetjmp call there return VAL, or 1 if VAL is 0.

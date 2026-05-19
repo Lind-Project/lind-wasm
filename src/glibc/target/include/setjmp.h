@@ -69,9 +69,26 @@ extern void _longjmp (struct __jmp_buf_tag __env[1], int __val)
    or not `longjmp' will restore the signal mask.  */
 typedef struct __jmp_buf_tag sigjmp_buf[1];
 
-/* Store the calling environment in ENV, also saving the
-   signal mask if SAVEMASK is nonzero.  Return 0.  */
-# define sigsetjmp(env, savemask)	__sigsetjmp (env, savemask)
+/* Forward-declared here so the sigsetjmp macro can call it without requiring
+   the user to include <signal.h>.  Use sigprocmask (the public POSIX name)
+   so that dynamic builds resolve it from libc.so's exported "sigprocmask"
+   symbol rather than the private "__sigprocmask" alias.  */
+extern int sigprocmask (int __how, const __sigset_t *__restrict __set,
+                        __sigset_t *__restrict __oset) __THROW;
+
+/* Set ENV to the current position and return 0, saving signal mask if
+   SAVEMASK is set.
+   Use _setjmp directly so the LLVM WebAssemblyLowerEmscriptenEHSjLj pass
+   inserts the EH try/catch at the call site.  __sigsetjmp is not transformed
+   by that pass, so sigsetjmp must expand to a _setjmp call in user code.  */
+# define sigsetjmp(env, savemask)                                             \
+  (__extension__ ({                                                            \
+    int __sm = (savemask);                                                    \
+    (env)[0].__mask_was_saved =                                               \
+      __sm && (sigprocmask (SIG_BLOCK, (__sigset_t *) NULL,                   \
+                            (__sigset_t *) &(env)[0].__saved_mask) == 0);     \
+    _setjmp (env);                                                            \
+  }))
 
 /* Jump to the environment saved in ENV, making the
    sigsetjmp call there return VAL, or 1 if VAL is 0.

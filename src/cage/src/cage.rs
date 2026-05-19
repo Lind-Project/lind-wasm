@@ -256,6 +256,10 @@ pub struct Cage {
     /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
     /// tracking is considered a VMContext-level concern.
     pub grate_inflight: AtomicU64,
+    /// EH-mode direct signal delivery: pre-delivery signal mask, written by signal_handler
+    /// before storing the custom signal for pause() to pick up and deliver inline.
+    /// Restored by lind-restore-signal-mask after the handler returns normally.
+    pub direct_signal_old_sigset: AtomicU64,
 }
 
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
@@ -469,6 +473,7 @@ mod tests {
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
+            direct_signal_old_sigset: AtomicU64::new(0),
         };
 
         add_cage(2, test_cage);

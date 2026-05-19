@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 /* Thread-local "second return value" communicated between saveSetjmp and its
  * caller via getTempRet0 (wasm has no multi-value imported functions yet). */
 static __thread int g_tempRet0;

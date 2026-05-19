@@ -3,11 +3,11 @@
 use anyhow::Result;
 use cage::memory::check_addr_write;
 use rand::Rng;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use sysdefs::constants::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
-use sysdefs::constants::Errno;
 use sysdefs::logging::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
@@ -16,7 +16,7 @@ use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
-use wasmtime_lind_multi_process::{get_memory_base, get_memory_base_and_size, LindHost};
+use wasmtime_lind_multi_process::{LindHost, get_memory_base, get_memory_base_and_size};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed
@@ -111,7 +111,7 @@ fn add_syscall_to_linker<
               arg5cageid: u64,
               arg6: u64,
               arg6cageid: u64|
-              -> i32 {
+              -> wasmtime::Result<i32> {
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
@@ -139,11 +139,11 @@ fn add_syscall_to_linker<
                             // Only override the return value with the pending visible retval if it is actually set.
                             // If it's not set, that means the clone syscall being replayed on rewind is the one in the child process, and we should return the actual syscall return value (0) instead of the pending visible retval from the parent process.
                             if retval > 0 {
-                                return retval;
+                                return Ok(retval);
                             }
                         }
                     }
-                    return rewind_res;
+                    return Ok(rewind_res);
                 }
             }
 
@@ -156,13 +156,13 @@ fn add_syscall_to_linker<
                 let retval = match caller.as_context_mut().get_current_syscall_rewind_data() {
                     Some(v) => v,
                     None => {
-                        wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-                        return 0;
+                        wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
+                        return Ok(0);
                     }
                 };
                 // let signal handler finish rest of the rewinding process
-                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-                return retval;
+                wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
+                return Ok(retval);
             }
 
             // Some thread-related operations must be executed against a specific thread's
@@ -222,16 +222,21 @@ fn add_syscall_to_linker<
             // since negating `I32::MIN` would cause an overflow panic.
             if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i32 {
                 caller.as_context_mut().append_syscall_asyncify_data(retval);
-                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                if let Err(e) =
+                    wasmtime_lind_multi_process::signal::signal_handler(&mut caller)
+                {
+                    caller.as_context_mut().pop_syscall_asyncify_data();
+                    return Err(e);
+                }
 
                 if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
-                    return 0;
+                    return Ok(0);
                 } else {
                     caller.as_context_mut().pop_syscall_asyncify_data();
                 }
             }
 
-            retval
+            Ok(retval)
         },
     )?;
     Ok(())
@@ -265,6 +270,7 @@ fn add_runtime_to_linker<
         sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
     })?;
 
+    #[cfg(feature = "asyncify-setjmp")]
     linker.func_wrap(
         "lind",
         "lind-setjmp",
@@ -273,6 +279,7 @@ fn add_runtime_to_linker<
         },
     )?;
 
+    #[cfg(feature = "asyncify-setjmp")]
     linker.func_wrap(
         "lind",
         "lind-longjmp",
@@ -281,11 +288,99 @@ fn add_runtime_to_linker<
         },
     )?;
 
+    // EH-mode: poll for the next pending custom signal for direct delivery via pause().
+    // Returns a packed i64: high 32 bits = handler, low 32 bits = signo for a custom signal;
+    // returns -1 when the queue is empty.  SIG_DFL and SIG_IGN are handled here on the Rust
+    // side; only custom handlers surface to glibc.  No wasm memory access needed.
+    #[cfg(not(feature = "asyncify-setjmp"))]
+    linker.func_wrap(
+        "lind",
+        "lind-take-next-signal",
+        move |mut caller: Caller<'_, T>| -> i64 {
+            let host = caller.data().clone();
+            let ctx = host.get_ctx();
+            let cageid = ctx.cageid as u64;
+
+            loop {
+                let signal = cage::signal::lind_get_first_signal_for_direct(cageid);
+                if signal.is_none() {
+                    return -1;
+                }
+                if cage::signal::lind_check_no_pending_signal(cageid) {
+                    cage::signal::signal_epoch_reset(cageid);
+                }
+                let (signo, signal_handler, _old_sigset) = signal.unwrap();
+
+                if signal_handler == sysdefs::constants::SIG_DFL as u32 {
+                    match sysdefs::constants::signal_default_handler_dispatcher(signo) {
+                        sysdefs::constants::SignalDefaultHandler::Terminate => {
+                            cage::cage_record_exit_status(
+                                cageid,
+                                cage::ExitStatus::Signaled(signo, false),
+                            );
+                            if let Some(c) = cage::get_cage(cageid) {
+                                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                            }
+                            threei::EXITING_TABLE.insert(cageid);
+                            cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
+                            threei::handler_table::_rm_grate_from_handler(cageid);
+                            ctx.exit_call(&mut caller, 128 + signo, 0);
+                            return -1;
+                        }
+                        sysdefs::constants::SignalDefaultHandler::Ignore => unreachable!(),
+                        sysdefs::constants::SignalDefaultHandler::Stop
+                        | sysdefs::constants::SignalDefaultHandler::Continue => {
+                            eprintln!("Warning: STOP/CONTINUE signal received but not supported!");
+                            continue;
+                        }
+                        sysdefs::constants::SignalDefaultHandler::NONEXIST => {
+                            panic!("lind-take-next-signal: NONEXIST signal");
+                        }
+                    }
+                } else if signal_handler == sysdefs::constants::SIG_IGN as u32 {
+                    continue;
+                } else {
+                    // Custom handler: return packed i64 (handler << 32 | signo).
+                    return ((signal_handler as i64) << 32) | (signo as i64);
+                }
+            }
+        },
+    )?;
+
+    // EH-mode: restore the cage signal mask to the pre-delivery value that was saved by
+    // lind_get_first_signal_for_direct.  Called by pause() after a custom handler returns
+    // normally (i.e. without calling siglongjmp).
+    #[cfg(not(feature = "asyncify-setjmp"))]
+    linker.func_wrap(
+        "lind",
+        "lind-restore-signal-mask",
+        move |caller: Caller<'_, T>| {
+            let cageid = caller.data().get_ctx().cageid as u64;
+            cage::signal::lind_restore_direct_sigset(cageid);
+        },
+    )?;
+
+    // EH-mode: atomically replace the cage signal mask WITHOUT triggering the epoch.
+    // Used by sigsuspend to set the wait mask before calling __libc_pause() so that
+    // siglongjmp inside a signal handler can propagate through the pure-wasm
+    // signal_callback path without hitting a Rust boundary.
+    // Returns the previous signal mask.
+    #[cfg(not(feature = "asyncify-setjmp"))]
+    linker.func_wrap(
+        "lind",
+        "lind-sigsuspend-setmask",
+        move |caller: Caller<'_, T>, new_mask: i32| -> i32 {
+            let cageid = caller.data().get_ctx().cageid as u64;
+            cage::signal::lind_sigsuspend_setmask(cageid, new_mask as u64) as i32
+        },
+    )?;
+
     linker.func_wrap(
         "lind",
         "epoch_callback",
-        move |mut caller: Caller<'_, T>| {
-            wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+        move |mut caller: Caller<'_, T>| -> wasmtime::Result<()> {
+            wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
+            Ok(())
         },
     )?;
 

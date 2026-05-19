@@ -148,6 +148,7 @@ pub extern "C" fn fork_syscall(
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
+            direct_signal_old_sigset: AtomicU64::new(0),
         };
 
         // increment child counter for parent
