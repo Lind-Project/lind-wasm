@@ -24,6 +24,18 @@ fi
 
 symbols=$($SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $SCRIPTS_DIR/extract_versions.py --flags --paths-file $SCRIPTS_DIR/version-path-minimal.txt)
 
+# wasm_eh_c_longjmp_tag.o introduces a wasm Tag section into libc.so.  The
+# prebuilt add-export-tool binary cannot handle binaries with a Tag section
+# (it miscounts globals, causing "exported global index out of bounds").  The
+# tag is only needed in the static libc.a as a fallback for programs that
+# never call setjmp themselves; in the shared build every user compilation
+# unit that uses setjmp will define __c_longjmp in its own object, so exclude
+# it here.
+SHARED_ARCHIVE=$(mktemp /tmp/libc_shared_XXXXXX.a)
+cp "$SYSROOT_ARCHIVE" "$SHARED_ARCHIVE"
+llvm-ar d "$SHARED_ARCHIVE" wasm_eh_c_longjmp_tag.o 2>/dev/null || true
+trap "rm -f $SHARED_ARCHIVE" EXIT
+
 # --import-memory, --shared-memory: to make memory shared across wasm module
 # --export-dynamic, --experimental-pic, --unresolved-symbols=import-dynamic, -shared: flags for dynamic build of libraries
 # --export-if-defined: manually export the symbol if found. symbol in glibc has hidden visibility by default, we have to manually export it
@@ -35,7 +47,7 @@ wasm-ld \
     --unresolved-symbols=import-dynamic \
     -shared \
     --whole-archive \
-    $SYSROOT_ARCHIVE \
+    "$SHARED_ARCHIVE" \
     --no-whole-archive \
     $symbols \
     --export-if-defined=__libc_setup_tls \
