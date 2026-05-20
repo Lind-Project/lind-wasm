@@ -1,22 +1,47 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use target_lexicon::Triple;
+use wasmtime::error::Context as _;
 use wasmtime::*;
+use wasmtime_environ::TripleExt;
+use wasmtime_test_macros::wasmtime_test;
 
 #[test]
 fn checks_incompatible_target() -> Result<()> {
-    let mut target = target_lexicon::Triple::host();
-    target.operating_system = target_lexicon::OperatingSystem::Unknown;
-    match Module::new(
-        &Engine::new(Config::new().target(&target.to_string())?)?,
-        "(module)",
-    ) {
-        Ok(_) => unreachable!(),
-        Err(e) => assert!(
-            format!("{:?}", e).contains("configuration does not match the host"),
-            "bad error: {:?}",
-            e
-        ),
+    // For platforms that Cranelift supports make sure a mismatch generates an
+    // error
+    if cfg!(target_arch = "x86_64")
+        || cfg!(target_arch = "aarch64")
+        || cfg!(target_arch = "s390x")
+        || cfg!(target_arch = "riscv64")
+    {
+        let mut target = target_lexicon::Triple::host();
+        target.operating_system = target_lexicon::OperatingSystem::Unknown;
+        assert_invalid_target(&target.to_string())?;
     }
 
-    Ok(())
+    // Otherwise make sure that the wrong pulley target is rejected on all
+    // platforms.
+    let wrong_pulley = if cfg!(target_pointer_width = "32") {
+        "pulley64"
+    } else {
+        "pulley32"
+    };
+    assert_invalid_target(wrong_pulley)?;
+
+    return Ok(());
+
+    fn assert_invalid_target(target: &str) -> Result<()> {
+        match Module::new(&Engine::new(Config::new().target(target)?)?, "(module)") {
+            Ok(_) => unreachable!(),
+            Err(e) => assert!(
+                format!("{e:?}").contains("configuration does not match the host"),
+                "bad error: {e:?}"
+            ),
+        }
+
+        Ok(())
+    }
 }
 
 #[test]
@@ -34,7 +59,7 @@ fn caches_across_engines() {
 
         // differ in runtime settings
         let res = Module::deserialize(
-            &Engine::new(Config::new().static_memory_maximum_size(0)).unwrap(),
+            &Engine::new(Config::new().memory_reservation(0)).unwrap(),
             &bytes,
         );
         assert!(res.is_err());
@@ -42,7 +67,7 @@ fn caches_across_engines() {
         // differ in wasm features enabled (which can affect
         // runtime/compilation settings)
         let res = Module::deserialize(
-            &Engine::new(Config::new().wasm_threads(false)).unwrap(),
+            &Engine::new(Config::new().wasm_relaxed_simd(false)).unwrap(),
             &bytes,
         );
         assert!(res.is_err());
@@ -77,28 +102,28 @@ fn serialize_deterministic() {
         let p1 = engine.precompile_module(wasm.as_bytes()).unwrap();
         let p2 = engine.precompile_module(wasm.as_bytes()).unwrap();
         if p1 != p2 {
-            panic!("precompile_module not deterministic for:\n{}", wasm);
+            panic!("precompile_module not deterministic for:\n{wasm}");
         }
 
         let module1 = Module::new(&engine, wasm).unwrap();
         let a1 = module1.serialize().unwrap();
         let a2 = module1.serialize().unwrap();
         if a1 != a2 {
-            panic!("Module::serialize not deterministic for:\n{}", wasm);
+            panic!("Module::serialize not deterministic for:\n{wasm}");
         }
 
         let module2 = Module::new(&engine, wasm).unwrap();
         let b1 = module2.serialize().unwrap();
         let b2 = module2.serialize().unwrap();
         if b1 != b2 {
-            panic!("Module::serialize not deterministic for:\n{}", wasm);
+            panic!("Module::serialize not deterministic for:\n{wasm}");
         }
 
         if a1 != b2 {
-            panic!("not matching across modules:\n{}", wasm);
+            panic!("not matching across modules:\n{wasm}");
         }
         if b1 != p2 {
-            panic!("not matching across engine/module:\n{}", wasm);
+            panic!("not matching across engine/module:\n{wasm}");
         }
     };
 
@@ -122,7 +147,7 @@ fn serialize_not_overly_massive() -> Result<()> {
     let engine = Engine::new(&config)?;
 
     let assert_smaller_than_1mb = |module: &str| -> Result<()> {
-        println!("{}", module);
+        println!("{module}");
         let bytes = Module::new(&engine, module)?.serialize()?;
         assert!(bytes.len() < (1 << 20));
         Ok(())
@@ -252,69 +277,18 @@ fn compile_a_component() -> Result<()> {
 }
 
 #[test]
-fn call_indirect_caching_and_memory64() -> Result<()> {
-    let mut config = Config::new();
-    config.wasm_memory64(true);
-    config.cache_call_indirects(true);
-    let engine = Engine::new(&config)?;
-    Module::new(
-        &engine,
-        "(module
-            (memory i64 1)
-            (func (param i64) (result i32)
-                local.get 0
-                i32.load offset=0x100000000
-            )
-        )",
-    )?;
-    Ok(())
-}
-
-#[test]
-fn call_indirect_caching_out_of_bounds_table_index() -> Result<()> {
-    let mut config = Config::new();
-    config.cache_call_indirects(true);
-    let engine = Engine::new(&config)?;
-    // Test an out-of-bounds table index: this is exposed to the prescan
-    // that call-indirect caching must perform during compilation, so we
-    // need to make sure the error is properly handled by the validation
-    // that comes later.
-    let err = Module::new(
-        &engine,
-        "(module
-            (func (param i32)
-                ref.null func
-                local.get 0
-                table.set 32  ;; out-of-bounds table index
-            )
-        )",
-    )
-    .unwrap_err();
-    let err = format!("{err:?}");
-    assert!(
-        err.contains("table index out of bounds"),
-        "bad error: {err}"
-    );
-    Ok(())
-}
-
-#[test]
+#[cfg_attr(miri, ignore)]
 fn tail_call_defaults() -> Result<()> {
     let wasm_with_tail_calls = "(module (func $a return_call $a))";
-    if cfg!(target_arch = "s390x") {
-        // off by default on s390x
-        let res = Module::new(&Engine::default(), wasm_with_tail_calls);
-        assert!(res.is_err());
-    } else {
-        // on by default
-        Module::new(&Engine::default(), wasm_with_tail_calls)?;
 
-        // on by default for cranelift
-        Module::new(
-            &Engine::new(Config::new().strategy(Strategy::Cranelift))?,
-            wasm_with_tail_calls,
-        )?;
-    }
+    // on by default
+    Module::new(&Engine::default(), wasm_with_tail_calls)?;
+
+    // on by default for cranelift
+    Module::new(
+        &Engine::new(Config::new().strategy(Strategy::Cranelift))?,
+        wasm_with_tail_calls,
+    )?;
 
     if cfg!(target_arch = "x86_64") {
         // off by default for winch
@@ -323,15 +297,12 @@ fn tail_call_defaults() -> Result<()> {
             wasm_with_tail_calls,
         );
         assert!(err.is_err());
-
-        // can't enable with winch
-        let err = Engine::new(Config::new().strategy(Strategy::Winch).wasm_tail_call(true));
-        assert!(err.is_err());
     }
     Ok(())
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn cross_engine_module_exports() -> Result<()> {
     let a_engine = Engine::default();
     let b_engine = Engine::default();
@@ -352,4 +323,329 @@ fn cross_engine_module_exports() -> Result<()> {
     let instance = Instance::new(&mut store, &a_module, &[])?;
     assert!(instance.get_module_export(&mut store, &export).is_none());
     Ok(())
+}
+
+/// Smoke test for registering and unregistering modules (and their rec group
+/// entries) concurrently.
+#[wasmtime_test(wasm_features(gc, function_references))]
+#[cfg_attr(miri, ignore)]
+fn concurrent_type_registry_modifications(config: &mut Config) -> Result<()> {
+    let _ = env_logger::try_init();
+
+    // The number of seconds to run the smoke test.
+    const TEST_DURATION_SECONDS: u64 = 5;
+
+    // The number of worker threads to spawn for this smoke test.
+    const NUM_WORKER_THREADS: usize = 32;
+
+    let engine = Engine::new(config)?;
+
+    /// Tests of various kinds of modifications to the type registry.
+    enum Test {
+        /// Creating a module (from its text format) should register new entries
+        /// in the type registry.
+        Module(&'static str),
+        /// Creating an individual func type registers a singleton entry in the
+        /// registry which is managed slightly differently from modules.
+        Func(fn(&Engine) -> FuncType),
+        /// Create a single struct type like a single function type.
+        Struct(fn(&Engine) -> StructType),
+        /// Create a single array type like a single function type.
+        Array(fn(&Engine) -> ArrayType),
+    }
+    const TESTS: &'static [Test] = &[
+        Test::Func(|engine| FuncType::new(engine, [], [])),
+        Test::Func(|engine| FuncType::new(engine, [], [ValType::I32])),
+        Test::Func(|engine| FuncType::new(engine, [ValType::I32], [])),
+        Test::Struct(|engine| StructType::new(engine, []).unwrap()),
+        Test::Array(|engine| {
+            ArrayType::new(engine, FieldType::new(Mutability::Const, StorageType::I8))
+        }),
+        Test::Array(|engine| {
+            ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8))
+        }),
+        Test::Module(
+            r#"
+                (module
+                    ;; A handful of function types.
+                    (type (func))
+                    (type (func (param i32)))
+                    (type (func (result i32)))
+                    (type (func (param i32) (result i32)))
+
+                    ;; A handful of recursive types.
+                    (rec)
+                    (rec (type $s (struct (field (ref null $s)))))
+                    (rec (type $a (struct (field (ref null $b))))
+                         (type $b (struct (field (ref null $a)))))
+                    (rec (type $c (struct (field (ref null $b))
+                                          (field (ref null $d))))
+                         (type $d (struct (field (ref null $a))
+                                          (field (ref null $c)))))
+
+                    ;; Some GC types
+                    (type (struct))
+                    (type (array i8))
+                    (type (array (mut i8)))
+                )
+            "#,
+        ),
+        Test::Module(
+            r#"
+                (module
+                    ;; Just the function types.
+                    (type (func))
+                    (type (func (param i32)))
+                    (type (func (result i32)))
+                    (type (func (param i32) (result i32)))
+                )
+            "#,
+        ),
+        Test::Module(
+            r#"
+                (module
+                    ;; Just the recursive types.
+                    (rec)
+                    (rec (type $s (struct (field (ref null $s)))))
+                    (rec (type $a (struct (field (ref null $b))))
+                         (type $b (struct (field (ref null $a)))))
+                    (rec (type $c (struct (field (ref null $b))
+                                          (field (ref null $d))))
+                         (type $d (struct (field (ref null $a))
+                                          (field (ref null $c)))))
+                )
+            "#,
+        ),
+        Test::Module(
+            r#"
+                (module
+                    ;; One of each kind of type.
+                    (type (func (param i32) (result i32)))
+                    (rec (type $a (struct (field (ref null $b))))
+                         (type $b (struct (field (ref null $a)))))
+                )
+            "#,
+        ),
+    ];
+
+    // Spawn the worker threads, each of them just registering and unregistering
+    // modules (and their types) constantly for the duration of the smoke test.
+    let handles = (0..NUM_WORKER_THREADS)
+        .map(|_| {
+            let engine = engine.clone();
+            std::thread::spawn(move || -> Result<()> {
+                let mut tests = TESTS.iter().cycle();
+                let start = std::time::Instant::now();
+                while start.elapsed().as_secs() < TEST_DURATION_SECONDS {
+                    match tests.next() {
+                        Some(Test::Module(wat)) => {
+                            let _ = Module::new(&engine, wat)?;
+                        }
+                        Some(Test::Func(ctor)) => {
+                            let _ = ctor(&engine);
+                        }
+                        Some(Test::Struct(ctor)) => {
+                            let _ = ctor(&engine);
+                        }
+                        Some(Test::Array(ctor)) => {
+                            let _ = ctor(&engine);
+                        }
+                        None => unreachable!(),
+                    }
+                }
+
+                Ok(())
+            })
+        })
+        .collect::<Vec<_>>();
+
+    // Join all of the thread handles.
+    for handle in handles {
+        handle
+            .join()
+            .expect("should join thread handle")
+            .context("error during thread execution")?;
+    }
+
+    Ok(())
+}
+
+#[wasmtime_test(wasm_features(function_references))]
+#[cfg_attr(miri, ignore)]
+fn concurrent_type_modifications_and_checks(config: &mut Config) -> Result<()> {
+    const THREADS_CHECKING: usize = 4;
+
+    let _ = env_logger::try_init();
+
+    let engine = Engine::new(&config)?;
+
+    let mut threads = Vec::new();
+    let keep_going = Arc::new(AtomicBool::new(true));
+
+    // Spawn a number of threads that are all working with a module and testing
+    // various properties about type-checks in the module.
+    for _ in 0..THREADS_CHECKING {
+        threads.push(std::thread::spawn({
+            let engine = engine.clone();
+            let keep_going = keep_going.clone();
+            move || -> Result<()> {
+                while keep_going.load(Relaxed) {
+                    let module = Module::new(
+                        &engine,
+                        r#"
+                            (module
+                                (func (export "f") (param funcref)
+                                    i32.const 0
+                                    local.get 0
+                                    table.set
+                                    i32.const 0
+                                    call_indirect (result f64)
+                                    drop
+                                )
+
+                                (table 1 funcref)
+                            )
+                        "#,
+                    )?;
+                    let ty = FuncType::new(&engine, [], [ValType::I32]);
+                    let mut store = Store::new(&engine, ());
+                    let func = Func::new(&mut store, ty, |_, _, results| {
+                        results[0] = Val::I32(0);
+                        Ok(())
+                    });
+
+                    let instance = Instance::new(&mut store, &module, &[])?;
+                    assert!(instance.get_typed_func::<(), i32>(&mut store, "f").is_err());
+                    assert!(instance.get_typed_func::<(), f64>(&mut store, "f").is_err());
+                    let f = instance.get_typed_func::<Func, ()>(&mut store, "f")?;
+                    let err = f.call(&mut store, func).unwrap_err();
+                    assert_eq!(err.downcast::<Trap>()?, Trap::BadSignature);
+                }
+                Ok(())
+            }
+        }));
+    }
+
+    // Spawn threads in the background creating/destroying `FuncType`s related
+    // to the module above.
+    threads.push(std::thread::spawn({
+        let engine = engine.clone();
+        let keep_going = keep_going.clone();
+        move || -> Result<()> {
+            while keep_going.load(Relaxed) {
+                FuncType::new(&engine, [], [ValType::F64]);
+            }
+            Ok(())
+        }
+    }));
+    threads.push(std::thread::spawn({
+        let engine = engine.clone();
+        let keep_going = keep_going.clone();
+        move || -> Result<()> {
+            while keep_going.load(Relaxed) {
+                FuncType::new(&engine, [], [ValType::I32]);
+            }
+            Ok(())
+        }
+    }));
+
+    std::thread::sleep(std::time::Duration::new(2, 0));
+    keep_going.store(false, Relaxed);
+
+    for thread in threads {
+        thread.join().unwrap()?;
+    }
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn validate_deterministic() {
+    let mut faulty_wat = "(module ".to_string();
+    for i in 0..100 {
+        faulty_wat.push_str(&format!(
+            "(func (export \"foo_{i}\") (result i64) (i64.add (i32.const 0) (i64.const 1)))"
+        ));
+    }
+    faulty_wat.push_str(")");
+    let binary = wat::parse_str(faulty_wat).unwrap();
+
+    let engine_parallel = Engine::new(&Config::new().parallel_compilation(true)).unwrap();
+    let result_parallel = Module::validate(&engine_parallel, &binary)
+        .unwrap_err()
+        .to_string();
+
+    let engine_sequential = Engine::new(&Config::new().parallel_compilation(false)).unwrap();
+    let result_sequential = Module::validate(&engine_sequential, &binary)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(result_parallel, result_sequential);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn deserialize_raw_avoids_copy() {
+    // target pulley; executing code directly requires virtual memory
+    let mut config = Config::new();
+    let target = format!("{}", Triple::pulley_host());
+    config.target(&target).unwrap();
+    let engine = Engine::new(&config).unwrap();
+    let wat = String::from(
+        r#"
+        (module
+            (func (export "add") (param $lhs i32) (param $rhs i32) (result i32)
+                (i32.add (local.get $lhs) (local.get $rhs))
+            )
+        )
+        "#,
+    );
+    let module = Module::new(&engine, &wat).unwrap();
+    let mut serialized = module.serialize().expect("Serialize failed");
+    let serialized_ptr = std::ptr::slice_from_raw_parts(serialized.as_mut_ptr(), serialized.len());
+    let module_memory = std::ptr::NonNull::new(serialized_ptr.cast_mut()).unwrap();
+    let deserialized_module =
+        unsafe { Module::deserialize_raw(&engine, module_memory).expect("Deserialize Failed") };
+
+    // assert that addresses haven't changed, no full copy
+    // TODO: haven't been able to find a pub way of doing this
+
+    // basic verification that the loaded module works
+    let mut store = Store::new(&engine, ());
+    let instance = Instance::new(&mut store, &deserialized_module, &[]).unwrap();
+    let f = instance
+        .get_typed_func::<(i32, i32), i32>(&mut store, "add")
+        .unwrap();
+    assert_eq!(f.call(&mut store, (26, 50)).unwrap(), 76);
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn deserialize_raw_fails_for_native() {
+    // target pulley
+    let engine = Engine::default();
+    let wat = String::from(
+        r#"
+        (module
+            (func (export "add") (param $lhs i32) (param $rhs i32) (result i32)
+                (i32.add (local.get $lhs) (local.get $rhs))
+            )
+        )
+        "#,
+    );
+    let module = Module::new(&engine, &wat).unwrap();
+    let mut serialized = module.serialize().expect("Serialize failed");
+    let serialized_ptr = std::ptr::slice_from_raw_parts(serialized.as_mut_ptr(), serialized.len());
+    let module_memory = std::ptr::NonNull::new(serialized_ptr.cast_mut()).unwrap();
+    let deserialize_res = unsafe { Module::deserialize_raw(&engine, module_memory) };
+
+    if engine.is_pulley() {
+        let _mod = deserialize_res.expect("Module should deserialize fine for pulley");
+    } else {
+        let err = deserialize_res.expect_err("Deserialization should fail for host target");
+        assert_eq!(
+            format!("{err}"),
+            "this target requires virtual memory to be enabled"
+        );
+    }
 }

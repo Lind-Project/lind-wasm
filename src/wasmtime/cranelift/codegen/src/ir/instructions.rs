@@ -18,10 +18,11 @@ use serde_derive::{Deserialize, Serialize};
 use crate::bitset::ScalarBitSet;
 use crate::entity;
 use crate::ir::{
-    self,
+    self, Block, ExceptionTable, ExceptionTables, FuncRef, MemFlags, SigRef, StackSlot, Type,
+    Value,
     condcodes::{FloatCC, IntCC},
     trapcode::TrapCode,
-    types, Block, FuncRef, MemFlags, SigRef, StackSlot, Type, Value,
+    types,
 };
 
 /// Some instructions use an external list of argument values because there is not enough space in
@@ -33,6 +34,8 @@ pub type ValueList = entity::EntityList<Value>;
 pub type ValueListPool = entity::ListPool<Value>;
 
 /// A pair of a Block and its arguments, stored in a single EntityList internally.
+///
+/// Block arguments are semantically a `BlockArg`.
 ///
 /// NOTE: We don't expose either value_to_block or block_to_value outside of this module because
 /// this operation is not generally safe. However, as the two share the same underlying layout,
@@ -69,10 +72,14 @@ impl BlockCall {
     }
 
     /// Construct a BlockCall with the given block and arguments.
-    pub fn new(block: Block, args: &[Value], pool: &mut ValueListPool) -> Self {
+    pub fn new(
+        block: Block,
+        args: impl IntoIterator<Item = BlockArg>,
+        pool: &mut ValueListPool,
+    ) -> Self {
         let mut values = ValueList::default();
         values.push(Self::block_to_value(block), pool);
-        values.extend(args.iter().copied(), pool);
+        values.extend(args.into_iter().map(|arg| arg.encode_as_value()), pool);
         Self { values }
     }
 
@@ -88,18 +95,36 @@ impl BlockCall {
     }
 
     /// Append an argument to the block args.
-    pub fn append_argument(&mut self, arg: Value, pool: &mut ValueListPool) {
-        self.values.push(arg, pool);
+    pub fn append_argument(&mut self, arg: impl Into<BlockArg>, pool: &mut ValueListPool) {
+        self.values.push(arg.into().encode_as_value(), pool);
     }
 
-    /// Return a slice for the arguments of this block.
-    pub fn args_slice<'a>(&self, pool: &'a ValueListPool) -> &'a [Value] {
-        &self.values.as_slice(pool)[1..]
+    /// Return the length of the argument list.
+    pub fn len(&self, pool: &ValueListPool) -> usize {
+        self.values.len(pool) - 1
     }
 
-    /// Return a slice for the arguments of this block.
-    pub fn args_slice_mut<'a>(&'a mut self, pool: &'a mut ValueListPool) -> &'a mut [Value] {
-        &mut self.values.as_mut_slice(pool)[1..]
+    /// Return an iterator over the arguments of this block.
+    pub fn args<'a>(
+        &self,
+        pool: &'a ValueListPool,
+    ) -> impl ExactSizeIterator<Item = BlockArg> + DoubleEndedIterator<Item = BlockArg> + use<'a>
+    {
+        self.values.as_slice(pool)[1..]
+            .iter()
+            .map(|value| BlockArg::decode_from_value(*value))
+    }
+
+    /// Traverse the arguments with a closure that can mutate them.
+    pub fn update_args<F: FnMut(BlockArg) -> BlockArg>(
+        &mut self,
+        pool: &mut ValueListPool,
+        mut f: F,
+    ) {
+        for raw in self.values.as_mut_slice(pool)[1..].iter_mut() {
+            let new = f(BlockArg::decode_from_value(*raw));
+            *raw = new.encode_as_value();
+        }
     }
 
     /// Remove the argument at ix from the argument list.
@@ -113,11 +138,17 @@ impl BlockCall {
     }
 
     /// Appends multiple elements to the arguments.
-    pub fn extend<I>(&mut self, elements: I, pool: &mut ValueListPool)
+    pub fn extend<I, T>(&mut self, elements: I, pool: &mut ValueListPool)
     where
-        I: IntoIterator<Item = Value>,
+        I: IntoIterator<Item = T>,
+        T: Into<BlockArg>,
     {
-        self.values.extend(elements, pool)
+        self.values.extend(
+            elements
+                .into_iter()
+                .map(|elem| elem.into().encode_as_value()),
+            pool,
+        )
     }
 
     /// Return a value that can display this block call.
@@ -144,18 +175,105 @@ pub struct DisplayBlockCall<'a> {
 impl<'a> Display for DisplayBlockCall<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.block.block(&self.pool))?;
-        let args = self.block.args_slice(&self.pool);
-        if !args.is_empty() {
+        if self.block.len(self.pool) > 0 {
             write!(f, "(")?;
-            for (ix, arg) in args.iter().enumerate() {
+            for (ix, arg) in self.block.args(self.pool).enumerate() {
                 if ix > 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "{}", arg)?;
+                write!(f, "{arg}")?;
             }
             write!(f, ")")?;
         }
         Ok(())
+    }
+}
+
+/// A `BlockArg` is a sum type of `Value`, `TryCallRet`, and
+/// `TryCallExn`. The latter two are values that are generated "on the
+/// edge" out of a `try_call` instruction into a successor block. We
+/// use special arguments rather than special values for these because
+/// they are not definable as SSA values at a certain program point --
+/// only when the `BlockCall` is executed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BlockArg {
+    /// An ordinary value, usable at the branch instruction using this
+    /// `BlockArg`, whose value is passed as an argument.
+    Value(Value),
+
+    /// A return value of a `try_call`'s called function. Signatures
+    /// allow multiple return values, so this carries an index. This
+    /// may be used only on the normal (non-exceptional) `BlockCall`
+    /// out of a `try_call` or `try_call_indirect` instruction.
+    TryCallRet(u32),
+
+    /// An exception payload value of a `try_call`. Some ABIs may
+    /// allow multiple payload values, so this carries an index. Its
+    /// type is defined by the ABI of the called function. This may be
+    /// used only on an exceptional `BlockCall` out of a `try_call` or
+    /// `try_call_indirect` instruction.
+    TryCallExn(u32),
+}
+
+impl BlockArg {
+    /// Encode this block argument as a `Value` for storage in the
+    /// value pool. Internal to `BlockCall`, must not be used
+    /// elsewhere to avoid exposing the raw bit encoding.
+    fn encode_as_value(&self) -> Value {
+        let (tag, payload) = match *self {
+            BlockArg::Value(v) => (0, v.as_bits()),
+            BlockArg::TryCallRet(i) => (1, i),
+            BlockArg::TryCallExn(i) => (2, i),
+        };
+        assert!(payload < (1 << 30));
+        let raw = (tag << 30) | payload;
+        Value::from_bits(raw)
+    }
+
+    /// Decode a raw `Value` encoding of this block argument.
+    fn decode_from_value(v: Value) -> Self {
+        let raw = v.as_u32();
+        let tag = raw >> 30;
+        let payload = raw & ((1 << 30) - 1);
+        match tag {
+            0 => BlockArg::Value(Value::from_bits(payload)),
+            1 => BlockArg::TryCallRet(payload),
+            2 => BlockArg::TryCallExn(payload),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Return this argument as a `Value`, if it is one, or `None`
+    /// otherwise.
+    pub fn as_value(&self) -> Option<Value> {
+        match *self {
+            BlockArg::Value(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Update the contained value, if any.
+    pub fn map_value<F: FnMut(Value) -> Value>(&self, mut f: F) -> Self {
+        match *self {
+            BlockArg::Value(v) => BlockArg::Value(f(v)),
+            other => other,
+        }
+    }
+}
+
+impl Display for BlockArg {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            BlockArg::Value(v) => write!(f, "{v}"),
+            BlockArg::TryCallRet(i) => write!(f, "ret{i}"),
+            BlockArg::TryCallExn(i) => write!(f, "exn{i}"),
+        }
+    }
+}
+
+impl From<Value> for BlockArg {
+    fn from(value: Value) -> BlockArg {
+        BlockArg::Value(value)
     }
 }
 
@@ -192,6 +310,14 @@ impl Opcode {
     /// Panic if this is called on `NotAnOpcode`.
     pub fn constraints(self) -> OpcodeConstraints {
         OPCODE_CONSTRAINTS[self as usize - 1]
+    }
+
+    /// Is this instruction a GC safepoint?
+    ///
+    /// Safepoints are all kinds of calls, except for tail calls.
+    #[inline]
+    pub fn is_safepoint(self) -> bool {
+        self.is_call() && !self.is_return()
     }
 }
 
@@ -274,9 +400,9 @@ impl Display for VariableArgs {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         for (i, val) in self.0.iter().enumerate() {
             if i == 0 {
-                write!(fmt, "{}", val)?;
+                write!(fmt, "{val}")?;
             } else {
-                write!(fmt, ", {}", val)?;
+                write!(fmt, ", {val}")?;
             }
         }
         Ok(())
@@ -297,13 +423,18 @@ impl InstructionData {
     /// Get the destinations of this instruction, if it's a branch.
     ///
     /// `br_table` returns the empty slice.
-    pub fn branch_destination<'a>(&'a self, jump_tables: &'a ir::JumpTables) -> &[BlockCall] {
+    pub fn branch_destination<'a>(
+        &'a self,
+        jump_tables: &'a ir::JumpTables,
+        exception_tables: &'a ir::ExceptionTables,
+    ) -> &'a [BlockCall] {
         match self {
-            Self::Jump {
-                ref destination, ..
-            } => std::slice::from_ref(destination),
+            Self::Jump { destination, .. } => core::slice::from_ref(destination),
             Self::Brif { blocks, .. } => blocks.as_slice(),
             Self::BranchTable { table, .. } => jump_tables.get(*table).unwrap().all_branches(),
+            Self::TryCall { exception, .. } | Self::TryCallIndirect { exception, .. } => {
+                exception_tables.get(*exception).unwrap().all_branches()
+            }
             _ => {
                 debug_assert!(!self.opcode().is_branch());
                 &[]
@@ -317,15 +448,19 @@ impl InstructionData {
     pub fn branch_destination_mut<'a>(
         &'a mut self,
         jump_tables: &'a mut ir::JumpTables,
-    ) -> &mut [BlockCall] {
+        exception_tables: &'a mut ir::ExceptionTables,
+    ) -> &'a mut [BlockCall] {
         match self {
-            Self::Jump {
-                ref mut destination,
-                ..
-            } => std::slice::from_mut(destination),
+            Self::Jump { destination, .. } => core::slice::from_mut(destination),
             Self::Brif { blocks, .. } => blocks.as_mut_slice(),
             Self::BranchTable { table, .. } => {
                 jump_tables.get_mut(*table).unwrap().all_branches_mut()
+            }
+            Self::TryCall { exception, .. } | Self::TryCallIndirect { exception, .. } => {
+                exception_tables
+                    .get_mut(*exception)
+                    .unwrap()
+                    .all_branches_mut()
             }
             _ => {
                 debug_assert!(!self.opcode().is_branch());
@@ -340,15 +475,23 @@ impl InstructionData {
         &mut self,
         pool: &mut ValueListPool,
         jump_tables: &mut ir::JumpTables,
+        exception_tables: &mut ir::ExceptionTables,
         mut f: impl FnMut(Value) -> Value,
     ) {
+        // Map all normal operator args.
         for arg in self.arguments_mut(pool) {
             *arg = f(*arg);
         }
 
-        for block in self.branch_destination_mut(jump_tables) {
-            for arg in block.args_slice_mut(pool) {
-                *arg = f(*arg);
+        // Map all BlockCall args.
+        for block in self.branch_destination_mut(jump_tables, exception_tables) {
+            block.update_args(pool, |arg| arg.map_value(|val| f(val)));
+        }
+
+        // Map all context items.
+        if let Some(et) = self.exception_table() {
+            for ctx in exception_tables[et].contexts_mut() {
+                *ctx = f(*ctx);
             }
         }
     }
@@ -357,7 +500,9 @@ impl InstructionData {
     /// `None`.
     pub fn trap_code(&self) -> Option<TrapCode> {
         match *self {
-            Self::CondTrap { code, .. } | Self::Trap { code, .. } => Some(code),
+            Self::CondTrap { code, .. }
+            | Self::IntAddTrap { code, .. }
+            | Self::Trap { code, .. } => Some(code),
             _ => None,
         }
     }
@@ -385,7 +530,9 @@ impl InstructionData {
     /// trap code. Otherwise, return `None`.
     pub fn trap_code_mut(&mut self) -> Option<&mut TrapCode> {
         match self {
-            Self::CondTrap { code, .. } | Self::Trap { code, .. } => Some(code),
+            Self::CondTrap { code, .. }
+            | Self::IntAddTrap { code, .. }
+            | Self::Trap { code, .. } => Some(code),
             _ => None,
         }
     }
@@ -434,7 +581,11 @@ impl InstructionData {
     /// Return information about a call instruction.
     ///
     /// Any instruction that can call another function reveals its call signature here.
-    pub fn analyze_call<'a>(&'a self, pool: &'a ValueListPool) -> CallInfo<'a> {
+    pub fn analyze_call<'a>(
+        &'a self,
+        pool: &'a ValueListPool,
+        exception_tables: &ExceptionTables,
+    ) -> CallInfo<'a> {
         match *self {
             Self::Call {
                 func_ref, ref args, ..
@@ -442,6 +593,31 @@ impl InstructionData {
             Self::CallIndirect {
                 sig_ref, ref args, ..
             } => CallInfo::Indirect(sig_ref, &args.as_slice(pool)[1..]),
+            Self::TryCall {
+                func_ref,
+                ref args,
+                exception,
+                ..
+            } => {
+                let exdata = &exception_tables[exception];
+                CallInfo::DirectWithSig(func_ref, exdata.signature(), args.as_slice(pool))
+            }
+            Self::TryCallIndirect {
+                exception,
+                ref args,
+                ..
+            } => {
+                let exdata = &exception_tables[exception];
+                CallInfo::Indirect(exdata.signature(), &args.as_slice(pool)[1..])
+            }
+            Self::Ternary {
+                opcode: Opcode::StackSwitch,
+                ..
+            } => {
+                // `StackSwitch` is not actually a call, but has the .call() side
+                // effect as it continues execution elsewhere.
+                CallInfo::NotACall
+            }
             _ => {
                 debug_assert!(!self.opcode().is_call());
                 CallInfo::NotACall
@@ -450,7 +626,7 @@ impl InstructionData {
     }
 
     #[inline]
-    pub(crate) fn sign_extend_immediates(&mut self, ctrl_typevar: Type) {
+    pub(crate) fn mask_immediates(&mut self, ctrl_typevar: Type) {
         if ctrl_typevar.is_invalid() {
             return;
         }
@@ -458,13 +634,16 @@ impl InstructionData {
         let bit_width = ctrl_typevar.bits();
 
         match self {
+            Self::UnaryImm { opcode: _, imm } => {
+                *imm = imm.mask_to_width(bit_width);
+            }
             Self::BinaryImm64 {
                 opcode,
                 arg: _,
                 imm,
             } => {
                 if *opcode == Opcode::SdivImm || *opcode == Opcode::SremImm {
-                    imm.sign_extend_from_width(bit_width);
+                    *imm = imm.mask_to_width(bit_width);
                 }
             }
             Self::IntCompareImm {
@@ -475,10 +654,20 @@ impl InstructionData {
             } => {
                 debug_assert_eq!(*opcode, Opcode::IcmpImm);
                 if cond.unsigned() != *cond {
-                    imm.sign_extend_from_width(bit_width);
+                    *imm = imm.mask_to_width(bit_width);
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Get the exception table, if any, associated with this instruction.
+    pub fn exception_table(&self) -> Option<ExceptionTable> {
+        match self {
+            Self::TryCall { exception, .. } | Self::TryCallIndirect { exception, .. } => {
+                Some(*exception)
+            }
+            _ => None,
         }
     }
 }
@@ -494,6 +683,11 @@ pub enum CallInfo<'a> {
 
     /// This is an indirect call with the specified signature. See `DataFlowGraph.signatures`.
     Indirect(SigRef, &'a [Value]),
+
+    /// This is a direct call to an external function declared in the
+    /// preamble, but the signature is also known by other means:
+    /// e.g., from an exception table entry.
+    DirectWithSig(FuncRef, SigRef, &'a [Value]),
 }
 
 /// Value type constraints for a given opcode.
@@ -589,7 +783,7 @@ impl OpcodeConstraints {
         debug_assert!(n < self.num_fixed_results(), "Invalid result index");
         match OPERAND_CONSTRAINTS[self.constraint_offset() + n].resolve(ctrl_type) {
             ResolvedConstraint::Bound(t) => t,
-            ResolvedConstraint::Free(ts) => panic!("Result constraints can't be free: {:?}", ts),
+            ResolvedConstraint::Free(ts) => panic!("Result constraints can't be free: {ts:?}"),
         }
     }
 
@@ -631,8 +825,6 @@ pub struct ValueTypeSet {
     pub ints: BitSet8,
     /// Allowed float widths
     pub floats: BitSet8,
-    /// Allowed ref widths
-    pub refs: BitSet8,
     /// Allowed dynamic vectors minimum lane sizes
     pub dynamic_lanes: BitSet16,
 }
@@ -647,8 +839,6 @@ impl ValueTypeSet {
             self.ints.contains(l2b)
         } else if scalar.is_float() {
             self.floats.contains(l2b)
-        } else if scalar.is_ref() {
-            self.refs.contains(l2b)
         } else {
             false
         }
@@ -794,10 +984,12 @@ impl OperandConstraint {
                     tys.ints = BitSet8::from_range(3, ctrl_type_bits as u8);
                 } else if ctrl_type.is_float() {
                     // The upper bound in from_range is exclusive, and we want to exclude the
-                    // control type to construct the interval of [F32, ctrl_type).
-                    tys.floats = BitSet8::from_range(5, ctrl_type_bits as u8);
+                    // control type to construct the interval of [F16, ctrl_type).
+                    tys.floats = BitSet8::from_range(4, ctrl_type_bits as u8);
                 } else {
-                    panic!("The Narrower constraint only operates on floats or ints");
+                    panic!(
+                        "The Narrower constraint only operates on floats or ints, got {ctrl_type:?}"
+                    );
                 }
                 ResolvedConstraint::Free(tys)
             }
@@ -822,12 +1014,15 @@ impl OperandConstraint {
                         tys.ints = BitSet8::from_range(lower_bound, 8);
                     }
                 } else if ctrl_type.is_float() {
-                    // The interval should include all float types wider than `ctrl_type`, so we
-                    // use `2^7` as the upper bound, and add one to the bits of `ctrl_type` to
-                    // define the interval `(ctrl_type, F64]`.
-                    tys.floats = BitSet8::from_range(ctrl_type_bits as u8 + 1, 7);
+                    // Same as above but for `tys.floats`, as the largest float type is F128.
+                    let lower_bound = ctrl_type_bits as u8 + 1;
+                    if lower_bound < BitSet8::capacity() {
+                        tys.floats = BitSet8::from_range(lower_bound, 8);
+                    }
                 } else {
-                    panic!("The Wider constraint only operates on floats or ints");
+                    panic!(
+                        "The Wider constraint only operates on floats or ints, got {ctrl_type:?}"
+                    );
                 }
 
                 ResolvedConstraint::Free(tys)
@@ -845,10 +1040,117 @@ pub enum ResolvedConstraint {
     Free(ValueTypeSet),
 }
 
+/// A trait to map some functions over each of the entities within an
+/// instruction, when paired with `InstructionData::map`.
+pub trait InstructionMapper {
+    /// Map a function over a `Value`.
+    fn map_value(&mut self, value: Value) -> Value;
+
+    /// Map a function over a `ValueList`.
+    fn map_value_list(&mut self, value_list: ValueList) -> ValueList;
+
+    /// Map a function over a `GlobalValue`.
+    fn map_global_value(&mut self, global_value: ir::GlobalValue) -> ir::GlobalValue;
+
+    /// Map a function over a `JumpTable`.
+    fn map_jump_table(&mut self, jump_table: ir::JumpTable) -> ir::JumpTable;
+
+    /// Map a function over an `ExceptionTable`.
+    fn map_exception_table(&mut self, exception_table: ExceptionTable) -> ExceptionTable;
+
+    /// Map a function over a `BlockCall`.
+    fn map_block_call(&mut self, block_call: BlockCall) -> BlockCall;
+
+    /// Map a function over a `Block`.
+    fn map_block(&mut self, block: Block) -> Block;
+
+    /// Map a function over a `FuncRef`.
+    fn map_func_ref(&mut self, func_ref: FuncRef) -> FuncRef;
+
+    /// Map a function over a `SigRef`.
+    fn map_sig_ref(&mut self, sig_ref: SigRef) -> SigRef;
+
+    /// Map a function over a `StackSlot`.
+    fn map_stack_slot(&mut self, stack_slot: StackSlot) -> StackSlot;
+
+    /// Map a function over a `DynamicStackSlot`.
+    fn map_dynamic_stack_slot(
+        &mut self,
+        dynamic_stack_slot: ir::DynamicStackSlot,
+    ) -> ir::DynamicStackSlot;
+
+    /// Map a function over a `Constant`.
+    fn map_constant(&mut self, constant: ir::Constant) -> ir::Constant;
+
+    /// Map a function over an `Immediate`.
+    fn map_immediate(&mut self, immediate: ir::Immediate) -> ir::Immediate;
+}
+
+impl<'a, T> InstructionMapper for &'a mut T
+where
+    T: InstructionMapper,
+{
+    fn map_value(&mut self, value: Value) -> Value {
+        (**self).map_value(value)
+    }
+
+    fn map_value_list(&mut self, value_list: ValueList) -> ValueList {
+        (**self).map_value_list(value_list)
+    }
+
+    fn map_global_value(&mut self, global_value: ir::GlobalValue) -> ir::GlobalValue {
+        (**self).map_global_value(global_value)
+    }
+
+    fn map_jump_table(&mut self, jump_table: ir::JumpTable) -> ir::JumpTable {
+        (**self).map_jump_table(jump_table)
+    }
+
+    fn map_exception_table(&mut self, exception_table: ExceptionTable) -> ExceptionTable {
+        (**self).map_exception_table(exception_table)
+    }
+
+    fn map_block_call(&mut self, block_call: BlockCall) -> BlockCall {
+        (**self).map_block_call(block_call)
+    }
+
+    fn map_block(&mut self, block: Block) -> Block {
+        (**self).map_block(block)
+    }
+
+    fn map_func_ref(&mut self, func_ref: FuncRef) -> FuncRef {
+        (**self).map_func_ref(func_ref)
+    }
+
+    fn map_sig_ref(&mut self, sig_ref: SigRef) -> SigRef {
+        (**self).map_sig_ref(sig_ref)
+    }
+
+    fn map_stack_slot(&mut self, stack_slot: StackSlot) -> StackSlot {
+        (**self).map_stack_slot(stack_slot)
+    }
+
+    fn map_dynamic_stack_slot(
+        &mut self,
+        dynamic_stack_slot: ir::DynamicStackSlot,
+    ) -> ir::DynamicStackSlot {
+        (**self).map_dynamic_stack_slot(dynamic_stack_slot)
+    }
+
+    fn map_constant(&mut self, constant: ir::Constant) -> ir::Constant {
+        (**self).map_constant(constant)
+    }
+
+    fn map_immediate(&mut self, immediate: ir::Immediate) -> ir::Immediate {
+        (**self).map_immediate(immediate)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use alloc::string::ToString;
+    use ir::{DynamicStackSlot, GlobalValue, JumpTable};
 
     #[test]
     fn inst_data_is_copy() {
@@ -860,7 +1162,7 @@ mod tests {
     fn inst_data_size() {
         // The size of `InstructionData` is performance sensitive, so make sure
         // we don't regress it unintentionally.
-        assert_eq!(std::mem::size_of::<InstructionData>(), 16);
+        assert_eq!(core::mem::size_of::<InstructionData>(), 16);
     }
 
     #[test]
@@ -956,7 +1258,6 @@ mod tests {
             lanes: BitSet16::from_range(0, 8),
             ints: BitSet8::from_range(4, 7),
             floats: BitSet8::from_range(0, 0),
-            refs: BitSet8::from_range(5, 7),
             dynamic_lanes: BitSet16::from_range(0, 4),
         };
         assert!(!vts.contains(I8));
@@ -964,16 +1265,15 @@ mod tests {
         assert!(vts.contains(I64));
         assert!(vts.contains(I32X4));
         assert!(vts.contains(I32X4XN));
+        assert!(!vts.contains(F16));
         assert!(!vts.contains(F32));
-        assert!(vts.contains(R32));
-        assert!(vts.contains(R64));
+        assert!(!vts.contains(F128));
         assert_eq!(vts.example().to_string(), "i32");
 
         let vts = ValueTypeSet {
             lanes: BitSet16::from_range(0, 8),
             ints: BitSet8::from_range(0, 0),
             floats: BitSet8::from_range(5, 7),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert_eq!(vts.example().to_string(), "f32");
@@ -982,7 +1282,6 @@ mod tests {
             lanes: BitSet16::from_range(1, 8),
             ints: BitSet8::from_range(0, 0),
             floats: BitSet8::from_range(5, 7),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert_eq!(vts.example().to_string(), "f32x2");
@@ -991,7 +1290,6 @@ mod tests {
             lanes: BitSet16::from_range(2, 8),
             ints: BitSet8::from_range(3, 7),
             floats: BitSet8::from_range(0, 0),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert_eq!(vts.example().to_string(), "i32x4");
@@ -1001,12 +1299,242 @@ mod tests {
             lanes: BitSet16::from_range(0, 9),
             ints: BitSet8::from_range(3, 7),
             floats: BitSet8::from_range(0, 0),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert!(vts.contains(I32));
         assert!(vts.contains(I32X4));
-        assert!(!vts.contains(R32));
-        assert!(!vts.contains(R64));
+    }
+
+    #[test]
+    fn instruction_data_map() {
+        struct TestMapper;
+
+        impl InstructionMapper for TestMapper {
+            fn map_value(&mut self, value: Value) -> Value {
+                Value::from_u32(value.as_u32() + 1)
+            }
+
+            fn map_value_list(&mut self, _value_list: ValueList) -> ValueList {
+                ValueList::new()
+            }
+
+            fn map_global_value(&mut self, global_value: ir::GlobalValue) -> ir::GlobalValue {
+                GlobalValue::from_u32(global_value.as_u32() + 1)
+            }
+
+            fn map_jump_table(&mut self, jump_table: ir::JumpTable) -> ir::JumpTable {
+                JumpTable::from_u32(jump_table.as_u32() + 1)
+            }
+
+            fn map_exception_table(&mut self, exception_table: ExceptionTable) -> ExceptionTable {
+                ExceptionTable::from_u32(exception_table.as_u32() + 1)
+            }
+
+            fn map_block_call(&mut self, _block_call: BlockCall) -> BlockCall {
+                let block = Block::from_u32(42);
+                let mut pool = ValueListPool::new();
+                BlockCall::new(block, [], &mut pool)
+            }
+
+            fn map_block(&mut self, block: Block) -> Block {
+                Block::from_u32(block.as_u32() + 1)
+            }
+
+            fn map_func_ref(&mut self, func_ref: FuncRef) -> FuncRef {
+                FuncRef::from_u32(func_ref.as_u32() + 1)
+            }
+
+            fn map_sig_ref(&mut self, sig_ref: SigRef) -> SigRef {
+                SigRef::from_u32(sig_ref.as_u32() + 1)
+            }
+
+            fn map_stack_slot(&mut self, stack_slot: StackSlot) -> StackSlot {
+                StackSlot::from_u32(stack_slot.as_u32() + 1)
+            }
+
+            fn map_dynamic_stack_slot(
+                &mut self,
+                dynamic_stack_slot: ir::DynamicStackSlot,
+            ) -> ir::DynamicStackSlot {
+                DynamicStackSlot::from_u32(dynamic_stack_slot.as_u32() + 1)
+            }
+
+            fn map_constant(&mut self, constant: ir::Constant) -> ir::Constant {
+                ir::Constant::from_u32(constant.as_u32() + 1)
+            }
+
+            fn map_immediate(&mut self, immediate: ir::Immediate) -> ir::Immediate {
+                ir::Immediate::from_u32(immediate.as_u32() + 1)
+            }
+        }
+
+        let mut pool = ValueListPool::new();
+        let map = |inst: InstructionData| inst.map(TestMapper);
+
+        // Mapping `Value`s.
+        assert_eq!(
+            map(InstructionData::Binary {
+                opcode: Opcode::Iadd,
+                args: [Value::from_u32(10), Value::from_u32(20)]
+            }),
+            InstructionData::Binary {
+                opcode: Opcode::Iadd,
+                args: [Value::from_u32(11), Value::from_u32(21)]
+            }
+        );
+
+        // Mapping `ValueList`s and `FuncRef`s.
+        let mut args = ValueList::new();
+        args.push(Value::from_u32(42), &mut pool);
+        let func_ref = FuncRef::from_u32(99);
+        let inst = map(InstructionData::Call {
+            opcode: Opcode::Call,
+            args,
+            func_ref,
+        });
+        let InstructionData::Call {
+            opcode: Opcode::Call,
+            args,
+            func_ref,
+        } = inst
+        else {
+            panic!()
+        };
+        assert!(args.is_empty());
+        assert_eq!(func_ref, FuncRef::from_u32(100));
+
+        // Mapping `GlobalValue`s.
+        assert_eq!(
+            map(InstructionData::UnaryGlobalValue {
+                opcode: Opcode::GlobalValue,
+                global_value: GlobalValue::from_u32(4),
+            }),
+            InstructionData::UnaryGlobalValue {
+                opcode: Opcode::GlobalValue,
+                global_value: GlobalValue::from_u32(5),
+            }
+        );
+
+        // Mapping `JumpTable`s.
+        assert_eq!(
+            map(InstructionData::BranchTable {
+                opcode: Opcode::BrTable,
+                arg: Value::from_u32(0),
+                table: JumpTable::from_u32(1),
+            }),
+            InstructionData::BranchTable {
+                opcode: Opcode::BrTable,
+                arg: Value::from_u32(1),
+                table: JumpTable::from_u32(2),
+            }
+        );
+
+        // Mapping `ExceptionTable`s.
+        assert_eq!(
+            map(InstructionData::TryCall {
+                opcode: Opcode::TryCall,
+                args,
+                func_ref: FuncRef::from_u32(0),
+                exception: ExceptionTable::from_u32(1),
+            }),
+            InstructionData::TryCall {
+                opcode: Opcode::TryCall,
+                args,
+                func_ref: FuncRef::from_u32(1),
+                exception: ExceptionTable::from_u32(2),
+            }
+        );
+
+        // Mapping `BlockCall`s.
+        assert_eq!(
+            map(InstructionData::Jump {
+                opcode: Opcode::Jump,
+                destination: BlockCall::new(Block::from_u32(99), [], &mut pool),
+            }),
+            map(InstructionData::Jump {
+                opcode: Opcode::Jump,
+                destination: BlockCall::new(Block::from_u32(42), [], &mut pool),
+            })
+        );
+
+        // Mapping `Block`s.
+        assert_eq!(
+            map(InstructionData::ExceptionHandlerAddress {
+                opcode: Opcode::GetExceptionHandlerAddress,
+                block: Block::from_u32(1),
+                imm: 0.into(),
+            }),
+            InstructionData::ExceptionHandlerAddress {
+                opcode: Opcode::GetExceptionHandlerAddress,
+                block: Block::from_u32(2),
+                imm: 0.into(),
+            },
+        );
+
+        // Mapping `SigRef`s.
+        assert_eq!(
+            map(InstructionData::CallIndirect {
+                opcode: Opcode::CallIndirect,
+                args,
+                sig_ref: SigRef::from_u32(11)
+            }),
+            InstructionData::CallIndirect {
+                opcode: Opcode::CallIndirect,
+                args: ValueList::new(),
+                sig_ref: SigRef::from_u32(12)
+            }
+        );
+
+        // Mapping `StackSlot`s.
+        assert_eq!(
+            map(InstructionData::StackLoad {
+                opcode: Opcode::StackLoad,
+                stack_slot: StackSlot::from_u32(0),
+                offset: 0.into()
+            }),
+            InstructionData::StackLoad {
+                opcode: Opcode::StackLoad,
+                stack_slot: StackSlot::from_u32(1),
+                offset: 0.into()
+            },
+        );
+
+        // Mapping `DynamicStackSlot`s.
+        assert_eq!(
+            map(InstructionData::DynamicStackLoad {
+                opcode: Opcode::DynamicStackLoad,
+                dynamic_stack_slot: DynamicStackSlot::from_u32(0),
+            }),
+            InstructionData::DynamicStackLoad {
+                opcode: Opcode::DynamicStackLoad,
+                dynamic_stack_slot: DynamicStackSlot::from_u32(1),
+            },
+        );
+
+        // Mapping `Constant`s
+        assert_eq!(
+            map(InstructionData::UnaryConst {
+                opcode: ir::Opcode::Vconst,
+                constant_handle: ir::Constant::from_u32(2)
+            }),
+            InstructionData::UnaryConst {
+                opcode: ir::Opcode::Vconst,
+                constant_handle: ir::Constant::from_u32(3)
+            },
+        );
+
+        // Mapping `Immediate`s
+        assert_eq!(
+            map(InstructionData::Shuffle {
+                opcode: ir::Opcode::Shuffle,
+                args: [Value::from_u32(0), Value::from_u32(1)],
+                imm: ir::Immediate::from_u32(41),
+            }),
+            InstructionData::Shuffle {
+                opcode: ir::Opcode::Shuffle,
+                args: [Value::from_u32(1), Value::from_u32(2)],
+                imm: ir::Immediate::from_u32(42),
+            },
+        );
     }
 }

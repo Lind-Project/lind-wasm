@@ -1,9 +1,10 @@
 [package]
-name = "wasmtime-explorer"
+name = "wasmtime-internal-explorer"
 authors.workspace = true
-description = "Compiler explorer for Wasmtime and Cranelift"
+description = "INTERNAL: Compiler explorer for Wasmtime and Cranelift"
 documentation = "https://docs.rs/wasmtime-explorer/"
 edition.workspace = true
+rust-version.workspace = true
 license = "Apache-2.0 WITH LLVM-exception"
 repository = "https://github.com/bytecodealliance/wasmtime"
 version.workspace = true
@@ -12,12 +13,11 @@ version.workspace = true
 workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 capstone = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
 serde_json = { workspace = true }
 target-lexicon = { workspace = true, features = ['std'] }
 wasmprinter = { workspace = true }
-wasmtime = { workspace = true, features = ["cranelift", "runtime"] }
-wasmtime-environ = { workspace = true }
+wasmtime = { workspace = true, features = ["anyhow", "cranelift", "runtime"] }
+wasmtime-environ = { workspace = true, features = ["anyhow"] }

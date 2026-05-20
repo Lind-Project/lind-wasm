@@ -1,4 +1,4 @@
-use crate::{wasm_externtype_t, wasm_valtype_t, CExternType};
+use crate::{CExternType, wasm_externtype_t, wasm_valtype_t};
 use once_cell::unsync::OnceCell;
 use wasmtime::GlobalType;
 

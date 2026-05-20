@@ -18,15 +18,13 @@ extern crate std;
 
 #[cfg(not(feature = "std"))]
 use hashbrown::{
-    hash_map,
+    HashMap, hash_map,
     hash_map::Entry::{Occupied, Vacant},
-    HashMap,
 };
 #[cfg(feature = "std")]
 use std::collections::{
-    hash_map,
+    HashMap, hash_map,
     hash_map::Entry::{Occupied, Vacant},
-    HashMap,
 };
 
 mod code_translator;

@@ -88,6 +88,7 @@ pub mod table;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
+pub use anyhow::Error as EnvError;
 pub use cap_rand::RngCore;
 pub use clocks::{SystemTimeSpec, WasiClocks, WasiMonotonicClock, WasiSystemClock};
 pub use ctx::WasiCtx;
@@ -110,7 +111,7 @@ macro_rules! define_wasi {
 
     use wasmtime::Linker;
 
-    pub fn add_to_linker<T, U>(
+    pub fn add_to_linker<T: 'static, U>(
         linker: &mut Linker<T>,
         get_cx: impl Fn(&mut T) -> &mut U + Send + Sync + Copy + 'static,
     ) -> anyhow::Result<()>

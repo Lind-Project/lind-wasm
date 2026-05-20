@@ -3,16 +3,17 @@
 //! The `Function` struct defined in this module owns all of its basic blocks and
 //! instructions.
 
+use crate::HashMap;
 use crate::entity::{PrimaryMap, SecondaryMap};
+use crate::ir::DebugTags;
 use crate::ir::{
-    self, pcc::Fact, Block, DataFlowGraph, DynamicStackSlot, DynamicStackSlotData,
-    DynamicStackSlots, DynamicType, ExtFuncData, FuncRef, GlobalValue, GlobalValueData, Inst,
-    JumpTable, JumpTableData, Layout, MemoryType, MemoryTypeData, Opcode, SigRef, Signature,
-    SourceLocs, StackSlot, StackSlotData, StackSlots, Type,
+    self, Block, DataFlowGraph, DynamicStackSlot, DynamicStackSlotData, DynamicStackSlots,
+    DynamicType, ExtFuncData, FuncRef, GlobalValue, GlobalValueData, Inst, JumpTable,
+    JumpTableData, Layout, SigRef, Signature, SourceLocs, StackSlot, StackSlotData, StackSlots,
+    Type,
 };
 use crate::isa::CallConv;
-use crate::write::write_function;
-use crate::HashMap;
+use crate::write::{write_function, write_function_spec};
 #[cfg(feature = "enable-serde")]
 use alloc::string::String;
 use core::fmt;
@@ -172,12 +173,6 @@ pub struct FunctionStencil {
     /// Global values referenced.
     pub global_values: PrimaryMap<ir::GlobalValue, ir::GlobalValueData>,
 
-    /// Global value proof-carrying-code facts.
-    pub global_value_facts: SecondaryMap<ir::GlobalValue, Option<Fact>>,
-
-    /// Memory types for proof-carrying code.
-    pub memory_types: PrimaryMap<ir::MemoryType, ir::MemoryTypeData>,
-
     /// Data flow graph containing the primary definition of all instructions, blocks and values.
     pub dfg: DataFlowGraph,
 
@@ -189,6 +184,22 @@ pub struct FunctionStencil {
     /// Track the original source location for each instruction. The source locations are not
     /// interpreted by Cranelift, only preserved.
     pub srclocs: SourceLocs,
+
+    /// Opaque debug-info tags on sequence-point and call
+    /// instructions.
+    ///
+    /// These tags are not interpreted by Cranelift, and are passed
+    /// through to compilation-result metadata. The only semantic
+    /// structure that Cranelift imposes is that when inlining, it
+    /// prepends the callsite call instruction's tags to the tags on
+    /// inlined instructions.
+    ///
+    /// In order to ensure clarity around guaranteed compiler
+    /// behavior, tags are only permitted on instructions whose
+    /// presence and sequence will remain the same in the compiled
+    /// output: namely, `sequence_point` instructions and ordinary
+    /// call instructions.
+    pub debug_tags: DebugTags,
 
     /// An optional global value which represents an expression evaluating to
     /// the stack limit for this function. This `GlobalValue` will be
@@ -204,11 +215,10 @@ impl FunctionStencil {
         self.sized_stack_slots.clear();
         self.dynamic_stack_slots.clear();
         self.global_values.clear();
-        self.global_value_facts.clear();
-        self.memory_types.clear();
         self.dfg.clear();
         self.layout.clear();
         self.srclocs.clear();
+        self.debug_tags.clear();
         self.stack_limit = None;
     }
 
@@ -239,11 +249,6 @@ impl FunctionStencil {
         self.global_values.push(data)
     }
 
-    /// Declares a memory type for use by the function.
-    pub fn create_memory_type(&mut self, data: MemoryTypeData) -> MemoryType {
-        self.memory_types.push(data)
-    }
-
     /// Find the global dyn_scale value associated with given DynamicType.
     pub fn get_dyn_scale(&self, ty: DynamicType) -> GlobalValue {
         self.dfg.dynamic_types.get(ty).unwrap().dynamic_scale
@@ -260,7 +265,7 @@ impl FunctionStencil {
         self.dfg
             .dynamic_types
             .get(ty)
-            .unwrap_or_else(|| panic!("Undeclared dynamic vector type: {}", ty))
+            .unwrap_or_else(|| panic!("Undeclared dynamic vector type: {ty}"))
             .concrete()
     }
 
@@ -282,7 +287,9 @@ impl FunctionStencil {
     /// Rewrite the branch destination to `new_dest` if the destination matches `old_dest`.
     /// Does nothing if called with a non-jump or non-branch instruction.
     pub fn rewrite_branch_destination(&mut self, inst: Inst, old_dest: Block, new_dest: Block) {
-        for dest in self.dfg.insts[inst].branch_destination_mut(&mut self.dfg.jump_tables) {
+        for dest in self.dfg.insts[inst]
+            .branch_destination_mut(&mut self.dfg.jump_tables, &mut self.dfg.exception_tables)
+        {
             if dest.block(&self.dfg.value_lists) == old_dest {
                 dest.set_block(new_dest, &mut self.dfg.value_lists)
             }
@@ -299,36 +306,23 @@ impl FunctionStencil {
         // Ignore all instructions prior to the first branch.
         let mut inst_iter = inst_iter.skip_while(|&inst| !dfg.insts[inst].opcode().is_branch());
 
-        // A conditional branch is permitted in a basic block only when followed
-        // by a terminal jump instruction.
         if let Some(_branch) = inst_iter.next() {
             if let Some(next) = inst_iter.next() {
-                match dfg.insts[next].opcode() {
-                    Opcode::Jump => (),
-                    _ => return Err((next, "post-branch instruction not jump")),
-                }
+                return Err((next, "post-terminator instruction"));
             }
         }
 
         Ok(())
     }
 
-    /// Returns true if the function is function that doesn't call any other functions. This is not
-    /// to be confused with a "leaf function" in Windows terminology.
-    pub fn is_leaf(&self) -> bool {
-        // Conservative result: if there's at least one function signature referenced in this
-        // function, assume it is not a leaf.
-        let has_signatures = !self.dfg.signatures.is_empty();
-
-        // Under some TLS models, retrieving the address of a TLS variable requires calling a
-        // function. Conservatively assume that any function that references a tls global value
-        // is not a leaf.
-        let has_tls = self.global_values.values().any(|gv| match gv {
-            GlobalValueData::Symbol { tls, .. } => *tls,
-            _ => false,
-        });
-
-        !has_signatures && !has_tls
+    /// Returns an iterator over the blocks succeeding the given block.
+    pub fn block_successors(&self, block: Block) -> impl DoubleEndedIterator<Item = Block> + '_ {
+        self.layout.last_inst(block).into_iter().flat_map(|inst| {
+            self.dfg.insts[inst]
+                .branch_destination(&self.dfg.jump_tables, &self.dfg.exception_tables)
+                .iter()
+                .map(|block| block.block(&self.dfg.value_lists))
+        })
     }
 
     /// Replace the `dst` instruction's data with the `src` instruction's data
@@ -344,12 +338,13 @@ impl FunctionStencil {
             self.dfg.inst_results(dst).len(),
             self.dfg.inst_results(src).len()
         );
-        debug_assert!(self
-            .dfg
-            .inst_results(dst)
-            .iter()
-            .zip(self.dfg.inst_results(src))
-            .all(|(a, b)| self.dfg.value_type(*a) == self.dfg.value_type(*b)));
+        debug_assert!(
+            self.dfg
+                .inst_results(dst)
+                .iter()
+                .zip(self.dfg.inst_results(src))
+                .all(|(a, b)| self.dfg.value_type(*a) == self.dfg.value_type(*b))
+        );
 
         self.dfg.insts[dst] = self.dfg.insts[src];
         self.layout.remove_inst(src);
@@ -412,12 +407,11 @@ impl Function {
                 sized_stack_slots: StackSlots::new(),
                 dynamic_stack_slots: DynamicStackSlots::new(),
                 global_values: PrimaryMap::new(),
-                global_value_facts: SecondaryMap::new(),
-                memory_types: PrimaryMap::new(),
                 dfg: DataFlowGraph::new(),
                 layout: Layout::new(),
                 srclocs: SecondaryMap::new(),
                 stack_limit: None,
+                debug_tags: DebugTags::default(),
             },
             params: FunctionParameters::new(),
         }
@@ -438,6 +432,11 @@ impl Function {
     /// Return an object that can display this function with correct ISA-specific annotations.
     pub fn display(&self) -> DisplayFunction<'_> {
         DisplayFunction(self)
+    }
+
+    /// Return an object that can display this function's name and signature.
+    pub fn display_spec(&self) -> DisplayFunctionSpec<'_> {
+        DisplayFunctionSpec(self)
     }
 
     /// Sets an absolute source location for the given instruction.
@@ -486,5 +485,20 @@ impl fmt::Display for Function {
 impl fmt::Debug for Function {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write_function(fmt, self)
+    }
+}
+
+/// Wrapper type capable of displaying a 'Function's name and signature.
+pub struct DisplayFunctionSpec<'a>(&'a Function);
+
+impl<'a> fmt::Display for DisplayFunctionSpec<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write_function_spec(fmt, self.0)
+    }
+}
+
+impl<'a> fmt::Debug for DisplayFunctionSpec<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write_function_spec(fmt, self.0)
     }
 }

@@ -52,8 +52,7 @@ impl Dfs {
     /// This iterator can be used to perform either pre- or post-order
     /// traversals, or a combination of the two.
     pub fn iter<'a>(&'a mut self, func: &'a ir::Function) -> DfsIter<'a> {
-        self.seen.clear();
-        self.stack.clear();
+        self.clear();
         if let Some(e) = func.layout.entry_block() {
             self.stack.push((Event::Enter, e));
         }
@@ -73,6 +72,13 @@ impl Dfs {
     pub fn post_order_iter<'a>(&'a mut self, func: &'a ir::Function) -> DfsPostOrderIter<'a> {
         DfsPostOrderIter(self.iter(func))
     }
+
+    /// Clear this DFS, but keep its allocations for future reuse.
+    pub fn clear(&mut self) {
+        let Dfs { stack, seen } = self;
+        stack.clear();
+        seen.clear();
+    }
 }
 
 /// An iterator that yields pairs of `(Event, ir::Block)` items as it performs a
@@ -86,15 +92,19 @@ impl Iterator for DfsIter<'_> {
     type Item = (Event, ir::Block);
 
     fn next(&mut self) -> Option<(Event, ir::Block)> {
-        let (event, block) = self.dfs.stack.pop()?;
+        loop {
+            let (event, block) = self.dfs.stack.pop()?;
 
-        if event == Event::Enter && self.dfs.seen.insert(block) {
-            self.dfs.stack.push((Event::Exit, block));
-            if let Some(inst) = self.func.layout.last_inst(block) {
+            if event == Event::Enter {
+                let first_time_seeing = self.dfs.seen.insert(block);
+                if !first_time_seeing {
+                    continue;
+                }
+
+                self.dfs.stack.push((Event::Exit, block));
                 self.dfs.stack.extend(
-                    self.func.dfg.insts[inst]
-                        .branch_destination(&self.func.dfg.jump_tables)
-                        .iter()
+                    self.func
+                        .block_successors(block)
                         // Heuristic: chase the children in reverse. This puts
                         // the first successor block first in the postorder, all
                         // other things being equal, which tends to prioritize
@@ -105,7 +115,6 @@ impl Iterator for DfsIter<'_> {
                         // purely for other consumers of the postorder we cache
                         // here.
                         .rev()
-                        .map(|block| block.block(&self.func.dfg.value_lists))
                         // This is purely an optimization to avoid additional
                         // iterations of the loop, and is not required; it's
                         // merely inlining the check from the outer conditional
@@ -115,9 +124,9 @@ impl Iterator for DfsIter<'_> {
                         .map(|block| (Event::Enter, block)),
                 );
             }
-        }
 
-        Some((event, block))
+            return Some((event, block));
+        }
     }
 }
 
@@ -159,7 +168,7 @@ impl Iterator for DfsPostOrderIter<'_> {
 mod tests {
     use super::*;
     use crate::cursor::{Cursor, FuncCursor};
-    use crate::ir::{types::I32, Function, InstBuilder, TrapCode};
+    use crate::ir::{Function, InstBuilder, TrapCode, types::I32};
 
     #[test]
     fn test_dfs_traversal() {
@@ -183,7 +192,7 @@ mod tests {
         // block3:
         //   trap user0
         cur.insert_block(block3);
-        cur.ins().trap(TrapCode::User(0));
+        cur.ins().trap(TrapCode::unwrap_user(1));
 
         // block1:
         //   v1 = iconst.i32 1
@@ -192,7 +201,7 @@ mod tests {
         cur.insert_block(block1);
         let v1 = cur.ins().iconst(I32, 1);
         let v2 = cur.ins().iadd(v0, v1);
-        cur.ins().jump(block0, &[v2]);
+        cur.ins().jump(block0, &[v2.into()]);
 
         // block2:
         //   return v0
@@ -211,6 +220,60 @@ mod tests {
                 (Event::Exit, block3),
                 (Event::Exit, block0)
             ],
+        );
+    }
+
+    #[test]
+    fn multiple_successors_to_the_same_block() {
+        let _ = env_logger::try_init();
+
+        let mut func = Function::new();
+
+        let block0 = func.dfg.make_block();
+        let block1 = func.dfg.make_block();
+
+        let mut cur = FuncCursor::new(&mut func);
+
+        // block0(v0):
+        //   v1 = iconst.i32 36
+        //   v2 = iconst.i32 42
+        //   br_if v0, block1(v1), block1(v2)
+        cur.insert_block(block0);
+        let v0 = cur.func.dfg.append_block_param(block0, I32);
+        let v1 = cur.ins().iconst(ir::types::I32, 36);
+        let v2 = cur.ins().iconst(ir::types::I32, 42);
+        cur.ins()
+            .brif(v0, block1, &[v1.into()], block1, &[v2.into()]);
+
+        // block1(v3: i32):
+        //   return v3
+        cur.insert_block(block1);
+        let v3 = cur.func.dfg.append_block_param(block1, I32);
+        cur.ins().return_(&[v3]);
+
+        let mut dfs = Dfs::new();
+
+        // We should only enter `block1` once.
+        assert_eq!(
+            dfs.iter(&func).collect::<Vec<_>>(),
+            vec![
+                (Event::Enter, block0),
+                (Event::Enter, block1),
+                (Event::Exit, block1),
+                (Event::Exit, block0),
+            ],
+        );
+
+        // We should only iterate over `block1` once in a pre-order traversal.
+        assert_eq!(
+            dfs.pre_order_iter(&func).collect::<Vec<_>>(),
+            vec![block0, block1],
+        );
+
+        // We should only iterate over `block1` once in a post-order traversal.
+        assert_eq!(
+            dfs.post_order_iter(&func).collect::<Vec<_>>(),
+            vec![block1, block0],
         );
     }
 }

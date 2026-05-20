@@ -57,7 +57,8 @@
 //! └──────────────────────────────────────────────────┘ ------> Stack pointer when emitting the call
 
 use crate::{
-    abi::{vmctx, ABIOperand, ABISig, RetArea, ABI},
+    FuncEnv,
+    abi::{ABI, ABIOperand, ABISig, RetArea, vmctx},
     codegen::{BuiltinFunction, BuiltinType, Callee, CodeGenContext},
     masm::{
         CalleeKind, ContextArgs, MacroAssembler, MemMoveDirection, OperandSize, SPOffset,
@@ -65,7 +66,6 @@ use crate::{
     },
     reg::Reg,
     stack::Val,
-    FuncEnv,
 };
 use wasmtime_environ::{FuncIndex, PtrSize, VMOffsets};
 

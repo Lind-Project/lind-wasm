@@ -1,4 +1,4 @@
-#![allow(non_snake_case)]
+#![expect(non_snake_case, reason = "DSL style here")]
 
 use crate::cdsl::instructions::{
     AllInstructions, InstructionBuilder as Inst, InstructionGroupBuilder,
@@ -29,8 +29,10 @@ fn define_control_flow(
         "#,
             &formats.jump,
         )
-        .operands_in(vec![Operand::new("block_call", &entities.block_call)
-            .with_doc("Destination basic block, with its arguments provided")])
+        .operands_in(vec![
+            Operand::new("block_call", &entities.block_call)
+                .with_doc("Destination basic block, with its arguments provided"),
+        ])
         .branches(),
     );
 
@@ -98,7 +100,7 @@ fn define_control_flow(
     let iAddr = &TypeVar::new(
         "iAddr",
         "An integer address type",
-        TypeSetBuilder::new().ints(32..64).refs(32..64).build(),
+        TypeSetBuilder::new().ints(32..64).build(),
     );
 
     ig.push(
@@ -141,7 +143,13 @@ fn define_control_flow(
             Operand::new("c", ScalarTruthy).with_doc("Controlling value to test"),
             Operand::new("code", &imm.trapcode),
         ])
-        .can_trap(),
+        .can_trap()
+        // When one `trapz` dominates another `trapz` and they have identical
+        // conditions and trap codes, it is safe to deduplicate them (like GVN,
+        // although there is not actually any value being numbered). Either the
+        // first `trapz` raised a trap and execution halted, or it didn't and
+        // therefore the dominated `trapz` will not raise a trap either.
+        .side_effects_idempotent(),
     );
 
     ig.push(
@@ -158,7 +166,9 @@ fn define_control_flow(
             Operand::new("c", ScalarTruthy).with_doc("Controlling value to test"),
             Operand::new("code", &imm.trapcode),
         ])
-        .can_trap(),
+        .can_trap()
+        // See the above comment for `trapz` and idempotent side effects.
+        .side_effects_idempotent(),
     );
 
     ig.push(
@@ -174,7 +184,7 @@ fn define_control_flow(
             &formats.multiary,
         )
         .operands_in(vec![
-            Operand::new("rvals", &entities.varargs).with_doc("return values")
+            Operand::new("rvals", &entities.varargs).with_doc("return values"),
         ])
         .returns(),
     );
@@ -196,7 +206,7 @@ fn define_control_flow(
             Operand::new("args", &entities.varargs).with_doc("call arguments"),
         ])
         .operands_out(vec![
-            Operand::new("rvals", &entities.varargs).with_doc("return values")
+            Operand::new("rvals", &entities.varargs).with_doc("return values"),
         ])
         .call(),
     );
@@ -223,7 +233,7 @@ fn define_control_flow(
             Operand::new("args", &entities.varargs).with_doc("call arguments"),
         ])
         .operands_out(vec![
-            Operand::new("rvals", &entities.varargs).with_doc("return values")
+            Operand::new("rvals", &entities.varargs).with_doc("return values"),
         ])
         .call(),
     );
@@ -295,9 +305,80 @@ fn define_control_flow(
         "#,
             &formats.func_addr,
         )
-        .operands_in(vec![Operand::new("FN", &entities.func_ref)
-            .with_doc("function to call, declared by `function`")])
+        .operands_in(vec![
+            Operand::new("FN", &entities.func_ref)
+                .with_doc("function to call, declared by `function`"),
+        ])
         .operands_out(vec![Operand::new("addr", iAddr)]),
+    );
+
+    ig.push(
+        Inst::new(
+            "try_call",
+            r#"
+        Call a function, catching the specified exceptions.
+
+        Call the function pointed to by `callee` with the given arguments. On
+        normal return, branch to the first target, with function returns
+        available as `retN` block arguments. On exceptional return,
+        look up the thrown exception tag in the provided exception table;
+        if the tag matches one of the targets, branch to the matching
+        target with the exception payloads available as `exnN` block arguments.
+        If no tag matches, then propagate the exception up the stack.
+
+        It is the Cranelift embedder's responsibility to define the meaning
+        of tags: they are accepted by this instruction and passed through
+        to unwind metadata tables in Cranelift's output. Actual unwinding is
+        outside the purview of the core Cranelift compiler.
+
+        Payload values on exception are passed in fixed register(s) that are
+        defined by the platform and ABI. See the documentation on `CallConv`
+        for details.
+        "#,
+            &formats.try_call,
+        )
+        .operands_in(vec![
+            Operand::new("callee", &entities.func_ref)
+                .with_doc("function to call, declared by `function`"),
+            Operand::new("args", &entities.varargs).with_doc("call arguments"),
+            Operand::new("ET", &entities.exception_table).with_doc("exception table"),
+        ])
+        .call()
+        .branches(),
+    );
+
+    ig.push(
+        Inst::new(
+            "try_call_indirect",
+            r#"
+        Call a function, catching the specified exceptions.
+
+        Call the function pointed to by `callee` with the given arguments. On
+        normal return, branch to the first target, with function returns
+        available as `retN` block arguments. On exceptional return,
+        look up the thrown exception tag in the provided exception table;
+        if the tag matches one of the targets, branch to the matching
+        target with the exception payloads available as `exnN` block arguments.
+        If no tag matches, then propagate the exception up the stack.
+
+        It is the Cranelift embedder's responsibility to define the meaning
+        of tags: they are accepted by this instruction and passed through
+        to unwind metadata tables in Cranelift's output. Actual unwinding is
+        outside the purview of the core Cranelift compiler.
+
+        Payload values on exception are passed in fixed register(s) that are
+        defined by the platform and ABI. See the documentation on `CallConv`
+        for details.
+        "#,
+            &formats.try_call_indirect,
+        )
+        .operands_in(vec![
+            Operand::new("callee", iAddr).with_doc("address of function to call"),
+            Operand::new("args", &entities.varargs).with_doc("call arguments"),
+            Operand::new("ET", &entities.exception_table).with_doc("exception table"),
+        ])
+        .call()
+        .branches(),
     );
 }
 
@@ -331,7 +412,7 @@ fn define_simd_lane_access(
             &formats.unary,
         )
         .operands_in(vec![
-            Operand::new("x", &TxN.lane_of()).with_doc("Value to splat to all lanes")
+            Operand::new("x", &TxN.lane_of()).with_doc("Value to splat to all lanes"),
         ])
         .operands_out(vec![Operand::new("a", TxN)]),
     );
@@ -599,8 +680,10 @@ pub(crate) fn define(
 
     // Operand kind shorthands.
     let i8: &TypeVar = &ValueType::from(LaneType::from(types::Int::I8)).into();
+    let f16_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F16)).into();
     let f32_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F32)).into();
     let f64_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F64)).into();
+    let f128_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F128)).into();
 
     // Starting definitions.
     let Int = &TypeVar::new(
@@ -640,13 +723,7 @@ pub(crate) fn define(
     let iAddr = &TypeVar::new(
         "iAddr",
         "An integer address type",
-        TypeSetBuilder::new().ints(32..64).refs(32..64).build(),
-    );
-
-    let Ref = &TypeVar::new(
-        "Ref",
-        "A scalar reference type",
-        TypeSetBuilder::new().refs(Interval::All).build(),
+        TypeSetBuilder::new().ints(32..64).build(),
     );
 
     let TxN = &TypeVar::new(
@@ -665,7 +742,6 @@ pub(crate) fn define(
         TypeSetBuilder::new()
             .ints(Interval::All)
             .floats(Interval::All)
-            .refs(Interval::All)
             .simd_lanes(Interval::All)
             .includes_scalars(true)
             .build(),
@@ -678,7 +754,6 @@ pub(crate) fn define(
             .ints(Interval::All)
             .floats(Interval::All)
             .simd_lanes(Interval::All)
-            .refs(Interval::All)
             .dynamic_simd_lanes(Interval::All)
             .build(),
     );
@@ -912,6 +987,66 @@ pub(crate) fn define(
             Operand::new("Offset", &imm.offset32).with_doc("Byte offset from base address"),
         ])
         .can_store(),
+    );
+    ig.push(
+        Inst::new(
+            "stack_switch",
+            r#"
+        Suspends execution of the current stack and resumes execution of another
+        one.
+
+        The target stack to switch to is identified by the data stored at
+        ``load_context_ptr``. Before switching, this instruction stores
+        analogous information about the
+        current (i.e., original) stack at ``store_context_ptr``, to
+        enabled switching back to the original stack at a later point.
+
+        The size, alignment and layout of the information stored at
+        ``load_context_ptr`` and ``store_context_ptr`` is platform-dependent.
+        The instruction assumes that ``load_context_ptr`` and
+        ``store_context_ptr`` are valid pointers to memory with said layout and
+        alignment, and does not perform any checks on these pointers or the data
+        stored there.
+
+        The instruction is experimental and only supported on x64 Linux at the
+        moment.
+
+        When switching from a stack A to a stack B, one of the following cases
+        must apply:
+        1. Stack B was previously suspended using a ``stack_switch`` instruction.
+        2. Stack B is a newly initialized stack. The necessary initialization is
+        platform-dependent and will generally involve running some kind of
+        trampoline to start execution of a function on the new stack.
+
+        In both cases, the ``in_payload`` argument of the ``stack_switch``
+        instruction executed on A is passed to stack B. In the first case above,
+        it will be the result value of the earlier ``stack_switch`` instruction
+        executed on stack B. In the second case, the value will be accessible to
+        the trampoline in a platform-dependent register.
+
+        The pointers ``load_context_ptr`` and ``store_context_ptr`` are allowed
+        to be equal; the instruction ensures that all data is loaded from the
+        former before writing to the latter.
+
+        Stack switching is one-shot in the sense that each ``stack_switch``
+        operation effectively consumes the context identified by
+        ``load_context_ptr``. In other words, performing two ``stack_switches``
+        using the same ``load_context_ptr`` causes undefined behavior, unless
+        the context at ``load_context_ptr`` is overwritten by another
+        `stack_switch` in between.
+        "#,
+            &formats.ternary,
+        )
+        .operands_in(vec![
+            Operand::new("store_context_ptr", iAddr),
+            Operand::new("load_context_ptr", iAddr),
+            Operand::new("in_payload0", iAddr),
+        ])
+        .operands_out(vec![Operand::new("out_payload0", iAddr)])
+        .other_side_effects()
+        .can_load()
+        .can_store()
+        .call(),
     );
 
     let I16x8 = &TypeVar::new(
@@ -1270,6 +1405,38 @@ pub(crate) fn define(
 
     ig.push(
         Inst::new(
+            "get_exception_handler_address",
+            r#"
+        Get the handler PC for the given exceptional edge for an
+        exception return from the given `try_call`-terminated block.
+
+        This instruction provides the PC for the handler resume point,
+        as defined by the exception-handling aspect of the given
+        callee ABI, for a return from the given calling block.  It can
+        be used when the exception unwind mechanism requires manual
+        plumbing for this information which must be set up before the call
+        itself: for example, if the resume address needs to be stored in
+        some context structure for a runtime to resume to on error.
+
+        The given caller block must end in a `try_call` and the given
+        exception-handling block must be one of its exceptional
+        successors in the associated exception-handling table. The
+        returned PC is *only* valid to resume to when the `try_call`
+        is on the stack having called the callee; in other words, when
+        a normal exception unwinder might otherwise resume to that
+        handler.
+        "#,
+            &formats.exception_handler_address,
+        )
+        .operands_in(vec![
+            Operand::new("block", &entities.raw_block),
+            Operand::new("index", &imm.imm64),
+        ])
+        .operands_out(vec![Operand::new("addr", iAddr)]),
+    );
+
+    ig.push(
+        Inst::new(
             "iconst",
             r#"
         Integer constant.
@@ -1281,7 +1448,23 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("N", &imm.imm64)])
         .operands_out(vec![
-            Operand::new("a", NarrowInt).with_doc("A constant integer scalar or vector value")
+            Operand::new("a", NarrowInt).with_doc("A constant integer scalar or vector value"),
+        ]),
+    );
+
+    ig.push(
+        Inst::new(
+            "f16const",
+            r#"
+        Floating point constant.
+
+        Create a `f16` SSA value with an immediate constant value.
+        "#,
+            &formats.unary_ieee16,
+        )
+        .operands_in(vec![Operand::new("N", &imm.ieee16)])
+        .operands_out(vec![
+            Operand::new("a", f16_).with_doc("A constant f16 scalar value"),
         ]),
     );
 
@@ -1297,7 +1480,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("N", &imm.ieee32)])
         .operands_out(vec![
-            Operand::new("a", f32_).with_doc("A constant f32 scalar value")
+            Operand::new("a", f32_).with_doc("A constant f32 scalar value"),
         ]),
     );
 
@@ -1313,7 +1496,23 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("N", &imm.ieee64)])
         .operands_out(vec![
-            Operand::new("a", f64_).with_doc("A constant f64 scalar value")
+            Operand::new("a", f64_).with_doc("A constant f64 scalar value"),
+        ]),
+    );
+
+    ig.push(
+        Inst::new(
+            "f128const",
+            r#"
+        Floating point constant.
+
+        Create a `f128` SSA value with an immediate constant value.
+        "#,
+            &formats.unary_const,
+        )
+        .operands_in(vec![Operand::new("N", &entities.pool_constant)])
+        .operands_out(vec![
+            Operand::new("a", f128_).with_doc("A constant f128 scalar value"),
         ]),
     );
 
@@ -1327,10 +1526,12 @@ pub(crate) fn define(
         "#,
             &formats.unary_const,
         )
-        .operands_in(vec![Operand::new("N", &imm.pool_constant)
-            .with_doc("The 16 immediate bytes of a 128-bit vector")])
+        .operands_in(vec![
+            Operand::new("N", &entities.pool_constant)
+                .with_doc("The 16 immediate bytes of a 128-bit vector"),
+        ])
         .operands_out(vec![
-            Operand::new("a", TxN).with_doc("A constant vector value")
+            Operand::new("a", TxN).with_doc("A constant vector value"),
         ]),
     );
 
@@ -1361,25 +1562,10 @@ pub(crate) fn define(
         .operands_in(vec![
             Operand::new("a", Tx16).with_doc("A vector value"),
             Operand::new("b", Tx16).with_doc("A vector value"),
-            Operand::new("mask", &imm.uimm128)
+            Operand::new("mask", &entities.uimm128)
                 .with_doc("The 16 immediate bytes used for selecting the elements to shuffle"),
         ])
         .operands_out(vec![Operand::new("a", Tx16).with_doc("A vector value")]),
-    );
-
-    ig.push(
-        Inst::new(
-            "null",
-            r#"
-        Null constant value for reference types.
-
-        Create a scalar reference SSA value with a constant null value.
-        "#,
-            &formats.nullary,
-        )
-        .operands_out(vec![
-            Operand::new("a", Ref).with_doc("A constant reference null value")
-        ]),
     );
 
     ig.push(Inst::new(
@@ -1466,7 +1652,7 @@ pub(crate) fn define(
         Conditional select of bits.
 
         For each bit in `c`, this instruction selects the corresponding bit from `x` if the bit
-        in `x` is 1 and the corresponding bit from `y` if the bit in `c` is 0. See also:
+        in `c` is 1 and the corresponding bit from `y` if the bit in `c` is 0. See also:
         `select`.
         "#,
             &formats.ternary,
@@ -1481,7 +1667,7 @@ pub(crate) fn define(
 
     ig.push(
         Inst::new(
-            "x86_blendv",
+            "blendv",
             r#"
         A bitselect-lookalike instruction except with the semantics of
         `blendv`-related instructions on x86.
@@ -1718,7 +1904,7 @@ pub(crate) fn define(
             r#"
         Fixed-point multiplication of numbers in the QN format, where N + 1
         is the number bitwidth:
-        `a := signed_saturate((x * y + 1 << (Q - 1)) >> Q)`
+        `a := signed_saturate((x * y + (1 << (Q - 1))) >> Q)`
 
         Polymorphic over all integer vector types with 16- or 32-bit numbers.
         "#,
@@ -1937,18 +2123,12 @@ pub(crate) fn define(
 
     ig.push(
         Inst::new(
-            "iadd_cin",
+            "sadd_overflow_cin",
             r#"
-        Add integers with carry in.
+        Add signed integers with carry in and overflow out.
 
-        Same as `iadd` with an additional carry input. Computes:
-
-        ```text
-            a = x + y + c_{in} \pmod 2^B
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `sadd_overflow` with an additional carry input. The `c_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero.
         "#,
             &formats.ternary,
         )
@@ -1957,24 +2137,20 @@ pub(crate) fn define(
             Operand::new("y", iB),
             Operand::new("c_in", i8).with_doc("Input carry flag"),
         ])
-        .operands_out(vec![Operand::new("a", iB)]),
+        .operands_out(vec![
+            Operand::new("a", iB),
+            Operand::new("c_out", i8).with_doc("Output carry flag"),
+        ]),
     );
 
     ig.push(
         Inst::new(
-            "iadd_carry",
+            "uadd_overflow_cin",
             r#"
-        Add integers with carry in and out.
+        Add unsigned integers with carry in and overflow out.
 
-        Same as `iadd` with an additional carry input and output.
-
-        ```text
-            a &= x + y + c_{in} \pmod 2^B \\
-            c_{out} &= x + y + c_{in} >= 2^B
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `uadd_overflow` with an additional carry input. The `c_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero.
         "#,
             &formats.ternary,
         )
@@ -2136,18 +2312,13 @@ pub(crate) fn define(
 
     ig.push(
         Inst::new(
-            "isub_bin",
+            "ssub_overflow_bin",
             r#"
-        Subtract integers with borrow in.
+        Subtract signed integers with borrow in and overflow out.
 
-        Same as `isub` with an additional borrow flag input. Computes:
-
-        ```text
-            a = x - (y + b_{in}) \pmod 2^B
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `ssub_overflow` with an additional borrow input. The `b_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero. The computation
+        performed here is `x - (y + (b_in != 0))`.
         "#,
             &formats.ternary,
         )
@@ -2156,24 +2327,21 @@ pub(crate) fn define(
             Operand::new("y", iB),
             Operand::new("b_in", i8).with_doc("Input borrow flag"),
         ])
-        .operands_out(vec![Operand::new("a", iB)]),
+        .operands_out(vec![
+            Operand::new("a", iB),
+            Operand::new("b_out", i8).with_doc("Output borrow flag"),
+        ]),
     );
 
     ig.push(
         Inst::new(
-            "isub_borrow",
+            "usub_overflow_bin",
             r#"
-        Subtract integers with borrow in and out.
+        Subtract unsigned integers with borrow in and overflow out.
 
-        Same as `isub` with an additional borrow flag input and output.
-
-        ```text
-            a &= x - (y + b_{in}) \pmod 2^B \\
-            b_{out} &= x < y + b_{in}
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `usub_overflow` with an additional borrow input. The `b_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero. The computation
+        performed here is `x - (y + (b_in != 0))`.
         "#,
             &formats.ternary,
         )
@@ -2727,7 +2895,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float), Operand::new("y", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("Result of applying operator to each lane")
+            Operand::new("a", Float).with_doc("Result of applying operator to each lane"),
         ]),
     );
 
@@ -2741,7 +2909,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float), Operand::new("y", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("Result of applying operator to each lane")
+            Operand::new("a", Float).with_doc("Result of applying operator to each lane"),
         ]),
     );
 
@@ -2755,7 +2923,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float), Operand::new("y", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("Result of applying operator to each lane")
+            Operand::new("a", Float).with_doc("Result of applying operator to each lane"),
         ]),
     );
 
@@ -2773,7 +2941,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float), Operand::new("y", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("Result of applying operator to each lane")
+            Operand::new("a", Float).with_doc("Result of applying operator to each lane"),
         ]),
     );
 
@@ -2787,7 +2955,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("Result of applying operator to each lane")
+            Operand::new("a", Float).with_doc("Result of applying operator to each lane"),
         ]),
     );
 
@@ -2808,7 +2976,7 @@ pub(crate) fn define(
             Operand::new("z", Float),
         ])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("Result of applying operator to each lane")
+            Operand::new("a", Float).with_doc("Result of applying operator to each lane"),
         ]),
     );
 
@@ -2824,7 +2992,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("``x`` with its sign bit inverted")
+            Operand::new("a", Float).with_doc("``x`` with its sign bit inverted"),
         ]),
     );
 
@@ -2840,7 +3008,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("``x`` with its sign bit cleared")
+            Operand::new("a", Float).with_doc("``x`` with its sign bit cleared"),
         ]),
     );
 
@@ -2857,7 +3025,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float), Operand::new("y", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("``x`` with its sign bit changed to that of ``y``")
+            Operand::new("a", Float).with_doc("``x`` with its sign bit changed to that of ``y``"),
         ]),
     );
 
@@ -2876,7 +3044,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float), Operand::new("y", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("The smaller of ``x`` and ``y``")
+            Operand::new("a", Float).with_doc("The smaller of ``x`` and ``y``"),
         ]),
     );
 
@@ -2895,7 +3063,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float), Operand::new("y", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("The larger of ``x`` and ``y``")
+            Operand::new("a", Float).with_doc("The larger of ``x`` and ``y``"),
         ]),
     );
 
@@ -2909,7 +3077,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("``x`` rounded to integral value")
+            Operand::new("a", Float).with_doc("``x`` rounded to integral value"),
         ]),
     );
 
@@ -2923,7 +3091,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("``x`` rounded to integral value")
+            Operand::new("a", Float).with_doc("``x`` rounded to integral value"),
         ]),
     );
 
@@ -2937,7 +3105,7 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("``x`` rounded to integral value")
+            Operand::new("a", Float).with_doc("``x`` rounded to integral value"),
         ]),
     );
 
@@ -2952,38 +3120,8 @@ pub(crate) fn define(
         )
         .operands_in(vec![Operand::new("x", Float)])
         .operands_out(vec![
-            Operand::new("a", Float).with_doc("``x`` rounded to integral value")
+            Operand::new("a", Float).with_doc("``x`` rounded to integral value"),
         ]),
-    );
-
-    ig.push(
-        Inst::new(
-            "is_null",
-            r#"
-        Reference verification.
-
-        The condition code determines if the reference type in question is
-        null or not.
-        "#,
-            &formats.unary,
-        )
-        .operands_in(vec![Operand::new("x", Ref)])
-        .operands_out(vec![Operand::new("a", i8)]),
-    );
-
-    ig.push(
-        Inst::new(
-            "is_invalid",
-            r#"
-        Reference verification.
-
-        The condition code determines if the reference type in question is
-        invalid or not.
-        "#,
-            &formats.unary,
-        )
-        .operands_in(vec![Operand::new("x", Ref)])
-        .operands_out(vec![Operand::new("a", i8)]),
     );
 
     ig.push(
@@ -3008,7 +3146,7 @@ pub(crate) fn define(
             Operand::new("x", Mem),
         ])
         .operands_out(vec![
-            Operand::new("a", MemTo).with_doc("Bits of `x` reinterpreted")
+            Operand::new("a", MemTo).with_doc("Bits of `x` reinterpreted"),
         ]),
     );
 
@@ -3022,7 +3160,7 @@ pub(crate) fn define(
             &formats.unary,
         )
         .operands_in(vec![
-            Operand::new("s", &TxN.lane_of()).with_doc("A scalar value")
+            Operand::new("s", &TxN.lane_of()).with_doc("A scalar value"),
         ])
         .operands_out(vec![Operand::new("a", TxN).with_doc("A vector value")]),
     );
@@ -3069,8 +3207,10 @@ pub(crate) fn define(
         "#,
             &formats.unary,
         )
-        .operands_in(vec![Operand::new("x", &Int.wider())
-            .with_doc("A scalar integer type, wider than the controlling type")])
+        .operands_in(vec![
+            Operand::new("x", &Int.wider())
+                .with_doc("A scalar integer type, wider than the controlling type"),
+        ])
         .operands_out(vec![Operand::new("a", Int)]),
     );
 
@@ -3606,15 +3746,17 @@ pub(crate) fn define(
             Operand::new("lo", NarrowInt),
             Operand::new("hi", NarrowInt),
         ])
-        .operands_out(vec![Operand::new("a", &NarrowInt.double_width())
-            .with_doc("The concatenation of `lo` and `hi`")]),
+        .operands_out(vec![
+            Operand::new("a", &NarrowInt.double_width())
+                .with_doc("The concatenation of `lo` and `hi`"),
+        ]),
     );
 
     // Instructions relating to atomic memory accesses and fences
     let AtomicMem = &TypeVar::new(
         "AtomicMem",
         "Any type that can be stored in memory, which can be used in an atomic operation",
-        TypeSetBuilder::new().ints(8..64).build(),
+        TypeSetBuilder::new().ints(8..128).build(),
     );
 
     ig.push(
@@ -3622,10 +3764,11 @@ pub(crate) fn define(
             "atomic_rmw",
             r#"
         Atomically read-modify-write memory at `p`, with second operand `x`.  The old value is
-        returned.  `p` has the type of the target word size, and `x` may be an integer type of
-        8, 16, 32 or 64 bits, even on a 32-bit target.  The type of the returned value is the
-        same as the type of `x`.  This operation is sequentially consistent and creates
-        happens-before edges that order normal (non-atomic) loads and stores.
+        returned.  `p` has the type of the target word size, and `x` may be any integer type; note
+        that some targets require specific target features to be enabled in order to support 128-bit
+        integer atomics.  The type of the returned value is the same as the type of `x`.  This
+        operation is sequentially consistent and creates happens-before edges that order normal
+        (non-atomic) loads and stores.
         "#,
             &formats.atomic_rmw,
         )
@@ -3636,7 +3779,7 @@ pub(crate) fn define(
             Operand::new("x", AtomicMem).with_doc("Value to be atomically stored"),
         ])
         .operands_out(vec![
-            Operand::new("a", AtomicMem).with_doc("Value atomically loaded")
+            Operand::new("a", AtomicMem).with_doc("Value atomically loaded"),
         ])
         .can_load()
         .can_store()
@@ -3650,11 +3793,11 @@ pub(crate) fn define(
         Perform an atomic compare-and-swap operation on memory at `p`, with expected value `e`,
         storing `x` if the value at `p` equals `e`.  The old value at `p` is returned,
         regardless of whether the operation succeeds or fails.  `p` has the type of the target
-        word size, and `x` and `e` must have the same type and the same size, which may be an
-        integer type of 8, 16, 32 or 64 bits, even on a 32-bit target.  The type of the returned
-        value is the same as the type of `x` and `e`.  This operation is sequentially
-        consistent and creates happens-before edges that order normal (non-atomic) loads and
-        stores.
+        word size, and `x` and `e` must have the same type and the same size, which may be any
+        integer type; note that some targets require specific target features to be enabled in order
+        to support 128-bit integer atomics.  The type of the returned value is the same as the type
+        of `x` and `e`.  This operation is sequentially consistent and creates happens-before edges
+        that order normal (non-atomic) loads and stores.
         "#,
             &formats.atomic_cas,
         )
@@ -3665,7 +3808,7 @@ pub(crate) fn define(
             Operand::new("x", AtomicMem).with_doc("Value to be atomically stored"),
         ])
         .operands_out(vec![
-            Operand::new("a", AtomicMem).with_doc("Value atomically loaded")
+            Operand::new("a", AtomicMem).with_doc("Value atomically loaded"),
         ])
         .can_load()
         .can_store()
@@ -3679,9 +3822,10 @@ pub(crate) fn define(
         Atomically load from memory at `p`.
 
         This is a polymorphic instruction that can load any value type which has a memory
-        representation.  It should only be used for integer types with 8, 16, 32 or 64 bits.
-        This operation is sequentially consistent and creates happens-before edges that order
-        normal (non-atomic) loads and stores.
+        representation.  It can only be used for integer types; note that some targets require
+        specific target features to be enabled in order to support 128-bit integer atomics. This
+        operation is sequentially consistent and creates happens-before edges that order normal
+        (non-atomic) loads and stores.
         "#,
             &formats.load_no_offset,
         )
@@ -3690,7 +3834,7 @@ pub(crate) fn define(
             Operand::new("p", iAddr),
         ])
         .operands_out(vec![
-            Operand::new("a", AtomicMem).with_doc("Value atomically loaded")
+            Operand::new("a", AtomicMem).with_doc("Value atomically loaded"),
         ])
         .can_load()
         .other_side_effects(),
@@ -3703,9 +3847,10 @@ pub(crate) fn define(
         Atomically store `x` to memory at `p`.
 
         This is a polymorphic instruction that can store any value type with a memory
-        representation.  It should only be used for integer types with 8, 16, 32 or 64 bits.
-        This operation is sequentially consistent and creates happens-before edges that order
-        normal (non-atomic) loads and stores.
+        representation.  It can only be used for integer types; note that some targets require
+        specific target features to be enabled in order to support 128-bit integer atomics This
+        operation is sequentially consistent and creates happens-before edges that order normal
+        (non-atomic) loads and stores.
         "#,
             &formats.store_no_offset,
         )
@@ -3754,7 +3899,23 @@ pub(crate) fn define(
             Operand::new("y", &imm.uimm8).with_doc("128-bit vector index"),
         ])
         .operands_out(vec![
-            Operand::new("a", &TxN.dynamic_to_vector()).with_doc("New fixed vector")
+            Operand::new("a", &TxN.dynamic_to_vector()).with_doc("New fixed vector"),
         ]),
+    );
+
+    ig.push(
+        Inst::new(
+            "sequence_point",
+            r#"
+         A compiler barrier that acts as an immovable marker from IR input to machine-code output.
+
+         This "sequence point" can have debug tags attached to it, and these tags will be
+         noted in the output `MachBuffer`.
+
+         It prevents motion of any other side-effects across this boundary.
+         "#,
+            &formats.nullary,
+        )
+        .other_side_effects(),
     );
 }

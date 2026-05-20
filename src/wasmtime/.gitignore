@@ -22,7 +22,15 @@ publish
 vendor
 examples/build
 examples/.cache
+crates/c-api/build
 *.coredump
+*.smt2
+cranelift/isle/veri/veri_engine/test_output
 crates/explorer/node_modules
-
-Cargo.lock
+*.cwasm
+/artifacts
+testcase*.wat
+testcase*.wasm
+testcase*.dna
+testcase*.json
+perf.data*

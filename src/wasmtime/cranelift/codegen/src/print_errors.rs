@@ -4,10 +4,9 @@ use crate::entity::SecondaryMap;
 use crate::ir;
 use crate::ir::entities::{AnyEntity, Block, Inst, Value};
 use crate::ir::function::Function;
-use crate::ir::pcc::Fact;
 use crate::result::CodegenError;
 use crate::verifier::{VerifierError, VerifierErrors};
-use crate::write::{decorate_function, FuncWriter, PlainWriter};
+use crate::write::{FuncWriter, PlainWriter, decorate_function};
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -72,9 +71,8 @@ impl<'a> FuncWriter for PrettyVerifierError<'a> {
         func: &Function,
         entity: AnyEntity,
         value: &dyn fmt::Display,
-        maybe_fact: Option<&Fact>,
     ) -> fmt::Result {
-        pretty_preamble_error(w, func, entity, value, maybe_fact, &mut *self.0, self.1)
+        pretty_preamble_error(w, func, entity, value, &mut *self.0, self.1)
     }
 }
 
@@ -89,7 +87,7 @@ fn pretty_block_header_error(
 ) -> fmt::Result {
     let mut s = String::new();
     func_w.write_block_header(&mut s, func, cur_block, indent)?;
-    write!(w, "{}", s)?;
+    write!(w, "{s}")?;
 
     // TODO: Use drain_filter here when it gets stabilized
     let mut i = 0;
@@ -127,7 +125,7 @@ fn pretty_instruction_error(
 ) -> fmt::Result {
     let mut s = String::new();
     func_w.write_instruction(&mut s, func, aliases, cur_inst, indent)?;
-    write!(w, "{}", s)?;
+    write!(w, "{s}")?;
 
     // TODO: Use drain_filter here when it gets stabilized
     let mut i = 0;
@@ -158,13 +156,12 @@ fn pretty_preamble_error(
     func: &Function,
     entity: AnyEntity,
     value: &dyn fmt::Display,
-    maybe_fact: Option<&Fact>,
     func_w: &mut dyn FuncWriter,
     errors: &mut Vec<VerifierError>,
 ) -> fmt::Result {
     let mut s = String::new();
-    func_w.write_entity_definition(&mut s, func, entity, value, maybe_fact)?;
-    write!(w, "{}", s)?;
+    func_w.write_entity_definition(&mut s, func, entity, value)?;
+    write!(w, "{s}")?;
 
     // TODO: Use drain_filter here when it gets stabilized
     let mut i = 0;

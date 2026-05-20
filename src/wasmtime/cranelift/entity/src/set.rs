@@ -1,15 +1,21 @@
 //! Densely numbered entity references as set keys.
 
-use crate::keys::Keys;
 use crate::EntityRef;
+use crate::keys::Keys;
+use core::fmt;
 use core::marker::PhantomData;
 use cranelift_bitset::CompoundBitSet;
+use wasmtime_core::error::OutOfMemory;
 
 /// A set of `K` for densely indexed entity references.
 ///
 /// The `EntitySet` data structure uses the dense index space to implement a set with a bitvector.
 /// Like `SecondaryMap`, an `EntitySet` is used to associate secondary information with entities.
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
 pub struct EntitySet<K>
 where
     K: EntityRef,
@@ -18,11 +24,28 @@ where
     unused: PhantomData<K>,
 }
 
+impl<K> fmt::Debug for EntitySet<K>
+where
+    K: fmt::Debug + EntityRef,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_set().entries(self.keys()).finish()
+    }
+}
+
 impl<K: EntityRef> Default for EntitySet<K> {
     fn default() -> Self {
         Self {
             bitset: CompoundBitSet::default(),
             unused: PhantomData,
+        }
+    }
+}
+
+impl<K: EntityRef> Extend<K> for EntitySet<K> {
+    fn extend<T: IntoIterator<Item = K>>(&mut self, iter: T) {
+        for k in iter {
+            self.insert(k);
         }
     }
 }
@@ -45,6 +68,25 @@ where
         }
     }
 
+    /// Like `with_capacity` but returns an error on allocation failure.
+    pub fn try_with_capacity(capacity: usize) -> Result<Self, OutOfMemory> {
+        Ok(Self {
+            bitset: CompoundBitSet::try_with_capacity(capacity)?,
+            unused: PhantomData,
+        })
+    }
+
+    /// Ensure that the set has enough capacity to hold `capacity` total
+    /// elements.
+    pub fn ensure_capacity(&mut self, capacity: usize) {
+        self.bitset.ensure_capacity(capacity);
+    }
+
+    /// Like `ensure_capacity` but returns an error on allocation failure.
+    pub fn try_ensure_capacity(&mut self, capacity: usize) -> Result<(), OutOfMemory> {
+        self.bitset.try_ensure_capacity(capacity)
+    }
+
     /// Get the element at `k` if it exists.
     pub fn contains(&self, k: K) -> bool {
         let index = k.index();
@@ -61,21 +103,96 @@ where
         self.bitset.clear()
     }
 
-    /// Iterate over all the keys in this set.
+    /// Iterate over all the keys up to the maximum in this set.
+    ///
+    /// This will yield intermediate keys on the way up to the max key, even if
+    /// they are not contained within the set.
+    ///
+    /// ```
+    /// use cranelift_entity::{entity_impl, EntityRef, EntitySet};
+    ///
+    /// #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    /// struct Entity(u32);
+    /// entity_impl!(Entity);
+    ///
+    /// let mut set = EntitySet::new();
+    /// set.insert(Entity::new(2));
+    ///
+    /// let mut keys = set.keys();
+    /// assert_eq!(keys.next(), Some(Entity::new(0)));
+    /// assert_eq!(keys.next(), Some(Entity::new(1)));
+    /// assert_eq!(keys.next(), Some(Entity::new(2)));
+    /// assert!(keys.next().is_none());
+    /// ```
     pub fn keys(&self) -> Keys<K> {
         Keys::with_len(self.bitset.max().map_or(0, |x| x + 1))
     }
 
+    /// Iterate over the elements of this set.
+    ///
+    /// ```
+    /// use cranelift_entity::{entity_impl, EntityRef, EntitySet};
+    ///
+    /// #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    /// struct Entity(u32);
+    /// entity_impl!(Entity);
+    ///
+    /// let mut set = EntitySet::new();
+    /// set.insert(Entity::new(2));
+    /// set.insert(Entity::new(3));
+    ///
+    /// let mut iter = set.iter();
+    /// assert_eq!(iter.next(), Some(Entity::new(2)));
+    /// assert_eq!(iter.next(), Some(Entity::new(3)));
+    /// assert!(iter.next().is_none());
+    /// ```
+    pub fn iter(&self) -> SetIter<'_, K> {
+        SetIter {
+            inner: self.bitset.iter(),
+            _phantom: PhantomData,
+        }
+    }
+
     /// Insert the element at `k`.
+    ///
+    /// Returns `true` if `k` was not present in the set, i.e. this is a
+    /// newly-added element. Returns `false` otherwise.
     pub fn insert(&mut self, k: K) -> bool {
         let index = k.index();
         self.bitset.insert(index)
     }
 
-    /// Removes and returns the entity from the set if it exists.
+    /// Remove `k` from this bitset.
+    ///
+    /// Returns whether `k` was previously in this set or not.
+    pub fn remove(&mut self, k: K) -> bool {
+        let index = k.index();
+        self.bitset.remove(index)
+    }
+
+    /// Removes and returns the highest-index entity from the set if it exists.
     pub fn pop(&mut self) -> Option<K> {
         let index = self.bitset.pop()?;
         Some(K::new(index))
+    }
+}
+
+/// An iterator over the elements in an `EntitySet`.
+pub struct SetIter<'a, K> {
+    inner: cranelift_bitset::compound::Iter<'a>,
+    _phantom: PhantomData<K>,
+}
+
+impl<K> Iterator for SetIter<'_, K>
+where
+    K: EntityRef,
+{
+    type Item = K;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let k = self.inner.next()?;
+        Some(K::new(k))
     }
 }
 

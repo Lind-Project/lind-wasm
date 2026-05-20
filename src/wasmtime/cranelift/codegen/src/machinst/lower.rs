@@ -7,24 +7,25 @@
 
 use crate::entity::SecondaryMap;
 use crate::inst_predicates::{has_lowering_side_effect, is_constant_64bit};
-use crate::ir::pcc::{Fact, FactContext, PccError, PccResult};
 use crate::ir::{
-    ArgumentPurpose, Block, Constant, ConstantData, DataFlowGraph, ExternalName, Function,
-    GlobalValue, GlobalValueData, Immediate, Inst, InstructionData, MemFlags, RelSourceLoc, Type,
-    Value, ValueDef, ValueLabelAssignments, ValueLabelStart,
+    ArgumentPurpose, Block, BlockArg, Constant, ConstantData, DataFlowGraph, ExternalName,
+    Function, GlobalValue, GlobalValueData, Immediate, Inst, InstructionData, MemFlags,
+    RelSourceLoc, SigRef, Signature, Type, Value, ValueDef, ValueLabelAssignments, ValueLabelStart,
 };
+use crate::machinst::valueregs::InvalidSentinel;
 use crate::machinst::{
-    writable_value_regs, BlockIndex, BlockLoweringOrder, Callee, InsnIndex, LoweredBlock,
-    MachLabel, Reg, SigSet, VCode, VCodeBuilder, VCodeConstant, VCodeConstantData, VCodeConstants,
-    VCodeInst, ValueRegs, Writable,
+    ABIMachineSpec, BackwardsInsnIndex, BlockIndex, BlockLoweringOrder, CallArgList, CallInfo,
+    CallRetList, Callee, InsnIndex, LoweredBlock, MachLabel, Reg, Sig, SigSet, TryCallInfo, VCode,
+    VCodeBuilder, VCodeConstant, VCodeConstantData, VCodeConstants, VCodeInst, ValueRegs, Writable,
+    writable_value_regs,
 };
 use crate::settings::Flags;
-use crate::{trace, CodegenResult};
+use crate::{CodegenError, CodegenResult, trace};
+use crate::{FxHashMap, FxHashSet};
 use alloc::vec::Vec;
+use core::fmt::Debug;
 use cranelift_control::ControlPlane;
-use rustc_hash::{FxHashMap, FxHashSet};
-use smallvec::{smallvec, SmallVec};
-use std::fmt::Debug;
+use smallvec::{SmallVec, smallvec};
 
 use super::{VCodeBuildDirection, VRegAllocator};
 
@@ -147,29 +148,13 @@ pub trait LowerBackend {
     fn maybe_pinned_reg(&self) -> Option<Reg> {
         None
     }
-
-    /// The type of state carried between `check_fact` invocations.
-    type FactFlowState: Default + Clone + Debug;
-
-    /// Check any facts about an instruction, given VCode with facts
-    /// on VRegs. Takes mutable `VCode` so that it can propagate some
-    /// kinds of facts automatically.
-    fn check_fact(
-        &self,
-        _ctx: &FactContext<'_>,
-        _vcode: &mut VCode<Self::MInst>,
-        _inst: InsnIndex,
-        _state: &mut Self::FactFlowState,
-    ) -> PccResult<()> {
-        Err(PccError::UnimplementedBackend)
-    }
 }
 
 /// Machine-independent lowering driver / machine-instruction container. Maintains a correspondence
 /// from original Inst to MachInsts.
 pub struct Lower<'func, I: VCodeInst> {
     /// The function to lower.
-    f: &'func Function,
+    pub(crate) f: &'func Function,
 
     /// Lowered machine instructions.
     vcode: VCodeBuilder<I>,
@@ -221,6 +206,14 @@ pub struct Lower<'func, I: VCodeInst> {
 
     /// Instructions collected for the CLIF inst in progress, in forward order.
     ir_insts: Vec<I>,
+
+    /// Try-call block arg normal-return values, indexed by instruction.
+    try_call_rets: FxHashMap<Inst, SmallVec<[ValueRegs<Writable<Reg>>; 2]>>,
+
+    /// Try-call block arg exceptional-return payloads, indexed by
+    /// instruction. Payloads are carried in registers per the ABI and
+    /// can only be one register each.
+    try_call_payloads: FxHashMap<Inst, SmallVec<[Writable<Reg>; 2]>>,
 
     /// The register to use for GetPinnedReg, if any, on this architecture.
     pinned_reg: Option<Reg>,
@@ -295,15 +288,36 @@ pub struct Lower<'func, I: VCodeInst> {
 /// actually merged" point. Instead, we compute a
 /// transitive-uniqueness. That is what this enum represents.
 ///
-/// To define it plainly: a value is `Unused` if no references exist
-/// to it; `Once` if only one other op refers to it, *and* that other
-/// op is `Unused` or `Once`; and `Multiple` otherwise. In other
-/// words, `Multiple` is contagious: even if an op's result value is
-/// directly used only once in the CLIF, that value is `Multiple` if
-/// the op that uses it is itself used multiple times (hence could be
-/// codegen'd multiple times). In brief, this analysis tells us
-/// whether, if every op merged all of its operand tree, a given op
-/// could be codegen'd in more than one place.
+/// There is one final caveat as well to the result of this analysis.  Notably,
+/// we define some instructions to be "root" instructions, which means that we
+/// assume they will always be codegen'd at the root of a matching tree, and not
+/// matched. (This comes with the caveat that we actually enforce this property
+/// by making them "opaque" to subtree matching in
+/// `get_value_as_source_or_const`). Because they will always be codegen'd once,
+/// they in some sense "reset" multiplicity: these root instructions can be used
+/// many times, but because their result(s) are only computed once, they only
+/// use their inputs once.
+///
+/// We currently define all multi-result instructions to be "root" instructions,
+/// because it is too complex to reason about matching through them, and they
+/// cause too-coarse-grained approximation of multiplicity otherwise: the
+/// analysis would have to assume (as it used to!) that they are always
+/// multiply-used, simply because they have multiple outputs even if those
+/// outputs are used only once.
+///
+/// In the future we could define other instructions to be "root" instructions
+/// as well, if we make the corresponding change to get_value_as_source_or_const
+/// as well.
+///
+/// To define `ValueUseState` more plainly: a value is `Unused` if no references
+/// exist to it; `Once` if only one other op refers to it, *and* that other op
+/// is `Unused` or `Once`; and `Multiple` otherwise. In other words, `Multiple`
+/// is contagious (except through root instructions): even if an op's result
+/// value is directly used only once in the CLIF, that value is `Multiple` if
+/// the op that uses it is itself used multiple times (hence could be codegen'd
+/// multiple times). In brief, this analysis tells us whether, if every op
+/// merged all of its operand tree, a given op could be codegen'd in more than
+/// one place.
 ///
 /// To compute this, we first consider direct uses. At this point
 /// `Unused` answers are correct, `Multiple` answers are correct, but
@@ -360,6 +374,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             block_order,
             constants,
             VCodeBuildDirection::Backward,
+            flags.log2_min_function_alignment(),
         );
 
         // We usually need two VRegs per instruction result, plus extras for
@@ -367,13 +382,16 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         let mut vregs = VRegAllocator::with_capacity(f.dfg.num_values() * 2);
 
         let mut value_regs = SecondaryMap::with_default(ValueRegs::invalid());
+        let mut try_call_rets = FxHashMap::default();
+        let mut try_call_payloads = FxHashMap::default();
 
-        // Assign a vreg to each block param and each inst result.
+        // Assign a vreg to each block param, each inst result, and
+        // each edge-defined block-call arg.
         for bb in f.layout.blocks() {
             for &param in f.dfg.block_params(bb) {
                 let ty = f.dfg.value_type(param);
                 if value_regs[param].is_invalid() {
-                    let regs = vregs.alloc_with_maybe_fact(ty, f.dfg.facts[param].clone())?;
+                    let regs = vregs.alloc(ty)?;
                     value_regs[param] = regs;
                     trace!("bb {} param {}: regs {:?}", bb, param, regs);
                 }
@@ -382,17 +400,37 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                 for &result in f.dfg.inst_results(inst) {
                     let ty = f.dfg.value_type(result);
                     if value_regs[result].is_invalid() && !ty.is_invalid() {
-                        let regs = vregs.alloc_with_maybe_fact(ty, f.dfg.facts[result].clone())?;
+                        let regs = vregs.alloc(ty)?;
                         value_regs[result] = regs;
                         trace!(
                             "bb {} inst {} ({:?}): result {} regs {:?}",
-                            bb,
-                            inst,
-                            f.dfg.insts[inst],
-                            result,
-                            regs,
+                            bb, inst, f.dfg.insts[inst], result, regs,
                         );
                     }
+                }
+
+                if let Some(et) = f.dfg.insts[inst].exception_table() {
+                    let exdata = &f.dfg.exception_tables[et];
+                    let sig = &f.dfg.signatures[exdata.signature()];
+
+                    let mut rets = smallvec![];
+                    for ty in sig.returns.iter().map(|ret| ret.value_type) {
+                        rets.push(vregs.alloc(ty)?.map(|r| Writable::from_reg(r)));
+                    }
+                    try_call_rets.insert(inst, rets);
+
+                    let mut payloads = smallvec![];
+                    // Note that this is intentionally using the calling
+                    // convention of the callee to determine what payload types
+                    // are available. The callee defines that, not the calling
+                    // convention of the caller.
+                    for &ty in sig
+                        .call_conv
+                        .exception_payload_types(I::ABIMachineSpec::word_type())
+                    {
+                        payloads.push(Writable::from_reg(vregs.alloc(ty)?.only_reg().unwrap()));
+                    }
+                    try_call_payloads.insert(inst, payloads);
                 }
             }
         }
@@ -452,7 +490,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             block_end_colors[bb] = InstColor::new(cur_color);
         }
 
-        let value_ir_uses = Self::compute_use_states(f, sret_param);
+        let value_ir_uses = compute_use_states(f, sret_param);
 
         Ok(Lower {
             f,
@@ -469,6 +507,8 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             cur_scan_entry_color: None,
             cur_inst: None,
             ir_insts: vec![],
+            try_call_rets,
+            try_call_payloads,
             pinned_reg: None,
             flags,
         })
@@ -480,120 +520,6 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
 
     pub fn sigs_mut(&mut self) -> &mut SigSet {
         self.vcode.sigs_mut()
-    }
-
-    /// Pre-analysis: compute `value_ir_uses`. See comment on
-    /// `ValueUseState` for a description of what this analysis
-    /// computes.
-    fn compute_use_states<'a>(
-        f: &'a Function,
-        sret_param: Option<Value>,
-    ) -> SecondaryMap<Value, ValueUseState> {
-        // We perform the analysis without recursion, so we don't
-        // overflow the stack on long chains of ops in the input.
-        //
-        // This is sort of a hybrid of a "shallow use-count" pass and
-        // a DFS. We iterate over all instructions and mark their args
-        // as used. However when we increment a use-count to
-        // "Multiple" we push its args onto the stack and do a DFS,
-        // immediately marking the whole dependency tree as
-        // Multiple. Doing both (shallow use-counting over all insts,
-        // and deep Multiple propagation) lets us trim both
-        // traversals, stopping recursion when a node is already at
-        // the appropriate state.
-        //
-        // In particular, note that the *coarsening* into {Unused,
-        // Once, Multiple} is part of what makes this pass more
-        // efficient than a full indirect-use-counting pass.
-
-        let mut value_ir_uses = SecondaryMap::with_default(ValueUseState::Unused);
-
-        if let Some(sret_param) = sret_param {
-            // There's an implicit use of the struct-return parameter in each
-            // copy of the function epilogue, which we count here.
-            value_ir_uses[sret_param] = ValueUseState::Multiple;
-        }
-
-        // Stack of iterators over Values as we do DFS to mark
-        // Multiple-state subtrees. The iterator type is whatever is
-        // returned by `uses` below.
-        let mut stack: SmallVec<[_; 16]> = smallvec![];
-
-        // Find the args for the inst corresponding to the given value.
-        let uses = |value| {
-            trace!(" -> pushing args for {} onto stack", value);
-            if let ValueDef::Result(src_inst, _) = f.dfg.value_def(value) {
-                Some(f.dfg.inst_values(src_inst))
-            } else {
-                None
-            }
-        };
-
-        // Do a DFS through `value_ir_uses` to mark a subtree as
-        // Multiple.
-        for inst in f
-            .layout
-            .blocks()
-            .flat_map(|block| f.layout.block_insts(block))
-        {
-            // If this inst produces multiple values, we must mark all
-            // of its args as Multiple, because otherwise two uses
-            // could come in as Once on our two different results.
-            let force_multiple = f.dfg.inst_results(inst).len() > 1;
-
-            // Iterate over all values used by all instructions, noting an
-            // additional use on each operand.
-            for arg in f.dfg.inst_values(inst) {
-                debug_assert!(f.dfg.value_is_real(arg));
-                let old = value_ir_uses[arg];
-                if force_multiple {
-                    trace!(
-                        "forcing arg {} to Multiple because of multiple results of user inst",
-                        arg
-                    );
-                    value_ir_uses[arg] = ValueUseState::Multiple;
-                } else {
-                    value_ir_uses[arg].inc();
-                }
-                let new = value_ir_uses[arg];
-                trace!("arg {} used, old state {:?}, new {:?}", arg, old, new);
-
-                // On transition to Multiple, do DFS.
-                if old == ValueUseState::Multiple || new != ValueUseState::Multiple {
-                    continue;
-                }
-                if let Some(iter) = uses(arg) {
-                    stack.push(iter);
-                }
-                while let Some(iter) = stack.last_mut() {
-                    if let Some(value) = iter.next() {
-                        debug_assert!(f.dfg.value_is_real(value));
-                        trace!(" -> DFS reaches {}", value);
-                        if value_ir_uses[value] == ValueUseState::Multiple {
-                            // Truncate DFS here: no need to go further,
-                            // as whole subtree must already be Multiple.
-                            // With debug asserts, check one level of
-                            // that invariant at least.
-                            debug_assert!(uses(value).into_iter().flatten().all(|arg| {
-                                debug_assert!(f.dfg.value_is_real(arg));
-                                value_ir_uses[arg] == ValueUseState::Multiple
-                            }));
-                            continue;
-                        }
-                        value_ir_uses[value] = ValueUseState::Multiple;
-                        trace!(" -> became Multiple");
-                        if let Some(iter) = uses(value) {
-                            stack.push(iter);
-                        }
-                    } else {
-                        // Empty iterator, discard.
-                        stack.pop();
-                    }
-                }
-            }
-        }
-
-        value_ir_uses
     }
 
     fn gen_arg_setup(&mut self) {
@@ -641,7 +567,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
     }
 
     /// Generate the return instruction.
-    pub fn gen_return(&mut self, rets: Vec<ValueRegs<Reg>>) {
+    pub fn gen_return(&mut self, rets: &[ValueRegs<Reg>]) {
         let mut out_rets = vec![];
 
         let mut rets = rets.into_iter();
@@ -654,9 +580,9 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             .enumerate()
         {
             let regs = if ret.purpose == ArgumentPurpose::StructReturn {
-                self.sret_reg.unwrap().clone()
+                self.sret_reg.unwrap()
             } else {
-                rets.next().unwrap()
+                *rets.next().unwrap()
             };
 
             let (regs, insns) = self.vcode.abi().gen_copy_regs_to_retval(
@@ -685,6 +611,95 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
 
         let inst = self.abi().gen_rets(out_rets);
         self.emit(inst);
+    }
+
+    /// Generate list of registers to hold the output of a call with
+    /// signature `sig`.
+    pub fn gen_call_output(&mut self, sig: &Signature) -> InstOutput {
+        let mut rets = smallvec![];
+        for ty in sig.returns.iter().map(|ret| ret.value_type) {
+            rets.push(self.vregs.alloc_with_deferred_error(ty));
+        }
+        rets
+    }
+
+    /// Likewise, but for a `SigRef` instead.
+    pub fn gen_call_output_from_sig_ref(&mut self, sig_ref: SigRef) -> InstOutput {
+        self.gen_call_output(&self.f.dfg.signatures[sig_ref])
+    }
+
+    /// Set up arguments values `args` for a call with signature `sig`.
+    pub fn gen_call_args(&mut self, sig: Sig, args: &[ValueRegs<Reg>]) -> CallArgList {
+        let (uses, insts) = self.vcode.abi().gen_call_args(
+            self.vcode.sigs(),
+            sig,
+            args,
+            /* is_tail_call */ false,
+            &self.flags,
+            &mut self.vregs,
+        );
+        for insn in insts {
+            self.emit(insn);
+        }
+        uses
+    }
+
+    /// Likewise, but for a `return_call`.
+    pub fn gen_return_call_args(&mut self, sig: Sig, args: &[ValueRegs<Reg>]) -> CallArgList {
+        let (uses, insts) = self.vcode.abi().gen_call_args(
+            self.vcode.sigs(),
+            sig,
+            args,
+            /* is_tail_call */ true,
+            &self.flags,
+            &mut self.vregs,
+        );
+        for insn in insts {
+            self.emit(insn);
+        }
+        uses
+    }
+
+    /// Set up return values `outputs` for a call with signature `sig`.
+    pub fn gen_call_rets(&mut self, sig: Sig, outputs: &[ValueRegs<Reg>]) -> CallRetList {
+        self.vcode
+            .abi()
+            .gen_call_rets(self.vcode.sigs(), sig, outputs, None, &mut self.vregs)
+    }
+
+    /// Likewise, but for a `try_call`.
+    pub fn gen_try_call_rets(&mut self, sig: Sig) -> CallRetList {
+        let ir_inst = self.cur_inst.unwrap();
+        let mut outputs: SmallVec<[ValueRegs<Reg>; 2]> = smallvec![];
+        for return_def in self.try_call_rets.get(&ir_inst).unwrap() {
+            outputs.push(return_def.map(|r| r.to_reg()));
+        }
+        let payloads = Some(&self.try_call_payloads.get(&ir_inst).unwrap()[..]);
+
+        self.vcode
+            .abi()
+            .gen_call_rets(self.vcode.sigs(), sig, &outputs, payloads, &mut self.vregs)
+    }
+
+    /// Populate a `CallInfo` for a call with signature `sig`.
+    pub fn gen_call_info<T>(
+        &mut self,
+        sig: Sig,
+        dest: T,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<TryCallInfo>,
+        patchable: bool,
+    ) -> CallInfo<T> {
+        self.vcode.abi().gen_call_info(
+            self.vcode.sigs(),
+            sig,
+            dest,
+            uses,
+            defs,
+            try_call_info,
+            patchable,
+        )
     }
 
     /// Has this instruction been sunk to a use-site (i.e., away from its
@@ -764,22 +779,31 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                 continue;
             }
 
+            // Value defined by "inst" becomes live after it in normal
+            // order, and therefore **before** in reversed order.
+            // Only emit value label aliases if the instruction will be lowered
+            // (otherwise we want to keep using the earlier label instead).
+            self.emit_value_label_live_range_start_for_inst(inst, has_side_effect || value_needed);
+
             // Normal instruction: codegen if the instruction is side-effecting
             // or any of its outputs is used.
             if has_side_effect || value_needed {
                 trace!("lowering: inst {}: {}", inst, self.f.dfg.display_inst(inst));
-                let temp_regs = backend.lower(self, inst).unwrap_or_else(|| {
-                    let ty = if self.num_outputs(inst) > 0 {
-                        Some(self.output_ty(inst, 0))
-                    } else {
-                        None
-                    };
-                    panic!(
-                        "should be implemented in ISLE: inst = `{}`, type = `{:?}`",
-                        self.f.dfg.display_inst(inst),
-                        ty
-                    )
-                });
+                let temp_regs = match backend.lower(self, inst) {
+                    Some(regs) => regs,
+                    None => {
+                        let ty = if self.num_outputs(inst) > 0 {
+                            Some(self.output_ty(inst, 0))
+                        } else {
+                            None
+                        };
+                        return Err(CodegenError::Unsupported(format!(
+                            "should be implemented in ISLE: inst = `{}`, type = `{:?}`",
+                            self.f.dfg.display_inst(inst),
+                            ty
+                        )));
+                    }
+                };
 
                 // The ISLE generated code emits its own registers to define the
                 // instruction's lowered values in. However, other instructions
@@ -795,16 +819,62 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                 debug_assert_eq!(temp_regs.len(), results.len());
                 for (regs, &result) in temp_regs.iter().zip(results) {
                     let dsts = self.value_regs[result];
-                    debug_assert_eq!(regs.len(), dsts.len());
-                    for (&dst, &temp) in dsts.regs().iter().zip(regs.regs()) {
+                    let mut regs = regs.regs().iter();
+                    for &dst in dsts.regs().iter() {
+                        let temp = regs.next().copied().unwrap_or(Reg::invalid_sentinel());
                         trace!("set vreg alias: {result:?} = {dst:?}, lowering = {temp:?}");
                         self.vregs.set_vreg_alias(dst, temp);
                     }
                 }
             }
 
+            let start = self.vcode.vcode.num_insts();
             let loc = self.srcloc(inst);
             self.finish_ir_inst(loc);
+
+            // If the instruction had a user stack map, forward it from the CLIF
+            // to the vcode.
+            if let Some(entries) = self.f.dfg.user_stack_map_entries(inst) {
+                let end = self.vcode.vcode.num_insts();
+                debug_assert!(end > start);
+                debug_assert_eq!(
+                    (start..end)
+                        .filter(|i| self.vcode.vcode[InsnIndex::new(*i)].is_safepoint())
+                        .count(),
+                    1
+                );
+                for i in start..end {
+                    let iix = InsnIndex::new(i);
+                    if self.vcode.vcode[iix].is_safepoint() {
+                        trace!(
+                            "Adding user stack map from clif\n\n\
+                                 {inst:?} `{}`\n\n\
+                             to vcode\n\n\
+                                 {iix:?} `{}`",
+                            self.f.dfg.display_inst(inst),
+                            &self.vcode.vcode[iix].pretty_print_inst(&mut Default::default()),
+                        );
+                        self.vcode
+                            .add_user_stack_map(BackwardsInsnIndex::new(iix.index()), entries);
+                        break;
+                    }
+                }
+            }
+
+            // If the CLIF instruction had debug tags, copy them to
+            // the VCode. Place on all VCode instructions lowered from
+            // this CLIF instruction.
+            let debug_tags = self.f.debug_tags.get(inst);
+            if !debug_tags.is_empty() && self.vcode.vcode.num_insts() > 0 {
+                let end = self.vcode.vcode.num_insts();
+                for i in start..end {
+                    let backwards_index = BackwardsInsnIndex::new(i);
+                    log::trace!(
+                        "debug tags on {inst}; associating {debug_tags:?} with {backwards_index:?}"
+                    );
+                    self.vcode.add_debug_tags(backwards_index, debug_tags);
+                }
+            }
 
             // maybe insert random instruction
             if ctrl_plane.get_decision() {
@@ -821,11 +891,6 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                     }
                 }
             }
-
-            // Emit value-label markers if needed, to later recover
-            // debug mappings. This must happen before the instruction
-            // (so after we emit, in bottom-to-top pass).
-            self.emit_value_label_markers_for_inst(inst);
         }
 
         // Add the block params to this block.
@@ -865,14 +930,14 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         }
     }
 
-    fn emit_value_label_marks_for_value(&mut self, val: Value) {
+    fn emit_value_label_marks_for_value(&mut self, val: Value, allow_alias: bool) {
         let regs = self.value_regs[val];
         if regs.len() > 1 {
             return;
         }
         let reg = regs.only_reg().unwrap();
 
-        if let Some(label_starts) = self.get_value_labels(val, 0) {
+        if let Some(label_starts) = self.get_value_labels(val, if allow_alias { 0 } else { !0 }) {
             let labels = label_starts
                 .iter()
                 .map(|&ValueLabelStart { label, .. }| label)
@@ -880,16 +945,14 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             for label in labels {
                 trace!(
                     "value labeling: defines val {:?} -> reg {:?} -> label {:?}",
-                    val,
-                    reg,
-                    label,
+                    val, reg, label,
                 );
                 self.vcode.add_value_label(reg, label);
             }
         }
     }
 
-    fn emit_value_label_markers_for_inst(&mut self, inst: Inst) {
+    fn emit_value_label_live_range_start_for_inst(&mut self, inst: Inst, allow_alias: bool) {
         if self.f.dfg.values_labels.is_none() {
             return;
         }
@@ -900,18 +963,18 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             inst
         );
         for &val in self.f.dfg.inst_results(inst) {
-            self.emit_value_label_marks_for_value(val);
+            self.emit_value_label_marks_for_value(val, allow_alias);
         }
     }
 
-    fn emit_value_label_markers_for_block_args(&mut self, block: Block) {
+    fn emit_value_label_live_range_start_for_block_args(&mut self, block: Block) {
         if self.f.dfg.values_labels.is_none() {
             return;
         }
 
         trace!("value labeling: block {}", block);
         for &arg in self.f.dfg.block_params(block) {
-            self.emit_value_label_marks_for_value(arg);
+            self.emit_value_label_marks_for_value(arg, true);
         }
         self.finish_ir_inst(Default::default());
     }
@@ -929,7 +992,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         self.vcode.end_bb();
     }
 
-    fn lower_clif_branches<B: LowerBackend<MInst = I>>(
+    fn lower_clif_branch<B: LowerBackend<MInst = I>>(
         &mut self,
         backend: &B,
         // Lowered block index:
@@ -940,10 +1003,8 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         targets: &[MachLabel],
     ) -> CodegenResult<()> {
         trace!(
-            "lower_clif_branches: block {} branch {:?} targets {:?}",
-            block,
-            branch,
-            targets,
+            "lower_clif_branch: block {} branch {:?} targets {:?}",
+            block, branch, targets,
         );
         // When considering code-motion opportunities, consider the current
         // program point to be this branch.
@@ -966,31 +1027,17 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
     }
 
     fn lower_branch_blockparam_args(&mut self, block: BlockIndex) {
+        let mut branch_arg_vregs: SmallVec<[Reg; 16]> = smallvec![];
+
         // TODO: why not make `block_order` public?
         for succ_idx in 0..self.vcode.block_order().succ_indices(block).1.len() {
-            // Avoid immutable borrow by explicitly indexing.
-            let (opt_inst, succs) = self.vcode.block_order().succ_indices(block);
-            let inst = opt_inst.expect("lower_branch_blockparam_args called on a critical edge!");
-            let succ = succs[succ_idx];
-
-            // The use of `succ_idx` to index `branch_destination` is valid on the assumption that
-            // the traversal order defined in `visit_block_succs` mirrors the order returned by
-            // `branch_destination`. If that assumption is violated, the branch targets returned
-            // here will not match the clif.
-            let branches = self.f.dfg.insts[inst].branch_destination(&self.f.dfg.jump_tables);
-            let branch_args = branches[succ_idx].args_slice(&self.f.dfg.value_lists);
-
-            let mut branch_arg_vregs: SmallVec<[Reg; 16]> = smallvec![];
-            for &arg in branch_args {
-                debug_assert!(self.f.dfg.value_is_real(arg));
-                let regs = self.put_value_in_regs(arg);
-                branch_arg_vregs.extend_from_slice(regs.regs());
-            }
-            self.vcode.add_succ(succ, &branch_arg_vregs[..]);
+            branch_arg_vregs.clear();
+            let (succ, args) = self.collect_block_call(block, succ_idx, &mut branch_arg_vregs);
+            self.vcode.add_succ(succ, args);
         }
     }
 
-    fn collect_branches_and_targets(
+    fn collect_branch_and_targets(
         &self,
         bindex: BlockIndex,
         _bb: Block,
@@ -1000,6 +1047,69 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         let (opt_inst, succs) = self.vcode.block_order().succ_indices(bindex);
         targets.extend(succs.iter().map(|succ| MachLabel::from_block(*succ)));
         opt_inst
+    }
+
+    /// Collect the outgoing block-call arguments for a given edge out
+    /// of a lowered block.
+    fn collect_block_call<'a>(
+        &mut self,
+        block: BlockIndex,
+        succ_idx: usize,
+        buffer: &'a mut SmallVec<[Reg; 16]>,
+    ) -> (BlockIndex, &'a [Reg]) {
+        let block_order = self.vcode.block_order();
+        let (_, succs) = block_order.succ_indices(block);
+        let succ = succs[succ_idx];
+        let this_lb = block_order.lowered_order()[block.index()];
+        let succ_lb = block_order.lowered_order()[succ.index()];
+
+        let (branch_inst, succ_idx) = match (this_lb, succ_lb) {
+            (_, LoweredBlock::CriticalEdge { .. }) => {
+                // The successor is a split-critical-edge block. In this
+                // case, this block-call has no arguments, and the
+                // arguments go on the critical edge block's unconditional
+                // branch instead.
+                return (succ, &[]);
+            }
+            (LoweredBlock::CriticalEdge { pred, succ_idx, .. }, _) => {
+                // This is a split-critical-edge block. In this case, our
+                // block-call has the arguments that in the CLIF appear in
+                // the predecessor's branch to this edge.
+                let branch_inst = self.f.layout.last_inst(pred).unwrap();
+                (branch_inst, succ_idx as usize)
+            }
+
+            (this, _) => {
+                let block = this.orig_block().unwrap();
+                // Ordinary block, with an ordinary block as
+                // successor. Take the arguments from the branch.
+                let branch_inst = self.f.layout.last_inst(block).unwrap();
+                (branch_inst, succ_idx)
+            }
+        };
+
+        let block_call = self.f.dfg.insts[branch_inst]
+            .branch_destination(&self.f.dfg.jump_tables, &self.f.dfg.exception_tables)[succ_idx];
+        for arg in block_call.args(&self.f.dfg.value_lists) {
+            match arg {
+                BlockArg::Value(arg) => {
+                    debug_assert!(self.f.dfg.value_is_real(arg));
+                    let regs = self.put_value_in_regs(arg);
+                    buffer.extend_from_slice(regs.regs());
+                }
+                BlockArg::TryCallRet(i) => {
+                    let regs = self.try_call_rets.get(&branch_inst).unwrap()[i as usize]
+                        .map(|r| r.to_reg());
+                    buffer.extend_from_slice(regs.regs());
+                }
+                BlockArg::TryCallExn(i) => {
+                    let reg =
+                        self.try_call_payloads.get(&branch_inst).unwrap()[i as usize].to_reg();
+                    buffer.push(reg);
+                }
+            }
+        }
+        (succ, &buffer[..])
     }
 
     /// Lower the function.
@@ -1038,45 +1148,47 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             // Lower the block body in reverse order (see comment in
             // `lower_clif_block()` for rationale).
 
-            // End branches.
+            // End branch.
             if let Some(bb) = lb.orig_block() {
-                if let Some(branch) = self.collect_branches_and_targets(bindex, bb, &mut targets) {
-                    self.lower_clif_branches(backend, bindex, bb, branch, &targets)?;
+                if let Some(branch) = self.collect_branch_and_targets(bindex, bb, &mut targets) {
+                    let branch_start = self.vcode.vcode.num_insts();
+                    self.lower_clif_branch(backend, bindex, bb, branch, &targets)?;
                     self.finish_ir_inst(self.srcloc(branch));
+
+                    // Branch instructions like try_call can also be safepoints
+                    // that need stack maps. Forward the stack map from the CLIF
+                    // branch to the VCode safepoint, just like we do for
+                    // non-branch instructions in `lower_clif_block`.
+                    if let Some(entries) = self.f.dfg.user_stack_map_entries(branch) {
+                        let branch_end = self.vcode.vcode.num_insts();
+                        for i in branch_start..branch_end {
+                            let iix = InsnIndex::new(i);
+                            if self.vcode.vcode[iix].is_safepoint() {
+                                self.vcode.add_user_stack_map(
+                                    BackwardsInsnIndex::new(iix.index()),
+                                    entries,
+                                );
+                                break;
+                            }
+                        }
+                    }
                 }
             } else {
                 // If no orig block, this must be a pure edge block;
-                // get the successor and emit a jump. Add block params
-                // according to the one successor, and pass them
-                // through; note that the successor must have an
-                // original block.
-                let (_, succs) = self.vcode.block_order().succ_indices(bindex);
-                let succ = succs[0];
-
-                let orig_succ = lowered_order[succ.index()];
-                let orig_succ = orig_succ
-                    .orig_block()
-                    .expect("Edge block succ must be body block");
-
-                let mut branch_arg_vregs: SmallVec<[Reg; 16]> = smallvec![];
-                for ty in self.f.dfg.block_param_types(orig_succ) {
-                    let regs = self.vregs.alloc(ty)?;
-                    for &reg in regs.regs() {
-                        branch_arg_vregs.push(reg);
-                        let vreg = reg.to_virtual_reg().unwrap();
-                        self.vcode.add_block_param(vreg);
-                    }
-                }
-                self.vcode.add_succ(succ, &branch_arg_vregs[..]);
-
+                // get the successor and emit a jump. This block has
+                // no block params; and this jump's block-call args
+                // will be filled in by
+                // `lower_branch_blockparam_args`.
+                let succ = self.vcode.block_order().succ_indices(bindex).1[0];
                 self.emit(I::gen_jump(MachLabel::from_block(succ)));
                 self.finish_ir_inst(Default::default());
+                self.lower_branch_blockparam_args(bindex);
             }
 
             // Original block body.
             if let Some(bb) = lb.orig_block() {
                 self.lower_clif_block(backend, bb, ctrl_plane)?;
-                self.emit_value_label_markers_for_block_args(bb);
+                self.emit_value_label_live_range_start_for_block_args(bb);
             }
 
             if bindex.index() == 0 {
@@ -1098,13 +1210,164 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         // VCodeBuilder, let's build the VCode.
         trace!(
             "built vcode:\n{:?}Backwards {:?}",
-            &self.vregs,
-            &self.vcode.vcode
+            &self.vregs, &self.vcode.vcode
         );
         let vcode = self.vcode.build(self.vregs);
 
         Ok(vcode)
     }
+
+    pub fn value_is_unused(&self, val: Value) -> bool {
+        match self.value_ir_uses[val] {
+            ValueUseState::Unused => true,
+            _ => false,
+        }
+    }
+
+    pub fn block_successor_label(&self, block: Block, succ: usize) -> MachLabel {
+        trace!("block_successor_label: block {block} succ {succ}");
+        let lowered = self
+            .vcode
+            .block_order()
+            .lowered_index_for_block(block)
+            .expect("Unreachable block");
+        trace!(" -> lowered block {lowered:?}");
+        let (_, succs) = self.vcode.block_order().succ_indices(lowered);
+        trace!(" -> succs {succs:?}");
+        let succ_block = *succs.get(succ).expect("Successor index out of range");
+        MachLabel::from_block(succ_block)
+    }
+}
+
+/// Pre-analysis: compute `value_ir_uses`. See comment on
+/// `ValueUseState` for a description of what this analysis
+/// computes.
+fn compute_use_states(
+    f: &Function,
+    sret_param: Option<Value>,
+) -> SecondaryMap<Value, ValueUseState> {
+    // We perform the analysis without recursion, so we don't
+    // overflow the stack on long chains of ops in the input.
+    //
+    // This is sort of a hybrid of a "shallow use-count" pass and
+    // a DFS. We iterate over all instructions and mark their args
+    // as used. However when we increment a use-count to
+    // "Multiple" we push its args onto the stack and do a DFS,
+    // immediately marking the whole dependency tree as
+    // Multiple. Doing both (shallow use-counting over all insts,
+    // and deep Multiple propagation) lets us trim both
+    // traversals, stopping recursion when a node is already at
+    // the appropriate state.
+    //
+    // In particular, note that the *coarsening* into {Unused,
+    // Once, Multiple} is part of what makes this pass more
+    // efficient than a full indirect-use-counting pass.
+
+    let mut value_ir_uses = SecondaryMap::with_default(ValueUseState::Unused);
+
+    if let Some(sret_param) = sret_param {
+        // There's an implicit use of the struct-return parameter in each
+        // copy of the function epilogue, which we count here.
+        value_ir_uses[sret_param] = ValueUseState::Multiple;
+    }
+
+    // Stack of iterators over Values as we do DFS to mark
+    // Multiple-state subtrees. The iterator type is whatever is
+    // returned by `uses` below.
+    let mut stack: SmallVec<[_; 16]> = smallvec![];
+
+    // Find the args for the inst corresponding to the given value.
+    //
+    // Note that "root" instructions are skipped here. This means that multiple
+    // uses of any result of a multi-result instruction are not considered
+    // multiple uses of the operands of a multi-result instruction. This
+    // requires tight coupling with `get_value_as_source_or_const` above which
+    // is the consumer of the map that this function is producing.
+    let uses = |value| {
+        trace!(" -> pushing args for {} onto stack", value);
+        if let ValueDef::Result(src_inst, _) = f.dfg.value_def(value) {
+            if is_value_use_root(f, src_inst) {
+                None
+            } else {
+                Some(f.dfg.inst_values(src_inst))
+            }
+        } else {
+            None
+        }
+    };
+
+    // Do a DFS through `value_ir_uses` to mark a subtree as
+    // Multiple.
+    for inst in f
+        .layout
+        .blocks()
+        .flat_map(|block| f.layout.block_insts(block))
+    {
+        // Iterate over all values used by all instructions, noting an
+        // additional use on each operand.
+        for arg in f.dfg.inst_values(inst) {
+            debug_assert!(f.dfg.value_is_real(arg));
+            let old = value_ir_uses[arg];
+            value_ir_uses[arg].inc();
+            let new = value_ir_uses[arg];
+            trace!("arg {} used, old state {:?}, new {:?}", arg, old, new);
+
+            // On transition to Multiple, do DFS.
+            if old == ValueUseState::Multiple || new != ValueUseState::Multiple {
+                continue;
+            }
+            if let Some(iter) = uses(arg) {
+                stack.push(iter);
+            }
+            while let Some(iter) = stack.last_mut() {
+                if let Some(value) = iter.next() {
+                    debug_assert!(f.dfg.value_is_real(value));
+                    trace!(" -> DFS reaches {}", value);
+                    if value_ir_uses[value] == ValueUseState::Multiple {
+                        // Truncate DFS here: no need to go further,
+                        // as whole subtree must already be Multiple.
+                        // With debug asserts, check one level of
+                        // that invariant at least.
+                        debug_assert!(uses(value).into_iter().flatten().all(|arg| {
+                            debug_assert!(f.dfg.value_is_real(arg));
+                            value_ir_uses[arg] == ValueUseState::Multiple
+                        }));
+                        continue;
+                    }
+                    value_ir_uses[value] = ValueUseState::Multiple;
+                    trace!(" -> became Multiple");
+                    if let Some(iter) = uses(value) {
+                        stack.push(iter);
+                    }
+                } else {
+                    // Empty iterator, discard.
+                    stack.pop();
+                }
+            }
+        }
+    }
+
+    value_ir_uses
+}
+
+/// Definition of a "root" instruction for the calculation of `ValueUseState`.
+///
+/// This function calculates whether `inst` is considered a "root" for value-use
+/// information. This concept is used to forcibly prevent looking-through the
+/// instruction during `get_value_as_source_or_const` as it additionally
+/// prevents propagating `Multiple`-used results of the `inst` here to the
+/// operands of the instruction.
+///
+/// Currently this is defined as multi-result instructions. That means that
+/// lowerings are never allowed to look through a multi-result instruction to
+/// generate patterns. Note that this isn't possible in ISLE today anyway so
+/// this isn't currently much of a loss.
+///
+/// The main purpose of this function is to prevent the operands of a
+/// multi-result instruction from being forcibly considered `Multiple`-used
+/// regardless of circumstances.
+fn is_value_use_root(f: &Function, inst: Inst) -> bool {
+    f.dfg.inst_results(inst).len() > 1
 }
 
 /// Function-level queries.
@@ -1237,25 +1500,52 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         val
     }
 
-    /// Like `get_input_as_source_or_const` but with a `Value`.
+    /// Resolves a particular input of an instruction to the `Value` that it is
+    /// represented with.
+    ///
+    /// For more information see [`Lower::get_value_as_source_or_const`].
     pub fn get_input_as_source_or_const(&self, ir_inst: Inst, idx: usize) -> NonRegInput {
         let val = self.input_as_value(ir_inst, idx);
         self.get_value_as_source_or_const(val)
     }
 
-    /// Resolves a particular input of an instruction to the `Value` that it is
-    /// represented with.
+    /// Resolves a `Value` definition to the source instruction it came from
+    /// plus whether it's a unique-use of that instruction.
+    ///
+    /// This function is the workhorse of pattern-matching in ISLE which enables
+    /// combining multiple instructions together. This is used implicitly in
+    /// patterns such as `(iadd x (iconst y))` where this function is used to
+    /// extract the `(iconst y)` operand.
+    ///
+    /// At its core this function is a wrapper around
+    /// [`DataFlowGraph::value_def`]. This function applies a filter on top of
+    /// that, however, to determine when it is actually safe to "look through"
+    /// the `val` definition here and view the underlying instruction. This
+    /// protects against duplicating side effects, such as loads, for example.
+    ///
+    /// Internally this uses the data computed from `compute_use_states` along
+    /// with other instruction properties to know what to return.
     pub fn get_value_as_source_or_const(&self, val: Value) -> NonRegInput {
         trace!(
             "get_input_for_val: val {} at cur_inst {:?} cur_scan_entry_color {:?}",
-            val,
-            self.cur_inst,
-            self.cur_scan_entry_color,
+            val, self.cur_inst, self.cur_scan_entry_color,
         );
         let inst = match self.f.dfg.value_def(val) {
-            // OK to merge source instruction if (i) we have a source
-            // instruction, and:
-            // - It has no side-effects, OR
+            // OK to merge source instruction if we have a source
+            // instruction, and one of these two conditions hold:
+            //
+            // - It has no side-effects and this instruction is not a "value-use
+            //   root" instruction. Instructions which are considered "roots"
+            //   for value-use calculations do not have accurate information
+            //   known about the `ValueUseState` of their operands. This is
+            //   currently done for multi-result instructions to prevent a use
+            //   of each result from forcing all operands of the multi-result
+            //   instruction to also be `Multiple`. This in turn means that the
+            //   `ValueUseState` for operands of a "root" instruction to be a
+            //   lie if pattern matching were to look through the multi-result
+            //   instruction. As a result the "look through this instruction"
+            //   logic only succeeds if it's not a root instruction.
+            //
             // - It has a side-effect, has one output value, that one
             //   output has only one use, directly or indirectly (so
             //   cannot be duplicated -- see comment on
@@ -1276,12 +1566,23 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             //   prior to the sunk instruction) to sink.
             ValueDef::Result(src_inst, result_idx) => {
                 let src_side_effect = has_lowering_side_effect(self.f, src_inst);
-                trace!(" -> src inst {}", src_inst);
+                trace!(" -> src inst {}", self.f.dfg.display_inst(src_inst));
                 trace!(" -> has lowering side effect: {}", src_side_effect);
-                if !src_side_effect {
-                    // Pure instruction: always possible to
-                    // sink. Let's determine whether we are the only
-                    // user or not.
+                if is_value_use_root(self.f, src_inst) {
+                    // If this instruction is a "root instruction" then it's
+                    // required that we can't look through it to see the
+                    // definition. This means that the `ValueUseState` for the
+                    // operands of this result assume that this instruction is
+                    // generated exactly once which might get violated were we
+                    // to allow looking through it.
+                    trace!(" -> is a root instruction");
+                    InputSourceInst::None
+                } else if !src_side_effect {
+                    // Otherwise if this instruction has no side effects and the
+                    // value is used only once then we can look through it with
+                    // a "unique" tag. A non-unique `Use` can be shown for other
+                    // values ensuring consumers know how it's computed but that
+                    // it's not available to omit.
                     if self.value_ir_uses[val] == ValueUseState::Once {
                         InputSourceInst::UniqueUse(src_inst, result_idx)
                     } else {
@@ -1293,9 +1594,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                     // the code-motion.
                     trace!(
                         " -> side-effecting op {} for val {}: use state {:?}",
-                        src_inst,
-                        val,
-                        self.value_ir_uses[val]
+                        src_inst, val, self.value_ir_uses[val]
                     );
                     if self.cur_scan_entry_color.is_some()
                         && self.value_ir_uses[val] == ValueUseState::Once
@@ -1403,30 +1702,54 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
     pub fn use_constant(&mut self, constant: VCodeConstantData) -> VCodeConstant {
         self.vcode.constants().insert(constant)
     }
+}
 
-    /// Cause the value in `reg` to be in a virtual reg, by copying it into a new virtual reg
-    /// if `reg` is a real reg.  `ty` describes the type of the value in `reg`.
-    pub fn ensure_in_vreg(&mut self, reg: Reg, ty: Type) -> Reg {
-        if reg.to_virtual_reg().is_some() {
-            reg
-        } else {
-            let new_reg = self.alloc_tmp(ty).only_reg().unwrap();
-            self.emit(I::gen_move(new_reg, reg, ty));
-            new_reg.to_reg()
-        }
+#[cfg(test)]
+mod tests {
+    use super::ValueUseState;
+    use crate::cursor::{Cursor, FuncCursor};
+    use crate::ir::types;
+    use crate::ir::{Function, InstBuilder};
+
+    #[test]
+    fn multi_result_use_once() {
+        let mut func = Function::new();
+        let block0 = func.dfg.make_block();
+        let mut pos = FuncCursor::new(&mut func);
+        pos.insert_block(block0);
+        let v1 = pos.ins().iconst(types::I64, 0);
+        let v2 = pos.ins().iconst(types::I64, 1);
+        let v3 = pos.ins().iconcat(v1, v2);
+        let (v4, v5) = pos.ins().isplit(v3);
+        pos.ins().return_(&[v4, v5]);
+        let func = pos.func;
+
+        let uses = super::compute_use_states(&func, None);
+        assert_eq!(uses[v1], ValueUseState::Once);
+        assert_eq!(uses[v2], ValueUseState::Once);
+        assert_eq!(uses[v3], ValueUseState::Once);
+        assert_eq!(uses[v4], ValueUseState::Once);
+        assert_eq!(uses[v5], ValueUseState::Once);
     }
 
-    /// Add a range fact to a register, if no other fact is present.
-    pub fn add_range_fact(&mut self, reg: Reg, bit_width: u16, min: u64, max: u64) {
-        if self.flags.enable_pcc() {
-            self.vregs.set_fact_if_missing(
-                reg.to_virtual_reg().unwrap(),
-                Fact::Range {
-                    bit_width,
-                    min,
-                    max,
-                },
-            );
-        }
+    #[test]
+    fn results_used_twice_but_not_operands() {
+        let mut func = Function::new();
+        let block0 = func.dfg.make_block();
+        let mut pos = FuncCursor::new(&mut func);
+        pos.insert_block(block0);
+        let v1 = pos.ins().iconst(types::I64, 0);
+        let v2 = pos.ins().iconst(types::I64, 1);
+        let v3 = pos.ins().iconcat(v1, v2);
+        let (v4, v5) = pos.ins().isplit(v3);
+        pos.ins().return_(&[v4, v4]);
+        let func = pos.func;
+
+        let uses = super::compute_use_states(&func, None);
+        assert_eq!(uses[v1], ValueUseState::Once);
+        assert_eq!(uses[v2], ValueUseState::Once);
+        assert_eq!(uses[v3], ValueUseState::Once);
+        assert_eq!(uses[v4], ValueUseState::Multiple);
+        assert_eq!(uses[v5], ValueUseState::Unused);
     }
 }

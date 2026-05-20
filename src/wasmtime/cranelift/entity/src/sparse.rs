@@ -5,11 +5,12 @@
 //! the paper:
 //!
 //! > Briggs, Torczon, *An efficient representation for sparse sets*,
-//!   ACM Letters on Programming Languages and Systems, Volume 2, Issue 1-4, March-Dec. 1993.
+//! > ACM Letters on Programming Languages and Systems, Volume 2, Issue 1-4, March-Dec. 1993.
 
-use crate::map::SecondaryMap;
 use crate::EntityRef;
+use crate::map::SecondaryMap;
 use alloc::vec::Vec;
+use core::fmt;
 use core::mem;
 use core::slice;
 use core::u32;
@@ -193,13 +194,35 @@ where
     /// The iteration order is entirely determined by the preceding sequence of `insert` and
     /// `remove` operations. In particular, if no elements were removed, this is the insertion
     /// order.
-    pub fn values(&self) -> slice::Iter<V> {
+    pub fn values(&self) -> slice::Iter<'_, V> {
         self.dense.iter()
     }
 
     /// Get the values as a slice.
     pub fn as_slice(&self) -> &[V] {
         self.dense.as_slice()
+    }
+}
+
+impl<K, V> Default for SparseMap<K, V>
+where
+    K: EntityRef,
+    V: SparseMapValue<K>,
+{
+    fn default() -> SparseMap<K, V> {
+        SparseMap::new()
+    }
+}
+
+impl<K, V> fmt::Debug for SparseMap<K, V>
+where
+    K: EntityRef + fmt::Debug,
+    V: SparseMapValue<K> + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map()
+            .entries(self.values().map(|v| (v.key(), v)))
+            .finish()
     }
 }
 
@@ -234,6 +257,8 @@ pub type SparseSet<T> = SparseMap<T, T>;
 
 #[cfg(test)]
 mod tests {
+    use alloc::format;
+
     use super::*;
 
     /// An opaque reference to an instruction in a function.
@@ -363,5 +388,24 @@ mod tests {
         assert_eq!(set.insert(i1), None);
         assert_eq!(set.get(i0), Some(&i0));
         assert_eq!(set.get(i1), Some(&i1));
+    }
+
+    #[test]
+    fn default_impl() {
+        let map: SparseMap<Inst, Obj> = SparseMap::default();
+
+        assert!(map.is_empty());
+        assert_eq!(map.len(), 0);
+    }
+
+    #[test]
+    fn debug_impl() {
+        let i1 = Inst::new(1);
+        let mut map = SparseMap::new();
+        assert_eq!(map.insert(Obj(i1, "hi")), None);
+
+        let debug = format!("{map:?}");
+        let expected = "{inst1: Obj(inst1, \"hi\")}";
+        assert_eq!(debug, expected);
     }
 }

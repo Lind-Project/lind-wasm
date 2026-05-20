@@ -3,7 +3,7 @@
 
 use crate::generators::{Config, DiffValue, DiffValueType};
 use crate::oracles::engine::{DiffEngine, DiffInstance};
-use anyhow::{anyhow, Error, Result};
+use anyhow::{Error, Result, anyhow};
 use wasm_spec_interpreter::SpecValue;
 use wasmtime::Trap;
 
@@ -72,7 +72,7 @@ impl DiffInstance for SpecInstance {
     }
 
     fn get_global(&mut self, name: &str, _ty: DiffValueType) -> Option<DiffValue> {
-        use wasm_spec_interpreter::{export, SpecExport::Global};
+        use wasm_spec_interpreter::{SpecExport::Global, export};
         if let Ok(Global(g)) = export(&self.instance, name) {
             Some(g.into())
         } else {
@@ -81,7 +81,7 @@ impl DiffInstance for SpecInstance {
     }
 
     fn get_memory(&mut self, name: &str, _shared: bool) -> Option<Vec<u8>> {
-        use wasm_spec_interpreter::{export, SpecExport::Memory};
+        use wasm_spec_interpreter::{SpecExport::Memory, export};
         if let Ok(Memory(m)) = export(&self.instance, name) {
             Some(m)
         } else {

@@ -1,71 +1,35 @@
-use crate::prelude::*;
+use crate::module::ModuleRegistry;
+use crate::runtime::vm::{self, GcStore, VMStore};
 use crate::store::StoreOpaque;
-use crate::{StoreContext, StoreContextMut};
-use core::fmt;
-use core::marker;
+use crate::{Engine, StoreContext, StoreContextMut};
 use core::num::NonZeroU64;
 use core::ops::{Index, IndexMut};
-use core::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use core::pin::Pin;
 
 // This is defined here, in a private submodule, so we can explicitly reexport
 // it only as `pub(crate)`. This avoids a ton of
 // crate-private-type-in-public-interface errors that aren't really too
 // interesting to deal with.
-#[derive(Copy, Clone, Debug)]
-pub struct InstanceId(pub(super) usize);
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct InstanceId(u32);
+wasmtime_environ::entity_impl!(InstanceId);
 
-impl InstanceId {
-    pub fn from_index(idx: usize) -> InstanceId {
-        InstanceId(idx)
-    }
-}
-
+#[allow(missing_docs)]
 pub struct StoreData {
     id: StoreId,
-    funcs: Vec<crate::func::FuncData>,
-    tables: Vec<crate::runtime::vm::ExportTable>,
-    globals: Vec<crate::runtime::vm::ExportGlobal>,
-    instances: Vec<crate::instance::InstanceData>,
-    memories: Vec<crate::runtime::vm::ExportMemory>,
     #[cfg(feature = "component-model")]
     pub(crate) components: crate::component::ComponentStoreData,
 }
 
-pub trait StoredData: Sized {
-    fn list(data: &StoreData) -> &Vec<Self>;
-    fn list_mut(data: &mut StoreData) -> &mut Vec<Self>;
-}
-
-macro_rules! impl_store_data {
-    ($($field:ident => $t:ty,)*) => ($(
-        impl StoredData for $t {
-            #[inline]
-            fn list(data: &StoreData) -> &Vec<Self> { &data.$field }
-            #[inline]
-            fn list_mut(data: &mut StoreData) -> &mut Vec<Self> { &mut data.$field }
-        }
-    )*)
-}
-
-impl_store_data! {
-    funcs => crate::func::FuncData,
-    tables => crate::runtime::vm::ExportTable,
-    globals => crate::runtime::vm::ExportGlobal,
-    instances => crate::instance::InstanceData,
-    memories => crate::runtime::vm::ExportMemory,
-}
-
 impl StoreData {
-    pub fn new() -> StoreData {
+    pub fn new(engine: &Engine) -> StoreData {
+        #[cfg(not(feature = "component-model"))]
+        let _ = engine;
         StoreData {
             id: StoreId::allocate(),
-            funcs: Vec::new(),
-            tables: Vec::new(),
-            globals: Vec::new(),
-            instances: Vec::new(),
-            memories: Vec::new(),
             #[cfg(feature = "component-model")]
-            components: Default::default(),
+            components: crate::component::ComponentStoreData::new(engine),
         }
     }
 
@@ -73,103 +37,18 @@ impl StoreData {
         self.id
     }
 
-    pub fn insert<T>(&mut self, data: T) -> Stored<T>
-    where
-        T: StoredData,
-    {
-        let list = T::list_mut(self);
-        let index = list.len();
-        list.push(data);
-        Stored::new(self.id, index)
+    pub fn run_manual_drop_routines<T>(store: StoreContextMut<T>) {
+        #[cfg(feature = "component-model")]
+        crate::component::ComponentStoreData::run_manual_drop_routines(store);
+        #[cfg(not(feature = "component-model"))]
+        let _ = store;
     }
 
-    pub fn next_id<T>(&self) -> Stored<T>
-    where
-        T: StoredData,
-    {
-        Stored::new(self.id, T::list(self).len())
-    }
-
-    pub fn contains<T>(&self, id: Stored<T>) -> bool
-    where
-        T: StoredData,
-    {
-        if id.store_id != self.id {
-            return false;
-        }
-        // This should be true as an invariant of our API, but double-check with
-        // debug assertions enabled.
-        debug_assert!(id.index() < T::list(self).len());
-        true
-    }
-
-    pub fn iter<T>(&self) -> impl ExactSizeIterator<Item = Stored<T>>
-    where
-        T: StoredData,
-    {
-        let id = self.id;
-        (0..T::list(self).len()).map(move |i| Stored::new(id, i))
-    }
-
-    pub(crate) fn reserve_funcs(&mut self, count: usize) {
-        self.funcs.reserve(count);
-    }
-}
-
-impl<T> Index<Stored<T>> for StoreData
-where
-    T: StoredData,
-{
-    type Output = T;
-
-    #[inline]
-    fn index(&self, index: Stored<T>) -> &Self::Output {
-        index.assert_belongs_to(self.id);
-        // Note that if this is ever a performance bottleneck it should be safe
-        // to use unchecked indexing here because presence of a `Stored<T>` is
-        // proof of an item having been inserted into a store and lists in
-        // stores are never shrunk. After the store check above the actual index
-        // should always be valid.
-        &T::list(self)[index.index()]
-    }
-}
-
-impl<T> IndexMut<Stored<T>> for StoreData
-where
-    T: StoredData,
-{
-    #[inline]
-    fn index_mut(&mut self, index: Stored<T>) -> &mut Self::Output {
-        index.assert_belongs_to(self.id);
-        // Note that this could be unchecked indexing, see the note in `Index`
-        // above.
-        &mut T::list_mut(self)[index.index()]
-    }
-}
-
-// forward StoreContext => StoreData
-impl<I, T> Index<I> for StoreContext<'_, T>
-where
-    StoreData: Index<I>,
-{
-    type Output = <StoreData as Index<I>>::Output;
-
-    #[inline]
-    fn index(&self, index: I) -> &Self::Output {
-        self.0.store_data.index(index)
-    }
-}
-
-// forward StoreContextMut => StoreData
-impl<I, T> Index<I> for StoreContextMut<'_, T>
-where
-    StoreData: Index<I>,
-{
-    type Output = <StoreData as Index<I>>::Output;
-
-    #[inline]
-    fn index(&self, index: I) -> &Self::Output {
-        self.0.store_data.index(index)
+    pub fn decrement_allocator_resources(&mut self, allocator: &dyn vm::InstanceAllocator) {
+        #[cfg(feature = "component-model")]
+        self.components.decrement_allocator_resources(allocator);
+        #[cfg(not(feature = "component-model"))]
+        let _ = allocator;
     }
 }
 
@@ -182,16 +61,74 @@ where
 
     #[inline]
     fn index(&self, index: I) -> &Self::Output {
-        self.store_data().index(index)
+        self.store_data.index(index)
     }
 }
+
 impl<I> IndexMut<I> for StoreOpaque
 where
     StoreData: IndexMut<I>,
 {
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        self.store_data_mut().index_mut(index)
+        self.store_data.index_mut(index)
+    }
+}
+
+// forward StoreContext => StoreOpaque
+impl<I, T> Index<I> for StoreContext<'_, T>
+where
+    StoreOpaque: Index<I>,
+{
+    type Output = <StoreOpaque as Index<I>>::Output;
+
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        self.0.index(index)
+    }
+}
+
+// forward StoreContextMut => StoreOpaque
+impl<I, T> Index<I> for StoreContextMut<'_, T>
+where
+    StoreOpaque: Index<I>,
+{
+    type Output = <StoreOpaque as Index<I>>::Output;
+
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        self.0.index(index)
+    }
+}
+
+impl<I, T> IndexMut<I> for StoreContextMut<'_, T>
+where
+    StoreOpaque: IndexMut<I>,
+{
+    #[inline]
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.0.index_mut(index)
+    }
+}
+
+// forward dyn VMStore => StoreOpaque
+impl<I> Index<I> for dyn VMStore + '_
+where
+    StoreOpaque: Index<I>,
+{
+    type Output = <StoreOpaque as Index<I>>::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.store_opaque().index(index)
+    }
+}
+
+impl<I> IndexMut<I> for dyn VMStore + '_
+where
+    StoreOpaque: IndexMut<I>,
+{
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.store_opaque_mut().index_mut(index)
     }
 }
 
@@ -210,22 +147,46 @@ impl StoreId {
     /// Allocates a new unique identifier for a store that has never before been
     /// used in this process.
     pub fn allocate() -> StoreId {
-        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-
-        // Only allow 2^63 stores at which point we start panicking to prevent
-        // overflow.
+        // When 64-bit atomics are allowed then allow 2^63 stores at which point
+        // we start panicking to prevent overflow.
         //
         // If a store is created once per microsecond then this will last the
         // current process for 584,540 years before overflowing.
-        //
-        // Also note the usage of `Relaxed` ordering here which should be ok
-        // since we're only looking for atomicity on this counter and this
-        // otherwise isn't used to synchronize memory stored anywhere else.
-        let id = NEXT_ID.fetch_add(1, Relaxed);
-        if id & (1 << 63) != 0 {
-            NEXT_ID.store(1 << 63, Relaxed);
-            panic!("store id allocator overflow");
-        }
+        const OVERFLOW_THRESHOLD: u64 = 1 << 63;
+
+        #[cfg(target_has_atomic = "64")]
+        let id = {
+            use core::sync::atomic::{AtomicU64, Ordering::Relaxed};
+
+            // Note the usage of `Relaxed` ordering here which should be ok
+            // since we're only looking for atomicity on this counter and this
+            // otherwise isn't used to synchronize memory stored anywhere else.
+            static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+            let id = NEXT_ID.fetch_add(1, Relaxed);
+            if id > OVERFLOW_THRESHOLD {
+                NEXT_ID.store(OVERFLOW_THRESHOLD, Relaxed);
+                panic!("store id allocator overflow");
+            }
+            id
+        };
+
+        // When 64-bit atomics are not allowed use a `RwLock<u64>`. This is
+        // already used elsewhere in Wasmtime and currently has the
+        // implementation of panic-on-contention, but it's at least no worse
+        // than what wasmtime had before and is at least correct and UB-free.
+        #[cfg(not(target_has_atomic = "64"))]
+        let id = {
+            use crate::sync::RwLock;
+            static NEXT_ID: RwLock<u64> = RwLock::new(0);
+
+            let mut lock = NEXT_ID.write();
+            if *lock > OVERFLOW_THRESHOLD {
+                panic!("store id allocator overflow");
+            }
+            let ret = *lock;
+            *lock += 1;
+            ret
+        };
 
         StoreId(NonZeroU64::new(id + 1).unwrap())
     }
@@ -249,20 +210,29 @@ impl StoreId {
     }
 }
 
-#[repr(C)] // used by reference in the C API, also in `wasmtime_func_t`.
-pub struct Stored<T> {
-    store_id: StoreId,
-    index: usize,
-    _marker: marker::PhantomData<fn() -> T>,
+#[cold]
+fn store_id_mismatch() {
+    panic!("object used with the wrong store");
 }
 
-impl<T> Stored<T> {
-    fn new(store_id: StoreId, index: usize) -> Stored<T> {
-        Stored {
-            store_id,
-            index,
-            _marker: marker::PhantomData,
-        }
+/// A type used to represent an allocated `vm::Instance` located within a store.
+///
+/// This type is held in various locations as a "safe index" into a store. This
+/// encapsulates a `StoreId` which owns the instance as well as the index within
+/// the store's list of which instance it's pointing to.
+///
+/// This type can notably be used to index into a `StoreOpaque` to project out
+/// the `vm::Instance` that is associated with this id.
+#[repr(C)] // used by reference in the C API
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct StoreInstanceId {
+    store_id: StoreId,
+    instance: InstanceId,
+}
+
+impl StoreInstanceId {
+    pub(crate) fn new(store_id: StoreId, instance: InstanceId) -> StoreInstanceId {
+        StoreInstanceId { store_id, instance }
     }
 
     #[inline]
@@ -270,32 +240,69 @@ impl<T> Stored<T> {
         self.store_id.assert_belongs_to(store)
     }
 
-    fn index(&self) -> usize {
-        self.index
+    #[inline]
+    pub fn store_id(&self) -> StoreId {
+        self.store_id
+    }
+
+    #[inline]
+    pub(crate) fn instance(&self) -> InstanceId {
+        self.instance
+    }
+
+    /// Looks up the `vm::Instance` within `store` that this id points to.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` does not belong to `store`.
+    #[inline]
+    pub(crate) fn get<'a>(&self, store: &'a StoreOpaque) -> &'a vm::Instance {
+        self.assert_belongs_to(store.id());
+        store.instance(self.instance)
+    }
+
+    /// Mutable version of `get` above.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` does not belong to `store`.
+    #[inline]
+    pub(crate) fn get_mut<'a>(&self, store: &'a mut StoreOpaque) -> Pin<&'a mut vm::Instance> {
+        self.assert_belongs_to(store.id());
+        store.instance_mut(self.instance)
+    }
+
+    /// Get both an instance handle and a borrow to the module
+    /// registry in the store.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` does not belong to `store`.
+    #[inline]
+    pub(crate) fn get_mut_and_module_registry<'a>(
+        &self,
+        store: &'a mut StoreOpaque,
+    ) -> (Pin<&'a mut vm::Instance>, &'a ModuleRegistry) {
+        self.assert_belongs_to(store.id());
+        store.instance_and_module_registry_mut(self.instance)
+    }
+
+    /// Same as [`Self::get_mut`], but also returns the `GcStore`.
+    #[inline]
+    pub(crate) fn get_with_gc_store_mut<'a>(
+        &self,
+        store: &'a mut StoreOpaque,
+    ) -> (Option<&'a mut GcStore>, Pin<&'a mut vm::Instance>) {
+        self.assert_belongs_to(store.id());
+        store.optional_gc_store_and_instance_mut(self.instance)
     }
 }
 
-#[cold]
-fn store_id_mismatch() {
-    panic!("object used with the wrong store");
-}
+impl Index<StoreInstanceId> for StoreOpaque {
+    type Output = vm::Instance;
 
-impl<T> PartialEq for Stored<T> {
-    fn eq(&self, other: &Stored<T>) -> bool {
-        self.store_id == other.store_id && self.index == other.index
-    }
-}
-
-impl<T> Copy for Stored<T> {}
-
-impl<T> Clone for Stored<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> fmt::Debug for Stored<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "store={}, index={}", self.store_id.0, self.index())
+    #[inline]
+    fn index(&self, id: StoreInstanceId) -> &Self::Output {
+        id.get(self)
     }
 }

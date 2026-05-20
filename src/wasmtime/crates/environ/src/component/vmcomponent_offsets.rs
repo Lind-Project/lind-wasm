@@ -2,20 +2,22 @@
 //
 // struct VMComponentContext {
 //      magic: u32,
-//      libcalls: &'static VMComponentLibcalls,
-//      store: *mut dyn Store,
-//      limits: *const VMRuntimeLimits,
+//      builtins: &'static VMComponentBuiltins,
+//      limits: *const VMStoreContext,
 //      flags: [VMGlobalDefinition; component.num_runtime_component_instances],
+//      task_may_block: u32,
 //      trampoline_func_refs: [VMFuncRef; component.num_trampolines],
+//      unsafe_intrinsics: [VMFuncRef; component.num_unsafe_intrinsics],
 //      lowerings: [VMLowering; component.num_lowerings],
-//      memories: [*mut VMMemoryDefinition; component.num_memories],
-//      reallocs: [*mut VMFuncRef; component.num_reallocs],
-//      post_returns: [*mut VMFuncRef; component.num_post_returns],
+//      memories: [*mut VMMemoryDefinition; component.num_runtime_memories],
+//      tables: [VMTable; component.num_runtime_tables],
+//      reallocs: [*mut VMFuncRef; component.num_runtime_reallocs],
+//      post_returns: [*mut VMFuncRef; component.num_runtime_post_returns],
 //      resource_destructors: [*mut VMFuncRef; component.num_resources],
 // }
 
-use crate::component::*;
 use crate::PtrSize;
+use crate::component::*;
 
 /// Equivalent of `VMCONTEXT_MAGIC` except for components.
 ///
@@ -27,14 +29,6 @@ pub const VMCOMPONENT_MAGIC: u32 = u32::from_le_bytes(*b"comp");
 /// canonical ABI flag `may_leave`
 pub const FLAG_MAY_LEAVE: i32 = 1 << 0;
 
-/// Flag for the `VMComponentContext::flags` field which corresponds to the
-/// canonical ABI flag `may_enter`
-pub const FLAG_MAY_ENTER: i32 = 1 << 1;
-
-/// Flag for the `VMComponentContext::flags` field which is set whenever a
-/// function is called to indicate that `post_return` must be called next.
-pub const FLAG_NEEDS_POST_RETURN: i32 = 1 << 2;
-
 /// Runtime offsets within a `VMComponentContext` for a specific component.
 #[derive(Debug, Clone, Copy)]
 pub struct VMComponentOffsets<P> {
@@ -45,8 +39,12 @@ pub struct VMComponentOffsets<P> {
     pub num_lowerings: u32,
     /// The number of memories which are recorded in this component for options.
     pub num_runtime_memories: u32,
+    /// The number of tables which are recorded in this component for options.
+    pub num_runtime_tables: u32,
     /// The number of reallocs which are recorded in this component for options.
     pub num_runtime_reallocs: u32,
+    /// The number of callbacks which are recorded in this component for options.
+    pub num_runtime_callbacks: u32,
     /// The number of post-returns which are recorded in this component for options.
     pub num_runtime_post_returns: u32,
     /// Number of component instances internally in the component (always at
@@ -54,19 +52,25 @@ pub struct VMComponentOffsets<P> {
     pub num_runtime_component_instances: u32,
     /// Number of cranelift-compiled trampolines required for this component.
     pub num_trampolines: u32,
+    /// Number of `VMFuncRef`s for unsafe intrinsics within this component's
+    /// context.
+    pub num_unsafe_intrinsics: u32,
     /// Number of resources within a component which need destructors stored.
     pub num_resources: u32,
 
     // precalculated offsets of various member fields
     magic: u32,
-    libcalls: u32,
-    store: u32,
-    limits: u32,
+    builtins: u32,
+    vm_store_context: u32,
     flags: u32,
+    task_may_block: u32,
     trampoline_func_refs: u32,
+    intrinsic_func_refs: u32,
     lowerings: u32,
     memories: u32,
+    tables: u32,
     reallocs: u32,
+    callbacks: u32,
     post_returns: u32,
     resource_destructors: u32,
     size: u32,
@@ -85,24 +89,48 @@ impl<P: PtrSize> VMComponentOffsets<P> {
         let mut ret = Self {
             ptr,
             num_lowerings: component.num_lowerings,
-            num_runtime_memories: component.num_runtime_memories.try_into().unwrap(),
-            num_runtime_reallocs: component.num_runtime_reallocs.try_into().unwrap(),
-            num_runtime_post_returns: component.num_runtime_post_returns.try_into().unwrap(),
-            num_runtime_component_instances: component
-                .num_runtime_component_instances
-                .try_into()
-                .unwrap(),
+            num_runtime_memories: component.num_runtime_memories,
+            num_runtime_tables: component.num_runtime_tables,
+            num_runtime_reallocs: component.num_runtime_reallocs,
+            num_runtime_callbacks: component.num_runtime_callbacks,
+            num_runtime_post_returns: component.num_runtime_post_returns,
+            num_runtime_component_instances: component.num_runtime_component_instances,
             num_trampolines: component.trampolines.len().try_into().unwrap(),
+            num_unsafe_intrinsics: if let Some(i) = component
+                .unsafe_intrinsics
+                .iter()
+                .rposition(|x| x.is_some())
+            {
+                // Note: We do not currently have an indirection between "the
+                // `i`th unsafe intrinsic in the vmctx" and
+                // `UnsafeIntrinsic::from_u32(i)`, so therefore if we are
+                // compiling in *any* intrinsics, we need to include space for
+                // all of them up to the max `i` that is used.
+                //
+                // We _could_ introduce such an indirection via a map in
+                // `Component` like `PrimaryMap<UnsafeIntrinsicIndex,
+                // UnsafeIntrinsic>`, and that would allow us to densely pack
+                // intrinsics in the vmctx. However we do not do that today
+                // because there are very few unsafe intrinsics, and we do not
+                // see that changing anytime soon, so we aren't wasting much
+                // space.
+                u32::try_from(i + 1).unwrap()
+            } else {
+                0
+            },
             num_resources: component.num_resources,
             magic: 0,
-            libcalls: 0,
-            store: 0,
-            limits: 0,
+            builtins: 0,
+            vm_store_context: 0,
             flags: 0,
+            task_may_block: 0,
             trampoline_func_refs: 0,
+            intrinsic_func_refs: 0,
             lowerings: 0,
             memories: 0,
+            tables: 0,
             reallocs: 0,
+            callbacks: 0,
             post_returns: 0,
             resource_destructors: 0,
             size: 0,
@@ -135,16 +163,19 @@ impl<P: PtrSize> VMComponentOffsets<P> {
         fields! {
             size(magic) = 4u32,
             align(u32::from(ret.ptr.size())),
-            size(libcalls) = ret.ptr.size(),
-            size(store) = cmul(2, ret.ptr.size()),
-            size(limits) = ret.ptr.size(),
+            size(builtins) = ret.ptr.size(),
+            size(vm_store_context) = ret.ptr.size(),
             align(16),
             size(flags) = cmul(ret.num_runtime_component_instances, ret.ptr.size_of_vmglobal_definition()),
+            size(task_may_block) = ret.ptr.size_of_vmglobal_definition(),
             align(u32::from(ret.ptr.size())),
             size(trampoline_func_refs) = cmul(ret.num_trampolines, ret.ptr.size_of_vm_func_ref()),
+            size(intrinsic_func_refs) = cmul(ret.num_unsafe_intrinsics, ret.ptr.size_of_vm_func_ref()),
             size(lowerings) = cmul(ret.num_lowerings, ret.ptr.size() * 2),
             size(memories) = cmul(ret.num_runtime_memories, ret.ptr.size()),
+            size(tables) = cmul(ret.num_runtime_tables, ret.size_of_vmtable_import()),
             size(reallocs) = cmul(ret.num_runtime_reallocs, ret.ptr.size()),
+            size(callbacks) = cmul(ret.num_runtime_callbacks, ret.ptr.size()),
             size(post_returns) = cmul(ret.num_runtime_post_returns, ret.ptr.size()),
             size(resource_destructors) = cmul(ret.num_resources, ret.ptr.size()),
         }
@@ -171,10 +202,10 @@ impl<P: PtrSize> VMComponentOffsets<P> {
         self.magic
     }
 
-    /// The offset of the `libcalls` field.
+    /// The offset of the `builtins` field.
     #[inline]
-    pub fn libcalls(&self) -> u32 {
-        self.libcalls
+    pub fn builtins(&self) -> u32 {
+        self.builtins
     }
 
     /// The offset of the `flags` field.
@@ -184,16 +215,15 @@ impl<P: PtrSize> VMComponentOffsets<P> {
         self.flags + index.as_u32() * u32::from(self.ptr.size_of_vmglobal_definition())
     }
 
-    /// The offset of the `store` field.
-    #[inline]
-    pub fn store(&self) -> u32 {
-        self.store
+    /// The offset of the `task_may_block` field.
+    pub fn task_may_block(&self) -> u32 {
+        self.task_may_block
     }
 
-    /// The offset of the `limits` field.
+    /// The offset of the `vm_store_context` field.
     #[inline]
-    pub fn limits(&self) -> u32 {
-        self.limits
+    pub fn vm_store_context(&self) -> u32 {
+        self.vm_store_context
     }
 
     /// The offset of the `trampoline_func_refs` field.
@@ -207,6 +237,20 @@ impl<P: PtrSize> VMComponentOffsets<P> {
     pub fn trampoline_func_ref(&self, index: TrampolineIndex) -> u32 {
         assert!(index.as_u32() < self.num_trampolines);
         self.trampoline_func_refs() + index.as_u32() * u32::from(self.ptr.size_of_vm_func_ref())
+    }
+
+    /// The offset of the `unsafe_intrinsic_func_refs` field.
+    #[inline]
+    pub fn unsafe_intrinsic_func_refs(&self) -> u32 {
+        self.intrinsic_func_refs
+    }
+
+    /// The offset of the `VMFuncRef` for the `intrinsic` specified.
+    #[inline]
+    pub fn unsafe_intrinsic_func_ref(&self, intrinsic: UnsafeIntrinsic) -> u32 {
+        assert!(intrinsic.index() < self.num_unsafe_intrinsics);
+        self.unsafe_intrinsic_func_refs()
+            + intrinsic.index() * u32::from(self.ptr.size_of_vm_func_ref())
     }
 
     /// The offset of the `lowerings` field.
@@ -266,6 +310,26 @@ impl<P: PtrSize> VMComponentOffsets<P> {
         self.runtime_memories() + index.as_u32() * u32::from(self.ptr.size())
     }
 
+    /// The offset of the base of the `runtime_tables` field
+    #[inline]
+    pub fn runtime_tables(&self) -> u32 {
+        self.tables
+    }
+
+    /// The offset of the table for the runtime index provided.
+    #[inline]
+    pub fn runtime_table(&self, index: RuntimeTableIndex) -> u32 {
+        assert!(index.as_u32() < self.num_runtime_tables);
+        self.runtime_tables() + index.as_u32() * u32::from(self.size_of_vmtable_import())
+    }
+
+    /// Return the size of `VMTableImport`, used here to hold the pointers to
+    /// the `VMTableDefinition` and `VMContext`.
+    #[inline]
+    pub fn size_of_vmtable_import(&self) -> u8 {
+        3 * self.pointer_size()
+    }
+
     /// The offset of the base of the `runtime_reallocs` field
     #[inline]
     pub fn runtime_reallocs(&self) -> u32 {
@@ -278,6 +342,20 @@ impl<P: PtrSize> VMComponentOffsets<P> {
     pub fn runtime_realloc(&self, index: RuntimeReallocIndex) -> u32 {
         assert!(index.as_u32() < self.num_runtime_reallocs);
         self.runtime_reallocs() + index.as_u32() * u32::from(self.ptr.size())
+    }
+
+    /// The offset of the base of the `runtime_callbacks` field
+    #[inline]
+    pub fn runtime_callbacks(&self) -> u32 {
+        self.callbacks
+    }
+
+    /// The offset of the `*mut VMFuncRef` for the runtime index
+    /// provided.
+    #[inline]
+    pub fn runtime_callback(&self, index: RuntimeCallbackIndex) -> u32 {
+        assert!(index.as_u32() < self.num_runtime_callbacks);
+        self.runtime_callbacks() + index.as_u32() * u32::from(self.ptr.size())
     }
 
     /// The offset of the base of the `runtime_post_returns` field
