@@ -15,6 +15,10 @@ pub const LINDFS_ROOT: &str = "/home/lind/lind-wasm/lindfs";
 /// in `fdtables`. Used to distinguish kernel-backed FDs from fully virtual ones
 /// (e.g., in-memory pipes).
 pub const FDKIND_KERNEL: u32 = 0;
+/// In-memory pipe endpoint managed by RawPOSIX.
+pub const FDKIND_IMPIPE: u32 = 1;
+/// In-memory stream socket managed by RawPOSIX.
+pub const FDKIND_IMSOCK: u32 = 2;
 /// Maximum allowed Cage ID.  
 /// This limit is inherited from earlier implementations and may be
 /// adjusted in the future.

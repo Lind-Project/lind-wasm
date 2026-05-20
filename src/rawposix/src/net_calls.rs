@@ -1,3 +1,4 @@
+use crate::inmem_ipc;
 use cage::{get_cage, readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
 use fdtables;
 use lazy_static::lazy_static;
@@ -6,7 +7,9 @@ use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::lind_platform_const::{
+    FDKIND_IMPIPE, FDKIND_IMSOCK, UNUSED_ARG, UNUSED_ID,
+};
 use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
@@ -25,6 +28,37 @@ lazy_static! {
     // A hashmap used to store epoll mapping relationships
     // <virtual_epfd <kernel_fd, virtual_fd>>
     static ref REAL_EPOLL_MAP: Mutex<HashMap<u64, HashMap<i32, u64>>> = Mutex::new(HashMap::new());
+}
+
+fn ensure_inmem_socket(
+    cageid: u64,
+    vfd_arg: u64,
+    domain: i32,
+    socktype: i32,
+    protocol: i32,
+) -> Result<fdtables::FDTableEntry, i32> {
+    let fdentry = fdtables::translate_virtual_fd(cageid, vfd_arg)
+        .map_err(|_| syscall_error(Errno::EBADF, "socket", "Bad File Descriptor"))?;
+    if fdentry.fdkind == FDKIND_IMSOCK {
+        return Ok(fdentry);
+    }
+    if fdentry.fdkind != FDKIND_KERNEL {
+        return Err(syscall_error(Errno::EBADF, "socket", "Bad File Descriptor"));
+    }
+
+    let socket_id = inmem_ipc::create_socket(domain, socktype, protocol);
+    fdtables::get_specific_virtual_fd(
+        cageid,
+        vfd_arg,
+        FDKIND_IMSOCK,
+        socket_id,
+        fdentry.should_cloexec,
+        fdentry.perfdinfo,
+    )
+    .map_err(|_| syscall_error(Errno::EBADF, "socket", "Bad File Descriptor"))?;
+
+    fdtables::translate_virtual_fd(cageid, vfd_arg)
+        .map_err(|_| syscall_error(Errno::EBADF, "socket", "Bad File Descriptor"))
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
@@ -133,6 +167,7 @@ pub extern "C" fn poll_syscall(
     // Process kernel-backed FDs and handle invalid FDs
     let mut all_kernel_pollfds: Vec<libc::pollfd> = Vec::new();
     let mut kernel_to_vfd_mapping: HashMap<usize, u64> = HashMap::new();
+    let mut inmem_pollfds: Vec<(u64, fdtables::FDTableEntry)> = Vec::new();
     let mut total_ready = 0i32;
 
     for (fdkind, fd_set) in poll_data_by_fdkind {
@@ -153,6 +188,11 @@ pub extern "C" fn poll_syscall(
                     });
                 }
             }
+            FDKIND_IMPIPE | FDKIND_IMSOCK => {
+                for (vfd, fdentry) in fd_set {
+                    inmem_pollfds.push((vfd, fdentry));
+                }
+            }
             fdtables::FDT_INVALID_FD => {
                 // Handle invalid FDs immediately - fdtables has already identified them
                 for (vfd, _fdentry) in fd_set {
@@ -169,13 +209,64 @@ pub extern "C" fn poll_syscall(
         }
     }
 
+    let poll_inmem_once = |fds_slice: &mut [libc::pollfd]| -> i32 {
+        let mut ready = 0i32;
+        for (vfd, fdentry) in &inmem_pollfds {
+            let Some(&array_index) = vfd_to_index.get(&(*vfd as i32)) else {
+                continue;
+            };
+            let events = *vfd_to_events.get(&(*vfd as i32)).unwrap_or(&0);
+            let revents = inmem_ipc::poll_fd(*fdentry, events);
+            if revents != 0 && fds_slice[array_index].revents == 0 {
+                fds_slice[array_index].revents = revents;
+                ready += 1;
+            }
+        }
+        ready
+    };
+
+    total_ready += poll_inmem_once(fds_slice);
+    if total_ready > 0 || original_timeout == 0 {
+        return total_ready;
+    }
+
+    if all_kernel_pollfds.is_empty() && !inmem_pollfds.is_empty() {
+        let start_time = starttimer();
+        let (duration, chunk_timeout) = timeout_setup_ms(original_timeout);
+
+        loop {
+            let current_chunk_timeout = if duration == Duration::MAX {
+                chunk_timeout
+            } else {
+                std::cmp::min(
+                    chunk_timeout as u128,
+                    duration.saturating_sub(readtimer(start_time)).as_millis(),
+                ) as i32
+            };
+
+            if current_chunk_timeout > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(
+                    current_chunk_timeout as u64,
+                ));
+            }
+
+            total_ready += poll_inmem_once(fds_slice);
+            if total_ready > 0 || readtimer(start_time) >= duration {
+                return total_ready;
+            }
+
+            if signal_check_trigger(cageid) {
+                return syscall_error(Errno::EINTR, "poll_syscall", "interrupted");
+            }
+        }
+    }
+
     // Poll all kernel-backed fds with timeout/signal checking loop
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
         // Keep track of total duration for our exit check in the poll loop
         let (duration, chunk_timeout) = timeout_setup_ms(original_timeout);
 
-        let ret;
         loop {
             let current_chunk_timeout = if duration == Duration::MAX {
                 chunk_timeout
@@ -200,8 +291,8 @@ pub extern "C" fn poll_syscall(
             }
 
             // Check for ready FDs or time elapsed is greater than the total duration of the timeout
-            if poll_ret > 0 || readtimer(start_time) >= duration {
-                ret = poll_ret;
+            total_ready += poll_inmem_once(fds_slice);
+            if poll_ret > 0 || total_ready > 0 || readtimer(start_time) >= duration {
                 break;
             }
 
@@ -419,7 +510,7 @@ pub extern "C" fn select_syscall(
     fdkindset.insert(FDKIND_KERNEL);
 
     // Prepare bitmasks for select using fdtables
-    let (selectbittables, _unparsedtables, mappingtable) =
+    let (selectbittables, unparsedtables, mappingtable) =
         match fdtables::prepare_bitmasks_for_select(
             cageid,
             nfds as u64,
@@ -479,8 +570,62 @@ pub extern "C" fn select_syscall(
     let (duration, chunk_timeout) = timeout_setup_ms(timeout_ms);
     // Convert chunk_timeout (ms) to timeval for select
 
-    let mut ret;
-    loop {
+    let poll_inmem_select_once = || -> (HashSet<u64>, HashSet<u64>, HashSet<u64>, i32) {
+        let mut read_ready = HashSet::new();
+        let mut write_ready = HashSet::new();
+        let mut error_ready = HashSet::new();
+        let mut ready_count = 0i32;
+
+        for fdkind in [FDKIND_IMPIPE, FDKIND_IMSOCK] {
+            if let Some(entries) = unparsedtables[0].get(&fdkind) {
+                for entry in entries {
+                    let revents = inmem_ipc::poll_fd(*entry, libc::POLLIN as i16);
+                    if revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) as i16 != 0 {
+                        if let Some(vfd) = mappingtable.get(&(entry.fdkind, entry.underfd)) {
+                            if read_ready.insert(*vfd) {
+                                ready_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(entries) = unparsedtables[1].get(&fdkind) {
+                for entry in entries {
+                    let revents = inmem_ipc::poll_fd(*entry, libc::POLLOUT as i16);
+                    if revents & (libc::POLLOUT | libc::POLLERR) as i16 != 0 {
+                        if let Some(vfd) = mappingtable.get(&(entry.fdkind, entry.underfd)) {
+                            if write_ready.insert(*vfd) {
+                                ready_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(entries) = unparsedtables[2].get(&fdkind) {
+                for entry in entries {
+                    let revents = inmem_ipc::poll_fd(*entry, (libc::POLLIN | libc::POLLOUT) as i16);
+                    if revents & libc::POLLERR as i16 != 0 {
+                        if let Some(vfd) = mappingtable.get(&(entry.fdkind, entry.underfd)) {
+                            if error_ready.insert(*vfd) {
+                                ready_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        (read_ready, write_ready, error_ready, ready_count)
+    };
+
+    let (inmem_read_ready, inmem_write_ready, inmem_error_ready) = loop {
+        let (read_ready, write_ready, error_ready, inmem_ret) = poll_inmem_select_once();
+        if inmem_ret > 0 {
+            break (read_ready, write_ready, error_ready);
+        }
+
         let mut tmp_readfds = real_readfds.clone();
         let mut tmp_writefds = real_writefds.clone();
         let mut tmp_errorfds = real_errorfds.clone();
@@ -499,46 +644,56 @@ pub extern "C" fn select_syscall(
             tv_usec: (current_chunk_ms as i64) * 1000,
         };
 
-        // Call libc select with proper null handling
-        // nfds should be the highest-numbered file descriptor + 1
-        ret = unsafe {
-            libc::select(
-                (realnewnfds + 1) as i32,
-                if readfds_ptr.is_some() {
-                    &mut tmp_readfds as *mut _
-                } else {
-                    std::ptr::null_mut()
-                },
-                if writefds_ptr.is_some() {
-                    &mut tmp_writefds as *mut _
-                } else {
-                    std::ptr::null_mut()
-                },
-                if exceptfds_ptr.is_some() {
-                    &mut tmp_errorfds as *mut _
-                } else {
-                    std::ptr::null_mut()
-                },
-                if timeout_ptr.is_some() {
-                    &mut current_timeout as *mut _ // libc select requires timeval struct format
-                } else {
-                    std::ptr::null_mut()
-                },
-            )
+        let has_kernel_fds = realnewnfds > 0;
+        let select_ret = if !has_kernel_fds {
+            if current_chunk_ms > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(current_chunk_ms as u64));
+            }
+            0
+        } else {
+            // Call libc select with proper null handling
+            // nfds should be the highest-numbered file descriptor + 1
+            unsafe {
+                libc::select(
+                    (realnewnfds + 1) as i32,
+                    if readfds_ptr.is_some() {
+                        &mut tmp_readfds as *mut _
+                    } else {
+                        std::ptr::null_mut()
+                    },
+                    if writefds_ptr.is_some() {
+                        &mut tmp_writefds as *mut _
+                    } else {
+                        std::ptr::null_mut()
+                    },
+                    if exceptfds_ptr.is_some() {
+                        &mut tmp_errorfds as *mut _
+                    } else {
+                        std::ptr::null_mut()
+                    },
+                    if timeout_ptr.is_some() {
+                        &mut current_timeout as *mut _ // libc select requires timeval struct format
+                    } else {
+                        std::ptr::null_mut()
+                    },
+                )
+            }
         };
 
-        if ret < 0 {
+        if select_ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "select_syscall");
         }
 
+        let (read_ready, write_ready, error_ready, inmem_ret) = poll_inmem_select_once();
+
         // Check for valid return or time elapsed is greater than the total duration of the timeout
         // Since we have this check here for total time elapsed, we can call libc select with a 0 timeout as we do above
-        if ret > 0 || readtimer(start_time) >= duration {
+        if select_ret > 0 || inmem_ret > 0 || timeout_ms == 0 || readtimer(start_time) >= duration {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
             real_errorfds = tmp_errorfds;
-            break;
+            break (read_ready, write_ready, error_ready);
         }
 
         // Check for signals that may have interrupted the select operation
@@ -548,14 +703,7 @@ pub extern "C" fn select_syscall(
         if signal_check_trigger(cageid) {
             return syscall_error(Errno::EINTR, "select_syscall", "interrupted");
         }
-    }
-
-    let unreal_read = HashSet::new();
-    let unreal_write = HashSet::new();
-
-    // TODO: Implement in-memory FD checking for select syscall
-    // Currently only kernel FDs are supported. In-memory pipes and sockets
-    // will require custom polling logic when in-memory system is integrated.
+    };
 
     // Convert kernel FD results back to virtual FDs and subsequently write to user memory
     // This step translates the kernel select() results (which contain kernel FDs) back into
@@ -564,7 +712,7 @@ pub extern "C" fn select_syscall(
         FDKIND_KERNEL,
         realnewnfds as u64,
         Some(real_readfds),
-        unreal_read,
+        inmem_read_ready,
         None,
         &mappingtable,
     );
@@ -580,7 +728,7 @@ pub extern "C" fn select_syscall(
         FDKIND_KERNEL,
         realnewnfds as u64,
         Some(real_writefds),
-        unreal_write,
+        inmem_write_ready,
         None,
         &mappingtable,
     );
@@ -595,7 +743,7 @@ pub extern "C" fn select_syscall(
         FDKIND_KERNEL,
         realnewnfds as u64,
         Some(real_errorfds),
-        HashSet::new(), // Assuming there are no unreal errorsets
+        inmem_error_ready,
         None,
         &mappingtable,
     );
@@ -1117,6 +1265,21 @@ pub extern "C" fn socket_syscall(
         );
     }
 
+    if inmem_ipc::enabled()
+        && domain == libc::AF_UNIX
+        && inmem_ipc::is_supported_socket(domain, socktype, protocol)
+    {
+        let socket_id = inmem_ipc::create_socket(domain, socktype, protocol);
+        let cloexec = (socktype & SOCK_CLOEXEC) != 0;
+        let perfdinfo = if (socktype & SOCK_NONBLOCK) != 0 {
+            libc::O_NONBLOCK as u64
+        } else {
+            0
+        };
+        return fdtables::get_unused_virtual_fd(cageid, FDKIND_IMSOCK, socket_id, cloexec, perfdinfo)
+            .unwrap() as i32;
+    }
+
     let kernel_fd = unsafe { libc::socket(domain, socktype, protocol) };
 
     if kernel_fd < 0 {
@@ -1175,7 +1338,6 @@ pub extern "C" fn connect_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
@@ -1191,6 +1353,35 @@ pub extern "C" fn connect_syscall(
         );
     }
 
+    if inmem_ipc::enabled() {
+        let addrlen = unsafe {
+            if addr.is_null() {
+                0
+            } else {
+                match (*(addr as *const sockaddr)).sa_family as i32 {
+                    libc::AF_UNIX => mem::size_of::<sockaddr_un>() as socklen_t,
+                    libc::AF_INET => mem::size_of::<sockaddr_in>() as socklen_t,
+                    _ => 0,
+                }
+            }
+        };
+        if let Some((family, key)) = inmem_ipc::sockaddr_key(addr, addrlen) {
+            let fdentry = match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+                Ok(entry) => entry,
+                Err(_) => return syscall_error(Errno::EBADF, "connect", "Bad File Descriptor"),
+            };
+            if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
+                let socktype = libc::SOCK_STREAM;
+                let socket_entry = match ensure_inmem_socket(cageid, fd_arg, family, socktype, 0) {
+                    Ok(entry) => entry,
+                    Err(e) => return e,
+                };
+                return inmem_ipc::connect_socket(socket_entry.underfd, key);
+            }
+        }
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret = unsafe { libc::connect(fd, finalsockaddr, addrlen) };
@@ -1232,7 +1423,6 @@ pub extern "C" fn bind_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
@@ -1248,6 +1438,35 @@ pub extern "C" fn bind_syscall(
         );
     }
 
+    if inmem_ipc::enabled() {
+        let addrlen = unsafe {
+            if addr.is_null() {
+                0
+            } else {
+                match (*(addr as *const sockaddr)).sa_family as i32 {
+                    libc::AF_UNIX => mem::size_of::<sockaddr_un>() as socklen_t,
+                    libc::AF_INET => mem::size_of::<sockaddr_in>() as socklen_t,
+                    _ => 0,
+                }
+            }
+        };
+        if let Some((family, key)) = inmem_ipc::sockaddr_key(addr, addrlen) {
+            let fdentry = match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+                Ok(entry) => entry,
+                Err(_) => return syscall_error(Errno::EBADF, "bind", "Bad File Descriptor"),
+            };
+            if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
+                let socket_entry =
+                    match ensure_inmem_socket(cageid, fd_arg, family, libc::SOCK_STREAM, 0) {
+                        Ok(entry) => entry,
+                        Err(e) => return e,
+                    };
+                return inmem_ipc::bind_socket(socket_entry.underfd, key);
+            }
+        }
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret = unsafe { libc::bind(fd, finalsockaddr, addrlen) };
@@ -1287,7 +1506,6 @@ pub extern "C" fn listen_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let backlog = sc_convert_sysarg_to_i32(backlog_arg, backlog_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation,
@@ -1303,6 +1521,16 @@ pub extern "C" fn listen_syscall(
         );
     }
 
+    if inmem_ipc::enabled() {
+        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+                return inmem_ipc::listen_socket(entry.underfd, backlog);
+            }
+            _ => {}
+        }
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let ret = unsafe { libc::listen(fd, backlog) };
 
     if ret < 0 {
@@ -1344,7 +1572,6 @@ pub extern "C" fn accept_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
@@ -1359,6 +1586,22 @@ pub extern "C" fn accept_syscall(
         );
     }
 
+    if inmem_ipc::enabled() {
+        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+                let socket_id = match inmem_ipc::accept_socket(entry) {
+                    Ok(socket_id) => socket_id,
+                    Err(e) => return e,
+                };
+                inmem_ipc::clear_sockaddr(addr, _len_arg as *mut socklen_t);
+                return fdtables::get_unused_virtual_fd(cageid, FDKIND_IMSOCK, socket_id, false, 0)
+                    .unwrap() as i32;
+            }
+            _ => {}
+        }
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret_kernelfd = unsafe { libc::accept(fd, finalsockaddr, &mut addrlen as *mut u32) };
@@ -1397,7 +1640,6 @@ pub extern "C" fn accept4_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
 
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
@@ -1408,6 +1650,34 @@ pub extern "C" fn accept4_syscall(
     }
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
+    if inmem_ipc::enabled() {
+        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+                let socket_id = match inmem_ipc::accept_socket(entry) {
+                    Ok(socket_id) => socket_id,
+                    Err(e) => return e,
+                };
+                inmem_ipc::clear_sockaddr(addr, len_arg as *mut socklen_t);
+                let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
+                let perfdinfo = if (flags & libc::SOCK_NONBLOCK) != 0 {
+                    libc::O_NONBLOCK as u64
+                } else {
+                    0
+                };
+                return fdtables::get_unused_virtual_fd(
+                    cageid,
+                    FDKIND_IMSOCK,
+                    socket_id,
+                    should_cloexec,
+                    perfdinfo,
+                )
+                .unwrap() as i32;
+            }
+            _ => {}
+        }
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret_kernelfd = unsafe {
@@ -1523,7 +1793,6 @@ pub extern "C" fn shutdown_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation,
@@ -1539,6 +1808,16 @@ pub extern "C" fn shutdown_syscall(
         );
     }
 
+    if inmem_ipc::enabled() {
+        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+                return inmem_ipc::shutdown_socket(entry.underfd, how);
+            }
+            _ => {}
+        }
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let ret = unsafe { libc::shutdown(fd, how) };
 
     if ret < 0 {
@@ -1667,7 +1946,6 @@ pub extern "C" fn sendto_syscall(
     addrlen_arg: u64,
     addrlen_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
@@ -1681,6 +1959,19 @@ pub extern "C" fn sendto_syscall(
     // to be mutable.
     let (finalsockaddr, addrlen) = convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
 
+    if inmem_ipc::enabled() {
+        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+                let _ = flag;
+                let _ = finalsockaddr;
+                let _ = addrlen;
+                return inmem_ipc::sendto(entry, buf as *const c_void, buflen);
+            }
+            _ => {}
+        }
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let ret = unsafe {
         libc::sendto(
             fd,
@@ -1734,10 +2025,19 @@ pub extern "C" fn recvfrom_syscall(
     addrlen_arg: u64,
     addrlen_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
+
+    if inmem_ipc::enabled() {
+        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+                let _ = flag;
+                return inmem_ipc::recvfrom(entry, buf as *mut c_void, buflen);
+            }
+            _ => {}
+        }
+    }
 
     // true means user passed NULL for that pointer
     let addr_nullity = sc_convert_arg_nullity(addr_arg, addr_cageid, cageid);
@@ -1747,6 +2047,7 @@ pub extern "C" fn recvfrom_syscall(
     // In this case recvfrom() won’t write to addr/addrlen,
     // so we can pass null pointers directly to libc.
     if addr_nullity && addrlen_nullity {
+        let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
         let ret = unsafe {
             libc::recvfrom(
                 fd,
@@ -1767,6 +2068,7 @@ pub extern "C" fn recvfrom_syscall(
     }
     // Case 2: both non-NULL → caller wants src_addr + addrlen filled
     else if !(addr_nullity || addrlen_nullity) {
+        let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
         let addr = addr_arg as *mut SockAddr;
 
         let mut src_storage: sockaddr_storage = unsafe { mem::zeroed() };
@@ -2127,6 +2429,28 @@ pub extern "C" fn socketpair_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "sockpair_syscall"
         );
+    }
+
+    if inmem_ipc::enabled()
+        && domain == libc::AF_UNIX
+        && inmem_ipc::is_supported_socket(domain, typ, protocol)
+    {
+        let (sock1, sock2) = inmem_ipc::socketpair(domain, typ, protocol);
+        let cloexec = (typ & SOCK_CLOEXEC) != 0;
+        let perfdinfo = if (typ & SOCK_NONBLOCK) != 0 {
+            libc::O_NONBLOCK as u64
+        } else {
+            0
+        };
+        let vsv_1 =
+            fdtables::get_unused_virtual_fd(cageid, FDKIND_IMSOCK, sock1, cloexec, perfdinfo)
+                .unwrap();
+        let vsv_2 =
+            fdtables::get_unused_virtual_fd(cageid, FDKIND_IMSOCK, sock2, cloexec, perfdinfo)
+                .unwrap();
+        virtual_socket_vector.sock1 = vsv_1 as i32;
+        virtual_socket_vector.sock2 = vsv_2 as i32;
+        return 0;
     }
 
     let mut kernel_socket_vector: [i32; 2] = [0, 0];

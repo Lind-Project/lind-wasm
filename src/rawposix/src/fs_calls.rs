@@ -1,3 +1,4 @@
+use crate::inmem_ipc;
 use cage::{
     get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
     shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
@@ -5,17 +6,19 @@ use cage::{
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
-use libc::c_void;
+use libc::{c_void, F_DUPFD_CLOEXEC};
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    AT_FDCWD, FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS,
-    MAP_FIXED, MAP_POPULATE, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
-    PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
-    STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
+    AT_FDCWD, FIOASYNC, FIONBIO, FIONREAD, F_DUPFD, F_GETFD, F_GETFL, F_GETLK64, F_SETFD, F_SETFL,
+    F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_POPULATE, MAP_PRIVATE, MAP_SHARED,
+    O_CLOEXEC, O_NONBLOCK, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+    SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::lind_platform_const::{
+    FDKIND_IMPIPE, FDKIND_IMSOCK, FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID,
+};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
 use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
@@ -255,13 +258,6 @@ pub extern "C" fn read_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    // Return error
-    if kernel_fd < 0 {
-        return handle_errno(-kernel_fd, "read");
-    }
-
     // Convert the user buffer and count.
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
@@ -274,6 +270,22 @@ pub extern "C" fn read_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "read_syscall"
         );
+    }
+
+    let fdentry = match fdtables::translate_virtual_fd(vfd_cageid, vfd_arg) {
+        Ok(entry) => entry,
+        Err(_) => return syscall_error(Errno::EBADF, "read", "Bad File Descriptor"),
+    };
+
+    if fdentry.fdkind == FDKIND_IMPIPE || fdentry.fdkind == FDKIND_IMSOCK {
+        return inmem_ipc::read(fdentry, buf as *mut u8, count);
+    }
+
+    // Convert the virtual fd to the underlying kernel file descriptor.
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "read");
     }
 
     // Call the underlying libc read.
@@ -421,12 +433,6 @@ pub extern "C" fn write_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    // Return error
-    if kernel_fd < 0 {
-        return handle_errno(-kernel_fd, "write");
-    }
-
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
@@ -438,6 +444,25 @@ pub extern "C" fn write_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "write_syscall"
         );
+    }
+
+    let fdentry = match fdtables::translate_virtual_fd(vfd_cageid, vfd_arg) {
+        Ok(entry) => entry,
+        Err(_) => return syscall_error(Errno::EBADF, "write", "Bad File Descriptor"),
+    };
+
+    if fdentry.fdkind == FDKIND_IMPIPE || fdentry.fdkind == FDKIND_IMSOCK {
+        let ret = inmem_ipc::write(fdentry, buf as *const u8, count);
+        if ret == -(Errno::EPIPE as i32) {
+            lind_send_signal(cageid, SIGPIPE);
+        }
+        return ret;
+    }
+
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "write");
     }
 
     let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
@@ -612,6 +637,42 @@ pub extern "C" fn pipe_syscall(
         Err(_e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
     };
 
+    if inmem_ipc::enabled() {
+        let (read_endpoint, write_endpoint) = inmem_ipc::create_pipe();
+        let read_vfd =
+            match fdtables::get_unused_virtual_fd(cageid, FDKIND_IMPIPE, read_endpoint, false, 0) {
+                Ok(fd) => fd as i32,
+                Err(_) => {
+                    return syscall_error(
+                        Errno::EMFILE,
+                        "pipe_syscall",
+                        "Failed to get virtual file descriptor",
+                    )
+                }
+            };
+        let write_vfd = match fdtables::get_unused_virtual_fd(
+            cageid,
+            FDKIND_IMPIPE,
+            write_endpoint,
+            false,
+            0,
+        ) {
+            Ok(fd) => fd as i32,
+            Err(_) => {
+                let _ = fdtables::close_virtualfd(cageid, read_vfd as u64);
+                return syscall_error(
+                    Errno::EMFILE,
+                    "pipe_syscall",
+                    "Failed to get virtual file descriptor",
+                );
+            }
+        };
+
+        pipefd.readfd = read_vfd;
+        pipefd.writefd = write_vfd;
+        return 0;
+    }
+
     // Create an array to hold the two kernel file descriptors
     let mut kernel_fds: [i32; 2] = [0; 2];
     let ret = unsafe { libc::pipe(kernel_fds.as_mut_ptr()) };
@@ -728,6 +789,49 @@ pub extern "C" fn pipe2_syscall(
         Ok(p) => p,
         Err(_e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
     };
+
+    if inmem_ipc::enabled() {
+        let (read_endpoint, write_endpoint) = inmem_ipc::create_pipe();
+        let should_cloexec = (flags & fs_const::O_CLOEXEC) != 0;
+        let perfdinfo = (flags & fs_const::O_NONBLOCK) as u64;
+        let read_vfd = match fdtables::get_unused_virtual_fd(
+            cageid,
+            FDKIND_IMPIPE,
+            read_endpoint,
+            should_cloexec,
+            perfdinfo,
+        ) {
+            Ok(fd) => fd as i32,
+            Err(_) => {
+                return syscall_error(
+                    Errno::EMFILE,
+                    "pipe2_syscall",
+                    "Failed to get virtual file descriptor",
+                )
+            }
+        };
+        let write_vfd = match fdtables::get_unused_virtual_fd(
+            cageid,
+            FDKIND_IMPIPE,
+            write_endpoint,
+            should_cloexec,
+            perfdinfo,
+        ) {
+            Ok(fd) => fd as i32,
+            Err(_) => {
+                let _ = fdtables::close_virtualfd(cageid, read_vfd as u64);
+                return syscall_error(
+                    Errno::EMFILE,
+                    "pipe2_syscall",
+                    "Failed to get virtual file descriptor",
+                );
+            }
+        };
+
+        pipefd.readfd = read_vfd;
+        pipefd.writefd = write_vfd;
+        return 0;
+    }
 
     // Create an array to hold the two kernel file descriptors
     let mut kernel_fds: [i32; 2] = [0; 2];
@@ -1428,7 +1532,7 @@ pub extern "C" fn fcntl_syscall(
                 vfd.fdkind,
                 vfd.underfd,
                 false,
-                0,
+                vfd.perfdinfo,
                 arg as u64,
             ) {
                 Ok(new_vfd) => return new_vfd as i32,
@@ -1450,7 +1554,7 @@ pub extern "C" fn fcntl_syscall(
                 vfd.fdkind,
                 vfd.underfd,
                 true,
-                0,
+                vfd.perfdinfo,
                 arg as u64,
             ) {
                 Ok(new_vfd) => return new_vfd as i32,
@@ -1473,6 +1577,13 @@ pub extern "C" fn fcntl_syscall(
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
+            if vfd.fdkind == FDKIND_IMPIPE || vfd.fdkind == FDKIND_IMSOCK {
+                let cloexec_flag: bool = arg != 0;
+                return match fdtables::set_cloexec(cageid, vfd_arg as u64, cloexec_flag) {
+                    Ok(_) => 0,
+                    Err(_) => syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+                };
+            }
             // Set underlying kernel fd flag
             let ret = unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) };
             if ret < 0 {
@@ -1495,6 +1606,19 @@ pub extern "C" fn fcntl_syscall(
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
+            if vfd.fdkind == FDKIND_IMPIPE || vfd.fdkind == FDKIND_IMSOCK {
+                return match cmd {
+                    F_GETFL => vfd.perfdinfo as i32,
+                    F_SETFL => {
+                        let status_flags = (arg & O_NONBLOCK) as u64;
+                        match fdtables::set_perfdinfo(cageid, vfd_arg as u64, status_flags) {
+                            Ok(_) => 0,
+                            Err(_) => syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+                        }
+                    }
+                    _ => syscall_error(Errno::EINVAL, "fcntl", "unsupported in-memory fd command"),
+                };
+            }
             let is_lock_op = cmd == F_GETLK
                 || cmd == F_SETLK
                 || cmd == F_SETLKW

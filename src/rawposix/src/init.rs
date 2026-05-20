@@ -1,4 +1,5 @@
 use crate::fs_calls::kernel_close;
+use crate::inmem_ipc;
 use crate::sys_calls::exit_group_syscall;
 use crate::syscall_table::*;
 use cage::{add_cage, cagetable_clear, cagetable_init, timer::IntervalTimer, Cage, Vmmap};
@@ -10,8 +11,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
-    EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
-    STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
+    EXIT_SUCCESS, FDKIND_IMPIPE, FDKIND_IMSOCK, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID,
+    RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG,
+    UNUSED_ID, VERBOSE,
 };
 use threei::{
     copy_data_between_cages, copy_handler_table_to_cage, register_handler,
@@ -248,6 +250,8 @@ pub fn rawposix_start(verbosity: isize) {
 
     // register kernel close to fdtables
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
+    fdtables::register_close_handlers(FDKIND_IMPIPE, fdtables::NULL_FUNC, inmem_ipc::close_fd);
+    fdtables::register_close_handlers(FDKIND_IMSOCK, fdtables::NULL_FUNC, inmem_ipc::close_fd);
 
     // register syscalls for init cage
     register_rawposix_syscall(INIT_CAGEID);
