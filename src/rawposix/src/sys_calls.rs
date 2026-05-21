@@ -23,9 +23,9 @@ use sysdefs::constants::lind_platform_const::{
     WASMTIME_CAGEID,
 };
 use sysdefs::constants::sys_const::{
-    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_DATA, RLIMIT_NOFILE,
-    RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK,
-    SIG_UNBLOCK, WNOHANG,
+    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_CORE, RLIMIT_DATA,
+    RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
+    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::constants::syscall_const;
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
@@ -163,9 +163,9 @@ pub extern "C" fn fork_syscall(
         // syscall implementation
         threei::copy_handler_table_to_cage(
             UNUSED_ARG,
-            child_cageid,
+            UNUSED_ARG,
             parent_cageid,
-            UNUSED_ID,
+            child_cageid,
             UNUSED_ARG,
             UNUSED_ID,
             UNUSED_ARG,
@@ -340,11 +340,15 @@ pub extern "C" fn exit_syscall(
         );
     }
 
-    let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
+    let _status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
 
-    // Thread-only exit: just record status and trigger asyncify unwind.
-    // No CAS, no epoch_kill_all — the cage stays alive for other threads.
-    cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
+    // Thread-only exit: trigger asyncify unwind for this thread only.
+    // Do NOT call cage_record_exit_status here — SYS_exit is only called by
+    // non-main threads when their thread function returns (glibc start_thread),
+    // and a thread's individual exit code does not determine the cage's
+    // process-level exit status.  Calling it here would race with and
+    // overwrite the exit_group(1) recorded by e.g. the faulthandler thread,
+    // causing the cage to exit with code 0 instead of 1.
 
     // Call wasmtime to trigger asyncify unwind for this thread.
     // OnCalledAction handles lind_thread_exit + cage_finalize if last.
@@ -429,6 +433,18 @@ pub extern "C" fn exit_group_syscall(
         threei::handler_table::_rm_grate_from_handler(cageid);
     }
 
+    // Use the cage's authoritative recorded exit status so that whichever
+    // thread wins the CAS (e.g. faulthandler calling _exit(1)) determines
+    // the OS-level exit code.  Late threads calling exit_group(0) after
+    // the cage has already been marked Exited(1) will use code=1.
+    let canonical_status_arg = cage::get_cage(cageid)
+        .and_then(|c| *c.final_exit_status.read())
+        .map(|st| match st {
+            cage::ExitStatus::Exited(code) => code as u64,
+            cage::ExitStatus::Signaled(_, _) => 1u64,
+        })
+        .unwrap_or(status_arg as u64);
+
     // Call wasmtime to trigger asyncify unwind.
     // OnCalledAction handles lind_thread_exit + cage_finalize if last.
     threei::make_syscall(
@@ -436,7 +452,7 @@ pub extern "C" fn exit_group_syscall(
         60, // reuse exit trampoline in wasmtime
         UNUSED_NAME,
         WASMTIME_CAGEID,
-        status_arg,
+        canonical_status_arg,
         cageid,
         tid,
         UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
@@ -674,6 +690,50 @@ pub extern "C" fn getpid_syscall(
     let cage = get_cage(cageid).unwrap();
 
     return cage.cageid as i32;
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getpgid.2.html
+///
+/// Returns the process group ID of the process specified by pid.
+/// If pid is 0, returns the process group ID of the calling process.
+///
+/// Lind does not implement process groups. The default RawPOSIX behavior
+/// always returns the cage's own cageid. A grate can interpose on this
+/// syscall to provide different process group semantics.
+///
+/// ## Returns
+///     - The cageid (as process group ID) on success.
+pub extern "C" fn getpgid_syscall(
+    cageid: u64,
+    pid_arg: u64,
+    pid_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getpgid_syscall"
+        );
+    }
+
+    // Lind doesn't implement process groups. Return own cageid regardless
+    // of the pid argument (matching the behavior of getpid).
+    let cage = get_cage(cageid).unwrap();
+    cage.cageid as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/getppid.3p.html
@@ -1215,6 +1275,10 @@ pub extern "C" fn prlimit64_syscall(
             RLIMIT_NPROC => {
                 old_limit.rlim_cur = MAX_CAGEID as u32;
                 old_limit.rlim_max = MAX_CAGEID as u32;
+            }
+            RLIMIT_CORE => {
+                old_limit.rlim_cur = 0;
+                old_limit.rlim_max = 0;
             }
             _ => {
                 lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));

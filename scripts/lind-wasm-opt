@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# lind-wasm-opt — wasm-opt wrapper that applies lind's standard instrumentation
+# flags for a given compilation target.
+#
+# Usage:
+#   lind-wasm-opt (--target=<target> | --static) [OPTIONS] input.wasm -o output.wasm
+#
+# Exactly one of --target or --static must be given:
+#   --target=main      Dynamic main-module binary.
+#   --target=library   Dynamic shared-library binary.
+#   --static           Static (non-dynamic) binary.
+#
+# Options:
+#   --fpcast-emu          Enable function-pointer-cast emulation.
+#   --without-asyncify    Omit asyncify instrumentation.
+#   --without-epoch       Omit epoch/signal instrumentation.
+#   -v, --verbose         Print the exact wasm-opt command before executing it.
+#   -h, --help            Show this help and exit.
+#
+# Examples:
+#   lind-wasm-opt --target=main    input.wasm -o output.wasm
+#   lind-wasm-opt --target=library input.wasm -o output.wasm
+#   lind-wasm-opt --static         input.wasm -o output.wasm
+#   lind-wasm-opt --target=main --fpcast-emu input.wasm -o output.wasm
+#   lind-wasm-opt --static --fpcast-emu      input.wasm -o output.wasm
+#   lind-wasm-opt --target=main --without-asyncify --without-epoch input.wasm -o output.wasm
+
+usage() {
+  sed -n '/^# Usage:/,/^[^#]/{ /^[^#]/d; s/^# \{0,3\}//; p }' "$0" >&2
+}
+
+TARGET=""
+STATIC="false"
+WITH_FPCAST="false"
+WITHOUT_ASYNCIFY="false"
+WITHOUT_EPOCH="false"
+PRINT_CMD="false"
+
+# --- option parsing ---
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --target=main|--target=library)
+      TARGET="${1#--target=}"
+      ;;
+    --target=*)
+      echo "error: unknown target '${1#--target=}' (expected: main, library)" >&2
+      usage
+      exit 2
+      ;;
+    --static)
+      STATIC="true"
+      ;;
+    --fpcast-emu)
+      WITH_FPCAST="true"
+      ;;
+    --without-asyncify)
+      WITHOUT_ASYNCIFY="true"
+      ;;
+    --without-epoch)
+      WITHOUT_EPOCH="true"
+      ;;
+    -v|--verbose)
+      PRINT_CMD="true"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+  shift
+done
+
+if [[ "${STATIC}" == "true" && -n "${TARGET}" ]]; then
+  echo "error: --static and --target are mutually exclusive" >&2
+  usage
+  exit 2
+fi
+
+if [[ "${STATIC}" == "false" && -z "${TARGET}" ]]; then
+  echo "error: one of --target=main, --target=library, or --static is required" >&2
+  usage
+  exit 2
+fi
+
+# Expect exactly: input.wasm -o output.wasm
+if [[ "$#" -ne 3 || "$2" != "-o" ]]; then
+  echo "error: expected exactly: input.wasm -o output.wasm" >&2
+  usage
+  exit 2
+fi
+
+INPUT_WASM="$1"
+OUTPUT_WASM="$3"
+
+if [[ ! -f "${INPUT_WASM}" ]]; then
+  echo "error: input file not found: ${INPUT_WASM}" >&2
+  exit 2
+fi
+
+# --- locate wasm-opt (repo-relative, matching lind_compile's path) ---
+if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
+  REPO_ROOT="${LIND_WASM_ROOT}"
+else
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+  elif command -v git >/dev/null 2>&1; then
+    REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  else
+    REPO_ROOT=""
+  fi
+fi
+
+if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
+  echo "error: cannot locate lind-wasm repo root; export LIND_WASM_ROOT=/path/to/lind-wasm" >&2
+  exit 2
+fi
+
+WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
+if [[ ! -x "${WASM_OPT_BIN}" ]]; then
+  echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2
+  exit 127
+fi
+
+# --- build flag list, matching lind_compile's do_optimize() exactly ---
+LIND_FLAGS=()
+
+if [[ "${STATIC}" == "true" ]]; then
+  [[ "${WITHOUT_EPOCH}" == "false" ]] && LIND_FLAGS+=(--epoch-injection)
+  [[ "${WITHOUT_ASYNCIFY}" == "false" ]] && LIND_FLAGS+=(--asyncify)
+  if [[ "${WITH_FPCAST}" == "true" ]]; then
+    LIND_FLAGS+=(--fpcast-emu)
+  fi
+elif [[ "${TARGET}" == "main" ]]; then
+  LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
+    LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module)
+  fi
+  if [[ "${WITHOUT_ASYNCIFY}" == "false" ]]; then
+    LIND_FLAGS+=(--asyncify --pass-arg=asyncify-import-globals)
+  fi
+  if [[ "${WITH_FPCAST}" == "true" ]]; then
+    LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
+  fi
+else  # library
+  LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
+    LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import)
+  fi
+  if [[ "${WITHOUT_ASYNCIFY}" == "false" ]]; then
+    LIND_FLAGS+=(--asyncify --pass-arg=asyncify-import-globals)
+  fi
+  if [[ "${WITH_FPCAST}" == "true" ]]; then
+    LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
+  fi
+fi
+
+LIND_FLAGS+=(-O2 --debuginfo)
+
+# --- run wasm-opt ---
+if [[ "${PRINT_CMD}" == "true" ]]; then
+  printf '+ %q' "${WASM_OPT_BIN}" >&2
+  printf ' %q' "${LIND_FLAGS[@]}" "${INPUT_WASM}" -o "${OUTPUT_WASM}" >&2
+  printf '\n' >&2
+fi
+
+exec "${WASM_OPT_BIN}" "${LIND_FLAGS[@]}" "${INPUT_WASM}" -o "${OUTPUT_WASM}"

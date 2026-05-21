@@ -5,8 +5,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 def read(path):
     return pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
 
-def extract_body(html_text:str) -> str:
-    m = re.search(r"(?is)<\s*body\b>[^>]*>(.*?)</\s*body\s*>",html_text, flags=re.I)
+def extract_body(html_text: str) -> str:
+    # Greedy: pair with the final </body> so content inside <pre> cannot end extraction early.
+    m = re.search(r"(?is)<\s*body\b[^>]*>(.*)</\s*body\s*>", html_text)
     return m.group(1) if m else html_text
 
 def strip_top_h1(html: str) -> str:

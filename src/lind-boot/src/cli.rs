@@ -64,6 +64,11 @@ pub struct CliOptions {
         value_parser = parse_preloads,
     )]
     pub preloads: Vec<(String, PathBuf)>,
+
+    /// Host thread stack size in bytes for spawned cage/thread processes.
+    /// Defaults to 64 MiB.
+    #[arg(long = "thread-stack-size", default_value_t = 64 * 1024 * 1024)]
+    pub thread_stack_size: usize,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {

@@ -11,10 +11,13 @@
 #   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 30"
 #   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
 #   (flags are collected until the next option starting with "--")
+#   "./wasmtestreport.py --grate grates/ipc-grate.cwasm" to run each test under a grate
+#   (the grate path is forwarded to lind_run before the test wasm)
 #
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+import html
 import json
 import os
 import subprocess
@@ -22,10 +25,15 @@ from pathlib import Path
 import argparse
 import shutil
 import logging
+import shlex
 import tempfile
 import sys
 import time
 from typing import Any, Callable
+try:
+    from harnesses import libcpptestreport
+except ImportError:
+    import libcpptestreport
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -38,6 +46,8 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 30 # in seconds
+GRATE_DEFAULT_TIMEOUT = 90  # bumped default when running tests under a grate
+DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for lind_run on libc++ smoke .cwasm
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
@@ -59,9 +69,12 @@ FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 GLOBAL_COMPILE_FLAGS = []
+LIND_PRE_FLAGS = []
 DIR_FLAGS = []
+GRATE_PREFIX = None
+GRATE_ARGS = []
+GRATE_CHAIN = []  # raw token list to prepend before the test wasm (set when --grate-prefix is used)
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
-
 
 error_types = {
     "Failure_native_compiling": "Compilation Failure Native",
@@ -461,7 +474,7 @@ def get_expected_output(source_file):
 def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file, *resolve_compile_flags(source_file, "lind")]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), *LIND_PRE_FLAGS, source_file, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -510,7 +523,13 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     wasm_file = Path(wasm_file)
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file.name]
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run")]
+    if GRATE_CHAIN:
+        run_cmd.extend(GRATE_CHAIN)
+    elif GRATE_PREFIX:
+        run_cmd.append(GRATE_PREFIX)
+        run_cmd.extend(GRATE_ARGS)
+    run_cmd.append(wasm_file.name)
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
@@ -937,6 +956,19 @@ def generate_html_report(report):
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
         }
+        /* Same look as .test-section but not matched by PR-comment wrap_sections_as_details */
+        .wasm-harness-subsection {
+            margin: 30px 0;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .wasm-harness-subsection h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
         .summary-table {
             width: 100%;
             margin-bottom: 20px;
@@ -970,8 +1002,11 @@ def generate_html_report(report):
 
     html_content.append(html_header)
 
-    # Generate sections for Deterministic/Non-Deterministic test type
-    for test_type, test_result in report.items():
+    # Generate sections for Deterministic/Non-Deterministic test type (skip embedded libcpp blob)
+    for test_type in ("deterministic", "fail"):
+        if test_type not in report:
+            continue
+        test_result = report[test_type]
         html_content.append(f'<div class="test-section">')
         html_content.append(f'<h2>{test_type.replace("_", " ").title()} Tests</h2>')
         
@@ -1032,22 +1067,30 @@ def generate_html_report(report):
                     # Extract just the test file name for display
                     test_name = test_path.split('/')[-1]
                     
-                    # For successful tests, just show "Success" instead of full output
-                    # For failures, show the full output for debugging
-                    output_display = "Success" if result['status'].lower() == "success" else result["output"]
-                    
+                    # Escape cell text and <pre> bodies so downstream HTML consumers
+                    # (e.g. PR comment wrap_sections_as_details) never see literal </div></body>.
+                    if result["status"].lower() == "success":
+                        output_display = "Success"
+                    else:
+                        output_display = html.escape(str(result.get("output", "")))
                     native_time, wasm_time = get_row_time_values(result)
 
                     html_content.append(
-                        f'<tr class="{row_class}"><td>{test_name}</td>'
-                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<tr class="{row_class}"><td>{html.escape(test_name)}</td>'
+                        f'<td>{html.escape(str(result["status"]))}</td>'
+                        f'<td>{html.escape(str(result["error_type"]))}</td>'
                         f'<td>{format_time_cell(native_time)}</td>'
                         f'<td>{format_time_cell(wasm_time)}</td>'
-                        f'<td><pre>{output_display}</pre></td></tr>'
+                        f"<td><pre>{output_display}</pre></td></tr>"
                     )
             
             html_content.append('</table>')
-        html_content.append('</div>') 
+        html_content.append('</div>')
+
+    # Omit libc++ HTML when skipped or never run (empty bucket still exists in JSON for schema).
+    libcpp_report = report.get("libcpp")
+    if libcpp_report and libcpp_report.get("total_test_cases", 0) > 0:
+        html_content.append(libcpptestreport.generate_html_section(libcpp_report))
 
     html_content.append("</body>\n</html>")
     html_content.append("\n")
@@ -1170,7 +1213,7 @@ def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description="Specify folders to skip or run.")
     parser.add_argument("--skip", nargs="*", default=SKIP_FOLDERS, help="List of folders to be skipped")
     parser.add_argument("--run", nargs="*", default=RUN_FOLDERS, help="List of folders to be run")
-    parser.add_argument("--timeout", type=check_timeout, default=DEFAULT_TIMEOUT, help="Timeout in seconds")
+    parser.add_argument("--timeout", type=check_timeout, default=None, help=f"Timeout in seconds (default: {DEFAULT_TIMEOUT}, or {GRATE_DEFAULT_TIMEOUT} when running under a grate)")
     parser.add_argument("--output", default=JSON_OUTPUT, help="Name of the output file")
     parser.add_argument("--report", default=HTML_OUTPUT, help="Name of the report HTML file")
     parser.add_argument("--generate-html", action="store_true", help="Flag to generate HTML file")
@@ -1183,7 +1226,22 @@ def parse_arguments(argv=None):
     parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
+    parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
+    parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a single grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
+    parser.add_argument("--grate-args", default="", help="Extra args passed to the grate, between the grate cwasm and the test wasm (shlex-split). Example: --grate-args '--chroot-dir /tmp'")
+    parser.add_argument("--grate-prefix", default=None, help="Raw prefix string of grates and their args, prepended verbatim before the test wasm (shlex-split). Use for chaining multiple grates including any grate-side group syntax. Example: --grate-prefix 'grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm'")
+    parser.add_argument(
+        "--libcpp-timeout",
+        type=check_timeout,
+        default=DEFAULT_LIBCPP_RUN_TIMEOUT,
+        help="Timeout in seconds for libc++ smoke test lind_run (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--skip-libcpp",
+        action="store_true",
+        help="Skip libc++ integration smoke (full lind_compile_cpp + lind_run)",
+    )
 
     args = parser.parse_args(argv)
     return args
@@ -1425,12 +1483,11 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
-    global GLOBAL_COMPILE_FLAGS, DIR_FLAGS
+    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX, GRATE_ARGS, GRATE_CHAIN
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
-    timeout_sec = args.timeout
     output_file = str(Path(args.output).with_suffix('.json'))
     output_html_file = str(Path(args.report).with_suffix('.html'))
     should_generate_html = True
@@ -1440,6 +1497,49 @@ def main():
     artifacts_dir_arg = args.artifacts_dir
     keep_artifacts = args.keep_artifacts
     GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
+    LIND_PRE_FLAGS = ["--static"] if args.static_build else []
+    GRATE_PREFIX = args.grate
+    GRATE_ARGS = shlex.split(args.grate_args) if args.grate_args else []
+    GRATE_CHAIN = shlex.split(args.grate_prefix) if args.grate_prefix else []
+
+    if GRATE_CHAIN and (GRATE_PREFIX or args.grate_args):
+        logger.error("--grate-prefix is mutually exclusive with --grate / --grate-args")
+        return
+
+    if GRATE_PREFIX:
+        grate_full = LINDFS_ROOT / GRATE_PREFIX.lstrip("/")
+        if not grate_full.exists():
+            grate_name = Path(GRATE_PREFIX).stem
+            logger.error(
+                f"Grate not found at {grate_full}.\n"
+                f"  Build it in the lind-wasm-example-grates repo:\n"
+                f"      cd ../lind-wasm-example-grates && make rust/{grate_name}\n"
+                f"  (or `make c/{grate_name}` for a C grate, `make list` to see available targets).\n"
+                f"  The build installs the cwasm into {LINDFS_ROOT}/grates/."
+            )
+            return
+
+    if GRATE_CHAIN:
+        missing = []
+        for tok in GRATE_CHAIN:
+            if tok.endswith(".cwasm") or tok.endswith(".wasm"):
+                full = LINDFS_ROOT / tok.lstrip("/")
+                if not full.exists():
+                    missing.append(full)
+        if missing:
+            paths = "\n    ".join(str(m) for m in missing)
+            logger.error(
+                f"Grate chain references missing cwasm/wasm files:\n"
+                f"    {paths}\n"
+                f"  Build them in the lind-wasm-example-grates repo (e.g. "
+                f"`cd ../lind-wasm-example-grates && make rust/<name>` per grate, "
+                f"or `make all`). Builds install into {LINDFS_ROOT}/grates/."
+            )
+            return
+
+    timeout_sec = args.timeout
+    if timeout_sec is None:
+        timeout_sec = GRATE_DEFAULT_TIMEOUT if (GRATE_PREFIX or GRATE_CHAIN) else DEFAULT_TIMEOUT
 
     if args.dir_flags:
         try:
@@ -1469,7 +1569,8 @@ def main():
 
     results = {
         "deterministic": get_empty_result(),
-        "fail": get_empty_result()
+        "fail": get_empty_result(),
+        "libcpp": libcpptestreport.get_empty_result(),
     }
 
     # Prepare artifacts root
@@ -1498,8 +1599,10 @@ def main():
         try:
             shutil.rmtree(TESTFILES_DST)
             logger.info(f"Testfiles at {TESTFILES_DST} deleted")
-        except FileNotFoundError as e:
-            logger.error(f"Testfiles not present at {TESTFILES_DST}")
+        except FileNotFoundError:
+            logger.info(f"Testfiles not present at {TESTFILES_DST}")
+        except PermissionError as e:
+            logger.warning(f"Could not remove testfiles at {TESTFILES_DST}: {e}")
         
         if clean_testfiles:
             return
@@ -1520,6 +1623,11 @@ def main():
         # Run all tests
         run_tests(config, artifacts_root, results, timeout_sec)
 
+        if not args.skip_libcpp:
+            libcpptestreport.run_libcpp_integration(
+                results["libcpp"], None, args.libcpp_timeout, logger=logger
+            )
+
         os.chdir(LIND_WASM_BASE)
         with open(output_file, "w") as fp:
             json.dump(results, fp, indent=4)
@@ -1538,7 +1646,7 @@ def main():
         # ALWAYS clean up, regardless of success/failure/interruption
         try:
             shutil.rmtree(TESTFILES_DST)
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             pass
             
         # Remove artifacts directory if it was temp and not requested to keep

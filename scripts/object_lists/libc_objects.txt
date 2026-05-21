@@ -2,7 +2,6 @@ lind_syscall.o
 addr_translation.o
 lind_debug.o
 csu/wasi_thread_start.o
-csu/set_stack_pointer.o
 csu/__init_tls.o
 csu/init-first.o
 csu/libc-start.o

@@ -234,8 +234,6 @@ pub fn register_handler_impl(
 /// Actual implementation of copy_handler_table_to_cage.
 /// See comments in threei.rs for details.
 pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
-    // Clone the source call map snapshot so we don't hold a long-lived reference
-    // while mutating the destination. DashMap::clone clones the structure and keys/values.
     let src_snapshot: CallnumMap = if let Some(src_entry) = HANDLERTABLE.get(&srccage) {
         let snap = src_entry.value().clone();
         drop(src_entry);
@@ -248,10 +246,12 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
         return threei_const::ELINDAPIABORTED;
     };
 
-    let dst_call_map_ref = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
+    // Overwrite the entire target handler table.
+    HANDLERTABLE.insert(targetcage, DashMap::new());
+
+    let dst_call_map_ref = HANDLERTABLE.get(&targetcage).unwrap();
     let dst_call_map: &CallnumMap = &*dst_call_map_ref;
 
-    // Copy without overwriting existing destination handlers.
     for src_call_entry in src_snapshot.iter() {
         let callnum = *src_call_entry.key();
         let src_target_map: &TargetCageMap = src_call_entry.value();
@@ -263,8 +263,7 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
             let handlefunccage = *src_target_entry.key();
             let addr = *src_target_entry.value();
 
-            // Insert only if absent, preserving any existing destination mapping.
-            dst_target_map.entry(handlefunccage).or_insert(addr);
+            dst_target_map.insert(handlefunccage, addr);
         }
     }
 

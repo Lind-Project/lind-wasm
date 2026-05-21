@@ -25,11 +25,12 @@
 #include <lind_syscall_num.h>
 #include <addr_translation.h>
 
+// Fix: Do NOT translate addr - it's a guest virtual address, not a data pointer.
 void *
 __mmap64 (void *addr, size_t len, int prot, int flags, int fd, off64_t offset)
 {
   return MAKE_LEGACY_SYSCALL (MMAP_SYSCALL, "syscall|mmap",
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
+		       (uint64_t)(uintptr_t) addr,
 		       (uint64_t) len, (uint64_t) prot, (uint64_t) flags,
 		       (uint64_t) fd, (uint64_t) offset, TRANSLATE_ERRNO_ON);
 }

@@ -1,4 +1,4 @@
-use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
+use cage::{get_cage, readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
 use fdtables;
 use lazy_static::lazy_static;
 use libc::*;
@@ -6,6 +6,7 @@ use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
@@ -235,6 +236,95 @@ pub extern "C" fn poll_syscall(
     }
 
     total_ready
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/ppoll.2.html
+///
+/// `ppoll` is like `poll` but atomically sets the signal mask during the wait.
+/// This implementation swaps the cage's signal mask before polling and restores
+/// it afterwards. The timeout is already converted to milliseconds by the glibc
+/// wrapper.
+///
+/// ## Arguments:
+///     - fds_arg: pointer to array of pollfd structs
+///     - nfds_arg: number of pollfd entries
+///     - timeout_arg: timeout in milliseconds (-1 = block indefinitely)
+///     - sigmask_arg: pointer to sigset_t to apply during poll, or 0 for NULL
+///
+/// ## Returns:
+///     - Number of ready fds on success, -1 on error
+pub extern "C" fn ppoll_syscall(
+    cageid: u64,
+    fds_arg: u64,
+    fds_cageid: u64,
+    nfds_arg: u64,
+    nfds_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
+    sigmask_arg: u64,
+    sigmask_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "ppoll_syscall"
+        );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let mut saved: Option<(u64, u64)> = None; // (old_mask, ppoll_mask)
+
+    // If sigmask is provided, atomically swap the signal mask
+    if sigmask_arg != 0 {
+        let sigmask_ptr = sc_convert_buf(sigmask_arg, sigmask_cageid, cageid) as *const u64;
+        let ppoll_mask = unsafe { *sigmask_ptr };
+        let old_mask = cage.sigset.load(std::sync::atomic::Ordering::Relaxed);
+        cage.sigset
+            .store(ppoll_mask, std::sync::atomic::Ordering::Relaxed);
+        saved = Some((old_mask, ppoll_mask));
+    }
+
+    // Call poll with the same args (fds, nfds, timeout)
+    let result = poll_syscall(
+        cageid,
+        fds_arg,
+        fds_cageid,
+        nfds_arg,
+        nfds_cageid,
+        timeout_arg,
+        timeout_cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    // Restore the original signal mask
+    if let Some((old_mask, ppoll_mask)) = saved {
+        cage.sigset
+            .store(old_mask, std::sync::atomic::Ordering::Relaxed);
+
+        // Check if any signals that were blocked during ppoll are now
+        // unblocked after restoring the original mask
+        let newly_unblocked = ppoll_mask & !old_mask;
+        if newly_unblocked != 0 {
+            let pending_signals = cage.pending_signals.read();
+            if pending_signals
+                .iter()
+                .any(|signo| (newly_unblocked & cage::convert_signal_mask(*signo)) != 0)
+            {
+                cage::signal_epoch_trigger(cageid);
+            }
+        }
+    }
+
+    result
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/select.2.html
@@ -858,10 +948,23 @@ pub extern "C" fn epoll_wait_syscall(
 
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
     // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
-    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg)
-        .unwrap()
-        .get(&FDKIND_KERNEL)
-        .unwrap();
+    let fd_map = match fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg) {
+        Ok(map) => map,
+        Err(_) => {
+            return syscall_error(Errno::EBADF, "epoll_wait_syscall", "invalid epoll fd");
+        }
+    };
+
+    let epfd = match fd_map.get(&FDKIND_KERNEL) {
+        Some(fd) => *fd,
+        None => {
+            return syscall_error(
+                Errno::EBADF,
+                "epoll_wait_syscall",
+                "missing kernel epoll fd",
+            );
+        }
+    };
 
     // Convert arguments
     let maxevents = sc_convert_sysarg_to_i32(maxevents_arg, maxevents_cageid, cageid);
@@ -940,13 +1043,24 @@ pub extern "C" fn epoll_wait_syscall(
         // Loop over virtual epollfd to find corresponding mapping relationship between kernel fd and virtual fd
         for i in 0..ret as usize {
             let ret_kernelfd = kernel_events[i].u64;
-            let epollmapping = REAL_EPOLL_MAP.lock();
-            let ret_virtualfd = epollmapping
-                .get(&(epfd))
-                .and_then(|kernel_map| kernel_map.get(&(ret_kernelfd as i32)).copied());
 
-            // Write back to user's buffer: store virtual fd in the u64 data field
-            events[i].u64 = ret_virtualfd.unwrap() as u64;
+            let epollmapping = REAL_EPOLL_MAP.lock();
+
+            let ret_virtualfd = match epollmapping
+                .get(&epfd)
+                .and_then(|kernel_map| kernel_map.get(&(ret_kernelfd as i32)).copied())
+            {
+                Some(vfd) => vfd,
+                None => {
+                    return syscall_error(
+                        Errno::EBADF,
+                        "epoll",
+                        "could not translate kernel fd to virtual fd",
+                    );
+                }
+            };
+
+            events[i].u64 = ret_virtualfd as u64;
             events[i].events = kernel_events[i].events;
         }
         return ret;
@@ -1855,17 +1969,21 @@ pub extern "C" fn getsockopt_syscall(
     optname_arg: u64,
     optname_cageid: u64,
     optval_arg: u64,
-    optval_cageid: u64,
+    _optval_cageid: u64,
     optlen_arg: u64,
-    optlen_cageid: u64,
+    _optlen_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_uaddr_to_host(optval_arg, optval_cageid, cageid) as *mut c_void;
-    let optlen = sc_convert_uaddr_to_host(optlen_arg, optlen_cageid, cageid) as *mut socklen_t;
+    // optval/optlen arrive as already-translated host pointers from glibc's
+    // getsockopt.c (matches setsockopt/sendto/recvfrom).  Re-translating here
+    // would break the grate forwarding path, where the grate has no way to
+    // translate cage offsets and relies on glibc having done so.
+    let optval = optval_arg as *mut c_void;
+    let optlen = optlen_arg as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
