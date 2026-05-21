@@ -160,11 +160,18 @@ impl ByteQueue {
             let queued = self.capacity - write_end.remaining();
             let remaining = write_end.remaining().min(limit.saturating_sub(queued));
             if remaining == 0 {
+                if nonblocking {
+                    if bytes_written > 0 {
+                        return bytes_written as i32;
+                    }
+                    return syscall_error(Errno::EAGAIN, "write", "would block");
+                }
                 std::thread::yield_now();
                 continue;
             }
 
-            if remaining != self.capacity
+            if !nonblocking
+                && remaining != self.capacity
                 && (count - bytes_written) > PAGE_SIZE
                 && remaining < PAGE_SIZE
             {
