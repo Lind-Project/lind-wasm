@@ -1,5 +1,5 @@
 use fdtables::FDTableEntry;
-use libc::{c_void, sockaddr, sockaddr_in, sockaddr_un, socklen_t};
+use libc::{c_void, linger, sockaddr, sockaddr_in, sockaddr_storage, sockaddr_un, socklen_t};
 use once_cell::sync::Lazy;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::CStr;
@@ -172,6 +172,12 @@ struct SocketState {
     closed: bool,
     read_shutdown: bool,
     write_shutdown: bool,
+    reuseaddr: i32,
+    reuseport: i32,
+    sndbuf: i32,
+    rcvbuf: i32,
+    linger: linger,
+    tcp_nodelay: i32,
     pending: VecDeque<Arc<InmemSocket>>,
 }
 
@@ -189,6 +195,15 @@ impl InmemSocket {
                 closed: false,
                 read_shutdown: false,
                 write_shutdown: false,
+                reuseaddr: 0,
+                reuseport: 0,
+                sndbuf: PIPE_CAPACITY as i32,
+                rcvbuf: PIPE_CAPACITY as i32,
+                linger: linger {
+                    l_onoff: 0,
+                    l_linger: 0,
+                },
+                tcp_nodelay: 0,
                 pending: VecDeque::new(),
             }),
             accept_ready: Condvar::new(),
@@ -392,6 +407,32 @@ pub fn bind_socket(socket_id: u64, key: String) -> i32 {
         Err(e) => return e,
     };
 
+    let key = {
+        let state = socket.state.lock().unwrap();
+        if key == "inet:0" {
+            next_ephemeral_key(state.domain)
+        } else {
+            key
+        }
+    };
+
+    if LISTENERS.lock().unwrap().contains_key(&key) {
+        return syscall_error(Errno::EADDRINUSE, "bind", "address already in use");
+    }
+    if SOCKETS.lock().unwrap().values().any(|other| {
+        if Arc::ptr_eq(other, &socket) {
+            return false;
+        }
+        let state = other.state.lock().unwrap();
+        !state.closed
+            && state
+                .local_key
+                .as_ref()
+                .is_some_and(|other_key| other_key == &key)
+    }) {
+        return syscall_error(Errno::EADDRINUSE, "bind", "address already in use");
+    }
+
     let mut state = socket.state.lock().unwrap();
     state.local_key = Some(key);
     0
@@ -512,16 +553,159 @@ pub fn is_supported_socket(domain: i32, socktype: i32, protocol: i32) -> bool {
         && (protocol == 0 || protocol == libc::IPPROTO_TCP)
 }
 
-pub fn is_loopback_sockaddr(addr: *mut u8, addrlen: socklen_t) -> bool {
-    matches!(sockaddr_key(addr, addrlen), Some((family, _)) if family == libc::AF_INET)
-}
-
 pub fn sendto(fdentry: FDTableEntry, buf: *const c_void, buflen: usize) -> i32 {
     write(fdentry, buf as *const u8, buflen)
 }
 
 pub fn recvfrom(fdentry: FDTableEntry, buf: *mut c_void, buflen: usize) -> i32 {
     read(fdentry, buf as *mut u8, buflen)
+}
+
+pub fn getsockname(socket_id: u64) -> Result<(sockaddr_storage, socklen_t), i32> {
+    let socket = get_socket(socket_id)?;
+    let state = socket.state.lock().unwrap();
+    let key = state.local_key.as_deref();
+    let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
+
+    match state.domain {
+        libc::AF_INET => {
+            let sockaddr = unsafe { &mut *(&mut storage as *mut _ as *mut sockaddr_in) };
+            sockaddr.sin_family = libc::AF_INET as libc::sa_family_t;
+            sockaddr.sin_addr.s_addr = u32::to_be(0x7f000001);
+            sockaddr.sin_port = key
+                .and_then(|key| key.strip_prefix("inet:"))
+                .and_then(|port| port.parse::<u16>().ok())
+                .map(u16::to_be)
+                .unwrap_or(0);
+            Ok((storage, mem::size_of::<sockaddr_in>() as socklen_t))
+        }
+        libc::AF_UNIX => {
+            let sockaddr = unsafe { &mut *(&mut storage as *mut _ as *mut sockaddr_un) };
+            sockaddr.sun_family = libc::AF_UNIX as libc::sa_family_t;
+            if let Some(path) = key.and_then(|key| key.strip_prefix("unix:")) {
+                let bytes = path.as_bytes();
+                let n = bytes.len().min(sockaddr.sun_path.len().saturating_sub(1));
+                for (idx, byte) in bytes.iter().take(n).enumerate() {
+                    sockaddr.sun_path[idx] = *byte as libc::c_char;
+                }
+            }
+            Ok((storage, mem::size_of::<sockaddr_un>() as socklen_t))
+        }
+        _ => Err(syscall_error(
+            Errno::EOPNOTSUPP,
+            "getsockname",
+            "unsupported in-memory socket family",
+        )),
+    }
+}
+
+pub fn setsockopt(
+    socket_id: u64,
+    level: i32,
+    optname: i32,
+    optval: *const c_void,
+    optlen: socklen_t,
+) -> i32 {
+    if optval.is_null() {
+        return syscall_error(Errno::EFAULT, "setsockopt", "option value is null");
+    }
+
+    let socket = match get_socket(socket_id) {
+        Ok(socket) => socket,
+        Err(e) => return e,
+    };
+    let mut state = socket.state.lock().unwrap();
+
+    match (level, optname) {
+        (libc::SOL_SOCKET, libc::SO_REUSEADDR) if optlen as usize >= mem::size_of::<i32>() => {
+            state.reuseaddr = unsafe { *(optval as *const i32) };
+            0
+        }
+        (libc::SOL_SOCKET, libc::SO_REUSEPORT) if optlen as usize >= mem::size_of::<i32>() => {
+            state.reuseport = unsafe { *(optval as *const i32) };
+            0
+        }
+        (libc::SOL_SOCKET, libc::SO_SNDBUF) if optlen as usize >= mem::size_of::<i32>() => {
+            state.sndbuf = unsafe { *(optval as *const i32) }.max(1);
+            0
+        }
+        (libc::SOL_SOCKET, libc::SO_RCVBUF) if optlen as usize >= mem::size_of::<i32>() => {
+            state.rcvbuf = unsafe { *(optval as *const i32) }.max(1);
+            0
+        }
+        (libc::SOL_SOCKET, libc::SO_LINGER) if optlen as usize >= mem::size_of::<linger>() => {
+            state.linger = unsafe { *(optval as *const linger) };
+            0
+        }
+        (libc::IPPROTO_TCP, libc::TCP_NODELAY) if optlen as usize >= mem::size_of::<i32>() => {
+            state.tcp_nodelay = unsafe { *(optval as *const i32) };
+            0
+        }
+        _ => syscall_error(
+            Errno::ENOPROTOOPT,
+            "setsockopt",
+            "unsupported socket option",
+        ),
+    }
+}
+
+pub fn getsockopt(
+    socket_id: u64,
+    level: i32,
+    optname: i32,
+    optval: *mut c_void,
+    optlen: *mut socklen_t,
+) -> i32 {
+    if optval.is_null() || optlen.is_null() {
+        return syscall_error(Errno::EFAULT, "getsockopt", "option pointer is null");
+    }
+
+    let socket = match get_socket(socket_id) {
+        Ok(socket) => socket,
+        Err(e) => return e,
+    };
+    let state = socket.state.lock().unwrap();
+
+    unsafe fn write_opt<T: Copy>(optval: *mut c_void, optlen: *mut socklen_t, value: T) -> i32 {
+        let required = mem::size_of::<T>() as socklen_t;
+        if *optlen < required {
+            return syscall_error(Errno::EINVAL, "getsockopt", "option buffer too small");
+        }
+        *(optval as *mut T) = value;
+        *optlen = required;
+        0
+    }
+
+    match (level, optname) {
+        (libc::SOL_SOCKET, libc::SO_TYPE) => unsafe {
+            write_opt(
+                optval,
+                optlen,
+                state.socktype & !(libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK),
+            )
+        },
+        (libc::SOL_SOCKET, libc::SO_ERROR) => unsafe { write_opt(optval, optlen, 0i32) },
+        (libc::SOL_SOCKET, libc::SO_ACCEPTCONN) => unsafe {
+            write_opt(optval, optlen, if state.listening { 1i32 } else { 0i32 })
+        },
+        (libc::SOL_SOCKET, libc::SO_REUSEADDR) => unsafe {
+            write_opt(optval, optlen, state.reuseaddr)
+        },
+        (libc::SOL_SOCKET, libc::SO_REUSEPORT) => unsafe {
+            write_opt(optval, optlen, state.reuseport)
+        },
+        (libc::SOL_SOCKET, libc::SO_SNDBUF) => unsafe { write_opt(optval, optlen, state.sndbuf) },
+        (libc::SOL_SOCKET, libc::SO_RCVBUF) => unsafe { write_opt(optval, optlen, state.rcvbuf) },
+        (libc::SOL_SOCKET, libc::SO_LINGER) => unsafe { write_opt(optval, optlen, state.linger) },
+        (libc::IPPROTO_TCP, libc::TCP_NODELAY) => unsafe {
+            write_opt(optval, optlen, state.tcp_nodelay)
+        },
+        _ => syscall_error(
+            Errno::ENOPROTOOPT,
+            "getsockopt",
+            "unsupported socket option",
+        ),
+    }
 }
 
 pub fn poll_fd(fdentry: FDTableEntry, events: i16) -> i16 {

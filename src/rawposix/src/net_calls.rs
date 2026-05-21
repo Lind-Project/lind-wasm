@@ -30,6 +30,34 @@ lazy_static! {
     static ref REAL_EPOLL_MAP: Mutex<HashMap<u64, HashMap<i32, u64>>> = Mutex::new(HashMap::new());
 }
 
+fn kernel_socket_type(fd: i32) -> Option<i32> {
+    let mut socktype: i32 = 0;
+    let mut optlen = mem::size_of::<i32>() as socklen_t;
+    let ret = unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_TYPE,
+            &mut socktype as *mut _ as *mut c_void,
+            &mut optlen,
+        )
+    };
+    if ret == 0 {
+        Some(socktype)
+    } else {
+        None
+    }
+}
+
+fn kernel_socket_nonblocking(fd: i32) -> u64 {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags >= 0 {
+        (flags & libc::O_NONBLOCK) as u64
+    } else {
+        0
+    }
+}
+
 fn ensure_inmem_socket(
     cageid: u64,
     vfd_arg: u64,
@@ -45,15 +73,23 @@ fn ensure_inmem_socket(
     if fdentry.fdkind != FDKIND_KERNEL {
         return Err(syscall_error(Errno::EBADF, "socket", "Bad File Descriptor"));
     }
+    if !inmem_ipc::is_supported_socket(domain, socktype, protocol) {
+        return Err(syscall_error(
+            Errno::EOPNOTSUPP,
+            "socket",
+            "unsupported in-memory socket type",
+        ));
+    }
 
     let socket_id = inmem_ipc::create_socket(domain, socktype, protocol);
+    let perfdinfo = fdentry.perfdinfo | kernel_socket_nonblocking(fdentry.underfd as i32);
     fdtables::get_specific_virtual_fd(
         cageid,
         vfd_arg,
         FDKIND_IMSOCK,
         socket_id,
         fdentry.should_cloexec,
-        fdentry.perfdinfo,
+        perfdinfo,
     )
     .map_err(|_| syscall_error(Errno::EBADF, "socket", "Bad File Descriptor"))?;
 
@@ -1366,8 +1402,14 @@ pub extern "C" fn connect_syscall(
             Ok(entry) => entry,
             Err(_) => return syscall_error(Errno::EBADF, "connect", "Bad File Descriptor"),
         };
-        if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
-            let socktype = libc::SOCK_STREAM;
+        let socktype = if fdentry.fdkind == FDKIND_KERNEL {
+            kernel_socket_type(fdentry.underfd as i32).unwrap_or(libc::SOCK_STREAM)
+        } else {
+            libc::SOCK_STREAM
+        };
+        if fdentry.fdkind == FDKIND_IMSOCK
+            || (family == libc::AF_INET && socktype == libc::SOCK_STREAM)
+        {
             let socket_entry = match ensure_inmem_socket(cageid, fd_arg, family, socktype, 0) {
                 Ok(entry) => entry,
                 Err(e) => return e,
@@ -1449,12 +1491,18 @@ pub extern "C" fn bind_syscall(
             Ok(entry) => entry,
             Err(_) => return syscall_error(Errno::EBADF, "bind", "Bad File Descriptor"),
         };
-        if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
-            let socket_entry =
-                match ensure_inmem_socket(cageid, fd_arg, family, libc::SOCK_STREAM, 0) {
-                    Ok(entry) => entry,
-                    Err(e) => return e,
-                };
+        let socktype = if fdentry.fdkind == FDKIND_KERNEL {
+            kernel_socket_type(fdentry.underfd as i32).unwrap_or(libc::SOCK_STREAM)
+        } else {
+            libc::SOCK_STREAM
+        };
+        if fdentry.fdkind == FDKIND_IMSOCK
+            || (family == libc::AF_INET && socktype == libc::SOCK_STREAM)
+        {
+            let socket_entry = match ensure_inmem_socket(cageid, fd_arg, family, socktype, 0) {
+                Ok(entry) => entry,
+                Err(e) => return e,
+            };
             return inmem_ipc::bind_socket(socket_entry.underfd, key);
         }
     }
@@ -1726,7 +1774,6 @@ pub extern "C" fn setsockopt_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
     let optval = optval_arg as *mut u8;
@@ -1741,6 +1788,20 @@ pub extern "C" fn setsockopt_syscall(
         );
     }
 
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            return inmem_ipc::setsockopt(
+                entry.underfd,
+                level,
+                optname,
+                optval as *const c_void,
+                optlen,
+            );
+        }
+        _ => {}
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let ret = unsafe { libc::setsockopt(fd, level, optname, optval as *mut c_void, optlen) };
 
     if ret < 0 {
@@ -1848,7 +1909,6 @@ pub extern "C" fn getsockname_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let user_addr = addr_arg as *mut SockAddr;
     let lenp = addrlen_arg as *mut socklen_t;
 
@@ -1868,6 +1928,22 @@ pub extern "C" fn getsockname_syscall(
         return syscall_error(Errno::EFAULT, "getsockname_syscall", "len is null");
     }
 
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            let (storage, actual_len) = match inmem_ipc::getsockname(entry.underfd) {
+                Ok(value) => value,
+                Err(e) => return e,
+            };
+            unsafe {
+                let requested_len = *lenp;
+                copy_out_sockaddr(user_addr, lenp, &storage);
+                *lenp = actual_len.min(requested_len);
+            }
+            return 0;
+        }
+        _ => {}
+    }
+
     // Read initial length and clamp to storage size
     let mut len: socklen_t = unsafe { *lenp };
     let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
@@ -1877,6 +1953,7 @@ pub extern "C" fn getsockname_syscall(
 
     // Call kernel into temporary buffer (avoid writing into SockAddr directly)
     let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let ret = unsafe {
         libc::getsockname(
             fd as i32,
@@ -2258,7 +2335,6 @@ pub extern "C" fn getsockopt_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
     // optval/optlen arrive as already-translated host pointers from glibc's
@@ -2277,6 +2353,14 @@ pub extern "C" fn getsockopt_syscall(
         );
     }
 
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            return inmem_ipc::getsockopt(entry.underfd, level, optname, optval, optlen);
+        }
+        _ => {}
+    }
+
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let ret = unsafe { libc::getsockopt(fd, level, optname, optval, optlen) };
     if ret < 0 {
         let errno = get_errno();

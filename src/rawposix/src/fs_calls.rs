@@ -2983,9 +2983,17 @@ pub extern "C" fn dup_syscall(
         return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
     }
     let vfd = wrappedvfd.unwrap();
-    let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
+    let underfd = if vfd.fdkind == FDKIND_KERNEL {
+        let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
+        if ret_kernelfd < 0 {
+            return handle_errno(get_errno(), "dup");
+        }
+        ret_kernelfd as u64
+    } else {
+        vfd.underfd
+    };
     let ret_vfd =
-        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
+        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, underfd, false, vfd.perfdinfo).unwrap();
     return ret_vfd as i32;
 }
 
@@ -3243,12 +3251,6 @@ pub extern "C" fn writev_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    // Return error
-    if kernel_fd < 0 {
-        return handle_errno(-kernel_fd, "writev");
-    }
-
     let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
     let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
 
@@ -3260,6 +3262,35 @@ pub extern "C" fn writev_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "writev"
         );
+    }
+
+    let fdentry = match fdtables::translate_virtual_fd(vfd_cageid, vfd_arg) {
+        Ok(entry) => entry,
+        Err(_) => return syscall_error(Errno::EBADF, "writev", "Bad File Descriptor"),
+    };
+    if fdentry.fdkind == FDKIND_IMPIPE || fdentry.fdkind == FDKIND_IMSOCK {
+        let iov =
+            unsafe { std::slice::from_raw_parts(iov_ptr as *const libc::iovec, iovcnt as usize) };
+        let mut total = 0i32;
+        for item in iov {
+            if item.iov_len == 0 {
+                continue;
+            }
+            let ret = inmem_ipc::write(fdentry, item.iov_base as *const u8, item.iov_len);
+            if ret < 0 {
+                return if total > 0 { total } else { ret };
+            }
+            total += ret;
+            if ret < item.iov_len as i32 {
+                break;
+            }
+        }
+        return total;
+    }
+
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "writev");
     }
 
     let ret = unsafe { libc::writev(kernel_fd, iov_ptr as *const libc::iovec, iovcnt) as i32 };
@@ -3302,11 +3333,6 @@ pub extern "C" fn readv_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd < 0 {
-        return handle_errno(-kernel_fd, "readv");
-    }
-
     let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
     let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
 
@@ -3318,6 +3344,38 @@ pub extern "C" fn readv_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "readv"
         );
+    }
+
+    let fdentry = match fdtables::translate_virtual_fd(vfd_cageid, vfd_arg) {
+        Ok(entry) => entry,
+        Err(_) => return syscall_error(Errno::EBADF, "readv", "Bad File Descriptor"),
+    };
+    if fdentry.fdkind == FDKIND_IMPIPE || fdentry.fdkind == FDKIND_IMSOCK {
+        let iov =
+            unsafe { std::slice::from_raw_parts(iov_ptr as *const libc::iovec, iovcnt as usize) };
+        let mut total = 0i32;
+        for item in iov {
+            if item.iov_len == 0 {
+                continue;
+            }
+            let ret = inmem_ipc::read(fdentry, item.iov_base as *mut u8, item.iov_len);
+            if ret < 0 {
+                return if total > 0 { total } else { ret };
+            }
+            if ret == 0 {
+                break;
+            }
+            total += ret;
+            if ret < item.iov_len as i32 {
+                break;
+            }
+        }
+        return total;
+    }
+
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd < 0 {
+        return handle_errno(-kernel_fd, "readv");
     }
 
     let ret = unsafe { libc::readv(kernel_fd, iov_ptr as *const libc::iovec, iovcnt) as i32 };
