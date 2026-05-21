@@ -637,26 +637,20 @@ pub extern "C" fn pipe_syscall(
         Err(_e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
     };
 
-    if inmem_ipc::enabled() {
-        let (read_endpoint, write_endpoint) = inmem_ipc::create_pipe();
-        let read_vfd =
-            match fdtables::get_unused_virtual_fd(cageid, FDKIND_IMPIPE, read_endpoint, false, 0) {
-                Ok(fd) => fd as i32,
-                Err(_) => {
-                    return syscall_error(
-                        Errno::EMFILE,
-                        "pipe_syscall",
-                        "Failed to get virtual file descriptor",
-                    )
-                }
-            };
-        let write_vfd = match fdtables::get_unused_virtual_fd(
-            cageid,
-            FDKIND_IMPIPE,
-            write_endpoint,
-            false,
-            0,
-        ) {
+    let (read_endpoint, write_endpoint) = inmem_ipc::create_pipe();
+    let read_vfd =
+        match fdtables::get_unused_virtual_fd(cageid, FDKIND_IMPIPE, read_endpoint, false, 0) {
+            Ok(fd) => fd as i32,
+            Err(_) => {
+                return syscall_error(
+                    Errno::EMFILE,
+                    "pipe_syscall",
+                    "Failed to get virtual file descriptor",
+                )
+            }
+        };
+    let write_vfd =
+        match fdtables::get_unused_virtual_fd(cageid, FDKIND_IMPIPE, write_endpoint, false, 0) {
             Ok(fd) => fd as i32,
             Err(_) => {
                 let _ = fdtables::close_virtualfd(cageid, read_vfd as u64);
@@ -668,69 +662,10 @@ pub extern "C" fn pipe_syscall(
             }
         };
 
-        pipefd.readfd = read_vfd;
-        pipefd.writefd = write_vfd;
-        return 0;
-    }
-
-    // Create an array to hold the two kernel file descriptors
-    let mut kernel_fds: [i32; 2] = [0; 2];
-    let ret = unsafe { libc::pipe(kernel_fds.as_mut_ptr()) };
-    if ret < 0 {
-        return handle_errno(get_errno(), "pipe_syscall");
-    }
-
-    // Get virtual fd for read end
-    let read_vfd = match fdtables::get_unused_virtual_fd(
-        cageid,
-        FDKIND_KERNEL,
-        kernel_fds[0] as u64,
-        false,
-        0,
-    ) {
-        Ok(fd) => fd as i32,
-        Err(_e) => {
-            unsafe {
-                libc::close(kernel_fds[0]);
-                libc::close(kernel_fds[1]);
-            }
-            return syscall_error(
-                Errno::EMFILE,
-                "pipe_syscall",
-                "Failed to get virtual file descriptor",
-            );
-        }
-    };
-
-    // Get virtual fd for write end
-    let write_vfd = match fdtables::get_unused_virtual_fd(
-        cageid,
-        FDKIND_KERNEL,
-        kernel_fds[1] as u64,
-        false,
-        0,
-    ) {
-        Ok(fd) => fd as i32,
-        Err(_e) => {
-            // close the kernel pipefd if there's an error
-            // on getting virtual fd
-            unsafe {
-                libc::close(kernel_fds[0]);
-                libc::close(kernel_fds[1]);
-            }
-            return syscall_error(
-                Errno::EMFILE,
-                "pipe_syscall",
-                "Failed to get virtual file descriptor",
-            );
-        }
-    };
-
-    // Update PipeArray located in cage linear memory
     pipefd.readfd = read_vfd;
     pipefd.writefd = write_vfd;
 
-    ret
+    0
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/pipe2.2.html
@@ -790,75 +725,18 @@ pub extern "C" fn pipe2_syscall(
         Err(_e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
     };
 
-    if inmem_ipc::enabled() {
-        let (read_endpoint, write_endpoint) = inmem_ipc::create_pipe();
-        let should_cloexec = (flags & fs_const::O_CLOEXEC) != 0;
-        let perfdinfo = (flags & fs_const::O_NONBLOCK) as u64;
-        let read_vfd = match fdtables::get_unused_virtual_fd(
-            cageid,
-            FDKIND_IMPIPE,
-            read_endpoint,
-            should_cloexec,
-            perfdinfo,
-        ) {
-            Ok(fd) => fd as i32,
-            Err(_) => {
-                return syscall_error(
-                    Errno::EMFILE,
-                    "pipe2_syscall",
-                    "Failed to get virtual file descriptor",
-                )
-            }
-        };
-        let write_vfd = match fdtables::get_unused_virtual_fd(
-            cageid,
-            FDKIND_IMPIPE,
-            write_endpoint,
-            should_cloexec,
-            perfdinfo,
-        ) {
-            Ok(fd) => fd as i32,
-            Err(_) => {
-                let _ = fdtables::close_virtualfd(cageid, read_vfd as u64);
-                return syscall_error(
-                    Errno::EMFILE,
-                    "pipe2_syscall",
-                    "Failed to get virtual file descriptor",
-                );
-            }
-        };
-
-        pipefd.readfd = read_vfd;
-        pipefd.writefd = write_vfd;
-        return 0;
-    }
-
-    // Create an array to hold the two kernel file descriptors
-    let mut kernel_fds: [i32; 2] = [0; 2];
-    let ret = unsafe { libc::pipe2(kernel_fds.as_mut_ptr(), flags) };
-    if ret < 0 {
-        return handle_errno(get_errno(), "pipe2_syscall");
-    }
-
-    // Check whether O_CLOEXEC is set
+    let (read_endpoint, write_endpoint) = inmem_ipc::create_pipe();
     let should_cloexec = (flags & fs_const::O_CLOEXEC) != 0;
-
-    // Get virtual fd for read end
+    let perfdinfo = (flags & fs_const::O_NONBLOCK) as u64;
     let read_vfd = match fdtables::get_unused_virtual_fd(
         cageid,
-        FDKIND_KERNEL,
-        kernel_fds[0] as u64,
+        FDKIND_IMPIPE,
+        read_endpoint,
         should_cloexec,
-        0,
+        perfdinfo,
     ) {
         Ok(fd) => fd as i32,
-        Err(_e) => {
-            // close the kernel pipefd if there's an error
-            // on getting virtual fd
-            unsafe {
-                libc::close(kernel_fds[0]);
-                libc::close(kernel_fds[1]);
-            }
+        Err(_) => {
             return syscall_error(
                 Errno::EMFILE,
                 "pipe2_syscall",
@@ -866,21 +744,16 @@ pub extern "C" fn pipe2_syscall(
             );
         }
     };
-
-    // Get virtual fd for write end
     let write_vfd = match fdtables::get_unused_virtual_fd(
         cageid,
-        FDKIND_KERNEL,
-        kernel_fds[1] as u64,
+        FDKIND_IMPIPE,
+        write_endpoint,
         should_cloexec,
-        0,
+        perfdinfo,
     ) {
         Ok(fd) => fd as i32,
-        Err(_e) => {
-            unsafe {
-                libc::close(kernel_fds[0]);
-                libc::close(kernel_fds[1]);
-            }
+        Err(_) => {
+            let _ = fdtables::close_virtualfd(cageid, read_vfd as u64);
             return syscall_error(
                 Errno::EMFILE,
                 "pipe2_syscall",
@@ -889,11 +762,10 @@ pub extern "C" fn pipe2_syscall(
         }
     };
 
-    // Update PipeArray located in cage linear memory
     pipefd.readfd = read_vfd;
     pipefd.writefd = write_vfd;
 
-    ret
+    0
 }
 
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.

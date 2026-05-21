@@ -196,12 +196,6 @@ impl InmemSocket {
     }
 }
 
-pub fn enabled() -> bool {
-    std::env::var("LIND_RAWPOSIX_INMEM_IPC")
-        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
-        .unwrap_or(false)
-}
-
 pub fn fd_is_nonblocking(fdentry: FDTableEntry) -> bool {
     (fdentry.perfdinfo as i32 & O_NONBLOCK) != 0
 }

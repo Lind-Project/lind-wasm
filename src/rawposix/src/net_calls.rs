@@ -1265,10 +1265,7 @@ pub extern "C" fn socket_syscall(
         );
     }
 
-    if inmem_ipc::enabled()
-        && domain == libc::AF_UNIX
-        && inmem_ipc::is_supported_socket(domain, socktype, protocol)
-    {
+    if domain == libc::AF_UNIX && inmem_ipc::is_supported_socket(domain, socktype, protocol) {
         let socket_id = inmem_ipc::create_socket(domain, socktype, protocol);
         let cloexec = (socktype & SOCK_CLOEXEC) != 0;
         let perfdinfo = if (socktype & SOCK_NONBLOCK) != 0 {
@@ -1353,31 +1350,29 @@ pub extern "C" fn connect_syscall(
         );
     }
 
-    if inmem_ipc::enabled() {
-        let addrlen = unsafe {
-            if addr.is_null() {
-                0
-            } else {
-                match (*(addr as *const sockaddr)).sa_family as i32 {
-                    libc::AF_UNIX => mem::size_of::<sockaddr_un>() as socklen_t,
-                    libc::AF_INET => mem::size_of::<sockaddr_in>() as socklen_t,
-                    _ => 0,
-                }
+    let addrlen = unsafe {
+        if addr.is_null() {
+            0
+        } else {
+            match (*(addr as *const sockaddr)).sa_family as i32 {
+                libc::AF_UNIX => mem::size_of::<sockaddr_un>() as socklen_t,
+                libc::AF_INET => mem::size_of::<sockaddr_in>() as socklen_t,
+                _ => 0,
             }
+        }
+    };
+    if let Some((family, key)) = inmem_ipc::sockaddr_key(addr, addrlen) {
+        let fdentry = match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) => entry,
+            Err(_) => return syscall_error(Errno::EBADF, "connect", "Bad File Descriptor"),
         };
-        if let Some((family, key)) = inmem_ipc::sockaddr_key(addr, addrlen) {
-            let fdentry = match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
+            let socktype = libc::SOCK_STREAM;
+            let socket_entry = match ensure_inmem_socket(cageid, fd_arg, family, socktype, 0) {
                 Ok(entry) => entry,
-                Err(_) => return syscall_error(Errno::EBADF, "connect", "Bad File Descriptor"),
+                Err(e) => return e,
             };
-            if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
-                let socktype = libc::SOCK_STREAM;
-                let socket_entry = match ensure_inmem_socket(cageid, fd_arg, family, socktype, 0) {
-                    Ok(entry) => entry,
-                    Err(e) => return e,
-                };
-                return inmem_ipc::connect_socket(socket_entry.underfd, key);
-            }
+            return inmem_ipc::connect_socket(socket_entry.underfd, key);
         }
     }
 
@@ -1438,31 +1433,29 @@ pub extern "C" fn bind_syscall(
         );
     }
 
-    if inmem_ipc::enabled() {
-        let addrlen = unsafe {
-            if addr.is_null() {
-                0
-            } else {
-                match (*(addr as *const sockaddr)).sa_family as i32 {
-                    libc::AF_UNIX => mem::size_of::<sockaddr_un>() as socklen_t,
-                    libc::AF_INET => mem::size_of::<sockaddr_in>() as socklen_t,
-                    _ => 0,
-                }
+    let addrlen = unsafe {
+        if addr.is_null() {
+            0
+        } else {
+            match (*(addr as *const sockaddr)).sa_family as i32 {
+                libc::AF_UNIX => mem::size_of::<sockaddr_un>() as socklen_t,
+                libc::AF_INET => mem::size_of::<sockaddr_in>() as socklen_t,
+                _ => 0,
             }
+        }
+    };
+    if let Some((family, key)) = inmem_ipc::sockaddr_key(addr, addrlen) {
+        let fdentry = match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+            Ok(entry) => entry,
+            Err(_) => return syscall_error(Errno::EBADF, "bind", "Bad File Descriptor"),
         };
-        if let Some((family, key)) = inmem_ipc::sockaddr_key(addr, addrlen) {
-            let fdentry = match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
-                Ok(entry) => entry,
-                Err(_) => return syscall_error(Errno::EBADF, "bind", "Bad File Descriptor"),
-            };
-            if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
-                let socket_entry =
-                    match ensure_inmem_socket(cageid, fd_arg, family, libc::SOCK_STREAM, 0) {
-                        Ok(entry) => entry,
-                        Err(e) => return e,
-                    };
-                return inmem_ipc::bind_socket(socket_entry.underfd, key);
-            }
+        if fdentry.fdkind == FDKIND_IMSOCK || family == libc::AF_INET {
+            let socket_entry =
+                match ensure_inmem_socket(cageid, fd_arg, family, libc::SOCK_STREAM, 0) {
+                    Ok(entry) => entry,
+                    Err(e) => return e,
+                };
+            return inmem_ipc::bind_socket(socket_entry.underfd, key);
         }
     }
 
@@ -1521,13 +1514,11 @@ pub extern "C" fn listen_syscall(
         );
     }
 
-    if inmem_ipc::enabled() {
-        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
-            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-                return inmem_ipc::listen_socket(entry.underfd, backlog);
-            }
-            _ => {}
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            return inmem_ipc::listen_socket(entry.underfd, backlog);
         }
+        _ => {}
     }
 
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
@@ -1586,19 +1577,17 @@ pub extern "C" fn accept_syscall(
         );
     }
 
-    if inmem_ipc::enabled() {
-        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
-            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-                let socket_id = match inmem_ipc::accept_socket(entry) {
-                    Ok(socket_id) => socket_id,
-                    Err(e) => return e,
-                };
-                inmem_ipc::clear_sockaddr(addr, _len_arg as *mut socklen_t);
-                return fdtables::get_unused_virtual_fd(cageid, FDKIND_IMSOCK, socket_id, false, 0)
-                    .unwrap() as i32;
-            }
-            _ => {}
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            let socket_id = match inmem_ipc::accept_socket(entry) {
+                Ok(socket_id) => socket_id,
+                Err(e) => return e,
+            };
+            inmem_ipc::clear_sockaddr(addr, _len_arg as *mut socklen_t);
+            return fdtables::get_unused_virtual_fd(cageid, FDKIND_IMSOCK, socket_id, false, 0)
+                .unwrap() as i32;
         }
+        _ => {}
     }
 
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
@@ -1650,31 +1639,29 @@ pub extern "C" fn accept4_syscall(
     }
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
-    if inmem_ipc::enabled() {
-        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
-            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-                let socket_id = match inmem_ipc::accept_socket(entry) {
-                    Ok(socket_id) => socket_id,
-                    Err(e) => return e,
-                };
-                inmem_ipc::clear_sockaddr(addr, len_arg as *mut socklen_t);
-                let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
-                let perfdinfo = if (flags & libc::SOCK_NONBLOCK) != 0 {
-                    libc::O_NONBLOCK as u64
-                } else {
-                    0
-                };
-                return fdtables::get_unused_virtual_fd(
-                    cageid,
-                    FDKIND_IMSOCK,
-                    socket_id,
-                    should_cloexec,
-                    perfdinfo,
-                )
-                .unwrap() as i32;
-            }
-            _ => {}
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            let socket_id = match inmem_ipc::accept_socket(entry) {
+                Ok(socket_id) => socket_id,
+                Err(e) => return e,
+            };
+            inmem_ipc::clear_sockaddr(addr, len_arg as *mut socklen_t);
+            let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
+            let perfdinfo = if (flags & libc::SOCK_NONBLOCK) != 0 {
+                libc::O_NONBLOCK as u64
+            } else {
+                0
+            };
+            return fdtables::get_unused_virtual_fd(
+                cageid,
+                FDKIND_IMSOCK,
+                socket_id,
+                should_cloexec,
+                perfdinfo,
+            )
+            .unwrap() as i32;
         }
+        _ => {}
     }
 
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
@@ -1808,13 +1795,11 @@ pub extern "C" fn shutdown_syscall(
         );
     }
 
-    if inmem_ipc::enabled() {
-        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
-            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-                return inmem_ipc::shutdown_socket(entry.underfd, how);
-            }
-            _ => {}
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            return inmem_ipc::shutdown_socket(entry.underfd, how);
         }
+        _ => {}
     }
 
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
@@ -1959,16 +1944,14 @@ pub extern "C" fn sendto_syscall(
     // to be mutable.
     let (finalsockaddr, addrlen) = convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
 
-    if inmem_ipc::enabled() {
-        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
-            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-                let _ = flag;
-                let _ = finalsockaddr;
-                let _ = addrlen;
-                return inmem_ipc::sendto(entry, buf as *const c_void, buflen);
-            }
-            _ => {}
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            let _ = flag;
+            let _ = finalsockaddr;
+            let _ = addrlen;
+            return inmem_ipc::sendto(entry, buf as *const c_void, buflen);
         }
+        _ => {}
     }
 
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
@@ -2029,14 +2012,12 @@ pub extern "C" fn recvfrom_syscall(
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
 
-    if inmem_ipc::enabled() {
-        match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
-            Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-                let _ = flag;
-                return inmem_ipc::recvfrom(entry, buf as *mut c_void, buflen);
-            }
-            _ => {}
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            let _ = flag;
+            return inmem_ipc::recvfrom(entry, buf as *mut c_void, buflen);
         }
+        _ => {}
     }
 
     // true means user passed NULL for that pointer
@@ -2431,10 +2412,7 @@ pub extern "C" fn socketpair_syscall(
         );
     }
 
-    if inmem_ipc::enabled()
-        && domain == libc::AF_UNIX
-        && inmem_ipc::is_supported_socket(domain, typ, protocol)
-    {
+    if domain == libc::AF_UNIX && inmem_ipc::is_supported_socket(domain, typ, protocol) {
         let (sock1, sock2) = inmem_ipc::socketpair(domain, typ, protocol);
         let cloexec = (typ & SOCK_CLOEXEC) != 0;
         let perfdinfo = if (typ & SOCK_NONBLOCK) != 0 {
