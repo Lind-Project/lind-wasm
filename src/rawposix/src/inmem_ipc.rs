@@ -1,17 +1,23 @@
 use fdtables::FDTableEntry;
 use libc::{c_void, linger, sockaddr, sockaddr_in, sockaddr_storage, sockaddr_un, socklen_t};
 use once_cell::sync::Lazy;
+use parking_lot::Mutex as ParkingMutex;
+use ringbuf::{Consumer, Producer, RingBuffer};
+use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::CStr;
 use std::mem;
 use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::slice;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::fs_const::O_NONBLOCK;
 use sysdefs::constants::lind_platform_const::{FDKIND_IMPIPE, FDKIND_IMSOCK};
 
 const PIPE_CAPACITY: usize = 65_536;
+const PAGE_SIZE: usize = 4096;
+const CANCEL_CHECK_INTERVAL: usize = 1_048_576;
 const EPHEMERAL_PORT_START: u16 = 49_152;
 
 static NEXT_ENDPOINT_ID: AtomicU64 = AtomicU64::new(1);
@@ -37,24 +43,43 @@ struct PipeEndpoint {
 }
 
 struct ByteQueue {
-    buf: Mutex<VecDeque<u8>>,
-    readable: Condvar,
-    writable: Condvar,
+    write_end: Arc<ParkingMutex<Producer<u8>>>,
+    read_end: Arc<ParkingMutex<Consumer<u8>>>,
+    refcount_write: Arc<AtomicU32>,
+    refcount_read: Arc<AtomicU32>,
+    eof: Arc<AtomicBool>,
     capacity: usize,
-    readers_open: AtomicBool,
-    writers_open: AtomicBool,
 }
 
 impl ByteQueue {
     fn new(capacity: usize) -> Self {
+        let rb = RingBuffer::<u8>::new(capacity);
+        let (prod, cons) = rb.split();
         Self {
-            buf: Mutex::new(VecDeque::with_capacity(capacity)),
-            readable: Condvar::new(),
-            writable: Condvar::new(),
+            write_end: Arc::new(ParkingMutex::new(prod)),
+            read_end: Arc::new(ParkingMutex::new(cons)),
+            refcount_write: Arc::new(AtomicU32::new(1)),
+            refcount_read: Arc::new(AtomicU32::new(1)),
+            eof: Arc::new(AtomicBool::new(false)),
             capacity,
-            readers_open: AtomicBool::new(true),
-            writers_open: AtomicBool::new(true),
         }
+    }
+
+    fn get_read_ref(&self) -> u32 {
+        self.refcount_read.load(Ordering::Relaxed)
+    }
+
+    fn get_write_ref(&self) -> u32 {
+        self.refcount_write.load(Ordering::Relaxed)
+    }
+
+    fn close_readers(&self) {
+        self.refcount_read.store(0, Ordering::Relaxed);
+    }
+
+    fn close_writers(&self) {
+        self.refcount_write.store(0, Ordering::Relaxed);
+        self.eof.store(true, Ordering::Relaxed);
     }
 
     fn read(&self, dst: *mut u8, count: usize, nonblocking: bool) -> i32 {
@@ -62,29 +87,40 @@ impl ByteQueue {
             return 0;
         }
 
-        let mut guard = self.buf.lock().unwrap();
-        loop {
-            if !guard.is_empty() {
-                let n = count.min(guard.len());
-                for i in 0..n {
-                    unsafe {
-                        *dst.add(i) = guard.pop_front().unwrap();
-                    }
-                }
-                self.writable.notify_all();
-                return n as i32;
-            }
+        let buf = unsafe {
+            assert!(!dst.is_null());
+            slice::from_raw_parts_mut(dst, count)
+        };
 
-            if !self.writers_open.load(Ordering::Acquire) {
+        let mut read_end = self.read_end.lock();
+        let mut pipe_space = read_end.len();
+        if nonblocking && pipe_space == 0 {
+            if self.eof.load(Ordering::SeqCst) {
+                return 0;
+            }
+            return syscall_error(Errno::EAGAIN, "read", "would block");
+        }
+
+        let mut checks = 0usize;
+        while pipe_space == 0 {
+            if self.eof.load(Ordering::SeqCst) || self.get_write_ref() == 0 {
                 return 0;
             }
 
-            if nonblocking {
-                return syscall_error(Errno::EAGAIN, "inmem_read", "would block");
+            if checks == CANCEL_CHECK_INTERVAL {
+                return -(Errno::EAGAIN as i32);
             }
 
-            guard = self.readable.wait(guard).unwrap();
+            pipe_space = read_end.len();
+            checks += 1;
+            if pipe_space == 0 {
+                std::thread::yield_now();
+            }
         }
+
+        let bytes_to_read = min(count, pipe_space);
+        read_end.pop_slice(&mut buf[..bytes_to_read]);
+        bytes_to_read as i32
     }
 
     fn write(&self, src: *const u8, count: usize, nonblocking: bool) -> i32 {
@@ -92,52 +128,49 @@ impl ByteQueue {
             return 0;
         }
 
-        let src_slice = unsafe { std::slice::from_raw_parts(src, count) };
-        let mut written = 0usize;
+        let buf = unsafe {
+            assert!(!src.is_null());
+            slice::from_raw_parts(src, count)
+        };
 
-        while written < count {
-            let mut guard = self.buf.lock().unwrap();
-            while guard.len() == self.capacity {
-                if !self.readers_open.load(Ordering::Acquire) {
-                    return syscall_error(Errno::EPIPE, "inmem_write", "reader closed");
-                }
-                if written > 0 {
-                    return written as i32;
-                }
-                if nonblocking {
-                    return syscall_error(Errno::EAGAIN, "inmem_write", "would block");
-                }
-                guard = self.writable.wait(guard).unwrap();
-            }
+        let mut bytes_written = 0usize;
+        let mut write_end = self.write_end.lock();
 
-            if !self.readers_open.load(Ordering::Acquire) {
-                return syscall_error(Errno::EPIPE, "inmem_write", "reader closed");
-            }
-
-            let available = self.capacity - guard.len();
-            let n = (count - written).min(available);
-            guard.extend(&src_slice[written..written + n]);
-            written += n;
-            self.readable.notify_all();
+        let pipe_space = write_end.remaining();
+        if nonblocking && pipe_space == 0 {
+            return syscall_error(Errno::EAGAIN, "write", "would block");
         }
 
-        written as i32
-    }
+        while bytes_written < count {
+            if self.get_read_ref() == 0 {
+                return syscall_error(Errno::EPIPE, "write", "broken pipe");
+            }
 
-    fn close_readers(&self) {
-        self.readers_open.store(false, Ordering::Release);
-        self.writable.notify_all();
-    }
+            let remaining = write_end.remaining();
+            if remaining == 0 {
+                std::thread::yield_now();
+                continue;
+            }
 
-    fn close_writers(&self) {
-        self.writers_open.store(false, Ordering::Release);
-        self.readable.notify_all();
+            if remaining != self.capacity
+                && (count - bytes_written) > PAGE_SIZE
+                && remaining < PAGE_SIZE
+            {
+                std::thread::yield_now();
+                continue;
+            }
+
+            let bytes_to_write = min(count, bytes_written + remaining);
+            write_end.push_slice(&buf[bytes_written..bytes_to_write]);
+            bytes_written = bytes_to_write;
+        }
+
+        bytes_written as i32
     }
 
     fn poll_read(&self) -> i16 {
-        let has_data = !self.buf.lock().unwrap().is_empty();
-        let writers_open = self.writers_open.load(Ordering::Acquire);
-        if has_data || !writers_open {
+        let has_data = self.read_end.lock().len() > 0;
+        if has_data || self.eof.load(Ordering::SeqCst) || self.get_write_ref() == 0 {
             libc::POLLIN as i16
         } else {
             0
@@ -145,10 +178,10 @@ impl ByteQueue {
     }
 
     fn poll_write(&self) -> i16 {
-        if !self.readers_open.load(Ordering::Acquire) {
+        if self.get_read_ref() == 0 {
             return libc::POLLERR as i16;
         }
-        if self.buf.lock().unwrap().len() < self.capacity {
+        if self.write_end.lock().remaining() != 0 {
             libc::POLLOUT as i16
         } else {
             0
