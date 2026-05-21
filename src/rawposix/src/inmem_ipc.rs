@@ -124,6 +124,16 @@ impl ByteQueue {
     }
 
     fn write(&self, src: *const u8, count: usize, nonblocking: bool) -> i32 {
+        self.write_with_limit(src, count, nonblocking, self.capacity)
+    }
+
+    fn write_with_limit(
+        &self,
+        src: *const u8,
+        count: usize,
+        nonblocking: bool,
+        limit: usize,
+    ) -> i32 {
         if count == 0 {
             return 0;
         }
@@ -135,9 +145,10 @@ impl ByteQueue {
 
         let mut bytes_written = 0usize;
         let mut write_end = self.write_end.lock();
+        let limit = limit.clamp(1, self.capacity);
 
-        let pipe_space = write_end.remaining();
-        if nonblocking && pipe_space == 0 {
+        let queued = self.capacity - write_end.remaining();
+        if nonblocking && queued >= limit {
             return syscall_error(Errno::EAGAIN, "write", "would block");
         }
 
@@ -146,7 +157,8 @@ impl ByteQueue {
                 return syscall_error(Errno::EPIPE, "write", "broken pipe");
             }
 
-            let remaining = write_end.remaining();
+            let queued = self.capacity - write_end.remaining();
+            let remaining = write_end.remaining().min(limit.saturating_sub(queued));
             if remaining == 0 {
                 std::thread::yield_now();
                 continue;
@@ -333,15 +345,23 @@ pub fn write(fdentry: FDTableEntry, src: *const u8, count: usize) -> i32 {
         },
         FDKIND_IMSOCK => match get_socket(fdentry.underfd) {
             Ok(socket) => {
-                let peer = {
+                let (peer, sndbuf) = {
                     let state = socket.state.lock().unwrap();
                     if state.write_shutdown {
                         return syscall_error(Errno::EPIPE, "write", "socket write shut down");
                     }
-                    state.peer.as_ref().and_then(Weak::upgrade)
+                    (
+                        state.peer.as_ref().and_then(Weak::upgrade),
+                        state.sndbuf.max(1) as usize,
+                    )
                 };
                 match peer {
-                    Some(peer) => peer.incoming.write(src, count, fd_is_nonblocking(fdentry)),
+                    Some(peer) => peer.incoming.write_with_limit(
+                        src,
+                        count,
+                        fd_is_nonblocking(fdentry),
+                        sndbuf,
+                    ),
                     None => syscall_error(Errno::EPIPE, "write", "socket peer closed"),
                 }
             }
@@ -659,7 +679,8 @@ pub fn setsockopt(
             0
         }
         (libc::SOL_SOCKET, libc::SO_SNDBUF) if optlen as usize >= mem::size_of::<i32>() => {
-            state.sndbuf = unsafe { *(optval as *const i32) }.max(1);
+            let requested = unsafe { *(optval as *const i32) }.max(1);
+            state.sndbuf = requested.saturating_mul(2).saturating_sub(128).max(1);
             0
         }
         (libc::SOL_SOCKET, libc::SO_RCVBUF) if optlen as usize >= mem::size_of::<i32>() => {
@@ -851,14 +872,19 @@ fn next_ephemeral_key(domain: i32) -> String {
 }
 
 pub fn clear_sockaddr(addr: *mut u8, addrlen: *mut socklen_t) {
-    if !addr.is_null() {
-        unsafe {
-            ptr::write_bytes(addr, 0, mem::size_of::<sockaddr_un>());
-        }
+    if addrlen.is_null() {
+        return;
     }
-    if !addrlen.is_null() {
-        unsafe {
-            *addrlen = 0;
+
+    unsafe {
+        let requested_len = *addrlen as usize;
+        if !addr.is_null() && requested_len > 0 {
+            ptr::write_bytes(
+                addr,
+                0,
+                requested_len.min(mem::size_of::<sockaddr_storage>()),
+            );
         }
+        *addrlen = 0;
     }
 }
