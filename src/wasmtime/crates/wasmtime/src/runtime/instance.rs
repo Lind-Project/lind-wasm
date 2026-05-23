@@ -601,6 +601,7 @@ impl Instance {
                 // therefore in this case, we only need to:
                 // 1. set memory base address
                 // 2. fork the memory space from parent
+                let _t_inst_child = std::time::Instant::now();
                 let export_memory = store
                     .0
                     .all_memories()
@@ -614,12 +615,16 @@ impl Instance {
                         export_memory.unshared().unwrap().data_ptr(&*store) as usize
                     }
                 };
+                eprintln!("[fork-perf]   {:>8.3} ms    instance alloc (new_raw)", _t_inst_child.elapsed().as_secs_f64() * 1000.0);
 
+                let _t_fvmmap = std::time::Instant::now();
                 fork_vmmap(parent_cageid as u64, child_cageid);
+                eprintln!("[fork-perf]   {:>8.3} ms    fork_vmmap", _t_fvmmap.elapsed().as_secs_f64() * 1000.0);
 
                 // For child instances, the stack arena is inherited from the parent cage, and grate calls
                 // only works at static build, so we only need to fork the stack arena base if dylink is not enabled.
                 if !dylink_enabled {
+                    let _t_arena = std::time::Instant::now();
                     lind_platform_const::fork_stack_arena_base_for_child(parent_cageid as usize, child_cageid as usize)
                         .unwrap_or_else(|e| {
                             panic!(
@@ -627,6 +632,7 @@ impl Instance {
                                 parent_cageid, child_cageid, e
                             )
                         });
+                    eprintln!("[fork-perf]   {:>8.3} ms    fork_stack_arena_base", _t_arena.elapsed().as_secs_f64() * 1000.0);
                 }
             }
             InstantiateType::InstantiateLib {

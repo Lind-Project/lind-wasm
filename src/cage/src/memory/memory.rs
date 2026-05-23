@@ -83,10 +83,19 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// * `child_cageid` - caegid of child
 pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     // first retrieve corresponding vmmaps
+    let _t_lookup = std::time::Instant::now();
     let parent_cage = get_cage(parent_cageid).unwrap();
     let child_cage = get_cage(child_cageid).unwrap();
     let parent_vmmap = parent_cage.vmmap.read();
     let child_vmmap = child_cage.vmmap.read();
+    eprintln!("[fork-perf]     {:>8.3} ms      vmmap lock/lookup", _t_lookup.elapsed().as_secs_f64() * 1000.0);
+
+    let mut t_mprotect_open = std::time::Duration::ZERO;
+    let mut t_memcpy        = std::time::Duration::ZERO;
+    let mut t_mprotect_rest = std::time::Duration::ZERO;
+    let mut t_mremap        = std::time::Duration::ZERO;
+    let mut total_bytes: usize = 0;
+    let mut n_entries: usize = 0;
 
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
@@ -103,10 +112,12 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
         // translate user address to system address
         let parent_st = parent_vmmap.user_to_sys(addr_st);
         let child_st = child_vmmap.user_to_sys(addr_st);
+        n_entries += 1;
         if entry.flags & (MAP_SHARED as i32) > 0 {
             // for shared memory, we are using mremap to fork shared memory
             // See "man 2 mremap" for description of what MREMAP_MAYMOVE does with old_size=0
             // when old_address points to a shared mapping
+            let t = std::time::Instant::now();
             unsafe {
                 libc::mremap(
                     parent_st as *mut libc::c_void,
@@ -116,27 +127,43 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     child_st as *mut libc::c_void,
                 );
             };
+            t_mremap += t.elapsed();
         } else {
+            total_bytes += addr_len;
             unsafe {
                 // temporarily enable write on child's memory region to write parent data
+                let t = std::time::Instant::now();
                 libc::mprotect(
                     child_st as *mut libc::c_void,
                     addr_len,
                     PROT_READ | PROT_WRITE,
                 );
+                t_mprotect_open += t.elapsed();
 
                 // write parent data
                 // TODO: replace copy_nonoverlapping with writev for potential performance boost
+                let t = std::time::Instant::now();
                 std::ptr::copy_nonoverlapping(
                     parent_st as *const u8,
                     child_st as *mut u8,
                     addr_len,
                 );
+                t_memcpy += t.elapsed();
 
                 // revert child's memory region prot
+                let t = std::time::Instant::now();
                 libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
+                t_mprotect_rest += t.elapsed();
             };
         }
+    }
+
+    eprintln!("[fork-perf]     {:>8.3} ms      mprotect open  ({} entries, {:.2} MB total)",
+        t_mprotect_open.as_secs_f64() * 1000.0, n_entries, total_bytes as f64 / 1024.0 / 1024.0);
+    eprintln!("[fork-perf]     {:>8.3} ms      memcpy", t_memcpy.as_secs_f64() * 1000.0);
+    eprintln!("[fork-perf]     {:>8.3} ms      mprotect restore", t_mprotect_rest.as_secs_f64() * 1000.0);
+    if t_mremap > std::time::Duration::ZERO {
+        eprintln!("[fork-perf]     {:>8.3} ms      mremap (shared)", t_mremap.as_secs_f64() * 1000.0);
     }
 
     // update program break for child
