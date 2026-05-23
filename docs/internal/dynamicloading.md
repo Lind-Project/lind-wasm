@@ -53,11 +53,12 @@ We have implemented dynamic loading support in Wasmtime. For applications that a
 
 1. Launch the application while injecting all required dependent libraries using the `--preload` option (similar to `LD_PRELOAD`).
 2. Ensure that `dlopen()`, `dlsym()`, and `dlclose()` are properly resolved at runtime and corresponding libraries loaded.
+3. Partial support for fork and threads within shared libraries: global snapshot propagation and name collision detection are implemented (tasks 1 and 2 of [#1028](https://github.com/Lind-Project/lind-wasm/issues/1028)). Cross-thread epoch-based dlopen replay and full signal handling within shared libraries remain to be done (tasks 3 and 4).
 
 	  
 ## Additional Features to be added:
-1. Support for fork, threads, and signals within the shared libraries.
-2. As of now, the dependent libraries have to be explicitly specified using `--preload` option. The compiler (`clang`) is supposed to add metadata about the required libraries when `--shared` or `-fPIC` option is used. Currently this is not working. This has to be fixed so that compiled adds the metadata and the dynamic loader can parse the metadata to determine the libraries required at runtime.
+1. Complete support for fork, threads, and signals within the shared libraries (tasks 3 and 4 of [#1028](https://github.com/Lind-Project/lind-wasm/issues/1028)).
+2. As of now, the dependent libraries have to be explicitly specified using `--preload` option. The compiler (`clang`) is supposed to add metadata about the required libraries when `--shared` or `-fPIC` option is used. Currently this is not implemented. This has to be fixed so that the compiler adds the metadata and the dynamic loader can parse the metadata to determine the libraries required at runtime.
 
 ## Changes made to implement dynamic loading:
 
@@ -65,7 +66,7 @@ To execute WebAssembly applications within Lind, Wasmtime is modified to interfa
 
 
 ### Parsing the dynamic section 
-The `dylink.0` custom section within WASM shared libraries is parsed to retrieve dynamic linking metadata. The `load_module` function is responsible for parsing the entire WASM binary to extract all section contents, including code, data, imports, exports, and dynamic linking information. As of now, `memory_size`, `memopry_alignment`, `table_size`, `table_alignment` and `importinfo` are parsed. We do not handle `needed` and `exportinfo` contents of `dylink.0`c section.
+The `dylink.0` custom section within WASM shared libraries is parsed to retrieve dynamic linking metadata. The `load_module` function is responsible for parsing the entire WASM binary to extract all section contents, including code, data, imports, exports, and dynamic linking information. As of now, `memory_size`, `memory_alignment`, `table_size`, `table_alignment` and `importinfo` are parsed. We do not handle `needed` and `exportinfo` contents of `dylink.0`c section.
 
 
 ### Handling libraries passed via `--preload`
@@ -124,7 +125,7 @@ This host function is responsible for finding the memory address or function ind
 #### `dlclose` (Lifecycle Management)
 This function manages the cleanup and unloading of libraries.
 * **Reference Counting:** Decrements the reference count of the library identified by the provided `handle`. 
-* **Unloading:** If the reference count reaches zero and the library is flagged as deletable (i.e., it was not loaded with `RTLD_NODELETE`), the host removes it from the global symbol table and frees associated resources.
+* **Symbol Table Update:** If the reference count reaches zero and the library is flagged as deletable (i.e., it was not loaded with `RTLD_NODELETE`), the host removes it from the global symbol table so that subsequent `dlsym` calls will not resolve symbols from the unloaded library. Note: the library is **not truly unloaded** from memory in the current implementation — fully reclaiming Wasm module resources within Wasmtime's architecture is non-trivial and is tracked as a future improvement.
 * **Returns:** `0` on success, strictly adhering to POSIX-compatible conventions.
 
 
@@ -201,7 +202,7 @@ Additional linker flags that can be used:
 
 ## Metadata added by linker to the shared WASM binary
 
-The generated shared WASM library binary will have a custom section called `dynlink.0` containing:
+The generated shared WASM library binary will have a custom section called `dylink.0` containing:
 
 1. **`WASM_DYNLINK_MEM_INFO`**: Specifies memory and table space requirements.
 2. **`WASM_DYLINK_NEEDED`**: Specifies external module dependencies.
