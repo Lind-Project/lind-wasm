@@ -133,7 +133,7 @@ pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 ///
 /// Because this value is global rather than per-instance, every grate-enabled
 /// instance reserves the same number of worker stack slots in linear memory.
-pub const MAX_GRATE_WORKERS: usize = 32;
+pub const MAX_GRATE_WORKERS: usize = 0;
 
 /// Size in bytes of the usable stack region assigned to one grate worker.
 ///

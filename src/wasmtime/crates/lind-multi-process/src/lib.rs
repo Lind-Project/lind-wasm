@@ -417,6 +417,16 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
+                    macro_rules! fork_lap {
+                        ($prev:expr, $label:expr) => {{
+                            let now = std::time::Instant::now();
+                            eprintln!("[fork-perf] {:>8.3} ms  {}", $prev.elapsed().as_secs_f64() * 1000.0, $label);
+                            now
+                        }};
+                    }
+                    let _t = std::time::Instant::now();
+                    eprintln!("[fork-perf] --- fork child setup begin (cage {}) ---", child_cageid);
+
                     // create a new instance
                     let store_inner = Store::<T>::new_inner(&engine, symbol_table)
                         .expect("failed to create store inner");
@@ -441,6 +451,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         None
                     };
 
+                    let _t = fork_lap!(_t, "store_inner + ctx setup + GOT clone");
+
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner)
                         .expect("failed to create store");
 
@@ -457,6 +469,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     // early init vmmap
                     cage::init_vmmap(child_cageid, child_memory_base.unwrap() as usize, None);
+
+                    let _t = fork_lap!(_t, "new_child_linker + init_vmmap");
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     // e.g. __stack_pointer, __indirect_function_table, etc.
@@ -533,11 +547,12 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 .unwrap();
                             linker.allow_shadowing(false);
                         }
-
                         Some(child_table)
                     } else {
                         None
                     };
+
+                    let _t = fork_lap!(_t, "preloaded libs instantiation (dylink only)");
 
                     store.set_stack_snapshots(parent_stack_snapshots);
 
@@ -557,6 +572,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             },
                         )
                         .unwrap();
+
+                    let _t = fork_lap!(_t, "instantiate_with_lind / fork_vmmap (memory copy)");
 
                     // Global snapshot workflow:
                     // 1. register_named_instance: record the child's main module instance under
@@ -582,6 +599,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             .map(Vec::as_slice)
                             .unwrap_or(&[]),
                     );
+
+                    let _t = fork_lap!(_t, "apply_global_snapshots");
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
@@ -656,6 +675,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         }
                     }
 
+                    let _t = fork_lap!(_t, "apply_GOT_relocs + dlopen replay (dylink only)");
+
                     let epoch_pointer = if epoch_handler.is_some() {
                         epoch_handler.unwrap() as *mut u64
                     } else {
@@ -692,7 +713,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // Notify threei of the cage runtime type
                     threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
+                    let _t = fork_lap!(_t, "signal init + cage registration");
+
                     barrier_clone.wait();
+
+                    let _t = fork_lap!(_t, "barrier wait (parent resume sync)");
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     let mut new_child_host = store.data_mut();
@@ -712,6 +737,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
+
+                    let _t = fork_lap!(_t, "attach linker/GOT + register vmctx");
 
                     // Grate calls only supports static linking for now, so we only register
                     // grate workers when dylink is not enabled.
@@ -735,6 +762,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         .expect("create_handler_for_cage failed");
                     }
 
+                    let _t = fork_lap!(_t, "create_handler_for_cage / grate workers (static only)");
+
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
 
@@ -749,6 +778,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     // mark the child to rewind state
                     let _ = child_rewind_start.call(&mut store, unwind_data_start_usr as i32);
+
+                    let _t = fork_lap!(_t, "asyncify_start_rewind");
 
                     // set up rewind state and fork return value for child
                     store
