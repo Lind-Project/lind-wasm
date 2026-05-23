@@ -1,6 +1,8 @@
 //! Utilities for working with object files that operate as Wasmtime's
 //! serialization and intermediate format for compiled modules.
 
+use core::fmt;
+
 /// Filler for the `os_abi` field of the ELF header.
 ///
 /// This is just a constant that seems reasonable in the sense it's unlikely to
@@ -14,6 +16,20 @@ pub const EF_WASMTIME_MODULE: u32 = 1 << 0;
 /// Flag for the `e_flags` field in the ELF header indicating a compiled
 /// component.
 pub const EF_WASMTIME_COMPONENT: u32 = 1 << 1;
+
+/// Flag for the `e_flags` field in the ELF header indicating compiled code for
+/// pulley32
+pub const EF_WASMTIME_PULLEY32: u32 = 1 << 2;
+
+/// Flag for the `e_flags` field in the ELF header indicating compiled code for
+/// pulley64
+pub const EF_WASMTIME_PULLEY64: u32 = 1 << 3;
+
+/// Flag for the `sh_flags` field in the ELF text section that indicates that
+/// the text section does not itself need to be executable. This is used for the
+/// Pulley target, for example, to indicate that it does not need to be made
+/// natively executable as it does not contain actual native code.
+pub const SH_WASMTIME_NOT_EXECUTED: u64 = 1 << 0;
 
 /// A custom Wasmtime-specific section of our compilation image which stores
 /// mapping data from offsets in the image to offset in the original wasm
@@ -44,6 +60,17 @@ pub const EF_WASMTIME_COMPONENT: u32 = 1 << 1;
 /// mean that >=4gb text sections are not supported.
 pub const ELF_WASMTIME_ADDRMAP: &str = ".wasmtime.addrmap";
 
+/// A custom Wasmtime-specific section of compilation which store information
+/// about live gc references at various locations in the text section (stack
+/// maps).
+///
+/// This section has a custom binary encoding described in `stack_maps.rs` which
+/// is used to implement the single query we want to satisfy of: where are the
+/// live GC references at this pc? Like the addrmap section this has an
+/// alignment of 1 with unaligned reads, and it additionally doesn't support
+/// >=4gb text sections.
+pub const ELF_WASMTIME_STACK_MAP: &str = ".wasmtime.stackmap";
+
 /// A custom binary-encoded section of wasmtime compilation artifacts which
 /// encodes the ability to map an offset in the text section to the trap code
 /// that it corresponds to.
@@ -70,6 +97,27 @@ pub const ELF_WASMTIME_ADDRMAP: &str = ".wasmtime.addrmap";
 /// Note that at this time this section has an alignment of 1. Additionally due
 /// to the 32-bit encodings for offsets this doesn't support images >=4gb.
 pub const ELF_WASMTIME_TRAPS: &str = ".wasmtime.traps";
+
+/// A custom binary-encoded section of the wasmtime compilation
+/// artifacts which encodes exception tables.
+///
+/// This section is used at runtime to allow the unwinder to find
+/// exception handler blocks active at particular callsites.
+///
+/// This section's format is defined by the `ExceptionTableBuilder` data
+/// structure. Its code offsets are relative to the start of the text segment.
+pub const ELF_WASMTIME_EXCEPTIONS: &str = ".wasmtime.exceptions";
+
+/// A custom binary-encoded section of the wasmtime compilation
+/// artifacts which encodes frame tables.
+///
+/// This section is used at runtime to allow debug APIs to decode Wasm
+/// VM-level state from state stack slots.
+///
+/// This section's format is defined by the
+/// [`crate::compile::FrameTableBuilder`] data structure. Its code
+/// offsets are relative to the start of the text segment.
+pub const ELF_WASMTIME_FRAMES: &str = ".wasmtime.frames";
 
 /// A custom section which consists of just 1 byte which is either 0 or 1 as to
 /// whether BTI is enabled.
@@ -129,45 +177,38 @@ pub const ELF_NAME_DATA: &'static str = ".name.wasm";
 /// metadata.
 pub const ELF_WASMTIME_DWARF: &str = ".wasmtime.dwarf";
 
-macro_rules! libcalls {
-    ($($rust:ident = $sym:tt)*) => (
-        #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Ord, PartialOrd)]
-        #[allow(missing_docs)]
-        pub enum LibCall {
-            $($rust,)*
-        }
+/// This is the name of the section in the final ELF image which contains the
+/// original Wasm bytecode for the module, preserved verbatim to support
+/// debugger access to the source bytecode.
+///
+/// This section is only emitted when the `guest-debug` tunable is enabled at
+/// compile time. Its contents are the concatenated raw bytes of all core
+/// module Wasm binaries in the artifact.
+pub const ELF_WASMTIME_WASM_BYTECODE: &str = ".wasmtime.wasm_bytecode";
 
-        impl LibCall {
-            /// Returns the libcall corresponding to the provided symbol name,
-            /// if one matches.
-            pub fn from_str(s: &str) -> Option<LibCall> {
-                match s {
-                    $($sym => Some(LibCall::$rust),)*
-                    _ => None,
-                }
-            }
+/// This is the name of the companion section to [`ELF_WASMTIME_WASM_BYTECODE`]
+/// that stores the end-offset table used to locate individual module bytecodes
+/// within the concatenated data.
+///
+/// The section contains one little-endian `u32` per core module in
+/// the artifact giving the *end* of that module's bytecode in the
+/// concatenated bytecode section above.
+pub const ELF_WASMTIME_WASM_BYTECODE_ENDS: &str = ".wasmtime.wasm_bytecode_ends";
 
-            /// Returns the symbol name in object files associated with this
-            /// libcall.
-            pub fn symbol(&self) -> &'static str {
-                match self {
-                    $(LibCall::$rust => $sym,)*
-                }
-            }
-        }
-    )
+/// Workaround to implement `core::error::Error` until
+/// gimli-rs/object#747 is settled.
+pub struct ObjectCrateErrorWrapper(pub object::Error);
+
+impl fmt::Debug for ObjectCrateErrorWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
-libcalls! {
-    FloorF32 = "libcall_floor32"
-    FloorF64 = "libcall_floor64"
-    NearestF32 = "libcall_nearestf32"
-    NearestF64 = "libcall_nearestf64"
-    CeilF32 = "libcall_ceilf32"
-    CeilF64 = "libcall_ceilf64"
-    TruncF32 = "libcall_truncf32"
-    TruncF64 = "libcall_truncf64"
-    FmaF32 = "libcall_fmaf32"
-    FmaF64 = "libcall_fmaf64"
-    X86Pshufb = "libcall_x86_pshufb"
+impl fmt::Display for ObjectCrateErrorWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
 }
+
+impl core::error::Error for ObjectCrateErrorWrapper {}

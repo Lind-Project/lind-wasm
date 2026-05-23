@@ -3,11 +3,11 @@
 use anyhow::Result;
 use cage::memory::check_addr_write;
 use rand::Rng;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use sysdefs::constants::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
-use sysdefs::constants::Errno;
 use sysdefs::logging::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
@@ -16,7 +16,7 @@ use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
-use wasmtime_lind_multi_process::{get_memory_base, get_memory_base_and_size, LindHost};
+use wasmtime_lind_multi_process::{LindHost, get_memory_base, get_memory_base_and_size};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed

@@ -1,10 +1,9 @@
-FROM centos:7
+FROM almalinux:8
 
-RUN yum install -y git gcc make
+RUN dnf install -y git gcc make cmake git unzip
+RUN git config --global --add safe.directory '*'
 
-# The CMake in Centos 7 was a bit too old for us to use so download one from
-# CMake's own releases and use that instead.
-RUN curl -L https://github.com/Kitware/CMake/releases/download/v3.29.3/cmake-3.29.3-linux-x86_64.tar.gz | tar xzf -
-ENV PATH=$PATH:/cmake-3.29.3-linux-x86_64/bin
-
-ENV PATH=$PATH:/rust/bin
+WORKDIR /usr/local/bin
+RUN curl --retry-connrefused --retry 5 -LO https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+RUN unzip ./ninja-linux
+WORKDIR /

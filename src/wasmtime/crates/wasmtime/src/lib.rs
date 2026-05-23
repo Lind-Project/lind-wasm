@@ -176,6 +176,106 @@
 //!
 //! [`wasmtime-wasi`]: https://crates.io/crates/wasmtime-wasi
 //!
+//! ## Async
+//!
+//! Wasmtime supports executing WebAssembly guests through Rust-level `async`
+//! functions. This enables Wasmtime to block the guest without blocking the
+//! host, interrupt infinite loops or long-running CPU-bound guests, and
+//! integrate with Rust host functions that are themselves `async`.
+//!
+//! Many functions in the embedding API have a sync variant and an async
+//! variant, for example [`Func::call`] and [`Func::call_async`]. Embedders
+//! may decide which is most appropriate for their use case, but if certain
+//! features of Wasmtime are configured then `*_async` variants of functions are
+//! required. If any of these features are used, for example, then `*_async`
+//! must be used:
+//!
+//! * Async core wasm host functions, for example via [`Linker::func_wrap_async`]
+//! * Async component host functions, for example via [`component::LinkerInstance::func_wrap_async`]
+//! * Async resource limiters, via [`Store::limiter_async`]
+//! * Async yields with fuel via [`Store::fuel_async_yield_interval`]
+//! * Async yields via epochs via [`Store::epoch_deadline_async_yield_and_update`]
+//!
+//! This is not an exhaustive list, but if any of these configurations/APIs are
+//! used then all `*_async` APIs must be used in Wasmtime. If synchronous APIs
+//! are used instead they will return an error.
+//!
+//! #### Asynchronous Wasm
+//!
+//! Core WebAssembly and synchronous WIT functions (e.g. WASIp2-and-prior)
+//! require that all imported functions appear synchronous from the perspective
+//! of the guest. Host functions which perform I/O and block, however, are often
+//! defined with `async` in Rust. Wasmtime's async support bridges this gap with
+//! asynchronous wasm execution.
+//!
+//! When using `*_async` APIs to execute WebAssembly Wasmtime will always
+//! represent its computation as a [`Future`]. The `poll` method of the futures
+//! returned by Wasmtime will perform the actual work of calling the
+//! WebAssembly. Wasmtime won't manage its own thread pools or similar, that's
+//! left up to the embedder.
+//!
+//! To implement futures in a way that WebAssembly sees asynchronous host
+//! functions as synchronous, all async Wasmtime futures will execute on a
+//! separately allocated native stack from the thread otherwise executing
+//! Wasmtime. This separate native stack can then be switched to and from.
+//! Using this whenever an `async` host function returns a future that
+//! resolves to `Pending` we switch away from the temporary stack back to
+//! the main stack and propagate the `Pending` status.
+//!
+//! #### Execution in `poll`
+//!
+//! The [`Future::poll`] method is the main driving force behind Rust's futures.
+//! That method's own documentation states "an implementation of `poll` should
+//! strive to return quickly, and should not block". This, however, can be at
+//! odds with executing WebAssembly code as part of the `poll` method itself. If
+//! your WebAssembly is untrusted then this could allow the `poll` method to
+//! take arbitrarily long in the worst case, likely blocking all other
+//! asynchronous tasks.
+//!
+//! To remedy this situation you have a few possible ways to solve this:
+//!
+//! * The most efficient solution is to enable
+//!   [`Config::epoch_interruption`] in conjunction with
+//!   [`crate::Store::epoch_deadline_async_yield_and_update`]. Coupled with
+//!   periodic calls to [`crate::Engine::increment_epoch`] this will cause
+//!   executing WebAssembly to periodically yield back according to the
+//!   epoch configuration settings. This enables [`Future::poll`] to take at
+//!   most a certain amount of time according to epoch configuration
+//!   settings and when increments happen. The benefit of this approach is
+//!   that the instrumentation in compiled code is quite lightweight, but a
+//!   downside can be that the scheduling is somewhat nondeterministic since
+//!   increments are usually timer-based which are not always deterministic.
+//!
+//!   Note that to prevent infinite execution of wasm it's recommended to
+//!   place a timeout on the entire future representing executing wasm code
+//!   and the periodic yields with epochs should ensure that when the
+//!   timeout is reached it's appropriately recognized.
+//!
+//! * Alternatively you can enable the
+//!   [`Config::consume_fuel`](crate::Config::consume_fuel) method as well
+//!   as [`crate::Store::fuel_async_yield_interval`] When doing so this will
+//!   configure Wasmtime futures to yield periodically while they're
+//!   executing WebAssembly code. After consuming the specified amount of
+//!   fuel wasm futures will return `Poll::Pending` from their `poll`
+//!   method, and will get automatically re-polled later. This enables the
+//!   `Future::poll` method to take roughly a fixed amount of time since
+//!   fuel is guaranteed to get consumed while wasm is executing. Unlike
+//!   epoch-based preemption this is deterministic since wasm always
+//!   consumes a fixed amount of fuel per-operation. The downside of this
+//!   approach, however, is that the compiled code instrumentation is
+//!   significantly more expensive than epoch checks.
+//!
+//!   Note that to prevent infinite execution of wasm it's recommended to
+//!   place a timeout on the entire future representing executing wasm code
+//!   and the periodic yields with epochs should ensure that when the
+//!   timeout is reached it's appropriately recognized.
+//!
+//! In all cases special care needs to be taken when integrating
+//! asynchronous wasm into your application. You should carefully plan where
+//! WebAssembly will execute and what compute resources will be allotted to
+//! it. If Wasmtime doesn't support exactly what you'd like just yet, please
+//! feel free to open an issue!
+//!
 //! ## Crate Features
 //!
 //! The `wasmtime` crate comes with a number of compile-time features that can
@@ -195,8 +295,7 @@
 //!
 //! * `cache` - Enabled by default, this feature adds support for wasmtime to
 //!   perform internal caching of modules in a global location. This must still
-//!   be enabled explicitly through [`Config::cache_config_load`] or
-//!   [`Config::cache_config_load_default`].
+//!   be enabled explicitly through [`Config::cache`].
 //!
 //! * `wat` - Enabled by default, this feature adds support for accepting the
 //!   text format of WebAssembly in [`Module::new`] and
@@ -209,7 +308,7 @@
 //!
 //! * `async` - Enabled by default, this feature enables APIs and runtime
 //!   support for defining asynchronous host functions and calling WebAssembly
-//!   asynchronously. For more information see [`Config::async_support`].
+//!   asynchronously. For more information see [async documentation](#async)
 //!
 //! * `profiling` - Enabled by default, this feature compiles in support for
 //!   profiling guest code via a number of possible strategies. See
@@ -271,27 +370,52 @@
 //!
 //! [manifest]: https://github.com/bytecodealliance/wasmtime/blob/main/crates/wasmtime/Cargo.toml
 
+#![deny(missing_docs)]
 #![doc(test(attr(deny(warnings))))]
 #![doc(test(attr(allow(dead_code, unused_variables, unused_mut))))]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![cfg_attr(not(feature = "default"), allow(dead_code, unused_imports))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+// NB: this list is currently being burned down to remove all features listed
+// here to get warnings in all configurations of Wasmtime.
+#![cfg_attr(
+    any(not(feature = "runtime"), not(feature = "std")),
+    expect(dead_code, unused_imports, reason = "list not burned down yet")
+)]
 // Allow broken links when the default features is disabled because most of our
 // documentation is written for the "one build" of the `main` branch which has
 // most features enabled. This will present warnings in stripped-down doc builds
 // and will prevent the doc build from failing.
 #![cfg_attr(feature = "default", warn(rustdoc::broken_intra_doc_links))]
 #![no_std]
+// Wasmtime liberally uses #[cfg]'d definitions of structures to uninhabited
+// types to reduce the total amount of #[cfg], but rustc warns that much usage
+// of these structures, rightfully, leads to unreachable code. This unreachable
+// code is only conditional, however, so it's generally just annoying to deal
+// with. Disable the `unreachable_code` lint in situations like this when some
+// major features are disabled. If all the features are enabled, though, we
+// still want to get warned about this.
+#![cfg_attr(
+    any(not(feature = "threads"), not(feature = "gc",)),
+    allow(unreachable_code, reason = "see comment")
+)]
 
-#[cfg(any(feature = "std", unix, windows))]
+#[cfg(feature = "std")]
 #[macro_use]
 extern crate std;
 extern crate alloc;
 
-pub(crate) mod prelude {
-    pub use crate::{Error, Result};
-    pub use anyhow::{anyhow, bail, ensure, format_err, Context};
-    pub use wasmtime_environ::prelude::*;
-}
+// Internal `use` statement which isn't used in this module but enable
+// `use crate::prelude::*;` everywhere else within this crate, for example.
+use wasmtime_environ::prelude;
+
+// FIXME(#12069) should transition to OOM-handling versions of these collections
+// for all internal usage instead of using abort-on-OOM versions. Once that's
+// done this can be removed and the collections should be directly imported from
+// `wasmtime_environ::collections::*`.
+#[allow(
+    unused_imports,
+    reason = "not all build configs use these; easier to allow than to precisely `cfg`"
+)]
+use wasmtime_environ::collections::oom_abort::{hash_map, hash_set};
 
 /// A helper macro to safely map `MaybeUninit<T>` to `MaybeUninit<U>` where `U`
 /// is a field projection within `T`.
@@ -318,17 +442,17 @@ pub(crate) mod prelude {
 #[macro_export]
 macro_rules! map_maybe_uninit {
     ($maybe_uninit:ident $($field:tt)*) => ({
-        #[allow(unused_unsafe)]
+        #[allow(unused_unsafe, reason = "macro-generated code")]
         {
             unsafe {
                 use $crate::MaybeUninitExt;
 
                 let m: &mut core::mem::MaybeUninit<_> = $maybe_uninit;
-                // Note the usage of `addr_of_mut!` here which is an attempt to "stay
+                // Note the usage of `&raw` here which is an attempt to "stay
                 // safe" here where we never accidentally create `&mut T` where `T` is
                 // actually uninitialized, hopefully appeasing the Rust unsafe
                 // guidelines gods.
-                m.map(|p| core::ptr::addr_of_mut!((*p)$($field)*))
+                m.map(|p| &raw mut (*p)$($field)*)
             }
         }
     })
@@ -338,10 +462,12 @@ macro_rules! map_maybe_uninit {
 pub trait MaybeUninitExt<T> {
     /// Maps `MaybeUninit<T>` to `MaybeUninit<U>` using the closure provided.
     ///
-    /// Note that this is `unsafe` as there is no guarantee that `U` comes from
-    /// `T`.
+    /// # Safety
+    ///
+    /// Requires that `*mut U` is a field projection from `*mut T`. Use
+    /// `map_maybe_uninit!` above instead.
     unsafe fn map<U>(&mut self, f: impl FnOnce(*mut T) -> *mut U)
-        -> &mut core::mem::MaybeUninit<U>;
+    -> &mut core::mem::MaybeUninit<U>;
 }
 
 impl<T> MaybeUninitExt<T> for core::mem::MaybeUninit<T> {
@@ -350,7 +476,10 @@ impl<T> MaybeUninitExt<T> for core::mem::MaybeUninit<T> {
         f: impl FnOnce(*mut T) -> *mut U,
     ) -> &mut core::mem::MaybeUninit<U> {
         let new_ptr = f(self.as_mut_ptr());
-        core::mem::transmute::<*mut U, &mut core::mem::MaybeUninit<U>>(new_ptr)
+        // SAFETY: the memory layout of these two types are the same, and
+        // asserting that it's a safe reference with the same lifetime as `self`
+        // is a requirement of this function itself.
+        unsafe { core::mem::transmute::<*mut U, &mut core::mem::MaybeUninit<U>>(new_ptr) }
     }
 }
 
@@ -362,7 +491,7 @@ pub use runtime::*;
 #[cfg(any(feature = "cranelift", feature = "winch"))]
 mod compile;
 #[cfg(any(feature = "cranelift", feature = "winch"))]
-pub use compile::CodeBuilder;
+pub use compile::{CodeBuilder, CodeHint};
 
 mod config;
 mod engine;
@@ -376,19 +505,39 @@ mod sync_std;
 #[cfg(feature = "std")]
 use sync_std as sync;
 
-#[cfg_attr(feature = "std", allow(dead_code))]
 mod sync_nostd;
 #[cfg(not(feature = "std"))]
 use sync_nostd as sync;
 
-/// A convenience wrapper for `Result<T, anyhow::Error>`.
+pub use wasmtime_environ::OperatorCost;
+pub use wasmtime_environ::ToWasmtimeResult;
+#[doc(inline)]
+pub use wasmtime_environ::error;
+
+// Only for use in `bindgen!`-generated code.
+#[doc(hidden)]
+#[cfg(feature = "anyhow")]
+pub use wasmtime_environ::anyhow;
+
+pub use self::error::{Error, Result, bail, ensure, format_err};
+
+/// A re-exported instance of Wasmtime's `wasmparser` dependency.
 ///
-/// This type can be used to interact with `wasmtimes`'s extensive use
-/// of `anyhow::Error` while still not directly depending on `anyhow`.
+/// This may be useful for embedders that also use `wasmparser`
+/// directly: it allows embedders to ensure that they are using the same
+/// version as Wasmtime, both to eliminate redundant dependencies on
+/// multiple versions of the library, and to ensure compatibility in
+/// validation and feature support.
 ///
-/// This type alias is identical to `anyhow::Result`.
-#[doc(no_inline)]
-pub use anyhow::{Error, Result};
+/// Note that this re-export is *not subject to semver*: we reserve the
+/// right to make patch releases of Wasmtime that bump the version of
+/// wasmparser used, and hence the version re-exported, in
+/// semver-incompatible ways. This is the tradeoff that the embedder
+/// needs to opt into: in order to stay exactly in sync with an internal
+/// detail of Wasmtime, the cost is visibility into potential internal
+/// version changes.
+#[cfg(feature = "reexport-wasmparser")]
+pub use wasmparser;
 
 fn _assert_send_and_sync<T: Send + Sync>() {}
 
@@ -403,5 +552,3 @@ pub mod _internal {
     // Exported just for the CLI.
     pub use crate::runtime::vm::MmapVec;
 }
-pub use crate::runtime::vm::traphandlers::{raise_trap, TrapReason};
-pub use crate::runtime::vm::InstanceHandle;

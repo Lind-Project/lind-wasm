@@ -4,11 +4,11 @@ use super::*;
 use crate::ir::condcodes::CondCode;
 
 use crate::isa::riscv64::lower::isle::generated_code::{
-    COpcodeSpace, CaOp, CbOp, CiOp, CiwOp, ClOp, CrOp, CsOp, CssOp, CsznOp, ZcbMemOp,
+    COpcodeSpace, CaOp, CbOp, CiOp, CiwOp, ClOp, CrOp, CsOp, CssOp, CsznOp, FpuOPWidth, ZcbMemOp,
 };
 use crate::machinst::isle::WritableReg;
 
-use std::fmt::Result;
+use core::fmt::Result;
 
 /// A macro for defining a newtype of `Reg` that enforces some invariant about
 /// the wrapped `Reg` (such as that it is of a particular register class).
@@ -38,11 +38,7 @@ macro_rules! newtype_of_reg {
             /// Create this newtype from the given register, or return `None` if the register
             /// is not a valid instance of this newtype.
             pub fn new($check_reg: Reg) -> Option<Self> {
-                if $check {
-                    Some(Self($check_reg))
-                } else {
-                    None
-                }
+                if $check { Some(Self($check_reg)) } else { None }
             }
 
             /// Get this newtype's underlying `Reg`.
@@ -57,7 +53,7 @@ macro_rules! newtype_of_reg {
         // NB: We cannot implement `DerefMut` because that would let people do
         // nasty stuff like `*my_xreg.deref_mut() = some_freg`, breaking the
         // invariants that `XReg` provides.
-        impl std::ops::Deref for $newtype_reg {
+        impl core::ops::Deref for $newtype_reg {
             type Target = Reg;
 
             fn deref(&self) -> &Reg {
@@ -181,16 +177,16 @@ impl Display for AMode {
                 write!(f, "{}({})", offset, reg_name(r))
             }
             &AMode::SPOffset(offset, ..) => {
-                write!(f, "{}(sp)", offset)
+                write!(f, "{offset}(sp)")
             }
             &AMode::SlotOffset(offset, ..) => {
-                write!(f, "{}(slot)", offset)
+                write!(f, "{offset}(slot)")
             }
             &AMode::IncomingArg(offset) => {
-                write!(f, "-{}(incoming_arg)", offset)
+                write!(f, "-{offset}(incoming_arg)")
             }
             &AMode::FPOffset(offset, ..) => {
-                write!(f, "{}(fp)", offset)
+                write!(f, "{offset}(fp)")
             }
             &AMode::Const(addr, ..) => {
                 write!(f, "[const({})]", addr.as_u32())
@@ -202,9 +198,9 @@ impl Display for AMode {
     }
 }
 
-impl Into<AMode> for StackAMode {
-    fn into(self) -> AMode {
-        match self {
+impl From<StackAMode> for AMode {
+    fn from(stack: StackAMode) -> AMode {
+        match stack {
             StackAMode::IncomingArg(offset, stack_args_size) => {
                 AMode::IncomingArg(i64::from(stack_args_size) - offset)
             }
@@ -321,7 +317,7 @@ pub struct FliConstant(u8);
 
 impl FliConstant {
     pub(crate) fn new(value: u8) -> Self {
-        debug_assert!(value <= 31, "Invalid FliConstant: {}", value);
+        debug_assert!(value <= 31, "Invalid FliConstant: {value}");
         Self(value)
     }
 
@@ -329,6 +325,35 @@ impl FliConstant {
         // Convert the value into an F64, this allows us to represent
         // values from both f32 and f64 in the same value.
         let value = match ty {
+            F16 => {
+                // FIXME(#8312): Use `f16` once it has been stabilised.
+                // Handle special/non-normal values first.
+                match imm {
+                    // `f16::MIN_POSITIVE`
+                    0x0400 => return Some(Self::new(1)),
+                    // 2 pow -16
+                    0x0100 => return Some(Self::new(2)),
+                    // 2 pow -15
+                    0x0200 => return Some(Self::new(3)),
+                    // `f16::INFINITY`
+                    0x7c00 => return Some(Self::new(30)),
+                    // Canonical NaN
+                    0x7e00 => return Some(Self::new(31)),
+                    _ => {
+                        let exponent_bits = imm & 0x7c00;
+                        if exponent_bits == 0 || exponent_bits == 0x7c00 {
+                            // All non-normal values are handled above.
+                            return None;
+                        }
+                        let sign = (imm & 0x8000) << 48;
+                        // Adjust the exponent for the difference between the `f16` exponent bias
+                        // and the `f64` exponent bias.
+                        let exponent = (exponent_bits + ((1023 - 15) << 10)) << 42;
+                        let significand = (imm & 0x3ff) << 42;
+                        f64::from_bits(sign | exponent | significand)
+                    }
+                }
+            }
             F32 => f32::from_bits(imm as u32) as f64,
             F64 => f64::from_bits(imm),
             _ => unimplemented!(),
@@ -427,326 +452,227 @@ impl FliConstant {
 }
 
 impl FpuOPRRRR {
-    pub(crate) fn op_name(self) -> &'static str {
+    pub(crate) fn op_name(self, width: FpuOPWidth) -> String {
         match self {
-            Self::FmaddS => "fmadd.s",
-            Self::FmsubS => "fmsub.s",
-            Self::FnmsubS => "fnmsub.s",
-            Self::FnmaddS => "fnmadd.s",
-            Self::FmaddD => "fmadd.d",
-            Self::FmsubD => "fmsub.d",
-            Self::FnmsubD => "fnmsub.d",
-            Self::FnmaddD => "fnmadd.d",
+            Self::Fmadd => format!("fmadd.{width}"),
+            Self::Fmsub => format!("fmsub.{width}"),
+            Self::Fnmsub => format!("fnmsub.{width}"),
+            Self::Fnmadd => format!("fnmadd.{width}"),
         }
     }
 
-    pub(crate) fn funct2(self) -> u32 {
+    pub(crate) fn opcode(self) -> u32 {
         match self {
-            FpuOPRRRR::FmaddS | FpuOPRRRR::FmsubS | FpuOPRRRR::FnmsubS | FpuOPRRRR::FnmaddS => 0,
-            FpuOPRRRR::FmaddD | FpuOPRRRR::FmsubD | FpuOPRRRR::FnmsubD | FpuOPRRRR::FnmaddD => 1,
-        }
-    }
-
-    pub(crate) fn op_code(self) -> u32 {
-        match self {
-            FpuOPRRRR::FmaddS => 0b1000011,
-            FpuOPRRRR::FmsubS => 0b1000111,
-            FpuOPRRRR::FnmsubS => 0b1001011,
-            FpuOPRRRR::FnmaddS => 0b1001111,
-            FpuOPRRRR::FmaddD => 0b1000011,
-            FpuOPRRRR::FmsubD => 0b1000111,
-            FpuOPRRRR::FnmsubD => 0b1001011,
-            FpuOPRRRR::FnmaddD => 0b1001111,
+            Self::Fmadd => 0b1000011,
+            Self::Fmsub => 0b1000111,
+            Self::Fnmsub => 0b1001011,
+            Self::Fnmadd => 0b1001111,
         }
     }
 }
 
 impl FpuOPRR {
-    pub(crate) fn op_name(self) -> &'static str {
+    pub(crate) fn op_name(self, width: FpuOPWidth) -> String {
+        let fmv_width = match width {
+            FpuOPWidth::H => "h",
+            FpuOPWidth::S => "w",
+            FpuOPWidth::D => "d",
+            FpuOPWidth::Q => "q",
+        };
         match self {
-            Self::FsqrtS => "fsqrt.s",
-            Self::FcvtWS => "fcvt.w.s",
-            Self::FcvtWuS => "fcvt.wu.s",
-            Self::FmvXW => "fmv.x.w",
-            Self::FclassS => "fclass.s",
-            Self::FcvtSw => "fcvt.s.w",
-            Self::FcvtSwU => "fcvt.s.wu",
-            Self::FmvWX => "fmv.w.x",
-            Self::FcvtLS => "fcvt.l.s",
-            Self::FcvtLuS => "fcvt.lu.s",
-            Self::FcvtSL => "fcvt.s.l",
-            Self::FcvtSLU => "fcvt.s.lu",
-            Self::FcvtLD => "fcvt.l.d",
-            Self::FcvtLuD => "fcvt.lu.d",
-            Self::FmvXD => "fmv.x.d",
-            Self::FcvtDL => "fcvt.d.l",
-            Self::FcvtDLu => "fcvt.d.lu",
-            Self::FmvDX => "fmv.d.x",
-            Self::FsqrtD => "fsqrt.d",
-            Self::FcvtSD => "fcvt.s.d",
-            Self::FcvtDS => "fcvt.d.s",
-            Self::FclassD => "fclass.d",
-            Self::FcvtWD => "fcvt.w.d",
-            Self::FcvtWuD => "fcvt.wu.d",
-            Self::FcvtDW => "fcvt.d.w",
-            Self::FcvtDWU => "fcvt.d.wu",
-            Self::FroundS => "fround.s",
-            Self::FroundD => "fround.d",
+            Self::Fsqrt => format!("fsqrt.{width}"),
+            Self::Fround => format!("fround.{width}"),
+            Self::Fclass => format!("fclass.{width}"),
+            Self::FcvtWFmt => format!("fcvt.w.{width}"),
+            Self::FcvtWuFmt => format!("fcvt.wu.{width}"),
+            Self::FcvtLFmt => format!("fcvt.l.{width}"),
+            Self::FcvtLuFmt => format!("fcvt.lu.{width}"),
+            Self::FcvtFmtW => format!("fcvt.{width}.w"),
+            Self::FcvtFmtWu => format!("fcvt.{width}.wu"),
+            Self::FcvtFmtL => format!("fcvt.{width}.l"),
+            Self::FcvtFmtLu => format!("fcvt.{width}.lu"),
+
+            // fmv instructions deviate from the normal encoding and instead
+            // encode the width as "w" instead of "s". The ISA manual gives this rationale:
+            //
+            // Instructions FMV.S.X and FMV.X.S were renamed to FMV.W.X and FMV.X.W respectively
+            // to be more consistent with their semantics, which did not change. The old names will continue
+            // to be supported in the tools.
+            Self::FmvXFmt => format!("fmv.x.{fmv_width}"),
+            Self::FmvFmtX => format!("fmv.{fmv_width}.x"),
+
+            Self::FcvtSD => "fcvt.s.d".to_string(),
+            Self::FcvtDS => "fcvt.d.s".to_string(),
         }
     }
 
     pub(crate) fn is_convert_to_int(self) -> bool {
         match self {
-            Self::FcvtWS
-            | Self::FcvtWuS
-            | Self::FcvtLS
-            | Self::FcvtLuS
-            | Self::FcvtWD
-            | Self::FcvtWuD
-            | Self::FcvtLD
-            | Self::FcvtLuD => true,
+            Self::FcvtWFmt | Self::FcvtWuFmt | Self::FcvtLFmt | Self::FcvtLuFmt => true,
             _ => false,
         }
     }
 
-    pub(crate) fn op_code(self) -> u32 {
+    pub(crate) fn has_frm(self) -> bool {
         match self {
-            FpuOPRR::FsqrtS
-            | FpuOPRR::FcvtWS
-            | FpuOPRR::FcvtWuS
-            | FpuOPRR::FmvXW
-            | FpuOPRR::FclassS
-            | FpuOPRR::FcvtSw
-            | FpuOPRR::FcvtSwU
-            | FpuOPRR::FmvWX => 0b1010011,
-
-            FpuOPRR::FcvtLS | FpuOPRR::FcvtLuS | FpuOPRR::FcvtSL | FpuOPRR::FcvtSLU => 0b1010011,
-
-            FpuOPRR::FcvtLD
-            | FpuOPRR::FcvtLuD
-            | FpuOPRR::FmvXD
-            | FpuOPRR::FcvtDL
-            | FpuOPRR::FcvtDLu
-            | FpuOPRR::FmvDX => 0b1010011,
-
-            FpuOPRR::FsqrtD
-            | FpuOPRR::FcvtSD
-            | FpuOPRR::FcvtDS
-            | FpuOPRR::FclassD
-            | FpuOPRR::FcvtWD
-            | FpuOPRR::FcvtWuD
-            | FpuOPRR::FcvtDW
-            | FpuOPRR::FcvtDWU
-            | FpuOPRR::FroundS
-            | FpuOPRR::FroundD => 0b1010011,
+            FpuOPRR::FmvXFmt | FpuOPRR::FmvFmtX | FpuOPRR::Fclass => false,
+            _ => true,
         }
     }
 
-    pub(crate) fn rs2_funct5(self) -> u32 {
+    pub(crate) fn opcode(self) -> u32 {
+        // OP-FP Major opcode
+        0b1010011
+    }
+
+    pub(crate) fn rs2(self) -> u32 {
         match self {
-            FpuOPRR::FsqrtS => 0b00000,
-            FpuOPRR::FcvtWS => 0b00000,
-            FpuOPRR::FcvtWuS => 0b00001,
-            FpuOPRR::FmvXW => 0b00000,
-            FpuOPRR::FclassS => 0b00000,
-            FpuOPRR::FcvtSw => 0b00000,
-            FpuOPRR::FcvtSwU => 0b00001,
-            FpuOPRR::FmvWX => 0b00000,
-            FpuOPRR::FcvtLS => 0b00010,
-            FpuOPRR::FcvtLuS => 0b00011,
-            FpuOPRR::FcvtSL => 0b00010,
-            FpuOPRR::FcvtSLU => 0b00011,
-            FpuOPRR::FcvtLD => 0b00010,
-            FpuOPRR::FcvtLuD => 0b00011,
-            FpuOPRR::FmvXD => 0b00000,
-            FpuOPRR::FcvtDL => 0b00010,
-            FpuOPRR::FcvtDLu => 0b00011,
-            FpuOPRR::FmvDX => 0b00000,
-            FpuOPRR::FcvtSD => 0b00001,
-            FpuOPRR::FcvtDS => 0b00000,
-            FpuOPRR::FclassD => 0b00000,
-            FpuOPRR::FcvtWD => 0b00000,
-            FpuOPRR::FcvtWuD => 0b00001,
-            FpuOPRR::FcvtDW => 0b00000,
-            FpuOPRR::FcvtDWU => 0b00001,
-            FpuOPRR::FsqrtD => 0b00000,
-            FpuOPRR::FroundS => 0b00100,
-            FpuOPRR::FroundD => 0b00100,
+            Self::Fsqrt => 0b00000,
+            Self::Fround => 0b00100,
+            Self::Fclass => 0b00000,
+            Self::FcvtWFmt => 0b00000,
+            Self::FcvtWuFmt => 0b00001,
+            Self::FcvtLFmt => 0b00010,
+            Self::FcvtLuFmt => 0b00011,
+            Self::FcvtFmtW => 0b00000,
+            Self::FcvtFmtWu => 0b00001,
+            Self::FcvtFmtL => 0b00010,
+            Self::FcvtFmtLu => 0b00011,
+            Self::FmvXFmt => 0b00000,
+            Self::FmvFmtX => 0b00000,
+            Self::FcvtSD => 0b00001,
+            Self::FcvtDS => 0b00000,
         }
     }
-    pub(crate) fn funct7(self) -> u32 {
+
+    pub(crate) fn funct5(self) -> u32 {
         match self {
-            FpuOPRR::FsqrtS => 0b0101100,
-            FpuOPRR::FcvtWS => 0b1100000,
-            FpuOPRR::FcvtWuS => 0b1100000,
-            FpuOPRR::FmvXW => 0b1110000,
-            FpuOPRR::FclassS => 0b1110000,
-            FpuOPRR::FcvtSw => 0b1101000,
-            FpuOPRR::FcvtSwU => 0b1101000,
-            FpuOPRR::FmvWX => 0b1111000,
-            FpuOPRR::FcvtLS => 0b1100000,
-            FpuOPRR::FcvtLuS => 0b1100000,
-            FpuOPRR::FcvtSL => 0b1101000,
-            FpuOPRR::FcvtSLU => 0b1101000,
-            FpuOPRR::FcvtLD => 0b1100001,
-            FpuOPRR::FcvtLuD => 0b1100001,
-            FpuOPRR::FmvXD => 0b1110001,
-            FpuOPRR::FcvtDL => 0b1101001,
-            FpuOPRR::FcvtDLu => 0b1101001,
-            FpuOPRR::FmvDX => 0b1111001,
-            FpuOPRR::FcvtSD | FpuOPRR::FroundS => 0b0100000,
-            FpuOPRR::FcvtDS | FpuOPRR::FroundD => 0b0100001,
-            FpuOPRR::FclassD => 0b1110001,
-            FpuOPRR::FcvtWD => 0b1100001,
-            FpuOPRR::FcvtWuD => 0b1100001,
-            FpuOPRR::FcvtDW => 0b1101001,
-            FpuOPRR::FcvtDWU => 0b1101001,
-            FpuOPRR::FsqrtD => 0b0101101,
+            Self::Fsqrt => 0b01011,
+            Self::Fround => 0b01000,
+            Self::Fclass => 0b11100,
+            Self::FcvtWFmt => 0b11000,
+            Self::FcvtWuFmt => 0b11000,
+            Self::FcvtLFmt => 0b11000,
+            Self::FcvtLuFmt => 0b11000,
+            Self::FcvtFmtW => 0b11010,
+            Self::FcvtFmtWu => 0b11010,
+            Self::FcvtFmtL => 0b11010,
+            Self::FcvtFmtLu => 0b11010,
+            Self::FmvXFmt => 0b11100,
+            Self::FmvFmtX => 0b11110,
+            Self::FcvtSD => 0b01000,
+            Self::FcvtDS => 0b01000,
         }
+    }
+
+    pub(crate) fn funct7(self, width: FpuOPWidth) -> u32 {
+        (self.funct5() << 2) | width.as_u32()
     }
 }
 
 impl FpuOPRRR {
-    pub(crate) const fn op_name(self) -> &'static str {
+    pub(crate) fn op_name(self, width: FpuOPWidth) -> String {
         match self {
-            Self::FaddS => "fadd.s",
-            Self::FsubS => "fsub.s",
-            Self::FmulS => "fmul.s",
-            Self::FdivS => "fdiv.s",
-            Self::FsgnjS => "fsgnj.s",
-            Self::FsgnjnS => "fsgnjn.s",
-            Self::FsgnjxS => "fsgnjx.s",
-            Self::FminS => "fmin.s",
-            Self::FmaxS => "fmax.s",
-            Self::FeqS => "feq.s",
-            Self::FltS => "flt.s",
-            Self::FleS => "fle.s",
-            Self::FaddD => "fadd.d",
-            Self::FsubD => "fsub.d",
-            Self::FmulD => "fmul.d",
-            Self::FdivD => "fdiv.d",
-            Self::FsgnjD => "fsgnj.d",
-            Self::FsgnjnD => "fsgnjn.d",
-            Self::FsgnjxD => "fsgnjx.d",
-            Self::FminD => "fmin.d",
-            Self::FmaxD => "fmax.d",
-            Self::FeqD => "feq.d",
-            Self::FltD => "flt.d",
-            Self::FleD => "fle.d",
-            Self::FminmS => "fminm.s",
-            Self::FmaxmS => "fmaxm.s",
-            Self::FminmD => "fminm.d",
-            Self::FmaxmD => "fmaxm.d",
+            Self::Fadd => format!("fadd.{width}"),
+            Self::Fsub => format!("fsub.{width}"),
+            Self::Fmul => format!("fmul.{width}"),
+            Self::Fdiv => format!("fdiv.{width}"),
+            Self::Fsgnj => format!("fsgnj.{width}"),
+            Self::Fsgnjn => format!("fsgnjn.{width}"),
+            Self::Fsgnjx => format!("fsgnjx.{width}"),
+            Self::Fmin => format!("fmin.{width}"),
+            Self::Fmax => format!("fmax.{width}"),
+            Self::Feq => format!("feq.{width}"),
+            Self::Flt => format!("flt.{width}"),
+            Self::Fle => format!("fle.{width}"),
+            Self::Fminm => format!("fminm.{width}"),
+            Self::Fmaxm => format!("fmaxm.{width}"),
         }
     }
 
-    pub fn op_code(self) -> u32 {
-        match self {
-            Self::FaddS
-            | Self::FsubS
-            | Self::FmulS
-            | Self::FdivS
-            | Self::FsgnjS
-            | Self::FsgnjnS
-            | Self::FsgnjxS
-            | Self::FminS
-            | Self::FmaxS
-            | Self::FeqS
-            | Self::FltS
-            | Self::FleS
-            | Self::FminmS
-            | Self::FmaxmS => 0b1010011,
+    pub(crate) fn opcode(self) -> u32 {
+        // OP-FP Major opcode
+        0b1010011
+    }
 
-            Self::FaddD
-            | Self::FsubD
-            | Self::FmulD
-            | Self::FdivD
-            | Self::FsgnjD
-            | Self::FsgnjnD
-            | Self::FsgnjxD
-            | Self::FminD
-            | Self::FmaxD
-            | Self::FeqD
-            | Self::FltD
-            | Self::FleD
-            | Self::FminmD
-            | Self::FmaxmD => 0b1010011,
+    pub(crate) const fn funct5(self) -> u32 {
+        match self {
+            Self::Fadd => 0b00000,
+            Self::Fsub => 0b00001,
+            Self::Fmul => 0b00010,
+            Self::Fdiv => 0b00011,
+            Self::Fsgnj => 0b00100,
+            Self::Fsgnjn => 0b00100,
+            Self::Fsgnjx => 0b00100,
+            Self::Fmin => 0b00101,
+            Self::Fmax => 0b00101,
+            Self::Feq => 0b10100,
+            Self::Flt => 0b10100,
+            Self::Fle => 0b10100,
+            Self::Fminm => 0b00101,
+            Self::Fmaxm => 0b00101,
         }
     }
 
-    pub const fn funct7(self) -> u32 {
-        match self {
-            Self::FaddS => 0b0000000,
-            Self::FsubS => 0b0000100,
-            Self::FmulS => 0b0001000,
-            Self::FdivS => 0b0001100,
-
-            Self::FsgnjS => 0b0010000,
-            Self::FsgnjnS => 0b0010000,
-            Self::FsgnjxS => 0b0010000,
-            Self::FminS => 0b0010100,
-            Self::FmaxS => 0b0010100,
-            Self::FeqS => 0b1010000,
-            Self::FltS => 0b1010000,
-            Self::FleS => 0b1010000,
-
-            Self::FaddD => 0b0000001,
-            Self::FsubD => 0b0000101,
-            Self::FmulD => 0b0001001,
-            Self::FdivD => 0b0001101,
-            Self::FsgnjD => 0b0010001,
-            Self::FsgnjnD => 0b0010001,
-            Self::FsgnjxD => 0b0010001,
-            Self::FminD => 0b0010101,
-            Self::FmaxD => 0b0010101,
-            Self::FeqD => 0b1010001,
-            Self::FltD => 0b1010001,
-            Self::FleD => 0b1010001,
-
-            Self::FminmS => 0b0010100,
-            Self::FmaxmS => 0b0010100,
-            Self::FminmD => 0b0010101,
-            Self::FmaxmD => 0b0010101,
-        }
-    }
-    pub fn is_32(self) -> bool {
-        match self {
-            Self::FaddS
-            | Self::FsubS
-            | Self::FmulS
-            | Self::FdivS
-            | Self::FsgnjS
-            | Self::FsgnjnS
-            | Self::FsgnjxS
-            | Self::FminS
-            | Self::FmaxS
-            | Self::FeqS
-            | Self::FltS
-            | Self::FleS => true,
-            _ => false,
-        }
+    pub(crate) fn funct7(self, width: FpuOPWidth) -> u32 {
+        (self.funct5() << 2) | width.as_u32()
     }
 
-    pub fn is_copy_sign(self) -> bool {
+    pub(crate) fn has_frm(self) -> bool {
         match self {
-            Self::FsgnjD | Self::FsgnjS => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_copy_neg_sign(self) -> bool {
-        match self {
-            Self::FsgnjnD | Self::FsgnjnS => true,
-            _ => false,
-        }
-    }
-    pub fn is_copy_xor_sign(self) -> bool {
-        match self {
-            Self::FsgnjxS | Self::FsgnjxD => true,
-            _ => false,
+            FpuOPRRR::Fsgnj
+            | FpuOPRRR::Fsgnjn
+            | FpuOPRRR::Fsgnjx
+            | FpuOPRRR::Fmin
+            | FpuOPRRR::Fmax
+            | FpuOPRRR::Feq
+            | FpuOPRRR::Flt
+            | FpuOPRRR::Fle => false,
+            _ => true,
         }
     }
 }
+
+impl Display for FpuOPWidth {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                FpuOPWidth::H => "h",
+                FpuOPWidth::S => "s",
+                FpuOPWidth::D => "d",
+                FpuOPWidth::Q => "q",
+            }
+        )
+    }
+}
+
+impl TryFrom<Type> for FpuOPWidth {
+    type Error = &'static str;
+
+    fn try_from(value: Type) -> core::result::Result<Self, Self::Error> {
+        match value {
+            F16 => Ok(FpuOPWidth::H),
+            F32 => Ok(FpuOPWidth::S),
+            F64 => Ok(FpuOPWidth::D),
+            F128 => Ok(FpuOPWidth::Q),
+            _ => Err("Invalid type for FpuOPWidth"),
+        }
+    }
+}
+
+impl FpuOPWidth {
+    pub(crate) fn as_u32(&self) -> u32 {
+        match self {
+            FpuOPWidth::S => 0b00,
+            FpuOPWidth::D => 0b01,
+            FpuOPWidth::H => 0b10,
+            FpuOPWidth::Q => 0b11,
+        }
+    }
+}
+
 impl AluOPRRR {
     pub(crate) const fn op_name(self) -> &'static str {
         match self {
@@ -1247,7 +1173,7 @@ impl FRM {
 
 impl FFlagsException {
     #[inline]
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "here for future use")]
     pub(crate) fn mask(self) -> u32 {
         match self {
             FFlagsException::NV => 1 << 4,
@@ -1269,22 +1195,21 @@ impl LoadOP {
             Self::Lhu => "lhu",
             Self::Lwu => "lwu",
             Self::Ld => "ld",
+            Self::Flh => "flh",
             Self::Flw => "flw",
             Self::Fld => "fld",
         }
     }
 
-    pub(crate) fn from_type(t: Type) -> Self {
-        if t.is_float() {
-            return if t == F32 { Self::Flw } else { Self::Fld };
-        }
-        match t {
-            R32 => Self::Lwu,
-            R64 | I64 => Self::Ld,
-
+    pub(crate) fn from_type(ty: Type) -> Self {
+        match ty {
+            F16 => Self::Flh,
+            F32 => Self::Flw,
+            F64 => Self::Fld,
             I8 => Self::Lb,
             I16 => Self::Lh,
             I32 => Self::Lw,
+            I64 => Self::Ld,
             _ => unreachable!(),
         }
     }
@@ -1292,7 +1217,7 @@ impl LoadOP {
     pub(crate) fn size(&self) -> i64 {
         match self {
             Self::Lb | Self::Lbu => 1,
-            Self::Lh | Self::Lhu => 2,
+            Self::Lh | Self::Lhu | Self::Flh => 2,
             Self::Lw | Self::Lwu | Self::Flw => 4,
             Self::Ld | Self::Fld => 8,
         }
@@ -1303,7 +1228,7 @@ impl LoadOP {
             Self::Lb | Self::Lh | Self::Lw | Self::Lbu | Self::Lhu | Self::Lwu | Self::Ld => {
                 0b0000011
             }
-            Self::Flw | Self::Fld => 0b0000111,
+            Self::Flh | Self::Flw | Self::Fld => 0b0000111,
         }
     }
     pub(crate) fn funct3(self) -> u32 {
@@ -1315,6 +1240,7 @@ impl LoadOP {
             Self::Lbu => 0b100,
             Self::Lhu => 0b101,
             Self::Ld => 0b011,
+            Self::Flh => 0b001,
             Self::Flw => 0b010,
             Self::Fld => 0b011,
         }
@@ -1328,19 +1254,20 @@ impl StoreOP {
             Self::Sh => "sh",
             Self::Sw => "sw",
             Self::Sd => "sd",
+            Self::Fsh => "fsh",
             Self::Fsw => "fsw",
             Self::Fsd => "fsd",
         }
     }
-    pub(crate) fn from_type(t: Type) -> Self {
-        if t.is_float() {
-            return if t == F32 { Self::Fsw } else { Self::Fsd };
-        }
-        match t.bits() {
-            1 | 8 => Self::Sb,
-            16 => Self::Sh,
-            32 => Self::Sw,
-            64 => Self::Sd,
+    pub(crate) fn from_type(ty: Type) -> Self {
+        match ty {
+            F16 => Self::Fsh,
+            F32 => Self::Fsw,
+            F64 => Self::Fsd,
+            I8 => Self::Sb,
+            I16 => Self::Sh,
+            I32 => Self::Sw,
+            I64 => Self::Sd,
             _ => unreachable!(),
         }
     }
@@ -1348,7 +1275,7 @@ impl StoreOP {
     pub(crate) fn size(&self) -> i64 {
         match self {
             Self::Sb => 1,
-            Self::Sh => 2,
+            Self::Sh | Self::Fsh => 2,
             Self::Sw | Self::Fsw => 4,
             Self::Sd | Self::Fsd => 8,
         }
@@ -1357,7 +1284,7 @@ impl StoreOP {
     pub(crate) fn op_code(self) -> u32 {
         match self {
             Self::Sb | Self::Sh | Self::Sw | Self::Sd => 0b0100011,
-            Self::Fsw | Self::Fsd => 0b0100111,
+            Self::Fsh | Self::Fsw | Self::Fsd => 0b0100111,
         }
     }
     pub(crate) fn funct3(self) -> u32 {
@@ -1366,13 +1293,13 @@ impl StoreOP {
             Self::Sh => 0b001,
             Self::Sw => 0b010,
             Self::Sd => 0b011,
+            Self::Fsh => 0b001,
             Self::Fsw => 0b010,
             Self::Fsd => 0b011,
         }
     }
 }
 
-#[allow(dead_code)]
 impl FClassResult {
     pub(crate) const fn bit(self) -> u32 {
         match self {
@@ -1390,15 +1317,18 @@ impl FClassResult {
     }
 
     #[inline]
+    #[expect(dead_code, reason = "here for future use")]
     pub(crate) const fn is_nan_bits() -> u32 {
         Self::SNaN.bit() | Self::QNaN.bit()
     }
     #[inline]
+    #[expect(dead_code, reason = "here for future use")]
     pub(crate) fn is_zero_bits() -> u32 {
         Self::NegZero.bit() | Self::PosZero.bit()
     }
 
     #[inline]
+    #[expect(dead_code, reason = "here for future use")]
     pub(crate) fn is_infinite_bits() -> u32 {
         Self::PosInfinite.bit() | Self::NegInfinite.bit()
     }
@@ -1506,18 +1436,10 @@ impl AtomicOP {
     }
 
     pub(crate) fn load_op(t: Type) -> Self {
-        if t.bits() <= 32 {
-            Self::LrW
-        } else {
-            Self::LrD
-        }
+        if t.bits() <= 32 { Self::LrW } else { Self::LrD }
     }
     pub(crate) fn store_op(t: Type) -> Self {
-        if t.bits() <= 32 {
-            Self::ScW
-        } else {
-            Self::ScD
-        }
+        if t.bits() <= 32 { Self::ScW } else { Self::ScD }
     }
 
     /// extract
@@ -1525,13 +1447,13 @@ impl AtomicOP {
         let mut insts = SmallInstVec::new();
         insts.push(Inst::AluRRR {
             alu_op: AluOPRRR::Srl,
-            rd: rd,
+            rd,
             rs1: rs,
             rs2: offset,
         });
         //
         insts.push(Inst::Extend {
-            rd: rd,
+            rd,
             rn: rd.to_reg(),
             signed: false,
             from_bits: ty.bits() as u8,
@@ -1551,13 +1473,13 @@ impl AtomicOP {
         let mut insts = SmallInstVec::new();
         insts.push(Inst::AluRRR {
             alu_op: AluOPRRR::Srl,
-            rd: rd,
+            rd,
             rs1: rs,
             rs2: offset,
         });
         //
         insts.push(Inst::Extend {
-            rd: rd,
+            rd,
             rn: rd.to_reg(),
             signed: true,
             from_bits: ty.bits() as u8,
@@ -1584,7 +1506,7 @@ impl AtomicOP {
         insts.push(Inst::construct_bit_not(tmp, tmp.to_reg()));
         insts.push(Inst::AluRRR {
             alu_op: AluOPRRR::And,
-            rd: rd,
+            rd,
             rs1: rd.to_reg(),
             rs2: tmp.to_reg(),
         });
@@ -1616,7 +1538,7 @@ impl AtomicOP {
         });
         insts.push(Inst::AluRRR {
             alu_op: AluOPRRR::Or,
-            rd: rd,
+            rd,
             rs1: rd.to_reg(),
             rs2: tmp.to_reg(),
         });
@@ -1641,9 +1563,12 @@ impl AtomicOP {
 ///Atomic Memory ordering.
 #[derive(Copy, Clone, Debug)]
 pub enum AMO {
+    #[allow(dead_code, reason = "used only in emit tests for now")]
     Relax = 0b00,
+    #[allow(dead_code, reason = "used only in emit tests for now")]
     Release = 0b01,
-    Aquire = 0b10,
+    #[allow(dead_code, reason = "used only in emit tests for now")]
+    Acquire = 0b10,
     SeqCst = 0b11,
 }
 
@@ -1652,7 +1577,7 @@ impl AMO {
         match self {
             AMO::Relax => "",
             AMO::Release => ".rl",
-            AMO::Aquire => ".aq",
+            AMO::Acquire => ".aq",
             AMO::SeqCst => ".aqrl",
         }
     }
@@ -1682,34 +1607,6 @@ impl Inst {
             s.push_str("w");
         }
         s
-    }
-}
-
-pub(crate) fn f32_cvt_to_int_bounds(signed: bool, out_bits: u32) -> (f32, f32) {
-    match (signed, out_bits) {
-        (true, 8) => (i8::min_value() as f32 - 1., i8::max_value() as f32 + 1.),
-        (true, 16) => (i16::min_value() as f32 - 1., i16::max_value() as f32 + 1.),
-        (true, 32) => (-2147483904.0, 2147483648.0),
-        (true, 64) => (-9223373136366403584.0, 9223372036854775808.0),
-        (false, 8) => (-1., u8::max_value() as f32 + 1.),
-        (false, 16) => (-1., u16::max_value() as f32 + 1.),
-        (false, 32) => (-1., 4294967296.0),
-        (false, 64) => (-1., 18446744073709551616.0),
-        _ => unreachable!(),
-    }
-}
-
-pub(crate) fn f64_cvt_to_int_bounds(signed: bool, out_bits: u32) -> (f64, f64) {
-    match (signed, out_bits) {
-        (true, 8) => (i8::min_value() as f64 - 1., i8::max_value() as f64 + 1.),
-        (true, 16) => (i16::min_value() as f64 - 1., i16::max_value() as f64 + 1.),
-        (true, 32) => (-2147483649.0, 2147483648.0),
-        (true, 64) => (-9223372036854777856.0, 9223372036854775808.0),
-        (false, 8) => (-1., u8::max_value() as f64 + 1.),
-        (false, 16) => (-1., u16::max_value() as f64 + 1.),
-        (false, 32) => (-1., 4294967296.0),
-        (false, 64) => (-1., 18446744073709551616.0),
-        _ => unreachable!(),
     }
 }
 

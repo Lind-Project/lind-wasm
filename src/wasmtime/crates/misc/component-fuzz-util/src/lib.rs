@@ -8,7 +8,7 @@
 
 use arbitrary::{Arbitrary, Unstructured};
 use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use std::borrow::Cow;
 use std::fmt::{self, Debug, Write};
 use std::iter;
@@ -68,13 +68,13 @@ impl<T, const L: u32, const H: u32> VecInRange<T, L, H> {
     fn new<'a>(
         input: &mut Unstructured<'a>,
         fuel: &mut u32,
-        gen: impl Fn(&mut Unstructured<'a>, &mut u32) -> arbitrary::Result<T>,
+        r#gen: impl Fn(&mut Unstructured<'a>, &mut u32) -> arbitrary::Result<T>,
     ) -> arbitrary::Result<Self> {
         let mut ret = Vec::new();
         input.arbitrary_loop(Some(L), Some(H), |input| {
             if *fuel > 0 {
                 *fuel = *fuel - 1;
-                ret.push(gen(input, fuel)?);
+                ret.push(r#gen(input, fuel)?);
                 Ok(std::ops::ControlFlow::Continue(()))
             } else {
                 Ok(std::ops::ControlFlow::Break(()))

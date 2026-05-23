@@ -8,38 +8,48 @@
 
 ;; `()`
 (type Unit (primitive Unit))
+(model Unit (type Unit))
 
 (decl pure unit () Unit)
 (extern constructor unit unit)
 
-(type bool (primitive bool))
-(extern const $true bool)
-(extern const $false bool)
+(model bool (type Bool))
 
-(type u8 (primitive u8))
-(type u16 (primitive u16))
-(type u32 (primitive u32))
-(type u64 (primitive u64))
-(type u128 (primitive u128))
-(type usize (primitive usize))
+(model u8 (type (bv 8)))
+(model u16 (type (bv 16)))
+(model u32 (type (bv 32)))
+(model u64 (type (bv 64)))
+(model usize (type (bv)))
 
-(type i8 (primitive i8))
-(type i16 (primitive i16))
-(type i32 (primitive i32))
-(type i64 (primitive i64))
-(type i128 (primitive i128))
-(type isize (primitive isize))
+(model i8 (type (bv 8)))
+(model i16 (type (bv 16)))
+(model i32 (type (bv 32)))
+(model i64 (type (bv 64)))
 
 ;; `cranelift-entity`-based identifiers.
+
+(model Type (type Int))
 (type Type (primitive Type))
+
+(model Value (type (bv)))
 (type Value (primitive Value))
+
 (type ValueList (primitive ValueList))
+
 (type BlockCall (primitive BlockCall))
+
+(type Inst (primitive Inst))
+
+;; Match the instruction that defines the given value, if any.
+(spec (def_inst arg) (provide (= result arg)))
+(decl def_inst (Inst) Value)
+(extern extractor def_inst def_inst)
 
 ;; ISLE representation of `&[Value]`.
 (type ValueSlice (primitive ValueSlice))
 
 ;; Extract the type of a `Value`.
+(spec (value_type arg) (provide (= arg (widthof result))))
 (decl value_type (Type) Value)
 (extern extractor infallible value_type value_type)
 
@@ -52,121 +62,19 @@
 (decl offset32 (i32) Offset32)
 (extern extractor infallible offset32 offset32)
 
-;; Pure/fallible constructor that tests if one u32 is less than or
-;; equal to another.
-(decl pure partial u32_lteq (u32 u32) Unit)
-(extern constructor u32_lteq u32_lteq)
-
-;; Pure/fallible constructor that tests if one u8 is less than or
-;; equal to another.
-(decl pure partial u8_lteq (u8 u8) Unit)
-(extern constructor u8_lteq u8_lteq)
-
-;; Pure/fallible constructor that tests if one u8 is strictly less
-;;  than another.
-(decl pure partial u8_lt (u8 u8) Unit)
-(extern constructor u8_lt u8_lt)
-
-;;;; Primitive Type Conversions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(decl pure u8_as_i8 (u8) i8)
-(extern constructor u8_as_i8 u8_as_i8)
-
-(decl pure u8_as_u32 (u8) u32)
-(extern constructor u8_as_u32 u8_as_u32)
-(convert u8 u32 u8_as_u32)
-
-(decl pure u8_as_u64 (u8) u64)
-(extern constructor u8_as_u64 u8_as_u64)
-(convert u8 u64 u8_as_u64)
-
-(decl pure u16_as_u64 (u16) u64)
-(extern constructor u16_as_u64 u16_as_u64)
-(convert u16 u64 u16_as_u64)
-
-(decl pure u32_as_u64 (u32) u64)
-(extern constructor u32_as_u64 u32_as_u64)
-(convert u32 u64 u32_as_u64)
-
-(decl pure i32_as_i64 (i32) i64)
-(extern constructor i32_as_i64 i32_as_i64)
-(convert i32 i64 i32_as_i64)
-
-(decl pure i64_as_u64 (i64) u64)
-(extern constructor i64_as_u64 i64_as_u64)
-
-(decl pure i64_neg (i64) i64)
-(extern constructor i64_neg i64_neg)
-
-(decl pure i8_neg (i8) i8)
-(extern constructor i8_neg i8_neg)
-
-(decl u128_as_u64 (u64) u128)
-(extern extractor u128_as_u64 u128_as_u64)
-
-(decl u64_as_u32 (u32) u64)
-(extern extractor u64_as_u32 u64_as_u32)
-
-(decl pure u64_as_i32 (u64) i32)
-(extern constructor u64_as_i32 u64_as_i32)
-
 ;;;; Primitive Arithmetic ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(decl pure u8_and (u8 u8) u8)
-(extern constructor u8_and u8_and)
+(decl pure partial checked_add_with_type (Type u64 u64) u64)
+(extern constructor checked_add_with_type checked_add_with_type)
 
-(decl pure u8_shl (u8 u8) u8)
-(extern constructor u8_shl u8_shl)
+(decl pure add_overflows_with_type (Type u64 u64) bool)
+(extern constructor add_overflows_with_type add_overflows_with_type)
 
-(decl pure u8_shr (u8 u8) u8)
-(extern constructor u8_shr u8_shr)
+(decl pure partial imm64_sdiv (Type Imm64 Imm64) Imm64)
+(extern constructor imm64_sdiv imm64_sdiv)
 
-(decl pure u8_sub (u8 u8) u8)
-(extern constructor u8_sub u8_sub)
-
-(decl pure u32_add (u32 u32) u32)
-(extern constructor u32_add u32_add)
-
-(decl pure u32_sub (u32 u32) u32)
-(extern constructor u32_sub u32_sub)
-
-(decl pure u32_and (u32 u32) u32)
-(extern constructor u32_and u32_and)
-
-(decl pure u32_shl (u32 u32) u32)
-(extern constructor u32_shl u32_shl)
-
-;; Pure/fallible constructor that tries to add two `u32`s, interpreted
-;; as signed values, and fails to match on overflow.
-(decl pure partial s32_add_fallible (i32 i32) i32)
-(extern constructor s32_add_fallible s32_add_fallible)
-
-(decl pure u64_add (u64 u64) u64)
-(extern constructor u64_add u64_add)
-
-(decl pure u64_sub (u64 u64) u64)
-(extern constructor u64_sub u64_sub)
-
-(decl pure u64_mul (u64 u64) u64)
-(extern constructor u64_mul u64_mul)
-
-(decl pure partial u64_sdiv (u64 u64) u64)
-(extern constructor u64_sdiv u64_sdiv)
-
-(decl pure partial u64_udiv (u64 u64) u64)
-(extern constructor u64_udiv u64_udiv)
-
-(decl pure u64_and (u64 u64) u64)
-(extern constructor u64_and u64_and)
-
-(decl pure u64_or (u64 u64) u64)
-(extern constructor u64_or u64_or)
-
-(decl pure u64_xor (u64 u64) u64)
-(extern constructor u64_xor u64_xor)
-
-(decl pure u64_shl (u64 u64) u64)
-(extern constructor u64_shl u64_shl)
+(decl pure partial imm64_srem (Type Imm64 Imm64) Imm64)
+(extern constructor imm64_srem imm64_srem)
 
 (decl pure imm64_shl (Type Imm64 Imm64) Imm64)
 (extern constructor imm64_shl imm64_shl)
@@ -177,28 +85,17 @@
 (decl pure imm64_sshr (Type Imm64 Imm64) Imm64)
 (extern constructor imm64_sshr imm64_sshr)
 
-(decl pure u64_not (u64) u64)
-(extern constructor u64_not u64_not)
+(decl pure imm64_rotl (Type Imm64 Imm64) Imm64)
+(extern constructor imm64_rotl imm64_rotl)
 
-(decl pure u64_eq (u64 u64) bool)
-(extern constructor u64_eq u64_eq)
-
-(decl pure u64_le (u64 u64) bool)
-(extern constructor u64_le u64_le)
-
-(decl pure u64_lt (u64 u64) bool)
-(extern constructor u64_lt u64_lt)
-
-(decl pure i64_shr (i64 i64) i64)
-(extern constructor i64_shr i64_shr)
-
-(decl pure i64_ctz (i64) i64)
-(extern constructor i64_ctz i64_ctz)
+(decl pure imm64_rotr (Type Imm64 Imm64) Imm64)
+(extern constructor imm64_rotr imm64_rotr)
 
 ;; Sign extends a u64 from ty bits up to 64bits
 (decl pure i64_sextend_u64 (Type u64) i64)
 (extern constructor i64_sextend_u64 i64_sextend_u64)
 
+(spec (i64_sextend_imm64 ty a) (provide (= result (sign_ext 64 (conv_to ty a)))))
 (decl pure i64_sextend_imm64 (Type Imm64) i64)
 (extern constructor i64_sextend_imm64 i64_sextend_imm64)
 
@@ -208,23 +105,11 @@
 (decl pure imm64_icmp (Type IntCC Imm64 Imm64) Imm64)
 (extern constructor imm64_icmp imm64_icmp)
 
-(decl u64_is_zero (bool) u64)
-(extern extractor infallible u64_is_zero u64_is_zero)
+(decl pure imm64_clz (Type Imm64) Imm64)
+(extern constructor imm64_clz imm64_clz)
 
-(decl i64_is_zero (bool) i64)
-(extern extractor infallible i64_is_zero i64_is_zero)
-
-(decl u64_zero () u64)
-(extractor (u64_zero) (u64_is_zero $true))
-
-(decl u64_nonzero (u64) u64)
-(extractor (u64_nonzero x) (and (u64_is_zero $false) x))
-
-(decl i64_nonzero (i64) i64)
-(extractor (i64_nonzero x) (and (i64_is_zero $false) x))
-
-(decl pure u64_is_odd (u64) bool)
-(extern constructor u64_is_odd u64_is_odd)
+(decl pure imm64_ctz (Type Imm64) Imm64)
+(extern constructor imm64_ctz imm64_ctz)
 
 ;; Each of these extractors tests whether the upper half of the input equals the
 ;; lower half of the input
@@ -237,20 +122,91 @@
 (decl u16_replicated_u8 (u8) u64)
 (extern extractor u16_replicated_u8 u16_replicated_u8)
 
+;; Get the low and high bits of a `u128` as `u64`s.
+(decl u128_low_bits (u128) u64)
+(extern constructor u128_low_bits u128_low_bits)
+(decl u128_high_bits (u128) u64)
+(extern constructor u128_high_bits u128_high_bits)
+
 ;; Floating point operations
 
+(decl pure partial f16_min (Ieee16 Ieee16) Ieee16)
+(extern constructor f16_min f16_min)
+(decl pure partial f16_max (Ieee16 Ieee16) Ieee16)
+(extern constructor f16_max f16_max)
+(decl pure f16_neg (Ieee16) Ieee16)
+(extern constructor f16_neg f16_neg)
+(decl pure f16_abs (Ieee16) Ieee16)
+(extern constructor f16_abs f16_abs)
+(decl pure f16_copysign (Ieee16 Ieee16) Ieee16)
+(extern constructor f16_copysign f16_copysign)
+(decl pure partial f32_add (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_add f32_add)
+(decl pure partial f32_sub (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_sub f32_sub)
+(decl pure partial f32_mul (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_mul f32_mul)
+(decl pure partial f32_div (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_div f32_div)
+(decl pure partial f32_sqrt (Ieee32) Ieee32)
+(extern constructor f32_sqrt f32_sqrt)
+(decl pure partial f32_ceil (Ieee32) Ieee32)
+(extern constructor f32_ceil f32_ceil)
+(decl pure partial f32_floor (Ieee32) Ieee32)
+(extern constructor f32_floor f32_floor)
+(decl pure partial f32_trunc (Ieee32) Ieee32)
+(extern constructor f32_trunc f32_trunc)
+(decl pure partial f32_nearest (Ieee32) Ieee32)
+(extern constructor f32_nearest f32_nearest)
+(decl pure partial f32_min (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_min f32_min)
+(decl pure partial f32_max (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_max f32_max)
 (decl pure f32_neg (Ieee32) Ieee32)
 (extern constructor f32_neg f32_neg)
 (decl pure f32_abs (Ieee32) Ieee32)
 (extern constructor f32_abs f32_abs)
 (decl pure f32_copysign (Ieee32 Ieee32) Ieee32)
 (extern constructor f32_copysign f32_copysign)
+(decl pure partial f64_add (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_add f64_add)
+(decl pure partial f64_sub (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_sub f64_sub)
+(decl pure partial f64_mul (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_mul f64_mul)
+(decl pure partial f64_div (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_div f64_div)
+(decl pure partial f64_sqrt (Ieee64) Ieee64)
+(extern constructor f64_sqrt f64_sqrt)
+(decl pure partial f64_ceil (Ieee64) Ieee64)
+(extern constructor f64_ceil f64_ceil)
+(decl pure partial f64_floor (Ieee64) Ieee64)
+(extern constructor f64_floor f64_floor)
+(decl pure partial f64_trunc (Ieee64) Ieee64)
+(extern constructor f64_trunc f64_trunc)
+(decl pure partial f64_nearest (Ieee64) Ieee64)
+(extern constructor f64_nearest f64_nearest)
+(decl pure partial f64_min (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_min f64_min)
+(decl pure partial f64_max (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_max f64_max)
 (decl pure f64_neg (Ieee64) Ieee64)
 (extern constructor f64_neg f64_neg)
 (decl pure f64_abs (Ieee64) Ieee64)
 (extern constructor f64_abs f64_abs)
 (decl pure f64_copysign (Ieee64 Ieee64) Ieee64)
 (extern constructor f64_copysign f64_copysign)
+(decl pure partial f128_min (Ieee128 Ieee128) Ieee128)
+(extern constructor f128_min f128_min)
+(decl pure partial f128_max (Ieee128 Ieee128) Ieee128)
+(extern constructor f128_max f128_max)
+(decl pure f128_neg (Ieee128) Ieee128)
+(extern constructor f128_neg f128_neg)
+(decl pure f128_abs (Ieee128) Ieee128)
+(extern constructor f128_abs f128_abs)
+(decl pure f128_copysign (Ieee128 Ieee128) Ieee128)
+(extern constructor f128_copysign f128_copysign)
+(type Ieee128 (primitive Ieee128))
 
 ;;;; `cranelift_codegen::ir::Type` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -260,11 +216,10 @@
 (extern const $I64 Type)
 (extern const $I128 Type)
 
-(extern const $R32 Type)
-(extern const $R64 Type)
-
+(extern const $F16 Type)
 (extern const $F32 Type)
 (extern const $F64 Type)
+(extern const $F128 Type)
 
 (extern const $I8X8 Type)
 (extern const $I8X16 Type)
@@ -274,6 +229,7 @@
 (extern const $I32X4 Type)
 (extern const $I64X2 Type)
 
+(extern const $F16X8 Type)
 (extern const $F32X4 Type)
 (extern const $F64X2 Type)
 
@@ -297,10 +253,13 @@
 (extern constructor ty_smax ty_smax)
 
 ;; Get the bit width of a given type.
+(spec (ty_bits x) (provide (= result (int2bv 8 x))))
 (decl pure ty_bits (Type) u8)
 (extern constructor ty_bits ty_bits)
 
 ;; Get the bit width of a given type.
+(spec (ty_bits_u16 x)
+      (provide (= result (int2bv 16 x))))
 (decl pure ty_bits_u16 (Type) u16)
 (extern constructor ty_bits_u16 ty_bits_u16)
 
@@ -344,16 +303,20 @@
 (decl pure ty_equal (Type Type) bool)
 (extern constructor ty_equal ty_equal)
 
-(decl pure is_ref_type (Type) bool)
-(rule 1 (is_ref_type $R32) $true)
-(rule 1 (is_ref_type $R64) $true)
-(rule 0 (is_ref_type _) $false)
-
 ;;;; `cranelift_codegen::ir::MemFlags ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; Provide model for the MemFlags type (declared in generated clif_lower.isle).
+(model MemFlags (type (bv 16)))
+
 ;; `MemFlags::trusted`
+(spec (mem_flags_trusted)
+      (provide (= result #x0003)))
 (decl pure mem_flags_trusted () MemFlags)
 (extern constructor mem_flags_trusted mem_flags_trusted)
+
+;; Determine if flags specify little- or native-endian.
+(decl little_or_native_endian (MemFlags) MemFlags)
+(extern extractor little_or_native_endian little_or_native_endian)
 
 ;;;; Helpers for Working with Flags ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -385,41 +348,17 @@
 
 ;;;; Helper Clif Extractors ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(decl eq (Type Value Value) Value)
-(extractor (eq ty x y) (icmp ty (IntCC.Equal) x y))
-
-(decl ne (Type Value Value) Value)
-(extractor (ne ty x y) (icmp ty (IntCC.NotEqual) x y))
-
-(decl ult (Type Value Value) Value)
-(extractor (ult ty x y) (icmp ty (IntCC.UnsignedLessThan) x y))
-
-(decl ule (Type Value Value) Value)
-(extractor (ule ty x y) (icmp ty (IntCC.UnsignedLessThanOrEqual) x y))
-
-(decl ugt (Type Value Value) Value)
-(extractor (ugt ty x y) (icmp ty (IntCC.UnsignedGreaterThan) x y))
-
-(decl uge (Type Value Value) Value)
-(extractor (uge ty x y) (icmp ty (IntCC.UnsignedGreaterThanOrEqual) x y))
-
-(decl slt (Type Value Value) Value)
-(extractor (slt ty x y) (icmp ty (IntCC.SignedLessThan) x y))
-
-(decl sle (Type Value Value) Value)
-(extractor (sle ty x y) (icmp ty (IntCC.SignedLessThanOrEqual) x y))
-
-(decl sgt (Type Value Value) Value)
-(extractor (sgt ty x y) (icmp ty (IntCC.SignedGreaterThan) x y))
-
-(decl sge (Type Value Value) Value)
-(extractor (sge ty x y) (icmp ty (IntCC.SignedGreaterThanOrEqual) x y))
-
 ;; An extractor that only matches types that can fit in 16 bits.
+(spec (fits_in_16 arg)
+      (provide (= result arg))
+      (require (<= arg 16)))
 (decl fits_in_16 (Type) Type)
 (extern extractor fits_in_16 fits_in_16)
 
 ;; An extractor that only matches types that can fit in 32 bits.
+(spec (fits_in_32 arg)
+      (provide (= result arg))
+      (require (<= arg 32)))
 (decl fits_in_32 (Type) Type)
 (extern extractor fits_in_32 fits_in_32)
 
@@ -428,8 +367,15 @@
 (extern extractor lane_fits_in_32 lane_fits_in_32)
 
 ;; An extractor that only matches types that can fit in 64 bits.
+(spec (fits_in_64 arg)
+      (provide (= result arg))
+      (require (<= arg 64)))
 (decl fits_in_64 (Type) Type)
 (extern extractor fits_in_64 fits_in_64)
+
+;; An extractor that only matches types that fit in exactly 16 bits.
+(decl ty_16 (Type) Type)
+(extern extractor ty_16 ty_16)
 
 ;; An extractor that only matches types that fit in exactly 32 bits.
 (decl ty_32 (Type) Type)
@@ -439,13 +385,23 @@
 (decl ty_64 (Type) Type)
 (extern extractor ty_64 ty_64)
 
+;; An extractor that only matches types that fit in exactly 128 bits.
+(decl ty_128 (Type) Type)
+(extern extractor ty_128 ty_128)
+
 ;; A pure constructor/extractor that only matches scalar integers, and
 ;; references that can fit in 64 bits.
+(spec (ty_int_ref_scalar_64 arg)
+    (provide (= result arg))
+    (require (<= arg 64)))
 (decl pure partial ty_int_ref_scalar_64 (Type) Type)
 (extern constructor ty_int_ref_scalar_64 ty_int_ref_scalar_64)
 (extern extractor ty_int_ref_scalar_64 ty_int_ref_scalar_64_extract)
 
 ;; An extractor that matches 32- and 64-bit types only.
+(spec (ty_32_or_64 arg)
+      (provide (= result arg))
+      (require (or (= arg 32) (= arg 64))))
 (decl ty_32_or_64 (Type) Type)
 (extern extractor ty_32_or_64 ty_32_or_64)
 
@@ -461,7 +417,7 @@
 (decl int_fits_in_32 (Type) Type)
 (extern extractor int_fits_in_32 int_fits_in_32)
 
-;; An extractor that matches I64 or R64.
+;; An extractor that matches I64.
 (decl ty_int_ref_64 (Type) Type)
 (extern extractor ty_int_ref_64 ty_int_ref_64)
 
@@ -470,6 +426,7 @@
 (extern extractor ty_int_ref_16_to_64 ty_int_ref_16_to_64)
 
 ;; An extractor that only matches integers.
+(spec (ty_int a) (provide (= result a)))
 (decl ty_int (Type) Type)
 (extern extractor ty_int ty_int)
 
@@ -477,7 +434,7 @@
 (decl ty_scalar (Type) Type)
 (extern extractor ty_scalar ty_scalar)
 
-;; An extractor that only matches scalar floating-point types--F32 or F64.
+;; An extractor that only matches scalar floating-point types.
 (decl ty_scalar_float (Type) Type)
 (extern extractor ty_scalar_float ty_scalar_float)
 
@@ -544,6 +501,7 @@
 (extern extractor infallible u64_from_bool u64_from_bool)
 
 ;; Extract a `u64` from an `Imm64`.
+(spec (u64_from_imm64 arg) (provide (= arg result)))
 (decl u64_from_imm64 (u64) Imm64)
 (extern extractor infallible u64_from_imm64 u64_from_imm64)
 
@@ -563,7 +521,11 @@
 (decl pure imm64_masked (Type u64) Imm64)
 (extern constructor imm64_masked imm64_masked)
 
-;; Extract a `u64` from an `Ieee32`.
+;; Extract a `u16` from an `Ieee16`.
+(decl u16_from_ieee16 (u16) Ieee16)
+(extern extractor infallible u16_from_ieee16 u16_from_ieee16)
+
+;; Extract a `u32` from an `Ieee32`.
 (decl u32_from_ieee32 (u32) Ieee32)
 (extern extractor infallible u32_from_ieee32 u32_from_ieee32)
 
@@ -592,10 +554,12 @@
 (extern extractor ty_dyn128_int ty_dyn128_int)
 
 ;; Convert an `Offset32` to a primitive number.
+(spec (offset32_to_i32 offset) (provide (= result offset)))
 (decl pure offset32_to_i32 (Offset32) i32)
 (extern constructor offset32_to_i32 offset32_to_i32)
 
 ;; Convert a number to an `Offset32`
+(spec (i32_to_offset32 x) (provide (= result x)))
 (decl pure i32_to_offset32 (i32) Offset32)
 (extern constructor i32_to_offset32 i32_to_offset32)
 
@@ -606,6 +570,9 @@
 (extern constructor intcc_unsigned intcc_unsigned)
 
 ;; Pure constructor that only matches signed integer cond codes.
+(spec (signed_cond_code c)
+    (provide (= result c))
+    (require (and (bvuge c #x02) (bvule c #x05))))
 (decl pure partial signed_cond_code (IntCC) IntCC)
 (extern constructor signed_cond_code signed_cond_code)
 
@@ -620,35 +587,33 @@
 (decl pure trap_code_bad_conversion_to_integer () TrapCode)
 (extern constructor trap_code_bad_conversion_to_integer trap_code_bad_conversion_to_integer)
 
-;;;; Helpers for tail recursion loops ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; A range of integers to loop through.
-(type Range (primitive Range))
-
-;; Create a new range from `start` through `end` (exclusive).
-(decl pure range (usize usize) Range)
-(extern constructor range range)
-
-;; A view on the current state of the range.
-(type RangeView extern
-      (enum
-        (Empty)
-        (NonEmpty (index usize) (rest Range))))
-
-;; View the current state of the range.
-(decl range_view (RangeView) Range)
-(extern extractor infallible range_view range_view)
-
-;; Extractor to test whether a range is empty.
-(decl range_empty () Range)
-(extractor (range_empty) (range_view (RangeView.Empty)))
-
-;; Extractor to return the first value in the range, and a sub-range
-;; containing the remaining values.
-(decl range_unwrap (usize Range) Range)
-(extractor (range_unwrap index rest) (range_view (RangeView.NonEmpty index rest)))
-
 ;;;; Automatic conversions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (convert Offset32 i32 offset32_to_i32)
 (convert i32 Offset32 i32_to_offset32)
+
+;;;; Common Term Signatures ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(form
+  bv_unary_8_to_64
+  ((args (bv  8)) (ret (bv  8)) (canon (bv  8)))
+  ((args (bv 16)) (ret (bv 16)) (canon (bv 16)))
+  ((args (bv 32)) (ret (bv 32)) (canon (bv 32)))
+  ((args (bv 64)) (ret (bv 64)) (canon (bv 64)))
+)
+
+(form
+  bv_binary_8_to_64
+  ((args (bv  8) (bv  8)) (ret (bv  8)) (canon (bv  8)))
+  ((args (bv 16) (bv 16)) (ret (bv 16)) (canon (bv 16)))
+  ((args (bv 32) (bv 32)) (ret (bv 32)) (canon (bv 32)))
+  ((args (bv 64) (bv 64)) (ret (bv 64)) (canon (bv 64)))
+)
+
+(form
+  bv_ternary_8_to_64
+  ((args (bv  8) (bv  8) (bv  8)) (ret (bv  8)) (canon (bv  8)))
+  ((args (bv 16) (bv 16) (bv 16)) (ret (bv 16)) (canon (bv 16)))
+  ((args (bv 32) (bv 32) (bv 32)) (ret (bv 32)) (canon (bv 32)))
+  ((args (bv 64) (bv 64) (bv 64)) (ret (bv 64)) (canon (bv 64)))
+)

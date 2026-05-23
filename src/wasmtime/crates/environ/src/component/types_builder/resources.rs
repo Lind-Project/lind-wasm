@@ -68,12 +68,13 @@
 //! methods below.
 
 use crate::component::{
-    ComponentTypes, ResourceIndex, RuntimeComponentInstanceIndex, TypeResourceTable,
-    TypeResourceTableIndex,
+    AbstractResourceIndex, ComponentTypes, ResourceIndex, RuntimeComponentInstanceIndex,
+    TypeResourceTable, TypeResourceTableIndex,
 };
 use crate::prelude::*;
 use std::collections::HashMap;
-use wasmparser::types;
+use wasmparser::component_types::{ComponentAnyTypeId, ComponentEntityType, ResourceId};
+use wasmparser::types::TypesRef;
 
 /// Builder state used to translate wasmparser's `ResourceId` types to
 /// Wasmtime's `TypeResourceTableIndex` type.
@@ -111,7 +112,7 @@ pub struct ResourcesBuilder {
     /// A cache of previously visited `ResourceId` items and which table they
     /// correspond to. This is lazily populated as resources are visited and is
     /// exclusively used by the `convert` function below.
-    resource_id_to_table_index: HashMap<types::ResourceId, TypeResourceTableIndex>,
+    resource_id_to_table_index: HashMap<ResourceId, TypeResourceTableIndex>,
 
     /// A cache of the origin resource type behind a `ResourceId`.
     ///
@@ -121,11 +122,25 @@ pub struct ResourcesBuilder {
     /// phase. This is used to record the actual underlying type of a resource
     /// and where it originally comes from. When a resource is later referred to
     /// then a table is injected to be referred to.
-    resource_id_to_resource_index: HashMap<types::ResourceId, ResourceIndex>,
+    resource_id_to_resource_index: HashMap<ResourceId, ResourceIndexKind>,
 
     /// The current instance index that's being visited. This is updated as
     /// inliner frames are processed and components are instantiated.
     current_instance: Option<RuntimeComponentInstanceIndex>,
+}
+
+/// Resources are considered either "concrete" or "abstract" depending on where
+/// the resource type is defined.
+///
+/// Resources defined in a component, or imported into a component, are
+/// considered "concrete" and may actually be instantiated/have a value at
+/// runtime. Resources defined in instance types or component types are
+/// considered "abstract" meaning that they won't ever actually exist at runtime
+/// so only an integer identifier is tracked for them.
+#[derive(Clone, Copy, Debug)]
+enum ResourceIndexKind {
+    Concrete(ResourceIndex),
+    Abstract(AbstractResourceIndex),
 }
 
 impl ResourcesBuilder {
@@ -144,16 +159,21 @@ impl ResourcesBuilder {
     /// any component it's assigned a new table, which is exactly what we want.
     pub fn convert(
         &mut self,
-        id: types::ResourceId,
+        id: ResourceId,
         types: &mut ComponentTypes,
     ) -> TypeResourceTableIndex {
         *self
             .resource_id_to_table_index
             .entry(id)
             .or_insert_with(|| {
-                let ty = self.resource_id_to_resource_index[&id];
-                let instance = self.current_instance.expect("current instance not set");
-                types.push_resource_table(TypeResourceTable { ty, instance })
+                let table_ty = match self.resource_id_to_resource_index[&id] {
+                    ResourceIndexKind::Concrete(ty) => {
+                        let instance = self.current_instance.expect("current instance not set");
+                        TypeResourceTable::Concrete { ty, instance }
+                    }
+                    ResourceIndexKind::Abstract(i) => TypeResourceTable::Abstract(i),
+                };
+                types.push_resource_table(table_ty)
             })
     }
 
@@ -174,10 +194,36 @@ impl ResourcesBuilder {
     /// resource type is expected.
     pub fn register_component_entity_type<'a>(
         &mut self,
-        types: &'a types::TypesRef<'_>,
-        ty: types::ComponentEntityType,
+        types: &'a TypesRef<'_>,
+        ty: ComponentEntityType,
         path: &mut Vec<&'a str>,
         register: &mut dyn FnMut(&[&'a str]) -> ResourceIndex,
+    ) {
+        self.register_component_entity_type_(types, ty, path, &mut |path| {
+            ResourceIndexKind::Concrete(register(path))
+        })
+    }
+
+    /// Same as [`Self::register_component_entity_type`], but for when an
+    /// [`AbstractResourceIndex`] is created for all resources.
+    pub fn register_abstract_component_entity_type<'a>(
+        &mut self,
+        types: &'a TypesRef<'_>,
+        ty: ComponentEntityType,
+        path: &mut Vec<&'a str>,
+        register: &mut dyn FnMut(&[&'a str]) -> AbstractResourceIndex,
+    ) {
+        self.register_component_entity_type_(types, ty, path, &mut |path| {
+            ResourceIndexKind::Abstract(register(path))
+        })
+    }
+
+    fn register_component_entity_type_<'a>(
+        &mut self,
+        types: &'a TypesRef<'_>,
+        ty: ComponentEntityType,
+        path: &mut Vec<&'a str>,
+        register: &mut dyn FnMut(&[&'a str]) -> ResourceIndexKind,
     ) {
         match ty {
             // If `ty` is itself a type, and that's a resource type, then this
@@ -185,8 +231,8 @@ impl ResourcesBuilder {
             // with the current path and that's inserted in to
             // `resource_id_to_resource_index` if the resource hasn't been seen
             // yet.
-            types::ComponentEntityType::Type {
-                created: types::ComponentAnyTypeId::Resource(id),
+            ComponentEntityType::Type {
+                created: ComponentAnyTypeId::Resource(id),
                 ..
             } => {
                 self.resource_id_to_resource_index
@@ -197,31 +243,32 @@ impl ResourcesBuilder {
             // Resources can be imported/defined through exports of instances so
             // all instance exports are walked here. Note the management of
             // `path` which is used for the recursive invocation of this method.
-            types::ComponentEntityType::Instance(id) => {
+            ComponentEntityType::Instance(id) => {
                 let ty = &types[id];
                 for (name, ty) in ty.exports.iter() {
                     path.push(name);
-                    self.register_component_entity_type(types, *ty, path, register);
+                    self.register_component_entity_type_(types, *ty, path, register);
                     path.pop();
                 }
             }
 
             // None of these items can introduce a new component type, so
             // there's no need to recurse over these.
-            types::ComponentEntityType::Func(_)
-            | types::ComponentEntityType::Type { .. }
-            | types::ComponentEntityType::Module(_)
-            | types::ComponentEntityType::Component(_)
-            | types::ComponentEntityType::Value(_) => {}
+            ComponentEntityType::Func(_)
+            | ComponentEntityType::Type { .. }
+            | ComponentEntityType::Module(_)
+            | ComponentEntityType::Component(_)
+            | ComponentEntityType::Value(_) => {}
         }
     }
-
     /// Declares that the wasmparser `id`, which must point to a resource, is
     /// defined by the `ty` provided.
     ///
     /// This is used when a local resource is defined within a component for example.
-    pub fn register_resource(&mut self, id: types::ResourceId, ty: ResourceIndex) {
-        let prev = self.resource_id_to_resource_index.insert(id, ty);
+    pub fn register_resource(&mut self, id: ResourceId, ty: ResourceIndex) {
+        let prev = self
+            .resource_id_to_resource_index
+            .insert(id, ResourceIndexKind::Concrete(ty));
         assert!(prev.is_none());
     }
 
@@ -229,5 +276,10 @@ impl ResourcesBuilder {
     /// `TypeResourceTableIndex` values produced via `convert`.
     pub fn set_current_instance(&mut self, instance: RuntimeComponentInstanceIndex) {
         self.current_instance = Some(instance);
+    }
+
+    /// Retrieves the `current_instance` field.
+    pub fn get_current_instance(&self) -> Option<RuntimeComponentInstanceIndex> {
+        self.current_instance
     }
 }

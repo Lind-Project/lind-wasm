@@ -9,14 +9,18 @@
 //! throughout the `wasmtime` crate with extra functionality that's only
 //! available on Unix.
 
+#[cfg(has_native_signals)]
+use crate::AsContextMut;
+use crate::Store;
+#[cfg(has_native_signals)]
 use crate::prelude::*;
-use crate::{AsContextMut, Store};
 
 /// Extensions for the [`Store`] type only available on Unix.
 pub trait StoreExt {
     // TODO: needs more docs?
     /// The signal handler must be
     /// [async-signal-safe](http://man7.org/linux/man-pages/man7/signal-safety.7.html).
+    #[cfg(has_native_signals)]
     unsafe fn set_signal_handler<H>(&mut self, handler: H)
     where
         H: 'static
@@ -26,6 +30,7 @@ pub trait StoreExt {
 }
 
 impl<T> StoreExt for Store<T> {
+    #[cfg(has_native_signals)]
     unsafe fn set_signal_handler<H>(&mut self, handler: H)
     where
         H: 'static

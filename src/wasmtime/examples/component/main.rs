@@ -2,8 +2,8 @@ use anyhow::Context;
 use std::{fs, path::Path};
 
 use wasmtime::{
-    component::{bindgen, Component, Linker},
     Config, Engine, Result, Store,
+    component::{Component, Linker, bindgen},
 };
 
 // Generate bindings of the guest and host components.

@@ -1,7 +1,7 @@
 use crate::bindings::sockets::tcp::ErrorCode;
 use crate::host::network;
 use crate::network::SocketAddressFamily;
-use crate::runtime::{with_ambient_tokio_runtime, AbortOnDropJoinHandle};
+use crate::runtime::{AbortOnDropJoinHandle, with_ambient_tokio_runtime};
 use crate::{
     HostInputStream, HostOutputStream, InputStream, OutputStream, SocketResult, StreamError,
     Subscribe,
@@ -9,8 +9,8 @@ use crate::{
 use anyhow::{Error, Result};
 use cap_net_ext::AddressFamily;
 use futures::Future;
-use io_lifetimes::views::SocketlikeView;
 use io_lifetimes::AsSocketlike;
+use io_lifetimes::views::SocketlikeView;
 use rustix::io::Errno;
 use rustix::net::sockopt;
 use std::io;
@@ -232,7 +232,7 @@ impl TcpSocket {
             TcpState::Default(..) => {}
 
             TcpState::Connecting(..) | TcpState::ConnectReady(..) => {
-                return Err(ErrorCode::ConcurrencyConflict.into())
+                return Err(ErrorCode::ConcurrencyConflict.into());
             }
 
             _ => return Err(ErrorCode::InvalidState.into()),
@@ -449,7 +449,7 @@ impl TcpSocket {
         let view = match self.tcp_state {
             TcpState::Connected(..) => self.as_std_view()?,
             TcpState::Connecting(..) | TcpState::ConnectReady(..) => {
-                return Err(ErrorCode::ConcurrencyConflict.into())
+                return Err(ErrorCode::ConcurrencyConflict.into());
             }
             _ => return Err(ErrorCode::InvalidState.into()),
         };
@@ -623,7 +623,7 @@ impl TcpSocket {
                 return Err(io::Error::new(
                     io::ErrorKind::NotConnected,
                     "socket not connected",
-                ))
+                ));
             }
         };
 

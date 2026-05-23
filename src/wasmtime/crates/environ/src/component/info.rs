@@ -48,9 +48,9 @@
 
 use crate::component::*;
 use crate::prelude::*;
-use crate::{EntityIndex, PrimaryMap, WasmValType};
+use crate::{EntityIndex, ModuleInternedTypeIndex, PrimaryMap, WasmValType};
+use cranelift_entity::packed_option::PackedOption;
 use serde_derive::{Deserialize, Serialize};
-use wasmtime_types::ModuleInternedTypeIndex;
 
 /// Metadata as a result of compiling a component.
 pub struct ComponentTranslation {
@@ -142,6 +142,10 @@ pub struct Component {
     /// stored in two different locations).
     pub num_runtime_memories: u32,
 
+    /// The number of runtime tables (maximum `RuntimeTableIndex`) needed to
+    /// instantiate this component. See notes on `num_runtime_memories`.
+    pub num_runtime_tables: u32,
+
     /// The number of runtime reallocs (maximum `RuntimeReallocIndex`) needed to
     /// instantiate this component.
     ///
@@ -149,23 +153,39 @@ pub struct Component {
     /// `VMComponentContext`.
     pub num_runtime_reallocs: u32,
 
+    /// The number of runtime async callbacks (maximum `RuntimeCallbackIndex`)
+    /// needed to instantiate this component.
+    pub num_runtime_callbacks: u32,
+
     /// Same as `num_runtime_reallocs`, but for post-return functions.
     pub num_runtime_post_returns: u32,
 
     /// WebAssembly type signature of all trampolines.
     pub trampolines: PrimaryMap<TrampolineIndex, ModuleInternedTypeIndex>,
 
+    /// A map from a `UnsafeIntrinsic::index()` to that intrinsic's
+    /// module-interned type.
+    pub unsafe_intrinsics: [PackedOption<ModuleInternedTypeIndex>; UnsafeIntrinsic::len() as usize],
+
     /// The number of lowered host functions (maximum `LoweredIndex`) needed to
     /// instantiate this component.
     pub num_lowerings: u32,
 
-    /// Maximal number of tables that required at runtime for resource-related
-    /// information in this component.
-    pub num_resource_tables: usize,
-
     /// Total number of resources both imported and defined within this
     /// component.
     pub num_resources: u32,
+
+    /// Maximal number of tables required at runtime for future-related
+    /// information in this component.
+    pub num_future_tables: usize,
+
+    /// Maximal number of tables required at runtime for stream-related
+    /// information in this component.
+    pub num_stream_tables: usize,
+
+    /// Maximal number of tables required at runtime for error-context-related
+    /// information in this component.
+    pub num_error_context_tables: usize,
 
     /// Metadata about imported resources and where they are within the runtime
     /// imports array.
@@ -179,6 +199,10 @@ pub struct Component {
     /// This is used to determine which set of instance flags are inspected when
     /// testing reentrance.
     pub defined_resource_instances: PrimaryMap<DefinedResourceIndex, RuntimeComponentInstanceIndex>,
+
+    /// All canonical options used by this component. Stored as a table here
+    /// from index-to-options so the options can be consulted at runtime.
+    pub options: PrimaryMap<OptionsIndex, CanonicalOptions>,
 }
 
 impl Component {
@@ -200,10 +224,11 @@ impl Component {
     }
 }
 
-/// GlobalInitializer instructions to get processed when instantiating a component
+/// GlobalInitializer instructions to get processed when instantiating a
+/// component.
 ///
-/// The variants of this enum are processed during the instantiation phase of
-/// a component in-order from front-to-back. These are otherwise emitted as a
+/// The variants of this enum are processed during the instantiation phase of a
+/// component in-order from front-to-back. These are otherwise emitted as a
 /// component is parsed and read and translated.
 //
 // FIXME(#2639) if processing this list is ever a bottleneck we could
@@ -218,7 +243,10 @@ pub enum GlobalInitializer {
     /// involve running the `start` function of the instance as well if it's
     /// specified. This largely delegates to the same standard instantiation
     /// process as the rest of the core wasm machinery already uses.
-    InstantiateModule(InstantiateModule),
+    ///
+    /// The second field represents the component instance to which the module
+    /// belongs, if applicable.  This will be `None` for adapter modules.
+    InstantiateModule(InstantiateModule, Option<RuntimeComponentInstanceIndex>),
 
     /// A host function is being lowered, creating a core wasm function.
     ///
@@ -242,11 +270,10 @@ pub enum GlobalInitializer {
     /// A core wasm linear memory is going to be saved into the
     /// `VMComponentContext`.
     ///
-    /// This instruction indicates that the `index`th core wasm linear memory
-    /// needs to be extracted from the `export` specified, a pointer to a
-    /// previously created module instance, and stored into the
-    /// `VMComponentContext` at the `index` specified. This lowering is then
-    /// used in the future by pointers from `CanonicalOptions`.
+    /// This instruction indicates that a core wasm linear memory needs to be
+    /// extracted from the `export` and stored into the `VMComponentContext` at
+    /// the `index` specified. This lowering is then used in the future by
+    /// pointers from `CanonicalOptions`.
     ExtractMemory(ExtractMemory),
 
     /// Same as `ExtractMemory`, except it's extracting a function pointer to be
@@ -254,8 +281,21 @@ pub enum GlobalInitializer {
     ExtractRealloc(ExtractRealloc),
 
     /// Same as `ExtractMemory`, except it's extracting a function pointer to be
+    /// used as an async `callback` function.
+    ExtractCallback(ExtractCallback),
+
+    /// Same as `ExtractMemory`, except it's extracting a function pointer to be
     /// used as a `post-return` function.
     ExtractPostReturn(ExtractPostReturn),
+
+    /// A core wasm table is going to be saved into the `VMComponentContext`.
+    ///
+    /// This instruction indicates that s core wasm table needs to be extracted
+    /// from its `export` and stored into the `VMComponentContext` at the
+    /// `index` specified. During this extraction, we will also capture the
+    /// table's containing instance pointer to access the table at runtime. This
+    /// extraction is useful for `thread.spawn-indirect`.
+    ExtractTable(ExtractTable),
 
     /// Declares a new defined resource within this component.
     ///
@@ -263,8 +303,9 @@ pub enum GlobalInitializer {
     Resource(Resource),
 }
 
-/// Metadata for extraction of a memory of what's being extracted and where it's
-/// going.
+/// Metadata for extraction of a memory; contains what's being extracted (the
+/// memory at `export`) and where it's going (the `index` within a
+/// `VMComponentContext`).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExtractMemory {
     /// The index of the memory being defined.
@@ -282,6 +323,15 @@ pub struct ExtractRealloc {
     pub def: CoreDef,
 }
 
+/// Same as `ExtractMemory` but for the `callback` canonical option.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtractCallback {
+    /// The index of the callback being defined.
+    pub index: RuntimeCallbackIndex,
+    /// Where this callback is being extracted from.
+    pub def: CoreDef,
+}
+
 /// Same as `ExtractMemory` but for the `post-return` canonical option.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExtractPostReturn {
@@ -289,6 +339,15 @@ pub struct ExtractPostReturn {
     pub index: RuntimePostReturnIndex,
     /// Where this post-return is being extracted from.
     pub def: CoreDef,
+}
+
+/// Metadata for extraction of a table.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtractTable {
+    /// The index of the table being defined in a `VMComponentContext`.
+    pub index: RuntimeTableIndex,
+    /// Where this table is being extracted from.
+    pub export: CoreExport<TableIndex>,
 }
 
 /// Different methods of instantiating a core wasm module.
@@ -331,6 +390,12 @@ pub enum CoreDef {
     /// This is a reference to a Cranelift-generated trampoline which is
     /// described in the `trampolines` array.
     Trampoline(TrampolineIndex),
+    /// An intrinsic for compile-time builtins.
+    UnsafeIntrinsic(UnsafeIntrinsic),
+    /// Reference to a wasm global which represents a runtime-managed boolean
+    /// indicating whether the currently-running task may perform a blocking
+    /// operation.
+    TaskMayBlock,
 }
 
 impl<T> From<CoreExport<T>> for CoreDef
@@ -404,7 +469,7 @@ pub enum Export {
         /// Which core WebAssembly export is being lifted.
         func: CoreDef,
         /// Any options, if present, associated with this lifting.
-        options: CanonicalOptions,
+        options: OptionsIndex,
     },
     /// A module defined within this component is exported.
     ModuleStatic {
@@ -433,6 +498,25 @@ pub enum Export {
     Type(TypeDef),
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// Data is stored in a linear memory.
+pub struct LinearMemoryOptions {
+    /// The memory used by these options, if specified.
+    pub memory: Option<RuntimeMemoryIndex>,
+    /// The realloc function used by these options, if specified.
+    pub realloc: Option<RuntimeReallocIndex>,
+}
+
+/// The data model for objects that are not unboxed in locals.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum CanonicalOptionsDataModel {
+    /// Data is stored in GC objects.
+    Gc {},
+
+    /// Data is stored in a linear memory.
+    LinearMemory(LinearMemoryOptions),
+}
+
 /// Canonical ABI options associated with a lifted or lowered function.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanonicalOptions {
@@ -442,35 +526,67 @@ pub struct CanonicalOptions {
     /// The encoding used for strings.
     pub string_encoding: StringEncoding,
 
-    /// The memory used by these options, if specified.
-    pub memory: Option<RuntimeMemoryIndex>,
-
-    /// The realloc function used by these options, if specified.
-    pub realloc: Option<RuntimeReallocIndex>,
+    /// The async callback function used by these options, if specified.
+    pub callback: Option<RuntimeCallbackIndex>,
 
     /// The post-return function used by these options, if specified.
     pub post_return: Option<RuntimePostReturnIndex>,
+
+    /// Whether to use the async ABI for lifting or lowering.
+    pub async_: bool,
+
+    /// Whether or not this function can consume a task cancellation
+    /// notification.
+    pub cancellable: bool,
+
+    /// The core function type that is being lifted from / lowered to.
+    pub core_type: ModuleInternedTypeIndex,
+
+    /// The data model (GC objects or linear memory) used with these canonical
+    /// options.
+    pub data_model: CanonicalOptionsDataModel,
+}
+
+impl CanonicalOptions {
+    /// Returns the memory referred to by these options, if any.
+    pub fn memory(&self) -> Option<RuntimeMemoryIndex> {
+        match self.data_model {
+            CanonicalOptionsDataModel::Gc {} => None,
+            CanonicalOptionsDataModel::LinearMemory(opts) => opts.memory,
+        }
+    }
 }
 
 /// Possible encodings of strings within the component model.
-//
-// Note that the `repr(u8)` is load-bearing here since this is used in an
-// `extern "C" fn()` function argument which is called from cranelift-compiled
-// code so we must know the representation of this.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[allow(missing_docs)]
-#[repr(u8)]
+#[expect(missing_docs, reason = "self-describing variants")]
 pub enum StringEncoding {
     Utf8,
     Utf16,
     CompactUtf16,
 }
 
+impl StringEncoding {
+    /// Decodes the `u8` provided back into a `StringEncoding`, if it's valid.
+    pub fn from_u8(val: u8) -> Option<StringEncoding> {
+        if val == StringEncoding::Utf8 as u8 {
+            return Some(StringEncoding::Utf8);
+        }
+        if val == StringEncoding::Utf16 as u8 {
+            return Some(StringEncoding::Utf16);
+        }
+        if val == StringEncoding::CompactUtf16 as u8 {
+            return Some(StringEncoding::CompactUtf16);
+        }
+        None
+    }
+}
+
 /// Possible transcoding operations that must be provided by the host.
 ///
 /// Note that each transcoding operation may have a unique signature depending
 /// on the precise operation.
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing variants")]
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum Transcode {
     Copy(FixedEncoding),
@@ -526,7 +642,7 @@ impl Transcode {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing variants")]
 pub enum FixedEncoding {
     Utf8,
     Utf16,
@@ -542,6 +658,15 @@ impl FixedEncoding {
             FixedEncoding::Utf8 => 1,
             FixedEncoding::Utf16 => 2,
             FixedEncoding::Latin1 => 1,
+        }
+    }
+
+    /// Returns the alignment of strings using this encoding.
+    pub fn align(&self) -> u8 {
+        match self {
+            FixedEncoding::Utf8 => 1,
+            FixedEncoding::Utf16 => 2,
+            FixedEncoding::Latin1 => 2,
         }
     }
 }
@@ -575,6 +700,7 @@ pub struct Resource {
 ///
 /// Note that this type does not implement `Serialize` or `Deserialize` and
 /// that's intentional as this isn't stored in the final compilation artifact.
+#[derive(Debug)]
 pub enum Trampoline {
     /// Description of a lowered import used in conjunction with
     /// `GlobalInitializer::LowerImport`.
@@ -588,7 +714,7 @@ pub enum Trampoline {
 
         /// The canonical ABI options used when lowering this function specified
         /// in the original component.
-        options: CanonicalOptions,
+        options: OptionsIndex,
     },
 
     /// Information about a string transcoding function required by an adapter
@@ -620,19 +746,304 @@ pub enum Trampoline {
         to64: bool,
     },
 
-    /// A small adapter which simply traps, used for degenerate lift/lower
-    /// combinations.
-    AlwaysTrap,
-
     /// A `resource.new` intrinsic which will inject a new resource into the
     /// table specified.
-    ResourceNew(TypeResourceTableIndex),
+    ResourceNew {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The type of the resource.
+        ty: TypeResourceTableIndex,
+    },
 
     /// Same as `ResourceNew`, but for the `resource.rep` intrinsic.
-    ResourceRep(TypeResourceTableIndex),
+    ResourceRep {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The type of the resource.
+        ty: TypeResourceTableIndex,
+    },
 
     /// Same as `ResourceNew`, but for the `resource.drop` intrinsic.
-    ResourceDrop(TypeResourceTableIndex),
+    ResourceDrop {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The type of the resource.
+        ty: TypeResourceTableIndex,
+    },
+
+    /// A `backpressure.inc` intrinsic.
+    BackpressureInc {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// A `backpressure.dec` intrinsic.
+    BackpressureDec {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// A `task.return` intrinsic, which returns a result to the caller of a
+    /// lifted export function.  This allows the callee to continue executing
+    /// after returning a result.
+    TaskReturn {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// Tuple representing the result types this intrinsic accepts.
+        results: TypeTupleIndex,
+        /// The canonical ABI options specified for this intrinsic.
+        options: OptionsIndex,
+    },
+
+    /// A `task.cancel` intrinsic, which acknowledges a `CANCELLED` event
+    /// delivered to a guest task previously created by a call to an async
+    /// export.
+    TaskCancel {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// A `waitable-set.new` intrinsic.
+    WaitableSetNew {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// A `waitable-set.wait` intrinsic, which waits for at least one
+    /// outstanding async task/stream/future to make progress, returning the
+    /// first such event.
+    WaitableSetWait {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// Configuration options for this intrinsic call.
+        options: OptionsIndex,
+    },
+
+    /// A `waitable-set.poll` intrinsic, which checks whether any outstanding
+    /// async task/stream/future has made progress.  Unlike `task.wait`, this
+    /// does not block and may return nothing if no such event has occurred.
+    WaitableSetPoll {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// Configuration options for this intrinsic call.
+        options: OptionsIndex,
+    },
+
+    /// A `waitable-set.drop` intrinsic.
+    WaitableSetDrop {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// A `waitable.join` intrinsic.
+    WaitableJoin {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// A `thread.yield` intrinsic, which yields control to the host so that other
+    /// tasks are able to make progress, if any.
+    ThreadYield {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// If `true`, indicates the caller instance may receive notification
+        /// of task cancellation.
+        cancellable: bool,
+    },
+
+    /// A `subtask.drop` intrinsic to drop a specified task which has completed.
+    SubtaskDrop {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// A `subtask.cancel` intrinsic to drop an in-progress task.
+    SubtaskCancel {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// If `false`, block until cancellation completes rather than return
+        /// `BLOCKED`.
+        async_: bool,
+    },
+
+    /// A `stream.new` intrinsic to create a new `stream` handle of the
+    /// specified type.
+    StreamNew {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+    },
+
+    /// A `stream.read` intrinsic to read from a `stream` of the specified type.
+    StreamRead {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+        /// Any options (e.g. string encoding) to use when storing values to
+        /// memory.
+        options: OptionsIndex,
+    },
+
+    /// A `stream.write` intrinsic to write to a `stream` of the specified type.
+    StreamWrite {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+        /// Any options (e.g. string encoding) to use when storing values to
+        /// memory.
+        options: OptionsIndex,
+    },
+
+    /// A `stream.cancel-read` intrinsic to cancel an in-progress read from a
+    /// `stream` of the specified type.
+    StreamCancelRead {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+        /// If `false`, block until cancellation completes rather than return
+        /// `BLOCKED`.
+        async_: bool,
+    },
+
+    /// A `stream.cancel-write` intrinsic to cancel an in-progress write from a
+    /// `stream` of the specified type.
+    StreamCancelWrite {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+        /// If `false`, block until cancellation completes rather than return
+        /// `BLOCKED`.
+        async_: bool,
+    },
+
+    /// A `stream.drop-readable` intrinsic to drop the readable end of a
+    /// `stream` of the specified type.
+    StreamDropReadable {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+    },
+
+    /// A `stream.drop-writable` intrinsic to drop the writable end of a
+    /// `stream` of the specified type.
+    StreamDropWritable {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+    },
+
+    /// A `future.new` intrinsic to create a new `future` handle of the
+    /// specified type.
+    FutureNew {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+    },
+
+    /// A `future.read` intrinsic to read from a `future` of the specified type.
+    FutureRead {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+        /// Any options (e.g. string encoding) to use when storing values to
+        /// memory.
+        options: OptionsIndex,
+    },
+
+    /// A `future.write` intrinsic to write to a `future` of the specified type.
+    FutureWrite {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+        /// Any options (e.g. string encoding) to use when storing values to
+        /// memory.
+        options: OptionsIndex,
+    },
+
+    /// A `future.cancel-read` intrinsic to cancel an in-progress read from a
+    /// `future` of the specified type.
+    FutureCancelRead {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+        /// If `false`, block until cancellation completes rather than return
+        /// `BLOCKED`.
+        async_: bool,
+    },
+
+    /// A `future.cancel-write` intrinsic to cancel an in-progress write from a
+    /// `future` of the specified type.
+    FutureCancelWrite {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+        /// If `false`, block until cancellation completes rather than return
+        /// `BLOCKED`.
+        async_: bool,
+    },
+
+    /// A `future.drop-readable` intrinsic to drop the readable end of a
+    /// `future` of the specified type.
+    FutureDropReadable {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+    },
+
+    /// A `future.drop-writable` intrinsic to drop the writable end of a
+    /// `future` of the specified type.
+    FutureDropWritable {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+    },
+
+    /// A `error-context.new` intrinsic to create a new `error-context` with a
+    /// specified debug message.
+    ErrorContextNew {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the `error-context` type in the caller instance.
+        ty: TypeComponentLocalErrorContextTableIndex,
+        /// String encoding, memory, etc. to use when loading debug message.
+        options: OptionsIndex,
+    },
+
+    /// A `error-context.debug-message` intrinsic to get the debug message for a
+    /// specified `error-context`.
+    ///
+    /// Note that the debug message might not necessarily match what was passed
+    /// to `error.new`.
+    ErrorContextDebugMessage {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the `error-context` type in the caller instance.
+        ty: TypeComponentLocalErrorContextTableIndex,
+        /// String encoding, memory, etc. to use when storing debug message.
+        options: OptionsIndex,
+    },
+
+    /// A `error-context.drop` intrinsic to drop a specified `error-context`.
+    ErrorContextDrop {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the `error-context` type in the caller instance.
+        ty: TypeComponentLocalErrorContextTableIndex,
+    },
 
     /// An intrinsic used by FACT-generated modules which will transfer an owned
     /// resource from one table to another. Used in component-to-component
@@ -642,15 +1053,147 @@ pub enum Trampoline {
     /// Same as `ResourceTransferOwn` but for borrows.
     ResourceTransferBorrow,
 
-    /// An intrinsic used by FACT-generated modules which indicates that a call
-    /// is being entered and resource-related metadata needs to be configured.
-    ///
-    /// Note that this is currently only invoked when borrowed resources are
-    /// detected, otherwise this is "optimized out".
-    ResourceEnterCall,
+    /// An intrinsic used by FACT-generated modules to prepare a call involving
+    /// an async-lowered import and/or an async-lifted export.
+    PrepareCall {
+        /// The memory used to verify that the memory specified for the
+        /// `task.return` that is called at runtime matches the one specified in
+        /// the lifted export.
+        memory: Option<RuntimeMemoryIndex>,
+    },
 
-    /// Same as `ResourceEnterCall` except for when exiting a call.
-    ResourceExitCall,
+    /// An intrinsic used by FACT-generated modules to start a call involving a
+    /// sync-lowered import and async-lifted export.
+    SyncStartCall {
+        /// The callee's callback function, if any.
+        callback: Option<RuntimeCallbackIndex>,
+    },
+
+    /// An intrinsic used by FACT-generated modules to start a call involving
+    /// an async-lowered import function.
+    ///
+    /// Note that `AsyncPrepareCall` and `AsyncStartCall` could theoretically be
+    /// combined into a single `AsyncCall` intrinsic, but we separate them to
+    /// allow the FACT-generated module to optionally call the callee directly
+    /// without an intermediate host stack frame.
+    AsyncStartCall {
+        /// The callee's callback, if any.
+        callback: Option<RuntimeCallbackIndex>,
+        /// The callee's post-return function, if any.
+        post_return: Option<RuntimePostReturnIndex>,
+    },
+
+    /// An intrinisic used by FACT-generated modules to (partially or entirely) transfer
+    /// ownership of a `future`.
+    ///
+    /// Transferring a `future` can either mean giving away the readable end
+    /// while retaining the writable end or only the former, depending on the
+    /// ownership status of the `future`.
+    FutureTransfer,
+
+    /// An intrinisic used by FACT-generated modules to (partially or entirely) transfer
+    /// ownership of a `stream`.
+    ///
+    /// Transferring a `stream` can either mean giving away the readable end
+    /// while retaining the writable end or only the former, depending on the
+    /// ownership status of the `stream`.
+    StreamTransfer,
+
+    /// An intrinisic used by FACT-generated modules to (partially or entirely) transfer
+    /// ownership of an `error-context`.
+    ///
+    /// Unlike futures, streams, and resource handles, `error-context` handles
+    /// are reference counted, meaning that sharing the handle with another
+    /// component does not invalidate the handle in the original component.
+    ErrorContextTransfer,
+
+    /// An intrinsic used by FACT-generated modules to trap with a specified
+    /// code.
+    Trap,
+
+    /// An intrinsic used by FACT-generated modules to push a task onto the
+    /// stack for a sync-to-sync, guest-to-guest call.
+    EnterSyncCall,
+    /// An intrinsic used by FACT-generated modules to pop the task previously
+    /// pushed by `EnterSyncCall`.
+    ExitSyncCall,
+
+    /// Intrinsic used to implement the `context.get` component model builtin.
+    ///
+    /// The payload here represents that this is accessing the Nth slot of local
+    /// storage.
+    ContextGet {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// Which slot to access.
+        slot: u32,
+    },
+
+    /// Intrinsic used to implement the `context.set` component model builtin.
+    ///
+    /// The payload here represents that this is accessing the Nth slot of local
+    /// storage.
+    ContextSet {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// Which slot to update.
+        slot: u32,
+    },
+
+    /// Intrinsic used to implement the `thread.index` component model builtin.
+    ThreadIndex,
+
+    /// Intrinsic used to implement the `thread.new-indirect` component model builtin.
+    ThreadNewIndirect {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The type index for the start function of the thread.
+        start_func_ty_idx: ComponentTypeIndex,
+        /// The index of the table that stores the start function.
+        start_func_table_idx: RuntimeTableIndex,
+    },
+
+    /// Intrinsic used to implement the `thread.suspend-to-suspended` component model builtin.
+    ThreadSuspendToSuspended {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// If `true`, indicates the caller instance may receive notification
+        /// of task cancellation.
+        cancellable: bool,
+    },
+
+    /// Intrinsic used to implement the `thread.suspend-to` component model builtin.
+    ThreadSuspendTo {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// If `true`, indicates the caller instance may receive notification
+        /// of task cancellation.
+        cancellable: bool,
+    },
+
+    /// Intrinsic used to implement the `thread.suspend` component model builtin.
+    ThreadSuspend {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// If `true`, indicates the caller instance may receive notification
+        /// of task cancellation.
+        cancellable: bool,
+    },
+
+    /// Intrinsic used to implement the `thread.unsuspend` component model builtin.
+    ThreadUnsuspend {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// Intrinsic used to implement the `thread.yield-to-suspended` component model builtin.
+    ThreadYieldToSuspended {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// If `true`, indicates the caller instance may receive notification
+        /// of task cancellation.
+        cancellable: bool,
+    },
 }
 
 impl Trampoline {
@@ -670,14 +1213,58 @@ impl Trampoline {
                 let to = if *to64 { "64" } else { "32" };
                 format!("component-transcode-{op}-m{from}-m{to}")
             }
-            AlwaysTrap => format!("component-always-trap"),
-            ResourceNew(i) => format!("component-resource-new[{}]", i.as_u32()),
-            ResourceRep(i) => format!("component-resource-rep[{}]", i.as_u32()),
-            ResourceDrop(i) => format!("component-resource-drop[{}]", i.as_u32()),
+            ResourceNew { ty, .. } => format!("component-resource-new[{}]", ty.as_u32()),
+            ResourceRep { ty, .. } => format!("component-resource-rep[{}]", ty.as_u32()),
+            ResourceDrop { ty, .. } => format!("component-resource-drop[{}]", ty.as_u32()),
+            BackpressureInc { .. } => format!("backpressure-inc"),
+            BackpressureDec { .. } => format!("backpressure-dec"),
+            TaskReturn { .. } => format!("task-return"),
+            TaskCancel { .. } => format!("task-cancel"),
+            WaitableSetNew { .. } => format!("waitable-set-new"),
+            WaitableSetWait { .. } => format!("waitable-set-wait"),
+            WaitableSetPoll { .. } => format!("waitable-set-poll"),
+            WaitableSetDrop { .. } => format!("waitable-set-drop"),
+            WaitableJoin { .. } => format!("waitable-join"),
+            ThreadYield { .. } => format!("thread-yield"),
+            SubtaskDrop { .. } => format!("subtask-drop"),
+            SubtaskCancel { .. } => format!("subtask-cancel"),
+            StreamNew { .. } => format!("stream-new"),
+            StreamRead { .. } => format!("stream-read"),
+            StreamWrite { .. } => format!("stream-write"),
+            StreamCancelRead { .. } => format!("stream-cancel-read"),
+            StreamCancelWrite { .. } => format!("stream-cancel-write"),
+            StreamDropReadable { .. } => format!("stream-drop-readable"),
+            StreamDropWritable { .. } => format!("stream-drop-writable"),
+            FutureNew { .. } => format!("future-new"),
+            FutureRead { .. } => format!("future-read"),
+            FutureWrite { .. } => format!("future-write"),
+            FutureCancelRead { .. } => format!("future-cancel-read"),
+            FutureCancelWrite { .. } => format!("future-cancel-write"),
+            FutureDropReadable { .. } => format!("future-drop-readable"),
+            FutureDropWritable { .. } => format!("future-drop-writable"),
+            ErrorContextNew { .. } => format!("error-context-new"),
+            ErrorContextDebugMessage { .. } => format!("error-context-debug-message"),
+            ErrorContextDrop { .. } => format!("error-context-drop"),
             ResourceTransferOwn => format!("component-resource-transfer-own"),
             ResourceTransferBorrow => format!("component-resource-transfer-borrow"),
-            ResourceEnterCall => format!("component-resource-enter-call"),
-            ResourceExitCall => format!("component-resource-exit-call"),
+            PrepareCall { .. } => format!("component-prepare-call"),
+            SyncStartCall { .. } => format!("component-sync-start-call"),
+            AsyncStartCall { .. } => format!("component-async-start-call"),
+            FutureTransfer => format!("future-transfer"),
+            StreamTransfer => format!("stream-transfer"),
+            ErrorContextTransfer => format!("error-context-transfer"),
+            Trap => format!("trap"),
+            EnterSyncCall => format!("enter-sync-call"),
+            ExitSyncCall => format!("exit-sync-call"),
+            ContextGet { .. } => format!("context-get"),
+            ContextSet { .. } => format!("context-set"),
+            ThreadIndex => format!("thread-index"),
+            ThreadNewIndirect { .. } => format!("thread-new-indirect"),
+            ThreadSuspendToSuspended { .. } => format!("thread-suspend-to-suspended"),
+            ThreadSuspendTo { .. } => format!("thread-suspend-to"),
+            ThreadSuspend { .. } => format!("thread-suspend"),
+            ThreadUnsuspend { .. } => format!("thread-unsuspend"),
+            ThreadYieldToSuspended { .. } => format!("thread-yield-to-suspended"),
         }
     }
 }

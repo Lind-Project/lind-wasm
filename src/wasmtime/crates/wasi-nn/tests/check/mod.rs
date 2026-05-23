@@ -1,13 +1,9 @@
-//! This is testing-specific code--it is public only so that it can be
-//! accessible both in unit and integration tests.
+//! Check that the environment is set up correctly for running tests.
 //!
 //! This module checks:
-//! - that OpenVINO can be found in the environment
-//! - that WinML is available
-//! - that some ML model artifacts can be downloaded and cached.
+//! - that various backends can be located on the system (see sub-modules)
+//! - that certain ML model artifacts can be downloaded and cached.
 
-#[allow(unused_imports)]
-use anyhow::{anyhow, Context, Result};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -15,10 +11,12 @@ use std::{
     sync::Mutex,
 };
 
-#[cfg(any(feature = "onnx", feature = "winml"))]
+#[cfg(any(feature = "onnx", all(feature = "winml", target_os = "windows")))]
 pub mod onnx;
 #[cfg(feature = "openvino")]
 pub mod openvino;
+#[cfg(feature = "pytorch")]
+pub mod pytorch;
 #[cfg(all(feature = "winml", target_os = "windows"))]
 pub mod winml;
 
@@ -33,7 +31,7 @@ pub fn artifacts_dir() -> PathBuf {
 }
 
 /// Retrieve the bytes at the `from` URL and place them in the `to` file.
-fn download(from: &str, to: &Path) -> anyhow::Result<()> {
+fn download(from: &str, to: &Path) -> wasmtime::Result<()> {
     let mut curl = Command::new("curl");
     curl.arg("--location").arg(from).arg("--output").arg(to);
     println!("> downloading: {:?}", &curl);
