@@ -90,10 +90,6 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     let child_vmmap = child_cage.vmmap.read();
     eprintln!("[fork-perf]     {:>8.3} ms      vmmap lock/lookup", _t_lookup.elapsed().as_secs_f64() * 1000.0);
 
-    let mut t_mprotect_open = std::time::Duration::ZERO;
-    let mut t_memcpy        = std::time::Duration::ZERO;
-    let mut t_mprotect_rest = std::time::Duration::ZERO;
-    let mut t_mremap        = std::time::Duration::ZERO;
     let mut total_bytes: usize = 0;
     let mut n_entries: usize = 0;
 
@@ -127,44 +123,44 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     child_st as *mut libc::c_void,
                 );
             };
-            t_mremap += t.elapsed();
+            eprintln!("[fork-perf]       entry {:>2}: {:>8.3} ms  mremap  {:.3} MB",
+                n_entries, t.elapsed().as_secs_f64() * 1000.0, addr_len as f64 / 1024.0 / 1024.0);
         } else {
             total_bytes += addr_len;
             unsafe {
+                let t_entry = std::time::Instant::now();
+
                 // temporarily enable write on child's memory region to write parent data
                 let t = std::time::Instant::now();
-                libc::mprotect(
-                    child_st as *mut libc::c_void,
-                    addr_len,
-                    PROT_READ | PROT_WRITE,
-                );
-                t_mprotect_open += t.elapsed();
+                libc::mprotect(child_st as *mut libc::c_void, addr_len, PROT_READ | PROT_WRITE);
+                let d_mprotect_open = t.elapsed();
 
                 // write parent data
                 // TODO: replace copy_nonoverlapping with writev for potential performance boost
                 let t = std::time::Instant::now();
-                std::ptr::copy_nonoverlapping(
-                    parent_st as *const u8,
-                    child_st as *mut u8,
-                    addr_len,
-                );
-                t_memcpy += t.elapsed();
+                std::ptr::copy_nonoverlapping(parent_st as *const u8, child_st as *mut u8, addr_len);
+                let d_memcpy = t.elapsed();
 
                 // revert child's memory region prot
                 let t = std::time::Instant::now();
                 libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
-                t_mprotect_rest += t.elapsed();
+                let d_mprotect_rest = t.elapsed();
+
+                eprintln!(
+                    "[fork-perf]       entry {:>2}: {:>8.3} ms total  ({:.3} MB | mprotect_open {:.3} ms | memcpy {:.3} ms | mprotect_restore {:.3} ms)",
+                    n_entries,
+                    t_entry.elapsed().as_secs_f64() * 1000.0,
+                    addr_len as f64 / 1024.0 / 1024.0,
+                    d_mprotect_open.as_secs_f64() * 1000.0,
+                    d_memcpy.as_secs_f64() * 1000.0,
+                    d_mprotect_rest.as_secs_f64() * 1000.0,
+                );
             };
         }
     }
 
-    eprintln!("[fork-perf]     {:>8.3} ms      mprotect open  ({} entries, {:.2} MB total)",
-        t_mprotect_open.as_secs_f64() * 1000.0, n_entries, total_bytes as f64 / 1024.0 / 1024.0);
-    eprintln!("[fork-perf]     {:>8.3} ms      memcpy", t_memcpy.as_secs_f64() * 1000.0);
-    eprintln!("[fork-perf]     {:>8.3} ms      mprotect restore", t_mprotect_rest.as_secs_f64() * 1000.0);
-    if t_mremap > std::time::Duration::ZERO {
-        eprintln!("[fork-perf]     {:>8.3} ms      mremap (shared)", t_mremap.as_secs_f64() * 1000.0);
-    }
+    eprintln!("[fork-perf]     --- fork_vmmap summary: {} entries, {:.3} MB copied ---",
+        n_entries, total_bytes as f64 / 1024.0 / 1024.0);
 
     // update program break for child
     drop(child_vmmap);
