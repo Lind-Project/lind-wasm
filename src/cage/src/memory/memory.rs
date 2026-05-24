@@ -75,8 +75,8 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// 2. **Shared memory regions**:
 ///    - The function uses the `mremap` syscall to replicate shared memory efficiently. Refer to `man 2 mremap` for details.
 /// 3. **Private memory regions**:
-///    - The function uses `std::ptr::copy_nonoverlapping` to copy the memory contents directly.
-///    - **TODO**: Investigate whether using `writev` could improve performance for this case.
+///    - The function uses `process_vm_writev` to copy memory contents from the parent into
+///      the child's address space.
 ///
 /// # Arguments
 /// * `parent_cageid` - cageid of parent
@@ -125,9 +125,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     PROT_READ | PROT_WRITE,
                 );
 
-                // write parent data using process_vm_writev for ~25% speedup over memcpy
-                // on cold pages (fewer TLB shootdowns via kernel copy path); fall back to
-                // copy_nonoverlapping if the syscall is unavailable or returns an error.
+                // write parent data
                 let local_iov = libc::iovec {
                     iov_base: parent_st as *mut libc::c_void,
                     iov_len: addr_len,
@@ -138,9 +136,11 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 };
                 let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
                 if ret < 0 {
-                    std::ptr::copy_nonoverlapping(
-                        parent_st as *const u8,
-                        child_st as *mut u8,
+                    panic!(
+                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={})",
+                        *libc::__errno_location(),
+                        parent_st,
+                        child_st,
                         addr_len,
                     );
                 }
