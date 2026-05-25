@@ -596,7 +596,7 @@ impl<
                         );
 
                         linker
-                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .instance_dylink(&mut store, "env", instance, Some(child_cageid), vec!["signal_callback"])
                             .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
@@ -1166,7 +1166,7 @@ impl<
                         );
 
                         linker
-                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .instance_dylink(&mut store, "env", instance, Some(child_cageid as u64), vec!["signal_callback"])
                             .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
