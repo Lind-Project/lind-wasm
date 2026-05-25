@@ -10,8 +10,10 @@
  * 1. Basic sigsetjmp/siglongjmp — round-trip with mask save/restore
  * 2. siglongjmp(buf, 0) must deliver 1 (ISO C)
  * 3. Signal handler calls siglongjmp — delivered via kill+pause pure-wasm path
- * 4. Signal handler calls siglongjmp — delivered via sigsuspend pure-wasm path
- * 5. Nested sigsetjmp — siglongjmp targets inner, outer not triggered
+ * 4. Nested sigsetjmp — siglongjmp targets inner, outer not triggered
+ *
+ * Note: the sigsuspend delivery path (block signal → kill → sigsuspend) is
+ * covered by the pre-existing signal_longjmp.c test and is not repeated here.
  */
 
 #include <setjmp.h>
@@ -115,64 +117,13 @@ static void test_signal_pause(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Test 4: siglongjmp from signal handler via sigsuspend              */
-/*                                                                     */
-/* Block SIGUSR2, queue it via kill(), then sigsuspend with empty     */
-/* mask.  The EH sigsuspend sets the mask without triggering the      */
-/* epoch, then calls pause() for pure-wasm delivery.                  */
-/* ------------------------------------------------------------------ */
-static sigjmp_buf g_buf4;
-static volatile int g_ran4 = 0;
-
-static void handler4(int sig)
-{
-    (void)sig;
-    g_ran4 = 1;
-    siglongjmp(g_buf4, 77);
-}
-
-static void test_signal_sigsuspend(void)
-{
-    printf("\n[4] siglongjmp from signal handler via sigsuspend\n");
-    g_ran4 = 0;
-
-    struct sigaction sa = {0};
-    sa.sa_handler = handler4;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGUSR2, &sa, NULL);
-
-    /* Block SIGUSR2 so it queues without firing yet. */
-    sigset_t block, empty;
-    sigemptyset(&block);
-    sigaddset(&block, SIGUSR2);
-    sigprocmask(SIG_BLOCK, &block, NULL);
-
-    int v = sigsetjmp(g_buf4, 1);
-    if (v == 0) {
-        kill(getpid(), SIGUSR2);   /* queued but blocked */
-        sigemptyset(&empty);
-        sigsuspend(&empty);        /* unblock all → delivers SIGUSR2 */
-        printf("  FAIL: sigsuspend returned without siglongjmp (handler ran=%d)\n",
-               g_ran4);
-        failed++;
-        sigprocmask(SIG_UNBLOCK, &block, NULL);
-        signal(SIGUSR2, SIG_DFL);
-        return;
-    }
-    EXPECT_EQ("signal handler ran", g_ran4, 1);
-    EXPECT_EQ("siglongjmp from sigsuspend delivers 77", v, 77);
-    sigprocmask(SIG_UNBLOCK, &block, NULL);
-    signal(SIGUSR2, SIG_DFL);
-}
-
-/* ------------------------------------------------------------------ */
-/* Test 5: nested sigsetjmp — siglongjmp targets inner only           */
+/* Test 4: nested sigsetjmp — siglongjmp targets inner only           */
 /* ------------------------------------------------------------------ */
 static sigjmp_buf g_outer5, g_inner5;
 
 static void test_nested(void)
 {
-    printf("\n[5] Nested sigsetjmp — siglongjmp targets inner only\n");
+    printf("\n[4] Nested sigsetjmp — siglongjmp targets inner only\n");
 
     int outer = sigsetjmp(g_outer5, 0);
     if (outer != 0) {
@@ -199,7 +150,6 @@ int main(void)
     test_basic();
     test_zero_val();
     test_signal_pause();
-    test_signal_sigsuspend();
     test_nested();
 
     printf("\n=== Results: %d passed, %d failed ===\n", passed, failed);
