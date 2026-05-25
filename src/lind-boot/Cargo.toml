@@ -9,6 +9,7 @@ disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_
 secure = ["typemap/secure"]
 lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug" ]
 debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
+remote-lib = ["wasmtime-lind-dylink/remote-lib", "wasmtime/remote-lib"]
 debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
 # Pass-through selectors for the fdtables backend. Pick exactly one.
 fdtables-dashmaparray = ["rawposix/fdtables-dashmaparray"]
@@ -34,3 +35,10 @@ anyhow = { version = "1.0.66", default-features = false }
 clap = { version = "4", features = ["derive"] }
 cfg-if = "1.0"
 libc = "0.2"
+lind-remote-lib = { path = "../wasmtime/crates/lind-remote-lib" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[[bin]]
+name = "lind-remote-server"
+path = "src/bin/remote_server.rs"

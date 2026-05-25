@@ -1,0 +1,16 @@
+{
+  "library":  "SO_PATH",
+  "endpoint": "unix://SOCK_PATH",
+  "functions": [
+    {
+      "call_id":  1,
+      "symbol":   "remote_strcpy",
+      "num_args": 2,
+      "ret":      "i64",
+      "args": [
+        { "type": "ptr", "direction": "out" },
+        { "type": "ptr", "direction": "in"  }
+      ]
+    }
+  ]
+}

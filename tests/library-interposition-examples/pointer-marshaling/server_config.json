@@ -1,0 +1,17 @@
+{
+  "library":  "/lib/x86_64-linux-gnu/libc.so.6",
+  "endpoint": "unix:///home/lind/lind-wasm/lindfs/tmp/ptr_test.sock",
+  "functions": [
+    {
+      "call_id":  1,
+      "symbol":   "write",
+      "num_args": 3,
+      "ret":      "i64",
+      "args": [
+        { "type": "scalar" },
+        { "type": "ptr", "direction": "in" },
+        { "type": "scalar" }
+      ]
+    }
+  ]
+}

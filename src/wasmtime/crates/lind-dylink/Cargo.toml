@@ -24,3 +24,4 @@ typemap = { path = "../typemap" }
 
 [features]
 debug-dylink = []
+remote-lib = ["wasmtime/remote-lib"]

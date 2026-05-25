@@ -1,0 +1,9 @@
+{
+  "default_route": "local",
+  "remotes": {
+    "glibc": { "endpoint": "unix:///tmp/rand.sock" }
+  },
+  "routes": [
+    { "symbol": "rand", "route": "remote", "remote": "glibc", "call_id": 1 }
+  ]
+}
