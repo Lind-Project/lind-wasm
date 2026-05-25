@@ -21,12 +21,10 @@
  *                  signal_callback; handler calls longjmp(EH path); exception
  *                  propagates through signal_callback/pause() with no Rust
  *                  boundary and is caught by the setjmp try_table in user code.
- * 7. dlopen lib:   setjmp in user code; dlopen longjmp_lib.cwasm; call
- *                  lib_do_longjmp which calls longjmp from inside the shared
- *                  library; the EH exception crosses two module boundaries
- *                  (lib → libc.so → user code) and is caught at the setjmp
- *                  call site.  Verifies the host tag is shared across all
- *                  module instances in the Store.
+ *
+ * The dlopen cross-module test (longjmp from a dlopen'd library) is in
+ * dylink_tests/deterministic/longjmp_dlopen.c, which is skipped in the
+ * main test runner alongside other dlopen tests.
  *
  * Compilation
  * -----------
@@ -34,7 +32,6 @@
  * the cross-module path.  The test runner uses the default dynamic mode.
  */
 
-#include <dlfcn.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
@@ -241,50 +238,6 @@ static void test_signal_crossmodule(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Test 7: longjmp from a dlopen'd shared library                     */
-/*                                                                     */
-/* longjmp_lib.cwasm exports lib_do_longjmp(jmp_buf *, int).          */
-/* When called, it executes longjmp which the SjLj pass lowers to     */
-/* __wasm_longjmp (in libc.so).  The throw crosses two module         */
-/* boundaries (longjmp_lib.so → libc.so → user code) and must be     */
-/* caught by the try_table at the setjmp site in this file.           */
-/* This verifies that the host-provided __c_longjmp tag is shared     */
-/* across all module instances loaded in the same Store.              */
-/* ------------------------------------------------------------------ */
-static jmp_buf g_dlopen_buf;
-
-static void test_dlopen_longjmp(void)
-{
-    printf("\n[7] longjmp from dlopen'd shared library\n");
-
-    void *h = dlopen("longjmp_lib.cwasm", RTLD_LAZY);
-    if (h == NULL) {
-        printf("  SKIP: dlopen(longjmp_lib.cwasm) failed: %s\n", dlerror());
-        return;
-    }
-
-    void (*lib_do_longjmp)(jmp_buf *, int) =
-        (void (*)(jmp_buf *, int)) dlsym(h, "lib_do_longjmp");
-    if (lib_do_longjmp == NULL) {
-        printf("  SKIP: dlsym(lib_do_longjmp) failed: %s\n", dlerror());
-        dlclose(h);
-        return;
-    }
-
-    int v = setjmp(g_dlopen_buf);
-    if (v == 0) {
-        lib_do_longjmp(&g_dlopen_buf, 55);
-        printf("  FAIL: should not reach after lib_do_longjmp\n");
-        failed++;
-        dlclose(h);
-        return;
-    }
-    EXPECT_EQ("dlopen lib longjmp delivers 55", v, 55);
-
-    dlclose(h);
-}
-
-/* ------------------------------------------------------------------ */
 int main(void)
 {
     printf("=== Cross-module longjmp/setjmp tests (dynamic build) ===\n");
@@ -295,7 +248,6 @@ int main(void)
     test_deep_stack();
     test_reuse();
     test_signal_crossmodule();
-    test_dlopen_longjmp();
 
     printf("\n=== Results: %d passed, %d failed ===\n", passed, failed);
     return failed > 0 ? 1 : 0;
