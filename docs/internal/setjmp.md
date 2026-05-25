@@ -291,18 +291,6 @@ each `setjmp` call O(n) in the number of active entries. A simple cached
 `next_free` index stored alongside the table (reset on compaction or free)
 would make the common case O(1).
 
-### Dead asyncify setjmp infrastructure in wasmtime store
-
-The following code in `src/wasmtime/crates/wasmtime/src/runtime/store.rs`
-is no longer used but was never removed:
-
-- `stack_snapshots: HashMap<u64, Vec<u8>>` field
-- `store_unwind_data()` / `retrieve_unwind_data()`
-- `get_stack_snapshots()` / `set_stack_snapshots()`
-
-No caller in `lind-boot/src/` invokes these methods. The `stack_snapshots`
-field is copied on fork but is always empty. These should be removed.
-
 ---
 
 ## File map
