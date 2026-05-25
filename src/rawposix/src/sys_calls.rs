@@ -1330,15 +1330,19 @@ pub extern "C" fn sched_yield_syscall(
     (unsafe { sched_yield() }) as i32
 }
 
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/pause.2.html
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/rt_sigsuspend.2.html
 ///
-/// Suspends the calling cage until a signal arrives.  Always returns -1 with
-/// errno set to EINTR.  The loop spins (sched_yield) until `signal_check_trigger`
-/// detects a pending lind signal.
-pub extern "C" fn pause_syscall(
+/// Atomically replaces the signal mask with `set` and suspends the cage until a
+/// signal arrives.  Always returns -1 with errno EINTR.
+///
+/// Unlike the glibc fallback (sigprocmask + pause), this is a single host call:
+/// the mask swap and the spin-wait happen without returning to wasm in between,
+/// so there is no epoch injection point that could consume the epoch flag before
+/// the spin-loop sees it.
+pub extern "C" fn sigsuspend_syscall(
     cageid: u64,
-    arg1: u64,
-    arg1_cageid: u64,
+    set_arg: u64,
+    set_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -1350,8 +1354,8 @@ pub extern "C" fn pause_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    if !(sc_unusedarg(arg1, arg1_cageid)
-        && sc_unusedarg(arg2, arg2_cageid)
+    let set = sc_convert_sigset(set_arg, set_cageid, cageid);
+    if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
@@ -1359,13 +1363,31 @@ pub extern "C" fn pause_syscall(
     {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
-            "pause_syscall"
+            "sigsuspend_syscall"
         );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+
+    if let Some(some_set) = set {
+        let curr_sigset = cage.sigset.load(Relaxed);
+        // Signals that transition from blocked to unblocked
+        let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+        {
+            let pending_signals = cage.pending_signals.read();
+            if pending_signals
+                .iter()
+                .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
+            {
+                cage::signal_epoch_trigger(cage.cageid);
+            }
+        }
+        cage.sigset.store(*some_set, Relaxed);
     }
 
     loop {
         if signal_check_trigger(cageid) {
-            return syscall_error(Errno::EINTR, "pause", "interrupted by signal");
+            return syscall_error(Errno::EINTR, "sigsuspend", "interrupted by signal");
         }
         unsafe { sched_yield() };
     }
