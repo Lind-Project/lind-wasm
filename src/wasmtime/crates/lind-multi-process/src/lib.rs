@@ -893,7 +893,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let next_tid = match self.next_thread_id() {
             Some(val) => val,
             None => {
-                println!("running out of thread id!");
+                eprintln!("running out of thread id!");
                 0
             }
         };
@@ -1635,7 +1635,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // retrieved from hashmap, and continue the rewind. This approach allows the wasm process to restore to its
     // previous state
     pub fn setjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: u32) -> Result<i32> {
-        println!("[debug] old setjmp_call encountered");
         // get the base address of the memory
         let address = get_memory_base(&mut caller);
 

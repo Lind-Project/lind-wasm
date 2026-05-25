@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <lind_debug.h>
 
 
 /* Thread-local "second return value" communicated between saveSetjmp and its
@@ -70,7 +71,7 @@ __attribute__((visibility("default"))) int *saveSetjmp(int *buf, int label_id, i
     int new_size = size * 2;
     int *new_table = (int *)realloc(table, (size_t)new_size * 2 * sizeof(int));
     if (!new_table) {
-        /* OOM: keep existing table, caller will have to rethrow. */
+        lind_debug_panic("saveSetjmp: OOM growing setjmp table");
         setTempRet0(size);
         return table;
     }
@@ -114,7 +115,7 @@ __attribute__((visibility("default"))) int testSetjmp(int env, int *table, int s
  */
 __attribute__((visibility("default"), noreturn)) void __wasm_longjmp(int *buf, int val)
 {
-    buf[3] = val > 1 ? val : 1;
+    buf[3] = val != 0 ? val : 1;
     buf[2] = (int)(uintptr_t)buf;
     __builtin_wasm_throw(1, (void *)(buf + 2));
 }
