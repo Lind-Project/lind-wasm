@@ -7,7 +7,7 @@
 #   - lind-clang on PATH
 #   - gcc on PATH
 #
-# Run from the repo root: bash examples/remote-calls/run.sh
+# Run from the repo root: bash test/library-interposition-examples/basic/run.sh
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -8,7 +8,7 @@
 # The remote server's rand() always returns 42424242 (sentinel). Seeing that
 # value instead of pseudo-random output proves the call went over the RPC.
 #
-# Run from the repo root: bash examples/remote-calls-rand/run.sh
+# Run from the repo root: bash test/library-interposition-examples/rand-library/run.sh
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -6,12 +6,12 @@
 #   cage 3 — routed to a TCP socket server
 #
 # Usage (from repo root):
-#   bash examples/remote-calls-percage/run.sh
+#   bash test/library-interposition-examples/per-cage-routing/run.sh
 
 set -e
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-EXAMPLE="$REPO/examples/remote-calls-percage"
+EXAMPLE="$REPO/test/library-interposition-examples/per-cage-routing"
 LINDFS="$REPO/lindfs"
 SERVER="$REPO/src/lind-boot/target/release/lind-remote-server"
 

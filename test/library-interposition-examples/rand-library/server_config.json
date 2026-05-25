@@ -1,5 +1,5 @@
 {
-  "library": "/home/lind/lind-wasm/examples/remote-calls-rand/librand.so",
+  "library": "/home/lind/lind-wasm/test/library-interposition-examples/rand-library/librand.so",
   "endpoint": "unix:////home/lind/lind-wasm/lindfs/tmp/rand.sock",
   "functions": [
     { "call_id": 1, "symbol": "rand", "num_args": 0, "ret": "i32" }

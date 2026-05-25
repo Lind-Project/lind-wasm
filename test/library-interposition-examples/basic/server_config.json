@@ -1,5 +1,5 @@
 {
-  "library": "/home/lind/lind-wasm/examples/remote-calls/libtoy.so",
+  "library": "/home/lind/lind-wasm/test/library-interposition-examples/basic/libtoy.so",
   "endpoint": "unix:////home/lind/lind-wasm/lindfs/tmp/test.sock",
   "functions": [
     { "call_id": 1, "symbol": "add", "num_args": 2, "ret": "i32" },

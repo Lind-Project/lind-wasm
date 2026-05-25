@@ -3,12 +3,12 @@
 # Unix domain socket server running the native zlib implementation.
 #
 # Usage (from repo root):
-#   bash examples/remote-calls-zlib/run.sh
+#   bash test/library-interposition-examples/zlib-compression/run.sh
 
 set -e
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-EXAMPLE="$REPO/examples/remote-calls-zlib"
+EXAMPLE="$REPO/test/library-interposition-examples/zlib-compression"
 LINDFS="$REPO/lindfs"
 SERVER="$REPO/src/lind-boot/target/release/lind-remote-server"
 
