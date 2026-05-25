@@ -43,7 +43,10 @@ pub enum PtrSizeSpec {
 #[derive(Debug, Clone)]
 pub enum ArgSpec {
     Scalar,
-    Ptr { direction: Direction, size: PtrSizeSpec },
+    Ptr {
+        direction: Direction,
+        size: PtrSizeSpec,
+    },
 }
 
 /// Argument metadata for a remotely-dispatched function.
@@ -225,18 +228,14 @@ pub fn get_route(symbol: &str, cage_id: Option<u64>) -> &'static RouteDecision {
     if let Some(id) = cage_id {
         if let Some(cage_routes) = state.per_cage_route_table.get(&id) {
             if let Some(decision) = cage_routes.get(symbol) {
-                if let RouteDecision::Remote { call_id, endpoint } = decision {
-                    println!("[debug] cage: {:?} routing decision for {} (cage {}): {:?}", cage_id, symbol, id, decision);
-                }
                 return decision;
             }
         }
     }
-    let decision = state.route_table.get(symbol).unwrap_or(&state.default_decision);
-    if let RouteDecision::Remote { call_id, endpoint } = decision {
-        println!("[debug] cage: {:?} routing decision for {} (global): {:?}", cage_id, symbol, decision);
-    }
-    decision
+    state
+        .route_table
+        .get(symbol)
+        .unwrap_or(&state.default_decision)
 }
 
 /// Look up argument metadata for `symbol`, if present in the routing config.
@@ -305,18 +304,20 @@ impl Write for Transport {
 /// Accepts `unix://<path>` and `tcp://<host:port>`.
 fn connect(endpoint: &str) -> Result<Transport> {
     if let Some(path) = endpoint.strip_prefix("unix://") {
-        let stream = UnixStream::connect(path)
-            .map_err(|e| anyhow!("remote-lib: connect to {path}: {e}"))?;
+        let stream =
+            UnixStream::connect(path).map_err(|e| anyhow!("remote-lib: connect to {path}: {e}"))?;
         Ok(Transport::Unix(stream))
     } else if let Some(addr) = endpoint.strip_prefix("tcp://") {
-        let stream = TcpStream::connect(addr)
-            .map_err(|e| anyhow!("remote-lib: connect to {addr}: {e}"))?;
+        let stream =
+            TcpStream::connect(addr).map_err(|e| anyhow!("remote-lib: connect to {addr}: {e}"))?;
         // Disable Nagle: the protocol is strictly request-response, so we want
         // each write to be sent immediately without waiting to coalesce packets.
         stream.set_nodelay(true).ok();
         Ok(Transport::Tcp(stream))
     } else {
-        Err(anyhow!("remote-lib: invalid endpoint scheme in '{endpoint}' (expected unix:// or tcp://)"))
+        Err(anyhow!(
+            "remote-lib: invalid endpoint scheme in '{endpoint}' (expected unix:// or tcp://)"
+        ))
     }
 }
 
@@ -544,10 +545,13 @@ pub fn dispatch_remote_call(
                         const MAX_SCAN: usize = 4096;
                         // SAFETY: mem_base is the base of 4 GB WASM linear memory; wasm_ptr is
                         // a guest offset so mem_base+wasm_ptr+MAX_SCAN is within that region.
-                        let slice = unsafe {
-                            std::slice::from_raw_parts(mem_base.add(wasm_ptr), MAX_SCAN)
-                        };
-                        slice.iter().position(|&b| b == 0).map(|p| p + 1).unwrap_or(MAX_SCAN)
+                        let slice =
+                            unsafe { std::slice::from_raw_parts(mem_base.add(wasm_ptr), MAX_SCAN) };
+                        slice
+                            .iter()
+                            .position(|&b| b == 0)
+                            .map(|p| p + 1)
+                            .unwrap_or(MAX_SCAN)
                     }
                     PtrSizeSpec::SameAsPtrArg(_) => continue,
                 };
@@ -556,7 +560,11 @@ pub fn dispatch_remote_call(
         }
         // Second pass: SameAsPtrArg references a size already resolved above.
         for (i, spec) in meta.args.iter().enumerate() {
-            if let ArgSpec::Ptr { size: PtrSizeSpec::SameAsPtrArg(j), .. } = spec {
+            if let ArgSpec::Ptr {
+                size: PtrSizeSpec::SameAsPtrArg(j),
+                ..
+            } = spec
+            {
                 resolved[i] = resolved.get(*j).copied().flatten();
             }
         }
@@ -585,13 +593,15 @@ pub fn dispatch_remote_call(
                 let data = if *dir != Direction::Out {
                     // SAFETY: mem_base is the base of 4 GB WASM linear memory; wasm_ptr and
                     // size come from guest arguments that fit within that region.
-                    unsafe {
-                        std::slice::from_raw_parts(mem_base.add(*wasm_ptr), *size).to_vec()
-                    }
+                    unsafe { std::slice::from_raw_parts(mem_base.add(*wasm_ptr), *size).to_vec() }
                 } else {
                     Vec::new()
                 };
-                PtrBuf { direction: dir.clone(), alloc_size: *size as u32, data }
+                PtrBuf {
+                    direction: dir.clone(),
+                    alloc_size: *size as u32,
+                    data,
+                }
             })
             .collect();
 
@@ -607,10 +617,8 @@ pub fn dispatch_remote_call(
                     // guest offset and buf.len() is the size returned by the remote server for
                     // the same allocation, so the write stays within the linear memory region.
                     unsafe {
-                        let dst = std::slice::from_raw_parts_mut(
-                            mem_base.add(*wasm_ptr),
-                            buf.len(),
-                        );
+                        let dst =
+                            std::slice::from_raw_parts_mut(mem_base.add(*wasm_ptr), buf.len());
                         dst.copy_from_slice(buf);
                     }
                     out_idx += 1;

@@ -32,10 +32,10 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::{UnixListener, UnixStream};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use lind_remote_lib::{
-    read_call_id, read_ptr_sections, read_scalar_args, write_response, write_response_with_ptrs,
-    Direction,
+    Direction, read_call_id, read_ptr_sections, read_scalar_args, write_response,
+    write_response_with_ptrs,
 };
 use serde::Deserialize;
 
@@ -74,7 +74,10 @@ struct FunctionEntry {
 
 enum ParsedArgSpec {
     Scalar,
-    Ptr { direction: Direction, size_arg: usize },
+    Ptr {
+        direction: Direction,
+        size_arg: usize,
+    },
 }
 
 struct LoadedFn {
@@ -118,8 +121,7 @@ unsafe fn call_scalar_native(func_ptr: *mut libc::c_void, args: &[u64], ret: &st
             f(a(0), a(1), a(2))
         }
         4 => {
-            let f: unsafe extern "C" fn(i64, i64, i64, i64) -> i64 =
-                std::mem::transmute(func_ptr);
+            let f: unsafe extern "C" fn(i64, i64, i64, i64) -> i64 = std::mem::transmute(func_ptr);
             f(a(0), a(1), a(2), a(3))
         }
         5 => {
@@ -245,8 +247,7 @@ fn run(config_path: &str) -> Result<()> {
 
     // Load the shared library.
     let lib_cstr = CString::new(config.library.as_str())?;
-    let lib_handle =
-        unsafe { libc::dlopen(lib_cstr.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL) };
+    let lib_handle = unsafe { libc::dlopen(lib_cstr.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL) };
     if lib_handle.is_null() {
         let err_ptr = unsafe { libc::dlerror() };
         let msg = if err_ptr.is_null() {
@@ -336,7 +337,9 @@ fn run(config_path: &str) -> Result<()> {
             }
         }
     } else {
-        return Err(anyhow!("invalid endpoint scheme in '{endpoint}' (expected unix:// or tcp://)"));
+        return Err(anyhow!(
+            "invalid endpoint scheme in '{endpoint}' (expected unix:// or tcp://)"
+        ));
     }
 
     Ok(())
