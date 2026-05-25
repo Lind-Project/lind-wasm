@@ -1,5 +1,5 @@
 use sysdefs::constants::{SIG_DFL, SIG_IGN};
-use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, ThrownException};
 
 use crate::LindHost;
 
@@ -73,9 +73,25 @@ pub fn signal_handler<
             Some(d) => d,
             None => return Ok(0),
         };
-        // Propagate wasm exceptions (e.g. siglongjmp in EH mode) back through
-        // the host boundary so the calling wasm context can handle them.
-        signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo))?;
+        let rewind_res =
+            signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
+        if let Err(err) = rewind_res {
+            if err.is::<ThrownException>() {
+                // Wasm exception (longjmp/siglongjmp in EH mode) — propagate back
+                // through the host boundary so the calling wasm context handles it.
+                return Err(err);
+            }
+            // Signal handler crashed during rewind — run cage-termination routine.
+            eprintln!("Error: signal handler crashed during rewind: {:?}", err);
+            cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+            if let Some(c) = cage::get_cage(cageid) {
+                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+            }
+            threei::EXITING_TABLE.insert(cageid);
+            cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
+            threei::handler_table::_rm_grate_from_handler(cageid);
+            ctx.exit_call(caller, 1, 0);
+        }
         return Ok(0);
     }
     // all non-main thread of the cage should not be able to reach the below routine
@@ -150,15 +166,29 @@ pub fn signal_handler<
             let invoke_res =
                 signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
             if let Err(err) = invoke_res {
-                // Pop the frame before propagating: the signal handler threw a wasm
-                // exception (siglongjmp in EH mode) — the asyncify rewind path will
-                // not run so we clean up here.
-                caller
-                    .as_context_mut()
-                    .pop_signal_asyncify_data(signal_handler as i32, signo);
-                // Propagate back through the epoch host boundary so wasmtime
-                // re-throws the pending exception in the calling wasm context.
-                return Err(err);
+                if err.is::<ThrownException>() {
+                    // Wasm exception throw (longjmp/siglongjmp in EH mode) — pop the
+                    // asyncify frame (the rewind path will not run) and propagate back
+                    // through the epoch host boundary so wasmtime re-throws the pending
+                    // exception in the calling wasm context where the setjmp catch block
+                    // can handle it.
+                    caller
+                        .as_context_mut()
+                        .pop_signal_asyncify_data(signal_handler as i32, signo);
+                    return Err(err);
+                }
+                // Any other error means the signal handler itself crashed (trap, OOB,
+                // divide-by-zero, etc.).  Run the original cage-termination routine.
+                eprintln!("Error: signal handler crashed: {:?}", err);
+                cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+                if let Some(c) = cage::get_cage(cageid) {
+                    c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                }
+                threei::EXITING_TABLE.insert(cageid);
+                cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
+                threei::handler_table::_rm_grate_from_handler(cageid);
+                ctx.exit_call(caller, 1, 0);
+                return Ok(0);
             }
 
             if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
