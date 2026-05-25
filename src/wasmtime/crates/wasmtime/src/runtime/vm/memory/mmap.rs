@@ -107,11 +107,9 @@ impl MmapMemory {
             .with_context(|| format!("cannot allocate {minimum} with guard regions"))?;
 
         // lind-wasm: pre-allocate the entire region (including guard areas) as
-        // PROT_READ|PROT_WRITE. Lind relies on explicit wasm bounds checks rather
-        // than SIGSEGV-on-PROT_NONE guard pages, so host-accessible guard regions
-        // are safe. This also ensures host-internal allocations (e.g., GC heap)
-        // are accessible from the start without needing grow_to's make_accessible
-        // to handle the initial reservation.
+        // PROT_READ|PROT_WRITE so rawposix can immediately mprotect it to
+        // PROT_NONE in attach_shared_memory (lind-multi-process/src/lib.rs).
+        // rawposix vmmap owns all permissions from that point onward.
         let mmap = Mmap::accessible_reserved(request_bytes, request_bytes)?;
 
         Ok(Self {
@@ -198,20 +196,10 @@ impl RuntimeLinearMemory for MmapMemory {
             assert!(new_size <= current_capacity.byte_count());
             assert!(self.maximum.map_or(true, |max| new_size <= max));
 
-            // If the Wasm memory's page size is smaller than the host's page
-            // size, then we might not need to actually change permissions,
-            // since we are forced to round our accessible range up to the
-            // host's page size.
-            if let Ok(difference) = new_accessible.checked_sub(self.accessible()) {
-                // SAFETY: the difference was previously inaccessible so we
-                // never handed out any references to within it.
-                let mprotect_start = self.pre_guard_size
-                    .checked_add(self.accessible())
-                    .context("overflow calculating new accessible region")?;
-                unsafe {
-                    self.mmap.make_accessible(mprotect_start, difference)?;
-                }
-            }
+            // lind-wasm: skip make_accessible for in-place linear memory growth.
+            // rawposix vmmap handles mprotect on wasm linear memory; wasmtime
+            // must not override those permissions on memory.grow.
+            let _ = new_accessible;
         }
 
         self.len = new_size;
