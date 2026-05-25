@@ -2424,6 +2424,24 @@ impl<T> Caller<'_, T> {
 
     /// Return the current size of the library's function table (table index 0).
     /// Returns 0 if the module has no indirect function table.
+
+    /// Get the indirect function table as a `Table` usable from host code.
+    ///
+    /// Tries the export name `__indirect_function_table` first.  Falls back to
+    /// accessing table 0 by index directly, which is correct in Lind's dylink
+    /// model where the imported `__indirect_function_table` is always table 0.
+    pub fn get_function_table(&mut self) -> Option<crate::Table> {
+        if let Some(crate::Extern::Table(t)) = self.get_export("__indirect_function_table") {
+            return Some(t);
+        }
+        // Fallback: access table 0 by index.  The table is imported (not
+        // exported) in worker thread stores, so the name lookup above misses it.
+        let store_id = self.store.0.id();
+        let (instance, _registry) = self.caller.id.get_mut_and_module_registry(self.store.0);
+        Some(instance.get_exported_table(store_id, TableIndex::from_u32(0)))
+    }
+
+    /// This directly accesses the underlying VM table structure and queries its size.
     pub fn get_table_size(&mut self) -> u32 {
         match self
             .caller
