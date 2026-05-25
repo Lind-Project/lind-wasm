@@ -13,8 +13,8 @@ use crate::{
     DataIndex, ElemIndex, FuncIndex, GlobalIndex, MemoryIndex, TableIndex, Tag, TagIndex,
     TypeIndex, WasmError, WasmResult,
 };
-use cranelift_entity::packed_option::ReservedValue;
 use cranelift_entity::EntityRef;
+use cranelift_entity::packed_option::ReservedValue;
 use std::boxed::Box;
 use std::vec::Vec;
 use wasmparser::{
@@ -312,7 +312,7 @@ pub fn parse_data_section<'data>(
                         return Err(wasm_unsupported!(
                             "unsupported init expr in data section: {:?}",
                             s
-                        ))
+                        ));
                     }
                 };
                 environ.declare_data_initialization(

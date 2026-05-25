@@ -1,27 +1,31 @@
 //! ARM 64-bit Instruction Set Architecture.
 
 use crate::dominator_tree::DominatorTree;
-use crate::ir::{Function, Type};
+use crate::ir::{self, Function, Type};
 use crate::isa::aarch64::settings as aarch64_settings;
 #[cfg(feature = "unwind")]
 use crate::isa::unwind::systemv;
-use crate::isa::{Builder as IsaBuilder, FunctionAlignment, TargetIsa};
+use crate::isa::{Builder as IsaBuilder, FunctionAlignment, IsaFlagsHashKey, TargetIsa};
+#[cfg(feature = "unwind")]
+use crate::machinst::CompiledCode;
 use crate::machinst::{
-    compile, CompiledCode, CompiledCodeStencil, MachInst, MachTextSectionBuilder, Reg, SigSet,
-    TextSectionBuilder, VCode,
+    CompiledCodeStencil, MachInst, MachTextSectionBuilder, Reg, SigSet, TextSectionBuilder, VCode,
+    compile,
 };
 use crate::result::CodegenResult;
 use crate::settings as shared_settings;
+use alloc::string::String;
 use alloc::{boxed::Box, vec::Vec};
 use core::fmt;
 use cranelift_control::ControlPlane;
-use target_lexicon::{Aarch64Architecture, Architecture, OperatingSystem, Triple};
+#[cfg(feature = "unwind")]
+use target_lexicon::OperatingSystem;
+use target_lexicon::{Aarch64Architecture, Architecture, Triple};
 
 // New backend:
 mod abi;
 pub mod inst;
 mod lower;
-mod pcc;
 pub mod settings;
 
 use self::inst::EmitInfo;
@@ -55,7 +59,7 @@ impl AArch64Backend {
         domtree: &DominatorTree,
         ctrl_plane: &mut ControlPlane,
     ) -> CodegenResult<(VCode<inst::Inst>, regalloc2::Output)> {
-        let emit_info = EmitInfo::new(self.flags.clone());
+        let emit_info = EmitInfo::new(self.flags.clone(), self.isa_flags.clone());
         let sigs = SigSet::new::<abi::AArch64MachineDeps>(func, &self.flags)?;
         let abi = abi::AArch64Callee::new(func, self, &self.isa_flags, &sigs)?;
         compile::compile::<AArch64Backend>(func, domtree, self, abi, emit_info, sigs, ctrl_plane)
@@ -73,23 +77,17 @@ impl TargetIsa for AArch64Backend {
         let (vcode, regalloc_result) = self.compile_vcode(func, domtree, ctrl_plane)?;
 
         let emit_result = vcode.emit(&regalloc_result, want_disasm, &self.flags, ctrl_plane);
-        let frame_size = emit_result.frame_size;
         let value_labels_ranges = emit_result.value_labels_ranges;
         let buffer = emit_result.buffer;
-        let sized_stackslot_offsets = emit_result.sized_stackslot_offsets;
-        let dynamic_stackslot_offsets = emit_result.dynamic_stackslot_offsets;
 
         if let Some(disasm) = emit_result.disasm.as_ref() {
-            log::debug!("disassembly:\n{}", disasm);
+            log::debug!("disassembly:\n{disasm}");
         }
 
         Ok(CompiledCodeStencil {
             buffer,
-            frame_size,
             vcode: emit_result.disasm,
             value_labels_ranges,
-            sized_stackslot_offsets,
-            dynamic_stackslot_offsets,
             bb_starts: emit_result.bb_offsets,
             bb_edges: emit_result.bb_edges,
         })
@@ -109,6 +107,10 @@ impl TargetIsa for AArch64Backend {
 
     fn isa_flags(&self) -> Vec<shared_settings::Value> {
         self.isa_flags.iter().collect()
+    }
+
+    fn isa_flags_hash_key(&self) -> IsaFlagsHashKey<'_> {
+        IsaFlagsHashKey(self.isa_flags.hash_key())
     }
 
     fn is_branch_protection_enabled(&self) -> bool {
@@ -138,10 +140,11 @@ impl TargetIsa for AArch64Backend {
                     )?,
                 ))
             }
-            UnwindInfoKind::Windows => {
-                // TODO: support Windows unwind info on AArch64
-                None
-            }
+            UnwindInfoKind::Windows => Some(UnwindInfo::WindowsArm64(
+                crate::isa::unwind::winarm64::create_unwind_info_from_insts(
+                    &result.buffer.unwind_info[..],
+                )?,
+            )),
             _ => None,
         })
     }
@@ -149,10 +152,10 @@ impl TargetIsa for AArch64Backend {
     #[cfg(feature = "unwind")]
     fn create_systemv_cie(&self) -> Option<gimli::write::CommonInformationEntry> {
         let is_apple_os = match self.triple.operating_system {
-            OperatingSystem::Darwin
-            | OperatingSystem::Ios
+            OperatingSystem::Darwin(_)
+            | OperatingSystem::IOS(_)
             | OperatingSystem::MacOSX { .. }
-            | OperatingSystem::Tvos => true,
+            | OperatingSystem::TvOS(_) => true,
             _ => false,
         };
 
@@ -160,7 +163,9 @@ impl TargetIsa for AArch64Backend {
             && self.isa_flags.sign_return_address_with_bkey()
             && !is_apple_os
         {
-            unimplemented!("Specifying that the B key is used with pointer authentication instructions in the CIE is not implemented.");
+            unimplemented!(
+                "Specifying that the B key is used with pointer authentication instructions in the CIE is not implemented."
+            );
         }
 
         Some(inst::unwind::systemv::create_cie())
@@ -183,9 +188,9 @@ impl TargetIsa for AArch64Backend {
         use target_lexicon::*;
         match self.triple().operating_system {
             OperatingSystem::MacOSX { .. }
-            | OperatingSystem::Darwin
-            | OperatingSystem::Ios
-            | OperatingSystem::Tvos => {
+            | OperatingSystem::Darwin(_)
+            | OperatingSystem::IOS(_)
+            | OperatingSystem::TvOS(_) => {
                 debug_assert_eq!(1 << 14, 0x4000);
                 14
             }
@@ -213,11 +218,19 @@ impl TargetIsa for AArch64Backend {
         Ok(cs)
     }
 
+    fn pretty_print_reg(&self, reg: Reg, _size: u8) -> String {
+        inst::regs::pretty_print_reg(reg)
+    }
+
     fn has_native_fma(&self) -> bool {
         true
     }
 
-    fn has_x86_blendv_lowering(&self, _: Type) -> bool {
+    fn has_round(&self) -> bool {
+        true
+    }
+
+    fn has_blendv_lowering(&self, _: Type) -> bool {
         false
     }
 
@@ -231,6 +244,17 @@ impl TargetIsa for AArch64Backend {
 
     fn has_x86_pmaddubsw_lowering(&self) -> bool {
         false
+    }
+
+    fn default_argument_extension(&self) -> ir::ArgumentExtension {
+        // This is copied/carried over from a historical piece of code in
+        // Wasmtime:
+        //
+        // https://github.com/bytecodealliance/wasmtime/blob/a018a5a9addb77d5998021a0150192aa955c71bf/crates/cranelift/src/lib.rs#L366-L374
+        //
+        // Whether or not it is still applicable here is unsure, but it's left
+        // the same as-is for now to reduce the likelihood of problems arising.
+        ir::ArgumentExtension::Uext
     }
 }
 

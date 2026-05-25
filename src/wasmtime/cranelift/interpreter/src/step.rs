@@ -1,17 +1,18 @@
 //! The [step] function interprets a single Cranelift instruction given its [State] and
 //! [InstructionContext].
 use crate::address::{Address, AddressSize};
+use crate::frame::Frame;
 use crate::instruction::InstructionContext;
 use crate::state::{InterpreterFunctionRef, MemoryError, State};
 use crate::value::{DataValueExt, ValueConversionKind, ValueError, ValueResult};
 use cranelift_codegen::data_value::DataValue;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::{
-    types, AbiParam, AtomicRmwOp, Block, BlockCall, Endianness, ExternalName, FuncRef, Function,
-    InstructionData, MemFlags, Opcode, TrapCode, Type, Value as ValueRef,
+    AbiParam, AtomicRmwOp, Block, BlockArg, BlockCall, Endianness, ExternalName, FuncRef, Function,
+    InstructionData, MemFlags, Opcode, TrapCode, Type, Value as ValueRef, types,
 };
 use log::trace;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::fmt::Debug;
 use std::ops::RangeFrom;
 use thiserror::Error;
@@ -42,10 +43,22 @@ fn sum_unsigned(head: DataValue, tail: SmallVec<[DataValue; 1]>) -> ValueResult<
     acc.into_int_unsigned()
 }
 
+/// Collect a list of block arguments.
+fn collect_block_args(
+    frame: &Frame,
+    args: impl Iterator<Item = BlockArg>,
+) -> SmallVec<[DataValue; 1]> {
+    args.into_iter()
+        .map(|n| match n {
+            BlockArg::Value(n) => frame.get(n).clone(),
+            _ => panic!("exceptions not supported"),
+        })
+        .collect()
+}
+
 /// Interpret a single Cranelift instruction. Note that program traps and interpreter errors are
 /// distinct: a program trap results in `Ok(Flow::Trap(...))` whereas an interpretation error (e.g.
 /// the types of two values are incompatible) results in `Err(...)`.
-#[allow(unused_variables)]
 pub fn step<'a, I>(state: &mut dyn State<'a>, inst_context: I) -> Result<ControlFlow<'a>, StepError>
 where
     I: InstructionContext,
@@ -58,7 +71,7 @@ where
         if ctrl_ty.is_invalid() {
             String::new()
         } else {
-            format!(".{}", ctrl_ty)
+            format!(".{ctrl_ty}")
         }
     );
 
@@ -81,20 +94,35 @@ where
 
     // Retrieve the immediate value for an instruction, expecting it to exist.
     let imm = || -> DataValue {
-        DataValue::from(match inst {
+        match inst {
             InstructionData::UnaryConst {
-                constant_handle, ..
+                constant_handle,
+                opcode,
             } => {
                 let buffer = state
                     .get_current_function()
                     .dfg
                     .constants
-                    .get(constant_handle.clone())
-                    .as_slice();
-                match ctrl_ty.bytes() {
-                    16 => DataValue::V128(buffer.try_into().expect("a 16-byte data buffer")),
-                    8 => DataValue::V64(buffer.try_into().expect("an 8-byte data buffer")),
-                    length => panic!("unexpected UnaryConst buffer length {}", length),
+                    .get(constant_handle);
+                match (ctrl_ty.bytes(), opcode) {
+                    (_, Opcode::F128const) => {
+                        DataValue::F128(buffer.try_into().expect("a 16-byte data buffer"))
+                    }
+                    (16, Opcode::Vconst) => DataValue::V128(
+                        buffer.as_slice().try_into().expect("a 16-byte data buffer"),
+                    ),
+                    (8, Opcode::Vconst) => {
+                        DataValue::V64(buffer.as_slice().try_into().expect("an 8-byte data buffer"))
+                    }
+                    (4, Opcode::Vconst) => {
+                        DataValue::V32(buffer.as_slice().try_into().expect("a 4-byte data buffer"))
+                    }
+                    (2, Opcode::Vconst) => {
+                        DataValue::V16(buffer.as_slice().try_into().expect("a 2-byte data buffer"))
+                    }
+                    (length, opcode) => panic!(
+                        "unexpected UnaryConst controlling type size {length} for opcode {opcode:?}"
+                    ),
                 }
             }
             InstructionData::Shuffle { imm, .. } => {
@@ -108,13 +136,17 @@ where
                 match mask.len() {
                     16 => DataValue::V128(mask.try_into().expect("a 16-byte vector mask")),
                     8 => DataValue::V64(mask.try_into().expect("an 8-byte vector mask")),
-                    length => panic!("unexpected Shuffle mask length {}", mask.len()),
+                    4 => DataValue::V32(mask.try_into().expect("a 4-byte vector mask")),
+                    2 => DataValue::V16(mask.try_into().expect("a 2-byte vector mask")),
+                    length => panic!("unexpected Shuffle mask length {length}"),
                 }
             }
             // 8-bit.
             InstructionData::BinaryImm8 { imm, .. } | InstructionData::TernaryImm8 { imm, .. } => {
                 DataValue::from(imm as i8) // Note the switch from unsigned to signed.
             }
+            // 16-bit
+            InstructionData::UnaryIeee16 { imm, .. } => DataValue::from(imm),
             // 32-bit
             InstructionData::UnaryIeee32 { imm, .. } => DataValue::from(imm),
             InstructionData::Load { offset, .. }
@@ -127,7 +159,7 @@ where
             | InstructionData::IntCompareImm { imm, .. } => DataValue::from(imm.bits()),
             InstructionData::UnaryIeee64 { imm, .. } => DataValue::from(imm),
             _ => unreachable!(),
-        })
+        }
     };
 
     // Retrieve the immediate value for an instruction and convert it to the controlling type of the
@@ -147,39 +179,39 @@ where
     let assign_or_trap = |value: ValueResult<DataValue>| match value {
         Ok(v) => Ok(assign(v)),
         Err(ValueError::IntegerDivisionByZero) => Ok(ControlFlow::Trap(CraneliftTrap::User(
-            TrapCode::IntegerDivisionByZero,
+            TrapCode::INTEGER_DIVISION_BY_ZERO,
         ))),
         Err(ValueError::IntegerOverflow) => Ok(ControlFlow::Trap(CraneliftTrap::User(
-            TrapCode::IntegerOverflow,
+            TrapCode::INTEGER_OVERFLOW,
         ))),
         Err(e) => Err(e),
     };
 
     let memerror_to_trap = |e: MemoryError| match e {
-        MemoryError::InvalidAddress(_) => TrapCode::HeapOutOfBounds,
-        MemoryError::InvalidAddressType(_) => TrapCode::HeapOutOfBounds,
-        MemoryError::InvalidOffset { .. } => TrapCode::HeapOutOfBounds,
-        MemoryError::InvalidEntry { .. } => TrapCode::HeapOutOfBounds,
-        MemoryError::OutOfBoundsStore { mem_flags, .. } => mem_flags
-            .trap_code()
-            .expect("store with notrap flag should not trap"),
-        MemoryError::OutOfBoundsLoad { mem_flags, .. } => mem_flags
-            .trap_code()
-            .expect("load with notrap flag should not trap"),
-        MemoryError::MisalignedLoad { .. } => TrapCode::HeapMisaligned,
-        MemoryError::MisalignedStore { .. } => TrapCode::HeapMisaligned,
+        MemoryError::InvalidAddress(_)
+        | MemoryError::InvalidAddressType(_)
+        | MemoryError::InvalidOffset { .. }
+        | MemoryError::InvalidEntry { .. } => CraneliftTrap::User(TrapCode::HEAP_OUT_OF_BOUNDS),
+        MemoryError::OutOfBoundsStore { mem_flags, .. }
+        | MemoryError::OutOfBoundsLoad { mem_flags, .. } => CraneliftTrap::User(
+            mem_flags
+                .trap_code()
+                .expect("op with notrap flag should not trap"),
+        ),
+        MemoryError::MisalignedLoad { .. } => CraneliftTrap::HeapMisaligned,
+        MemoryError::MisalignedStore { .. } => CraneliftTrap::HeapMisaligned,
     };
 
     // Assigns or traps depending on the value of the result
     let assign_or_memtrap = |res| match res {
         Ok(v) => assign(v),
-        Err(e) => ControlFlow::Trap(CraneliftTrap::User(memerror_to_trap(e))),
+        Err(e) => ControlFlow::Trap(memerror_to_trap(e)),
     };
 
     // Continues or traps depending on the value of the result
     let continue_or_memtrap = |res| match res {
         Ok(_) => ControlFlow::Continue,
-        Err(e) => ControlFlow::Trap(CraneliftTrap::User(memerror_to_trap(e))),
+        Err(e) => ControlFlow::Trap(memerror_to_trap(e)),
     };
 
     let calculate_addr =
@@ -231,8 +263,10 @@ where
     // Retrieve an instruction's branch destination; expects the instruction to be a branch.
 
     let continue_at = |block: BlockCall| {
-        let branch_args =
-            state.collect_values(block.args_slice(&state.get_current_function().dfg.value_lists));
+        let branch_args = collect_block_args(
+            state.current_frame(),
+            block.args(&state.get_current_function().dfg.value_lists),
+        );
         Ok(ControlFlow::ContinueAt(
             block.block(&state.get_current_function().dfg.value_lists),
             branch_args,
@@ -240,6 +274,7 @@ where
     };
 
     // Based on `condition`, indicate where to continue the control flow.
+    #[expect(unused_variables, reason = "here in case it's needed in the future")]
     let branch_when = |condition: bool, block| -> Result<ControlFlow, StepError> {
         if condition {
             continue_at(block)
@@ -272,9 +307,7 @@ where
             // guarantees that the user has ran that.
             let args_match = validate_signature_params(&signature.params[..], &args[..]);
             if !args_match {
-                return Ok(ControlFlow::Trap(CraneliftTrap::User(
-                    TrapCode::BadSignature,
-                )));
+                return Ok(ControlFlow::Trap(CraneliftTrap::BadSignature));
             }
 
             Ok(match func_ref {
@@ -292,7 +325,7 @@ where
                     // We don't transfer control to a libcall, we just execute it and return the results
                     let res = libcall_handler(libcall, args);
                     let res = match res {
-                        Err(trap) => return Ok(ControlFlow::Trap(CraneliftTrap::User(trap))),
+                        Err(trap) => return Ok(ControlFlow::Trap(trap)),
                         Ok(rets) => rets,
                     };
 
@@ -300,7 +333,7 @@ where
                     if validate_signature_params(&signature.returns[..], &res[..]) {
                         ControlFlow::Assign(res)
                     } else {
-                        ControlFlow::Trap(CraneliftTrap::User(TrapCode::BadSignature))
+                        ControlFlow::Trap(CraneliftTrap::BadSignature)
                     }
                 }
             })
@@ -429,7 +462,7 @@ where
                 AddressSize::try_from(addr_ty).and_then(|addr_size| {
                     let addr = state.function_address(addr_size, &ext_data.name)?;
                     let dv = DataValue::try_from(addr)?;
-                    Ok(dv.into())
+                    Ok(dv)
                 })
             })
         }
@@ -531,7 +564,7 @@ where
                 AddressSize::try_from(load_ty).and_then(|addr_size| {
                     let addr = state.stack_address(addr_size, slot, offset)?;
                     let dv = DataValue::try_from(addr)?;
-                    Ok(dv.into())
+                    Ok(dv)
                 })
             })
         }
@@ -552,10 +585,11 @@ where
             ControlFlow::Continue
         }
         Opcode::Iconst => assign(DataValueExt::int(imm().into_int_signed()?, ctrl_ty)?),
+        Opcode::F16const => assign(imm()),
         Opcode::F32const => assign(imm()),
         Opcode::F64const => assign(imm()),
+        Opcode::F128const => assign(imm()),
         Opcode::Vconst => assign(imm()),
-        Opcode::Null => unimplemented!("Null"),
         Opcode::Nop => ControlFlow::Continue,
         Opcode::Select | Opcode::SelectSpectreGuard => choose(arg(0).into_bool()?, arg(1), arg(2)),
         Opcode::Bitselect => assign(bitselect(arg(0), arg(1), arg(2))?),
@@ -714,54 +748,56 @@ where
             let (sum, carry) = arg(0).smul_overflow(arg(1))?;
             assign_multiple(&[sum, DataValueExt::bool(carry, false, types::I8)?])
         }
-        Opcode::IaddCin => choose(
-            DataValueExt::into_bool(arg(2))?,
-            DataValueExt::add(
-                DataValueExt::add(arg(0), arg(1))?,
-                DataValueExt::int(1, ctrl_ty)?,
-            )?,
-            DataValueExt::add(arg(0), arg(1))?,
-        ),
-        Opcode::IaddCarry => {
-            let mut sum = DataValueExt::add(arg(0), arg(1))?;
-            let mut carry = arg(0).sadd_checked(arg(1))?.is_none();
+        Opcode::SaddOverflowCin => {
+            let (mut sum, mut carry) = arg(0).sadd_overflow(arg(1))?;
 
             if DataValueExt::into_bool(arg(2))? {
-                carry |= sum
-                    .clone()
-                    .sadd_checked(DataValueExt::int(1, ctrl_ty)?)?
-                    .is_none();
-                sum = DataValueExt::add(sum, DataValueExt::int(1, ctrl_ty)?)?;
+                let (sum2, carry2) = sum.sadd_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sum = sum2;
+            }
+
+            assign_multiple(&[sum, DataValueExt::bool(carry, false, types::I8)?])
+        }
+        Opcode::UaddOverflowCin => {
+            let (mut sum, mut carry) = arg(0).uadd_overflow(arg(1))?;
+
+            if DataValueExt::into_bool(arg(2))? {
+                let (sum2, carry2) = sum.uadd_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sum = sum2;
             }
 
             assign_multiple(&[sum, DataValueExt::bool(carry, false, types::I8)?])
         }
         Opcode::UaddOverflowTrap => {
-            let sum = DataValueExt::add(arg(0), arg(1))?;
-            let carry = sum < arg(0) && sum < arg(1);
-            if carry {
-                ControlFlow::Trap(CraneliftTrap::User(trap_code()))
-            } else {
+            if let Some(sum) = DataValueExt::uadd_checked(arg(0), arg(1))? {
                 assign(sum)
+            } else {
+                ControlFlow::Trap(CraneliftTrap::User(trap_code()))
             }
         }
-        Opcode::IsubBin => choose(
-            DataValueExt::into_bool(arg(2))?,
-            DataValueExt::sub(
-                arg(0),
-                DataValueExt::add(arg(1), DataValueExt::int(1, ctrl_ty)?)?,
-            )?,
-            DataValueExt::sub(arg(0), arg(1))?,
-        ),
-        Opcode::IsubBorrow => {
-            let rhs = if DataValueExt::into_bool(arg(2))? {
-                DataValueExt::add(arg(1), DataValueExt::int(1, ctrl_ty)?)?
-            } else {
-                arg(1)
-            };
-            let borrow = arg(0) < rhs;
-            let sum = DataValueExt::sub(arg(0), rhs)?;
-            assign_multiple(&[sum, DataValueExt::bool(borrow, false, types::I8)?])
+        Opcode::SsubOverflowBin => {
+            let (mut sub, mut carry) = arg(0).ssub_overflow(arg(1))?;
+
+            if DataValueExt::into_bool(arg(2))? {
+                let (sub2, carry2) = sub.ssub_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sub = sub2;
+            }
+
+            assign_multiple(&[sub, DataValueExt::bool(carry, false, types::I8)?])
+        }
+        Opcode::UsubOverflowBin => {
+            let (mut sub, mut carry) = arg(0).usub_overflow(arg(1))?;
+
+            if DataValueExt::into_bool(arg(2))? {
+                let (sub2, carry2) = sub.usub_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sub = sub2;
+            }
+
+            assign_multiple(&[sub, DataValueExt::bool(carry, false, types::I8)?])
         }
         Opcode::Band => binary(DataValueExt::and, arg(0), arg(1))?,
         Opcode::Bor => binary(DataValueExt::or, arg(0), arg(1))?,
@@ -850,26 +886,64 @@ where
         Opcode::Fneg => unary(DataValueExt::neg, arg(0))?,
         Opcode::Fabs => unary(DataValueExt::abs, arg(0))?,
         Opcode::Fcopysign => binary(DataValueExt::copysign, arg(0), arg(1))?,
-        Opcode::Fmin => assign(match (arg(0), arg(1)) {
-            (a, _) if a.is_nan()? => a,
-            (_, b) if b.is_nan()? => b,
-            (a, b) if a.is_zero()? && b.is_zero()? && a.is_negative()? => a,
-            (a, b) if a.is_zero()? && b.is_zero()? && b.is_negative()? => b,
-            (a, b) => a.smin(b)?,
-        }),
-        Opcode::Fmax => assign(match (arg(0), arg(1)) {
-            (a, _) if a.is_nan()? => a,
-            (_, b) if b.is_nan()? => b,
-            (a, b) if a.is_zero()? && b.is_zero()? && a.is_negative()? => b,
-            (a, b) if a.is_zero()? && b.is_zero()? && b.is_negative()? => a,
-            (a, b) => a.smax(b)?,
-        }),
+        Opcode::Fmin => {
+            let scalar_min = |a: DataValue, b: DataValue| -> ValueResult<DataValue> {
+                Ok(match (a, b) {
+                    (a, _) if a.is_nan()? => a,
+                    (_, b) if b.is_nan()? => b,
+                    (a, b) if a.is_zero()? && b.is_zero()? && a.is_negative()? => a,
+                    (a, b) if a.is_zero()? && b.is_zero()? && b.is_negative()? => b,
+                    (a, b) => a.smin(b)?,
+                })
+            };
+
+            if ctrl_ty.is_vector() {
+                let arg0 = extractlanes(&arg(0), ctrl_ty)?;
+                let arg1 = extractlanes(&arg(1), ctrl_ty)?;
+
+                assign(vectorizelanes(
+                    &(arg0
+                        .into_iter()
+                        .zip(arg1.into_iter())
+                        .map(|(a, b)| scalar_min(a, b))
+                        .collect::<ValueResult<SimdVec<DataValue>>>()?),
+                    ctrl_ty,
+                )?)
+            } else {
+                assign(scalar_min(arg(0), arg(1))?)
+            }
+        }
+        Opcode::Fmax => {
+            let scalar_max = |a: DataValue, b: DataValue| -> ValueResult<DataValue> {
+                Ok(match (a, b) {
+                    (a, _) if a.is_nan()? => a,
+                    (_, b) if b.is_nan()? => b,
+                    (a, b) if a.is_zero()? && b.is_zero()? && a.is_negative()? => b,
+                    (a, b) if a.is_zero()? && b.is_zero()? && b.is_negative()? => a,
+                    (a, b) => a.smax(b)?,
+                })
+            };
+
+            if ctrl_ty.is_vector() {
+                let arg0 = extractlanes(&arg(0), ctrl_ty)?;
+                let arg1 = extractlanes(&arg(1), ctrl_ty)?;
+
+                assign(vectorizelanes(
+                    &(arg0
+                        .into_iter()
+                        .zip(arg1.into_iter())
+                        .map(|(a, b)| scalar_max(a, b))
+                        .collect::<ValueResult<SimdVec<DataValue>>>()?),
+                    ctrl_ty,
+                )?)
+            } else {
+                assign(scalar_max(arg(0), arg(1))?)
+            }
+        }
         Opcode::Ceil => unary(DataValueExt::ceil, arg(0))?,
         Opcode::Floor => unary(DataValueExt::floor, arg(0))?,
         Opcode::Trunc => unary(DataValueExt::trunc, arg(0))?,
         Opcode::Nearest => unary(DataValueExt::nearest, arg(0))?,
-        Opcode::IsNull => unimplemented!("IsNull"),
-        Opcode::IsInvalid => unimplemented!("IsInvalid"),
         Opcode::Bitcast | Opcode::ScalarToVector => {
             let input_ty = inst_context.type_of(inst_context.args()[0]).unwrap();
             let lanes = &if input_ty.is_vector() {
@@ -1044,7 +1118,7 @@ where
             // NaN check
             if arg(0).is_nan()? {
                 return Ok(ControlFlow::Trap(CraneliftTrap::User(
-                    TrapCode::BadConversionToInteger,
+                    TrapCode::BAD_CONVERSION_TO_INTEGER,
                 )));
             }
             let x = arg(0).into_float()? as i128;
@@ -1058,7 +1132,7 @@ where
             // bounds check
             if overflow {
                 return Ok(ControlFlow::Trap(CraneliftTrap::User(
-                    TrapCode::IntegerOverflow,
+                    TrapCode::INTEGER_OVERFLOW,
                 )));
             }
             // perform the conversion.
@@ -1175,7 +1249,7 @@ where
                 .and_then(|addr| state.checked_load(addr, ctrl_ty, mem_flags));
             let prev_val = match loaded {
                 Ok(v) => v,
-                Err(e) => return Ok(ControlFlow::Trap(CraneliftTrap::User(memerror_to_trap(e)))),
+                Err(e) => return Ok(ControlFlow::Trap(memerror_to_trap(e))),
             };
             let prev_val_to_assign = prev_val.clone();
             let replace = match op {
@@ -1202,7 +1276,7 @@ where
                 .and_then(|addr| state.checked_load(addr, ctrl_ty, mem_flags));
             let loaded_val = match loaded {
                 Ok(v) => v,
-                Err(e) => return Ok(ControlFlow::Trap(CraneliftTrap::User(memerror_to_trap(e)))),
+                Err(e) => return Ok(ControlFlow::Trap(memerror_to_trap(e))),
             };
             let expected_val = arg(1);
             let val_to_assign = if loaded_val == expected_val {
@@ -1277,10 +1351,18 @@ where
         Opcode::GetStackPointer => unimplemented!("GetStackPointer"),
         Opcode::GetReturnAddress => unimplemented!("GetReturnAddress"),
         Opcode::X86Pshufb => unimplemented!("X86Pshufb"),
-        Opcode::X86Blendv => unimplemented!("X86Blendv"),
+        Opcode::Blendv => unimplemented!("Blendv"),
         Opcode::X86Pmulhrsw => unimplemented!("X86Pmulhrsw"),
         Opcode::X86Pmaddubsw => unimplemented!("X86Pmaddubsw"),
         Opcode::X86Cvtt2dq => unimplemented!("X86Cvtt2dq"),
+        Opcode::StackSwitch => unimplemented!("StackSwitch"),
+
+        Opcode::TryCall => unimplemented!("TryCall"),
+        Opcode::TryCallIndirect => unimplemented!("TryCallIndirect"),
+
+        Opcode::GetExceptionHandlerAddress => unimplemented!("GetExceptionHandlerAddress"),
+
+        Opcode::SequencePoint => unimplemented!("SequencePoint"),
     })
 }
 
@@ -1326,6 +1408,12 @@ pub enum ControlFlow<'a> {
 pub enum CraneliftTrap {
     #[error("user code: {0}")]
     User(TrapCode),
+    #[error("bad signature")]
+    BadSignature,
+    #[error("unreachable code has been reached")]
+    UnreachableCodeReached,
+    #[error("heap is misaligned")]
+    HeapMisaligned,
     #[error("user debug")]
     Debug,
 }
@@ -1419,7 +1507,7 @@ pub(crate) fn extractlanes(
 
     let iterations = match lane_type {
         types::I8 => 1,
-        types::I16 => 2,
+        types::I16 | types::F16 => 2,
         types::I32 | types::F32 => 4,
         types::I64 | types::F64 => 8,
         _ => unimplemented!("vectors with lanes wider than 64-bits are currently unsupported."),
@@ -1458,7 +1546,7 @@ fn vectorizelanes_all(x: &[DataValue], vector_type: types::Type) -> ValueResult<
     let lane_type = vector_type.lane_type();
     let iterations = match lane_type {
         types::I8 => 1,
-        types::I16 => 2,
+        types::I16 | types::F16 => 2,
         types::I32 | types::F32 => 4,
         types::I64 | types::F64 => 8,
         _ => unimplemented!("vectors with lanes wider than 64-bits are currently unsupported."),

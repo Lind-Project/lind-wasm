@@ -3,19 +3,26 @@
 // ISLE integration glue.
 pub(super) mod isle;
 
-use crate::ir::pcc::{FactContext, PccResult};
-use crate::ir::{types, ExternalName, Inst as IRInst, InstructionData, LibCall, Opcode, Type};
+use crate::ir::{
+    Endianness, ExternalName, Inst as IRInst, InstructionData, LibCall, Opcode, Type, types,
+};
 use crate::isa::x64::abi::*;
 use crate::isa::x64::inst::args::*;
 use crate::isa::x64::inst::*;
-use crate::isa::x64::pcc;
-use crate::isa::{x64::X64Backend, CallConv};
+use crate::isa::{CallConv, x64::X64Backend};
 use crate::machinst::lower::*;
 use crate::machinst::*;
 use crate::result::CodegenResult;
 use crate::settings::Flags;
-use smallvec::smallvec;
+use alloc::boxed::Box;
 use target_lexicon::Triple;
+
+/// Identifier for a particular input of an instruction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct InsnInput {
+    insn: IRInst,
+    input: usize,
+}
 
 //=============================================================================
 // Helpers for instruction lowering.
@@ -34,8 +41,7 @@ impl Lower<'_, Inst> {
 
 fn is_int_or_ref_ty(ty: Type) -> bool {
     match ty {
-        types::I8 | types::I16 | types::I32 | types::I64 | types::R64 => true,
-        types::R32 => panic!("shouldn't have 32-bits refs on x64"),
+        types::I8 | types::I16 | types::I32 | types::I64 => true,
         _ => false,
     }
 }
@@ -120,6 +126,13 @@ fn is_mergeable_load(
         }
     }
 
+    // If the load's flags specify big-endian, we can't merge.
+    if let Some(flags) = ctx.memflags(src_insn) {
+        if flags.explicit_endianness() == Some(Endianness::Big) {
+            return None;
+        }
+    }
+
     // Just testing the opcode is enough, because the width will always match if
     // the type does (and the type should match if the CLIF is properly
     // constructed).
@@ -151,48 +164,44 @@ fn emit_vm_call(
     flags: &Flags,
     triple: &Triple,
     libcall: LibCall,
-    inputs: &[Reg],
-    outputs: &[Writable<Reg>],
-) -> CodegenResult<()> {
+    inputs: &[ValueRegs<Reg>],
+) -> CodegenResult<InstOutput> {
     let extname = ExternalName::LibCall(libcall);
-
-    let dist = if flags.use_colocated_libcalls() {
-        RelocDistance::Near
-    } else {
-        RelocDistance::Far
-    };
 
     // TODO avoid recreating signatures for every single Libcall function.
     let call_conv = CallConv::for_libcall(flags, CallConv::triple_default(triple));
     let sig = libcall.signature(call_conv, types::I64);
-    let caller_conv = ctx.abi().call_conv(ctx.sigs());
+    let outputs = ctx.gen_call_output(&sig);
 
     if !ctx.sigs().have_abi_sig_for_signature(&sig) {
         ctx.sigs_mut()
             .make_abi_sig_from_ir_signature::<X64ABIMachineSpec>(sig.clone(), flags)?;
     }
+    let sig = ctx.sigs().abi_sig_for_signature(&sig);
 
-    let mut abi =
-        X64CallSite::from_libcall(ctx.sigs(), &sig, &extname, dist, caller_conv, flags.clone());
+    let uses = ctx.gen_call_args(sig, inputs);
+    let defs = ctx.gen_call_rets(sig, &outputs);
 
-    assert_eq!(inputs.len(), abi.num_args(ctx.sigs()));
+    let stack_ret_space = ctx.sigs()[sig].sized_stack_ret_space();
+    let stack_arg_space = ctx.sigs()[sig].sized_stack_arg_space();
+    ctx.abi_mut()
+        .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
 
-    for (i, input) in inputs.iter().enumerate() {
-        abi.gen_arg(ctx, i, ValueRegs::one(*input));
+    if flags.use_colocated_libcalls() {
+        let call_info = ctx.gen_call_info(sig, extname, uses, defs, None, false);
+        ctx.emit(Inst::call_known(Box::new(call_info)));
+    } else {
+        let tmp = ctx.alloc_tmp(types::I64).only_reg().unwrap();
+        ctx.emit(Inst::LoadExtName {
+            dst: tmp.map(Gpr::unwrap_new),
+            name: Box::new(extname),
+            offset: 0,
+            distance: RelocDistance::Far,
+        });
+        let call_info = ctx.gen_call_info(sig, RegMem::reg(tmp.to_reg()), uses, defs, None, false);
+        ctx.emit(Inst::call_unknown(Box::new(call_info)));
     }
-
-    let mut retval_insts: SmallInstVec<_> = smallvec![];
-    for (i, output) in outputs.iter().enumerate() {
-        retval_insts.extend(abi.gen_retval(ctx, i, ValueRegs::one(*output)).into_iter());
-    }
-
-    abi.emit_call(ctx);
-
-    for inst in retval_insts {
-        ctx.emit(inst);
-    }
-
-    Ok(())
+    Ok(outputs)
 }
 
 /// Returns whether the given input is a shift by a constant value less or equal than 3.
@@ -229,7 +238,12 @@ fn lower_to_amode(ctx: &mut Lower<Inst>, spec: InsnInput, offset: i32) -> Amode 
     // We now either have an add that we must materialize, or some other input; as well as the
     // final offset.
     if let Some(add) = matches_input(ctx, spec, Opcode::Iadd) {
-        debug_assert_eq!(ctx.output_ty(add, 0), types::I64);
+        let output_ty = ctx.output_ty(add, 0);
+        debug_assert_eq!(
+            output_ty,
+            types::I64,
+            "Address width of 64 expected, got {output_ty}"
+        );
         let add_inputs = &[
             InsnInput {
                 insn: add,
@@ -289,8 +303,8 @@ fn lower_to_amode(ctx: &mut Lower<Inst>, spec: InsnInput, offset: i32) -> Amode 
 
         return Amode::imm_reg_reg_shift(
             offset,
-            Gpr::new(base).unwrap(),
-            Gpr::new(index).unwrap(),
+            Gpr::unwrap_new(base),
+            Gpr::unwrap_new(index),
             shift,
         )
         .with_flags(flags);
@@ -322,16 +336,4 @@ impl LowerBackend for X64Backend {
     fn maybe_pinned_reg(&self) -> Option<Reg> {
         Some(regs::pinned_reg())
     }
-
-    fn check_fact(
-        &self,
-        ctx: &FactContext<'_>,
-        vcode: &mut VCode<Self::MInst>,
-        inst: InsnIndex,
-        state: &mut pcc::FactFlowState,
-    ) -> PccResult<()> {
-        pcc::check(ctx, vcode, inst, state)
-    }
-
-    type FactFlowState = pcc::FactFlowState;
 }

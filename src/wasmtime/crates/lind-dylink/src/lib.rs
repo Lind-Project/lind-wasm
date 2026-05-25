@@ -8,7 +8,7 @@ use sysdefs::{
     logging::lind_debug_panic,
 };
 use wasmtime::Caller;
-use wasmtime_lind_multi_process::{get_memory_base, LindHost};
+use wasmtime_lind_multi_process::{LindHost, get_memory_base};
 
 /// Type alias for the dynamic loader callback used by `dlopen`.
 ///

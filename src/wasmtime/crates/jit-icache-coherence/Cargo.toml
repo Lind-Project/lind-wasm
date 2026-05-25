@@ -1,19 +1,20 @@
 [package]
-name = "wasmtime-jit-icache-coherence"
+name = "wasmtime-internal-jit-icache-coherence"
 version.workspace = true
 authors.workspace = true
-description = "Utilities for JIT icache maintenance"
+description = "INTERNAL: Utilities for JIT icache maintenance"
 documentation = "https://docs.rs/jit-icache-coherence"
 license = "Apache-2.0 WITH LLVM-exception"
 repository = "https://github.com/bytecodealliance/wasmtime"
 edition.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
 cfg-if = { workspace = true }
-anyhow = { workspace = true }
+wasmtime-core = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
 workspace = true
@@ -23,7 +24,7 @@ features = [
     "Win32_System_Diagnostics_Debug",
 ]
 
-[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd", target_os = "android"))'.dependencies]
+[target.'cfg(any(target_os = "linux", target_vendor = "apple", target_os = "freebsd", target_os = "android"))'.dependencies]
 libc = { workspace = true }
 
 [features]

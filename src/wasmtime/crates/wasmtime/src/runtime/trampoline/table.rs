@@ -1,28 +1,50 @@
-use crate::prelude::*;
-use crate::store::{InstanceId, StoreOpaque};
-use crate::trampoline::create_handle;
 use crate::TableType;
+use crate::prelude::*;
+use crate::runtime::vm::{Imports, ModuleRuntimeInfo, OnDemandInstanceAllocator};
+use crate::store::{AllocateInstanceKind, InstanceId, StoreOpaque, StoreResourceLimiter};
+use alloc::sync::Arc;
+use wasmtime_environ::StaticModuleIndex;
 use wasmtime_environ::{EntityIndex, Module, TypeTrace};
 
-pub fn create_table(store: &mut StoreOpaque, table: &TableType) -> Result<InstanceId> {
-    let mut module = Module::new();
+pub async fn create_table(
+    store: &mut StoreOpaque,
+    limiter: Option<&mut StoreResourceLimiter<'_>>,
+    table: &TableType,
+) -> Result<InstanceId> {
+    let mut module = Module::new(StaticModuleIndex::from_u32(0));
 
-    let wasmtime_table = table.wasmtime_table().clone();
-    let tunables = store.engine().tunables();
+    let wasmtime_table = *table.wasmtime_table();
 
     debug_assert!(
-        wasmtime_table.wasm_ty.is_canonicalized_for_runtime_usage(),
+        wasmtime_table.ref_type.is_canonicalized_for_runtime_usage(),
         "should be canonicalized for runtime usage: {:?}",
-        wasmtime_table.wasm_ty
+        wasmtime_table.ref_type
     );
 
-    let table_plan = wasmtime_environ::TablePlan::for_table(wasmtime_table, tunables);
-    let table_id = module.table_plans.push(table_plan);
+    let table_id = module.tables.push(wasmtime_table)?;
 
     // TODO: can this `exports.insert` get removed?
-    module
-        .exports
-        .insert(String::new(), EntityIndex::Table(table_id));
+    let name = module.strings.insert("")?;
+    module.exports.insert(name, EntityIndex::Table(table_id))?;
 
-    create_handle(module, store, Box::new(()), &[], None)
+    let imports = Imports::default();
+
+    unsafe {
+        let allocator =
+            OnDemandInstanceAllocator::new(store.engine().config().mem_creator.clone(), 0, false);
+        let module = try_new::<Arc<_>>(module)?;
+        store
+            .allocate_instance(
+                limiter,
+                AllocateInstanceKind::Dummy {
+                    allocator: &allocator,
+                },
+                &ModuleRuntimeInfo::bare_with_registered_type(
+                    module,
+                    table.element().clone().into_registered_type(),
+                )?,
+                imports,
+            )
+            .await
+    }
 }

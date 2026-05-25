@@ -1,28 +1,30 @@
+use crate::error::{OutOfMemory, Result, bail};
 use crate::module::{
-    FuncRefIndex, Initializer, MemoryInitialization, MemoryInitializer, MemoryPlan, Module,
-    TablePlan, TableSegment, TableSegmentElements,
+    FuncRefIndex, Initializer, MemoryInitialization, MemoryInitializer, Module, TablePlan,
+    TableSegment, TableSegmentElements,
 };
 use crate::prelude::*;
 use crate::{
-    DataIndex, DefinedFuncIndex, ElemIndex, EntityIndex, EntityType, FuncIndex, GlobalIndex,
-    InitMemory, MemoryIndex, ModuleTypesBuilder, PrimaryMap, StaticMemoryInitializer, TableIndex,
-    TableInitialValue, Tunables, TypeConvert, TypeIndex, Unsigned, WasmError, WasmHeapType,
-    WasmResult, WasmValType, WasmparserTypeConverter,
+    ConstExpr, ConstOp, DataIndex, DefinedFuncIndex, ElemIndex, EngineOrModuleTypeIndex,
+    EntityIndex, EntityType, FuncIndex, FuncKey, GlobalIndex, IndexType, InitMemory, MemoryIndex,
+    ModuleInternedTypeIndex, ModuleTypesBuilder, PanicOnOom as _, PrimaryMap, SizeOverflow,
+    StaticMemoryInitializer, StaticModuleIndex, TableIndex, TableInitialValue, Tag, TagIndex,
+    Tunables, TypeConvert, TypeIndex, WasmError, WasmHeapTopType, WasmHeapType, WasmResult,
+    WasmValType, WasmparserTypeConverter,
 };
-use anyhow::{bail, Result};
-use cranelift_entity::packed_option::ReservedValue;
 use cranelift_entity::EntityRef;
+use cranelift_entity::SecondaryMap;
+use cranelift_entity::packed_option::ReservedValue;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem;
 use std::path::PathBuf;
 use std::sync::Arc;
 use wasmparser::{
-    types::Types, CustomSectionReader, DataKind, ElementItems, ElementKind, Encoding, ExternalKind,
+    CustomSectionReader, DataKind, ElementItems, ElementKind, Encoding, ExternalKind,
     FuncToValidate, FunctionBody, KnownCustom, NameSectionReader, Naming, Operator, Parser,
-    Payload, TypeRef, Validator, ValidatorResources,
+    Payload, TypeRef, Validator, ValidatorResources, types::Types,
 };
-use wasmtime_types::{ConstExpr, ConstOp, ModuleInternedTypeIndex, SizeOverflow, WasmHeapTopType};
 
 /// Object containing the standalone environment information.
 pub struct ModuleEnvironment<'a, 'data> {
@@ -37,10 +39,10 @@ pub struct ModuleEnvironment<'a, 'data> {
     tunables: &'a Tunables,
 }
 
-/// The result of translating via `ModuleEnvironment`. Function bodies are not
-/// yet translated, and data initializers have not yet been copied out of the
-/// original buffer.
-#[derive(Default)]
+/// The result of translating via `ModuleEnvironment`.
+///
+/// Function bodies are not yet translated, and data initializers have not yet
+/// been copied out of the original buffer.
 pub struct ModuleTranslation<'data> {
     /// Module information.
     pub module: Module,
@@ -52,8 +54,24 @@ pub struct ModuleTranslation<'data> {
     /// themselves.
     pub wasm: &'data [u8],
 
+    /// The byte offset of this module's Wasm binary within the outer
+    /// binary (e.g. a component). For standalone modules this is 0.
+    /// This is used to convert component-relative source locations to
+    /// module-relative source locations.
+    pub wasm_module_offset: u64,
+
     /// References to the function bodies.
     pub function_body_inputs: PrimaryMap<DefinedFuncIndex, FunctionBodyData<'data>>,
+
+    /// For each imported function, the single statically-known function that
+    /// always satisfies that import, if any.
+    ///
+    /// This is used to turn what would otherwise be indirect calls through the
+    /// imports table into direct calls, when possible.
+    ///
+    /// When filled in, this only ever contains
+    /// `FuncKey::DefinedWasmFunction(..)`s and `FuncKey::Intrinsic(..)`s.
+    pub known_imported_functions: SecondaryMap<FuncIndex, Option<FuncKey>>,
 
     /// A list of type signatures which are considered exported from this
     /// module, or those that can possibly be called. This list is sorted, and
@@ -102,11 +120,37 @@ pub struct ModuleTranslation<'data> {
 }
 
 impl<'data> ModuleTranslation<'data> {
+    /// Create a new translation for the module with the given index.
+    pub fn new(module_index: StaticModuleIndex) -> Self {
+        Self {
+            module: Module::new(module_index),
+            wasm: &[],
+            wasm_module_offset: 0,
+            function_body_inputs: PrimaryMap::default(),
+            known_imported_functions: SecondaryMap::default(),
+            exported_signatures: Vec::default(),
+            debuginfo: DebugInfoData::default(),
+            has_unparsed_debuginfo: false,
+            data: Vec::default(),
+            data_align: None,
+            total_data: 0,
+            passive_data: Vec::default(),
+            total_passive_data: 0,
+            code_index: 0,
+            types: None,
+        }
+    }
+
     /// Returns a reference to the type information of the current module.
     pub fn get_types(&self) -> &Types {
         self.types
             .as_ref()
             .expect("module type information to be available")
+    }
+
+    /// Get this translation's module's index.
+    pub fn module_index(&self) -> StaticModuleIndex {
+        self.module.module_index
     }
 }
 
@@ -121,7 +165,7 @@ pub struct FunctionBodyData<'a> {
 }
 
 #[derive(Debug, Default)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub struct DebugInfoData<'a> {
     pub dwarf: Dwarf<'a>,
     pub name_section: NameSection<'a>,
@@ -134,13 +178,13 @@ pub struct DebugInfoData<'a> {
     pub debug_tu_index: gimli::DebugTuIndex<Reader<'a>>,
 }
 
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing")]
 pub type Dwarf<'input> = gimli::Dwarf<Reader<'input>>;
 
 type Reader<'input> = gimli::EndianSlice<'input, gimli::LittleEndian>;
 
 #[derive(Debug, Default)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub struct NameSection<'a> {
     pub module_name: Option<&'a str>,
     pub func_names: HashMap<FuncIndex, &'a str>,
@@ -148,7 +192,7 @@ pub struct NameSection<'a> {
 }
 
 #[derive(Debug, Default)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub struct WasmFileInfo {
     pub path: Option<PathBuf>,
     pub code_section_offset: u64,
@@ -157,7 +201,7 @@ pub struct WasmFileInfo {
 }
 
 #[derive(Debug)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub struct FunctionMetadata {
     pub params: Box<[WasmValType]>,
     pub locals: Box<[(u32, WasmValType)]>,
@@ -169,9 +213,10 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
         tunables: &'a Tunables,
         validator: &'a mut Validator,
         types: &'a mut ModuleTypesBuilder,
+        module_index: StaticModuleIndex,
     ) -> Self {
         Self {
-            result: ModuleTranslation::default(),
+            result: ModuleTranslation::new(module_index),
             types,
             tunables,
             validator,
@@ -229,7 +274,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                     .iter()
                     .filter_map(|(_, func)| {
                         if func.is_escaping() {
-                            Some(func.signature)
+                            Some(func.signature.unwrap_module_type_index())
                         } else {
                             None
                         }
@@ -242,9 +287,11 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
             Payload::TypeSection(types) => {
                 self.validator.type_section(&types)?;
 
-                let count = types.count();
+                let count = self.validator.types(0).unwrap().core_type_count_in_module();
+                log::trace!("interning {count} Wasm types");
+
                 let capacity = usize::try_from(count).unwrap();
-                self.result.module.types.reserve(capacity);
+                self.result.module.types.reserve(capacity)?;
                 self.types.reserve_wasm_signatures(capacity);
 
                 // Iterate over each *rec group* -- not type -- defined in the
@@ -257,15 +304,16 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                 // groups, we need copy the duplicates over (shallowly) as well,
                 // so that our types index space doesn't have holes.
                 let mut type_index = 0;
-                for _ in 0..count {
+                while type_index < count {
                     let validator_types = self.validator.types(0).unwrap();
 
                     // Get the rec group for the current type index, which is
                     // always the first type defined in a rec group.
-                    let core_type_id = validator_types.core_type_at(type_index).unwrap_sub();
+                    log::trace!("looking up wasmparser type for index {type_index}");
+                    let core_type_id = validator_types.core_type_at_in_module(type_index);
                     log::trace!(
-                        "about to intern rec group for {core_type_id:?} = {:?}",
-                        validator_types[core_type_id]
+                        "  --> {core_type_id:?} = {:?}",
+                        validator_types[core_type_id],
                     );
                     let rec_group_id = validator_types.rec_group_id_of(core_type_id);
                     debug_assert_eq!(
@@ -277,16 +325,12 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
 
                     // Intern the rec group and then fill in this module's types
                     // index space.
-                    let interned = self.types.intern_rec_group(
-                        &self.result.module,
-                        validator_types,
-                        rec_group_id,
-                    )?;
+                    let interned = self.types.intern_rec_group(validator_types, rec_group_id)?;
                     let elems = self.types.rec_group_elements(interned);
                     let len = elems.len();
-                    self.result.module.types.reserve(len);
+                    self.result.module.types.reserve(len)?;
                     for ty in elems {
-                        self.result.module.types.push(ty);
+                        self.result.module.types.push(ty.into())?;
                     }
 
                     // Advance `type_index` to the start of the next rec group.
@@ -298,9 +342,9 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                 self.validator.import_section(&imports)?;
 
                 let cnt = usize::try_from(imports.count()).unwrap();
-                self.result.module.initializers.reserve(cnt);
+                self.result.module.initializers.reserve(cnt)?;
 
-                for entry in imports {
+                for entry in imports.into_imports() {
                     let import = entry?;
                     let ty = match import.ty {
                         TypeRef::Func(index) => {
@@ -308,9 +352,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                             let interned_index = self.result.module.types[index];
                             self.result.module.num_imported_funcs += 1;
                             self.result.debuginfo.wasm_file.imported_func_count += 1;
-                            EntityType::Function(wasmtime_types::EngineOrModuleTypeIndex::Module(
-                                interned_index,
-                            ))
+                            EntityType::Function(interned_index)
                         }
                         TypeRef::Memory(ty) => {
                             self.result.module.num_imported_memories += 1;
@@ -318,17 +360,30 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                         }
                         TypeRef::Global(ty) => {
                             self.result.module.num_imported_globals += 1;
-                            EntityType::Global(self.convert_global_type(&ty))
+                            EntityType::Global(self.convert_global_type(&ty)?)
                         }
                         TypeRef::Table(ty) => {
                             self.result.module.num_imported_tables += 1;
                             EntityType::Table(self.convert_table_type(&ty)?)
                         }
-
-                        // doesn't get past validation
-                        TypeRef::Tag(_) => unreachable!(),
+                        TypeRef::Tag(ty) => {
+                            let index = TypeIndex::from_u32(ty.func_type_idx);
+                            let signature = self.result.module.types[index];
+                            let exception = self.types.define_exception_type_for_tag(
+                                signature.unwrap_module_type_index(),
+                            );
+                            let tag = Tag {
+                                signature,
+                                exception: EngineOrModuleTypeIndex::Module(exception),
+                            };
+                            self.result.module.num_imported_tags += 1;
+                            EntityType::Tag(tag)
+                        }
+                        TypeRef::FuncExact(_) => {
+                            bail!("custom-descriptors proposal not implemented yet");
+                        }
                     };
-                    self.declare_import(import.module, import.name, ty);
+                    self.declare_import(import.module, import.name, ty)?;
                 }
             }
 
@@ -336,7 +391,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                 self.validator.function_section(&functions)?;
 
                 let cnt = usize::try_from(functions.count()).unwrap();
-                self.result.module.functions.reserve_exact(cnt);
+                self.result.module.functions.reserve_exact(cnt)?;
 
                 for entry in functions {
                     let sigindex = entry?;
@@ -349,19 +404,23 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
             Payload::TableSection(tables) => {
                 self.validator.table_section(&tables)?;
                 let cnt = usize::try_from(tables.count()).unwrap();
-                self.result.module.table_plans.reserve_exact(cnt);
+                self.result.module.tables.reserve_exact(cnt)?;
 
                 for entry in tables {
                     let wasmparser::Table { ty, init } = entry?;
                     let table = self.convert_table_type(&ty)?;
-                    let plan = TablePlan::for_table(table, &self.tunables);
-                    self.result.module.table_plans.push(plan);
+                    self.result.module.needs_gc_heap |= table.ref_type.is_vmgcref_type();
+                    self.result.module.tables.push(table)?;
+                    self.result
+                        .module
+                        .table_plans
+                        .push(TablePlan::for_table(table, &self.tunables))?;
                     let init = match init {
                         wasmparser::TableInit::RefNull => TableInitialValue::Null {
-                            precomputed: Vec::new(),
+                            precomputed: TryVec::new(),
                         },
                         wasmparser::TableInit::Expr(expr) => {
-                            let (init, escaped) = ConstExpr::from_wasmparser(expr)?;
+                            let (init, escaped) = ConstExpr::from_wasmparser(self, expr)?;
                             for f in escaped {
                                 self.flag_func_escaped(f);
                             }
@@ -372,7 +431,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                         .module
                         .table_initialization
                         .initial_values
-                        .push(init);
+                        .push(init)?;
                 }
             }
 
@@ -380,38 +439,43 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                 self.validator.memory_section(&memories)?;
 
                 let cnt = usize::try_from(memories.count()).unwrap();
-                self.result.module.memory_plans.reserve_exact(cnt);
+                self.result.module.memories.reserve_exact(cnt)?;
 
                 for entry in memories {
                     let memory = entry?;
-                    let plan = MemoryPlan::for_memory(memory.into(), &self.tunables);
-                    self.result.module.memory_plans.push(plan);
+                    self.result.module.memories.push(memory.into())?;
                 }
             }
 
             Payload::TagSection(tags) => {
                 self.validator.tag_section(&tags)?;
 
-                // This feature isn't enabled at this time, so we should
-                // never get here.
-                unreachable!();
+                for entry in tags {
+                    let sigindex = entry?.func_type_idx;
+                    let ty = TypeIndex::from_u32(sigindex);
+                    let interned_index = self.result.module.types[ty];
+                    let exception = self
+                        .types
+                        .define_exception_type_for_tag(interned_index.unwrap_module_type_index());
+                    self.result.module.push_tag(interned_index, exception);
+                }
             }
 
             Payload::GlobalSection(globals) => {
                 self.validator.global_section(&globals)?;
 
                 let cnt = usize::try_from(globals.count()).unwrap();
-                self.result.module.globals.reserve_exact(cnt);
+                self.result.module.globals.reserve_exact(cnt)?;
 
                 for entry in globals {
                     let wasmparser::Global { ty, init_expr } = entry?;
-                    let (initializer, escaped) = ConstExpr::from_wasmparser(init_expr)?;
+                    let (initializer, escaped) = ConstExpr::from_wasmparser(self, init_expr)?;
                     for f in escaped {
                         self.flag_func_escaped(f);
                     }
-                    let ty = self.convert_global_type(&ty);
-                    self.result.module.globals.push(ty);
-                    self.result.module.global_initializers.push(initializer);
+                    let ty = self.convert_global_type(&ty)?;
+                    self.result.module.globals.push(ty)?;
+                    self.result.module.global_initializers.push(initializer)?;
                 }
             }
 
@@ -419,12 +483,12 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                 self.validator.export_section(&exports)?;
 
                 let cnt = usize::try_from(exports.count()).unwrap();
-                self.result.module.exports.reserve(cnt);
+                self.result.module.exports.reserve(cnt)?;
 
                 for entry in exports {
                     let wasmparser::Export { name, kind, index } = entry?;
                     let entity = match kind {
-                        ExternalKind::Func => {
+                        ExternalKind::Func | ExternalKind::FuncExact => {
                             let index = FuncIndex::from_u32(index);
                             self.flag_func_escaped(index);
                             EntityIndex::Function(index)
@@ -432,17 +496,13 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                         ExternalKind::Table => EntityIndex::Table(TableIndex::from_u32(index)),
                         ExternalKind::Memory => EntityIndex::Memory(MemoryIndex::from_u32(index)),
                         ExternalKind::Global => EntityIndex::Global(GlobalIndex::from_u32(index)),
-
-                        // this never gets past validation
-                        ExternalKind::Tag => unreachable!(),
+                        ExternalKind::Tag => EntityIndex::Tag(TagIndex::from_u32(index)),
                     };
                     if let EntityIndex::Table(table) = entity {
                         self.flag_written_table(table);
                     }
-                    self.result
-                        .module
-                        .exports
-                        .insert(String::from(name), entity);
+                    let name = self.result.module.strings.insert(name)?;
+                    self.result.module.exports.insert(name, entity)?;
                 }
             }
 
@@ -485,7 +545,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                             let mut exprs =
                                 Vec::with_capacity(usize::try_from(items.count()).unwrap());
                             for expr in items {
-                                let (expr, escaped) = ConstExpr::from_wasmparser(expr?)?;
+                                let (expr, escaped) = ConstExpr::from_wasmparser(self, expr?)?;
                                 exprs.push(expr);
                                 for func in escaped {
                                     self.flag_func_escaped(func);
@@ -501,28 +561,26 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                             offset_expr,
                         } => {
                             let table_index = TableIndex::from_u32(table_index.unwrap_or(0));
-                            let (offset, escaped) = ConstExpr::from_wasmparser(offset_expr)?;
+                            let (offset, escaped) = ConstExpr::from_wasmparser(self, offset_expr)?;
                             debug_assert!(escaped.is_empty());
 
                             if !offset.provably_nonzero_i32() {
                                 self.flag_table_possibly_non_null_zero_element(table_index);
                             }
 
-                            self.result
-                                .module
-                                .table_initialization
-                                .segments
-                                .push(TableSegment {
+                            self.result.module.table_initialization.segments.push(
+                                TableSegment {
                                     table_index,
                                     offset,
-                                    elements: elements.into(),
-                                });
+                                    elements,
+                                },
+                            )?;
                         }
 
                         ElementKind::Passive => {
                             let elem_index = ElemIndex::from_u32(index as u32);
                             let index = self.result.module.passive_elements.len();
-                            self.result.module.passive_elements.push(elements.into());
+                            self.result.module.passive_elements.push(elements)?;
                             self.result
                                 .module
                                 .passive_elements_map
@@ -535,7 +593,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
             }
 
             Payload::CodeSectionStart { count, range, .. } => {
-                self.validator.code_section_start(count, &range)?;
+                self.validator.code_section_start(&range)?;
                 let cnt = usize::try_from(count).unwrap();
                 self.result.function_body_inputs.reserve_exact(cnt);
                 self.result.debuginfo.wasm_file.code_section_offset = range.start as u64;
@@ -549,13 +607,15 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
 
                 let call_indirect_start = self.result.module.num_call_indirect_caches;
 
-                if self.tunables.generate_native_debuginfo {
-                    let sig_index = self.result.module.functions[func_index].signature;
+                if self.tunables.debug_native {
+                    let sig_index = self.result.module.functions[func_index]
+                        .signature
+                        .unwrap_module_type_index();
                     let sig = self.types[sig_index].unwrap_func();
                     let mut locals = Vec::new();
                     for pair in body.get_locals_reader()? {
                         let (cnt, ty) = pair?;
-                        let ty = self.convert_valtype(ty);
+                        let ty = self.convert_valtype(ty)?;
                         locals.push((cnt, ty));
                     }
                     self.result
@@ -566,6 +626,12 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                             locals: locals.into_boxed_slice(),
                             params: sig.params().into(),
                         });
+                }
+                if self.tunables.debug_guest {
+                    // All functions are potentially reachable and
+                    // callable by the guest debugger, so they must
+                    // all be flagged as escaping.
+                    self.flag_func_escaped(func_index);
                 }
                 self.prescan_code_section(&body)?;
                 self.result.function_body_inputs.push(FunctionBodyData {
@@ -585,7 +651,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                 };
 
                 let cnt = usize::try_from(data.count()).unwrap();
-                initializers.reserve_exact(cnt);
+                initializers.reserve_exact(cnt)?;
                 self.result.data.reserve_exact(cnt);
 
                 for (index, entry) in data.into_iter().enumerate() {
@@ -617,14 +683,18 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                         } => {
                             let range = mk_range(&mut self.result.total_data)?;
                             let memory_index = MemoryIndex::from_u32(memory_index);
-                            let (offset, escaped) = ConstExpr::from_wasmparser(offset_expr)?;
+                            let (offset, escaped) = ConstExpr::from_wasmparser(self, offset_expr)?;
                             debug_assert!(escaped.is_empty());
 
+                            let initializers = match &mut self.result.module.memory_initialization {
+                                MemoryInitialization::Segmented(i) => i,
+                                _ => unreachable!(),
+                            };
                             initializers.push(MemoryInitializer {
                                 memory_index,
                                 offset,
                                 data: range,
-                            });
+                            })?;
                             self.result.data.push(data.into());
                         }
                         DataKind::Passive => {
@@ -678,7 +748,7 @@ and for re-adding support for interface types you can see this issue:
             // that's a bug in Wasmtime as we forgot to implement something.
             other => {
                 self.validator.payload(&other)?;
-                panic!("unimplemented section in wasm file {:?}", other);
+                panic!("unimplemented section in wasm file {other:?}");
             }
         }
         Ok(())
@@ -766,7 +836,7 @@ and for re-adding support for interface types you can see this issue:
             KnownCustom::Name(name) => {
                 let result = self.name_section(name);
                 if let Err(e) = result {
-                    log::warn!("failed to parse name section {:?}", e);
+                    log::warn!("failed to parse name section {e:?}");
                 }
             }
             KnownCustom::Dylink0(dylinks) => {
@@ -809,7 +879,15 @@ and for re-adding support for interface types you can see this issue:
                                 .dylink_import_info
                                 .insert(crate::DylinkImportInfo { imports: imports });
                         }
-                        wasmparser::Dylink0Subsection::Unknown { ty, data, range } => {
+                        wasmparser::Dylink0Subsection::RuntimePath(_rtp) => {
+                            #[cfg(feature = "debug-dylink")]
+                            eprintln!("Warning: Dylink.0 RuntimePath Section not handled");
+                        }
+                        wasmparser::Dylink0Subsection::Unknown {
+                            ty: _,
+                            data: _,
+                            range: _,
+                        } => {
                             #[cfg(feature = "debug-dylink")]
                             eprintln!("Dylink.0 Unknown Section Encountered!");
                         }
@@ -826,7 +904,7 @@ and for re-adding support for interface types you can see this issue:
     }
 
     fn dwarf_section(&mut self, name: &str, section: &CustomSectionReader<'data>) {
-        if !self.tunables.generate_native_debuginfo && !self.tunables.parse_wasm_debuginfo {
+        if !self.tunables.debug_native && !self.tunables.parse_wasm_debuginfo {
             self.result.has_unparsed_debuginfo = true;
             return;
         }
@@ -867,7 +945,7 @@ and for re-adding support for interface types you can see this issue:
             // We don't use these at the moment.
             ".debug_aranges" | ".debug_pubnames" | ".debug_pubtypes" => return,
             other => {
-                log::warn!("unknown debug section `{}`", other);
+                log::warn!("unknown debug section `{other}`");
                 return;
             }
         }
@@ -888,13 +966,19 @@ and for re-adding support for interface types you can see this issue:
     /// When the module linking proposal is disabled, however, disregard this
     /// logic and instead work directly with two-level imports since no
     /// instances are defined.
-    fn declare_import(&mut self, module: &'data str, field: &'data str, ty: EntityType) {
+    fn declare_import(
+        &mut self,
+        module: &'data str,
+        field: &'data str,
+        ty: EntityType,
+    ) -> Result<(), OutOfMemory> {
         let index = self.push_type(ty);
         self.result.module.initializers.push(Initializer::Import {
-            name: module.to_owned(),
-            field: field.to_owned(),
+            name: self.result.module.strings.insert(module)?,
+            field: self.result.module.strings.insert(field)?,
             index,
-        });
+        })?;
+        Ok(())
     }
 
     fn push_type(&mut self, ty: EntityType) -> EntityIndex {
@@ -910,15 +994,22 @@ and for re-adding support for interface types you can see this issue:
                 func_index
             }),
             EntityType::Table(ty) => {
-                let plan = TablePlan::for_table(ty, &self.tunables);
-                EntityIndex::Table(self.result.module.table_plans.push(plan))
+                self.result
+                    .module
+                    .table_plans
+                    .push(TablePlan::for_table(ty, &self.tunables))
+                    .panic_on_oom();
+                EntityIndex::Table(self.result.module.tables.push(ty).panic_on_oom())
             }
             EntityType::Memory(ty) => {
-                let plan = MemoryPlan::for_memory(ty, &self.tunables);
-                EntityIndex::Memory(self.result.module.memory_plans.push(plan))
+                EntityIndex::Memory(self.result.module.memories.push(ty).panic_on_oom())
             }
-            EntityType::Global(ty) => EntityIndex::Global(self.result.module.globals.push(ty)),
-            EntityType::Tag(_) => unimplemented!(),
+            EntityType::Global(ty) => {
+                EntityIndex::Global(self.result.module.globals.push(ty).panic_on_oom())
+            }
+            EntityType::Tag(ty) => {
+                EntityIndex::Tag(self.result.module.tags.push(ty).panic_on_oom())
+            }
         }
     }
 
@@ -967,13 +1058,14 @@ and for re-adding support for interface types you can see this issue:
                     }
                 }
                 wasmparser::Name::Module { name, .. } => {
-                    self.result.module.name = Some(name.to_string());
-                    if self.tunables.generate_native_debuginfo {
+                    self.result.module.name =
+                        Some(self.result.module.strings.insert(name).panic_on_oom());
+                    if self.tunables.debug_native {
                         self.result.debuginfo.name_section.module_name = Some(name);
                     }
                 }
                 wasmparser::Name::Local(reader) => {
-                    if !self.tunables.generate_native_debuginfo {
+                    if !self.tunables.debug_native {
                         continue;
                     }
                     for f in reader {
@@ -1014,14 +1106,17 @@ and for re-adding support for interface types you can see this issue:
 
 impl TypeConvert for ModuleEnvironment<'_, '_> {
     fn lookup_heap_type(&self, index: wasmparser::UnpackedIndex) -> WasmHeapType {
-        WasmparserTypeConverter::new(&self.types, &self.result.module).lookup_heap_type(index)
+        WasmparserTypeConverter::new(&self.types, |idx| {
+            self.result.module.types[idx].unwrap_module_type_index()
+        })
+        .lookup_heap_type(index)
     }
 
-    fn lookup_type_index(
-        &self,
-        index: wasmparser::UnpackedIndex,
-    ) -> wasmtime_types::EngineOrModuleTypeIndex {
-        WasmparserTypeConverter::new(&self.types, &self.result.module).lookup_type_index(index)
+    fn lookup_type_index(&self, index: wasmparser::UnpackedIndex) -> EngineOrModuleTypeIndex {
+        WasmparserTypeConverter::new(&self.types, |idx| {
+            self.result.module.types[idx].unwrap_module_type_index()
+        })
+        .lookup_type_index(index)
     }
 }
 
@@ -1075,8 +1170,8 @@ impl ModuleTranslation<'_> {
             // wasm module.
             segments: Vec<(usize, StaticMemoryInitializer)>,
         }
-        let mut info = PrimaryMap::with_capacity(self.module.memory_plans.len());
-        for _ in 0..self.module.memory_plans.len() {
+        let mut info = PrimaryMap::with_capacity(self.module.memories.len());
+        for _ in 0..self.module.memories.len() {
             info.push(Memory {
                 data_size: 0,
                 min_addr: u64::MAX,
@@ -1095,16 +1190,15 @@ impl ModuleTranslation<'_> {
                 &mut self,
                 memory_index: MemoryIndex,
             ) -> Result<u64, SizeOverflow> {
-                self.module.memory_plans[memory_index]
-                    .memory
-                    .minimum_byte_size()
+                self.module.memories[memory_index].minimum_byte_size()
             }
 
             fn eval_offset(&mut self, memory_index: MemoryIndex, expr: &ConstExpr) -> Option<u64> {
-                let mem64 = self.module.memory_plans[memory_index].memory.memory64;
-                match expr.ops() {
-                    &[ConstOp::I32Const(offset)] if !mem64 => Some(offset.unsigned().into()),
-                    &[ConstOp::I64Const(offset)] if mem64 => Some(offset.unsigned()),
+                match (expr.ops(), self.module.memories[memory_index].idx_type) {
+                    (&[ConstOp::I32Const(offset)], IndexType::I32) => {
+                        Some(offset.cast_unsigned().into())
+                    }
+                    (&[ConstOp::I64Const(offset)], IndexType::I64) => Some(offset.cast_unsigned()),
                     _ => None,
                 }
             }
@@ -1143,8 +1237,12 @@ impl ModuleTranslation<'_> {
 
         // Validate that the memory information collected is indeed valid for
         // static memory initialization.
-        for info in info.values().filter(|i| i.data_size > 0) {
+        for (i, info) in info.iter().filter(|(_, info)| info.data_size > 0) {
             let image_size = info.max_addr - info.min_addr;
+
+            if self.module.memories[i].page_size() < page_size {
+                return;
+            }
 
             // If the range of memory being initialized is less than twice the
             // total size of the data itself then it's assumed that static
@@ -1173,7 +1271,7 @@ impl ModuleTranslation<'_> {
         // memory initialization image is built here from the page data and then
         // it's converted to a single initializer.
         let data = mem::replace(&mut self.data, Vec::new());
-        let mut map = PrimaryMap::with_capacity(info.len());
+        let mut map = TryPrimaryMap::with_capacity(info.len()).panic_on_oom();
         let mut module_data_size = 0u32;
         for (memory, info) in info.iter() {
             // Create the in-memory `image` which is the initialized contents of
@@ -1257,7 +1355,7 @@ impl ModuleTranslation<'_> {
             } else {
                 None
             };
-            let idx = map.push(init);
+            let idx = map.push(init).panic_on_oom();
             assert_eq!(idx, memory);
             module_data_size += len;
         }
@@ -1273,30 +1371,30 @@ impl ModuleTranslation<'_> {
         // This should be large enough to support very large Wasm
         // modules with huge funcref tables, but small enough to avoid
         // OOMs or DoS on truly sparse tables.
-        const MAX_FUNC_TABLE_SIZE: u32 = 1024 * 1024;
+        const MAX_FUNC_TABLE_SIZE: u64 = 1024 * 1024;
 
         // First convert any element-initialized tables to images of just that
         // single function if the minimum size of the table allows doing so.
-        for ((_, init), (_, plan)) in self
+        for ((_, init), (_, table)) in self
             .module
             .table_initialization
             .initial_values
             .iter_mut()
             .zip(
                 self.module
-                    .table_plans
+                    .tables
                     .iter()
                     .skip(self.module.num_imported_tables),
             )
         {
-            let table_size = plan.table.minimum;
+            let table_size = table.limits.min;
             if table_size > MAX_FUNC_TABLE_SIZE {
                 continue;
             }
             if let TableInitialValue::Expr(expr) = init {
                 if let [ConstOp::RefFunc(f)] = expr.ops() {
                     *init = TableInitialValue::Null {
-                        precomputed: vec![*f; table_size as usize],
+                        precomputed: try_vec![*f; table_size as usize].panic_on_oom(),
                     };
                 }
             }
@@ -1330,7 +1428,8 @@ impl ModuleTranslation<'_> {
             // include it in the statically-built array of initial
             // contents.
             let offset = match segment.offset.ops() {
-                &[ConstOp::I32Const(offset)] => offset.unsigned(),
+                &[ConstOp::I32Const(offset)] => u64::from(offset.cast_unsigned()),
+                &[ConstOp::I64Const(offset)] => offset.cast_unsigned(),
                 _ => break,
             };
 
@@ -1341,14 +1440,13 @@ impl ModuleTranslation<'_> {
                 Some(top) => top,
                 None => break,
             };
-            let table_size = self.module.table_plans[segment.table_index].table.minimum;
+            let table_size = self.module.tables[segment.table_index].limits.min;
             if top > table_size || top > MAX_FUNC_TABLE_SIZE {
                 break;
             }
 
-            match self.module.table_plans[segment.table_index]
-                .table
-                .wasm_ty
+            match self.module.tables[segment.table_index]
+                .ref_type
                 .heap_type
                 .top()
             {
@@ -1358,7 +1456,10 @@ impl ModuleTranslation<'_> {
                 // initializer won't trap so we could continue processing
                 // segments, but that's left as a future optimization if
                 // necessary.
-                WasmHeapTopType::Any | WasmHeapTopType::Extern => break,
+                WasmHeapTopType::Any
+                | WasmHeapTopType::Extern
+                | WasmHeapTopType::Cont
+                | WasmHeapTopType::Exn => break,
             }
 
             // Function indices can be optimized here, but fully general
@@ -1387,7 +1488,9 @@ impl ModuleTranslation<'_> {
             // it's large enough to hold the segment and then copying the
             // segment into the precomputed list.
             if precomputed.len() < top as usize {
-                precomputed.resize(top as usize, FuncIndex::reserved_value());
+                precomputed
+                    .resize(top as usize, FuncIndex::reserved_value())
+                    .panic_on_oom();
             }
             let dst = &mut precomputed[offset as usize..top as usize];
             dst.copy_from_slice(&function_elements);
@@ -1395,6 +1498,6 @@ impl ModuleTranslation<'_> {
             // advance the iterator to see the next segment
             let _ = segments.next();
         }
-        self.module.table_initialization.segments = segments.collect();
+        self.module.table_initialization.segments = segments.try_collect().panic_on_oom();
     }
 }

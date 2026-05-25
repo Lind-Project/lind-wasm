@@ -1,6 +1,6 @@
 //! Helper functions and structures for the translation.
-use crate::environ::TargetEnvironment;
 use crate::WasmResult;
+use crate::environ::TargetEnvironment;
 use core::u32;
 use cranelift_codegen::ir;
 use cranelift_frontend::FunctionBuilder;
