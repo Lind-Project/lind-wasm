@@ -179,9 +179,43 @@ All glibc objects are compiled with `-fPIC`. In PIC mode, the LLVM SjLj pass
 emits a tag **import** for `__c_longjmp` rather than a local weak definition
 — which is correct: the host owns the authoritative definition.
 
-For the **static build** there is no host linker, so `wasm_eh_c_longjmp_tag.o`
-provides a weak local definition that `wasm-ld` can use to satisfy all imports
-at link time (see [Known issues](#1-__c_longjmp-undefined-symbol-in-static-builds) below).
+For the **static build** there is no host linker. Because `__builtin_wasm_throw(1, …)`
+references `__c_longjmp` but the LLVM SjLj pass only emits a weak tag definition
+in objects that contain a `_setjmp` call site, programs that never call `setjmp`
+themselves would have an undefined `__c_longjmp` at link time.
+`src/glibc/setjmp/wasm_eh_c_longjmp_tag.c` solves this with a synthetic object
+that has a dummy `_setjmp` call site; the pass emits a weak `__c_longjmp` tag
+definition into it, which `wasm-ld` uses to satisfy all imports. This object must
+be compiled **without `-fPIE`** (`EXTRA_FLAGS_NO_PIE` in
+`scripts/make_glibc_and_sysroot.sh`), and is excluded from the `libc.so` shared
+link since the dynamic build uses host-provided tag imports instead.
+
+---
+
+## Longjmp from signal handlers
+
+When a signal handler calls `longjmp`, the `__c_longjmp` exception must unwind
+back through the signal delivery call chain — `signal_callback` → `pause()` /
+`sigsuspend()` — to the `try_table` at the original `setjmp` call site. That
+chain is entirely pure-wasm, so exception propagation works naturally. The one
+place that requires explicit handling is the Rust/wasm boundary at
+`signal_func.call()` in `signal.rs`.
+
+`signal_func.call()` returns `Err(ThrownException)` when the wasm signal handler
+throws an uncaught exception. For this error to re-enter wasmtime as a live wasm
+exception (rather than a fatal cage error), `signal_handler` must return
+`wasmtime::Result<i32>` — not `anyhow::Result<i32>`. `wasmtime::Result` preserves
+`ThrownException` as a distinct variant; `?` propagates it through `epoch_callback`
+back into the wasmtime execution engine, which re-throws the pending wasm exception
+in the original execution context. It then propagates normally to the `try_table`
+at the `setjmp` call site.
+
+If `anyhow::Result` were used instead, `ThrownException` would be erased into a
+generic error, the exception would not be re-thrown, and the cage would terminate
+rather than returning to the setjmp site.
+
+Note: any host function registered with `func_wrap` that may surface wasm
+exceptions must follow the same rule — return `wasmtime::Result<T>`.
 
 ---
 
@@ -236,113 +270,6 @@ binaryen pass can also be dropped at that point if clang 19+ emits exnref native
 
 ---
 
-## Known issues and limitations
-
-### 1. `__c_longjmp` undefined symbol in static builds
-
-**Symptom:**
-```
-wasm-ld: error: libc.a(wasm_eh_setjmp.o): undefined symbol: __c_longjmp
-```
-
-**Root cause:** `__wasm_longjmp` uses `__builtin_wasm_throw(1, ...)` which
-references the `__c_longjmp` wasm exception tag. The LLVM SjLj pass only emits
-a weak tag definition in objects that contain a `_setjmp` call site. Programs
-that never call `setjmp` themselves provide no such definition.
-
-**Fix:** `src/glibc/setjmp/wasm_eh_c_longjmp_tag.c` — a synthetic object with
-a dummy `_setjmp` call site (followed by a call to `__libc_write` to satisfy
-the pass's requirement for a non-excluded post-setjmp call). The LLVM SjLj
-pass emits a weak `__c_longjmp` tag definition into this object.
-
-**Constraint:** This file must be compiled **without `-fPIE`**. With PIC/PIE
-flags, the pass emits a tag *import* instead of a local weak definition.
-`EXTRA_FLAGS_NO_PIE` in `scripts/make_glibc_and_sysroot.sh` strips `-fPIE`
-for this specific compilation.
-
-This file is stripped from `libc.so` before the shared link
-(`scripts/make_shared_glibc.sh`) because the shared build uses host-provided
-tag imports — a weak local definition in `libc.so` would be wrong.
-
-### 2. `add-export-tool` failure with Tag section
-
-**Symptom:**
-```
-Error: rewritten wasm is invalid
-Caused by: unknown global 5: exported global index out of bounds
-```
-
-**Root cause:** `wasm_eh_c_longjmp_tag.o` introduces a wasm Tag section into
-`libc.so`. The prebuilt `add-export-tool` binary was compiled with an older
-`wasmparser` that does not account for the Tag section when counting globals,
-miscounting subsequent global indices.
-
-**Fix:** Strip `wasm_eh_c_longjmp_tag.o` from a temporary copy of `libc.a`
-before the `wasm-ld` shared link:
-
-```bash
-SHARED_ARCHIVE=$(mktemp /tmp/libc_shared_XXXXXX.a)
-cp "$SYSROOT_ARCHIVE" "$SHARED_ARCHIVE"
-llvm-ar d "$SHARED_ARCHIVE" wasm_eh_c_longjmp_tag.o 2>/dev/null || true
-trap "rm -f $SHARED_ARCHIVE" EXIT
-```
-
-### 3. GC heap SIGSEGV on first `throw`
-
-**Symptom:** The first `longjmp` call caused SIGSEGV inside wasmtime's
-JIT-compiled code, in the GC heap.
-
-**Root cause:** Wasmtime allocates wasm exception objects on an internal GC
-heap created via `Mmap::reserve()` (PROT_NONE), then grown via
-`make_accessible()`. `Mmap::make_accessible` was a no-op in lind-wasm (rawposix
-manages wasm linear memory permissions). The GC heap stayed PROT_NONE and the
-first write to allocate an exception object faulted.
-
-**Fix:** Restored `Mmap::make_accessible` to call real `mprotect`. This is
-correct because the GC heap is a host-internal allocation (not wasm linear
-memory) and must be writable. The PROT_NONE enforcement for wasm linear memory
-is handled separately in `attach_shared_memory`.
-
-### 4. `__longjmp_cancel` signature mismatch
-
-**Symptom:**
-```
-wasm-ld: warning: function signature mismatch: __longjmp_cancel
->>> defined as (i32, i32) -> void in libc.a(longjmp.o)
->>> defined as () -> void in libc.a(__longjmp_cancel.o)
-```
-
-**Root cause:** The caller passes two arguments `(env, val)` but the stub had
-`void __longjmp_cancel(void)`.
-
-**Fix:** `src/glibc/sysdeps/x86/__longjmp_cancel.c` rewritten with the correct
-2-argument signature. On wasm there is no shadow stack to unwind, so
-`__longjmp_cancel` is identical to `__longjmp`.
-
-### 5. `ThrownException` not propagating through the epoch callback
-
-**Symptom:** `siglongjmp` called from a signal handler (delivered via epoch
-interrupt) terminated the cage instead of returning to the `sigsetjmp` call site.
-
-**Root cause:** Signal handlers are called via `signal_func.call()` in
-`signal.rs`. When the signal handler called `siglongjmp` → `__wasm_longjmp`
-throwing `__c_longjmp`, `call()` returned `Err(ThrownException)`. The old code
-caught this, logged an error, and terminated the cage.
-
-**Fix:** `signal_handler` now returns `wasmtime::Result<i32>`. When
-`signal_func.call()` returns `Err(ThrownException)`:
-1. Pop the signal asyncify frame.
-2. Return `Err(err)` upward.
-3. `epoch_callback` propagates the error via `?`.
-4. Wasmtime receives the error from the epoch handler and re-throws the pending
-   wasm exception in the original execution context.
-5. The exception propagates to the `try_table` at the `sigsetjmp` call site.
-
-Note: host functions registered with `func_wrap` that may surface wasm
-exceptions must return `wasmtime::Result<T>`, not `anyhow::Result<T>`.
-
----
-
 ## Open tasks
 
 ### Table memory leak on normal function exit
@@ -391,7 +318,7 @@ field is copied on fork but is always empty. These should be removed.
 | `src/glibc/setjmp/longjmp.c` | `__libc_siglongjmp` → `__longjmp` → `__wasm_longjmp` |
 | `src/lind-boot/src/lind_wasmtime/execute.rs` | Host-provided `__c_longjmp` tag for dynamic builds |
 | `src/wasmtime/crates/wasmtime/src/runtime/linker.rs` | `new_child_linker`: per-child `__c_longjmp` tag for forked cages |
-| `src/wasmtime/crates/lind-multi-process/src/signal.rs` | `ThrownException` propagation through epoch callback |
+| `src/wasmtime/crates/lind-multi-process/src/signal.rs` | `signal_handler` returns `wasmtime::Result` to propagate `ThrownException` through epoch callback |
 | `scripts/make_glibc_and_sysroot.sh` | Compiles EH setjmp objects; strips `-fPIE` for tag anchor |
 | `scripts/make_shared_glibc.sh` | Excludes `wasm_eh_c_longjmp_tag.o` from `libc.so` link |
 | `scripts/lind_compile` | Adds `-fwasm-exceptions -mllvm -wasm-enable-sjlj` when `LIND_ASYNCIFY_SETJMP` unset |
