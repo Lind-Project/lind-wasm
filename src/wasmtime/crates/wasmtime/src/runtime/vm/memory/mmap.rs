@@ -106,12 +106,12 @@ impl MmapMemory {
             .and_then(|i| i.checked_add(offset_guard_bytes))
             .with_context(|| format!("cannot allocate {minimum} with guard regions"))?;
 
-        // lind-wasm: make_accessible is a no-op because rawposix manages wasm memory
-        // permissions. Pre-allocate the entire region (including guards) as
-        // PROT_READ|PROT_WRITE so both wasm memories and host-internal allocations
-        // like the GC heap are accessible from the start. Guard regions being
-        // host-accessible is safe because lind-wasm relies on explicit bounds checks,
-        // not SIGSEGV-on-PROT_NONE, for out-of-bounds detection.
+        // lind-wasm: pre-allocate the entire region (including guard areas) as
+        // PROT_READ|PROT_WRITE. Lind relies on explicit wasm bounds checks rather
+        // than SIGSEGV-on-PROT_NONE guard pages, so host-accessible guard regions
+        // are safe. This also ensures host-internal allocations (e.g., GC heap)
+        // are accessible from the start without needing grow_to's make_accessible
+        // to handle the initial reservation.
         let mmap = Mmap::accessible_reserved(request_bytes, request_bytes)?;
 
         Ok(Self {
