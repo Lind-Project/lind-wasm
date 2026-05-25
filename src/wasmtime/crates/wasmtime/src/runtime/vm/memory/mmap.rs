@@ -205,7 +205,8 @@ impl RuntimeLinearMemory for MmapMemory {
             if let Ok(difference) = new_accessible.checked_sub(self.accessible()) {
                 // SAFETY: the difference was previously inaccessible so we
                 // never handed out any references to within it.
-                let mprotect_start = self.pre_guard_size
+                let mprotect_start = self
+                    .pre_guard_size
                     .checked_add(self.accessible())
                     .context("overflow calculating new accessible region")?;
                 unsafe {

@@ -7,9 +7,9 @@ use crate::{
     GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result, SharedMemory,
     StoreContextMut, Table, Val, ValRaw, ValType, prelude::*,
 };
-use alloc::sync::Arc;
 #[cfg(not(feature = "asyncify-setjmp"))]
 use crate::{Tag, TagType};
+use alloc::sync::Arc;
 use cage::DashMap;
 use core::fmt::{self, Debug};
 #[cfg(feature = "async")]
@@ -588,11 +588,7 @@ impl<T> Linker<T> {
                     // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
                     // rawposix takes ownership via init_vmmap + fork_vmmap.
                     unsafe {
-                        libc::mprotect(
-                            base as *mut libc::c_void,
-                            1usize << 32,
-                            libc::PROT_NONE,
-                        );
+                        libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE);
                     }
                     new_linker.define(&mut store, &module, &name, mem)?;
                 }
