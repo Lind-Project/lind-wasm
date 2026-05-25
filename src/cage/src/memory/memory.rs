@@ -5,7 +5,7 @@
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
 use crate::memory::VmmapOps;
-use sysdefs::constants::err_const::Errno;
+use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
@@ -138,7 +138,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 if ret < 0 {
                     panic!(
                         "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={})",
-                        *libc::__errno_location(),
+                        get_errno(),
                         parent_st,
                         child_st,
                         addr_len,
