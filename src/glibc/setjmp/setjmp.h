@@ -92,8 +92,9 @@ extern int sigprocmask (int __how, const __sigset_t *__restrict __set,
   (__extension__ ({                                                            \
     int __sm = (savemask);                                                    \
     (env)[0].__mask_was_saved =                                               \
-      __sm && (sigprocmask (SIG_BLOCK, (__sigset_t *) NULL,                   \
-                            (__sigset_t *) &(env)[0].__saved_mask) == 0);     \
+      __sm && (sigprocmask (0 /* how ignored: set is NULL, query only */,     \
+                            (__sigset_t *) 0,                                 \
+                            (__sigset_t *) &(env)[0].__saved_mask) == 0);    \
     _setjmp (env);                                                            \
   }))
 

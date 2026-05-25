@@ -70,11 +70,18 @@ extern void _longjmp (struct __jmp_buf_tag __env[1], int __val)
 typedef struct __jmp_buf_tag sigjmp_buf[1];
 
 /* Forward-declared here so the sigsetjmp macro can call it without requiring
-   the user to include <signal.h>.  Use sigprocmask (the public POSIX name)
-   so that dynamic builds resolve it from libc.so's exported "sigprocmask"
-   symbol rather than the private "__sigprocmask" alias.  */
+   the user to include <signal.h>.  Guarded by _SIGNAL_H so that glibc's own
+   internal compilation (which includes <signal.h> first) does not see a
+   conflicting redeclaration — glibc's signal.h uses sigset_t while we use
+   __sigset_t, and clang treats them as distinct even though they are the same
+   underlying type.  User code that includes only <setjmp.h> (no _SIGNAL_H)
+   gets the forward declaration it needs.  Use sigprocmask (the public POSIX
+   name) so that dynamic builds resolve it from libc.so's "sigprocmask" export
+   rather than the private "__sigprocmask" alias.  */
+#ifndef _SIGNAL_H
 extern int sigprocmask (int __how, const __sigset_t *__restrict __set,
                         __sigset_t *__restrict __oset) __THROW;
+#endif
 
 /* Set ENV to the current position and return 0, saving signal mask if
    SAVEMASK is set.
@@ -85,8 +92,9 @@ extern int sigprocmask (int __how, const __sigset_t *__restrict __set,
   (__extension__ ({                                                            \
     int __sm = (savemask);                                                    \
     (env)[0].__mask_was_saved =                                               \
-      __sm && (sigprocmask (SIG_BLOCK, (__sigset_t *) NULL,                   \
-                            (__sigset_t *) &(env)[0].__saved_mask) == 0);     \
+      __sm && (sigprocmask (0 /* how ignored: set is NULL, query only */,     \
+                            (__sigset_t *) 0,                                 \
+                            (__sigset_t *) &(env)[0].__saved_mask) == 0);    \
     _setjmp (env);                                                            \
   }))
 
