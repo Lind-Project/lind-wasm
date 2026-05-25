@@ -30,6 +30,7 @@ pub const ACCESS_SYSCALL: i32 = 21;
 pub const PIPE_SYSCALL: i32 = 22;
 pub const SELECT_SYSCALL: i32 = 23;
 pub const SCHED_YIELD_SYSCALL: i32 = 24;
+pub const PAUSE_SYSCALL: i32 = 34;
 pub const SHMGET_SYSCALL: i32 = 29;
 pub const SHMAT_SYSCALL: i32 = 30;
 pub const SHMCTL_SYSCALL: i32 = 31;

@@ -287,7 +287,6 @@ pub fn rawposix_start(verbosity: isize) {
         exit_group_initiated: AtomicBool::new(false),
         is_dead: AtomicBool::new(false),
         grate_inflight: AtomicU64::new(0),
-        direct_signal_old_sigset: AtomicU64::new(0),
     };
 
     // Add cage to cagetable

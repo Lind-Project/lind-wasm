@@ -30,7 +30,7 @@ use super::net_calls::{
 use super::sys_calls::{
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
     getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall,
-    prlimit64_syscall, sched_yield_syscall, setitimer_syscall, sigaction_syscall,
+    pause_syscall, prlimit64_syscall, sched_yield_syscall, setitimer_syscall, sigaction_syscall,
     sigprocmask_syscall, waitpid_syscall,
 };
 use sysdefs::constants::syscall_const;
@@ -66,6 +66,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         syscall_const::SCHED_YIELD_SYSCALL as u64,
         sched_yield_syscall,
     ),
+    (syscall_const::PAUSE_SYSCALL as u64, pause_syscall),
     (syscall_const::SHMGET_SYSCALL as u64, shmget_syscall),
     (syscall_const::SHMAT_SYSCALL as u64, shmat_syscall),
     (syscall_const::SHMCTL_SYSCALL as u64, shmctl_syscall),

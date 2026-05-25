@@ -148,7 +148,6 @@ pub extern "C" fn fork_syscall(
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
-            direct_signal_old_sigset: AtomicU64::new(0),
         };
 
         // increment child counter for parent
@@ -1329,6 +1328,47 @@ pub extern "C" fn sched_yield_syscall(
     }
 
     (unsafe { sched_yield() }) as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pause.2.html
+///
+/// Suspends the calling cage until a signal arrives.  Always returns -1 with
+/// errno set to EINTR.  The loop spins (sched_yield) until `signal_check_trigger`
+/// detects a pending lind signal.
+pub extern "C" fn pause_syscall(
+    cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg1, arg1_cageid)
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "pause_syscall"
+        );
+    }
+
+    loop {
+        if signal_check_trigger(cageid) {
+            return syscall_error(Errno::EINTR, "pause", "interrupted by signal");
+        }
+        unsafe { sched_yield() };
+    }
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html

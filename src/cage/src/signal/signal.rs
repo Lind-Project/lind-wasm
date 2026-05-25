@@ -543,69 +543,6 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
     }
 }
 
-// EH-mode variant: same as lind_get_first_signal but returns the pre-delivery sigset
-// instead of a restorer closure.  Also saves old_sigset into cage.direct_signal_old_sigset
-// so lind_restore_direct_sigset() can restore it after a normal handler return.
-pub fn lind_get_first_signal_for_direct(cageid: u64) -> Option<(i32, u32, u64)> {
-    let cage = get_cage(cageid)?;
-    let mut pending_signals = cage.pending_signals.write();
-    let sigset = cage.sigset.load(Ordering::Relaxed);
-
-    if let Some(index) = pending_signals
-        .iter()
-        .position(|&signo| (sigset & convert_signal_mask(signo)) == 0)
-    {
-        let signo = pending_signals.remove(index);
-        let (signal_handler, new_mask) = match cage.signalhandler.get_mut(&signo) {
-            Some(mut sigaction) => {
-                let mut mask_self = convert_signal_mask(signo);
-                let handler = sigaction.sa_handler;
-                if sigaction.sa_flags as u32 & SA_RESETHAND > 0 {
-                    sigaction.sa_handler = SIG_DFL as u32;
-                }
-                if sigaction.sa_flags as u32 & SA_NODEFER > 0 {
-                    mask_self = 0;
-                }
-                (handler, sigaction.sa_mask | mask_self)
-            }
-            None => (
-                signal_get_handler(cageid, signo),
-                convert_signal_mask(signo),
-            ),
-        };
-        cage.sigset.fetch_or(new_mask, Ordering::Relaxed);
-        cage.direct_signal_old_sigset
-            .store(sigset, Ordering::Release);
-        Some((signo, signal_handler, sigset))
-    } else {
-        None
-    }
-}
-
-// EH-mode: restore the cage signal mask to the value saved by the last
-// lind_get_first_signal_for_direct call.  Called after a direct-delivery
-// handler returns normally (i.e. without siglongjmp).
-pub fn lind_restore_direct_sigset(cageid: u64) {
-    if let Some(cage) = get_cage(cageid) {
-        let old = cage.direct_signal_old_sigset.load(Ordering::Acquire);
-        cage.sigset.store(old, Ordering::Relaxed);
-    }
-}
-
-// EH-mode: atomically replace the cage signal mask with `new_mask` WITHOUT
-// triggering the epoch interrupt.  Used by sigsuspend to change the effective
-// mask before calling __libc_pause() so that pending-but-previously-blocked
-// signals are visible to lind-take-next-signal while the pure-wasm
-// signal_callback path remains usable (i.e. siglongjmp can propagate).
-// Returns the previous signal mask so the caller can restore it later.
-pub fn lind_sigsuspend_setmask(cageid: u64, new_mask: u64) -> u64 {
-    if let Some(cage) = get_cage(cageid) {
-        cage.sigset.swap(new_mask, Ordering::Relaxed)
-    } else {
-        0
-    }
-}
-
 // check if there is any pending unblocked signals
 // return true if no pending unblocked signals are found
 // thread safety: this function will only be invoked by main thread of the cage
