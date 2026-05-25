@@ -617,6 +617,7 @@ impl Module {
             tags: Default::default(),
             dylink_mem_info: None,
             dylink_import_info: None,
+            dylink_needed_info: None,
         }
     }
 
@@ -912,6 +913,7 @@ impl TypeTrace for Module {
             tags,
             dylink_mem_info: _,
             dylink_import_info: _,
+            dylink_needed_info: _,
         } = self;
 
         for t in types.values().copied() {
@@ -968,6 +970,7 @@ impl TypeTrace for Module {
             tags,
             dylink_mem_info: _,
             dylink_import_info: _,
+            dylink_needed_info: _,
         } = self;
 
         for t in types.values_mut() {

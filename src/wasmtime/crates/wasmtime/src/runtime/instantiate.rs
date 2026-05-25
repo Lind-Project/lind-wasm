@@ -105,12 +105,10 @@ impl CompiledModule {
         self.module.dylink_import_info.as_ref()
     }
 
-
     /// lind-wasm: retrieve dynamic loading needed (dependency) information
     pub fn dylink_needed_info(&self) -> Option<&DylinkNeededInfo> {
         self.module.dylink_needed_info.as_ref()
     }
-
 
     /// Looks up the `name` section name for the function index `idx`, if one
     /// was specified in the original wasm module.

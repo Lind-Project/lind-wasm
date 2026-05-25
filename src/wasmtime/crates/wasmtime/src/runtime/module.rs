@@ -1115,6 +1115,7 @@ impl Module {
     }
 
     // lind-wasm: retrieve dynamic loading needed (dependency) information
+    #[allow(missing_docs)]
     pub fn dylink_neededinfo<'a>(&'a self) -> Option<&DylinkNeededInfo> {
         self.compiled_module().dylink_needed_info()
     }
