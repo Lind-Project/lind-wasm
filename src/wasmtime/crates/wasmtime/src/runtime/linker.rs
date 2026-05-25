@@ -583,7 +583,17 @@ impl<T> Linker<T> {
                     if delta > 0 {
                         mem.grow(delta)?;
                     }
-                    memory_base = Some(mem.get_memory_base());
+                    let base = mem.get_memory_base();
+                    memory_base = Some(base);
+                    // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
+                    // rawposix takes ownership via init_vmmap + fork_vmmap.
+                    unsafe {
+                        libc::mprotect(
+                            base as *mut libc::c_void,
+                            1usize << 32,
+                            libc::PROT_NONE,
+                        );
+                    }
                     new_linker.define(&mut store, &module, &name, mem)?;
                 }
             }

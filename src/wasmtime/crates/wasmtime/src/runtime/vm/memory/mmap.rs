@@ -196,10 +196,12 @@ impl RuntimeLinearMemory for MmapMemory {
             assert!(new_size <= current_capacity.byte_count());
             assert!(self.maximum.map_or(true, |max| new_size <= max));
 
-            // lind-wasm: skip make_accessible for in-place linear memory growth.
-            // rawposix vmmap handles mprotect on wasm linear memory; wasmtime
-            // must not override those permissions on memory.grow.
-            let _ = new_accessible;
+            // SAFETY: We have exclusive access to the mmap (via Arc) and are
+            // only extending the accessible region, never shrinking it.
+            unsafe {
+                self.mmap
+                    .make_accessible(self.pre_guard_size, new_accessible)?;
+            }
         }
 
         self.len = new_size;
