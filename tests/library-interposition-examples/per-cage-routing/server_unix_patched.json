@@ -1,5 +1,5 @@
 {
-  "library":  "/home/lind/lind-wasm/test/library-interposition-examples/per-cage-routing/remote_strcpy.so",
+  "library":  "/home/lind/lind-wasm/tests/library-interposition-examples/per-cage-routing/remote_strcpy.so",
   "endpoint": "unix:///home/lind/lind-wasm/lindfs/tmp/percage_unix.sock",
   "functions": [
     {

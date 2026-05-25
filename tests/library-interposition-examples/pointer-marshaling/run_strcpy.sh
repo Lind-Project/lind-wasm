@@ -1,10 +1,10 @@
 #!/bin/bash
 # Build and run the strcpy remote-call example with a custom server-side handler.
-# Run from the repo root: bash test/library-interposition-examples/pointer-marshaling/run_strcpy.sh
+# Run from the repo root: bash tests/library-interposition-examples/pointer-marshaling/run_strcpy.sh
 
 set -e
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-EXAMPLE="$REPO/test/library-interposition-examples/pointer-marshaling"
+EXAMPLE="$REPO/tests/library-interposition-examples/pointer-marshaling"
 LINDFS="$REPO/lindfs"
 
 # 1. Compile the custom server-side handler to a native shared library.

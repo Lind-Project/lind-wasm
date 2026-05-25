@@ -1,10 +1,10 @@
 #!/bin/bash
 # Build and run the ptr-argument remote-call example (strlen interposition).
-# Run from the repo root: bash test/library-interposition-examples/pointer-marshaling/run.sh
+# Run from the repo root: bash tests/library-interposition-examples/pointer-marshaling/run.sh
 
 set -e
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-EXAMPLE="$REPO/test/library-interposition-examples/pointer-marshaling"
+EXAMPLE="$REPO/tests/library-interposition-examples/pointer-marshaling"
 LINDFS="$REPO/lindfs"
 
 # 1. Build the WASM binary for the Lind cage.

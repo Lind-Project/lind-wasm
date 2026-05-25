@@ -1,5 +1,5 @@
 {
-  "library":  "/home/lind/lind-wasm/test/library-interposition-examples/zlib-compression/remote_zlib.so",
+  "library":  "/home/lind/lind-wasm/tests/library-interposition-examples/zlib-compression/remote_zlib.so",
   "endpoint": "unix:///home/lind/lind-wasm/lindfs/tmp/zlib_remote.sock",
   "functions": [
     {
