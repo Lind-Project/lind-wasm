@@ -45,7 +45,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
     --print-args, --debug-args  print parsed arguments after option handling
-    --compile-grate             add grate-specific clang flags (exports pass_fptr_to_wt);
+    --compile-grate             add grate-specific clang flags;
                                 compatible with dynamic and static backends
     --fpcast-emu                enable function-pointer-cast emulation via wasm-opt
                                 (applies to full and --opt-only modes; for dynamic/library
@@ -310,7 +310,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
+    debug_default_clang_flags+=(-Wl,--export=__indirect_function_table)
   fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
@@ -339,7 +339,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
+    debug_default_clang_flags+=(-Wl,--export=__indirect_function_table)
   fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
@@ -369,7 +369,7 @@ do_static_compile() {
   )
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
+    default_clang_flags+=(-Wl,--export=__indirect_function_table)
   fi
 
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
@@ -409,7 +409,7 @@ do_dynamic_compile() {
   fi
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
-    default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
+    default_clang_flags+=(-Wl,--export=__indirect_function_table)
   fi
 
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then

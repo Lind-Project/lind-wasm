@@ -23,25 +23,6 @@
 
 /* ── Dispatcher ─────────────────────────────────────────────────────── */
 
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
-                    uint64_t arg1, uint64_t arg1cage,
-                    uint64_t arg2, uint64_t arg2cage,
-                    uint64_t arg3, uint64_t arg3cage,
-                    uint64_t arg4, uint64_t arg4cage,
-                    uint64_t arg5, uint64_t arg5cage,
-                    uint64_t arg6, uint64_t arg6cage) {
-    if (fn_ptr_uint == 0)
-        return -1;
-
-    typedef int (*handler_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-                             uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-                             uint64_t, uint64_t, uint64_t);
-
-    handler_t fn = (handler_t)(uintptr_t)fn_ptr_uint;
-    return fn(cageid, arg1, arg1cage, arg2, arg2cage, arg3, arg3cage,
-              arg4, arg4cage, arg5, arg5cage, arg6, arg6cage);
-}
-
 /* ── Handlers ───────────────────────────────────────────────────────── */
 
 /* Intercept mmap — the crash site at fs_calls.rs:795.

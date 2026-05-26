@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{
-    AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
+    AsContextMut, Engine, Func, InstantiateType, Module, Ref, Store, StoreLimits, Val, ValType,
 };
 
 use wasmtime::{Caller, Instance};
@@ -55,24 +55,15 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
     Ok((parts[0].into(), parts[1].into()))
 }
 
-/// The callback function registered with 3i uses a unified Wasm entry
-/// function as the single re-entry point into the Wasm executable.
+/// The callback function registered with 3i dispatches a grate syscall by
+/// calling the handler function directly from the grate’s wasm indirect
+/// function table.
 ///
-/// When invoked, this function first uses the provided grateid to
-/// retrieve the corresponding `VMContext` pointer from lind-3i’s global
-/// runtime-state table. The `VMContext` identifies the Wasmtime store and
-/// instance associated with the target grate and allows execution to
-/// re-enter the correct runtime context.
-///
-/// This function receives an address inside grate that identifies the target handler.
-/// When invoked, the callback calls the entry function inside the Wasm
-/// module, passing this address as an argument. The entry function then
-/// dispatches control to the corresponding per-syscall implementation
-/// based on the address provided by `register_handler`.
-///
-/// To complete the bridge between host and guest, the system uses
-/// `Caller::with()` to re-enter the  Wasmtime runtime context from the
-/// host side.
+/// When invoked, this function uses the provided grate cage id to retrieve the
+/// corresponding `VMContext` pointer from lind-3i’s global runtime-state table.
+/// It then re-enters Wasmtime via `Caller::with()`, looks up
+/// `__indirect_function_table`, fetches the function at `in_grate_fn_ptr_u64`,
+/// and calls it with the marshalled cage id and argument pairs.
 ///
 /// This function is called by 3i when a syscall is routed to a grate.
 ///
@@ -114,52 +105,38 @@ pub extern "C" fn grate_callback_trampoline(
                 caller: instance,
             } = caller;
 
-            // Resolve the unified entry function once per call
-            let entry_func = instance
+            let wasm_instance = instance
                 .host_state()
                 .downcast_ref::<Instance>()
-                .ok_or_else(|| anyhow!("bad host_state Instance"))?
-                .get_export(&mut store, "pass_fptr_to_wt")
-                .and_then(|f| f.into_func())
-                .ok_or_else(|| anyhow!("missing export `pass_fptr_to_wt`"))?;
+                .ok_or_else(|| anyhow!("bad host_state Instance"))?;
 
-            let typed_func = entry_func.typed::<(
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-                u64,
-            ), i32>(&mut store)?;
+            let table = wasm_instance
+                .get_table(&mut store, "__indirect_function_table")
+                .ok_or_else(|| anyhow!("missing __indirect_function_table"))?;
 
-            // Call the entry function with all arguments and in grate function pointer
-            typed_func.call(
-                &mut store,
-                (
-                    in_grate_fn_ptr_u64,
-                    cageid,
-                    arg1,
-                    arg1cageid,
-                    arg2,
-                    arg2cageid,
-                    arg3,
-                    arg3cageid,
-                    arg4,
-                    arg4cageid,
-                    arg5,
-                    arg5cageid,
-                    arg6,
-                    arg6cageid,
-                ),
-            )
+            let func = match table.get(&mut store, in_grate_fn_ptr_u64 as u32) {
+                Some(Ref::Func(Some(f))) => f,
+                _ => bail!("no function at table index {}", in_grate_fn_ptr_u64),
+            };
+
+            let args = [
+                Val::I64(cageid as i64),
+                Val::I64(arg1 as i64),
+                Val::I64(arg1cageid as i64),
+                Val::I64(arg2 as i64),
+                Val::I64(arg2cageid as i64),
+                Val::I64(arg3 as i64),
+                Val::I64(arg3cageid as i64),
+                Val::I64(arg4 as i64),
+                Val::I64(arg4cageid as i64),
+                Val::I64(arg5 as i64),
+                Val::I64(arg5cageid as i64),
+                Val::I64(arg6 as i64),
+                Val::I64(arg6cageid as i64),
+            ];
+            let mut results = [Val::I32(0)];
+            func.call(&mut store, &args, &mut results)?;
+            Ok(results[0].unwrap_i32())
         })
         .unwrap_or(threei_const::GRATE_ERR)
     };

@@ -17,20 +17,6 @@
 #include <unistd.h>
 #include <assert.h>
 
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
-                    uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
-                    uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
-                    uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
-                    uint64_t arg6, uint64_t arg6cage) {
-    if (fn_ptr_uint == 0) {
-        fprintf(stderr, "[thread_race] Invalid function ptr\n");
-        assert(0);
-    }
-
-    int (*fn)(uint64_t) = (int (*)(uint64_t))(uintptr_t)fn_ptr_uint;
-    return fn(cageid);
-}
-
 /* Persistent shared state — simulates what a real grate maintains
  * across calls (e.g. fdtables / shared buffers / counters). */
 static int *call_counts = NULL;     /* per-cage call counter array */
@@ -52,7 +38,10 @@ static pthread_mutex_t grate_mu = PTHREAD_MUTEX_INITIALIZER;
  * If this version still crashes under concurrent callbacks, the issue is
  * less likely to be caused by the handler's own heap races.
  */
-int thread_race_handler(uint64_t cageid) {
+int thread_race_handler(uint64_t cageid,
+                        uint64_t arg1, uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
+                        uint64_t arg3, uint64_t arg3cage, uint64_t arg4, uint64_t arg4cage,
+                        uint64_t arg5, uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
     int id = (int)cageid;
     int slot;
     char *entry = NULL;

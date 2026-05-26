@@ -41,7 +41,7 @@ export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="\
 -C link-arg=-Wl,--export=__stack_pointer \
 -C link-arg=-Wl,--export=__stack_low \
 -C link-arg=-Wl,--export=__tls_base \
--C link-arg=-Wl,--export=pass_fptr_to_wt"
+"
 
 # Set wasm-opt and wasmtime paths (allow override via environment variables)
 WASM_OPT_BIN="${WASM_OPT_BIN:-wasm-opt}"

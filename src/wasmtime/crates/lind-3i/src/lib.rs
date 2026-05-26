@@ -78,27 +78,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
-use wasmtime::{Engine, Instance, Linker, Module, Store, TypedFunc, Val};
-
-type PassFptrTyped = TypedFunc<
-    (
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-    ),
-    i32,
->;
+use wasmtime::{Engine, Instance, Linker, Module, Ref, Store, Val};
 
 type WorkerId = u64;
 
@@ -236,13 +216,6 @@ struct GrateWorker<T> {
     ///
     /// Calls submitted to this worker execute inside this instance.
     instance: Instance,
-
-    /// Typed handle to the grate entry export, if present.
-    ///
-    /// This is usually the `pass_fptr_to_wt` trampoline used to enter the
-    /// grate from the handler. It is cached here to avoid resolving the export
-    /// on every call.
-    pass_fptr_func: Option<PassFptrTyped>,
 
     /// Base address of this worker’s assigned stack slot in the stack arena.
     ///
@@ -590,8 +563,8 @@ impl<T> GrateWorker<T> {
     ///
     /// Execution happens inside this worker’s private `Store` and `Instance`,
     /// which isolates its runtime state from other concurrently executing workers.
-    /// The worker resets its stack, resolves the exported grate entry function,
-    /// and invokes `pass_fptr_to_wt` with the marshalled request arguments.
+    /// The worker resets its stack, looks up the handler function directly in the
+    /// wasm indirect function table using the stored table index, and calls it.
     fn run(&mut self, req: GrateRequest) -> anyhow::Result<i32> {
         #[cfg(feature = "debug-grate-calls")]
         {
@@ -603,43 +576,53 @@ impl<T> GrateWorker<T> {
 
         self.reset_worker_stack();
 
-        let func = self.pass_fptr_func.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id)
-        })?;
+        let table = self
+            .instance
+            .get_table(&mut self.store, "__indirect_function_table")
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing __indirect_function_table in worker {}",
+                    self.worker_id
+                )
+            })?;
 
-        let ret = func
-            .call(
-                &mut self.store,
-                (
-                    req.handler_addr,
-                    req.cageid,
-                    req.arg1,
-                    req.arg1cageid,
-                    req.arg2,
-                    req.arg2cageid,
-                    req.arg3,
-                    req.arg3cageid,
-                    req.arg4,
-                    req.arg4cageid,
-                    req.arg5,
-                    req.arg5cageid,
-                    req.arg6,
-                    req.arg6cageid,
-                ),
-            )
+        let func = match table.get(&mut self.store, req.handler_addr as u32) {
+            Some(Ref::Func(Some(f))) => f,
+            _ => anyhow::bail!(
+                "no function at table index {} in worker {}",
+                req.handler_addr,
+                self.worker_id
+            ),
+        };
+
+        let args = [
+            Val::I64(req.cageid as i64),
+            Val::I64(req.arg1 as i64),
+            Val::I64(req.arg1cageid as i64),
+            Val::I64(req.arg2 as i64),
+            Val::I64(req.arg2cageid as i64),
+            Val::I64(req.arg3 as i64),
+            Val::I64(req.arg3cageid as i64),
+            Val::I64(req.arg4 as i64),
+            Val::I64(req.arg4cageid as i64),
+            Val::I64(req.arg5 as i64),
+            Val::I64(req.arg5cageid as i64),
+            Val::I64(req.arg6 as i64),
+            Val::I64(req.arg6cageid as i64),
+        ];
+        let mut results = [Val::I32(0)];
+        func.call(&mut self.store, &args, &mut results)
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "pass_fptr_to_wt trapped in worker {}: {:#}",
+                    "handler call trapped in worker {}: {:#}",
                     self.worker_id,
                     e
                 )
             })?;
 
+        let ret = results[0].unwrap_i32();
         #[cfg(feature = "debug-grate-calls")]
-        println!(
-            "Worker {} got result {} from pass_fptr_to_wt",
-            self.worker_id, ret
-        );
+        println!("Worker {} got result {} from handler", self.worker_id, ret);
         Ok(ret)
     }
 }
@@ -680,26 +663,6 @@ where
         .instantiate_with_lind_thread(&mut store, &template.module, false)
         .context("failed to instantiate grate module")?;
 
-    let pass_fptr_func = match instance.get_export(&mut store, "pass_fptr_to_wt") {
-        Some(_) => Some(instance.get_typed_func::<(
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-            u64,
-        ), i32>(&mut store, "pass_fptr_to_wt")?),
-        None => None,
-    };
-
     let stack_base = worker_stack_base(cageid, worker_id);
     let stack_top = worker_stack_top(cageid, worker_id);
 
@@ -707,7 +670,6 @@ where
         worker_id,
         store,
         instance,
-        pass_fptr_func,
         stack_base,
         stack_top,
     })

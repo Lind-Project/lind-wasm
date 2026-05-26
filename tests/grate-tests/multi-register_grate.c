@@ -7,32 +7,19 @@
 #include <unistd.h>
 #include <assert.h>
 
-// Dispatcher function
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
-                    uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
-                    uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
-                    uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
-                    uint64_t arg6, uint64_t arg6cage) {
-  if (fn_ptr_uint == 0) {
-    fprintf(stderr, "[Grate|multi-register_grate] Invalid function ptr\n");
-    assert(0);
-  }
-
-  printf("[Grate|multi-register_grate] Handling function ptr: %llu from cage: %llu\n",
-         fn_ptr_uint, cageid);
-
-  int (*fn)(uint64_t) = (int (*)(uint64_t))(uintptr_t)fn_ptr_uint;
-
-  return fn(cageid);
-}
-
-int geteuid_grate(uint64_t cageid) {
+int geteuid_grate(uint64_t cageid,
+                  uint64_t arg1, uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
+                  uint64_t arg3, uint64_t arg3cage, uint64_t arg4, uint64_t arg4cage,
+                  uint64_t arg5, uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
   printf("[Grate|multi-register_grate] In multi-register_grate %d handler for cage: %llu\n",
          getpid(), cageid);
   return 10;
 }
 
-int getuid_grate(uint64_t cageid) {
+int getuid_grate(uint64_t cageid,
+                 uint64_t arg1, uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
+                 uint64_t arg3, uint64_t arg3cage, uint64_t arg4, uint64_t arg4cage,
+                 uint64_t arg5, uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
   printf("[Grate|multi-register_grate] In multi-register_grate %d handler for cage: %llu\n",
          getpid(), cageid);
   return 20;

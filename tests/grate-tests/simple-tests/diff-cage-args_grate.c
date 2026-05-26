@@ -8,32 +8,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-// Dispatcher function
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
-		    uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
-		    uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
-		    uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
-		    uint64_t arg6, uint64_t arg6cage) {
-	if (fn_ptr_uint == 0) {
-		fprintf(stderr,
-			"[Grate|diff-cage-args] Invalid function ptr\n");
-		assert(0);
-	}
-
-	printf("[Grate|diff-cage-args] Handling function ptr: %llu from cage: "
-	       "%llu\n",
-	       fn_ptr_uint, cageid);
-
-	int (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-		  uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-		  uint64_t) =
-	    (int (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-		     uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-		     uint64_t))(uintptr_t)fn_ptr_uint;
-
-	return fn(cageid, arg1, arg1cage, arg2, arg2cage, arg3, arg3cage, arg4,
-		  arg4cage, arg5, arg5cage, arg6, arg6cage);
-}
 
 int read_grate(uint64_t grateid, uint64_t arg1, uint64_t arg1cage,
 	       uint64_t arg2, uint64_t arg2cage, uint64_t arg3,
