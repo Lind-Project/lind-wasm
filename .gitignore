@@ -20,3 +20,6 @@ report.html
 
 #Ignore python cache
 __pycache__/
+
+#Ignore upstream wasmtime lockfile (not ours to manage)
+src/wasmtime/Cargo.lock

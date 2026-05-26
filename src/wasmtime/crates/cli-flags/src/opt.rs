@@ -6,7 +6,7 @@
 //! option parsing is contained exclusively within this module.
 
 use crate::WasiNnGraph;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::builder::{StringValueParser, TypedValueParser, ValueParserFactory};
 use clap::error::{Error, ErrorKind};
 use std::marker;
@@ -209,11 +209,7 @@ where
                 .filter_map(|d| match d.name {
                     OptName::Name(s) => {
                         let s = s.replace('_', "-");
-                        if s == key {
-                            Some((d, s))
-                        } else {
-                            None
-                        }
+                        if s == key { Some((d, s)) } else { None }
                     }
                     OptName::Prefix(s) => {
                         let name = key.strip_prefix(s)?.strip_prefix("-")?;

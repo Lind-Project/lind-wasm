@@ -68,9 +68,8 @@ impl I31 {
     /// If the value doesn't fit in the bottom 31 bits, it is wrapped such that
     /// the wrapped value does.
     #[inline]
-    #[allow(clippy::cast_sign_loss)]
     pub fn wrapping_i32(value: i32) -> Self {
-        Self::wrapping_u32(value as u32)
+        Self::wrapping_u32(value.cast_unsigned())
     }
 
     /// Get this `I31`'s value as an unsigned integer.

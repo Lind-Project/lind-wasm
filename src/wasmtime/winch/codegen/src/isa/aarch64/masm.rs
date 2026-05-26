@@ -1,7 +1,7 @@
 use super::{abi::Aarch64ABI, address::Address, asm::Assembler, regs};
 use crate::{
     abi::{self, local::LocalSlot},
-    codegen::{ptr_type_from_ptr_size, CodeGenContext, FuncEnv},
+    codegen::{CodeGenContext, FuncEnv, ptr_type_from_ptr_size},
     isa::reg::Reg,
     masm::{
         CalleeKind, DivKind, ExtendKind, FloatCmpKind, Imm as I, IntCmpKind,
@@ -10,9 +10,10 @@ use crate::{
     },
 };
 use cranelift_codegen::{
+    Final, MachBufferFinalized, MachLabel,
     binemit::CodeOffset,
     ir::{RelSourceLoc, SourceLoc},
-    settings, Final, MachBufferFinalized, MachLabel,
+    settings,
 };
 use regalloc2::RegClass;
 use wasmtime_environ::PtrSize;

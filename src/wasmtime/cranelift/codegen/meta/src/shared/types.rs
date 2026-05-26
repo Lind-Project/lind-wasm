@@ -43,8 +43,10 @@ impl Iterator for IntIterator {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub(crate) enum Float {
+    F16 = 16,
     F32 = 32,
     F64 = 64,
+    F128 = 128,
 }
 
 /// Iterator through the variants of the Float enum.
@@ -63,40 +65,10 @@ impl Iterator for FloatIterator {
     type Item = Float;
     fn next(&mut self) -> Option<Self::Item> {
         let res = match self.index {
-            0 => Some(Float::F32),
-            1 => Some(Float::F64),
-            _ => return None,
-        };
-        self.index += 1;
-        res
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub(crate) enum Reference {
-    /// 32-bit reference.
-    R32 = 32,
-    /// 64-bit reference.
-    R64 = 64,
-}
-
-/// This provides an iterator through all of the supported reference variants.
-pub(crate) struct ReferenceIterator {
-    index: u8,
-}
-
-impl ReferenceIterator {
-    pub fn new() -> Self {
-        Self { index: 0 }
-    }
-}
-
-impl Iterator for ReferenceIterator {
-    type Item = Reference;
-    fn next(&mut self) -> Option<Self::Item> {
-        let res = match self.index {
-            0 => Some(Reference::R32),
-            1 => Some(Reference::R64),
+            0 => Some(Float::F16),
+            1 => Some(Float::F32),
+            2 => Some(Float::F64),
+            3 => Some(Float::F128),
             _ => return None,
         };
         self.index += 1;
@@ -122,16 +94,10 @@ mod iter_tests {
     #[test]
     fn float_iter_works() {
         let mut float_iter = FloatIterator::new();
+        assert_eq!(float_iter.next(), Some(Float::F16));
         assert_eq!(float_iter.next(), Some(Float::F32));
         assert_eq!(float_iter.next(), Some(Float::F64));
+        assert_eq!(float_iter.next(), Some(Float::F128));
         assert_eq!(float_iter.next(), None);
-    }
-
-    #[test]
-    fn reference_iter_works() {
-        let mut reference_iter = ReferenceIterator::new();
-        assert_eq!(reference_iter.next(), Some(Reference::R32));
-        assert_eq!(reference_iter.next(), Some(Reference::R64));
-        assert_eq!(reference_iter.next(), None);
     }
 }

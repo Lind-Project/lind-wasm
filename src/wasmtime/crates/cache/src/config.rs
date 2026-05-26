@@ -1,18 +1,18 @@
 //! Module for configuring the cache system.
 
 use super::Worker;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use directories_next::ProjectDirs;
 use log::{trace, warn};
 use serde::{
-    de::{self, Deserializer},
     Deserialize,
+    de::{self, Deserializer},
 };
 use std::fmt::Debug;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::time::Duration;
 
 // wrapped, so we have named section in config,
@@ -340,6 +340,23 @@ impl CacheConfig {
         let mut conf = Self::new_cache_disabled();
         conf.enabled = true;
         conf
+    }
+
+    /// Validates and fills in defaults for all configuration settings.
+    pub(crate) fn validate(&mut self) -> Result<()> {
+        self.validate_directory_or_default()?;
+        self.validate_worker_event_queue_size_or_default();
+        self.validate_baseline_compression_level_or_default()?;
+        self.validate_optimized_compression_level_or_default()?;
+        self.validate_optimized_compression_usage_counter_threshold_or_default();
+        self.validate_cleanup_interval_or_default();
+        self.validate_optimizing_compression_task_timeout_or_default();
+        self.validate_allowed_clock_drift_for_files_from_future_or_default();
+        self.validate_file_count_soft_limit_or_default();
+        self.validate_files_total_size_soft_limit_or_default();
+        self.validate_file_count_limit_percent_if_deleting_or_default()?;
+        self.validate_files_total_size_limit_percent_if_deleting_or_default()?;
+        Ok(())
     }
 
     /// Parses cache configuration from the file specified

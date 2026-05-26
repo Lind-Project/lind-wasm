@@ -1,32 +1,26 @@
-use crate::runtime::vm::traphandlers::{tls, TrapTest};
-use crate::runtime::vm::VMContext;
-use core::mem;
+use crate::prelude::*;
 
-pub use crate::runtime::vm::sys::capi::{self, wasmtime_longjmp};
+pub type SignalHandler = Box<dyn Fn() + Send + Sync>;
 
-#[allow(missing_docs)]
-pub type SignalHandler<'a> = dyn Fn() + Send + Sync + 'a;
+#[cfg(has_native_signals)]
+pub struct TrapHandler;
 
-pub unsafe fn wasmtime_setjmp(
-    jmp_buf: *mut *const u8,
-    callback: extern "C" fn(*mut u8, *mut VMContext),
-    payload: *mut u8,
-    callee: *mut VMContext,
-) -> i32 {
-    let callback = mem::transmute::<
-        extern "C" fn(*mut u8, *mut VMContext),
-        extern "C" fn(*mut u8, *mut u8),
-    >(callback);
-    capi::wasmtime_setjmp(jmp_buf, callback, payload, callee.cast())
-}
-
-pub fn platform_init(_macos_use_mach_ports: bool) {
-    unsafe {
-        capi::wasmtime_init_traps(handle_trap);
+#[cfg(has_native_signals)]
+impl TrapHandler {
+    pub unsafe fn new(_macos_use_mach_ports: bool) -> TrapHandler {
+        unsafe {
+            crate::runtime::vm::sys::capi::wasmtime_init_traps(handle_trap);
+        }
+        TrapHandler
     }
+
+    pub fn validate_config(&self, _macos_use_mach_ports: bool) {}
 }
 
-extern "C" fn handle_trap(ip: usize, fp: usize, has_faulting_addr: bool, faulting_addr: usize) {
+#[cfg(has_native_signals)]
+extern "C" fn handle_trap(pc: usize, fp: usize, has_faulting_addr: bool, faulting_addr: usize) {
+    use crate::runtime::vm::traphandlers::{TrapRegisters, TrapTest, tls};
+
     tls::with(|info| {
         let info = match info {
             Some(info) => info,
@@ -37,17 +31,14 @@ extern "C" fn handle_trap(ip: usize, fp: usize, has_faulting_addr: bool, faultin
         } else {
             None
         };
-        let ip = ip as *const u8;
-        let test = info.test_if_trap(ip, |_handler| {
+        let regs = TrapRegisters { pc, fp };
+        let test = info.test_if_trap(regs, faulting_addr, |_handler| {
             panic!("custom signal handlers are not supported on this platform");
         });
         match test {
             TrapTest::NotWasm => {}
             TrapTest::HandledByEmbedder => unreachable!(),
-            TrapTest::Trap { jmp_buf, trap } => {
-                info.set_jit_trap(ip, fp, faulting_addr, trap);
-                unsafe { wasmtime_longjmp(jmp_buf) }
-            }
+            TrapTest::Trap(handler) => unsafe { handler.resume_tailcc(0, 0) },
         }
     })
 }

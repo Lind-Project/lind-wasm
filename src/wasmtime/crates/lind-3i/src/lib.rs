@@ -200,7 +200,7 @@ impl SerialExecutor {
 /// owns its own Wasmtime `Store` and `Instance`, but may still be attached to
 /// the same underlying linear memory as other workers. To preserve isolation,
 /// each worker is assigned a dedicated stack slot inside the shared stack arena.
-struct GrateWorker<T> {
+struct GrateWorker<T: 'static> {
     /// Logical identifier of this worker within the handler’s pool.
     ///
     /// The worker id is also used to derive the worker’s private stack slot.
@@ -258,7 +258,7 @@ fn worker_stack_top(cageid: u64, workerid: WorkerId) -> u32 {
 /// A `WorkerLease` represents a worker temporarily checked out from a
 /// `GrateHandler`. When the lease is dropped, the worker is automatically
 /// returned to the handler’s pool.
-struct WorkerLease<'a, T> {
+struct WorkerLease<'a, T: 'static> {
     /// The handler that owns the leased worker.
     ///
     /// This is used to return the worker to the pool on drop.
@@ -293,7 +293,7 @@ impl<'a, T> WorkerLease<'a, T> {
     }
 }
 
-impl<'a, T> Drop for WorkerLease<'a, T> {
+impl<'a, T: 'static> Drop for WorkerLease<'a, T> {
     /// Return the leased worker to its handler when the lease goes out of scope.
     ///
     /// This guarantees that worker-pool bookkeeping remains correct even when
@@ -310,7 +310,7 @@ impl<'a, T> Drop for WorkerLease<'a, T> {
 /// A `GrateHandler` manages the reusable worker pool for a grate and defines
 /// how incoming grate requests are admitted, scheduled, and shut down.
 /// It is the main runtime object responsible for grate-call concurrency.
-pub struct GrateHandler<T> {
+pub struct GrateHandler<T: 'static> {
     /// Identifier of the grate or cage associated with this handler.
     ///
     /// This is mainly used for diagnostics and error reporting.
@@ -364,11 +364,11 @@ pub struct GrateHandler<T> {
 ///
 /// This structure exists to keep the lock scope narrow and separate the
 /// worker-pool state from the rest of the handler’s control fields.
-struct GrateHandlerInner<T> {
+struct GrateHandlerInner<T: 'static> {
     workers: VecDeque<GrateWorker<T>>,
 }
 
-impl<T: Clone> GrateHandler<T> {
+impl<T: Clone + 'static> GrateHandler<T> {
     /// Pre-create the worker pool for a grate handler.
     ///
     /// Each worker is an independent `store + instance + call stack` execution
@@ -402,7 +402,7 @@ impl<T: Clone> GrateHandler<T> {
     }
 }
 
-impl<T> GrateHandler<T> {
+impl<T: 'static> GrateHandler<T> {
     /// Lease one available worker from the pool, blocking until one is free.
     ///
     /// This function is the core worker-pool acquisition primitive. If all
@@ -500,7 +500,7 @@ impl<T> GrateHandler<T> {
 /// An `ActiveCallGuard` increments the handler’s active-call counter when a
 /// submission begins and decrements it automatically when execution ends,
 /// ensuring correct shutdown coordination even in the presence of errors.
-struct ActiveCallGuard<'a, T> {
+struct ActiveCallGuard<'a, T: 'static> {
     owner: &'a GrateHandler<T>,
 }
 
@@ -540,7 +540,7 @@ impl<'a, T> Drop for ActiveCallGuard<'a, T> {
     }
 }
 
-impl<T> GrateWorker<T> {
+impl<T: 'static> GrateWorker<T> {
     /// Reset this worker’s stack pointer to the top of its private stack slot.
     ///
     /// Grate workers are reusable execution contexts. Before each new grate call,
@@ -653,7 +653,7 @@ pub fn create_worker<T>(
     worker_id: WorkerId,
 ) -> anyhow::Result<GrateWorker<T>>
 where
-    T: Clone,
+    T: Clone + 'static,
 {
     let mut store = Store::new(&template.engine, host);
 
@@ -685,7 +685,7 @@ where
 ///
 /// This function performs eager worker creation so that the handler is ready to
 /// serve grate calls immediately after registration.
-pub fn create_handler_for_cage<T: Clone>(
+pub fn create_handler_for_cage<T: Clone + 'static>(
     template: &GrateTemplate<T>,
     host: T,
     cageid: u64,

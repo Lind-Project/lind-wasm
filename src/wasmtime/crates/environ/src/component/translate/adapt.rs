@@ -115,9 +115,9 @@
 //! time this may want to be revisited if too many adapter modules are being
 //! created.
 
+use crate::EntityType;
 use crate::component::translate::*;
 use crate::fact;
-use crate::EntityType;
 use std::collections::HashSet;
 
 /// Metadata information about a fused adapter.
@@ -142,6 +142,23 @@ pub struct Adapter {
     pub func: dfg::CoreDef,
 }
 
+/// The data model for objects that are not unboxed in locals.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum DataModel {
+    /// Data is stored in GC objects.
+    Gc {},
+
+    /// Data is stored in a linear memory.
+    LinearMemory {
+        /// An optional memory definition supplied.
+        memory: Option<dfg::CoreExport<MemoryIndex>>,
+        /// If `memory` is specified, whether it's a 64-bit memory.
+        memory64: bool,
+        /// An optional definition of `realloc` to used.
+        realloc: Option<dfg::CoreDef>,
+    },
+}
+
 /// Configuration options which can be specified as part of the canonical ABI
 /// in the component model.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -149,16 +166,24 @@ pub struct AdapterOptions {
     /// The Wasmtime-assigned component instance index where the options were
     /// originally specified.
     pub instance: RuntimeComponentInstanceIndex,
+    /// The ancestors (i.e. chain of instantiating instances) of the instance
+    /// specified in the `instance` field.
+    pub ancestors: Vec<RuntimeComponentInstanceIndex>,
     /// How strings are encoded.
     pub string_encoding: StringEncoding,
-    /// An optional memory definition supplied.
-    pub memory: Option<dfg::CoreExport<MemoryIndex>>,
-    /// If `memory` is specified, whether it's a 64-bit memory.
-    pub memory64: bool,
-    /// An optional definition of `realloc` to used.
-    pub realloc: Option<dfg::CoreDef>,
+    /// The async callback function used by these options, if specified.
+    pub callback: Option<dfg::CoreDef>,
     /// An optional definition of a `post-return` to use.
     pub post_return: Option<dfg::CoreDef>,
+    /// Whether to use the async ABI for lifting or lowering.
+    pub async_: bool,
+    /// Whether or not this intrinsic can consume a task cancellation
+    /// notification.
+    pub cancellable: bool,
+    /// The core function type that is being lifted from / lowered to.
+    pub core_type: ModuleInternedTypeIndex,
+    /// The data model used by this adapter: linear memory or GC objects.
+    pub data_model: DataModel,
 }
 
 impl<'data> Translator<'_, 'data> {
@@ -183,8 +208,7 @@ impl<'data> Translator<'_, 'data> {
         // the module using standard core wasm translation, and then fills out
         // the dfg metadata for each adapter.
         for (module_id, adapter_module) in state.adapter_modules.iter() {
-            let mut module =
-                fact::Module::new(self.types.types(), self.tunables.debug_adapter_modules);
+            let mut module = fact::Module::new(self.types.types(), self.tunables);
             let mut names = Vec::with_capacity(adapter_module.adapters.len());
             for adapter in adapter_module.adapters.iter() {
                 let name = format!("adapter{}", adapter.as_u32());
@@ -201,8 +225,8 @@ impl<'data> Translator<'_, 'data> {
             let wasm = &*self.scope_vec.push(wasm);
             if log::log_enabled!(log::Level::Trace) {
                 match wasmprinter::print_bytes(wasm) {
-                    Ok(s) => log::trace!("generated adapter module:\n{}", s),
-                    Err(e) => log::trace!("failed to print adapter module: {}", e),
+                    Ok(s) => log::trace!("generated adapter module:\n{s}"),
+                    Err(e) => log::trace!("failed to print adapter module: {e}"),
                 }
             }
 
@@ -212,10 +236,12 @@ impl<'data> Translator<'_, 'data> {
             // likely to use that if anything is actually indirected through
             // memory.
             self.validator.reset();
+            let static_module_index = self.static_modules.next_key();
             let translation = ModuleEnvironment::new(
                 self.tunables,
                 &mut self.validator,
                 self.types.module_types_builder(),
+                static_module_index,
             )
             .translate(Parser::new(0), wasm)
             .expect("invalid adapter module generated");
@@ -223,11 +249,12 @@ impl<'data> Translator<'_, 'data> {
             // Record, for each adapter in this adapter module, the module that
             // the adapter was placed within as well as the function index of
             // the adapter in the wasm module generated. Note that adapters are
-            // paritioned in-order so we're guaranteed to push the adapters
+            // partitioned in-order so we're guaranteed to push the adapters
             // in-order here as well. (with an assert to double-check)
             for (adapter, name) in adapter_module.adapters.iter().zip(&names) {
-                let index = translation.module.exports[name];
-                let i = component.adapter_paritionings.push((module_id, index));
+                let name = translation.module.strings.get_atom(name).unwrap();
+                let export = translation.module.exports[&name];
+                let i = component.adapter_partitionings.push((module_id, export));
                 assert_eq!(i, *adapter);
             }
 
@@ -241,8 +268,9 @@ impl<'data> Translator<'_, 'data> {
                 .zip(translation.module.imports())
                 .map(|(arg, (_, _, ty))| fact_import_to_core_def(component, arg, ty))
                 .collect::<Vec<_>>();
-            let static_index = self.static_modules.push(translation);
-            let id = component.adapter_modules.push((static_index, args.into()));
+            let static_module_index2 = self.static_modules.push(translation);
+            assert_eq!(static_module_index, static_module_index2);
+            let id = component.adapter_modules.push((static_module_index, args));
             assert_eq!(id, module_id);
         }
     }
@@ -253,6 +281,16 @@ fn fact_import_to_core_def(
     import: &fact::Import,
     ty: EntityType,
 ) -> dfg::CoreDef {
+    fn unwrap_memory(def: &dfg::CoreDef) -> dfg::CoreExport<MemoryIndex> {
+        match def {
+            dfg::CoreDef::Export(e) => e.clone().map_index(|i| match i {
+                EntityIndex::Memory(i) => i,
+                _ => unreachable!(),
+            }),
+            _ => unreachable!(),
+        }
+    }
+
     let mut simple_intrinsic = |trampoline: dfg::Trampoline| {
         let signature = ty.unwrap_func();
         let index = dfg
@@ -269,16 +307,6 @@ fn fact_import_to_core_def(
             to,
             to64,
         } => {
-            fn unwrap_memory(def: &dfg::CoreDef) -> dfg::CoreExport<MemoryIndex> {
-                match def {
-                    dfg::CoreDef::Export(e) => e.clone().map_index(|i| match i {
-                        EntityIndex::Memory(i) => i,
-                        _ => unreachable!(),
-                    }),
-                    _ => unreachable!(),
-                }
-            }
-
             let from = dfg.memories.push(unwrap_memory(from));
             let to = dfg.memories.push(unwrap_memory(to));
             let signature = ty.unwrap_func();
@@ -298,8 +326,29 @@ fn fact_import_to_core_def(
         fact::Import::ResourceTransferBorrow => {
             simple_intrinsic(dfg::Trampoline::ResourceTransferBorrow)
         }
-        fact::Import::ResourceEnterCall => simple_intrinsic(dfg::Trampoline::ResourceEnterCall),
-        fact::Import::ResourceExitCall => simple_intrinsic(dfg::Trampoline::ResourceExitCall),
+        fact::Import::PrepareCall { memory } => simple_intrinsic(dfg::Trampoline::PrepareCall {
+            memory: memory.as_ref().map(|v| dfg.memories.push(unwrap_memory(v))),
+        }),
+        fact::Import::SyncStartCall { callback } => {
+            simple_intrinsic(dfg::Trampoline::SyncStartCall {
+                callback: callback.clone().map(|v| dfg.callbacks.push(v)),
+            })
+        }
+        fact::Import::AsyncStartCall {
+            callback,
+            post_return,
+        } => simple_intrinsic(dfg::Trampoline::AsyncStartCall {
+            callback: callback.clone().map(|v| dfg.callbacks.push(v)),
+            post_return: post_return.clone().map(|v| dfg.post_returns.push(v)),
+        }),
+        fact::Import::FutureTransfer => simple_intrinsic(dfg::Trampoline::FutureTransfer),
+        fact::Import::StreamTransfer => simple_intrinsic(dfg::Trampoline::StreamTransfer),
+        fact::Import::ErrorContextTransfer => {
+            simple_intrinsic(dfg::Trampoline::ErrorContextTransfer)
+        }
+        fact::Import::Trap => simple_intrinsic(dfg::Trampoline::Trap),
+        fact::Import::EnterSyncCall => simple_intrinsic(dfg::Trampoline::EnterSyncCall),
+        fact::Import::ExitSyncCall => simple_intrinsic(dfg::Trampoline::ExitSyncCall),
     }
 }
 
@@ -357,14 +406,28 @@ impl PartitionAdapterModules {
     }
 
     fn adapter_options(&mut self, dfg: &dfg::ComponentDfg, options: &AdapterOptions) {
-        if let Some(memory) = &options.memory {
-            self.core_export(dfg, memory);
-        }
-        if let Some(def) = &options.realloc {
+        if let Some(def) = &options.callback {
             self.core_def(dfg, def);
         }
         if let Some(def) = &options.post_return {
             self.core_def(dfg, def);
+        }
+        match &options.data_model {
+            DataModel::Gc {} => {
+                // Nothing to do here yet.
+            }
+            DataModel::LinearMemory {
+                memory,
+                memory64: _,
+                realloc,
+            } => {
+                if let Some(memory) = memory {
+                    self.core_export(dfg, memory);
+                }
+                if let Some(def) = realloc {
+                    self.core_def(dfg, def);
+                }
+            }
         }
     }
 
@@ -389,7 +452,10 @@ impl PartitionAdapterModules {
             }
 
             // These items can't transitively depend on an adapter
-            dfg::CoreDef::Trampoline(_) | dfg::CoreDef::InstanceFlags(_) => {}
+            dfg::CoreDef::Trampoline(_)
+            | dfg::CoreDef::InstanceFlags(_)
+            | dfg::CoreDef::UnsafeIntrinsic(..)
+            | dfg::CoreDef::TaskMayBlock => {}
         }
     }
 

@@ -1,28 +1,26 @@
+use crate::component::InstanceExportLookup;
 use crate::component::matching::InstanceType;
 use crate::component::types;
-use crate::component::InstanceExportLookup;
 use crate::prelude::*;
-use crate::runtime::vm::component::ComponentRuntimeInfo;
-use crate::runtime::vm::{
-    CompiledModuleId, VMArrayCallFunction, VMFuncRef, VMFunctionBody, VMWasmCallFunction,
-};
+#[cfg(feature = "std")]
+use crate::runtime::vm::open_file_for_mmap;
+use crate::runtime::vm::{CompiledModuleId, VMArrayCallFunction, VMFuncRef, VMWasmCallFunction};
 use crate::{
-    code::CodeObject, code_memory::CodeMemory, type_registry::TypeCollection, Engine, Module,
-    ResourcesRequired,
+    Engine, Module, ResourcesRequired, code::EngineCode, code_memory::CodeMemory,
+    type_registry::TypeCollection,
 };
 use crate::{FuncType, ValType};
 use alloc::sync::Arc;
-use core::any::Any;
-use core::mem;
 use core::ops::Range;
 use core::ptr::NonNull;
 #[cfg(feature = "std")]
 use std::path::Path;
 use wasmtime_environ::component::{
-    AllCallFunc, CompiledComponentInfo, ComponentArtifacts, ComponentTypes, Export, ExportIndex,
-    GlobalInitializer, InstantiateModule, NameMapNoIntern, StaticModuleIndex, TrampolineIndex,
-    TypeComponentIndex, TypeDef, VMComponentOffsets,
+    CompiledComponentInfo, ComponentArtifacts, ComponentTypes, CoreDef, Export, ExportIndex,
+    GlobalInitializer, InstantiateModule, NameMapNoIntern, OptionsIndex, StaticModuleIndex,
+    TrampolineIndex, TypeComponentIndex, TypeFuncIndex, UnsafeIntrinsic, VMComponentOffsets,
 };
+use wasmtime_environ::{Abi, CompiledFunctionsTable, FuncKey, TypeTrace, WasmChecksum};
 use wasmtime_environ::{FunctionLoc, HostPtr, ObjectKind, PrimaryMap};
 
 /// A compiled WebAssembly Component.
@@ -83,20 +81,27 @@ struct ComponentInner {
     ///
     /// Note that the `Arc` here is used to share this allocation with internal
     /// modules.
-    code: Arc<CodeObject>,
+    code: Arc<EngineCode>,
 
     /// Metadata produced during compilation.
     info: CompiledComponentInfo,
 
+    /// The index of compiled functions and their locations in the text section
+    /// for this component.
+    index: Arc<CompiledFunctionsTable>,
+
     /// A cached handle to the `wasmtime::FuncType` for the canonical ABI's
     /// `realloc`, to avoid the need to look up types in the registry and take
     /// locks when calling `realloc` via `TypedFunc::call_raw`.
-    realloc_func_type: Arc<dyn Any + Send + Sync>,
+    realloc_func_type: Arc<FuncType>,
+
+    /// The checksum of the source binary from which the module was compiled.
+    checksum: WasmChecksum,
 }
 
 pub(crate) struct AllCallFuncPointers {
     pub wasm_call: NonNull<VMWasmCallFunction>,
-    pub array_call: VMArrayCallFunction,
+    pub array_call: NonNull<VMArrayCallFunction>,
 }
 
 impl Component {
@@ -139,7 +144,7 @@ impl Component {
     /// ```no_run
     /// # use wasmtime::*;
     /// # use wasmtime::component::Component;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let wasm_bytes: Vec<u8> = Vec::new();
     /// let component = Component::new(&engine, &wasm_bytes)?;
@@ -153,7 +158,7 @@ impl Component {
     /// ```
     /// # use wasmtime::*;
     /// # use wasmtime::component::Component;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let component = Component::new(&engine, "(component (core module))")?;
     /// # Ok(())
@@ -161,7 +166,7 @@ impl Component {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn new(engine: &Engine, bytes: impl AsRef<[u8]>) -> Result<Component> {
         crate::CodeBuilder::new(engine)
-            .wasm(bytes.as_ref(), None)?
+            .wasm_binary_or_text(bytes.as_ref(), None)?
             .compile_component()
     }
 
@@ -173,7 +178,7 @@ impl Component {
     #[cfg(all(feature = "std", any(feature = "cranelift", feature = "winch")))]
     pub fn from_file(engine: &Engine, file: impl AsRef<Path>) -> Result<Component> {
         crate::CodeBuilder::new(engine)
-            .wasm_file(file.as_ref())?
+            .wasm_binary_or_text_file(file.as_ref())?
             .compile_component()
     }
 
@@ -189,8 +194,7 @@ impl Component {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn from_binary(engine: &Engine, binary: &[u8]) -> Result<Component> {
         crate::CodeBuilder::new(engine)
-            .wasm(binary, None)?
-            .wat(false)?
+            .wasm_binary(binary, None)?
             .compile_component()
     }
 
@@ -213,6 +217,25 @@ impl Component {
         Component::from_parts(engine, code, None)
     }
 
+    /// Same as [`Module::deserialize_raw`], but for components.
+    ///
+    /// See [`Component::deserialize`] for additional information; this method
+    /// works identically except that it will not create a copy of the provided
+    /// memory but will use it directly.
+    ///
+    /// # Unsafety
+    ///
+    /// All of the safety notes from [`Component::deserialize`] apply here as well
+    /// with the additional constraint that the code memory provide by `memory`
+    /// lives for as long as the module and is nevery externally modified for
+    /// the lifetime of the deserialized module.
+    pub unsafe fn deserialize_raw(engine: &Engine, memory: NonNull<[u8]>) -> Result<Component> {
+        // SAFETY: the contract required by `load_code_raw` is the same as this
+        // function.
+        let code = unsafe { engine.load_code_raw(memory, ObjectKind::Component)? };
+        Component::from_parts(engine, code, None)
+    }
+
     /// Same as [`Module::deserialize_file`], but for components.
     ///
     /// Note that the file referenced here must contain contents previously
@@ -229,7 +252,10 @@ impl Component {
     /// [`Module::deserialize_file`]: crate::Module::deserialize_file
     #[cfg(feature = "std")]
     pub unsafe fn deserialize_file(engine: &Engine, path: impl AsRef<Path>) -> Result<Component> {
-        let code = engine.load_code_file(path.as_ref(), ObjectKind::Component)?;
+        let file = open_file_for_mmap(path.as_ref())?;
+        let code = engine
+            .load_code_file(file, ObjectKind::Component)
+            .with_context(|| format!("failed to load code for: {}", path.as_ref().display()))?;
         Component::from_parts(engine, code, None)
     }
 
@@ -243,7 +269,7 @@ impl Component {
     /// An important point to note here is that the precise type of imports and
     /// exports of a component change when it is instantiated with respect to
     /// resources. For example a [`Component`] represents an un-instantiated
-    /// component meaning that its imported resources are represeted as abstract
+    /// component meaning that its imported resources are represented as abstract
     /// resource types. These abstract types are not equal to any other
     /// component's types.
     ///
@@ -381,12 +407,15 @@ impl Component {
         let ComponentArtifacts {
             ty,
             info,
-            types,
-            static_modules,
+            table: index,
+            mut types,
+            mut static_modules,
+            checksum,
         } = match artifacts {
             Some(artifacts) => artifacts,
-            None => postcard::from_bytes(code_memory.wasmtime_info()).err2anyhow()?,
+            None => postcard::from_bytes(code_memory.wasmtime_info())?,
         };
+        let index = Arc::new(index);
 
         // Validate that the component can be used with the current instance
         // allocator.
@@ -399,26 +428,32 @@ impl Component {
         // Create a signature registration with the `Engine` for all trampolines
         // and core wasm types found within this component, both for the
         // component and for all included core wasm modules.
-        let signatures = TypeCollection::new_for_module(engine, types.module_types());
+        let signatures = engine.register_and_canonicalize_types(
+            types.module_types_mut(),
+            static_modules.iter_mut().map(|(_, m)| &mut m.module),
+        )?;
+        types.canonicalize_for_runtime_usage(&mut |idx| signatures.shared_type(idx).unwrap());
 
-        // Assemble the `CodeObject` artifact which is shared by all core wasm
+        // Assemble the `EngineCode` artifact which is shared by all core wasm
         // modules as well as the final component.
         let types = Arc::new(types);
-        let code = Arc::new(CodeObject::new(code_memory, signatures, types.into()));
+        let code = Arc::new(EngineCode::new(code_memory, signatures, types.into())?);
 
         // Convert all information about static core wasm modules into actual
         // `Module` instances by converting each `CompiledModuleInfo`, the
         // `types` type information, and the code memory to a runtime object.
         let static_modules = static_modules
             .into_iter()
-            .map(|(_, info)| Module::from_parts_raw(engine, code.clone(), info, false))
+            .map(|(_, info)| {
+                Module::from_parts_raw(engine, code.clone(), info, index.clone(), false)
+            })
             .collect::<Result<_>>()?;
 
         let realloc_func_type = Arc::new(FuncType::new(
             engine,
             [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
             [ValType::I32],
-        )) as _;
+        ));
 
         Ok(Component {
             inner: Arc::new(ComponentInner {
@@ -428,7 +463,9 @@ impl Component {
                 static_modules,
                 code,
                 info,
+                index,
                 realloc_func_type,
+                checksum,
             }),
         })
     }
@@ -445,41 +482,79 @@ impl Component {
         &self.inner.static_modules[idx]
     }
 
+    #[cfg(any(feature = "profiling", feature = "debug"))]
+    pub(crate) fn static_modules(&self) -> impl Iterator<Item = &Module> {
+        self.inner.static_modules.values()
+    }
+
     #[inline]
     pub(crate) fn types(&self) -> &Arc<ComponentTypes> {
-        self.inner.component_types()
+        match self.inner.code.types() {
+            crate::code::Types::Component(types) => types,
+            // The only creator of a `Component` is itself which uses the other
+            // variant, so this shouldn't be possible.
+            crate::code::Types::Module(_) => unreachable!(),
+        }
     }
 
     pub(crate) fn signatures(&self) -> &TypeCollection {
         self.inner.code.signatures()
     }
 
-    pub(crate) fn text(&self) -> &[u8] {
-        self.inner.code.code_memory().text()
-    }
-
     pub(crate) fn trampoline_ptrs(&self, index: TrampolineIndex) -> AllCallFuncPointers {
-        let AllCallFunc {
+        let wasm_call = self
+            .store_invariant_func(FuncKey::ComponentTrampoline(Abi::Wasm, index))
+            .unwrap()
+            .cast();
+        let array_call = self
+            .store_invariant_func(FuncKey::ComponentTrampoline(Abi::Array, index))
+            .unwrap()
+            .cast();
+        AllCallFuncPointers {
             wasm_call,
             array_call,
-        } = &self.inner.info.trampolines[index];
-        AllCallFuncPointers {
-            wasm_call: self.func(wasm_call).cast(),
-            array_call: unsafe {
-                mem::transmute::<NonNull<VMFunctionBody>, VMArrayCallFunction>(
-                    self.func(array_call),
-                )
-            },
         }
     }
 
-    fn func(&self, loc: &FunctionLoc) -> NonNull<VMFunctionBody> {
-        let text = self.text();
-        let trampoline = &text[loc.start as usize..][..loc.length as usize];
-        NonNull::new(trampoline.as_ptr() as *mut VMFunctionBody).unwrap()
+    pub(crate) fn unsafe_intrinsic_ptrs(
+        &self,
+        intrinsic: UnsafeIntrinsic,
+    ) -> Option<AllCallFuncPointers> {
+        let wasm_call = self
+            .store_invariant_func(FuncKey::UnsafeIntrinsic(Abi::Wasm, intrinsic))?
+            .cast();
+        let array_call = self
+            .store_invariant_func(FuncKey::UnsafeIntrinsic(Abi::Array, intrinsic))?
+            .cast();
+        Some(AllCallFuncPointers {
+            wasm_call,
+            array_call,
+        })
     }
 
-    pub(crate) fn code_object(&self) -> &Arc<CodeObject> {
+    /// Look up a function in this component's text section by `FuncKey`.
+    ///
+    /// This supports only `FuncKey`s that do not invoke Wasm code,
+    /// i.e., code that is potentially Store-specific.
+    fn store_invariant_func(&self, key: FuncKey) -> Option<NonNull<u8>> {
+        assert!(key.is_store_invariant());
+        let loc = self.inner.index.func_loc(key)?;
+        Some(self.func_loc_to_pointer(loc))
+    }
+
+    /// Given a function location within this component's text section, get a
+    /// pointer to the function.
+    ///
+    /// This works only for Store-invariant functions.
+    ///
+    /// Panics on out-of-bounds function locations.
+    fn func_loc_to_pointer(&self, loc: &FunctionLoc) -> NonNull<u8> {
+        let text = self.engine_code().text();
+        let trampoline = &text[loc.start as usize..][..loc.length as usize];
+        NonNull::from(trampoline).cast()
+    }
+
+    pub(crate) fn engine_code(&self) -> &Arc<EngineCode> {
         &self.inner.code
     }
 
@@ -492,11 +567,7 @@ impl Component {
     /// [`Module::serialize`]: crate::Module::serialize
     /// [`Module`]: crate::Module
     pub fn serialize(&self) -> Result<Vec<u8>> {
-        Ok(self.code_object().code_memory().mmap().to_vec())
-    }
-
-    pub(crate) fn runtime_info(&self) -> Arc<dyn ComponentRuntimeInfo> {
-        self.inner.clone()
+        Ok(self.engine_code().image().to_vec())
     }
 
     /// Creates a new `VMFuncRef` with all fields filled out for the destructor
@@ -513,11 +584,9 @@ impl Component {
         // then this can't be called by the component, so it's ok to leave it
         // blank.
         let wasm_call = self
-            .inner
-            .info
-            .resource_drop_wasm_to_array_trampoline
-            .as_ref()
-            .map(|i| self.func(i).cast());
+            .store_invariant_func(FuncKey::ResourceDropTrampoline)
+            .map(|f| f.cast().into());
+
         VMFuncRef {
             wasm_call,
             ..*dtor.func_ref()
@@ -589,7 +658,7 @@ impl Component {
         };
         for init in &self.env_component().initializers {
             match init {
-                GlobalInitializer::InstantiateModule(inst) => match inst {
+                GlobalInitializer::InstantiateModule(inst, _) => match inst {
                     InstantiateModule::Static(index, _) => {
                         let module = self.static_module(*index);
                         resources.add(&module.resources_required());
@@ -602,7 +671,9 @@ impl Component {
                 },
                 GlobalInitializer::LowerImport { .. }
                 | GlobalInitializer::ExtractMemory(_)
+                | GlobalInitializer::ExtractTable(_)
                 | GlobalInitializer::ExtractRealloc(_)
+                | GlobalInitializer::ExtractCallback(_)
                 | GlobalInitializer::ExtractPostReturn(_)
                 | GlobalInitializer::Resource(_) => {}
             }
@@ -616,7 +687,62 @@ impl Component {
     /// For more information see
     /// [`Module::image_range`](crate::Module::image_range).
     pub fn image_range(&self) -> Range<*const u8> {
-        self.inner.code.code_memory().mmap().image_range()
+        self.inner.code.image().as_ptr_range()
+    }
+
+    /// Force initialization of copy-on-write images to happen here-and-now
+    /// instead of when they're requested during first instantiation.
+    ///
+    /// When [copy-on-write memory
+    /// initialization](crate::Config::memory_init_cow) is enabled then Wasmtime
+    /// will lazily create the initialization image for a component. This method
+    /// can be used to explicitly dictate when this initialization happens.
+    ///
+    /// Note that this largely only matters on Linux when memfd is used.
+    /// Otherwise the copy-on-write image typically comes from disk and in that
+    /// situation the creation of the image is trivial as the image is always
+    /// sourced from disk. On Linux, though, when memfd is used a memfd is
+    /// created and the initialization image is written to it.
+    ///
+    /// Also note that this method is not required to be called, it's available
+    /// as a performance optimization if required but is otherwise handled
+    /// automatically.
+    pub fn initialize_copy_on_write_image(&self) -> Result<()> {
+        for (_, module) in self.inner.static_modules.iter() {
+            module.initialize_copy_on_write_image()?;
+        }
+        Ok(())
+    }
+
+    /// Looks up a specific export of this component by `name` optionally nested
+    /// within the `instance` provided.
+    ///
+    /// See related method [`Self::get_export`] for additional docs and
+    /// examples.
+    ///
+    /// This method is primarily used to acquire a [`ComponentExportIndex`]
+    /// which can be used with [`Instance`](crate::component::Instance) when
+    /// looking up exports. Export lookup with [`ComponentExportIndex`] can
+    /// skip string lookups at runtime and instead use a more efficient
+    /// index-based lookup.
+    ///
+    /// This method only returns the [`ComponentExportIndex`]. If you need the
+    /// corresponding [`types::ComponentItem`], use the related function
+    /// [`Self::get_export`].
+    ///
+    ///
+    /// [`Instance`](crate::component::Instance) has a corresponding method
+    /// [`Instance::get_export_index`](crate::component::Instance::get_export_index).
+    pub fn get_export_index(
+        &self,
+        instance: Option<&ComponentExportIndex>,
+        name: &str,
+    ) -> Option<ComponentExportIndex> {
+        let index = self.lookup_export_index(instance, name)?;
+        Some(ComponentExportIndex {
+            id: self.inner.id,
+            index,
+        })
     }
 
     /// Looks up a specific export of this component by `name` optionally nested
@@ -645,6 +771,14 @@ impl Component {
     /// with [`Instance::get_func`](crate::component::Instance::get_func) for
     /// example.
     ///
+    /// The returned [`types::ComponentItem`] is more expensive to calculate
+    /// than the [`ComponentExportIndex`]. If you only consume the
+    /// [`ComponentExportIndex`], use the related method
+    /// [`Self::get_export_index`] instead.
+    ///
+    /// [`Instance`](crate::component::Instance) has a corresponding method
+    /// [`Instance::get_export`](crate::component::Instance::get_export).
+    ///
     /// # Examples
     ///
     /// ```
@@ -669,7 +803,7 @@ impl Component {
     /// )?;
     ///
     /// // Perform a lookup of the function "f" before instantiaton.
-    /// let (ty, export) = component.export_index(None, "f").unwrap();
+    /// let (ty, export) = component.get_export(None, "f").unwrap();
     /// assert!(matches!(ty, ComponentItem::ComponentFunc(_)));
     ///
     /// // After instantiation use `export` to lookup the function in question
@@ -681,23 +815,19 @@ impl Component {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn export_index(
+    pub fn get_export(
         &self,
         instance: Option<&ComponentExportIndex>,
         name: &str,
     ) -> Option<(types::ComponentItem, ComponentExportIndex)> {
         let info = self.env_component();
         let index = self.lookup_export_index(instance, name)?;
-        let ty = match info.export_items[index] {
-            Export::Instance { ty, .. } => TypeDef::ComponentInstance(ty),
-            Export::LiftedFunction { ty, .. } => TypeDef::ComponentFunc(ty),
-            Export::ModuleStatic { ty, .. } | Export::ModuleImport { ty, .. } => {
-                TypeDef::Module(ty)
-            }
-            Export::Type(ty) => ty,
-        };
         let item = self.with_uninstantiated_instance_type(|instance| {
-            types::ComponentItem::from(&self.inner.engine, &ty, instance)
+            types::ComponentItem::from_export(
+                &self.inner.engine,
+                &info.export_items[index],
+                instance,
+            )
         });
         Some((
             item,
@@ -737,11 +867,40 @@ impl Component {
     pub fn engine(&self) -> &Engine {
         &self.inner.engine
     }
+
+    pub(crate) fn realloc_func_ty(&self) -> &Arc<FuncType> {
+        &self.inner.realloc_func_type
+    }
+
+    #[allow(
+        unused,
+        reason = "used only for verification with wasmtime `rr` feature \
+        and requires a lot of unnecessary gating across crates"
+    )]
+    pub(crate) fn checksum(&self) -> &WasmChecksum {
+        &self.inner.checksum
+    }
+
+    /// Returns the `Export::LiftedFunction` metadata associated with `export`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `export` is out of bounds or if it isn't a `LiftedFunction`.
+    pub(crate) fn export_lifted_function(
+        &self,
+        export: ExportIndex,
+    ) -> (TypeFuncIndex, &CoreDef, OptionsIndex) {
+        let component = self.env_component();
+        match &component.export_items[export] {
+            Export::LiftedFunction { ty, func, options } => (*ty, func, *options),
+            _ => unreachable!(),
+        }
+    }
 }
 
 /// A value which represents a known export of a component.
 ///
-/// This is the return value of [`Component::export_index`] and implements the
+/// This is the return value of [`Component::get_export`] and implements the
 /// [`InstanceExportLookup`] trait to work with lookups like
 /// [`Instance::get_func`](crate::component::Instance::get_func).
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
@@ -760,29 +919,10 @@ impl InstanceExportLookup for ComponentExportIndex {
     }
 }
 
-impl ComponentRuntimeInfo for ComponentInner {
-    fn component(&self) -> &wasmtime_environ::component::Component {
-        &self.info.component
-    }
-
-    fn component_types(&self) -> &Arc<ComponentTypes> {
-        match self.code.types() {
-            crate::code::Types::Component(types) => types,
-            // The only creator of a `Component` is itself which uses the other
-            // variant, so this shouldn't be possible.
-            crate::code::Types::Module(_) => unreachable!(),
-        }
-    }
-
-    fn realloc_func_type(&self) -> &Arc<dyn Any + Send + Sync> {
-        &self.realloc_func_type
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::component::Component;
-    use crate::{Config, Engine};
+    use crate::{CodeBuilder, Config, Engine};
     use wasmtime_environ::MemoryInitialization;
 
     #[test]
@@ -807,5 +947,28 @@ mod tests {
             let init = &module.env_module().memory_initialization;
             assert!(matches!(init, MemoryInitialization::Static { .. }));
         }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn image_range_is_whole_image() {
+        let wat = r#"
+                (component
+                    (core module
+                        (memory 1)
+                        (data (i32.const 0) "1234")
+                        (func (export "f") (param i32) (result i32)
+                            local.get 0)))
+            "#;
+        let engine = Engine::default();
+        let mut builder = CodeBuilder::new(&engine);
+        builder.wasm_binary_or_text(wat.as_bytes(), None).unwrap();
+        let bytes = builder.compile_component_serialized().unwrap();
+
+        let comp = unsafe { Component::deserialize(&engine, &bytes).unwrap() };
+        let image_range = comp.image_range();
+        let len = image_range.end.addr() - image_range.start.addr();
+        // Length may be strictly greater if it becomes page-aligned.
+        assert!(len >= bytes.len());
     }
 }

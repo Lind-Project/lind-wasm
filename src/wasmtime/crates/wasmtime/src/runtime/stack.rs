@@ -1,5 +1,6 @@
 use crate::prelude::*;
-use std::{ops::Range, sync::Arc};
+use alloc::sync::Arc;
+use core::ops::Range;
 use wasmtime_fiber::{RuntimeFiberStack, RuntimeFiberStackCreator};
 
 /// A stack creator. Can be used to provide a stack creator to wasmtime
@@ -19,18 +20,21 @@ pub unsafe trait StackCreator: Send + Sync {
     ///
     /// The `size` parameter is the expected size of the stack without any guard pages.
     ///
+    /// The `zeroed` parameter is whether the stack's memory should be zeroed,
+    /// as a defense-in-depth measure.
+    ///
     /// Note there should be at least one guard page of protected memory at the bottom
     /// of the stack to catch potential stack overflow scenarios. Additionally, stacks should be
     /// page aligned and zero filled.
-    fn new_stack(&self, size: usize) -> Result<Box<dyn StackMemory>, Error>;
+    fn new_stack(&self, size: usize, zeroed: bool) -> Result<Box<dyn StackMemory>, Error>;
 }
 
 #[derive(Clone)]
 pub(crate) struct StackCreatorProxy(pub Arc<dyn StackCreator>);
 
 unsafe impl RuntimeFiberStackCreator for StackCreatorProxy {
-    fn new_stack(&self, size: usize) -> Result<Box<dyn RuntimeFiberStack>, Error> {
-        let stack = self.0.new_stack(size)?;
+    fn new_stack(&self, size: usize, zeroed: bool) -> Result<Box<dyn RuntimeFiberStack>, Error> {
+        let stack = self.0.new_stack(size, zeroed)?;
         Ok(Box::new(FiberStackProxy(stack)) as Box<dyn RuntimeFiberStack>)
     }
 }
@@ -57,6 +61,8 @@ pub unsafe trait StackMemory: Send + Sync {
     fn top(&self) -> *mut u8;
     /// The range of where this stack resides in memory, excluding guard pages.
     fn range(&self) -> Range<usize>;
+    /// The range of memory where the guard region of this stack resides.
+    fn guard_range(&self) -> Range<*mut u8>;
 }
 
 pub(crate) struct FiberStackProxy(pub Box<dyn StackMemory>);
@@ -68,5 +74,9 @@ unsafe impl RuntimeFiberStack for FiberStackProxy {
 
     fn range(&self) -> Range<usize> {
         self.0.range()
+    }
+
+    fn guard_range(&self) -> Range<*mut u8> {
+        self.0.guard_range()
     }
 }

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use std::sync::{
-    atomic::{AtomicU32, Ordering},
     Condvar, Mutex,
+    atomic::{AtomicU32, Ordering},
 };
 
 use dashmap::DashMap;

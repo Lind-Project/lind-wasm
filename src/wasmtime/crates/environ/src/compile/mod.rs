@@ -1,13 +1,12 @@
 //! A `Compilation` contains the compiled function bodies for a WebAssembly
 //! module.
 
+use crate::error::Result;
 use crate::prelude::*;
-use crate::{obj, Tunables};
 use crate::{
-    BuiltinFunctionIndex, DefinedFuncIndex, FlagValue, FuncIndex, FunctionLoc, ObjectKind,
-    PrimaryMap, StaticModuleIndex, WasmError, WasmFuncType, WasmFunctionInfo,
+    DefinedFuncIndex, FlagValue, FuncKey, FunctionLoc, ObjectKind, PrimaryMap, StaticModuleIndex,
+    TripleExt, Tunables, WasmError, WasmFuncType, obj,
 };
-use anyhow::Result;
 use object::write::{Object, SymbolId};
 use object::{Architecture, BinaryFormat, FileFlags};
 use std::any::Any;
@@ -17,15 +16,19 @@ use std::path;
 use std::sync::Arc;
 
 mod address_map;
+mod frame_table;
 mod module_artifacts;
 mod module_environ;
 mod module_types;
+mod stack_maps;
 mod trap_encoding;
 
 pub use self::address_map::*;
+pub use self::frame_table::*;
 pub use self::module_artifacts::*;
 pub use self::module_environ::*;
 pub use self::module_types::*;
+pub use self::stack_maps::*;
 pub use self::trap_encoding::*;
 
 /// An error while compiling WebAssembly to machine code.
@@ -59,27 +62,13 @@ impl From<WasmError> for CompileError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for CompileError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for CompileError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             CompileError::Wasm(e) => Some(e),
             _ => None,
         }
     }
-}
-
-/// What relocations can be applied against.
-///
-/// Each wasm function may refer to various other `RelocationTarget` entries.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum RelocationTarget {
-    /// This is a reference to another defined wasm function in the same module.
-    Wasm(FuncIndex),
-    /// This is a reference to a trampoline for a builtin function.
-    Builtin(BuiltinFunctionIndex),
-    /// A compiler-generated libcall.
-    HostLibcall(obj::LibCall),
 }
 
 /// Implementation of an incremental compilation's key/value cache store.
@@ -90,7 +79,7 @@ pub enum RelocationTarget {
 pub trait CacheStore: Send + Sync + std::fmt::Debug {
     /// Try to retrieve an arbitrary cache key entry, and returns a reference to bytes that were
     /// inserted via `Self::insert` before.
-    fn get(&self, key: &[u8]) -> Option<Cow<[u8]>>;
+    fn get(&self, key: &[u8]) -> Option<Cow<'_, [u8]>>;
 
     /// Given an arbitrary key and bytes, stores them in the cache.
     ///
@@ -108,7 +97,7 @@ pub trait CompilerBuilder: Send + Sync + fmt::Debug {
 
     /// Enables clif output in the directory specified.
     fn clif_dir(&mut self, _path: &path::Path) -> Result<()> {
-        anyhow::bail!("clif output not supported");
+        bail!("clif output not supported");
     }
 
     /// Returns the currently configured target triple that compilation will
@@ -140,6 +129,9 @@ pub trait CompilerBuilder: Send + Sync + fmt::Debug {
 
     /// Set the tunables for this compiler.
     fn set_tunables(&mut self, tunables: Tunables) -> Result<()>;
+
+    /// Get the tunables used by this compiler.
+    fn tunables(&self) -> Option<&Tunables>;
 
     /// Builds a new [`Compiler`] object from this configuration.
     fn build(&self) -> Result<Box<dyn Compiler>>;
@@ -175,27 +167,94 @@ pub enum SettingKind {
     Preset,
 }
 
+/// The result of compiling a single function body.
+pub struct CompiledFunctionBody {
+    /// The code. This is whatever type the `Compiler` implementation wants it
+    /// to be, we just shepherd it around.
+    pub code: Box<dyn Any + Send + Sync>,
+    /// Whether the compiled function needs a GC heap to run; that is, whether
+    /// it reads a struct field, allocates, an array, or etc...
+    pub needs_gc_heap: bool,
+}
+
 /// An implementation of a compiler which can compile WebAssembly functions to
 /// machine code and perform other miscellaneous tasks needed by the JIT runtime.
+///
+/// The diagram below depicts typical usage of this trait:
+///
+/// ```text
+///                     +------+
+///                     | Wasm |
+///                     +------+
+///                        |
+///                        |
+///           Compiler::compile_function()
+///                        |
+///                        |
+///                        V
+///             +----------------------+
+///             | CompiledFunctionBody |
+///             +----------------------+
+///               |                  |
+///               |                  |
+///               |                When
+///               |       Compiler::inlining_compiler()
+///               |               is some
+///               |                  |
+///             When                 |
+/// Compiler::inlining_compiler()    |-----------------.
+///             is none              |                 |
+///               |                  |                 |
+///               |           Optionally call          |
+///               |        InliningCompiler::inline()  |
+///               |                  |                 |
+///               |                  |                 |
+///               |                  |-----------------'
+///               |                  |
+///               |                  |
+///               |                  V
+///               |     InliningCompiler::finish_compiling()
+///               |                  |
+///               |                  |
+///               |------------------'
+///               |
+///               |
+///   Compiler::append_code()
+///               |
+///               |
+///               V
+///           +--------+
+///           | Object |
+///           +--------+
+/// ```
 pub trait Compiler: Send + Sync {
+    /// Get this compiler's inliner.
+    ///
+    /// Consumers of this trait **must** check for when when this method returns
+    /// `Some(_)`, and **must** call `InliningCompiler::finish_compiling` on all
+    /// `CompiledFunctionBody`s produced by this compiler in that case before
+    /// passing the the compiled functions to `Compiler::append_code`, even if
+    /// the consumer does not actually intend to do any inlining. This allows
+    /// implementations of the trait to only translate to an internal
+    /// representation in `Compiler::compile_*` methods so that they can then
+    /// perform inlining afterwards if the consumer desires, and then finally
+    /// proceed with compilng that internal representation to native code in
+    /// `InliningCompiler::finish_compiling`.
+    fn inlining_compiler(&self) -> Option<&dyn InliningCompiler>;
+
     /// Compiles the function `index` within `translation`.
     ///
     /// The body of the function is available in `data` and configuration
     /// values are also passed in via `tunables`. Type information in
     /// `translation` is all relative to `types`.
-    ///
-    /// This function returns a tuple:
-    ///
-    /// 1. Metadata about the wasm function itself.
-    /// 2. The function itself, as an `Any` to get downcasted later when passed
-    ///    to `append_code`.
     fn compile_function(
         &self,
         translation: &ModuleTranslation<'_>,
-        index: DefinedFuncIndex,
+        key: FuncKey,
         data: FunctionBodyData<'_>,
         types: &ModuleTypesBuilder,
-    ) -> Result<(WasmFunctionInfo, Box<dyn Any + Send>), CompileError>;
+        symbol: &str,
+    ) -> Result<CompiledFunctionBody, CompileError>;
 
     /// Compile a trampoline for an array-call host function caller calling the
     /// `index`th Wasm function.
@@ -206,8 +265,9 @@ pub trait Compiler: Send + Sync {
         &self,
         translation: &ModuleTranslation<'_>,
         types: &ModuleTypesBuilder,
-        index: DefinedFuncIndex,
-    ) -> Result<Box<dyn Any + Send>, CompileError>;
+        key: FuncKey,
+        symbol: &str,
+    ) -> Result<CompiledFunctionBody, CompileError>;
 
     /// Compile a trampoline for a Wasm caller calling a array callee with the
     /// given signature.
@@ -217,9 +277,11 @@ pub trait Compiler: Send + Sync {
     fn compile_wasm_to_array_trampoline(
         &self,
         wasm_func_ty: &WasmFuncType,
-    ) -> Result<Box<dyn Any + Send>, CompileError>;
+        key: FuncKey,
+        symbol: &str,
+    ) -> Result<CompiledFunctionBody, CompileError>;
 
-    /// Creates a tramopline that can be used to call Wasmtime's implementation
+    /// Creates a trampoline that can be used to call Wasmtime's implementation
     /// of the builtin function specified by `index`.
     ///
     /// The trampoline created can technically have any ABI but currently has
@@ -230,15 +292,16 @@ pub trait Compiler: Send + Sync {
     /// call.
     fn compile_wasm_to_builtin(
         &self,
-        index: BuiltinFunctionIndex,
-    ) -> Result<Box<dyn Any + Send>, CompileError>;
+        key: FuncKey,
+        symbol: &str,
+    ) -> Result<CompiledFunctionBody, CompileError>;
 
     /// Returns the list of relocations required for a function from one of the
     /// previous `compile_*` functions above.
     fn compiled_function_relocation_targets<'a>(
         &'a self,
         func: &'a dyn Any,
-    ) -> Box<dyn Iterator<Item = RelocationTarget> + 'a>;
+    ) -> Box<dyn Iterator<Item = FuncKey> + 'a>;
 
     /// Appends a list of compiled functions to an in-memory object.
     ///
@@ -263,15 +326,15 @@ pub trait Compiler: Send + Sync {
     /// 1. First, the index within `funcs` that is being resolved,
     ///
     /// 2. and next the `RelocationTarget` which is the relocation target to
-    /// resolve.
+    ///    resolve.
     ///
     /// The return value is an index within `funcs` that the relocation points
     /// to.
     fn append_code(
         &self,
         obj: &mut Object<'static>,
-        funcs: &[(String, Box<dyn Any + Send>)],
-        resolve_reloc: &dyn Fn(usize, RelocationTarget) -> usize,
+        funcs: &[(String, FuncKey, Box<dyn Any + Send + Sync>)],
+        resolve_reloc: &dyn Fn(usize, FuncKey) -> usize,
     ) -> Result<Vec<(SymbolId, FunctionLoc)>>;
 
     /// Creates a new `Object` file which is used to build the results of a
@@ -284,19 +347,29 @@ pub trait Compiler: Send + Sync {
         use target_lexicon::Architecture::*;
 
         let triple = self.triple();
+        let (arch, flags) = match triple.architecture {
+            X86_32(_) => (Architecture::I386, 0),
+            X86_64 => (Architecture::X86_64, 0),
+            Arm(_) => (Architecture::Arm, 0),
+            Aarch64(_) => (Architecture::Aarch64, 0),
+            S390x => (Architecture::S390x, 0),
+            Riscv64(_) => (Architecture::Riscv64, 0),
+            // XXX: the `object` crate won't successfully build an object
+            // with relocations and such if it doesn't know the
+            // architecture, so just pretend we are riscv64. Yolo!
+            //
+            // Also note that we add some flags to `e_flags` in the object file
+            // to indicate that it's pulley, not actually riscv64. This is used
+            // by `wasmtime objdump` for example.
+            Pulley32 | Pulley32be => (Architecture::Riscv64, obj::EF_WASMTIME_PULLEY32),
+            Pulley64 | Pulley64be => (Architecture::Riscv64, obj::EF_WASMTIME_PULLEY64),
+            architecture => {
+                bail!("target architecture {architecture:?} is unsupported");
+            }
+        };
         let mut obj = Object::new(
             BinaryFormat::Elf,
-            match triple.architecture {
-                X86_32(_) => Architecture::I386,
-                X86_64 => Architecture::X86_64,
-                Arm(_) => Architecture::Arm,
-                Aarch64(_) => Architecture::Aarch64,
-                S390x => Architecture::S390x,
-                Riscv64(_) => Architecture::Riscv64,
-                architecture => {
-                    anyhow::bail!("target architecture {:?} is unsupported", architecture,);
-                }
-            },
+            arch,
             match triple.endianness().unwrap() {
                 target_lexicon::Endianness::Little => object::Endianness::Little,
                 target_lexicon::Endianness::Big => object::Endianness::Big,
@@ -304,10 +377,11 @@ pub trait Compiler: Send + Sync {
         );
         obj.flags = FileFlags::Elf {
             os_abi: obj::ELFOSABI_WASMTIME,
-            e_flags: match kind {
-                ObjectKind::Module => obj::EF_WASMTIME_MODULE,
-                ObjectKind::Component => obj::EF_WASMTIME_COMPONENT,
-            },
+            e_flags: flags
+                | match kind {
+                    ObjectKind::Module => obj::EF_WASMTIME_MODULE,
+                    ObjectKind::Component => obj::EF_WASMTIME_COMPONENT,
+                },
             abi_version: 0,
         };
         Ok(obj)
@@ -321,13 +395,19 @@ pub trait Compiler: Send + Sync {
     /// alignment is larger than necessary for some platforms since it may
     /// depend on the platform's runtime configuration.
     fn page_size_align(&self) -> u64 {
+        // Conservatively assume the max-of-all-supported-hosts for pulley
+        // and round up to 64k.
+        if self.triple().is_pulley() {
+            return 0x10000;
+        }
+
         use target_lexicon::*;
         match (self.triple().operating_system, self.triple().architecture) {
             (
                 OperatingSystem::MacOSX { .. }
-                | OperatingSystem::Darwin
-                | OperatingSystem::Ios
-                | OperatingSystem::Tvos,
+                | OperatingSystem::Darwin(_)
+                | OperatingSystem::IOS(_)
+                | OperatingSystem::TvOS(_),
                 Architecture::Aarch64(..),
             ) => 0x4000,
             // 64 KB is the maximal page size (i.e. memory translation granule size)
@@ -346,7 +426,7 @@ pub trait Compiler: Send + Sync {
     /// Get a flag indicating whether branch protection is enabled.
     fn is_branch_protection_enabled(&self) -> bool;
 
-    /// Returns a suitable compiler usable for component-related compliations.
+    /// Returns a suitable compiler usable for component-related compilations.
     ///
     /// Note that the `ComponentCompiler` trait can also be implemented for
     /// `Self` in which case this function would simply return `self`.
@@ -364,7 +444,7 @@ pub trait Compiler: Send + Sync {
         get_func: &'a dyn Fn(
             StaticModuleIndex,
             DefinedFuncIndex,
-        ) -> (SymbolId, &'a (dyn Any + Send)),
+        ) -> (SymbolId, &'a (dyn Any + Send + Sync)),
         dwarf_package_bytes: Option<&'a [u8]>,
         tunables: &'a Tunables,
     ) -> Result<()>;
@@ -376,4 +456,37 @@ pub trait Compiler: Send + Sync {
         // By default, an ISA cannot create a System V CIE.
         None
     }
+}
+
+/// An inlining compiler.
+pub trait InliningCompiler: Sync + Send {
+    /// Enumerate the function calls that the given `func` makes.
+    fn calls(&self, func: &CompiledFunctionBody, calls: &mut IndexSet<FuncKey>) -> Result<()>;
+
+    /// Get the abstract size of the given function, for the purposes of
+    /// inlining heuristics.
+    fn size(&self, func: &CompiledFunctionBody) -> u32;
+
+    /// Process this function for inlining.
+    ///
+    /// Implementations should call `get_callee` for each of their direct
+    /// function call sites and if `get_callee` returns `Some(_)`, they should
+    /// inline the given function body into that call site.
+    fn inline<'a>(
+        &self,
+        func: &mut CompiledFunctionBody,
+        get_callee: &'a mut dyn FnMut(FuncKey) -> Option<&'a CompiledFunctionBody>,
+    ) -> Result<()>;
+
+    /// Finish compiling the given function.
+    ///
+    /// This method **must** be called before passing the
+    /// `CompiledFunctionBody`'s contents to `Compiler::append_code`, even if no
+    /// inlining was performed.
+    fn finish_compiling(
+        &self,
+        func: &mut CompiledFunctionBody,
+        input: Option<wasmparser::FunctionBody<'_>>,
+        symbol: &str,
+    ) -> Result<()>;
 }
