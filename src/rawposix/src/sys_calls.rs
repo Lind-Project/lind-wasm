@@ -1332,19 +1332,20 @@ pub extern "C" fn sched_yield_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/rt_sigsuspend.2.html
 ///
-/// Atomically replaces the signal mask with `set` and suspends the cage until a
-/// signal arrives.  Always returns -1 with errno EINTR.
+/// Atomically saves the current signal mask into `oldset`, replaces it with
+/// `set`, and suspends the cage until a signal arrives.  Always returns -1
+/// with errno EINTR.
 ///
-/// Unlike the glibc fallback (sigprocmask + pause), this is a single host call:
-/// the mask swap and the spin-wait happen without returning to wasm in between,
-/// so there is no epoch injection point that could consume the epoch flag before
-/// the spin-loop sees it.
+/// Saving the old mask here (rather than in a separate sigprocmask call in
+/// glibc) removes the last wasm round-trip before the mask swap: the entire
+/// sequence — save old mask, install new mask, check pending signals, spin —
+/// happens inside a single host call with no epoch injection points in between.
 pub extern "C" fn sigsuspend_syscall(
     cageid: u64,
     set_arg: u64,
     set_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
+    oldset_arg: u64,
+    oldset_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -1355,8 +1356,8 @@ pub extern "C" fn sigsuspend_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let set = sc_convert_sigset(set_arg, set_cageid, cageid);
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
+    let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
+    if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -1368,9 +1369,13 @@ pub extern "C" fn sigsuspend_syscall(
     }
 
     let cage = get_cage(cageid).unwrap();
+    let curr_sigset = cage.sigset.load(Relaxed);
+
+    if let Some(some_oldset) = oldset {
+        *some_oldset = curr_sigset;
+    }
 
     if let Some(some_set) = set {
-        let curr_sigset = cage.sigset.load(Relaxed);
         // Signals that transition from blocked to unblocked
         let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
         {

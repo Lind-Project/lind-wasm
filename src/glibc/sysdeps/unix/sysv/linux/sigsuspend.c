@@ -25,16 +25,17 @@
 /* Change the set of blocked signals to SET, wait until a signal arrives,
    and restore the set of blocked signals.  Always returns -1 / EINTR.
 
-   Implemented as a single rt_sigsuspend syscall so that the mask swap and
-   the spin-wait are atomic from the wasm perspective: no epoch injection
-   point can fire between the mask change and the start of the wait.  The
-   old mask is saved here in wasm before the syscall and restored after,
-   so signal_callback fires (at the entry of sigprocmask) after the syscall
-   returns but before the mask is restored — correct POSIX delivery order.  */
+   The rt_sigsuspend syscall atomically saves the current mask into
+   rawposix_old, installs the new mask, checks for pending signals, and
+   spins — all inside a single host call with no epoch injection points
+   between any of those steps.  The restore call after the syscall runs
+   back in wasm, so signal_callback fires at its function-header epoch
+   point and delivers the signal before the mask is restored.  */
 int
 __sigsuspend (const sigset_t *set)
 {
   unsigned long long rawposix_set;
+  unsigned long long rawposix_old = 0;
   sigset_t old;
 
   if (set == NULL)
@@ -45,18 +46,16 @@ __sigsuspend (const sigset_t *set)
 
   rawposix_set = set->__val[0];
 
-  /* Save current mask for restoration after the syscall (read-only call,
-     no pending-signal check, no epoch trigger).  */
-  __sigprocmask (SIG_BLOCK, NULL, &old);
-
-  /* Atomically install the new mask and wait for a signal.  */
+  /* Atomically save old mask, install new mask, and wait for a signal.  */
   MAKE_LEGACY_SYSCALL (RT_SIGSUSPEND_SYSCALL, "syscall|sigsuspend",
                        (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&rawposix_set),
-                       NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED,
+                       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&rawposix_old),
+                       NOTUSED, NOTUSED, NOTUSED, NOTUSED,
                        TRANSLATE_ERRNO_ON);
 
   /* Restore old mask.  signal_callback fires at the function entry of
      sigprocmask, delivering the pending signal before the mask changes.  */
+  old.__val[0] = (unsigned long int) rawposix_old;
   __sigprocmask (SIG_SETMASK, &old, NULL);
   __set_errno (EINTR);
   return -1;
