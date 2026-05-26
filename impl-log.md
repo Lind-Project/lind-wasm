@@ -85,17 +85,71 @@ The grate's child (cage 2) calls `register_lib_handler` with:
 When the portal fires: `make_syscall(2, 2001, ...)` → HANDLERTABLE[2][2001] → grate cage 1
 → `pass_fptr_to_wt(toy_add_handler_ptr, ...)` → `toy_add_handler` returns `(a+b)*2`.
 
+### Challenge: GRATE_POOL not initialized for dynamically-linked grates
+
+`init_grate_pool()` is only called when `!dylink_metadata.dylink_enabled`. A grate compiled
+without `-s` (the default) has a `dylink.0` section, so `init_grate_pool()` was never called,
+causing a panic at runtime.
+
+Fix: always compile grates with `lind-clang -s` (static linking). Grates don't need dynamic
+libc anyway — they are host-side handlers that use the 3i API directly.
+
+### Challenge: portal stubs not installed for statically-linked exec'd modules
+
+`define_lib_interpose_stubs` was only called in the dylink path in `execute.rs`. Static
+(non-dylink) modules went through a separate path that never installed portals.
+
+Fix: added a `define_lib_interpose_stubs` call in the non-dylink path before
+`load_main_module`. (Note: this is harmless but technically unnecessary since only the
+grate is static and it doesn't need portals installed for itself.)
+
+### Challenge: portal must shadow libc's exported `env::strlen`, `env::rand`, etc.
+
+The initial `define_lib_interpose_stubs` checked if the import was already satisfied and
+skipped it. But preloaded libc.cwasm exports `env::strlen`, so the portal was never installed.
+
+Fix: check for a registered handler first. If one exists, install the portal with
+`allow_shadowing(true)` so it overrides libc's definition. Extracted the inner logic to
+`_define_lib_interpose_stubs_inner` to avoid a borrow-checker conflict with setting
+`allow_shadowing` before and after calling `func_new`.
+
+### Challenge: WASM virtual address vs host address asymmetry in copy_data_between_cages
+
+The C glibc wrapper for `copy_data_between_cages` (lind_syscall.c) applies
+`TRANSLATE_UADDR_TO_HOST(addr, cageid)` before calling into the host. This macro only
+translates when `cageid == __lind_cageid` (the calling cage's own id). Cross-cage
+addresses pass through untranslated as raw WASM virtual addresses.
+
+In the lib-interpose use case, the grate (cage 1) calls:
+```c
+copy_data_between_cages(1, 2, arg1, 2, (uint64_t)buf, 1, 255, 1);
+```
+- `srcaddr=arg1, srccage=2`: `srccage(2) != grate_cage(1)` → NOT translated → WASM vaddr
+- `destaddr=buf,  destcage=1`: `destcage(1) == grate_cage(1)` → translated → host addr
+
+The Rust `copy_data_between_cages` receives a mix: some host addresses, some WASM virtual.
+
+Fix: `_ensure_host_addr(cageid, addr)` — if `addr < 4GiB`, treat as WASM virtual and add
+the cage's linear memory base; otherwise treat as already-host. Applied to both src and dest
+in `copy_data_between_cages`, and also in `_strlen_in_cage`.
+
 ### Final result
 
-Test passes end-to-end:
+All three tests pass end-to-end:
 ```
-[Grate|lib-interpose] registering toy_add handler for cage 2
-[3i|register_lib_handler] cage=2 lib=env sym=toy_add call_id=2001 handler_cage=1 fn=...
+=== libc-rand ===
+[Cage] PASS  /  [Grate|libc-rand] PASS
+
+=== libc-strlen ===
+[Grate|libc-strlen] strlen_handler: cage=1 str="hello" real_len=5 returning 10
+[Cage] strlen("hello") = 10
+[Cage] PASS  /  [Grate|libc-strlen] PASS
+
+=== custom-lib ===
 [Grate|lib-interpose] toy_add_handler: cage=1 a=3 b=4
 [Cage] toy_add(3, 4) = 14
 [Grate|lib-interpose] toy_mul_handler: cage=1 a=5 b=6
 [Cage] toy_mul(5, 6) = 11
-[Cage] PASS
-[Grate|lib-interpose] PASS
+[Cage] PASS  /  [Grate|lib-interpose] PASS
 ```
 

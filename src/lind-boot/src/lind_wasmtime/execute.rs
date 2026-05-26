@@ -345,6 +345,15 @@ pub fn execute_with_lind(
         got_guard.warning_undefined();
     }
 
+    // For non-dylink (statically-linked) modules, install lib-3i portal stubs
+    // here so that interposed symbols (registered via register_lib_handler before
+    // this exec) get real portals rather than trap stubs or missing-import errors.
+    if !dylink_metadata.dylink_enabled {
+        let mut linker_guard = linker.lock().unwrap();
+        let _ = linker_guard.define_lib_interpose_stubs(&module, cageid as u64);
+        drop(linker_guard);
+    }
+
     // -- Run the module in the cage --
     let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
         load_main_module(
@@ -515,6 +524,13 @@ fn attach_api(
         },
         dynamic_loader,
     )?;
+
+    // Install register_lib_handler as a HostFunc so it is available even when
+    // libc.cwasm was built before the function was added to lind_syscall.c, and
+    // so it is propagated to child linkers via get_linker_snapshot_for_child.
+    if let Err(e) = linker_guard.define_register_lib_handler_stub() {
+        eprintln!("[lind] WARNING: define_register_lib_handler_stub failed: {:?}", e);
+    }
 
     // attach SharedMemory to the instance
     // Pass all modules so the memory is created with limits that satisfy every

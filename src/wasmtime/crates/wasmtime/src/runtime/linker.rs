@@ -362,6 +362,77 @@ impl<T> Linker<T> {
         Ok(())
     }
 
+    /// Install `env.register_lib_handler` as a host function in the linker.
+    ///
+    /// This is needed because the function is implemented in glibc's lind_syscall.c,
+    /// but the prebuilt libc.cwasm may not export it yet. Providing it as a HostFunc
+    /// ensures it is also propagated to child linkers via get_linker_snapshot_for_child.
+    ///
+    /// Signature (wasm32): (i64 target_cage, i32 lib_name_ptr, i32 sym_name_ptr,
+    ///                       i64 call_id, i64 handler_cage, i64 fn_ptr) -> i32
+    pub fn define_register_lib_handler_stub(&mut self) -> Result<()>
+    where
+        T: 'static,
+    {
+        use crate::FuncType;
+        let func_ty = FuncType::new(
+            &self.engine,
+            [
+                ValType::I64, ValType::I32, ValType::I32,
+                ValType::I64, ValType::I64, ValType::I64,
+            ],
+            [ValType::I32],
+        );
+        self.func_new("env", "register_lib_handler", func_ty, move |mut caller, params, results| {
+            eprintln!("[lind-3i] register_lib_handler host stub called");
+            let target_cage = match &params[0] { Val::I64(x) => *x as u64, _ => 0 };
+            let lib_name_wptr = match &params[1] { Val::I32(x) => *x as u32 as u64, _ => 0 };
+            let sym_name_wptr = match &params[2] { Val::I32(x) => *x as u32 as u64, _ => 0 };
+            let call_id      = match &params[3] { Val::I64(x) => *x as u64, _ => 0 };
+            let handler_cage = match &params[4] { Val::I64(x) => *x as u64, _ => 0 };
+            let fn_ptr       = match &params[5] { Val::I64(x) => *x as u64, _ => 0 };
+
+            let mem_base = {
+                let mem_opt = {
+                    let mut it = caller.as_context_mut().0.all_memories();
+                    let m = it.next();
+                    drop(it);
+                    m
+                };
+                match mem_opt {
+                    Some(m) => {
+                        if let Some(ptr) = m.shared_base_ptr() {
+                            ptr as u64
+                        } else {
+                            m.unshared()
+                             .map(|u| u.data_ptr(caller.as_context()) as u64)
+                             .unwrap_or(0)
+                        }
+                    }
+                    None => 0,
+                }
+            };
+            eprintln!("[lind-3i] register_lib_handler: mem_base={:#x} lib_name_wptr={:#x} sym_name_wptr={:#x}", mem_base, lib_name_wptr, sym_name_wptr);
+
+            let lib_name_host = mem_base + lib_name_wptr;
+            let sym_name_host = mem_base + sym_name_wptr;
+
+            // Delegate to the threei implementation with host-translated addresses.
+            let ret = threei::register_lib_handler(
+                0, 0,
+                target_cage, 0,
+                lib_name_host, 0,
+                sym_name_host, 0,
+                call_id, 0,
+                handler_cage, 0,
+                fn_ptr, 0,
+            );
+            results[0] = Val::I32(ret);
+            Ok(())
+        })?;
+        Ok(())
+    }
+
     /// Install library-level 3i portal stubs for unresolved imports that have a
     /// registered handler in the LIB_SYMBOL_TABLE for `cage_id`.
     ///
@@ -371,14 +442,25 @@ impl<T> Linker<T> {
     where
         T: 'static,
     {
+        // Allow shadowing so portals can override preloaded-library definitions
+        // (e.g. libc.cwasm already providing `env::rand`).
+        let prev_shadowing = self.allow_shadowing;
+        self.allow_shadowing(true);
+        let result = self._define_lib_interpose_stubs_inner(module, cage_id);
+        self.allow_shadowing(prev_shadowing);
+        result
+    }
+
+    fn _define_lib_interpose_stubs_inner(&mut self, module: &Module, cage_id: u64) -> Result<()>
+    where
+        T: 'static,
+    {
         for import in module.imports() {
-            // Only act on unresolved function imports.
-            if self._get_by_import(&import).is_ok() {
-                continue;
-            }
             let ExternType::Func(func_ty) = import.ty() else {
                 continue;
             };
+            // Check for a registered handler first; if none, skip entirely.
+            // A handler overrides any existing definition (including libc).
             let call_id = match threei::get_lib_call_id(cage_id, import.module(), import.name()) {
                 Some(id) => id,
                 None => continue,
@@ -389,7 +471,10 @@ impl<T> Linker<T> {
                 import.module(),
                 import.name(),
                 func_ty,
-                move |_caller, params, results| {
+                move |mut caller, params, results| {
+                    // Pass raw WASM values to make_syscall. For pointer arguments,
+                    // copy_data_between_cages translates WASM virtual → host internally
+                    // using the cage's memory base. Non-pointer integers are passed as-is.
                     let mut raw = [0u64; 6];
                     for (i, v) in params.iter().enumerate().take(6) {
                         raw[i] = match v {
@@ -402,8 +487,8 @@ impl<T> Linker<T> {
                     }
                     let ret = make_syscall(
                         cage_id, call_id, 0, cage_id,
-                        raw[0], 0, raw[1], 0, raw[2], 0,
-                        raw[3], 0, raw[4], 0, raw[5], 0,
+                        raw[0], cage_id, raw[1], cage_id, raw[2], cage_id,
+                        raw[3], cage_id, raw[4], cage_id, raw[5], cage_id,
                     );
                     for (slot, ty) in results.iter_mut().zip(func_ty_portal.results()) {
                         *slot = match ty {
@@ -1095,9 +1180,11 @@ impl<T> Linker<T> {
                             let portal = Func::new(
                                 &mut store,
                                 func_ty,
-                                move |_caller, params, results| {
+                                move |mut caller, params, results| {
                                     // Extract up to 6 args as raw u64 values.
                                     // WASM i32 args are zero-extended; i64 pass directly.
+                                    // Raw WASM values are passed; copy_data_between_cages
+                                    // translates WASM virtual → host using cage memory bases.
                                     let mut raw = [0u64; 6];
                                     for (i, v) in params.iter().enumerate().take(6) {
                                         raw[i] = match v {
@@ -1110,8 +1197,8 @@ impl<T> Linker<T> {
                                     }
                                     let ret = make_syscall(
                                         cid, call_id, 0, cid,
-                                        raw[0], 0, raw[1], 0, raw[2], 0,
-                                        raw[3], 0, raw[4], 0, raw[5], 0,
+                                        raw[0], cid, raw[1], cid, raw[2], cid,
+                                        raw[3], cid, raw[4], cid, raw[5], cid,
                                     );
                                     // Pack the i32 result back into the expected return type.
                                     for (slot, ty) in results

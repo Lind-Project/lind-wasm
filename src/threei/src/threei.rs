@@ -692,6 +692,28 @@ pub fn harsh_cage_exit(
     0 // success
 }
 
+/// Translate `addr` to a host address for `cageid` if it looks like a raw WASM virtual
+/// address (< 4 GiB). Addresses already >= 4 GiB are treated as already-translated host
+/// addresses (as produced by TRANSLATE_UADDR_TO_HOST in the C glibc wrapper for same-cage
+/// pointers). Returns 0 on failure (cage not found or base not set).
+#[inline]
+fn _ensure_host_addr(cageid: u64, addr: u64) -> u64 {
+    if addr < (1u64 << 32) {
+        // WASM virtual address — translate using this cage's linear memory base
+        let base = cage::get_cage(cageid)
+            .and_then(|c| c.vmmap.read().base_address)
+            .unwrap_or(0) as u64;
+        if base == 0 {
+            eprintln!("[3i|copy] no memory base for cage {}", cageid);
+            return 0;
+        }
+        addr + base
+    } else {
+        // Already a host address
+        addr
+    }
+}
+
 /***************************** copy_data_between_cages *****************************/
 ///
 /// CopyType represents the type of copy operation supported by copy_data_between_cages.
@@ -780,10 +802,14 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
 /// - Some(length) if a null terminator is found within max_len.
 /// - None if no null byte is found, indicating a malformed or unterminated string.
 fn _strlen_in_cage(cageid: u64, srcaddr: u64, max_len: usize) -> Option<usize> {
+    let host_addr = _ensure_host_addr(cageid, srcaddr);
+    if host_addr == 0 {
+        return None;
+    }
     for i in 0..max_len {
-        let addr = srcaddr.checked_add(i as u64)?;
+        let addr = host_addr.checked_add(i as u64)?;
 
-        // validate this byte before dereference
+        // validate this byte before dereference (check_addr_read expects host addresses)
         if check_addr_read(cageid, addr, 1).is_err() {
             return None;
         }
@@ -941,21 +967,26 @@ pub fn copy_data_between_cages(
         }
     };
 
-    // Validate that src and dest ranges are accessible
-    if let Err(code) = _validate_range_read(srccage, srcaddr, copy_len, "source") {
-        return code;
-    }
-    if let Err(code) = _validate_range_rw(destcage, destaddr, copy_len, "destination") {
-        return code;
+    // The C-side glibc wrapper (lind_syscall.c) applies TRANSLATE_UADDR_TO_HOST, which
+    // only translates an address when its cageid matches the calling cage (__lind_cageid).
+    // Cross-cage addresses (e.g. a pointer owned by a different cage) pass through
+    // untranslated as raw WASM virtual addresses. We complete the translation here:
+    // addresses below 4GiB are WASM virtual and need the cage's memory base added;
+    // addresses >= 4GiB are already host addresses (already translated by C wrapper).
+    let host_src_addr = _ensure_host_addr(srccage, srcaddr);
+    let host_dest_addr = _ensure_host_addr(destcage, destaddr);
+
+    if host_src_addr == 0 || host_dest_addr == 0 {
+        eprintln!("[3i|copy] address translation failed: src={:#x} dest={:#x}", srcaddr, destaddr);
+        return threei_const::ELINDAPIABORTED;
     }
 
-    // Translate user virtual addrs to host pointers
-    let host_src_addr = srcaddr;
-    let host_dest_addr = destaddr;
-    if host_src_addr == 0 || host_dest_addr == 0 {
-        // src addr or dest addr is null
-        eprintln!("[3i|copy] host addr translate failed");
-        return threei_const::ELINDAPIABORTED;
+    // Validate that src and dest ranges are accessible (check_addr_read expects host addrs)
+    if let Err(code) = _validate_range_read(srccage, host_src_addr, copy_len, "source") {
+        return code;
+    }
+    if let Err(code) = _validate_range_rw(destcage, host_dest_addr, copy_len, "destination") {
+        return code;
     }
 
     // Check for arithmetic overflow before doing pointer arithmetic
@@ -964,7 +995,7 @@ pub fn copy_data_between_cages(
     {
         eprintln!(
             "[3i|copy] address overflow: src={:#x} len={} dest={:#x}",
-            srcaddr, copy_len, destaddr
+            host_src_addr, copy_len, host_dest_addr
         );
         return threei_const::ELINDAPIABORTED;
     }
