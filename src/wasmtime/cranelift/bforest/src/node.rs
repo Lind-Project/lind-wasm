@@ -1,6 +1,6 @@
 //! B+-tree nodes.
 
-use super::{slice_insert, slice_shift, Forest, Node, SetValue, INNER_SIZE};
+use super::{Forest, INNER_SIZE, Node, SetValue, slice_insert, slice_shift};
 use core::borrow::{Borrow, BorrowMut};
 use core::fmt;
 
@@ -13,7 +13,6 @@ use core::fmt;
 ///
 /// An inner node contains at least M/2 node references unless it is the right-most node at its
 /// level. A leaf node contains at least N/2 keys unless it is the right-most leaf.
-#[allow(dead_code)] // workaround for https://github.com/rust-lang/rust/issues/64362
 pub(super) enum NodeData<F: Forest> {
     Inner {
         /// The number of keys in this node.
@@ -174,7 +173,7 @@ impl<F: Forest> NodeData<F> {
             } => {
                 let sz = usize::from(*size);
                 debug_assert!(sz <= keys.len());
-                debug_assert!(index <= sz, "Can't insert at {} with {} keys", index, sz);
+                debug_assert!(index <= sz, "Can't insert at {index} with {sz} keys");
 
                 if let Some(ks) = keys.get_mut(0..=sz) {
                     *size = (sz + 1) as u8;
@@ -547,7 +546,7 @@ impl ValDisp for SetValue {
 
 impl<T: fmt::Display> ValDisp for T {
     fn valfmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, ":{}", self)
+        write!(f, ":{self}")
     }
 }
 
@@ -576,7 +575,7 @@ where
                 }
                 write!(f, " ]")
             }
-            Self::Free { next: Some(n) } => write!(f, "[ free -> {} ]", n),
+            Self::Free { next: Some(n) } => write!(f, "[ free -> {n} ]"),
             Self::Free { next: None } => write!(f, "[ free ]"),
         }
     }
@@ -641,7 +640,7 @@ mod tests {
 
         // Splitting should be independent of the hint because we have an even number of node
         // references.
-        let saved = inner.clone();
+        let saved = inner;
         let sp = inner.split(1);
         assert_eq!(sp.lhs_entries, 4);
         assert_eq!(sp.rhs_entries, 4);
@@ -691,7 +690,7 @@ mod tests {
         assert!(!leaf.try_leaf_insert(15, 'x', SetValue()));
 
         // The index given to `split` is not the split position, it's a hint for balancing the node.
-        let saved = leaf.clone();
+        let saved = leaf;
         let sp = leaf.split(12);
         assert_eq!(sp.lhs_entries, 8);
         assert_eq!(sp.rhs_entries, 7);

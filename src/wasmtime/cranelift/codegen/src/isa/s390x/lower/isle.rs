@@ -3,54 +3,40 @@
 // Pull in the ISLE generated code.
 pub mod generated_code;
 
-use crate::ir::ExternalName;
 // Types that the generated ISLE code uses via `use super::*`.
-use crate::isa::s390x::abi::{S390xMachineDeps, REG_SAVE_AREA_SIZE};
-use crate::isa::s390x::inst::{
-    gpr, stack_reg, writable_gpr, zero_reg, CallIndInfo, CallInfo, Cond, Inst as MInst, LaneOrder,
-    MemArg, MemArgPair, RegPair, SymbolReloc, UImm12, UImm16Shifted, UImm32Shifted,
-    WritableRegPair,
-};
+use crate::ir::ExternalName;
 use crate::isa::s390x::S390xBackend;
-use crate::isle_common_prelude_methods;
+use crate::isa::s390x::abi::REG_SAVE_AREA_SIZE;
+use crate::isa::s390x::inst::{
+    CallInstDest, Cond, Inst as MInst, LaneOrder, MemArg, RegPair, ReturnCallInfo, SImm20,
+    SymbolReloc, UImm12, UImm16Shifted, UImm32Shifted, WritableRegPair, gpr, stack_reg,
+    writable_gpr, zero_reg,
+};
 use crate::machinst::isle::*;
-use crate::machinst::{MachLabel, Reg};
+use crate::machinst::{CallInfo, MachLabel, Reg, TryCallInfo, non_writable_value_regs};
 use crate::{
     ir::{
-        condcodes::*, immediates::*, types::*, ArgumentExtension, ArgumentPurpose, AtomicRmwOp,
-        BlockCall, Endianness, Inst, InstructionData, KnownSymbol, LibCall, MemFlags, Opcode,
-        TrapCode, Value, ValueList,
+        AtomicRmwOp, BlockCall, Endianness, Inst, InstructionData, KnownSymbol, MemFlags, Opcode,
+        TrapCode, Value, ValueList, condcodes::*, immediates::*, types::*,
     },
     isa::CallConv,
-    machinst::abi::ABIMachineSpec,
     machinst::{
-        ArgPair, CallArgList, CallArgPair, CallRetList, CallRetPair, InstOutput, MachInst,
-        VCodeConstant, VCodeConstantData,
+        ArgPair, CallArgList, CallRetList, InstOutput, MachInst, VCodeConstant, VCodeConstantData,
     },
 };
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::cell::Cell;
 use regalloc2::PReg;
-use smallvec::smallvec;
-use std::boxed::Box;
-use std::cell::Cell;
-use std::vec::Vec;
 
-/// Information describing a library call to be emitted.
-pub struct LibCallInfo {
-    libcall: LibCall,
-    uses: CallArgList,
-    defs: CallRetList,
-    tls_symbol: Option<SymbolReloc>,
-}
-
-type BoxCallInfo = Box<CallInfo>;
-type BoxCallIndInfo = Box<CallIndInfo>;
+type BoxCallInfo = Box<CallInfo<CallInstDest>>;
+type BoxReturnCallInfo = Box<ReturnCallInfo<CallInstDest>>;
 type VecMachLabel = Vec<MachLabel>;
 type BoxExternalName = Box<ExternalName>;
 type BoxSymbolReloc = Box<SymbolReloc>;
 type VecMInst = Vec<MInst>;
 type VecMInstBuilder = Cell<Vec<MInst>>;
 type VecArgPair = Vec<ArgPair>;
-type CallArgListBuilder = Cell<CallArgList>;
 
 /// The main entry point for lowering with ISLE.
 pub(crate) fn lower(
@@ -74,236 +60,151 @@ pub(crate) fn lower_branch(
     // TODO: reuse the ISLE context across lowerings so we can reuse its
     // internal heap allocations.
     let mut isle_ctx = IsleContext { lower_ctx, backend };
-    generated_code::constructor_lower_branch(&mut isle_ctx, branch, &targets.to_vec())
+    generated_code::constructor_lower_branch(&mut isle_ctx, branch, targets)
 }
 
 impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     isle_lower_prelude_methods!();
 
-    fn gen_return_call(
-        &mut self,
-        callee_sig: SigRef,
-        callee: ExternalName,
-        distance: RelocDistance,
-        args: ValueSlice,
-    ) -> InstOutput {
-        let _ = (callee_sig, callee, distance, args);
-        todo!()
-    }
-
-    fn gen_return_call_indirect(
-        &mut self,
-        callee_sig: SigRef,
-        callee: Value,
-        args: ValueSlice,
-    ) -> InstOutput {
-        let _ = (callee_sig, callee, args);
-        todo!()
+    #[inline]
+    fn call_inst_dest_direct(&mut self, name: ExternalName) -> CallInstDest {
+        CallInstDest::Direct { name }
     }
 
     #[inline]
-    fn args_builder_new(&mut self) -> CallArgListBuilder {
-        Cell::new(CallArgList::new())
+    fn call_inst_dest_indirect(&mut self, reg: Reg) -> CallInstDest {
+        CallInstDest::Indirect { reg }
     }
 
-    #[inline]
-    fn args_builder_push(
-        &mut self,
-        builder: &CallArgListBuilder,
-        vreg: Reg,
-        preg: RealReg,
-    ) -> Unit {
-        let mut args = builder.take();
-        args.push(CallArgPair {
-            vreg,
-            preg: preg.into(),
-        });
-        builder.set(args);
-    }
-
-    #[inline]
-    fn args_builder_finish(&mut self, builder: &CallArgListBuilder) -> CallArgList {
-        builder.take()
-    }
-
-    fn defs_init(&mut self, abi: Sig) -> CallRetList {
-        // Allocate writable registers for all retval regs, except for StructRet args.
-        let mut defs = smallvec![];
-        for i in 0..self.lower_ctx.sigs().num_rets(abi) {
-            if let &ABIArg::Slots {
-                ref slots, purpose, ..
-            } = &self.lower_ctx.sigs().get_ret(abi, i)
-            {
-                if purpose == ArgumentPurpose::StructReturn {
-                    continue;
-                }
-                for slot in slots {
-                    match slot {
-                        &ABIArgSlot::Reg { reg, ty, .. } => {
-                            let value_regs = self.lower_ctx.alloc_tmp(ty);
-                            defs.push(CallRetPair {
-                                vreg: value_regs.only_reg().unwrap(),
-                                preg: reg.into(),
-                            });
-                        }
-                        _ => {}
-                    }
+    // Adjust the stack before performing a (regular) call to a function
+    // using the tail-call ABI.  We need to allocate the part of the callee's
+    // frame holding the incoming argument area.  If necessary for unwinding,
+    // we also create a (temporary) copy of the backchain.
+    fn abi_emit_call_adjust_stack(&mut self, abi: Sig) -> Unit {
+        let sig_data = &self.lower_ctx.sigs()[abi];
+        if sig_data.call_conv() == CallConv::Tail {
+            let arg_space = sig_data.sized_stack_arg_space();
+            if arg_space > 0 {
+                if self.backend.flags.preserve_frame_pointers() {
+                    let tmp = self.lower_ctx.alloc_tmp(I64).only_reg().unwrap();
+                    let src_mem = MemArg::reg(stack_reg(), MemFlags::trusted());
+                    let dst_mem = MemArg::reg(stack_reg(), MemFlags::trusted());
+                    self.emit(&MInst::Load64 {
+                        rd: tmp,
+                        mem: src_mem,
+                    });
+                    self.emit(&MInst::AllocateArgs { size: arg_space });
+                    self.emit(&MInst::Store64 {
+                        rd: tmp.to_reg(),
+                        mem: dst_mem,
+                    });
+                } else {
+                    self.emit(&MInst::AllocateArgs { size: arg_space });
                 }
             }
         }
-        defs
     }
 
-    fn defs_lookup(&mut self, defs: &CallRetList, reg: RealReg) -> Reg {
-        let reg = Reg::from(reg);
-        for def in defs {
-            if def.preg == reg {
-                return def.vreg.to_reg();
-            }
+    // Adjust the stack before performing a tail call.  The actual stack
+    // adjustment is deferred to the call instruction itself, but we create
+    // a temporary backchain copy in the proper place here, if necessary
+    // for unwinding.
+    fn abi_emit_return_call_adjust_stack(&mut self, abi: Sig) -> Unit {
+        let sig_data = &self.lower_ctx.sigs()[abi];
+        let arg_space = sig_data.sized_stack_arg_space();
+        if arg_space > 0 && self.backend.flags.preserve_frame_pointers() {
+            let tmp = self.lower_ctx.alloc_tmp(I64).only_reg().unwrap();
+            let src_mem = MemArg::InitialSPOffset { off: 0 };
+            let dst_mem = MemArg::InitialSPOffset {
+                off: -(arg_space as i64),
+            };
+            self.emit(&MInst::Load64 {
+                rd: tmp,
+                mem: src_mem,
+            });
+            self.emit(&MInst::Store64 {
+                rd: tmp.to_reg(),
+                mem: dst_mem,
+            });
         }
-        unreachable!()
     }
 
-    fn abi_sig(&mut self, sig_ref: SigRef) -> Sig {
-        self.lower_ctx.sigs().abi_sig_for_sig_ref(sig_ref)
+    // Load call arguments into a vector of ValueRegs.  This is the same as
+    // the common-code put_in_regs_vec routine, except that we also handle
+    // vector lane swaps if caller and callee differ in lane order.
+    fn abi_prepare_args(&mut self, abi: Sig, (list, off): ValueSlice) -> ValueRegsVec {
+        let lane_order = LaneOrder::from(self.lower_ctx.sigs()[abi].call_conv());
+        let lane_swap_needed = self.lane_order() != lane_order;
+
+        (off..list.len(&self.lower_ctx.dfg().value_lists))
+            .map(|ix| {
+                let val = list.get(ix, &self.lower_ctx.dfg().value_lists).unwrap();
+                let ty = self.lower_ctx.dfg().value_type(val);
+                let regs = self.put_in_regs(val);
+
+                if lane_swap_needed && ty.is_vector() && ty.lane_count() >= 2 {
+                    let tmp_regs = self.lower_ctx.alloc_tmp(ty);
+                    self.emit(&MInst::VecEltRev {
+                        lane_count: ty.lane_count(),
+                        rd: tmp_regs.only_reg().unwrap(),
+                        rn: regs.only_reg().unwrap(),
+                    });
+                    non_writable_value_regs(tmp_regs)
+                } else {
+                    regs
+                }
+            })
+            .collect()
     }
 
-    fn abi_first_ret(&mut self, sig_ref: SigRef, abi: Sig) -> usize {
-        // Return the index of the first actual return value, excluding
-        // any StructReturn that might have been added to Sig.
-        let sig = &self.lower_ctx.dfg().signatures[sig_ref];
-        self.lower_ctx.sigs().num_rets(abi) - sig.returns.len()
-    }
-
-    fn abi_lane_order(&mut self, abi: Sig) -> LaneOrder {
-        lane_order_for_call_conv(self.lower_ctx.sigs()[abi].call_conv())
-    }
-
-    fn abi_accumulate_outgoing_args_size(&mut self, abi: Sig) -> Unit {
-        let off = self.lower_ctx.sigs()[abi].sized_stack_arg_space()
-            + self.lower_ctx.sigs()[abi].sized_stack_ret_space();
+    fn gen_call_info(
+        &mut self,
+        sig: Sig,
+        dest: CallInstDest,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<TryCallInfo>,
+        patchable: bool,
+    ) -> BoxCallInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        let total_space = if self.lower_ctx.sigs()[sig].call_conv() != CallConv::Tail {
+            REG_SAVE_AREA_SIZE + stack_arg_space + stack_ret_space
+        } else {
+            REG_SAVE_AREA_SIZE + stack_ret_space
+        };
         self.lower_ctx
             .abi_mut()
-            .accumulate_outgoing_args_size(off as u32);
+            .accumulate_outgoing_args_size(total_space);
+
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, patchable),
+        )
     }
 
-    fn abi_call_info(
+    fn gen_return_call_info(
         &mut self,
-        abi: Sig,
-        name: ExternalName,
-        uses: &CallArgList,
-        defs: &CallRetList,
-        opcode: &Opcode,
-    ) -> BoxCallInfo {
-        let clobbers = self.lower_ctx.sigs().call_clobbers::<S390xMachineDeps>(abi);
-        Box::new(CallInfo {
-            dest: name.clone(),
-            uses: uses.clone(),
-            defs: defs.clone(),
-            clobbers,
-            opcode: *opcode,
-            caller_callconv: self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
-            callee_callconv: self.lower_ctx.sigs()[abi].call_conv(),
-            tls_symbol: None,
+        sig: Sig,
+        dest: CallInstDest,
+        uses: CallArgList,
+    ) -> BoxReturnCallInfo {
+        let callee_pop_size = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_tail_args_size(callee_pop_size);
+
+        Box::new(ReturnCallInfo {
+            dest,
+            uses,
+            callee_pop_size,
         })
     }
 
-    fn abi_call_ind_info(
-        &mut self,
-        abi: Sig,
-        target: Reg,
-        uses: &CallArgList,
-        defs: &CallRetList,
-        opcode: &Opcode,
-    ) -> BoxCallIndInfo {
-        let clobbers = self.lower_ctx.sigs().call_clobbers::<S390xMachineDeps>(abi);
-        Box::new(CallIndInfo {
-            rn: target,
-            uses: uses.clone(),
-            defs: defs.clone(),
-            clobbers,
-            opcode: *opcode,
-            caller_callconv: self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
-            callee_callconv: self.lower_ctx.sigs()[abi].call_conv(),
-        })
-    }
-
-    fn lib_call_info_memcpy(&mut self, dst: Reg, src: Reg, len: Reg) -> LibCallInfo {
-        LibCallInfo {
-            libcall: LibCall::Memcpy,
-            uses: smallvec![
-                CallArgPair {
-                    vreg: dst,
-                    preg: gpr(2),
-                },
-                CallArgPair {
-                    vreg: src,
-                    preg: gpr(3),
-                },
-                CallArgPair {
-                    vreg: len,
-                    preg: gpr(4),
-                },
-            ],
-            defs: smallvec![],
-            tls_symbol: None,
-        }
-    }
-
-    fn lib_call_info_tls_get_offset(
-        &mut self,
-        tls_offset: WritableReg,
-        got: Reg,
-        got_offset: Reg,
-        tls_symbol: &SymbolReloc,
-    ) -> LibCallInfo {
-        LibCallInfo {
-            libcall: LibCall::ElfTlsGetOffset,
-            uses: smallvec![
-                CallArgPair {
-                    vreg: got,
-                    preg: gpr(12),
-                },
-                CallArgPair {
-                    vreg: got_offset,
-                    preg: gpr(2),
-                },
-            ],
-            defs: smallvec![CallRetPair {
-                vreg: tls_offset,
-                preg: gpr(2),
-            },],
-            tls_symbol: Some(tls_symbol.clone()),
-        }
-    }
-
-    fn lib_accumulate_outgoing_args_size(&mut self, _: &LibCallInfo) -> Unit {
-        // Libcalls only require the register save area.
+    fn abi_for_elf_tls_get_offset(&mut self) {
         self.lower_ctx
             .abi_mut()
             .accumulate_outgoing_args_size(REG_SAVE_AREA_SIZE);
-    }
-
-    fn lib_call_info(&mut self, info: &LibCallInfo) -> BoxCallInfo {
-        let caller_callconv = self.lower_ctx.abi().call_conv(self.lower_ctx.sigs());
-        let callee_callconv = CallConv::for_libcall(&self.backend.flags, caller_callconv);
-
-        // Clobbers are defined by the calling convention.  Remove defs from clobbers.
-        let mut clobbers = S390xMachineDeps::get_regs_clobbered_by_call(callee_callconv);
-        for reg in &info.defs {
-            clobbers.remove(PReg::from(reg.preg.to_real_reg().unwrap()));
-        }
-
-        Box::new(CallInfo {
-            dest: ExternalName::LibCall(info.libcall),
-            uses: info.uses.clone(),
-            defs: info.defs.clone(),
-            clobbers,
-            opcode: Opcode::Call,
-            caller_callconv,
-            callee_callconv,
-            tls_symbol: info.tls_symbol.clone(),
-        })
     }
 
     #[inline]
@@ -312,8 +213,8 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     }
 
     #[inline]
-    fn mie2_enabled(&mut self, _: Type) -> Option<()> {
-        if self.backend.isa_flags.has_mie2() {
+    fn mie3_enabled(&mut self, _: Type) -> Option<()> {
+        if self.backend.isa_flags.has_mie3() {
             Some(())
         } else {
             None
@@ -321,8 +222,26 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     }
 
     #[inline]
-    fn mie2_disabled(&mut self, _: Type) -> Option<()> {
-        if !self.backend.isa_flags.has_mie2() {
+    fn mie3_disabled(&mut self, _: Type) -> Option<()> {
+        if !self.backend.isa_flags.has_mie3() {
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn mie4_enabled(&mut self, _: Type) -> Option<()> {
+        if self.backend.isa_flags.has_mie4() {
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn mie4_disabled(&mut self, _: Type) -> Option<()> {
+        if !self.backend.isa_flags.has_mie4() {
             Some(())
         } else {
             None
@@ -341,6 +260,24 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     #[inline]
     fn vxrs_ext2_disabled(&mut self, _: Type) -> Option<()> {
         if !self.backend.isa_flags.has_vxrs_ext2() {
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn vxrs_ext3_enabled(&mut self, _: Type) -> Option<()> {
+        if self.backend.isa_flags.has_vxrs_ext3() {
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn vxrs_ext3_disabled(&mut self, _: Type) -> Option<()> {
+        if !self.backend.isa_flags.has_vxrs_ext3() {
             Some(())
         } else {
             None
@@ -368,7 +305,7 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     #[inline]
     fn gpr64_ty(&mut self, ty: Type) -> Option<Type> {
         match ty {
-            I64 | R64 => Some(ty),
+            I64 => Some(ty),
             _ => None,
         }
     }
@@ -376,7 +313,7 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     #[inline]
     fn vr128_ty(&mut self, ty: Type) -> Option<Type> {
         match ty {
-            I128 => Some(ty),
+            I128 | F128 => Some(ty),
             _ if ty.is_vector() && ty.bits() == 128 => Some(ty),
             _ => None,
         }
@@ -394,11 +331,7 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
 
     #[inline]
     fn i64_nonequal(&mut self, val: i64, cmp: i64) -> Option<i64> {
-        if val != cmp {
-            Some(val)
-        } else {
-            None
-        }
+        if val != cmp { Some(val) } else { None }
     }
 
     #[inline]
@@ -442,65 +375,15 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     }
 
     #[inline]
-    fn u8_as_u16(&mut self, n: u8) -> u16 {
-        n as u16
-    }
-
-    #[inline]
-    fn u64_truncate_to_u32(&mut self, n: u64) -> u32 {
-        n as u32
-    }
-
-    #[inline]
-    fn u64_as_i16(&mut self, n: u64) -> i16 {
-        n as i16
-    }
-
-    #[inline]
     fn u64_nonzero_hipart(&mut self, n: u64) -> Option<u64> {
         let part = n & 0xffff_ffff_0000_0000;
-        if part != 0 {
-            Some(part)
-        } else {
-            None
-        }
+        if part != 0 { Some(part) } else { None }
     }
 
     #[inline]
     fn u64_nonzero_lopart(&mut self, n: u64) -> Option<u64> {
         let part = n & 0x0000_0000_ffff_ffff;
-        if part != 0 {
-            Some(part)
-        } else {
-            None
-        }
-    }
-
-    #[inline]
-    fn i32_from_u64(&mut self, n: u64) -> Option<i32> {
-        if let Ok(imm) = i32::try_from(n as i64) {
-            Some(imm)
-        } else {
-            None
-        }
-    }
-
-    #[inline]
-    fn i16_from_u64(&mut self, n: u64) -> Option<i16> {
-        if let Ok(imm) = i16::try_from(n as i64) {
-            Some(imm)
-        } else {
-            None
-        }
-    }
-
-    #[inline]
-    fn i16_from_u32(&mut self, n: u32) -> Option<i16> {
-        if let Ok(imm) = i16::try_from(n as i32) {
-            Some(imm)
-        } else {
-            None
-        }
+        if part != 0 { Some(part) } else { None }
     }
 
     #[inline]
@@ -515,7 +398,7 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
 
     #[inline]
     fn lane_order(&mut self) -> LaneOrder {
-        lane_order_for_call_conv(self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()))
+        LaneOrder::from(self.lower_ctx.abi().call_conv())
     }
 
     #[inline]
@@ -530,6 +413,7 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     fn be_vec_const(&mut self, ty: Type, n: u128) -> u128 {
         match self.lane_order() {
             LaneOrder::LittleEndian => n,
+            LaneOrder::BigEndian if ty.lane_count() == 1 => n,
             LaneOrder::BigEndian => {
                 let lane_count = ty.lane_count();
                 let lane_bits = ty.lane_bits();
@@ -767,6 +651,16 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     }
 
     #[inline]
+    fn fcvt_to_uint_ub128(&mut self, size: u8) -> u128 {
+        Ieee128::pow2(size).bits()
+    }
+
+    #[inline]
+    fn fcvt_to_uint_lb128(&mut self) -> u128 {
+        (-Ieee128::pow2(0)).bits()
+    }
+
+    #[inline]
     fn fcvt_to_sint_ub32(&mut self, size: u8) -> u64 {
         (2.0_f32).powi((size - 1).into()).to_bits() as u64
     }
@@ -774,7 +668,7 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     #[inline]
     fn fcvt_to_sint_lb32(&mut self, size: u8) -> u64 {
         let lb = (-2.0_f32).powi((size - 1).into());
-        std::cmp::max(lb.to_bits() + 1, (lb - 1.0).to_bits()) as u64
+        core::cmp::max(lb.to_bits() + 1, (lb - 1.0).to_bits()) as u64
     }
 
     #[inline]
@@ -785,7 +679,17 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     #[inline]
     fn fcvt_to_sint_lb64(&mut self, size: u8) -> u64 {
         let lb = (-2.0_f64).powi((size - 1).into());
-        std::cmp::max(lb.to_bits() + 1, (lb - 1.0).to_bits())
+        core::cmp::max(lb.to_bits() + 1, (lb - 1.0).to_bits())
+    }
+
+    #[inline]
+    fn fcvt_to_sint_ub128(&mut self, size: u8) -> u128 {
+        Ieee128::pow2(size - 1).bits()
+    }
+
+    #[inline]
+    fn fcvt_to_sint_lb128(&mut self, size: u8) -> u128 {
+        Ieee128::fcvt_to_sint_negative_overflow(size).bits()
     }
 
     #[inline]
@@ -814,8 +718,14 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     }
 
     #[inline]
-    fn memarg_flags(&mut self, mem: &MemArg) -> MemFlags {
-        mem.get_flags()
+    fn memarg_imm_from_offset(&mut self, imm: Offset32) -> Option<SImm20> {
+        SImm20::maybe_from_i64(i64::from(imm))
+    }
+
+    #[inline]
+    fn memarg_imm_from_offset_plus_bias(&mut self, imm: Offset32, bias: u8) -> Option<SImm20> {
+        let final_offset = i64::from(imm) + bias as i64;
+        SImm20::maybe_from_i64(final_offset)
     }
 
     #[inline]
@@ -829,18 +739,33 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     }
 
     #[inline]
+    fn memarg_reg_plus_reg_plus_off(
+        &mut self,
+        x: Reg,
+        y: Reg,
+        offset: &SImm20,
+        flags: MemFlags,
+    ) -> MemArg {
+        if let Some(imm) = UImm12::maybe_from_simm20(*offset) {
+            MemArg::BXD12 {
+                base: x,
+                index: y,
+                disp: imm,
+                flags,
+            }
+        } else {
+            MemArg::BXD20 {
+                base: x,
+                index: y,
+                disp: *offset,
+                flags,
+            }
+        }
+    }
+
+    #[inline]
     fn memarg_reg_plus_off(&mut self, reg: Reg, off: i64, bias: u8, flags: MemFlags) -> MemArg {
         MemArg::reg_plus_off(reg, off + (bias as i64), flags)
-    }
-
-    #[inline]
-    fn memarg_stack_off(&mut self, base: i64, off: i64) -> MemArg {
-        MemArg::reg_plus_off(stack_reg(), base + off, MemFlags::trusted())
-    }
-
-    #[inline]
-    fn memarg_initial_sp_offset(&mut self, off: i64) -> MemArg {
-        MemArg::InitialSPOffset { off }
     }
 
     #[inline]
@@ -862,27 +787,26 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     }
 
     #[inline]
+    fn memarg_const(&mut self, constant: VCodeConstant) -> MemArg {
+        MemArg::Constant { constant }
+    }
+
+    #[inline]
     fn memarg_symbol_offset_sum(&mut self, off1: i64, off2: i64) -> Option<i32> {
         let off = i32::try_from(off1 + off2).ok()?;
-        if off & 1 == 0 {
-            Some(off)
-        } else {
-            None
-        }
+        if off & 1 == 0 { Some(off) } else { None }
     }
 
     #[inline]
-    fn memarg_pair_from_memarg(&mut self, mem: &MemArg) -> Option<MemArgPair> {
-        MemArgPair::maybe_from_memarg(mem)
+    fn memarg_frame_pointer_offset(&mut self) -> MemArg {
+        // The frame pointer (back chain) is stored directly at SP.
+        MemArg::reg(stack_reg(), MemFlags::trusted())
     }
 
     #[inline]
-    fn memarg_pair_from_reg(&mut self, reg: Reg, flags: MemFlags) -> MemArgPair {
-        MemArgPair {
-            base: reg,
-            disp: UImm12::zero(),
-            flags,
-        }
+    fn memarg_return_address_offset(&mut self) -> MemArg {
+        // The return address is stored 14 pointer-sized slots above the initial SP.
+        MemArg::InitialSPOffset { off: 14 * 8 }
     }
 
     #[inline]
@@ -913,20 +837,12 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
 
     #[inline]
     fn same_reg(&mut self, dst: WritableReg, src: Reg) -> Option<Reg> {
-        if dst.to_reg() == src {
-            Some(src)
-        } else {
-            None
-        }
+        if dst.to_reg() == src { Some(src) } else { None }
     }
 
     #[inline]
     fn sinkable_inst(&mut self, val: Value) -> Option<Inst> {
-        let input = self.lower_ctx.get_value_as_source_or_const(val);
-        if let Some((inst, 0)) = input.inst.as_inst() {
-            return Some(inst);
-        }
-        None
+        self.is_sinkable_inst(val)
     }
 
     #[inline]
@@ -972,16 +888,6 @@ impl generated_code::Context for IsleContext<'_, '_, MInst, S390xBackend> {
     #[inline]
     fn regpair_lo(&mut self, w: RegPair) -> Reg {
         w.lo
-    }
-}
-
-/// Lane order to be used for a given calling convention.
-#[inline]
-fn lane_order_for_call_conv(call_conv: CallConv) -> LaneOrder {
-    if call_conv == CallConv::WasmtimeSystemV {
-        LaneOrder::LittleEndian
-    } else {
-        LaneOrder::BigEndian
     }
 }
 

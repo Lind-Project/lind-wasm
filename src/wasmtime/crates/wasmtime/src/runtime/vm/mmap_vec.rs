@@ -1,23 +1,52 @@
+#[cfg(not(has_virtual_memory))]
+use crate::error::OutOfMemory;
 use crate::prelude::*;
-use crate::runtime::vm::Mmap;
+use crate::runtime::vm::send_sync_ptr::SendSyncPtr;
+#[cfg(has_virtual_memory)]
+use crate::runtime::vm::{Mmap, mmap::UnalignedLength};
+#[cfg(not(has_virtual_memory))]
+use alloc::alloc::Layout;
 use alloc::sync::Arc;
-use core::ops::{Deref, DerefMut, Range};
+use core::ops::{Deref, Range};
+use core::ptr::NonNull;
 #[cfg(feature = "std")]
-use std::{fs::File, path::Path};
+use std::fs::File;
 
-/// A type akin to `Vec<u8>`, but backed by `mmap` and able to be split.
+/// A type which prefers to store backing memory in an OS-backed memory mapping
+/// but can fall back to the regular memory allocator as well.
 ///
-/// This type is a non-growable owned list of bytes. It can be segmented into
-/// disjoint separately owned views akin to the `split_at` method on slices in
-/// Rust. An `MmapVec` is backed by an OS-level memory allocation and is not
-/// suitable for lots of small allocation (since it works at the page
-/// granularity).
+/// This type is used to store code in Wasmtime and manage read-only and
+/// executable permissions of compiled images. This is created from either an
+/// in-memory compilation or by deserializing an artifact from disk. Methods
+/// are provided for managing VM permissions when the `signals-based-traps`
+/// Cargo feature is enabled.
 ///
-/// An `MmapVec` is an owned value which means that owners have the ability to
-/// get exclusive access to the underlying bytes, enabling mutation.
-pub struct MmapVec {
-    mmap: Arc<Mmap>,
-    range: Range<usize>,
+/// The length of an `MmapVec` is not guaranteed to be page-aligned. That means
+/// that if the contents are not themselves page-aligned, which compiled images
+/// are typically not, then the remaining bytes in the final page for
+/// mmap-backed instances are unused.
+///
+/// Note that when `signals-based-traps` is disabled then this type is
+/// backed by the regular memory allocator via `alloc` APIs. In such a
+/// scenario this type does not support read-only or executable bits
+/// and the methods are not available. However, the `CustomCodeMemory`
+/// mechanism may be used by the embedder to set up and tear down
+/// executable permissions on parts of this storage.
+pub enum MmapVec {
+    #[doc(hidden)]
+    #[cfg(not(has_virtual_memory))]
+    Alloc {
+        base: SendSyncPtr<u8>,
+        layout: Layout,
+    },
+    #[doc(hidden)]
+    ExternallyOwned { memory: SendSyncPtr<[u8]> },
+    #[doc(hidden)]
+    #[cfg(has_virtual_memory)]
+    Mmap {
+        mmap: Mmap<UnalignedLength>,
+        len: usize,
+    },
 }
 
 impl MmapVec {
@@ -26,21 +55,50 @@ impl MmapVec {
     /// The returned `MmapVec` will have the `size` specified, which can be
     /// smaller than the region mapped by the `Mmap`. The returned `MmapVec`
     /// will only have at most `size` bytes accessible.
-    pub fn new(mmap: Mmap, size: usize) -> MmapVec {
-        assert!(size <= mmap.len());
-        MmapVec {
-            mmap: Arc::new(mmap),
-            range: 0..size,
+    #[cfg(has_virtual_memory)]
+    fn new_mmap<M>(mmap: M, len: usize) -> MmapVec
+    where
+        M: Into<Mmap<UnalignedLength>>,
+    {
+        let mmap = mmap.into();
+        assert!(len <= mmap.len());
+        MmapVec::Mmap { mmap, len }
+    }
+
+    #[cfg(not(has_virtual_memory))]
+    fn new_alloc(len: usize, alignment: usize) -> Result<MmapVec, OutOfMemory> {
+        let layout = Layout::from_size_align(len, alignment)
+            .expect("Invalid size or alignment for MmapVec allocation");
+        match NonNull::new(unsafe { alloc::alloc::alloc_zeroed(layout.clone()) }) {
+            Some(ptr) => {
+                let base = SendSyncPtr::new(ptr);
+                Ok(MmapVec::Alloc { base, layout })
+            }
+            None => return Err(OutOfMemory::new(layout.size())),
         }
     }
 
-    /// Creates a new zero-initialized `MmapVec` with the given `size`.
+    fn new_externally_owned(memory: NonNull<[u8]>) -> MmapVec {
+        let memory = SendSyncPtr::new(memory);
+        MmapVec::ExternallyOwned { memory }
+    }
+
+    /// Creates a new zero-initialized `MmapVec` with the given `size`
+    /// and `alignment`.
     ///
     /// This commit will return a new `MmapVec` suitably sized to hold `size`
     /// bytes. All bytes will be initialized to zero since this is a fresh OS
     /// page allocation.
-    pub fn with_capacity(size: usize) -> Result<MmapVec> {
-        Ok(MmapVec::new(Mmap::with_at_least(size)?, size))
+    pub fn with_capacity_and_alignment(size: usize, alignment: usize) -> Result<MmapVec> {
+        #[cfg(has_virtual_memory)]
+        {
+            assert!(alignment <= crate::runtime::vm::host_page_size());
+            return Ok(MmapVec::new_mmap(Mmap::with_at_least(size)?, size));
+        }
+        #[cfg(not(has_virtual_memory))]
+        {
+            return Ok(MmapVec::new_alloc(size, alignment)?);
+        }
     }
 
     /// Creates a new `MmapVec` from the contents of an existing `slice`.
@@ -49,58 +107,154 @@ impl MmapVec {
     /// `slice` is copied into the new mmap. It's recommended to avoid this
     /// method if possible to avoid the need to copy data around.
     pub fn from_slice(slice: &[u8]) -> Result<MmapVec> {
-        let mut result = MmapVec::with_capacity(slice.len())?;
-        result.copy_from_slice(slice);
+        MmapVec::from_slice_with_alignment(slice, 1)
+    }
+
+    /// Creates a new `MmapVec` from an existing memory region
+    ///
+    /// This method avoids the copy performed by [`Self::from_slice`] by
+    /// directly using the memory region provided. This must be done with
+    /// extreme care, however, as any concurrent modification of the provided
+    /// memory will cause undefined and likely very, very bad things to
+    /// happen.
+    ///
+    /// The memory provided is guaranteed to not be mutated by the runtime.
+    ///
+    /// # Safety
+    ///
+    /// As there is no copy here, the runtime will be making direct readonly use
+    /// of the provided memory. As such, outside writes to this memory region
+    /// will result in undefined and likely very undesirable behavior.
+    pub unsafe fn from_raw(memory: NonNull<[u8]>) -> Result<MmapVec> {
+        Ok(MmapVec::new_externally_owned(memory))
+    }
+
+    /// Creates a new `MmapVec` from the contents of an existing
+    /// `slice`, with a minimum alignment.
+    ///
+    /// `align` must be a power of two. This is useful when page
+    /// alignment is required when the system otherwise does not use
+    /// virtual memory but has a custom code publish handler.
+    ///
+    /// A new `MmapVec` is allocated to hold the contents of `slice` and then
+    /// `slice` is copied into the new mmap. It's recommended to avoid this
+    /// method if possible to avoid the need to copy data around.
+    pub fn from_slice_with_alignment(slice: &[u8], align: usize) -> Result<MmapVec> {
+        let mut result = MmapVec::with_capacity_and_alignment(slice.len(), align)?;
+        // SAFETY: The mmap hasn't been made readonly yet so this should be
+        // safe to call.
+        unsafe {
+            result.as_mut_slice().copy_from_slice(slice);
+        }
         Ok(result)
     }
 
-    /// Creates a new `MmapVec` which is the `path` specified mmap'd into
-    /// memory.
+    /// Return `true` if the `MmapVec` support virtual memory operations
     ///
-    /// This function will attempt to open the file located at `path` and will
-    /// then use that file to learn about its size and map the full contents
-    /// into memory. This will return an error if the file doesn't exist or if
-    /// it's too large to be fully mapped into memory.
+    /// In some cases, such as when using externally owned memory, the underlying
+    /// platform may support virtual memory but it still may not be legal
+    /// to perform virtual memory operations on this memory.
+    pub fn supports_virtual_memory(&self) -> bool {
+        match self {
+            #[cfg(has_virtual_memory)]
+            MmapVec::Mmap { .. } => true,
+            MmapVec::ExternallyOwned { .. } => false,
+            #[cfg(not(has_virtual_memory))]
+            MmapVec::Alloc { .. } => false,
+        }
+    }
+
+    /// Return true if this `MmapVec` is always readonly
+    ///
+    /// Attempting to get access to mutate readonly memory via
+    /// [`MmapVec::as_mut`] will result in a panic.  Note that this method
+    /// does not change with runtime changes to portions of the code memory
+    /// via `MmapVec::make_readonly` for platforms with virtual memory.
+    pub fn is_always_readonly(&self) -> bool {
+        match self {
+            #[cfg(has_virtual_memory)]
+            MmapVec::Mmap { .. } => false,
+            MmapVec::ExternallyOwned { .. } => true,
+            #[cfg(not(has_virtual_memory))]
+            MmapVec::Alloc { .. } => false,
+        }
+    }
+
+    /// Creates a new `MmapVec` which is the given `File` mmap'd into memory.
+    ///
+    /// This function will determine the file's size and map the full contents
+    /// into memory. This will return an error if the file is too large to be
+    /// fully mapped into memory.
+    ///
+    /// The file is mapped into memory with a "private mapping" meaning that
+    /// changes are not persisted back to the file itself and are only visible
+    /// within this process.
     #[cfg(feature = "std")]
-    pub fn from_file(path: &Path) -> Result<MmapVec> {
-        let mmap = Mmap::from_file(path)
-            .with_context(|| format!("failed to create mmap for file: {}", path.display()))?;
+    pub fn from_file(file: File) -> Result<MmapVec> {
+        let file = Arc::new(file);
+        let mmap = Mmap::from_file(Arc::clone(&file))
+            .with_context(move || format!("failed to create mmap for file {file:?}"))?;
         let len = mmap.len();
-        Ok(MmapVec::new(mmap, len))
+        Ok(MmapVec::new_mmap(mmap, len))
     }
 
     /// Makes the specified `range` within this `mmap` to be read/execute.
+    #[cfg(has_virtual_memory)]
     pub unsafe fn make_executable(
         &self,
         range: Range<usize>,
         enable_branch_protection: bool,
     ) -> Result<()> {
+        let (mmap, len) = match self {
+            MmapVec::Mmap { mmap, len } => (mmap, *len),
+            MmapVec::ExternallyOwned { .. } => {
+                bail!("Unable to make externally owned memory executable");
+            }
+        };
         assert!(range.start <= range.end);
-        assert!(range.end <= self.range.len());
-        self.mmap.make_executable(
-            range.start + self.range.start..range.end + self.range.start,
-            enable_branch_protection,
-        )
+        assert!(range.end <= len);
+        unsafe { mmap.make_executable(range.start..range.end, enable_branch_protection) }
     }
 
     /// Makes the specified `range` within this `mmap` to be read-only.
+    #[cfg(has_virtual_memory)]
     pub unsafe fn make_readonly(&self, range: Range<usize>) -> Result<()> {
+        let (mmap, len) = match self {
+            MmapVec::Mmap { mmap, len } => (mmap, *len),
+            MmapVec::ExternallyOwned { .. } => {
+                bail!("Unable to make externally owned memory readonly");
+            }
+        };
         assert!(range.start <= range.end);
-        assert!(range.end <= self.range.len());
-        self.mmap
-            .make_readonly(range.start + self.range.start..range.end + self.range.start)
+        assert!(range.end <= len);
+        unsafe { mmap.make_readonly(range.start..range.end) }
+    }
+
+    /// Makes the specified `range` within this `mmap` to be
+    /// read-write (and not executable).
+    #[cfg(has_virtual_memory)]
+    pub unsafe fn make_readwrite(&self, range: Range<usize>) -> Result<()> {
+        let (mmap, len) = match self {
+            MmapVec::Mmap { mmap, len } => (mmap, *len),
+            MmapVec::ExternallyOwned { .. } => {
+                bail!("Unable to make externally owned memory read-write");
+            }
+        };
+        assert!(range.start <= range.end);
+        assert!(range.end <= len);
+        unsafe { mmap.make_readwrite(range.start..range.end) }
     }
 
     /// Returns the underlying file that this mmap is mapping, if present.
     #[cfg(feature = "std")]
     pub fn original_file(&self) -> Option<&Arc<File>> {
-        self.mmap.original_file()
-    }
-
-    /// Returns the offset within the original mmap that this `MmapVec` is
-    /// created from.
-    pub fn original_offset(&self) -> usize {
-        self.range.start
+        match self {
+            #[cfg(not(has_virtual_memory))]
+            MmapVec::Alloc { .. } => None,
+            MmapVec::ExternallyOwned { .. } => None,
+            #[cfg(has_virtual_memory)]
+            MmapVec::Mmap { mmap, .. } => mmap.original_file(),
+        }
     }
 
     /// Returns the bounds, in host memory, of where this mmap
@@ -110,6 +264,59 @@ impl MmapVec {
         let len = self.len();
         base..base.wrapping_add(len)
     }
+
+    /// Views this region of memory as a mutable slice.
+    ///
+    /// # Unsafety
+    ///
+    /// This method is only safe if `make_readonly` hasn't been called yet to
+    /// ensure that the memory is indeed writable.  For a MmapVec created from
+    /// a raw pointer using this memory as mutable is only safe if there are
+    /// no outside reads or writes to the memory region.
+    ///
+    /// Externally owned code is implicitly considered to be readonly and this
+    /// code will panic if called on externally owned memory.
+    pub unsafe fn as_mut_slice(&mut self) -> &mut [u8] {
+        match self {
+            #[cfg(not(has_virtual_memory))]
+            MmapVec::Alloc { base, layout } => unsafe {
+                core::slice::from_raw_parts_mut(base.as_mut(), layout.size())
+            },
+            MmapVec::ExternallyOwned { .. } => {
+                panic!("Mutating externally owned memory is prohibited");
+            }
+            #[cfg(has_virtual_memory)]
+            MmapVec::Mmap { mmap, len } => unsafe { mmap.slice_mut(0..*len) },
+        }
+    }
+
+    /// Create a copy of this `MmapVec` that can be separately
+    /// mutated.
+    #[cfg(feature = "debug")]
+    pub(crate) fn deep_clone(&self) -> Result<MmapVec> {
+        match self {
+            #[cfg(not(has_virtual_memory))]
+            MmapVec::Alloc { layout, .. } => {
+                MmapVec::from_slice_with_alignment(&self[..], layout.align())
+            }
+            MmapVec::ExternallyOwned { .. } => {
+                crate::bail!("Cannot clone an externally-owned code memory.");
+            }
+            #[cfg(has_virtual_memory)]
+            #[allow(
+                unused_variables,
+                reason = "`mmap` and `len` only used with `std` feature"
+            )]
+            MmapVec::Mmap { mmap, len } => {
+                #[cfg(feature = "std")]
+                if let Some(original_file) = mmap.original_file() {
+                    let mmap = Mmap::from_file(original_file.clone())?;
+                    return Ok(MmapVec::Mmap { mmap, len: *len });
+                }
+                MmapVec::from_slice_with_alignment(&self[..], crate::runtime::vm::host_page_size())
+            }
+        }
+    }
 }
 
 impl Deref for MmapVec {
@@ -117,25 +324,36 @@ impl Deref for MmapVec {
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        // SAFETY: this mmap owns its own range of the underlying mmap so it
-        // should be all good-to-read.
-        unsafe { self.mmap.slice(self.range.clone()) }
+        match self {
+            #[cfg(not(has_virtual_memory))]
+            MmapVec::Alloc { base, layout } => unsafe {
+                core::slice::from_raw_parts(base.as_ptr(), layout.size())
+            },
+            MmapVec::ExternallyOwned { memory } => unsafe { memory.as_ref() },
+            #[cfg(has_virtual_memory)]
+            MmapVec::Mmap { mmap, len } => {
+                // SAFETY: all bytes for this mmap, which is owned by
+                // `MmapVec`, are always at least readable.
+                unsafe { mmap.slice(0..*len) }
+            }
+        }
     }
 }
 
-impl DerefMut for MmapVec {
-    fn deref_mut(&mut self) -> &mut [u8] {
-        // SAFETY: The underlying mmap is protected behind an `Arc` which means
-        // there there can be many references to it. We are guaranteed, though,
-        // that each reference to the underlying `mmap` has a disjoint `range`
-        // listed that it can access. This means that despite having shared
-        // access to the mmap itself we have exclusive ownership of the bytes
-        // specified in `self.range`. This should allow us to safely hand out
-        // mutable access to these bytes if so desired.
-        unsafe {
-            let slice =
-                core::slice::from_raw_parts_mut(self.mmap.as_ptr().cast_mut(), self.mmap.len());
-            &mut slice[self.range.clone()]
+impl Drop for MmapVec {
+    fn drop(&mut self) {
+        match self {
+            #[cfg(not(has_virtual_memory))]
+            MmapVec::Alloc { base, layout, .. } => unsafe {
+                alloc::alloc::dealloc(base.as_mut(), layout.clone());
+            },
+            MmapVec::ExternallyOwned { .. } => {
+                // Memory is allocated externally, nothing to do
+            }
+            #[cfg(has_virtual_memory)]
+            MmapVec::Mmap { .. } => {
+                // Drop impl on the `mmap` takes care of this case.
+            }
         }
     }
 }
@@ -146,14 +364,23 @@ mod tests {
 
     #[test]
     fn smoke() {
-        let mut mmap = MmapVec::with_capacity(10).unwrap();
+        let mut mmap = MmapVec::with_capacity_and_alignment(10, 1).unwrap();
         assert_eq!(mmap.len(), 10);
         assert_eq!(&mmap[..], &[0; 10]);
 
-        mmap[0] = 1;
-        mmap[2] = 3;
+        unsafe {
+            mmap.as_mut_slice()[0] = 1;
+            mmap.as_mut_slice()[2] = 3;
+        }
         assert!(mmap.get(10).is_none());
         assert_eq!(mmap[0], 1);
         assert_eq!(mmap[2], 3);
+    }
+
+    #[test]
+    fn alignment() {
+        let mmap = MmapVec::with_capacity_and_alignment(10, 4096).unwrap();
+        let raw_ptr = &mmap[0] as *const _ as usize;
+        assert_eq!(raw_ptr & (4096 - 1), 0);
     }
 }

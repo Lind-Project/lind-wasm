@@ -99,19 +99,24 @@ pub struct TestcaseName(Box<[u8]>);
 impl fmt::Display for TestcaseName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_char('%')?;
-        f.write_str(std::str::from_utf8(&self.0).unwrap())
+        f.write_str(core::str::from_utf8(&self.0).unwrap())
     }
 }
 
 impl fmt::Debug for TestcaseName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
 impl TestcaseName {
     pub(crate) fn new<T: AsRef<[u8]>>(v: T) -> Self {
         Self(v.as_ref().into())
+    }
+
+    /// Get the raw test case name as bytes.
+    pub fn raw(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -204,8 +209,8 @@ impl<'a> fmt::Display for DisplayableExternalName<'a> {
                 }
             }
             ExternalName::TestCase(testcase) => testcase.fmt(f),
-            ExternalName::LibCall(lc) => write!(f, "%{}", lc),
-            ExternalName::KnownSymbol(ks) => write!(f, "%{}", ks),
+            ExternalName::LibCall(lc) => write!(f, "%{lc}"),
+            ExternalName::KnownSymbol(ks) => write!(f, "%{ks}"),
         }
     }
 }
@@ -233,7 +238,7 @@ impl FromStr for ExternalName {
 mod tests {
     use super::ExternalName;
     use crate::ir::{
-        entities::UserExternalNameRef, function::FunctionParameters, LibCall, UserExternalName,
+        LibCall, UserExternalName, entities::UserExternalNameRef, function::FunctionParameters,
     };
     use alloc::string::ToString;
     use core::u32;

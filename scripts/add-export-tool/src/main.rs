@@ -33,14 +33,30 @@ fn main() -> Result<()> {
     let target_name = args.next().context(
         "usage: add-wasm-export <in.wasm> <out.wasm> <export-name> <func|global> <target-name>",
     )?;
+    let optional = args.next().map(|s| s == "optional").unwrap_or(false);
 
     let wasm = fs::read(&input).with_context(|| format!("failed to read {input}"))?;
 
-    let target_index = find_named_target(&wasm, kind, &target_name)
-        .with_context(|| format!("could not find {kind:?} named {target_name:?}"))?;
+    let target_index = match find_named_target(&wasm, kind, &target_name) {
+        Ok(idx) => idx,
+        Err(_) if optional => {
+            println!("export {:?} not found, skipped", export_name);
+            return Ok(());
+        }
+        Err(e) => return Err(e.context(format!("could not find {kind:?} named {target_name:?}"))),
+    };
 
     let rewritten = add_export(&wasm, &export_name, kind, target_index)?;
-    wasmparser::validate(&rewritten).context("rewritten wasm is invalid")?;
+    // lind-wasm-opt runs --translate-to-exnref which converts legacy EH (try/catch) to standard
+    // EH (try_table); enable both forms so add-export-tool works on files from either pipeline.
+    let mut validator = wasmparser::Validator::new_with_features(
+        wasmparser::WasmFeatures::default()
+            | wasmparser::WasmFeatures::LEGACY_EXCEPTIONS
+            | wasmparser::WasmFeatures::EXCEPTIONS,
+    );
+    validator
+        .validate_all(&rewritten)
+        .context("rewritten wasm is invalid")?;
 
     fs::write(&output, rewritten).with_context(|| format!("failed to write {output}"))?;
 

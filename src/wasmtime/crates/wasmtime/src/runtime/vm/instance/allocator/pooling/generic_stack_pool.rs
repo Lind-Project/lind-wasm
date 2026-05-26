@@ -1,7 +1,11 @@
-#![cfg_attr(not(asan), allow(dead_code))]
+#![cfg_attr(
+    all(unix, not(miri), not(asan)),
+    expect(dead_code, reason = "not used, but typechecked")
+)]
 
+use crate::PoolConcurrencyLimitError;
 use crate::prelude::*;
-use crate::{runtime::vm::PoolingInstanceAllocatorConfig, PoolConcurrencyLimitError};
+use crate::runtime::vm::PoolingInstanceAllocatorConfig;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A generic implementation of a stack pool.
@@ -18,20 +22,26 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[derive(Debug)]
 pub struct StackPool {
     stack_size: usize,
+    stack_zeroing: bool,
     live_stacks: AtomicU64,
     stack_limit: u64,
 }
 
 impl StackPool {
+    #[cfg(test)]
+    pub fn enabled() -> bool {
+        false
+    }
+
     pub fn new(config: &PoolingInstanceAllocatorConfig) -> Result<Self> {
         Ok(StackPool {
             stack_size: config.stack_size,
+            stack_zeroing: config.async_stack_zeroing,
             live_stacks: AtomicU64::new(0),
             stack_limit: config.limits.total_stacks.into(),
         })
     }
 
-    #[allow(unused)] // some cfgs don't use this
     pub fn is_empty(&self) -> bool {
         self.live_stacks.load(Ordering::Acquire) == 0
     }
@@ -51,11 +61,18 @@ impl StackPool {
             .into());
         }
 
-        match wasmtime_fiber::FiberStack::new(self.stack_size) {
+        match wasmtime_fiber::FiberStack::new(self.stack_size, self.stack_zeroing) {
             Ok(stack) => Ok(stack),
             Err(e) => {
                 self.live_stacks.fetch_sub(1, Ordering::AcqRel);
-                Err(anyhow::Error::from(e))
+
+                #[allow(
+                    clippy::useless_conversion,
+                    reason = "some `cfg`s have `wasmtime::Error` as the error type, others don't"
+                )]
+                let e = crate::Error::from(e);
+
+                Err(e)
             }
         }
     }
@@ -64,15 +81,24 @@ impl StackPool {
         &self,
         _stack: &mut wasmtime_fiber::FiberStack,
         _decommit: impl FnMut(*mut u8, usize),
-    ) {
+    ) -> usize {
         // No need to actually zero the stack, since the stack won't ever be
         // reused on non-unix systems.
+        0
     }
 
     /// Safety: see the unix implementation.
-    pub unsafe fn deallocate(&self, stack: wasmtime_fiber::FiberStack) {
+    pub unsafe fn deallocate(&self, stack: wasmtime_fiber::FiberStack, _bytes_resident: usize) {
         self.live_stacks.fetch_sub(1, Ordering::AcqRel);
         // A no-op as we don't actually own the fiber stack on Windows.
         let _ = stack;
+    }
+
+    pub fn unused_warm_slots(&self) -> u32 {
+        0
+    }
+
+    pub fn unused_bytes_resident(&self) -> Option<usize> {
+        None
     }
 }

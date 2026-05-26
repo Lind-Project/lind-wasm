@@ -8,19 +8,21 @@ documentation = "https://docs.rs/cranelift-filetests"
 repository = "https://github.com/bytecodealliance/wasmtime"
 publish = false
 edition.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
-cranelift-codegen = { workspace = true, features = ["disas"] }
+cranelift-codegen = { workspace = true, features = ["disas", "timing"] }
 cranelift-frontend = { workspace = true }
 cranelift-interpreter = { workspace = true }
 cranelift-native = { workspace = true }
 cranelift-reader = { workspace = true }
-cranelift-jit = { workspace = true, features = ["selinux-fix"] }
+cranelift-jit = { workspace = true, features = ["selinux-fix", "wasmtime-unwinder"] }
 cranelift-module = { workspace = true }
 cranelift-control = { workspace = true }
+wasmtime-unwinder = { workspace = true, features = ["cranelift"] }
 file-per-thread-logger = { workspace = true }
 filecheck = { workspace = true }
 gimli = { workspace = true, features = ['std'] }
@@ -36,3 +38,5 @@ serde = { workspace = true }
 serde_derive = { workspace = true }
 cranelift.workspace = true
 smallvec = { workspace = true }
+pulley-interpreter = { workspace = true, features = ["disas", "std", "interp"] }
+libm = { workspace = true }

@@ -1,24 +1,25 @@
 //! Elaboration phase: lowers EGraph back to sequences of operations
 //! in CFG nodes.
 
-use super::cost::Cost;
 use super::Stats;
-use crate::dominator_tree::DominatorTreePreorder;
+use super::cost::Cost;
+use crate::ctxhash::NullCtx;
+use crate::dominator_tree::DominatorTree;
 use crate::hash_map::Entry as HashEntry;
 use crate::inst_predicates::is_pure_for_egraph;
 use crate::ir::{Block, Function, Inst, Value, ValueDef};
 use crate::loop_analysis::{Loop, LoopAnalysis};
 use crate::scoped_hash_map::ScopedHashMap;
 use crate::trace;
+use crate::{FxHashMap, FxHashSet};
 use alloc::vec::Vec;
 use cranelift_control::ControlPlane;
-use cranelift_entity::{packed_option::ReservedValue, SecondaryMap};
-use rustc_hash::{FxHashMap, FxHashSet};
-use smallvec::{smallvec, SmallVec};
+use cranelift_entity::{EntitySet, SecondaryMap, packed_option::ReservedValue};
+use smallvec::{SmallVec, smallvec};
 
 pub(crate) struct Elaborator<'a> {
     func: &'a mut Function,
-    domtree: &'a DominatorTreePreorder,
+    domtree: &'a DominatorTree,
     loop_analysis: &'a LoopAnalysis,
     /// Map from Value that is produced by a pure Inst (and was thus
     /// not in the side-effecting skeleton) to the value produced by
@@ -81,7 +82,7 @@ impl PartialOrd for BestEntry {
 
 impl Ord for BestEntry {
     #[inline]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.0.cmp(&other.0).then_with(|| {
             // Note that this comparison is reversed. When costs are equal,
             // prefer the value with the bigger index. This is a heuristic that
@@ -139,7 +140,7 @@ enum BlockStackEntry {
 impl<'a> Elaborator<'a> {
     pub(crate) fn new(
         func: &'a mut Function,
-        domtree: &'a DominatorTreePreorder,
+        domtree: &'a DominatorTree,
         loop_analysis: &'a LoopAnalysis,
         remat_values: &'a FxHashSet<Value>,
         stats: &'a mut Stats,
@@ -218,7 +219,72 @@ impl<'a> Elaborator<'a> {
         self.cur_block = block;
     }
 
+    fn topo_sorted_values(&self) -> Vec<Value> {
+        #[derive(Debug)]
+        enum Event {
+            Enter,
+            Exit,
+        }
+        let mut stack = Vec::<(Event, Value)>::new();
+
+        // Traverse the CFG in pre-order so that, when we look at the
+        // instructions and operands inside each block, we see value defs before
+        // uses.
+        for block in crate::traversals::Dfs::new().pre_order_iter(&self.func) {
+            for inst in self.func.layout.block_insts(block) {
+                stack.extend(self.func.dfg.inst_values(inst).map(|v| (Event::Enter, v)));
+            }
+        }
+
+        // We pushed in the desired order, so popping would implicitly reverse
+        // that. Avoid that by reversing the initial stack before we start
+        // traversing the DFG.
+        stack.reverse();
+
+        let mut sorted = Vec::with_capacity(self.func.dfg.values().len());
+        let mut seen = EntitySet::<Value>::with_capacity(self.func.dfg.values().len());
+
+        // Post-order traversal of the DFG, visiting value defs before uses.
+        while let Some((event, value)) = stack.pop() {
+            match event {
+                Event::Enter => {
+                    if seen.insert(value) {
+                        stack.push((Event::Exit, value));
+                        match self.func.dfg.value_def(value) {
+                            ValueDef::Result(inst, _) => {
+                                stack.extend(
+                                    self.func
+                                        .dfg
+                                        .inst_values(inst)
+                                        .rev()
+                                        .filter(|v| !seen.contains(*v))
+                                        .map(|v| (Event::Enter, v)),
+                                );
+                            }
+                            ValueDef::Union(a, b) => {
+                                if !seen.contains(b) {
+                                    stack.push((Event::Enter, b));
+                                }
+                                if !seen.contains(a) {
+                                    stack.push((Event::Enter, a));
+                                }
+                            }
+                            ValueDef::Param(..) => {}
+                        }
+                    }
+                }
+                Event::Exit => {
+                    sorted.push(value);
+                }
+            }
+        }
+
+        sorted
+    }
+
     fn compute_best_values(&mut self) {
+        let sorted_values = self.topo_sorted_values();
+
         let best = &mut self.value_to_best_value;
 
         // We can't make random decisions inside the fixpoint loop below because
@@ -229,128 +295,98 @@ impl<'a> Elaborator<'a> {
         // how to do instead of the best.
         let use_worst = self.ctrl_plane.get_decision();
 
-        // Do a fixpoint loop to compute the best value for each eclass.
-        //
-        // The maximum number of iterations is the length of the longest chain
-        // of `vNN -> vMM` edges in the dataflow graph where `NN < MM`, so this
-        // is *technically* quadratic, but `cranelift-frontend` won't construct
-        // any such edges. NaN canonicalization will introduce some of these
-        // edges, but they are chains of only two or three edges. So in
-        // practice, we *never* do more than a handful of iterations here unless
-        // (a) we parsed the CLIF from text and the text was funkily numbered,
-        // which we don't really care about, or (b) the CLIF producer did
-        // something weird, in which case it is their responsibility to stop
-        // doing that.
         trace!(
-            "Entering fixpoint loop to compute the {} values for each eclass",
+            "Computing the {} values for each eclass",
             if use_worst {
                 "worst (chaos mode)"
             } else {
                 "best"
             }
         );
-        let mut keep_going = true;
-        while keep_going {
-            keep_going = false;
-            trace!(
-                "fixpoint iteration {}",
-                self.stats.elaborate_best_cost_fixpoint_iters
-            );
-            self.stats.elaborate_best_cost_fixpoint_iters += 1;
 
-            for (value, def) in self.func.dfg.values_and_defs() {
-                trace!("computing best for value {:?} def {:?}", value, def);
-                let orig_best_value = best[value];
+        // Because the values are topologically sorted, we know that we will see
+        // defs before uses, so an instruction's operands' costs will already be
+        // computed by the time we are computing the cost for the current value
+        // and its instruction.
+        for value in sorted_values.iter().copied() {
+            let def = self.func.dfg.value_def(value);
+            trace!("computing best for value {:?} def {:?}", value, def);
 
-                match def {
-                    ValueDef::Union(x, y) => {
-                        // Pick the best of the two options based on
-                        // min-cost. This works because each element of `best`
-                        // is a `(cost, value)` tuple; `cost` comes first so
-                        // the natural comparison works based on cost, and
-                        // breaks ties based on value number.
-                        best[value] = if use_worst {
-                            if best[x].1.is_reserved_value() {
-                                best[y]
-                            } else if best[y].1.is_reserved_value() {
-                                best[x]
-                            } else {
-                                std::cmp::max(best[x], best[y])
-                            }
-                        } else {
-                            std::cmp::min(best[x], best[y])
-                        };
-                        trace!(
-                            " -> best of union({:?}, {:?}) = {:?}",
-                            best[x],
-                            best[y],
-                            best[value]
-                        );
-                    }
-                    ValueDef::Param(_, _) => {
+            match def {
+                // Pick the best of the two options based on min-cost. This
+                // works because each element of `best` is a `(cost, value)`
+                // tuple; `cost` comes first so the natural comparison works
+                // based on cost, and breaks ties based on value number.
+                ValueDef::Union(x, y) => {
+                    debug_assert!(!best[x].1.is_reserved_value());
+                    debug_assert!(!best[y].1.is_reserved_value());
+                    best[value] = if use_worst {
+                        core::cmp::max(best[x], best[y])
+                    } else {
+                        core::cmp::min(best[x], best[y])
+                    };
+                    trace!(
+                        " -> best of union({:?}, {:?}) = {:?}",
+                        best[x], best[y], best[value]
+                    );
+                }
+
+                ValueDef::Param(_, _) => {
+                    best[value] = BestEntry(Cost::zero(), value);
+                }
+
+                // If the Inst is inserted into the layout (which is,
+                // at this point, only the side-effecting skeleton),
+                // then it must be computed and thus we give it zero
+                // cost.
+                ValueDef::Result(inst, _) => {
+                    if let Some(_) = self.func.layout.inst_block(inst) {
                         best[value] = BestEntry(Cost::zero(), value);
+                    } else {
+                        let inst_data = &self.func.dfg.insts[inst];
+                        // N.B.: at this point we know that the opcode is
+                        // pure, so `pure_op_cost`'s precondition is
+                        // satisfied.
+                        let cost = Cost::of_pure_op(
+                            inst_data.opcode(),
+                            self.func.dfg.inst_values(inst).map(|value| {
+                                debug_assert!(!best[value].1.is_reserved_value());
+                                best[value].0
+                            }),
+                        );
+                        best[value] = BestEntry(cost, value);
+                        trace!(" -> cost of value {} = {:?}", value, cost);
                     }
-                    // If the Inst is inserted into the layout (which is,
-                    // at this point, only the side-effecting skeleton),
-                    // then it must be computed and thus we give it zero
-                    // cost.
-                    ValueDef::Result(inst, _) => {
-                        if let Some(_) = self.func.layout.inst_block(inst) {
-                            best[value] = BestEntry(Cost::zero(), value);
-                        } else {
-                            let inst_data = &self.func.dfg.insts[inst];
-                            // N.B.: at this point we know that the opcode is
-                            // pure, so `pure_op_cost`'s precondition is
-                            // satisfied.
-                            let cost = Cost::of_pure_op(
-                                inst_data.opcode(),
-                                self.func.dfg.inst_values(inst).map(|value| best[value].0),
-                            );
-                            best[value] = BestEntry(cost, value);
-                            trace!(" -> cost of value {} = {:?}", value, cost);
-                        }
-                    }
-                };
+                }
+            };
 
-                // Keep on iterating the fixpoint loop while we are finding new
-                // best values.
-                keep_going |= orig_best_value != best[value];
-            }
-        }
-
-        if cfg!(any(feature = "trace-log", debug_assertions)) {
-            trace!("finished fixpoint loop to compute best value for each eclass");
-            for value in self.func.dfg.values() {
-                trace!("-> best for eclass {:?}: {:?}", value, best[value]);
-                debug_assert_ne!(best[value].1, Value::reserved_value());
-                // You might additionally be expecting an assert that the best
-                // cost is not infinity, however infinite cost *can* happen in
-                // practice. First, note that our cost function doesn't know
-                // about any shared structure in the dataflow graph, it only
-                // sums operand costs. (And trying to avoid that by deduping a
-                // single operation's operands is a losing game because you can
-                // always just add one indirection and go from `add(x, x)` to
-                // `add(foo(x), bar(x))` to hide the shared structure.) Given
-                // that blindness to sharing, we can make cost grow
-                // exponentially with a linear sequence of operations:
-                //
-                //     v0 = iconst.i32 1    ;; cost = 1
-                //     v1 = iadd v0, v0     ;; cost = 3 + 1 + 1
-                //     v2 = iadd v1, v1     ;; cost = 3 + 5 + 5
-                //     v3 = iadd v2, v2     ;; cost = 3 + 13 + 13
-                //     v4 = iadd v3, v3     ;; cost = 3 + 29 + 29
-                //     v5 = iadd v4, v4     ;; cost = 3 + 61 + 61
-                //     v6 = iadd v5, v5     ;; cost = 3 + 125 + 125
-                //     ;; etc...
-                //
-                // Such a chain can cause cost to saturate to infinity. How do
-                // we choose which e-node is best when there are multiple that
-                // have saturated to infinity? It doesn't matter. As long as
-                // invariant (2) for optimization rules is upheld by our rule
-                // set (see `cranelift/codegen/src/opts/README.md`) it is safe
-                // to choose *any* e-node in the e-class. At worst we will
-                // produce suboptimal code, but never an incorrectness.
-            }
+            // You might be expecting an assert that the best cost we just
+            // computed is not infinity, however infinite cost *can* happen in
+            // practice. First, note that our cost function doesn't know about
+            // any shared structure in the dataflow graph, it only sums operand
+            // costs. (And trying to avoid that by deduping a single operation's
+            // operands is a losing game because you can always just add one
+            // indirection and go from `add(x, x)` to `add(foo(x), bar(x))` to
+            // hide the shared structure.) Given that blindness to sharing, we
+            // can make cost grow exponentially with a linear sequence of
+            // operations:
+            //
+            //     v0 = iconst.i32 1    ;; cost = 1
+            //     v1 = iadd v0, v0     ;; cost = 3 + 1 + 1
+            //     v2 = iadd v1, v1     ;; cost = 3 + 5 + 5
+            //     v3 = iadd v2, v2     ;; cost = 3 + 13 + 13
+            //     v4 = iadd v3, v3     ;; cost = 3 + 29 + 29
+            //     v5 = iadd v4, v4     ;; cost = 3 + 61 + 61
+            //     v6 = iadd v5, v5     ;; cost = 3 + 125 + 125
+            //     ;; etc...
+            //
+            // Such a chain can cause cost to saturate to infinity. How do we
+            // choose which e-node is best when there are multiple that have
+            // saturated to infinity? It doesn't matter. As long as invariant
+            // (2) for optimization rules is upheld by our rule set (see
+            // `cranelift/codegen/src/opts/README.md`) it is safe to choose
+            // *any* e-node in the e-class. At worst we will produce suboptimal
+            // code, but never an incorrectness.
         }
     }
 
@@ -428,7 +464,9 @@ impl<'a> Elaborator<'a> {
                     trace!("elaborate: value {} -> best {}", value, best_value);
                     debug_assert_ne!(best_value, Value::reserved_value());
 
-                    if let Some(elab_val) = self.value_to_elaborated_value.get(&best_value) {
+                    if let Some(elab_val) =
+                        self.value_to_elaborated_value.get(&NullCtx, &best_value)
+                    {
                         // Value is available; use it.
                         trace!("elaborate: value {} -> {:?}", value, elab_val);
                         self.stats.elaborate_memoize_hit += 1;
@@ -444,9 +482,7 @@ impl<'a> Elaborator<'a> {
                         ValueDef::Result(inst, result_idx) => {
                             trace!(
                                 " -> value {} is result {} of {}",
-                                best_value,
-                                result_idx,
-                                inst
+                                best_value, result_idx, inst
                             );
                             (inst, result_idx)
                         }
@@ -469,8 +505,7 @@ impl<'a> Elaborator<'a> {
 
                     trace!(
                         " -> result {} of inst {:?}",
-                        result_idx,
-                        self.func.dfg.insts[inst]
+                        result_idx, self.func.dfg.insts[inst]
                     );
 
                     // We're going to need to use this instruction
@@ -503,10 +538,7 @@ impl<'a> Elaborator<'a> {
                 } => {
                     trace!(
                         "PendingInst: {} result {} args {} before {}",
-                        inst,
-                        result_idx,
-                        num_args,
-                        before
+                        inst, result_idx, num_args, before
                     );
 
                     // We should have all args resolved at this
@@ -543,8 +575,7 @@ impl<'a> Elaborator<'a> {
                                 .unwrap_or(self.loop_stack.len());
                             trace!(
                                 " -> arg: elab_value {:?} hoist level {:?}",
-                                value,
-                                hoist_level
+                                value, hoist_level
                             );
                             hoist_level
                         })
@@ -566,34 +597,34 @@ impl<'a> Elaborator<'a> {
                     // place the instruction. This is the current
                     // block *unless* we hoist above a loop when all
                     // args are loop-invariant (and this op is pure).
-                    let (scope_depth, before, insert_block) =
-                        if loop_hoist_level == self.loop_stack.len() {
-                            // Depends on some value at the current
-                            // loop depth, or remat forces it here:
-                            // place it at the current location.
-                            (
-                                self.value_to_elaborated_value.depth(),
-                                before,
-                                self.func.layout.inst_block(before).unwrap(),
-                            )
-                        } else {
-                            // Does not depend on any args at current
-                            // loop depth: hoist out of loop.
-                            self.stats.elaborate_licm_hoist += 1;
-                            let data = &self.loop_stack[loop_hoist_level];
-                            // `data.hoist_block` should dominate `before`'s block.
-                            let before_block = self.func.layout.inst_block(before).unwrap();
-                            debug_assert!(self.domtree.dominates(data.hoist_block, before_block));
-                            // Determine the instruction at which we
-                            // insert in `data.hoist_block`.
-                            let before = self.func.layout.last_inst(data.hoist_block).unwrap();
-                            (data.scope_depth as usize, before, data.hoist_block)
-                        };
+                    let (scope_depth, before, insert_block) = if loop_hoist_level
+                        == self.loop_stack.len()
+                    {
+                        // Depends on some value at the current
+                        // loop depth, or remat forces it here:
+                        // place it at the current location.
+                        (
+                            self.value_to_elaborated_value.depth(),
+                            before,
+                            self.func.layout.inst_block(before).unwrap(),
+                        )
+                    } else {
+                        // Does not depend on any args at current
+                        // loop depth: hoist out of loop.
+                        self.stats.elaborate_licm_hoist += 1;
+                        let data = &self.loop_stack[loop_hoist_level];
+                        // `data.hoist_block` should dominate `before`'s block.
+                        let before_block = self.func.layout.inst_block(before).unwrap();
+                        debug_assert!(self.domtree.block_dominates(data.hoist_block, before_block));
+                        // Determine the instruction at which we
+                        // insert in `data.hoist_block`.
+                        let before = self.func.layout.last_inst(data.hoist_block).unwrap();
+                        (data.scope_depth as usize, before, data.hoist_block)
+                    };
 
                     trace!(
                         " -> decided to place: before {} insert_block {}",
-                        before,
-                        insert_block
+                        before, insert_block
                     );
 
                     // Now that we have the location for the
@@ -633,8 +664,7 @@ impl<'a> Elaborator<'a> {
                         let new_inst = self.func.dfg.clone_inst(inst);
                         trace!(
                             " -> inst {} already has a location; cloned to {}",
-                            inst,
-                            new_inst
+                            inst, new_inst
                         );
                         // Create mappings in the
                         // value-to-elab'd-value map from original
@@ -652,6 +682,7 @@ impl<'a> Elaborator<'a> {
                             };
                             let best_result = self.value_to_best_value[result];
                             self.value_to_elaborated_value.insert_if_absent_with_depth(
+                                &NullCtx,
                                 best_result.1,
                                 elab_value,
                                 scope_depth,
@@ -661,8 +692,7 @@ impl<'a> Elaborator<'a> {
 
                             trace!(
                                 " -> cloned inst has new result {} for orig {}",
-                                new_result,
-                                result
+                                new_result, result
                             );
                         }
                         new_inst
@@ -678,6 +708,7 @@ impl<'a> Elaborator<'a> {
                             };
                             let best_result = self.value_to_best_value[result];
                             self.value_to_elaborated_value.insert_if_absent_with_depth(
+                                &NullCtx,
                                 best_result.1,
                                 elab_value,
                                 scope_depth,
@@ -772,6 +803,7 @@ impl<'a> Elaborator<'a> {
                 trace!(" -> result {}", result);
                 let best_result = self.value_to_best_value[result];
                 self.value_to_elaborated_value.insert_if_absent(
+                    &NullCtx,
                     best_result.1,
                     ElaboratedValue {
                         in_block: block,
@@ -784,7 +816,7 @@ impl<'a> Elaborator<'a> {
         }
     }
 
-    fn elaborate_domtree(&mut self, domtree: &DominatorTreePreorder) {
+    fn elaborate_domtree(&mut self, domtree: &DominatorTree) {
         self.block_stack.push(BlockStackEntry::Elaborate {
             block: self.func.layout.entry_block().unwrap(),
             idom: None,

@@ -5,7 +5,7 @@
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
 use crate::memory::VmmapOps;
-use sysdefs::constants::err_const::Errno;
+use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
@@ -75,8 +75,8 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// 2. **Shared memory regions**:
 ///    - The function uses the `mremap` syscall to replicate shared memory efficiently. Refer to `man 2 mremap` for details.
 /// 3. **Private memory regions**:
-///    - The function uses `std::ptr::copy_nonoverlapping` to copy the memory contents directly.
-///    - **TODO**: Investigate whether using `writev` could improve performance for this case.
+///    - The function uses `process_vm_writev` to copy memory contents from the parent into
+///      the child's address space.
 ///
 /// # Arguments
 /// * `parent_cageid` - cageid of parent
@@ -126,12 +126,24 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 );
 
                 // write parent data
-                // TODO: replace copy_nonoverlapping with writev for potential performance boost
-                std::ptr::copy_nonoverlapping(
-                    parent_st as *const u8,
-                    child_st as *mut u8,
-                    addr_len,
-                );
+                let local_iov = libc::iovec {
+                    iov_base: parent_st as *mut libc::c_void,
+                    iov_len: addr_len,
+                };
+                let remote_iov = libc::iovec {
+                    iov_base: child_st as *mut libc::c_void,
+                    iov_len: addr_len,
+                };
+                let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
+                if ret < 0 {
+                    panic!(
+                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={})",
+                        get_errno(),
+                        parent_st,
+                        child_st,
+                        addr_len,
+                    );
+                }
 
                 // revert child's memory region prot
                 libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);

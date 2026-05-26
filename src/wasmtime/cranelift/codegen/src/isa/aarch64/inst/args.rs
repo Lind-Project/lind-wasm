@@ -233,9 +233,9 @@ impl Cond {
 #[derive(Clone, Copy, Debug)]
 pub enum CondBrKind {
     /// Condition: given register is zero.
-    Zero(Reg),
+    Zero(Reg, OperandSize),
     /// Condition: given register is nonzero.
-    NotZero(Reg),
+    NotZero(Reg, OperandSize),
     /// Condition: the given condition-code test is true.
     Cond(Cond),
 }
@@ -244,8 +244,8 @@ impl CondBrKind {
     /// Return the inverted branch condition.
     pub fn invert(self) -> CondBrKind {
         match self {
-            CondBrKind::Zero(reg) => CondBrKind::NotZero(reg),
-            CondBrKind::NotZero(reg) => CondBrKind::Zero(reg),
+            CondBrKind::Zero(reg, size) => CondBrKind::NotZero(reg, size),
+            CondBrKind::NotZero(reg, size) => CondBrKind::Zero(reg, size),
             CondBrKind::Cond(c) => CondBrKind::Cond(c.invert()),
         }
     }
@@ -307,15 +307,15 @@ impl PrettyPrint for ShiftOpAndAmt {
 
 impl PrettyPrint for ExtendOp {
     fn pretty_print(&self, _: u8) -> String {
-        format!("{:?}", self)
+        format!("{self:?}")
     }
 }
 
 impl PrettyPrint for MemLabel {
     fn pretty_print(&self, _: u8) -> String {
         match self {
-            MemLabel::PCRel(off) => format!("pc+{}", off),
-            MemLabel::Mach(off) => format!("label({})", off.get()),
+            MemLabel::PCRel(off) => format!("pc+{off}"),
+            MemLabel::Mach(off) => format!("label({})", off.as_u32()),
         }
     }
 }
@@ -339,30 +339,30 @@ impl PrettyPrint for AMode {
                 let reg = pretty_print_reg(rn);
                 if simm9.value != 0 {
                     let simm9 = simm9.pretty_print(8);
-                    format!("[{}, {}]", reg, simm9)
+                    format!("[{reg}, {simm9}]")
                 } else {
-                    format!("[{}]", reg)
+                    format!("[{reg}]")
                 }
             }
             &AMode::UnsignedOffset { rn, uimm12 } => {
                 let reg = pretty_print_reg(rn);
                 if uimm12.value() != 0 {
                     let uimm12 = uimm12.pretty_print(8);
-                    format!("[{}, {}]", reg, uimm12)
+                    format!("[{reg}, {uimm12}]")
                 } else {
-                    format!("[{}]", reg)
+                    format!("[{reg}]")
                 }
             }
             &AMode::RegReg { rn, rm } => {
                 let r1 = pretty_print_reg(rn);
                 let r2 = pretty_print_reg(rm);
-                format!("[{}, {}]", r1, r2)
+                format!("[{r1}, {r2}]")
             }
             &AMode::RegScaled { rn, rm } => {
                 let r1 = pretty_print_reg(rn);
                 let r2 = pretty_print_reg(rm);
                 let shift = shift_for_type(size_bytes);
-                format!("[{}, {}, LSL #{}]", r1, r2, shift)
+                format!("[{r1}, {r2}, LSL #{shift}]")
             }
             &AMode::RegScaledExtended { rn, rm, extendop } => {
                 let shift = shift_for_type(size_bytes);
@@ -373,7 +373,7 @@ impl PrettyPrint for AMode {
                 let r1 = pretty_print_reg(rn);
                 let r2 = pretty_print_ireg(rm, size);
                 let op = extendop.pretty_print(0);
-                format!("[{}, {}, {} #{}]", r1, r2, op, shift)
+                format!("[{r1}, {r2}, {op} #{shift}]")
             }
             &AMode::RegExtended { rn, rm, extendop } => {
                 let size = match extendop {
@@ -383,16 +383,16 @@ impl PrettyPrint for AMode {
                 let r1 = pretty_print_reg(rn);
                 let r2 = pretty_print_ireg(rm, size);
                 let op = extendop.pretty_print(0);
-                format!("[{}, {}, {}]", r1, r2, op)
+                format!("[{r1}, {r2}, {op}]")
             }
             &AMode::Label { ref label } => label.pretty_print(0),
             &AMode::SPPreIndexed { simm9 } => {
                 let simm9 = simm9.pretty_print(8);
-                format!("[sp, {}]!", simm9)
+                format!("[sp, {simm9}]!")
             }
             &AMode::SPPostIndexed { simm9 } => {
                 let simm9 = simm9.pretty_print(8);
-                format!("[sp], {}", simm9)
+                format!("[sp], {simm9}")
             }
             AMode::Const { addr } => format!("[const({})]", addr.as_u32()),
 
@@ -402,7 +402,7 @@ impl PrettyPrint for AMode {
             | &AMode::IncomingArg { .. }
             | &AMode::SlotOffset { .. }
             | &AMode::RegOffset { .. } => {
-                panic!("Unexpected pseudo mem-arg mode: {:?}", self)
+                panic!("Unexpected pseudo mem-arg mode: {self:?}")
             }
         }
     }
@@ -415,18 +415,18 @@ impl PrettyPrint for PairAMode {
                 let reg = pretty_print_reg(reg);
                 if simm7.value != 0 {
                     let simm7 = simm7.pretty_print(8);
-                    format!("[{}, {}]", reg, simm7)
+                    format!("[{reg}, {simm7}]")
                 } else {
-                    format!("[{}]", reg)
+                    format!("[{reg}]")
                 }
             }
             &PairAMode::SPPreIndexed { simm7 } => {
                 let simm7 = simm7.pretty_print(8);
-                format!("[sp, {}]!", simm7)
+                format!("[sp, {simm7}]!")
             }
             &PairAMode::SPPostIndexed { simm7 } => {
                 let simm7 = simm7.pretty_print(8);
-                format!("[sp], {}", simm7)
+                format!("[sp], {simm7}")
             }
         }
     }
@@ -434,7 +434,7 @@ impl PrettyPrint for PairAMode {
 
 impl PrettyPrint for Cond {
     fn pretty_print(&self, _: u8) -> String {
-        let mut s = format!("{:?}", self);
+        let mut s = format!("{self:?}");
         s.make_ascii_lowercase();
         s
     }
@@ -443,8 +443,8 @@ impl PrettyPrint for Cond {
 impl PrettyPrint for BranchTarget {
     fn pretty_print(&self, _: u8) -> String {
         match self {
-            &BranchTarget::Label(label) => format!("label{:?}", label.get()),
-            &BranchTarget::ResolvedOffset(off) => format!("{}", off),
+            &BranchTarget::Label(label) => format!("label{:?}", label.as_u32()),
+            &BranchTarget::ResolvedOffset(off) => format!("{off}"),
         }
     }
 }
@@ -544,7 +544,7 @@ impl ScalarSize {
         match self {
             ScalarSize::Size8 | ScalarSize::Size16 | ScalarSize::Size32 => OperandSize::Size32,
             ScalarSize::Size64 => OperandSize::Size64,
-            _ => panic!("Unexpected operand_size request for: {:?}", self),
+            _ => panic!("Unexpected operand_size request for: {self:?}"),
         }
     }
 
@@ -555,7 +555,7 @@ impl ScalarSize {
             ScalarSize::Size16 => 0b11,
             ScalarSize::Size32 => 0b00,
             ScalarSize::Size64 => 0b01,
-            _ => panic!("Unexpected scalar FP operand size: {:?}", self),
+            _ => panic!("Unexpected scalar FP operand size: {self:?}"),
         }
     }
 
@@ -613,6 +613,21 @@ pub enum VectorSize {
 }
 
 impl VectorSize {
+    /// Get the vector operand of the same size but with 8-bit lane size.
+    pub fn as_scalar8_vector(&self) -> VectorSize {
+        match self {
+            // 64-bit vector
+            VectorSize::Size8x8 | VectorSize::Size16x4 | VectorSize::Size32x2 => {
+                VectorSize::Size8x8
+            }
+            // 128-bit vector
+            VectorSize::Size8x16
+            | VectorSize::Size16x8
+            | VectorSize::Size32x4
+            | VectorSize::Size64x2 => VectorSize::Size8x16,
+        }
+    }
+
     /// Get the vector operand size with the given scalar size as lane size.
     pub fn from_lane_size(size: ScalarSize, is_128bit: bool) -> VectorSize {
         match (size, is_128bit) {
@@ -623,7 +638,7 @@ impl VectorSize {
             (ScalarSize::Size32, false) => VectorSize::Size32x2,
             (ScalarSize::Size32, true) => VectorSize::Size32x4,
             (ScalarSize::Size64, true) => VectorSize::Size64x2,
-            _ => panic!("Unexpected scalar FP operand size: {:?}", size),
+            _ => panic!("Unexpected scalar FP operand size: {size:?}"),
         }
     }
 
@@ -679,7 +694,7 @@ impl VectorSize {
         match self.lane_size() {
             ScalarSize::Size32 => 0b0,
             ScalarSize::Size64 => 0b1,
-            size => panic!("Unsupported floating-point size for vector op: {:?}", size),
+            size => panic!("Unsupported floating-point size for vector op: {size:?}"),
         }
     }
 }

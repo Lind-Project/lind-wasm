@@ -44,21 +44,22 @@
 //!
 //! ```
 
-use crate::binemit::{Addend, CodeInfo, CodeOffset, Reloc, StackMap};
-use crate::ir::function::FunctionParameters;
-use crate::ir::{DynamicStackSlot, RelSourceLoc, StackSlot, Type};
+use crate::binemit::{Addend, CodeInfo, CodeOffset, Reloc};
+use crate::ir::{
+    self, DynamicStackSlot, RelSourceLoc, StackSlot, Type, function::FunctionParameters,
+};
 use crate::isa::FunctionAlignment;
 use crate::result::CodegenResult;
 use crate::settings;
 use crate::settings::Flags;
 use crate::value_label::ValueLabelsRanges;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 use cranelift_control::ControlPlane;
 use cranelift_entity::PrimaryMap;
 use regalloc2::VReg;
-use smallvec::{smallvec, SmallVec};
-use std::string::String;
+use smallvec::{SmallVec, smallvec};
 
 #[cfg(feature = "enable-serde")]
 use serde_derive::{Deserialize, Serialize};
@@ -80,13 +81,9 @@ pub mod buffer;
 pub use buffer::*;
 pub mod helpers;
 pub use helpers::*;
-pub mod inst_common;
-#[allow(unused_imports)] // not used in all backends right now
-pub use inst_common::*;
 pub mod valueregs;
 pub use reg::*;
 pub use valueregs::*;
-pub mod pcc;
 pub mod reg;
 
 /// A machine instruction.
@@ -111,7 +108,16 @@ pub trait MachInst: Clone + Debug {
     /// Is this an "args" pseudoinst?
     fn is_args(&self) -> bool;
 
-    /// Should this instruction be included in the clobber-set?
+    /// Classify the type of call instruction this is.
+    ///
+    /// This enables more granular function type analysis and optimization.
+    /// Returns `CallType::None` for non-call instructions, `CallType::Regular`
+    /// for normal calls that return to the caller, and `CallType::TailCall`
+    /// for tail calls that don't return to the caller.
+    fn call_type(&self) -> CallType;
+
+    /// Should this instruction's clobber-list be included in the
+    /// clobber-set?
     fn is_included_in_clobbers(&self) -> bool;
 
     /// Does this instruction access memory?
@@ -170,6 +176,10 @@ pub trait MachInst: Clone + Debug {
     /// the instruction must have a nonzero size if preferred_size is nonzero.
     fn gen_nop(preferred_size: usize) -> Self;
 
+    /// The various kinds of NOP, with size, sorted in ascending-size
+    /// order.
+    fn gen_nop_units() -> Vec<Vec<u8>>;
+
     /// Align a basic block offset (from start of function).  By default, no
     /// alignment occurs.
     fn align_basic_block(offset: CodeOffset) -> CodeOffset {
@@ -199,6 +209,14 @@ pub trait MachInst: Clone + Debug {
     /// Returns a description of the alignment required for functions for this
     /// architecture.
     fn function_alignment() -> FunctionAlignment;
+
+    /// Is this a low-level, one-way branch, not meant for use in a
+    /// VCode body? These instructions are meant to be used only when
+    /// directly emitted, i.e. when `MachInst` is used as an assembler
+    /// library.
+    fn is_low_level_branch(&self) -> bool {
+        false
+    }
 
     /// A label-use kind: a type that describes the types of label references that
     /// can occur in an instruction.
@@ -258,8 +276,56 @@ pub trait MachInstLabelUse: Clone + Copy + Debug + Eq {
     fn from_reloc(reloc: Reloc, addend: Addend) -> Option<Self>;
 }
 
-/// Describes a block terminator (not call) in the vcode, when its branches
-/// have not yet been finalized (so a branch may have two targets).
+/// Classification of call instruction types for granular analysis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallType {
+    /// Not a call instruction.
+    None,
+    /// Regular call that returns to the caller.
+    Regular,
+    /// Tail call that doesn't return to the caller.
+    TailCall,
+}
+
+/// Function classification based on call patterns.
+///
+/// This enum classifies functions based on their calling behavior to enable
+/// targeted optimizations. Functions are categorized as:
+/// - `None`: No calls at all (can use simplified calling conventions)
+/// - `TailOnly`: Only tail calls (may skip frame setup in some cases)
+/// - `Regular`: Has regular calls (requires full calling convention support)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FunctionCalls {
+    /// Function makes no calls at all.
+    #[default]
+    None,
+    /// Function only makes tail calls (no regular calls).
+    TailOnly,
+    /// Function makes at least one regular call (may also have tail calls).
+    Regular,
+}
+
+impl FunctionCalls {
+    /// Update the function classification based on a new call instruction.
+    ///
+    /// This method implements the merge logic for accumulating call patterns:
+    /// - Any regular call makes the function Regular
+    /// - Tail calls upgrade None to TailOnly
+    /// - Regular always stays Regular
+    pub fn update(&mut self, call_type: CallType) {
+        *self = match (*self, call_type) {
+            // No call instruction - state unchanged
+            (current, CallType::None) => current,
+            // Regular call always results in Regular classification
+            (_, CallType::Regular) => FunctionCalls::Regular,
+            // Tail call: None becomes TailOnly, others unchanged
+            (FunctionCalls::None, CallType::TailCall) => FunctionCalls::TailOnly,
+            (current, CallType::TailCall) => current,
+        };
+    }
+}
+
+/// Describes a block terminator (not call) in the VCode.
 ///
 /// Actual targets are not included: the single-source-of-truth for
 /// those is the VCode itself, which holds, for each block, successors
@@ -272,22 +338,21 @@ pub enum MachTerminator {
     Ret,
     /// A tail call.
     RetCall,
-    /// An unconditional branch to another block.
-    Uncond,
-    /// A conditional branch to one of two other blocks.
-    Cond,
-    /// An indirect branch with known possible targets.
-    Indirect,
+    /// A branch.
+    Branch,
 }
 
 /// A trait describing the ability to encode a MachInst into binary machine code.
 pub trait MachInstEmit: MachInst {
     /// Persistent state carried across `emit` invocations.
     type State: MachInstEmitState<Self>;
+
     /// Constant information used in `emit` invocations.
     type Info;
+
     /// Emit the instruction.
     fn emit(&self, code: &mut MachBuffer<Self>, info: &Self::Info, state: &mut Self::State);
+
     /// Pretty-print the instruction.
     fn pretty_print_inst(&self, state: &mut Self::State) -> String;
 }
@@ -297,20 +362,25 @@ pub trait MachInstEmit: MachInst {
 pub trait MachInstEmitState<I: VCodeInst>: Default + Clone + Debug {
     /// Create a new emission state given the ABI object.
     fn new(abi: &Callee<I::ABIMachineSpec>, ctrl_plane: ControlPlane) -> Self;
+
     /// Update the emission state before emitting an instruction that is a
     /// safepoint.
-    fn pre_safepoint(&mut self, _stack_map: StackMap) {}
+    fn pre_safepoint(&mut self, user_stack_map: Option<ir::UserStackMap>);
+
     /// The emission state holds ownership of a control plane, so it doesn't
     /// have to be passed around explicitly too much. `ctrl_plane_mut` may
     /// be used if temporary access to the control plane is needed by some
     /// other function that doesn't have access to the emission state.
     fn ctrl_plane_mut(&mut self) -> &mut ControlPlane;
+
     /// Used to continue using a control plane after the emission state is
     /// not needed anymore.
     fn take_ctrl_plane(self) -> ControlPlane;
+
     /// A hook that triggers when first emitting a new block.
     /// It is guaranteed to be called before any instructions are emitted.
     fn on_new_block(&mut self) {}
+
     /// The [`FrameLayout`] for the function currently being compiled.
     fn frame_layout(&self) -> &FrameLayout;
 }
@@ -322,16 +392,10 @@ pub trait MachInstEmitState<I: VCodeInst>: Default + Clone + Debug {
 pub struct CompiledCodeBase<T: CompilePhase> {
     /// Machine code.
     pub buffer: MachBufferFinalized<T>,
-    /// Size of stack frame, in bytes.
-    pub frame_size: u32,
     /// Disassembly, if requested.
     pub vcode: Option<String>,
     /// Debug info: value labels to registers/stackslots at code offsets.
     pub value_labels_ranges: ValueLabelsRanges,
-    /// Debug info: stackslots to stack pointer offsets.
-    pub sized_stackslot_offsets: PrimaryMap<StackSlot, u32>,
-    /// Debug info: stackslots to stack pointer offsets.
-    pub dynamic_stackslot_offsets: PrimaryMap<DynamicStackSlot, u32>,
     /// Basic-block layout info: block start offsets.
     ///
     /// This info is generated only if the `machine_code_cfg_info`
@@ -351,11 +415,8 @@ impl CompiledCodeStencil {
     pub fn apply_params(self, params: &FunctionParameters) -> CompiledCode {
         CompiledCode {
             buffer: self.buffer.apply_base_srcloc(params.base_srcloc()),
-            frame_size: self.frame_size,
             vcode: self.vcode,
             value_labels_ranges: self.value_labels_ranges,
-            sized_stackslot_offsets: self.sized_stackslot_offsets,
-            dynamic_stackslot_offsets: self.dynamic_stackslot_offsets,
             bb_starts: self.bb_starts,
             bb_edges: self.bb_edges,
         }
@@ -382,12 +443,13 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
         params: Option<&crate::ir::function::FunctionParameters>,
         cs: &capstone::Capstone,
     ) -> Result<String, anyhow::Error> {
-        use std::fmt::Write;
+        use core::fmt::Write;
 
         let mut buf = String::new();
 
         let relocs = self.buffer.relocs();
         let traps = self.buffer.traps();
+        let mut patchables = self.buffer.patchable_call_sites().peekable();
 
         // Normalize the block starts to include an initial block of offset 0.
         let mut block_starts = Vec::new();
@@ -403,7 +465,7 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
             .zip(block_starts.iter().skip(1))
             .enumerate()
         {
-            writeln!(buf, "block{}: ; offset 0x{:x}", n, start)?;
+            writeln!(buf, "block{n}: ; offset 0x{start:x}")?;
 
             let buffer = &self.buffer.data()[start as usize..end as usize];
             let insns = cs.disasm_all(buffer, start as u64).map_err(map_caperr)?;
@@ -412,13 +474,13 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
 
                 let op_str = i.op_str().unwrap_or("");
                 if let Some(s) = i.mnemonic() {
-                    write!(buf, "{}", s)?;
+                    write!(buf, "{s}")?;
                     if !op_str.is_empty() {
                         write!(buf, " ")?;
                     }
                 }
 
-                write!(buf, "{}", op_str)?;
+                write!(buf, "{op_str}")?;
 
                 let end = i.address() + i.bytes().len() as u64;
                 let contains = |off| i.address() <= off && off < end;
@@ -437,6 +499,17 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
                     write!(buf, " ; trap: {}", trap.code)?;
                 }
 
+                if let Some(patchable) = patchables.peek()
+                    && patchable.ret_addr == end as u32
+                {
+                    write!(
+                        buf,
+                        " ; patchable call: NOP out last {} bytes",
+                        patchable.len
+                    )?;
+                    patchables.next();
+                }
+
                 writeln!(buf)?;
             }
         }
@@ -444,7 +517,7 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
         return Ok(buf);
 
         fn map_caperr(err: capstone::Error) -> anyhow::Error {
-            anyhow::format_err!("{}", err)
+            anyhow::format_err!("{err}")
         }
     }
 }
@@ -544,6 +617,10 @@ pub trait TextSectionBuilder {
 
     /// A debug-only option which is used to for
     fn force_veneers(&mut self);
+
+    /// Write the `data` provided at `offset`, for example when resolving a
+    /// relocation.
+    fn write(&mut self, offset: u64, data: &[u8]);
 
     /// Completes this text section, filling out any final details, and returns
     /// the bytes of the text section.

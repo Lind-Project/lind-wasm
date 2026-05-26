@@ -31,25 +31,32 @@ fn main() {
     let target_triple = env::var("TARGET").expect("The TARGET environment variable must be set");
 
     let all_arch = env::var("CARGO_FEATURE_ALL_ARCH").is_ok();
+    let all_native_arch = env::var("CARGO_FEATURE_ALL_NATIVE_ARCH").is_ok();
 
     let mut isas = meta::isa::Isa::all()
         .iter()
         .cloned()
         .filter(|isa| {
-            let env_key = format!("CARGO_FEATURE_{}", isa.to_string().to_uppercase());
+            let env_key = match isa {
+                meta::isa::Isa::Pulley32 | meta::isa::Isa::Pulley64 => {
+                    "CARGO_FEATURE_PULLEY".to_string()
+                }
+                _ => format!("CARGO_FEATURE_{}", isa.to_string().to_uppercase()),
+            };
             all_arch || env::var(env_key).is_ok()
         })
         .collect::<Vec<_>>();
 
     // Don't require host isa if under 'all-arch' feature.
-    let host_isa = env::var("CARGO_FEATURE_HOST_ARCH").is_ok() && !all_arch;
+    let host_isa = env::var("CARGO_FEATURE_HOST_ARCH").is_ok() && !all_native_arch;
 
     if isas.is_empty() || host_isa {
         // Try to match native target.
         let target_name = target_triple.split('-').next().unwrap();
-        let isa = meta::isa_from_arch(&target_name).expect("error when identifying target");
-        println!("cargo:rustc-cfg=feature=\"{}\"", isa);
-        isas.push(isa);
+        if let Ok(isa) = meta::isa_from_arch(&target_name) {
+            println!("cargo:rustc-cfg=feature=\"{isa}\"");
+            isas.push(isa);
+        }
     }
 
     let cur_dir = env::current_dir().expect("Can't access current working directory");

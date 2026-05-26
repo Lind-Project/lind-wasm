@@ -2,41 +2,44 @@
 
 // Pull in the ISLE generated code.
 pub mod generated_code;
-use generated_code::Context;
+use generated_code::{Context, ImmExtend};
 
 // Types that the generated ISLE code uses via `use super::*`.
 use super::{
-    fp_reg, lower_condcode, lower_fp_condcode, stack_reg, writable_link_reg, writable_zero_reg,
-    zero_reg, ASIMDFPModImm, ASIMDMovModImm, BranchTarget, CallIndInfo, CallInfo, Cond, CondBrKind,
-    ExtendOp, FPUOpRI, FPUOpRIMod, FloatCC, Imm12, ImmLogic, ImmShift, Inst as MInst, IntCC,
-    MachLabel, MemLabel, MoveWideConst, MoveWideOp, Opcode, OperandSize, Reg, SImm9, ScalarSize,
-    ShiftOpAndAmt, UImm12Scaled, UImm5, VecMisc2, VectorSize, NZCV,
+    ASIMDFPModImm, ASIMDMovModImm, BranchTarget, CallInfo, Cond, CondBrKind, ExtendOp, FPUOpRI,
+    FPUOpRIMod, FloatCC, Imm12, ImmLogic, ImmShift, Inst as MInst, IntCC, MachLabel, MemLabel,
+    MoveWideConst, MoveWideOp, NZCV, Opcode, OperandSize, Reg, SImm9, ScalarSize, ShiftOpAndAmt,
+    UImm5, UImm12Scaled, VecMisc2, VectorSize, fp_reg, lower_condcode, lower_fp_condcode,
+    stack_reg, writable_link_reg, writable_zero_reg, zero_reg,
 };
-use crate::ir::{condcodes, ArgumentExtension};
+use crate::ir::{ArgumentExtension, condcodes};
 use crate::isa;
-use crate::isa::aarch64::inst::{FPULeftShiftImm, FPURightShiftImm, ReturnCallInfo};
 use crate::isa::aarch64::AArch64Backend;
-use crate::isle_common_prelude_methods;
+use crate::isa::aarch64::inst::{FPULeftShiftImm, FPURightShiftImm, ReturnCallInfo};
 use crate::machinst::isle::*;
-use crate::machinst::valueregs;
 use crate::{
     binemit::CodeOffset,
     ir::{
-        immediates::*, types::*, AtomicRmwOp, BlockCall, ExternalName, Inst, InstructionData,
-        MemFlags, TrapCode, Value, ValueList,
+        AtomicRmwOp, BlockCall, ExternalName, Inst, InstructionData, MemFlags, TrapCode, Value,
+        ValueList, immediates::*, types::*,
     },
-    isa::aarch64::abi::AArch64CallSite,
-    isa::aarch64::inst::args::{ShiftOp, ShiftOpShiftImm},
+    isa::aarch64::abi::AArch64MachineDeps,
     isa::aarch64::inst::SImm7Scaled,
-    machinst::{abi::ArgPair, ty_bits, InstOutput, MachInst, VCodeConstant, VCodeConstantData},
+    isa::aarch64::inst::args::{ShiftOp, ShiftOpShiftImm},
+    machinst::{
+        CallArgList, CallRetList, InstOutput, MachInst, VCodeConstant, VCodeConstantData,
+        abi::ArgPair, ty_bits,
+    },
 };
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::u32;
 use regalloc2::PReg;
-use std::boxed::Box;
-use std::vec::Vec;
 
-type BoxCallInfo = Box<CallInfo>;
-type BoxCallIndInfo = Box<CallIndInfo>;
-type BoxReturnCallInfo = Box<ReturnCallInfo>;
+type BoxCallInfo = Box<CallInfo<ExternalName>>;
+type BoxCallIndInfo = Box<CallInfo<Reg>>;
+type BoxReturnCallInfo = Box<ReturnCallInfo<ExternalName>>;
+type BoxReturnCallIndInfo = Box<ReturnCallInfo<Reg>>;
 type VecMachLabel = Vec<MachLabel>;
 type BoxExternalName = Box<ExternalName>;
 type VecArgPair = Vec<ArgPair>;
@@ -62,7 +65,7 @@ pub(crate) fn lower_branch(
     // TODO: reuse the ISLE context across lowerings so we can reuse its
     // internal heap allocations.
     let mut isle_ctx = IsleContext { lower_ctx, backend };
-    generated_code::constructor_lower_branch(&mut isle_ctx, branch, &targets.to_vec())
+    generated_code::constructor_lower_branch(&mut isle_ctx, branch, targets)
 }
 
 pub struct ExtendedValue {
@@ -70,71 +73,92 @@ pub struct ExtendedValue {
     extend: ExtendOp,
 }
 
-impl IsleContext<'_, '_, MInst, AArch64Backend> {
-    isle_prelude_method_helpers!(AArch64CallSite);
-}
-
 impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
     isle_lower_prelude_methods!();
-    isle_prelude_caller_methods!(
-        crate::isa::aarch64::abi::AArch64MachineDeps,
-        AArch64CallSite
-    );
 
-    fn gen_return_call(
+    fn gen_call_info(
         &mut self,
-        callee_sig: SigRef,
-        callee: ExternalName,
-        distance: RelocDistance,
-        args: ValueSlice,
-    ) -> InstOutput {
-        let caller_conv = isa::CallConv::Tail;
-        debug_assert_eq!(
-            self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
-            caller_conv,
-            "Can only do `return_call`s from within a `tail` calling convention function"
-        );
+        sig: Sig,
+        dest: ExternalName,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<TryCallInfo>,
+        patchable: bool,
+    ) -> BoxCallInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
 
-        let call_site = AArch64CallSite::from_func(
-            self.lower_ctx.sigs(),
-            callee_sig,
-            &callee,
-            Opcode::ReturnCall,
-            distance,
-            caller_conv,
-            self.backend.flags().clone(),
-        );
-        call_site.emit_return_call(self.lower_ctx, args, &self.backend.isa_flags);
-
-        InstOutput::new()
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, patchable),
+        )
     }
 
-    fn gen_return_call_indirect(
+    fn gen_call_ind_info(
         &mut self,
-        callee_sig: SigRef,
-        callee: Value,
-        args: ValueSlice,
-    ) -> InstOutput {
-        let caller_conv = isa::CallConv::Tail;
-        debug_assert_eq!(
-            self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
-            caller_conv,
-            "Can only do `return_call`s from within a `tail` calling convention function"
-        );
+        sig: Sig,
+        dest: Reg,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<TryCallInfo>,
+    ) -> BoxCallIndInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
 
-        let callee = self.put_in_reg(callee);
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, false),
+        )
+    }
 
-        let call_site = AArch64CallSite::from_ptr(
-            self.lower_ctx.sigs(),
-            callee_sig,
-            callee,
-            Opcode::ReturnCallIndirect,
-            caller_conv,
-            self.backend.flags().clone(),
-        );
-        call_site.emit_return_call(self.lower_ctx, args, &self.backend.isa_flags);
+    fn gen_return_call_info(
+        &mut self,
+        sig: Sig,
+        dest: ExternalName,
+        uses: CallArgList,
+    ) -> BoxReturnCallInfo {
+        let new_stack_arg_size = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_tail_args_size(new_stack_arg_size);
 
-        InstOutput::new()
+        let key =
+            AArch64MachineDeps::select_api_key(&self.backend.isa_flags, isa::CallConv::Tail, true);
+
+        Box::new(ReturnCallInfo {
+            dest,
+            uses,
+            key,
+            new_stack_arg_size,
+        })
+    }
+
+    fn gen_return_call_ind_info(
+        &mut self,
+        sig: Sig,
+        dest: Reg,
+        uses: CallArgList,
+    ) -> BoxReturnCallIndInfo {
+        let new_stack_arg_size = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_tail_args_size(new_stack_arg_size);
+
+        let key =
+            AArch64MachineDeps::select_api_key(&self.backend.isa_flags, isa::CallConv::Tail, true);
+
+        Box::new(ReturnCallInfo {
+            dest,
+            uses,
+            key,
+            new_stack_arg_size,
+        })
     }
 
     fn sign_return_address_disabled(&mut self) -> Option<()> {
@@ -151,6 +175,14 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
         } else {
             None
         }
+    }
+
+    fn use_fp16(&mut self) -> bool {
+        self.backend.isa_flags.has_fp16()
+    }
+
+    fn use_csdb(&mut self) -> bool {
+        self.backend.isa_flags.use_csdb()
     }
 
     fn move_wide_const_from_u64(&mut self, ty: Type, n: u64) -> Option<MoveWideConst> {
@@ -209,7 +241,7 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
     fn lshl_from_u64(&mut self, ty: Type, n: u64) -> Option<ShiftOpAndAmt> {
         let shiftimm = ShiftOpShiftImm::maybe_from_shift(n)?;
         let shiftee_bits = ty_bits(ty);
-        if shiftee_bits <= std::u8::MAX as usize {
+        if shiftee_bits <= core::u8::MAX as usize {
             let shiftimm = shiftimm.mask(shiftee_bits as u8);
             Some(ShiftOpAndAmt::new(ShiftOp::LSL, shiftimm))
         } else {
@@ -220,7 +252,7 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
     fn ashr_from_u64(&mut self, ty: Type, n: u64) -> Option<ShiftOpAndAmt> {
         let shiftimm = ShiftOpShiftImm::maybe_from_shift(n)?;
         let shiftee_bits = ty_bits(ty);
-        if shiftee_bits <= std::u8::MAX as usize {
+        if shiftee_bits <= core::u8::MAX as usize {
             let shiftimm = shiftimm.mask(shiftee_bits as u8);
             Some(ShiftOpAndAmt::new(ShiftOp::ASR, shiftimm))
         } else {
@@ -230,25 +262,17 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
 
     fn integral_ty(&mut self, ty: Type) -> Option<Type> {
         match ty {
-            I8 | I16 | I32 | I64 | R64 => Some(ty),
+            I8 | I16 | I32 | I64 => Some(ty),
             _ => None,
         }
     }
 
     fn is_zero_simm9(&mut self, imm: &SImm9) -> Option<()> {
-        if imm.value() == 0 {
-            Some(())
-        } else {
-            None
-        }
+        if imm.value() == 0 { Some(()) } else { None }
     }
 
     fn is_zero_uimm12(&mut self, imm: &UImm12Scaled) -> Option<()> {
-        if imm.value() == 0 {
-            Some(())
-        } else {
-            None
-        }
+        if imm.value() == 0 { Some(()) } else { None }
     }
 
     /// This is target-word-size dependent.  And it excludes booleans and reftypes.
@@ -264,24 +288,36 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
     ///
     /// The logic here is nontrivial enough that it's not really worth porting
     /// this over to ISLE.
-    fn load_constant64_full(
+    fn load_constant_full(
         &mut self,
         ty: Type,
-        extend: &generated_code::ImmExtend,
+        extend: &ImmExtend,
+        extend_to: &OperandSize,
         value: u64,
     ) -> Reg {
         let bits = ty.bits();
-        let value = if bits < 64 {
-            if *extend == generated_code::ImmExtend::Sign {
+
+        let value = match (extend_to, *extend) {
+            (OperandSize::Size32, ImmExtend::Sign) if bits < 32 => {
+                let shift = 32 - bits;
+                let value = value as i32;
+
+                // we cast first to a u32 and then to a u64, to ensure that we are representing a
+                // i32 in a u64, and not a i64. This is important, otherwise value will not fit in
+                // 32 bits
+                ((value << shift) >> shift) as u32 as u64
+            }
+            (OperandSize::Size32, ImmExtend::Zero) if bits < 32 => {
+                value & !((u32::MAX as u64) << bits)
+            }
+            (OperandSize::Size64, ImmExtend::Sign) if bits < 64 => {
                 let shift = 64 - bits;
                 let value = value as i64;
 
                 ((value << shift) >> shift) as u64
-            } else {
-                value & !(u64::MAX << bits)
             }
-        } else {
-            value
+            (OperandSize::Size64, ImmExtend::Zero) if bits < 64 => value & !(u64::MAX << bits),
+            _ => value,
         };
 
         // Divide the value into 16-bit slices that we can manipulate using
@@ -349,10 +385,6 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
             },
             size,
         });
-        if self.backend.flags.enable_pcc() {
-            self.lower_ctx
-                .add_range_fact(rd.to_reg(), 64, running_value, running_value);
-        }
 
         // Emit a `movk` instruction for each remaining slice of the desired
         // constant that does not match the initial value constructed above.
@@ -368,10 +400,6 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
                     size,
                 });
                 running_value = replace(running_value, bits, shift);
-                if self.backend.flags.enable_pcc() {
-                    self.lower_ctx
-                        .add_range_fact(rd.to_reg(), 64, running_value, running_value);
-                }
             }
         }
 
@@ -412,12 +440,12 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
         self.lower_ctx.emit(inst.clone());
     }
 
-    fn cond_br_zero(&mut self, reg: Reg) -> CondBrKind {
-        CondBrKind::Zero(reg)
+    fn cond_br_zero(&mut self, reg: Reg, size: &OperandSize) -> CondBrKind {
+        CondBrKind::Zero(reg, *size)
     }
 
-    fn cond_br_not_zero(&mut self, reg: Reg) -> CondBrKind {
-        CondBrKind::NotZero(reg)
+    fn cond_br_not_zero(&mut self, reg: Reg, size: &OperandSize) -> CondBrKind {
+        CondBrKind::NotZero(reg, *size)
     }
 
     fn cond_br_cond(&mut self, cond: &Cond) -> CondBrKind {
@@ -750,11 +778,7 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
     }
     fn shuffle_dup64_from_imm(&mut self, imm: Immediate) -> Option<u8> {
         let (a, b) = self.shuffle64_from_imm(imm)?;
-        if a == b && a < 2 {
-            Some(a)
-        } else {
-            None
-        }
+        if a == b && a < 2 { Some(a) } else { None }
     }
 
     fn asimd_mov_mod_imm_zero(&mut self, size: &ScalarSize) -> ASIMDMovModImm {
@@ -806,5 +830,27 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
             return None;
         }
         Some(bit as u8)
+    }
+
+    /// Use as a helper when generating `AluRRRShift` for `extr` instructions.
+    fn a64_extr_imm(&mut self, ty: Type, shift: ImmShift) -> ShiftOpAndAmt {
+        // The `ShiftOpAndAmt` immediate is used with `AluRRRShift` shape which
+        // requires `ShiftOpAndAmt` so the shift of `ty` and `shift` are
+        // translated into `ShiftOpAndAmt` here. The `ShiftOp` value here is
+        // only used for its encoding, not its logical meaning.
+        let (op, expected) = match ty {
+            types::I32 => (ShiftOp::LSL, 0b00),
+            types::I64 => (ShiftOp::LSR, 0b01),
+            _ => unreachable!(),
+        };
+        assert_eq!(op.bits(), expected);
+        ShiftOpAndAmt::new(
+            op,
+            ShiftOpShiftImm::maybe_from_shift(shift.value().into()).unwrap(),
+        )
+    }
+
+    fn is_pic(&mut self) -> bool {
+        self.backend.flags.is_pic()
     }
 }

@@ -6,8 +6,8 @@
 use crate::ir;
 use crate::ir::instructions::InstructionFormat;
 use crate::ir::types;
+use crate::ir::{BlockArg, Inst, Opcode, Type, Value};
 use crate::ir::{DataFlowGraph, InstructionData};
-use crate::ir::{Inst, Opcode, Type, Value};
 
 /// Base trait for instruction builders.
 ///
@@ -277,6 +277,6 @@ mod tests {
 
         // We are trying to create a Opcode::Return with the InstData::Trap, which is obviously wrong
         pos.ins()
-            .Trap(Opcode::Return, I32, TrapCode::BadConversionToInteger);
+            .Trap(Opcode::Return, I32, TrapCode::BAD_CONVERSION_TO_INTEGER);
     }
 }

@@ -2,20 +2,31 @@
 //!
 //! This crate provides an implementation of the `wasmtime_environ::Compiler`
 //! and `wasmtime_environ::CompilerBuilder` traits.
+//!
+//! > **⚠️ Warning ⚠️**: this crate is an internal-only crate for the Wasmtime
+//! > project and is not intended for general use. APIs are not strictly
+//! > reviewed for safety and usage outside of Wasmtime may have bugs. If
+//! > you're interested in using this feel free to file an issue on the
+//! > Wasmtime repository to start a discussion about doing so, but otherwise
+//! > be aware that your usage of this crate is not supported.
+
+// See documentation in crates/wasmtime/src/runtime.rs for why this is
+// selectively enabled here.
+#![warn(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use cranelift_codegen::{
-    binemit,
+    FinalizedMachReloc, FinalizedRelocTarget, MachTrap, binemit,
     cursor::FuncCursor,
-    ir::{self, AbiParam, ArgumentPurpose, ExternalName, InstBuilder, Signature},
+    ir::{self, AbiParam, ArgumentPurpose, ExternalName, InstBuilder, Signature, TrapCode},
     isa::{CallConv, TargetIsa},
-    settings, FinalizedMachReloc, FinalizedRelocTarget, MachTrap,
+    settings,
 };
 use cranelift_entity::PrimaryMap;
-use cranelift_wasm::{FuncIndex, WasmFuncType, WasmHeapTopType, WasmHeapType, WasmValType};
 
 use target_lexicon::Architecture;
 use wasmtime_environ::{
-    BuiltinFunctionIndex, FlagValue, RelocationTarget, Trap, TrapInformation, Tunables,
+    BuiltinFunctionIndex, FlagValue, FuncKey, Trap, TrapInformation, Tunables, WasmFuncType,
+    WasmHeapTopType, WasmHeapType, WasmValType,
 };
 
 pub use builder::builder;
@@ -26,14 +37,42 @@ pub use obj::*;
 mod compiled_function;
 pub use compiled_function::*;
 
+mod bounds_checks;
 mod builder;
 mod compiler;
 mod debug;
 mod func_environ;
-mod gc;
+mod translate;
+mod trap;
 
-/// Trap code used for debug assertions we emit in our JIT code.
-const DEBUG_ASSERT_TRAP_CODE: u16 = u16::MAX;
+use self::compiler::Compiler;
+
+const TRAP_INTERNAL_ASSERT: TrapCode = TrapCode::unwrap_user(1);
+const TRAP_OFFSET: u8 = 2;
+pub const TRAP_CANNOT_LEAVE_COMPONENT: TrapCode =
+    TrapCode::unwrap_user(Trap::CannotLeaveComponent as u8 + TRAP_OFFSET);
+pub const TRAP_INDIRECT_CALL_TO_NULL: TrapCode =
+    TrapCode::unwrap_user(Trap::IndirectCallToNull as u8 + TRAP_OFFSET);
+pub const TRAP_BAD_SIGNATURE: TrapCode =
+    TrapCode::unwrap_user(Trap::BadSignature as u8 + TRAP_OFFSET);
+pub const TRAP_NULL_REFERENCE: TrapCode =
+    TrapCode::unwrap_user(Trap::NullReference as u8 + TRAP_OFFSET);
+pub const TRAP_ALLOCATION_TOO_LARGE: TrapCode =
+    TrapCode::unwrap_user(Trap::AllocationTooLarge as u8 + TRAP_OFFSET);
+pub const TRAP_ARRAY_OUT_OF_BOUNDS: TrapCode =
+    TrapCode::unwrap_user(Trap::ArrayOutOfBounds as u8 + TRAP_OFFSET);
+pub const TRAP_UNREACHABLE: TrapCode =
+    TrapCode::unwrap_user(Trap::UnreachableCodeReached as u8 + TRAP_OFFSET);
+pub const TRAP_HEAP_MISALIGNED: TrapCode =
+    TrapCode::unwrap_user(Trap::HeapMisaligned as u8 + TRAP_OFFSET);
+pub const TRAP_TABLE_OUT_OF_BOUNDS: TrapCode =
+    TrapCode::unwrap_user(Trap::TableOutOfBounds as u8 + TRAP_OFFSET);
+pub const TRAP_UNHANDLED_TAG: TrapCode =
+    TrapCode::unwrap_user(Trap::UnhandledTag as u8 + TRAP_OFFSET);
+pub const TRAP_CONTINUATION_ALREADY_CONSUMED: TrapCode =
+    TrapCode::unwrap_user(Trap::ContinuationAlreadyConsumed as u8 + TRAP_OFFSET);
+pub const TRAP_CAST_FAILURE: TrapCode =
+    TrapCode::unwrap_user(Trap::CastFailure as u8 + TRAP_OFFSET);
 
 /// Creates a new cranelift `Signature` with no wasm params/results for the
 /// given calling convention.
@@ -60,28 +99,13 @@ fn blank_sig(isa: &dyn TargetIsa, call_conv: CallConv) -> ir::Signature {
 /// This is intended to be used with things like `ValRaw` and the array calling
 /// convention.
 fn unbarriered_store_type_at_offset(
-    isa: &dyn TargetIsa,
     pos: &mut FuncCursor,
-    ty: WasmValType,
     flags: ir::MemFlags,
     base: ir::Value,
     offset: i32,
     value: ir::Value,
 ) {
-    let ir_ty = value_type(isa, ty);
-    if ir_ty.is_ref() {
-        let value = pos
-            .ins()
-            .bitcast(ir_ty.as_int(), ir::MemFlags::new(), value);
-        let truncated = match isa.pointer_bytes() {
-            4 => value,
-            8 => pos.ins().ireduce(ir::types::I32, value),
-            _ => unreachable!(),
-        };
-        pos.ins().store(flags, truncated, base, offset);
-    } else {
-        pos.ins().store(flags, value, base, offset);
-    }
+    pos.ins().store(flags, value, base, offset);
 }
 
 /// Emit code to do the following unbarriered memory read of the given type and
@@ -102,17 +126,7 @@ fn unbarriered_load_type_at_offset(
     offset: i32,
 ) -> ir::Value {
     let ir_ty = value_type(isa, ty);
-    if ir_ty.is_ref() {
-        let gc_ref = pos.ins().load(ir::types::I32, flags, base, offset);
-        let extended = match isa.pointer_bytes() {
-            4 => gc_ref,
-            8 => pos.ins().uextend(ir::types::I64, gc_ref),
-            _ => unreachable!(),
-        };
-        pos.ins().bitcast(ir_ty, ir::MemFlags::new(), extended)
-    } else {
-        pos.ins().load(ir_ty, flags, base, offset)
-    }
+    pos.ins().load(ir_ty, flags, base, offset)
 }
 
 /// Returns the corresponding cranelift type for the provided wasm type.
@@ -149,7 +163,34 @@ fn array_call_signature(isa: &dyn TargetIsa) -> ir::Signature {
     // of `ValRaw`.
     sig.params.push(ir::AbiParam::new(isa.pointer_type()));
     sig.params.push(ir::AbiParam::new(isa.pointer_type()));
+    // boolean return value of whether this function trapped
+    sig.returns.push(ir::AbiParam::new(ir::types::I8));
     sig
+}
+
+/// Get the internal Wasm calling convention for the target/tunables combo
+fn wasm_call_conv(isa: &dyn TargetIsa, tunables: &Tunables) -> CallConv {
+    // The default calling convention is `CallConv::Tail` to enable the use of
+    // tail calls in modules when needed. Note that this is used even if the
+    // tail call proposal is disabled in wasm. This is not interacted with on
+    // the host so it's purely an internal detail of wasm itself.
+    //
+    // The Winch calling convention is used instead when generating trampolines
+    // which call Winch-generated functions. The winch calling convention is
+    // only implemented for x64 and aarch64, so assert that here and panic on
+    // other architectures.
+    if tunables.winch_callable {
+        assert!(
+            matches!(
+                isa.triple().architecture,
+                Architecture::X86_64 | Architecture::Aarch64(_)
+            ),
+            "The Winch calling convention is only implemented for x86_64 and aarch64"
+        );
+        CallConv::Winch
+    } else {
+        CallConv::Tail
+    }
 }
 
 /// Get the internal Wasm calling convention signature for the given type.
@@ -158,58 +199,11 @@ fn wasm_call_signature(
     wasm_func_ty: &WasmFuncType,
     tunables: &Tunables,
 ) -> ir::Signature {
-    // NB: this calling convention in the near future is expected to be
-    // unconditionally switched to the "tail" calling convention once all
-    // platforms have support for tail calls.
-    //
-    // Also note that the calling convention for wasm functions is purely an
-    // internal implementation detail of cranelift and Wasmtime. Native Rust
-    // code does not interact with raw wasm functions and instead always
-    // operates through trampolines either using the `array_call_signature` or
-    // `native_call_signature` where the default platform ABI is used.
-    let call_conv = match isa.triple().architecture {
-        // If the tail calls proposal is enabled, we must use the tail calling
-        // convention. We don't use it by default yet because of
-        // https://github.com/bytecodealliance/wasmtime/issues/6759
-        arch if tunables.tail_callable => {
-            assert_ne!(
-                arch,
-                Architecture::S390x,
-                "https://github.com/bytecodealliance/wasmtime/issues/6530"
-            );
-
-            assert!(
-                !tunables.winch_callable,
-                "Winch doesn't support the WebAssembly tail call proposal",
-            );
-
-            CallConv::Tail
-        }
-
-        // The winch calling convention is only implemented for x64 and aarch64
-        arch if tunables.winch_callable => {
-            assert!(
-                matches!(arch, Architecture::X86_64 | Architecture::Aarch64(_)),
-                "The Winch calling convention is only implemented for x86_64 and aarch64"
-            );
-            CallConv::Winch
-        }
-
-        // On s390x the "wasmtime" calling convention is used to give vectors
-        // little-endian lane order at the ABI layer which should reduce the
-        // need for conversion when operating on vector function arguments. By
-        // default vectors on s390x are otherwise in big-endian lane order which
-        // would require conversions.
-        Architecture::S390x => CallConv::WasmtimeSystemV,
-
-        // All other platforms pick "fast" as the calling convention since it's
-        // presumably, well, the fastest.
-        _ => CallConv::Fast,
-    };
+    let call_conv = wasm_call_conv(isa, tunables);
     let mut sig = blank_sig(isa, call_conv);
     let cvt = |ty: &WasmValType| ir::AbiParam::new(value_type(isa, *ty));
     sig.params.extend(wasm_func_ty.params().iter().map(&cvt));
-    sig.returns.extend(wasm_func_ty.returns().iter().map(&cvt));
+    sig.returns.extend(wasm_func_ty.results().iter().map(&cvt));
     sig
 }
 
@@ -217,24 +211,15 @@ fn wasm_call_signature(
 fn reference_type(wasm_ht: WasmHeapType, pointer_type: ir::Type) -> ir::Type {
     match wasm_ht.top() {
         WasmHeapTopType::Func => pointer_type,
-        WasmHeapTopType::Any | WasmHeapTopType::Extern => match pointer_type {
-            ir::types::I32 => ir::types::R32,
-            ir::types::I64 => ir::types::R64,
-            _ => panic!("unsupported pointer type"),
-        },
+        WasmHeapTopType::Any | WasmHeapTopType::Extern | WasmHeapTopType::Exn => ir::types::I32,
+        WasmHeapTopType::Cont => {
+            // VMContObj is 2 * pointer_size (pointer + usize revision)
+            ir::Type::int((2 * pointer_type.bits()).try_into().unwrap()).unwrap()
+        }
     }
 }
 
 // List of namespaces which are processed in `mach_reloc_to_reloc` below.
-
-/// Namespace corresponding to wasm functions, the index is the index of the
-/// defined function that's being referenced.
-pub const NS_WASM_FUNC: u32 = 0;
-
-/// Namespace for builtin function trampolines. The index is the index of the
-/// builtin that's being referenced. These trampolines invoke the real host
-/// function through an indirect function call loaded by the `VMContext`.
-pub const NS_WASMTIME_BUILTIN: u32 = 1;
 
 /// A record of a relocation to perform.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,7 +227,7 @@ pub struct Relocation {
     /// The relocation code.
     pub reloc: binemit::Reloc,
     /// Relocation target.
-    pub reloc_target: RelocationTarget,
+    pub reloc_target: FuncKey,
     /// The offset where to apply the relocation.
     pub offset: binemit::CodeOffset,
     /// The addend to add to the relocation value.
@@ -268,47 +253,29 @@ fn to_flag_value(v: &settings::Value) -> FlagValue<'static> {
     }
 }
 
-/// A custom code with `TrapCode::User` which is used by always-trap shims which
-/// indicates that, as expected, the always-trapping function indeed did trap.
-/// This effectively provides a better error message as opposed to a bland
-/// "unreachable code reached"
-pub const ALWAYS_TRAP_CODE: u16 = 100;
-
-/// A custom code with `TrapCode::User` corresponding to being unable to reenter
-/// a component due to its reentrance limitations. This is used in component
-/// adapters to provide a more useful error message in such situations.
-pub const CANNOT_ENTER_CODE: u16 = 101;
-
 /// Converts machine traps to trap information.
 pub fn mach_trap_to_trap(trap: &MachTrap) -> Option<TrapInformation> {
     let &MachTrap { offset, code } = trap;
     Some(TrapInformation {
         code_offset: offset,
-        trap_code: match code {
-            ir::TrapCode::StackOverflow => Trap::StackOverflow,
-            ir::TrapCode::HeapOutOfBounds => Trap::MemoryOutOfBounds,
-            ir::TrapCode::HeapMisaligned => Trap::HeapMisaligned,
-            ir::TrapCode::TableOutOfBounds => Trap::TableOutOfBounds,
-            ir::TrapCode::IndirectCallToNull => Trap::IndirectCallToNull,
-            ir::TrapCode::BadSignature => Trap::BadSignature,
-            ir::TrapCode::IntegerOverflow => Trap::IntegerOverflow,
-            ir::TrapCode::IntegerDivisionByZero => Trap::IntegerDivisionByZero,
-            ir::TrapCode::BadConversionToInteger => Trap::BadConversionToInteger,
-            ir::TrapCode::UnreachableCodeReached => Trap::UnreachableCodeReached,
-            ir::TrapCode::Interrupt => Trap::Interrupt,
-            ir::TrapCode::User(ALWAYS_TRAP_CODE) => Trap::AlwaysTrapAdapter,
-            ir::TrapCode::User(CANNOT_ENTER_CODE) => Trap::CannotEnterComponent,
-            ir::TrapCode::NullReference => Trap::NullReference,
-            ir::TrapCode::NullI31Ref => Trap::NullI31Ref,
+        trap_code: clif_trap_to_env_trap(code)?,
+    })
+}
 
-            // These do not get converted to wasmtime traps, since they
-            // shouldn't ever be hit in theory. Instead of catching and handling
-            // these, we let the signal crash the process.
-            ir::TrapCode::User(DEBUG_ASSERT_TRAP_CODE) => return None,
+fn clif_trap_to_env_trap(trap: ir::TrapCode) -> Option<Trap> {
+    Some(match trap {
+        ir::TrapCode::STACK_OVERFLOW => Trap::StackOverflow,
+        ir::TrapCode::HEAP_OUT_OF_BOUNDS => Trap::MemoryOutOfBounds,
+        ir::TrapCode::INTEGER_OVERFLOW => Trap::IntegerOverflow,
+        ir::TrapCode::INTEGER_DIVISION_BY_ZERO => Trap::IntegerDivisionByZero,
+        ir::TrapCode::BAD_CONVERSION_TO_INTEGER => Trap::BadConversionToInteger,
 
-            // these should never be emitted by wasmtime-cranelift
-            ir::TrapCode::User(_) => unreachable!(),
-        },
+        // These do not get converted to wasmtime traps, since they
+        // shouldn't ever be hit in theory. Instead of catching and handling
+        // these, we let the signal crash the process.
+        TRAP_INTERNAL_ASSERT => return None,
+
+        other => Trap::from_u8(other.as_raw().get() - TRAP_OFFSET).unwrap(),
     })
 }
 
@@ -327,19 +294,14 @@ fn mach_reloc_to_reloc(
     let reloc_target = match *target {
         FinalizedRelocTarget::ExternalName(ExternalName::User(user_func_ref)) => {
             let name = &name_map[user_func_ref];
-            match name.namespace {
-                NS_WASM_FUNC => RelocationTarget::Wasm(FuncIndex::from_u32(name.index)),
-                NS_WASMTIME_BUILTIN => {
-                    RelocationTarget::Builtin(BuiltinFunctionIndex::from_u32(name.index))
-                }
-                _ => panic!("unknown namespace {}", name.namespace),
-            }
+            FuncKey::from_raw_parts(name.namespace, name.index)
         }
         FinalizedRelocTarget::ExternalName(ExternalName::LibCall(libcall)) => {
-            let libcall = libcall_cranelift_to_wasmtime(libcall);
-            RelocationTarget::HostLibcall(libcall)
+            // We should have avoided any code that needs this style of libcalls
+            // in the Wasm-to-Cranelift translator.
+            panic!("unexpected libcall {libcall:?}");
         }
-        _ => panic!("unrecognized external name"),
+        _ => panic!("unrecognized external name {target:?}"),
     };
     Relocation {
         reloc: kind,
@@ -349,45 +311,22 @@ fn mach_reloc_to_reloc(
     }
 }
 
-fn libcall_cranelift_to_wasmtime(call: ir::LibCall) -> wasmtime_environ::obj::LibCall {
-    use wasmtime_environ::obj::LibCall as LC;
-    match call {
-        ir::LibCall::FloorF32 => LC::FloorF32,
-        ir::LibCall::FloorF64 => LC::FloorF64,
-        ir::LibCall::NearestF32 => LC::NearestF32,
-        ir::LibCall::NearestF64 => LC::NearestF64,
-        ir::LibCall::CeilF32 => LC::CeilF32,
-        ir::LibCall::CeilF64 => LC::CeilF64,
-        ir::LibCall::TruncF32 => LC::TruncF32,
-        ir::LibCall::TruncF64 => LC::TruncF64,
-        ir::LibCall::FmaF32 => LC::FmaF32,
-        ir::LibCall::FmaF64 => LC::FmaF64,
-        ir::LibCall::X86Pshufb => LC::X86Pshufb,
-        _ => panic!("cranelift emitted a libcall wasmtime does not support: {call:?}"),
-    }
-}
-
 /// Helper structure for creating a `Signature` for all builtins.
 struct BuiltinFunctionSignatures {
     pointer_type: ir::Type,
 
-    #[cfg(feature = "gc")]
-    reference_type: ir::Type,
-
-    call_conv: CallConv,
+    host_call_conv: CallConv,
+    wasm_call_conv: CallConv,
+    argument_extension: ir::ArgumentExtension,
 }
 
 impl BuiltinFunctionSignatures {
-    fn new(isa: &dyn TargetIsa) -> Self {
+    fn new(compiler: &Compiler) -> Self {
         Self {
-            pointer_type: isa.pointer_type(),
-            #[cfg(feature = "gc")]
-            reference_type: match isa.pointer_type() {
-                ir::types::I32 => ir::types::R32,
-                ir::types::I64 => ir::types::R64,
-                _ => panic!(),
-            },
-            call_conv: CallConv::triple_default(isa.triple()),
+            pointer_type: compiler.isa().pointer_type(),
+            host_call_conv: CallConv::triple_default(compiler.isa().triple()),
+            wasm_call_conv: wasm_call_conv(compiler.isa(), compiler.tunables()),
+            argument_extension: compiler.isa().default_argument_extension(),
         }
     }
 
@@ -395,33 +334,52 @@ impl BuiltinFunctionSignatures {
         AbiParam::special(self.pointer_type, ArgumentPurpose::VMContext)
     }
 
-    #[cfg(feature = "gc")]
-    fn reference(&self) -> AbiParam {
-        AbiParam::new(self.reference_type)
-    }
-
     fn pointer(&self) -> AbiParam {
         AbiParam::new(self.pointer_type)
     }
 
-    fn i32(&self) -> AbiParam {
-        // Some platform ABIs require i32 values to be zero- or sign-
-        // extended to the full register width.  We need to indicate
-        // this here by using the appropriate .uext or .sext attribute.
-        // The attribute can be added unconditionally; platforms whose
-        // ABI does not require such extensions will simply ignore it.
-        // Note that currently all i32 arguments or return values used
-        // by builtin functions are unsigned, so we always use .uext.
-        // If that ever changes, we will have to add a second type
-        // marker here.
-        AbiParam::new(ir::types::I32).uext()
+    fn u32(&self) -> AbiParam {
+        AbiParam::new(ir::types::I32)
     }
 
-    fn i64(&self) -> AbiParam {
+    fn u64(&self) -> AbiParam {
         AbiParam::new(ir::types::I64)
     }
 
-    fn signature(&self, builtin: BuiltinFunctionIndex) -> Signature {
+    fn f32(&self) -> AbiParam {
+        AbiParam::new(ir::types::F32)
+    }
+
+    fn f64(&self) -> AbiParam {
+        AbiParam::new(ir::types::F64)
+    }
+
+    fn u8(&self) -> AbiParam {
+        AbiParam::new(ir::types::I8)
+    }
+
+    fn i8x16(&self) -> AbiParam {
+        AbiParam::new(ir::types::I8X16)
+    }
+
+    fn f32x4(&self) -> AbiParam {
+        AbiParam::new(ir::types::F32X4)
+    }
+
+    fn f64x2(&self) -> AbiParam {
+        AbiParam::new(ir::types::F64X2)
+    }
+
+    fn bool(&self) -> AbiParam {
+        AbiParam::new(ir::types::I8)
+    }
+
+    #[cfg(feature = "stack-switching")]
+    fn size(&self) -> AbiParam {
+        AbiParam::new(self.pointer_type)
+    }
+
+    fn wasm_signature(&self, builtin: BuiltinFunctionIndex) -> Signature {
         let mut _cur = 0;
         macro_rules! iter {
             (
@@ -436,7 +394,7 @@ impl BuiltinFunctionSignatures {
                         return Signature {
                             params: vec![ $( self.$param() ),* ],
                             returns: vec![ $( self.$result() )? ],
-                            call_conv: self.call_conv,
+                            call_conv: self.wasm_call_conv,
                         };
                     }
                     _cur += 1;
@@ -448,6 +406,22 @@ impl BuiltinFunctionSignatures {
 
         unreachable!();
     }
+
+    fn host_signature(&self, builtin: BuiltinFunctionIndex) -> Signature {
+        let mut sig = self.wasm_signature(builtin);
+        sig.call_conv = self.host_call_conv;
+
+        // Once we're declaring the signature of a host function we must
+        // respect the default ABI of the platform which is where argument
+        // extension of params/results may come into play.
+        for arg in sig.params.iter_mut().chain(sig.returns.iter_mut()) {
+            if arg.value_type.is_int() {
+                arg.extension = self.argument_extension;
+            }
+        }
+
+        sig
+    }
 }
 
 /// If this bit is set on a GC reference, then the GC reference is actually an
@@ -456,3 +430,19 @@ impl BuiltinFunctionSignatures {
 /// Must be kept in sync with
 /// `crate::runtime::vm::gc::VMGcRef::I31_REF_DISCRIMINANT`.
 const I31_REF_DISCRIMINANT: u32 = 1;
+
+/// Like `Option<T>` but specifically for passing information about transitions
+/// from reachable to unreachable state and the like from callees to callers.
+///
+/// Marked `must_use` to force callers to update
+/// `FuncTranslationStacks::reachable` as necessary.
+#[derive(PartialEq, Eq)]
+#[must_use]
+enum Reachability<T> {
+    /// The Wasm execution state is reachable, here is a `T`.
+    Reachable(T),
+    /// The Wasm execution state has been determined to be statically
+    /// unreachable. It is the receiver of this value's responsibility to update
+    /// `FuncTranslationStacks::reachable` as necessary.
+    Unreachable,
+}

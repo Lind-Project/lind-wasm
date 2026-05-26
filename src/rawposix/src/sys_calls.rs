@@ -1330,6 +1330,74 @@ pub extern "C" fn sched_yield_syscall(
     (unsafe { sched_yield() }) as i32
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/rt_sigsuspend.2.html
+///
+/// Atomically saves the current signal mask into `oldset`, replaces it with
+/// `set`, and suspends the cage until a signal arrives.  Always returns -1
+/// with errno EINTR.
+///
+/// Saving the old mask here (rather than in a separate sigprocmask call in
+/// glibc) removes the last wasm round-trip before the mask swap: the entire
+/// sequence — save old mask, install new mask, check pending signals, spin —
+/// happens inside a single host call with no epoch injection points in between.
+pub extern "C" fn sigsuspend_syscall(
+    cageid: u64,
+    set_arg: u64,
+    set_cageid: u64,
+    oldset_arg: u64,
+    oldset_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let set = sc_convert_sigset(set_arg, set_cageid, cageid);
+    let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sigsuspend_syscall"
+        );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let curr_sigset = cage.sigset.load(Relaxed);
+
+    if let Some(some_oldset) = oldset {
+        *some_oldset = curr_sigset;
+    }
+
+    if let Some(some_set) = set {
+        // Signals that transition from blocked to unblocked
+        let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+        {
+            let pending_signals = cage.pending_signals.read();
+            if pending_signals
+                .iter()
+                .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
+            {
+                cage::signal_epoch_trigger(cage.cageid);
+            }
+        }
+        cage.sigset.store(*some_set, Relaxed);
+    }
+
+    loop {
+        if signal_check_trigger(cageid) {
+            return syscall_error(Errno::EINTR, "sigsuspend", "interrupted by signal");
+        }
+        unsafe { sched_yield() };
+    }
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html
 ///
 /// This syscall allows a cage to set or retrieve the value of an interval timer.

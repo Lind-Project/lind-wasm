@@ -1,7 +1,7 @@
 //! Naming well-known routines in the runtime library.
 
 use crate::{
-    ir::{types, AbiParam, ExternalName, FuncRef, Function, Signature, Type},
+    ir::{AbiParam, ExternalName, FuncRef, Function, Signature, Type, types},
     isa::CallConv,
 };
 use core::fmt;
@@ -33,7 +33,7 @@ pub enum LibCall {
     FloorF64,
     /// trunc.f32
     TruncF32,
-    /// frunc.f64
+    /// trunc.f64
     TruncF64,
     /// nearest.f32
     NearestF32,

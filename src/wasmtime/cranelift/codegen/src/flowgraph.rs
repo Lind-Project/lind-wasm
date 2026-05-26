@@ -157,12 +157,12 @@ impl ControlFlowGraph {
     }
 
     /// Get an iterator over the CFG predecessors to `block`.
-    pub fn pred_iter(&self, block: Block) -> PredIter {
+    pub fn pred_iter(&self, block: Block) -> PredIter<'_> {
         PredIter(self.data[block].predecessors.iter(&self.pred_forest))
     }
 
     /// Get an iterator over the CFG successors to `block`.
-    pub fn succ_iter(&self, block: Block) -> SuccIter {
+    pub fn succ_iter(&self, block: Block) -> SuccIter<'_> {
         debug_assert!(self.is_valid());
         self.data[block].successors.iter(&self.succ_forest)
     }
@@ -197,7 +197,7 @@ pub type SuccIter<'a> = bforest::SetIter<'a, Block>;
 mod tests {
     use super::*;
     use crate::cursor::{Cursor, FuncCursor};
-    use crate::ir::{types, InstBuilder};
+    use crate::ir::{InstBuilder, types};
     use alloc::vec::Vec;
 
     #[test]
@@ -303,8 +303,8 @@ mod tests {
         func.dfg
             .replace(br_block0_block2_block1)
             .brif(cond, block1, &[], ret_block, &[]);
-        cfg.recompute_block(&mut func, block0);
-        cfg.recompute_block(&mut func, ret_block);
+        cfg.recompute_block(&func, block0);
+        cfg.recompute_block(&func, ret_block);
         let br_block0_block1_ret_block = br_block0_block2_block1;
 
         {

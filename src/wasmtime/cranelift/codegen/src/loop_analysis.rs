@@ -2,15 +2,15 @@
 //! and parent in the loop tree.
 
 use crate::dominator_tree::DominatorTree;
-use crate::entity::entity_impl;
 use crate::entity::SecondaryMap;
+use crate::entity::entity_impl;
 use crate::entity::{Keys, PrimaryMap};
-use crate::flowgraph::{BlockPredecessor, ControlFlowGraph};
-use crate::ir::{Block, Function, Layout};
+use crate::flowgraph::ControlFlowGraph;
+use crate::ir::{Block, Function};
 use crate::packed_option::PackedOption;
 use crate::timing;
 use alloc::vec::Vec;
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 
 /// A opaque reference to a code loop.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -62,13 +62,13 @@ impl LoopLevel {
     /// A clamped loop level from a larger-width (usize) depth.
     pub fn clamped(level: usize) -> Self {
         Self(
-            u8::try_from(std::cmp::min(level, (Self::INVALID as usize) - 1))
+            u8::try_from(core::cmp::min(level, (Self::INVALID as usize) - 1))
                 .expect("Clamped value must always convert"),
         )
     }
 }
 
-impl std::default::Default for LoopLevel {
+impl core::default::Default for LoopLevel {
     fn default() -> Self {
         LoopLevel::invalid()
     }
@@ -166,8 +166,8 @@ impl LoopAnalysis {
         self.loops.clear();
         self.block_loop_map.clear();
         self.block_loop_map.resize(func.dfg.num_blocks());
-        self.find_loop_headers(cfg, domtree, &func.layout);
-        self.discover_loop_blocks(cfg, domtree, &func.layout);
+        self.find_loop_headers(cfg, domtree);
+        self.discover_loop_blocks(cfg, domtree);
         self.assign_loop_levels();
         self.valid = true;
     }
@@ -190,55 +190,44 @@ impl LoopAnalysis {
         self.valid = false;
     }
 
+    // Determines if a block dominates any predecessor
+    // and thus is a loop header.
+    fn is_block_loop_header(block: Block, cfg: &ControlFlowGraph, domtree: &DominatorTree) -> bool {
+        // A block is a loop header if it dominates any of its predecessors.
+        cfg.pred_iter(block)
+            .any(|pred| domtree.block_dominates(block, pred.block))
+    }
+
     // Traverses the CFG in reverse postorder and create a loop object for every block having a
     // back edge.
-    fn find_loop_headers(
-        &mut self,
-        cfg: &ControlFlowGraph,
-        domtree: &DominatorTree,
-        layout: &Layout,
-    ) {
-        // We traverse the CFG in reverse postorder
-        for &block in domtree.cfg_postorder().iter().rev() {
-            for BlockPredecessor {
-                inst: pred_inst, ..
-            } in cfg.pred_iter(block)
-            {
-                // If the block dominates one of its predecessors it is a back edge
-                if domtree.dominates(block, pred_inst, layout) {
-                    // This block is a loop header, so we create its associated loop
-                    let lp = self.loops.push(LoopData::new(block, None));
-                    self.block_loop_map[block] = lp.into();
-                    break;
-                    // We break because we only need one back edge to identify a loop header.
-                }
-            }
+    fn find_loop_headers(&mut self, cfg: &ControlFlowGraph, domtree: &DominatorTree) {
+        for &block in domtree
+            .cfg_rpo()
+            .filter(|&&block| Self::is_block_loop_header(block, cfg, domtree))
+        {
+            // This block is a loop header, so we create its associated loop
+            let lp = self.loops.push(LoopData::new(block, None));
+            self.block_loop_map[block] = lp.into();
         }
     }
 
     // Intended to be called after `find_loop_headers`. For each detected loop header,
     // discovers all the block belonging to the loop and its inner loops. After a call to this
     // function, the loop tree is fully constructed.
-    fn discover_loop_blocks(
-        &mut self,
-        cfg: &ControlFlowGraph,
-        domtree: &DominatorTree,
-        layout: &Layout,
-    ) {
+    fn discover_loop_blocks(&mut self, cfg: &ControlFlowGraph, domtree: &DominatorTree) {
         let mut stack: Vec<Block> = Vec::new();
         // We handle each loop header in reverse order, corresponding to a pseudo postorder
         // traversal of the graph.
         for lp in self.loops().rev() {
-            for BlockPredecessor {
-                block: pred,
-                inst: pred_inst,
-            } in cfg.pred_iter(self.loops[lp].header)
-            {
-                // We follow the back edges
-                if domtree.dominates(self.loops[lp].header, pred_inst, layout) {
-                    stack.push(pred);
-                }
-            }
+            // Push all predecessors of this header that it dominates onto the stack.
+            stack.extend(
+                cfg.pred_iter(self.loops[lp].header)
+                    .filter(|pred| {
+                        // We follow the back edges
+                        domtree.block_dominates(self.loops[lp].header, pred.block)
+                    })
+                    .map(|pred| pred.block),
+            );
             while let Some(node) = stack.pop() {
                 let continue_dfs: Option<Block>;
                 match self.block_loop_map[node].expand() {
@@ -283,16 +272,14 @@ impl LoopAnalysis {
                 // Now we have handled the popped node and need to continue the DFS by adding the
                 // predecessors of that node
                 if let Some(continue_dfs) = continue_dfs {
-                    for BlockPredecessor { block: pred, .. } in cfg.pred_iter(continue_dfs) {
-                        stack.push(pred)
-                    }
+                    stack.extend(cfg.pred_iter(continue_dfs).map(|pred| pred.block));
                 }
             }
         }
     }
 
     fn assign_loop_levels(&mut self) {
-        let mut stack: SmallVec<[Loop; 8]> = smallvec![];
+        let mut stack: SmallVec<[Loop; 8]> = SmallVec::new();
         for lp in self.loops.keys() {
             if self.loops[lp].level == LoopLevel::invalid() {
                 stack.push(lp);
@@ -319,7 +306,7 @@ mod tests {
     use crate::cursor::{Cursor, FuncCursor};
     use crate::dominator_tree::DominatorTree;
     use crate::flowgraph::ControlFlowGraph;
-    use crate::ir::{types, Function, InstBuilder};
+    use crate::ir::{Function, InstBuilder, types};
     use crate::loop_analysis::{Loop, LoopAnalysis};
     use alloc::vec::Vec;
 
