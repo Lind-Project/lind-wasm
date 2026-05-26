@@ -2023,10 +2023,9 @@ pub extern "C" fn sendto_syscall(
 
     match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
         Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-            let _ = flag;
             let _ = finalsockaddr;
             let _ = addrlen;
-            return inmem_ipc::sendto(entry, buf as *const c_void, buflen);
+            return inmem_ipc::sendto(entry, buf as *const c_void, buflen, flag);
         }
         _ => {}
     }
@@ -2091,8 +2090,7 @@ pub extern "C" fn recvfrom_syscall(
 
     match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
         Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
-            let _ = flag;
-            return inmem_ipc::recvfrom(entry, buf as *mut c_void, buflen);
+            return inmem_ipc::recvfrom(entry, buf as *mut c_void, buflen, flag);
         }
         _ => {}
     }

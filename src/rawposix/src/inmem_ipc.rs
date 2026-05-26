@@ -319,11 +319,18 @@ fn get_endpoint(endpoint_id: u64) -> Result<Arc<PipeEndpoint>, i32> {
         .ok_or_else(|| syscall_error(Errno::EBADF, "inmem_pipe", "bad pipe"))
 }
 
-pub fn read(fdentry: FDTableEntry, dst: *mut u8, count: usize) -> i32 {
+fn read_with_mode(
+    fdentry: FDTableEntry,
+    dst: *mut u8,
+    count: usize,
+    force_nonblocking: bool,
+) -> i32 {
+    let nonblocking = force_nonblocking || fd_is_nonblocking(fdentry);
+
     match fdentry.fdkind {
         FDKIND_IMPIPE => match get_endpoint(fdentry.underfd) {
             Ok(endpoint) if endpoint.side == PipeSide::Read => {
-                endpoint.queue.read(dst, count, fd_is_nonblocking(fdentry))
+                endpoint.queue.read(dst, count, nonblocking)
             }
             Ok(_) => syscall_error(Errno::EBADF, "read", "pipe is not readable"),
             Err(e) => e,
@@ -333,7 +340,7 @@ pub fn read(fdentry: FDTableEntry, dst: *mut u8, count: usize) -> i32 {
                 if socket.state.lock().unwrap().read_shutdown {
                     return 0;
                 }
-                socket.incoming.read(dst, count, fd_is_nonblocking(fdentry))
+                socket.incoming.read(dst, count, nonblocking)
             }
             Err(e) => e,
         },
@@ -341,11 +348,22 @@ pub fn read(fdentry: FDTableEntry, dst: *mut u8, count: usize) -> i32 {
     }
 }
 
-pub fn write(fdentry: FDTableEntry, src: *const u8, count: usize) -> i32 {
+pub fn read(fdentry: FDTableEntry, dst: *mut u8, count: usize) -> i32 {
+    read_with_mode(fdentry, dst, count, false)
+}
+
+fn write_with_mode(
+    fdentry: FDTableEntry,
+    src: *const u8,
+    count: usize,
+    force_nonblocking: bool,
+) -> i32 {
+    let nonblocking = force_nonblocking || fd_is_nonblocking(fdentry);
+
     match fdentry.fdkind {
         FDKIND_IMPIPE => match get_endpoint(fdentry.underfd) {
             Ok(endpoint) if endpoint.side == PipeSide::Write => {
-                endpoint.queue.write(src, count, fd_is_nonblocking(fdentry))
+                endpoint.queue.write(src, count, nonblocking)
             }
             Ok(_) => syscall_error(Errno::EBADF, "write", "pipe is not writable"),
             Err(e) => e,
@@ -363,12 +381,9 @@ pub fn write(fdentry: FDTableEntry, src: *const u8, count: usize) -> i32 {
                     )
                 };
                 match peer {
-                    Some(peer) => peer.incoming.write_with_limit(
-                        src,
-                        count,
-                        fd_is_nonblocking(fdentry),
-                        sndbuf,
-                    ),
+                    Some(peer) => peer
+                        .incoming
+                        .write_with_limit(src, count, nonblocking, sndbuf),
                     None => syscall_error(Errno::EPIPE, "write", "socket peer closed"),
                 }
             }
@@ -376,6 +391,10 @@ pub fn write(fdentry: FDTableEntry, src: *const u8, count: usize) -> i32 {
         },
         _ => syscall_error(Errno::EBADF, "write", "unsupported in-memory fd"),
     }
+}
+
+pub fn write(fdentry: FDTableEntry, src: *const u8, count: usize) -> i32 {
+    write_with_mode(fdentry, src, count, false)
 }
 
 pub fn close_fd(fdentry: FDTableEntry, _count: u64) -> Result<(), i32> {
@@ -613,12 +632,14 @@ pub fn is_supported_socket(domain: i32, socktype: i32, protocol: i32) -> bool {
         && (protocol == 0 || protocol == libc::IPPROTO_TCP)
 }
 
-pub fn sendto(fdentry: FDTableEntry, buf: *const c_void, buflen: usize) -> i32 {
-    write(fdentry, buf as *const u8, buflen)
+pub fn sendto(fdentry: FDTableEntry, buf: *const c_void, buflen: usize, flags: i32) -> i32 {
+    let force_nonblocking = (flags & libc::MSG_DONTWAIT) != 0;
+    write_with_mode(fdentry, buf as *const u8, buflen, force_nonblocking)
 }
 
-pub fn recvfrom(fdentry: FDTableEntry, buf: *mut c_void, buflen: usize) -> i32 {
-    read(fdentry, buf as *mut u8, buflen)
+pub fn recvfrom(fdentry: FDTableEntry, buf: *mut c_void, buflen: usize, flags: i32) -> i32 {
+    let force_nonblocking = (flags & libc::MSG_DONTWAIT) != 0;
+    read_with_mode(fdentry, buf as *mut u8, buflen, force_nonblocking)
 }
 
 pub fn getsockname(socket_id: u64) -> Result<(sockaddr_storage, socklen_t), i32> {
