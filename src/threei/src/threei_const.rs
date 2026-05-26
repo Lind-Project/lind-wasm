@@ -50,3 +50,15 @@ pub const COPY_DATA_BETWEEN_CAGES_SYSCALL: u64 = 1002;
 /// TODO: When introducing a Rust-side unified syscall number table
 /// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const COPY_HANDLER_TABLE_TO_CAGE_SYSCALL: u64 = 1003;
+/// 3i-specific syscall number for `register_lib_handler`.
+///
+/// Match the definition in `glibc/lind_syscall_num.h`.
+pub const REGISTER_LIB_HANDLER_SYSCALL: u64 = 1004;
+/// Base value for library-level fake syscall numbers.
+///
+/// Library-level 3i uses fake syscall numbers in the range
+/// [LIBCALL_BASE, LIBCALL_BASE + N) to store per-symbol handlers in
+/// HANDLERTABLE, reusing the existing syscall dispatch machinery.
+/// These numbers must not overlap with real Linux syscall numbers or
+/// the 3i meta-operation range (1001-1003).
+pub const LIBCALL_BASE: u64 = 2000;

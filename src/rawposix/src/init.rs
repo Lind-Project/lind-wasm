@@ -14,9 +14,9 @@ use sysdefs::constants::{
     STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
 };
 use threei::{
-    copy_data_between_cages, copy_handler_table_to_cage, register_handler,
+    copy_data_between_cages, copy_handler_table_to_cage, register_handler, register_lib_handler,
     COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, REGISTER_HANDLER_SYSCALL,
-    RUNTIME_TYPE_WASMTIME,
+    REGISTER_LIB_HANDLER_SYSCALL, RUNTIME_TYPE_WASMTIME,
 };
 
 /// Function signature for a RawPOSIX syscall handler.
@@ -170,11 +170,30 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
         UNUSED_ID,
     );
 
-    // Check registration results and panic if either fails
-    if register_ret != 0 || copy_data_ret != 0 || copy_handler_table_ret != 0 {
+    // Register `register_lib_handler` syscall for this cage
+    let fp_register_lib = register_lib_handler as *const () as usize as u64;
+    let register_lib_ret = register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID,
+        self_cageid,
+        REGISTER_LIB_HANDLER_SYSCALL,
+        RUNTIME_TYPE_WASMTIME,
+        THREEI_CAGEID,
+        fp_register_lib,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    // Check registration results and panic if any fail
+    if register_ret != 0 || copy_data_ret != 0 || copy_handler_table_ret != 0 || register_lib_ret != 0 {
         panic!(
-            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_data_ret {}, copy_handler_table_ret {}",
-            register_ret, copy_data_ret, copy_handler_table_ret
+            "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_data_ret {}, copy_handler_table_ret {}, register_lib_ret {}",
+            register_ret, copy_data_ret, copy_handler_table_ret, register_lib_ret
         );
     }
     0

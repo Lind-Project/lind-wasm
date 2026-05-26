@@ -981,3 +981,101 @@ pub fn copy_data_between_cages(
     // Return destination address as success indicator
     destaddr
 }
+
+/***************************** register_lib_handler *****************************/
+
+/// Register a library-level 3i handler for a specific (lib_name, symbol_name) in target_cage.
+///
+/// This stores the (lib_name, symbol_name) -> call_id mapping in LIB_SYMBOL_TABLE so
+/// instance_dylink can install portal stubs, and registers the handler function in
+/// HANDLERTABLE under call_id so the existing make_syscall dispatch path routes the
+/// portal call to the grate handler.
+///
+/// Arguments (following the make_syscall/GrateTrampolineFn convention):
+///   _self_cageid, _target_cageid: injected by make_syscall dispatch, unused here
+///   arg1 = target_cage_id  — cage whose library calls are being intercepted
+///   arg2 = lib_name_ptr    — host pointer to null-terminated library name string
+///   arg3 = symbol_name_ptr — host pointer to null-terminated symbol name string
+///   arg4 = call_id         — fake syscall number (must be >= LIBCALL_BASE)
+///   arg5 = handler_cage_id — grate cage that will handle the call
+///   arg6 = handler_fn_ptr  — function pointer in the handler cage
+///
+/// All values are passed in the arg-value slots (not the cageid slots) with NOTUSED
+/// cageids so TRANSLATE_ARG_TO_HOST leaves them unchanged.
+pub fn register_lib_handler(
+    _self_cageid: u64,
+    _target_cageid: u64,
+    target_cage_id: u64,
+    _arg1cage: u64,
+    lib_name_ptr: u64,
+    _arg2cage: u64,
+    symbol_name_ptr: u64,
+    _arg3cage: u64,
+    call_id: u64,
+    _arg4cage: u64,
+    handler_cage_id: u64,
+    _arg5cage: u64,
+    handler_fn_ptr: u64,
+    _arg6cage: u64,
+) -> i32 {
+    if lib_name_ptr == 0 || symbol_name_ptr == 0 {
+        eprintln!("[3i|register_lib_handler] null string pointer");
+        return -1;
+    }
+    if call_id < threei_const::LIBCALL_BASE {
+        eprintln!(
+            "[3i|register_lib_handler] call_id {} is below LIBCALL_BASE {}",
+            call_id,
+            threei_const::LIBCALL_BASE
+        );
+        return -1;
+    }
+
+    let lib_name = unsafe {
+        match std::ffi::CStr::from_ptr(lib_name_ptr as *const i8).to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                eprintln!("[3i|register_lib_handler] invalid lib_name UTF-8");
+                return -1;
+            }
+        }
+    };
+    let symbol_name = unsafe {
+        match std::ffi::CStr::from_ptr(symbol_name_ptr as *const i8).to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                eprintln!("[3i|register_lib_handler] invalid symbol_name UTF-8");
+                return -1;
+            }
+        }
+    };
+
+    // Store symbol -> call_id mapping for instance_dylink to find at link time
+    crate::lib_symbol_table::register_lib_symbol(
+        target_cage_id,
+        &lib_name,
+        &symbol_name,
+        call_id,
+    );
+
+    // Register in HANDLERTABLE so make_syscall can dispatch the portal call
+    let ret = register_handler_impl(
+        target_cage_id,
+        call_id,
+        handler_cage_id,
+        handler_fn_ptr,
+    );
+    if ret != 0 {
+        eprintln!(
+            "[3i|register_lib_handler] register_handler_impl failed: {}",
+            ret
+        );
+        return -1;
+    }
+
+    eprintln!(
+        "[3i|register_lib_handler] cage={} lib={} sym={} call_id={} handler_cage={} fn={:#x}",
+        target_cage_id, lib_name, symbol_name, call_id, handler_cage_id, handler_fn_ptr
+    );
+    0
+}

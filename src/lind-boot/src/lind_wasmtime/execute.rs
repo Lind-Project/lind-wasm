@@ -333,6 +333,8 @@ pub fn execute_with_lind(
         // Resolve any remaining unknown imports to trap stubs so the library can
         // instantiate even when it has optional/unused imports.
         let mut linker_guard = linker.lock().unwrap();
+        // Install lib-3i portal stubs for symbols the cage has registered handlers for.
+        let _ = linker_guard.define_lib_interpose_stubs(&module, cageid as u64);
         linker_guard.define_unknown_imports_as_traps(&module);
 
         drop(linker_guard);

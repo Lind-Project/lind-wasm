@@ -1,5 +1,6 @@
 #include <errno.h>
-#include <stdint.h> // For uint64_t definition
+#include <stdint.h>
+#include <unistd.h>
 #include "addr_translation.h"
 #include "lind_syscall_num.h"
 #include "lind_constants.h"
@@ -141,6 +142,35 @@ int register_handler (int64_t targetcage,
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+
+// 3i function call to register a library-level handler for a symbol in target_cage.
+// target_cage: the cage whose library calls are being intercepted
+// lib_name: name of the library (e.g., "libtoy.so")
+// symbol_name: name of the function symbol (e.g., "toy_add")
+// call_id: fake syscall number >= LIBCALL_BASE assigned to this symbol
+// handler_cage: cage ID of the grate that will handle the call
+// handler_fn: function pointer in the handler cage
+int register_lib_handler(uint64_t target_cage,
+    const char *lib_name,
+    const char *symbol_name,
+    uint64_t call_id,
+    uint64_t handler_cage,
+    uint64_t handler_fn)
+{
+    return make_threei_call(
+        REGISTER_LIB_HANDLER_SYSCALL,
+        NOTUSED,
+        (uint64_t)getpid(), // self_cageid
+        (uint64_t)getpid(), // target_cageid
+        target_cage, NOTUSED,
+        (uint64_t)TRANSLATE_GUEST_POINTER_TO_HOST(lib_name), NOTUSED,
+        (uint64_t)TRANSLATE_GUEST_POINTER_TO_HOST(symbol_name), NOTUSED,
+        call_id, NOTUSED,
+        handler_cage, NOTUSED,
+        handler_fn, NOTUSED,
+        TRANSLATE_ERRNO_OFF
+    );
+}
 
 // 3i function call to copy data between cages
 // thiscage: the cage id of the caller cage

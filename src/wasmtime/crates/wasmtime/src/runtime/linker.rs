@@ -7,6 +7,7 @@ use crate::{
     GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result, SharedMemory,
     StoreContextMut, Table, Val, ValRaw, ValType, prelude::*,
 };
+use threei::make_syscall;
 use alloc::sync::Arc;
 use cage::DashMap;
 use core::fmt::{self, Debug};
@@ -357,6 +358,69 @@ impl<T> Linker<T> {
                     })?;
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// Install library-level 3i portal stubs for unresolved imports that have a
+    /// registered handler in the LIB_SYMBOL_TABLE for `cage_id`.
+    ///
+    /// Called before `define_unknown_imports_as_traps` so that interposed symbols
+    /// get a real portal closure rather than a trap stub.
+    pub fn define_lib_interpose_stubs(&mut self, module: &Module, cage_id: u64) -> Result<()>
+    where
+        T: 'static,
+    {
+        for import in module.imports() {
+            // Only act on unresolved function imports.
+            if self._get_by_import(&import).is_ok() {
+                continue;
+            }
+            let ExternType::Func(func_ty) = import.ty() else {
+                continue;
+            };
+            let call_id = match threei::get_lib_call_id(cage_id, import.module(), import.name()) {
+                Some(id) => id,
+                None => continue,
+            };
+            let func_ty_portal = func_ty.clone();
+            let name_for_err = import.name().to_string();
+            self.func_new(
+                import.module(),
+                import.name(),
+                func_ty,
+                move |_caller, params, results| {
+                    let mut raw = [0u64; 6];
+                    for (i, v) in params.iter().enumerate().take(6) {
+                        raw[i] = match v {
+                            Val::I32(x) => *x as u32 as u64,
+                            Val::I64(x) => *x as u64,
+                            Val::F32(b) => *b as u64,
+                            Val::F64(b) => *b,
+                            _ => 0,
+                        };
+                    }
+                    let ret = make_syscall(
+                        cage_id, call_id, 0, cage_id,
+                        raw[0], 0, raw[1], 0, raw[2], 0,
+                        raw[3], 0, raw[4], 0, raw[5], 0,
+                    );
+                    for (slot, ty) in results.iter_mut().zip(func_ty_portal.results()) {
+                        *slot = match ty {
+                            ValType::I32 => Val::I32(ret),
+                            ValType::I64 => Val::I64(ret as i64),
+                            ValType::F32 => Val::F32(ret as u32),
+                            ValType::F64 => Val::F64(ret as u64),
+                            other => {
+                                return Err(format_err!(
+                                    "lib-3i portal: unsupported return type {other} for {name_for_err}"
+                                ));
+                            }
+                        };
+                    }
+                    Ok(())
+                },
+            )?;
         }
         Ok(())
     }
@@ -1019,6 +1083,61 @@ impl<T> Linker<T> {
         for (key, export, name) in exports {
             let export = match export {
                 Extern::Func(original_func) => {
+                    // Library-level 3i: if a handler has been registered for this
+                    // (cage_id, module_name, symbol) via register_lib_handler, install a
+                    // portal stub that dispatches through make_syscall using the fake call_id.
+                    if let Some(cid) = cage_id {
+                        if let Some(call_id) =
+                            threei::get_lib_call_id(cid, module_name, &name)
+                        {
+                            let func_ty = original_func.ty(&store);
+                            let func_ty_for_portal = func_ty.clone();
+                            let portal = Func::new(
+                                &mut store,
+                                func_ty,
+                                move |_caller, params, results| {
+                                    // Extract up to 6 args as raw u64 values.
+                                    // WASM i32 args are zero-extended; i64 pass directly.
+                                    let mut raw = [0u64; 6];
+                                    for (i, v) in params.iter().enumerate().take(6) {
+                                        raw[i] = match v {
+                                            Val::I32(x) => *x as u32 as u64,
+                                            Val::I64(x) => *x as u64,
+                                            Val::F32(b) => *b as u64,
+                                            Val::F64(b) => *b,
+                                            _ => 0,
+                                        };
+                                    }
+                                    let ret = make_syscall(
+                                        cid, call_id, 0, cid,
+                                        raw[0], 0, raw[1], 0, raw[2], 0,
+                                        raw[3], 0, raw[4], 0, raw[5], 0,
+                                    );
+                                    // Pack the i32 result back into the expected return type.
+                                    for (slot, ty) in results
+                                        .iter_mut()
+                                        .zip(func_ty_for_portal.results())
+                                    {
+                                        *slot = match ty {
+                                            ValType::I32 => Val::I32(ret),
+                                            ValType::I64 => Val::I64(ret as i64),
+                                            ValType::F32 => Val::F32(ret as u32),
+                                            ValType::F64 => Val::F64(ret as u64),
+                                            other => {
+                                                return Err(format_err!(
+                                                    "lib-3i portal: unsupported return type {other} for {name}"
+                                                ));
+                                            }
+                                        };
+                                    }
+                                    Ok(())
+                                },
+                            );
+                            self.insert(key, Definition::new(store.0, Extern::Func(portal)))?;
+                            continue;
+                        }
+                    }
+
                     // Decide at link time whether to install an RPC wrapper or link directly.
                     // The routing config is static (OnceLock), so this decision is stable for
                     // the lifetime of the linker and need not be re-evaluated on every call.

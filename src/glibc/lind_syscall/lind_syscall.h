@@ -49,4 +49,12 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage,
     uint64_t len, uint64_t copytype);
 
 int copy_handler_table_to_cage(uint64_t srccage, uint64_t targetcage);
+
+int register_lib_handler(uint64_t target_cage,
+    const char *lib_name,
+    const char *symbol_name,
+    uint64_t call_id,
+    uint64_t handler_cage,
+    uint64_t handler_fn);
+
 #endif // _LIND_SYSCALL_H
