@@ -520,6 +520,18 @@ fn attach_api(
     let all_modules: Vec<Module> = modules.iter().map(|(_, _, m)| m.clone()).collect();
     attach_shared_memory(&mut *wstore, &mut linker_guard, &all_modules, true, cageid)?;
 
+    // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp.
+    // libc.so (wasm_eh_setjmp.o) and user programs both import "env"."__c_longjmp";
+    // the host must supply one shared tag object so throw/catch identity matches.
+    #[cfg(not(feature = "asyncify-setjmp"))]
+    {
+        use wasmtime::{FuncType, Tag, TagType};
+        let engine = wstore.engine().clone();
+        let tag_type = TagType::new(FuncType::new(&engine, [ValType::I32], []));
+        let tag = Tag::new(&mut *wstore, &tag_type)?;
+        linker_guard.define(&*wstore, "env", "__c_longjmp", tag)?;
+    }
+
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
         modules.clone(),
@@ -955,6 +967,10 @@ fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Confi
     wt_config.fpcast_enabled(enable_fpcast);
     wt_config.wasm_threads(true);
     wt_config.shared_memory(true);
+    // wasm-opt --translate-to-exnref converts clang 18's legacy EH to the standard proposal.
+    // The standard EXCEPTIONS proposal is supported by Cranelift; the legacy proposal is not.
+    #[cfg(not(feature = "asyncify-setjmp"))]
+    wt_config.wasm_exceptions(true);
 
     let details = if backtrace {
         WasmBacktraceDetails::Enable

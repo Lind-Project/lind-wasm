@@ -187,9 +187,11 @@ impl Mmap<AlignedLength> {
             self.len_aligned()
         );
 
-        // lind-wasm: mmap prot is managed by rawposix
-        // so we are skipping wasmtime's sys mmap here
-        Ok(())
+        unsafe {
+            self.sys
+                .make_accessible(start, len)
+                .context("failed to make memory accessible")
+        }
     }
 }
 

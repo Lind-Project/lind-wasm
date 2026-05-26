@@ -893,7 +893,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let next_tid = match self.next_thread_id() {
             Some(val) => val,
             None => {
-                println!("running out of thread id!");
+                eprintln!("running out of thread id!");
                 0
             }
         };
@@ -2425,6 +2425,21 @@ pub fn attach_shared_memory<
 
     if need_init {
         let memory_base = mem.get_memory_base();
+
+        // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
+        // before handing it to rawposix. rawposix vmmap is solely responsible
+        // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses
+        // them. early_init_stack (dylink) and the make_syscall in
+        // new_started_impl_with_lind re-establish the required initial regions
+        // before any wasm code runs.
+        unsafe {
+            libc::mprotect(
+                memory_base as *mut libc::c_void,
+                1usize << 32,
+                libc::PROT_NONE,
+            );
+        }
+
         cage::init_vmmap(cageid as u64, memory_base as usize, None);
     }
     linker.define(&store, import_module_name, import_name, mem.clone())?;
