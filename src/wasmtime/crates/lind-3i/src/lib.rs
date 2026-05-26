@@ -586,7 +586,7 @@ impl<T: 'static> GrateWorker<T> {
                 )
             })?;
 
-        let func = match table.get(&mut self.store, req.handler_addr as u32) {
+        let func = match table.get(&mut self.store, req.handler_addr) {
             Some(Ref::Func(Some(f))) => f,
             _ => anyhow::bail!(
                 "no function at table index {} in worker {}",
@@ -613,11 +613,7 @@ impl<T: 'static> GrateWorker<T> {
         let mut results = [Val::I32(0)];
         func.call(&mut self.store, &args, &mut results)
             .map_err(|e| {
-                anyhow::anyhow!(
-                    "handler call trapped in worker {}: {:#}",
-                    self.worker_id,
-                    e
-                )
+                anyhow::anyhow!("handler call trapped in worker {}: {:#}", self.worker_id, e)
             })?;
 
         let ret = results[0].unwrap_i32();
@@ -661,7 +657,7 @@ where
 
     let (instance, _, _) = linker
         .instantiate_with_lind_thread(&mut store, &template.module, false)
-        .context("failed to instantiate grate module")?;
+        .map_err(|e| anyhow::anyhow!("failed to instantiate grate module: {}", e))?;
 
     let stack_base = worker_stack_base(cageid, worker_id);
     let stack_top = worker_stack_top(cageid, worker_id);
