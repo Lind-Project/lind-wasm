@@ -1,5 +1,5 @@
 use sysdefs::constants::{SIG_DFL, SIG_IGN};
-use sysdefs::lind_log;
+use sysdefs::{lind_debug_panic, lind_log};
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, ThrownException};
 
 use crate::LindHost;
@@ -161,7 +161,8 @@ pub fn signal_handler<
                     continue;
                 }
                 sysdefs::constants::SignalDefaultHandler::NONEXIST => {
-                    panic!("signal_handler: NONEXIST signal received!");
+                    lind_debug_panic!("signal_handler: NONEXIST signal received!");
+                    continue;
                 }
             }
         } else if signal_handler == SIG_IGN as u32 {

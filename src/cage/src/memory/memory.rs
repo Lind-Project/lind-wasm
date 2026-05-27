@@ -9,7 +9,7 @@ use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
-use sysdefs::lind_debug_panic;
+use sysdefs::{lind_debug_panic, lind_log};
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -137,11 +137,17 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 };
                 let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
                 if ret < 0 {
-                    panic!(
-                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={})",
+                    lind_log!(
+                        Default,
+                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={}), falling back to copy_nonoverlapping",
                         get_errno(),
                         parent_st,
                         child_st,
+                        addr_len,
+                    );
+                    std::ptr::copy_nonoverlapping(
+                        parent_st as *const u8,
+                        child_st as *mut u8,
                         addr_len,
                     );
                 }
