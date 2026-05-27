@@ -17,7 +17,7 @@ use sysdefs::constants::lind_platform_const::{
 };
 use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
     AsContext, AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module,
@@ -492,7 +492,7 @@ fn attach_api(
                     let got_table = lind_ctx.got_table.clone().unwrap();
 
                     if lind_ctx.had_threads() {
-                        lind_debug_panic("dlopen within threads is currently not supported!");
+                        lind_debug_panic!("dlopen within threads is currently not supported!");
                     }
 
                     load_library_module(caller, linker, got_table, cageid, library_name, mode)

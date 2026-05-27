@@ -24,3 +24,4 @@ typemap = { path = "../typemap" }
 
 [features]
 debug-dylink = []
+lind-logging = ["sysdefs/lind-logging"]

@@ -9,7 +9,7 @@ use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -56,10 +56,8 @@ pub fn is_mmap_error(ret: usize) -> bool {
     }
 
     // Unaligned but not in errno range - this should never happen
-    lind_debug_panic(&format!(
-        "mmap returned unaligned address outside errno range: 0x{:x}",
-        ret
-    ));
+    lind_debug_panic!("mmap returned unaligned address outside errno range: 0x{:x}", ret);
+    true // treat as error in LogOnly/NoAction mode
 }
 
 /// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.

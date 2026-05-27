@@ -17,7 +17,7 @@ use sysdefs::constants::fs_const::{
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
@@ -861,14 +861,11 @@ pub extern "C" fn mmap_syscall(
         | MAP_ANONYMOUS as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic(&format!(
-            "mmap: unsupported flags {:#x} (allowed: {:#x})",
-            flags, allowed_flags
-        ));
+        lind_debug_panic!("mmap: unsupported flags {:#x} (allowed: {:#x})", flags, allowed_flags);
     }
 
     if prot & PROT_EXEC > 0 {
-        lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
+        lind_debug_panic!("mmap protection flag PROT_EXEC is not allowed in Lind");
     }
 
     // check if the provided address is multiple of pages
@@ -1137,10 +1134,10 @@ pub extern "C" fn munmap_syscall(
             ) as usize
         };
         if result != act_start_addr {
-            lind_debug_panic(&format!(
+            lind_debug_panic!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
                 result as *const c_void, act_start_addr as *const c_void
-            ));
+            );
         }
         if result as isize == -1 {
             let errno = get_errno();
@@ -4559,7 +4556,7 @@ pub extern "C" fn ioctl_syscall(
     // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, FIONREAD, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
     if req != FIONBIO && req != FIOASYNC && req != FIONREAD && req != TIOCGWINSZ {
-        lind_debug_panic("Lind unsupported ioctl request");
+        lind_debug_panic!("Lind unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -4729,7 +4726,7 @@ pub extern "C" fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        lind_debug_panic("shmget key IPC_PRIVATE is not allowed in Lind");
+        lind_debug_panic!("shmget key IPC_PRIVATE is not allowed in Lind");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;

@@ -29,7 +29,7 @@ use sysdefs::constants::sys_const::{
 };
 use sysdefs::constants::syscall_const;
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
@@ -1233,7 +1233,7 @@ pub extern "C" fn prlimit64_syscall(
     //pid has to be zero
     let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
     if pid != 0 {
-        lind_debug_panic(&format!("prlimit64: unsupported pid {}", pid));
+        lind_debug_panic!("prlimit64: unsupported pid {}", pid);
         return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
     }
 
@@ -1248,7 +1248,7 @@ pub extern "C" fn prlimit64_syscall(
 
     // setrlimit unsupported
     if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
-        lind_debug_panic("prlimit64: setrlimit not supported");
+        lind_debug_panic!("prlimit64: setrlimit not supported");
         return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
     }
 
@@ -1281,7 +1281,7 @@ pub extern "C" fn prlimit64_syscall(
                 old_limit.rlim_max = 0;
             }
             _ => {
-                lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
+                lind_debug_panic!("prlimit64: unsupported resource {}", resource);
                 old_limit.rlim_cur = 0;
                 old_limit.rlim_max = 0;
             }

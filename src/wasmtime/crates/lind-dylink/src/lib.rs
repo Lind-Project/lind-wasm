@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use sysdefs::{
     constants::{DylinkErrorCode, RTLD_DEFAULT, RTLD_NEXT},
-    logging::lind_debug_panic,
+    lind_debug_panic,
 };
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{LindHost, get_memory_base};
@@ -84,7 +84,8 @@ pub fn dlsym_call<
             None => return -(DylinkErrorCode::ENOFOUND as i32),
         }
     } else if handle == RTLD_NEXT {
-        lind_debug_panic("[lind-dylink] dlsym RTLD_NEXT encountered but not currently supported");
+        lind_debug_panic!(DYLINK, "[lind-dylink] dlsym RTLD_NEXT: not currently supported");
+        return -(DylinkErrorCode::ENOFOUND as i32);
     } else {
         match caller.find_library_symbol_from_local(handle, symbol) {
             Some(val) => val,

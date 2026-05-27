@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use sysdefs::constants::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
@@ -267,7 +267,7 @@ fn add_runtime_to_linker<
 
     linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
         let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
-        sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
+        lind_debug_panic!("FROM GUEST: {}", _panic_str);
     })?;
 
     #[cfg(feature = "asyncify-setjmp")]

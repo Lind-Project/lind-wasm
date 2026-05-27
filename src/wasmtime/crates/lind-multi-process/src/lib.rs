@@ -10,7 +10,7 @@ use sysdefs::constants::lind_platform_const::{
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
@@ -502,7 +502,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                             let module_name = module
                                 .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                                .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -514,7 +517,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // shared table. GOT entries are patched through the shared LindGOT.
                             let module_name = module
                                 .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                                .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -571,7 +577,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     //    excluded from the snapshot map.
                     let main_module_name = module
                         .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                        .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -626,7 +635,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                             let module_name = module
                                 .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                                .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1086,7 +1098,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                             let module_name = module
                                 .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                                .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1098,7 +1113,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // shared table. GOT entries are patched through the shared LindGOT.
                             let module_name = module
                                 .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                                .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1143,7 +1161,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     //    never registered and are therefore naturally excluded.
                     let main_module_name = module
                         .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                        .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -1190,7 +1211,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                             let module_name = module
                                 .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                                .unwrap_or_else(|| {
+                    lind_debug_panic!(DYLINK, "module has no name");
+                    "" // best-effort fallback in LogOnly/NoAction mode
+                });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
