@@ -1,8 +1,8 @@
 use super::address_transform::AddressTransform;
-use super::{DebugInputContext, Reader};
-use anyhow::Error;
-use gimli::{write, AttributeValue, DebuggingInformationEntry, RangeListsOffset, Unit};
+use crate::debug::Reader;
+use gimli::{AttributeValue, RangeListsOffset, UnitRef, write};
 use wasmtime_environ::DefinedFuncIndex;
+use wasmtime_environ::error::Error;
 
 pub(crate) enum RangeInfoBuilder {
     Undefined,
@@ -12,34 +12,25 @@ pub(crate) enum RangeInfoBuilder {
 }
 
 impl RangeInfoBuilder {
-    pub(crate) fn from<R>(
-        dwarf: &gimli::Dwarf<R>,
-        unit: &Unit<R, R::Offset>,
-        entry: &DebuggingInformationEntry<R>,
-        context: &DebugInputContext<R>,
-        cu_low_pc: u64,
-    ) -> Result<Self, Error>
-    where
-        R: Reader,
-    {
-        if let Some(AttributeValue::RangeListsRef(r)) = entry.attr_value(gimli::DW_AT_ranges)? {
-            let r = dwarf.ranges_offset_from_raw(unit, r);
-            return RangeInfoBuilder::from_ranges_ref(unit, r, context, cu_low_pc);
+    pub(crate) fn from(entry: &write::ConvertUnitEntry<Reader<'_>>) -> Result<Self, Error> {
+        if let Some(AttributeValue::RangeListsRef(r)) = entry.attr_value(gimli::DW_AT_ranges) {
+            let r = entry.read_unit.ranges_offset_from_raw(r);
+            return RangeInfoBuilder::from_ranges_ref(entry.read_unit, r);
         };
 
-        let low_pc =
-            if let Some(AttributeValue::Addr(addr)) = entry.attr_value(gimli::DW_AT_low_pc)? {
-                addr
-            } else if let Some(AttributeValue::DebugAddrIndex(i)) =
-                entry.attr_value(gimli::DW_AT_low_pc)?
-            {
-                context.debug_addr.get_address(4, unit.addr_base, i)?
-            } else {
-                return Ok(RangeInfoBuilder::Undefined);
-            };
+        let low_pc = if let Some(AttributeValue::Addr(addr)) = entry.attr_value(gimli::DW_AT_low_pc)
+        {
+            addr
+        } else if let Some(AttributeValue::DebugAddrIndex(i)) =
+            entry.attr_value(gimli::DW_AT_low_pc)
+        {
+            entry.read_unit.address(i)?
+        } else {
+            return Ok(RangeInfoBuilder::Undefined);
+        };
 
         Ok(
-            if let Some(AttributeValue::Udata(u)) = entry.attr_value(gimli::DW_AT_high_pc)? {
+            if let Some(AttributeValue::Udata(u)) = entry.attr_value(gimli::DW_AT_high_pc) {
                 RangeInfoBuilder::Ranges(vec![(low_pc, low_pc + u)])
             } else {
                 RangeInfoBuilder::Position(low_pc)
@@ -47,23 +38,11 @@ impl RangeInfoBuilder {
         )
     }
 
-    pub(crate) fn from_ranges_ref<R>(
-        unit: &Unit<R, R::Offset>,
+    pub(crate) fn from_ranges_ref(
+        unit: UnitRef<'_, Reader<'_>>,
         ranges: RangeListsOffset,
-        context: &DebugInputContext<R>,
-        cu_low_pc: u64,
-    ) -> Result<Self, Error>
-    where
-        R: Reader,
-    {
-        let unit_encoding = unit.encoding();
-        let mut ranges = context.rnglists.ranges(
-            ranges,
-            unit_encoding,
-            cu_low_pc,
-            &context.debug_addr,
-            unit.addr_base,
-        )?;
+    ) -> Result<Self, Error> {
+        let mut ranges = unit.ranges(ranges)?;
         let mut result = Vec::new();
         while let Some(range) = ranges.next()? {
             if range.begin >= range.end {
@@ -79,44 +58,29 @@ impl RangeInfoBuilder {
         })
     }
 
-    pub(crate) fn from_subprogram_die<R>(
-        dwarf: &gimli::Dwarf<R>,
-        unit: &Unit<R, R::Offset>,
-        entry: &DebuggingInformationEntry<R>,
-        context: &DebugInputContext<R>,
+    pub(crate) fn from_subprogram_die(
+        entry: &write::ConvertUnitEntry<Reader<'_>>,
         addr_tr: &AddressTransform,
-        cu_low_pc: u64,
-    ) -> Result<Self, Error>
-    where
-        R: Reader,
-    {
-        let unit_encoding = unit.encoding();
-        let addr =
-            if let Some(AttributeValue::Addr(addr)) = entry.attr_value(gimli::DW_AT_low_pc)? {
-                addr
-            } else if let Some(AttributeValue::DebugAddrIndex(i)) =
-                entry.attr_value(gimli::DW_AT_low_pc)?
-            {
-                context.debug_addr.get_address(4, unit.addr_base, i)?
-            } else if let Some(AttributeValue::RangeListsRef(r)) =
-                entry.attr_value(gimli::DW_AT_ranges)?
-            {
-                let r = dwarf.ranges_offset_from_raw(unit, r);
-                let mut ranges = context.rnglists.ranges(
-                    r,
-                    unit_encoding,
-                    cu_low_pc,
-                    &context.debug_addr,
-                    unit.addr_base,
-                )?;
-                if let Some(range) = ranges.next()? {
-                    range.begin
-                } else {
-                    return Ok(RangeInfoBuilder::Undefined);
-                }
+    ) -> Result<Self, Error> {
+        let unit = entry.read_unit;
+        let addr = if let Some(AttributeValue::Addr(addr)) = entry.attr_value(gimli::DW_AT_low_pc) {
+            addr
+        } else if let Some(AttributeValue::DebugAddrIndex(i)) =
+            entry.attr_value(gimli::DW_AT_low_pc)
+        {
+            unit.address(i)?
+        } else if let Some(AttributeValue::RangeListsRef(r)) = entry.attr_value(gimli::DW_AT_ranges)
+        {
+            let r = unit.ranges_offset_from_raw(r);
+            let mut ranges = unit.ranges(r)?;
+            if let Some(range) = ranges.next()? {
+                range.begin
             } else {
                 return Ok(RangeInfoBuilder::Undefined);
-            };
+            }
+        } else {
+            return Ok(RangeInfoBuilder::Undefined);
+        };
 
         let index = addr_tr.find_func_index(addr);
         if index.is_none() {

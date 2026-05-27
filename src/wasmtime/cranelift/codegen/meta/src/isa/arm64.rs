@@ -19,6 +19,12 @@ pub(crate) fn define() -> TargetIsa {
         false,
     );
     settings.add_bool(
+        "has_fp16",
+        "Use half-precision floating point (FEAT_FP16) instructions.",
+        "",
+        false,
+    );
+    settings.add_bool(
         "sign_return_address_all",
         "If function return address signing is enabled, then apply it to all \
         functions; does not have an effect on code generation by itself.",
@@ -45,6 +51,12 @@ pub(crate) fn define() -> TargetIsa {
     settings.add_bool(
         "use_bti",
         "Use Branch Target Identification (FEAT_BTI) instructions.",
+        "",
+        false,
+    );
+    settings.add_bool(
+        "use_csdb",
+        "Use the `csdb` instruction when spectre mitigations are enabled",
         "",
         false,
     );

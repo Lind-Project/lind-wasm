@@ -2,11 +2,15 @@
 
 use crate::prelude::*;
 use crate::runtime::vm::{
-    ExternRefHostDataId, ExternRefHostDataTable, SendSyncPtr, VMExternRef, VMGcHeader, VMGcRef,
+    ExternRefHostDataId, ExternRefHostDataTable, GcHeapObject, SendSyncPtr, TypedGcRef, VMArrayRef,
+    VMExternRef, VMGcHeader, VMGcObjectData, VMGcRef,
 };
-use core::marker;
-use core::ptr;
-use core::{any::Any, num::NonZeroUsize};
+use crate::store::Asyncness;
+use crate::vm::VMMemoryDefinition;
+use core::ptr::NonNull;
+use core::slice;
+use core::{alloc::Layout, any::Any, marker, mem, ops::Range, ptr};
+use wasmtime_environ::{GcArrayLayout, GcStructLayout, GcTypeLayouts, VMSharedTypeIndex};
 
 /// Trait for integrating a garbage collector with the runtime.
 ///
@@ -30,8 +34,12 @@ use core::{any::Any, num::NonZeroUsize};
 /// safety. Implementations of this trait may not add new safety invariants, not
 /// already documented in this trait's interface, that callers need to uphold.
 pub unsafe trait GcRuntime: 'static + Send + Sync {
+    /// Get this collector's GC type layouts.
+    fn layouts(&self) -> &dyn GcTypeLayouts;
+
     /// Construct a new GC heap.
-    fn new_gc_heap(&self) -> Result<Box<dyn GcHeap>>;
+    #[cfg(feature = "gc")]
+    fn new_gc_heap(&self, engine: &crate::Engine) -> Result<Box<dyn GcHeap>>;
 }
 
 /// A heap that manages garbage-collected objects.
@@ -77,6 +85,31 @@ pub unsafe trait GcRuntime: 'static + Send + Sync {
 /// utilization that implies.
 pub unsafe trait GcHeap: 'static + Send + Sync {
     ////////////////////////////////////////////////////////////////////////////
+    // Life Cycle GC Heap Methods
+
+    /// Is this GC heap currently attached to a memory?
+    fn is_attached(&self) -> bool;
+
+    /// Attach this GC heap to a memory.
+    ///
+    /// Once attached, this GC heap can be used with Wasm.
+    fn attach(&mut self, memory: crate::vm::Memory);
+
+    /// Reset this heap.
+    ///
+    /// Calling this method unassociates this heap with the store that it has
+    /// been associated with, making it available to be associated with a new
+    /// heap.
+    ///
+    /// This should refill free lists, reset bump pointers, and etc... as if
+    /// nothing were allocated in this heap (because nothing is allocated in
+    /// this heap anymore).
+    ///
+    /// This should retain any allocated memory from the global allocator and
+    /// any virtual memory mappings.
+    fn detach(&mut self) -> crate::vm::Memory;
+
+    ////////////////////////////////////////////////////////////////////////////
     // `Any` methods
 
     /// Get this heap as an `&Any`.
@@ -100,13 +133,6 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     ///
     /// Dual to `enter_no_gc_scope`.
     fn exit_no_gc_scope(&mut self);
-
-    ////////////////////////////////////////////////////////////////////////////
-    // GC Object Header Methods
-
-    /// Get a shared borrow of the `VMGcHeader` that this GC reference is
-    /// pointing to.
-    fn header(&self, gc_ref: &VMGcRef) -> &VMGcHeader;
 
     ////////////////////////////////////////////////////////////////////////////
     // GC Barriers
@@ -163,13 +189,6 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     /// failures such as panics or incorrect results.
     fn expose_gc_ref_to_wasm(&mut self, gc_ref: VMGcRef);
 
-    /// Predicate invoked before calling into or returning to Wasm to determine
-    /// whether we should GC first.
-    ///
-    /// `num_gc_refs` is the number of non-`i31ref` GC references that will be
-    /// passed into Wasm.
-    fn need_gc_before_entering_wasm(&self, num_gc_refs: NonZeroUsize) -> bool;
-
     ////////////////////////////////////////////////////////////////////////////
     // `externref` Methods
 
@@ -178,19 +197,21 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     ///
     /// Return values:
     ///
-    /// * `Ok(Some(_))`: The allocation was successful.
+    /// * `Ok(Ok(_))`: The allocation was successful.
     ///
-    /// * `Ok(None)`: There is currently no available space for this
-    ///   allocation. The caller should call `self.gc()`, run the GC to
-    ///   completion so the collector can reclaim space, and then try allocating
-    ///   again.
+    /// * `Ok(Err(n))`: There is currently not enough available space for this
+    ///   allocation of size `n`. The caller should either grow the heap or run
+    ///   a collection to reclaim space, and then try allocating again.
     ///
     /// * `Err(_)`: The collector cannot satisfy this allocation request, and
     ///   would not be able to even after the caller were to trigger a
     ///   collection. This could be because, for example, the requested
     ///   allocation is larger than this collector's implementation limit for
     ///   object size.
-    fn alloc_externref(&mut self, host_data: ExternRefHostDataId) -> Result<Option<VMExternRef>>;
+    fn alloc_externref(
+        &mut self,
+        host_data: ExternRefHostDataId,
+    ) -> Result<Result<VMExternRef, u64>>;
 
     /// Get the host data ID associated with the given `externref`.
     ///
@@ -198,6 +219,125 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     /// heap. Failure to do so is memory safe, but may result in general
     /// failures such as panics or incorrect results.
     fn externref_host_data(&self, externref: &VMExternRef) -> ExternRefHostDataId;
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Struct, array, and general GC object methods
+
+    /// Get the header of the object that `gc_ref` points to.
+    fn header(&self, gc_ref: &VMGcRef) -> &VMGcHeader;
+
+    /// Get the header of the object that `gc_ref` points to.
+    fn header_mut(&mut self, gc_ref: &VMGcRef) -> &mut VMGcHeader;
+
+    /// Get the size (in bytes) of the object referenced by `gc_ref`.
+    ///
+    /// # Panics
+    ///
+    /// Panics on out of bounds or if the `gc_ref` is an `i31ref`.
+    fn object_size(&self, gc_ref: &VMGcRef) -> usize;
+
+    /// Allocate a raw, uninitialized GC-managed object with the given header
+    /// and layout.
+    ///
+    /// The object's fields and elements are left uninitialized. It is the
+    /// caller's responsibility to initialize them before exposing the struct to
+    /// Wasm or triggering a GC.
+    ///
+    /// The header's described type and layout must match *for this
+    /// collector*. That is, if this collector adds an extra header word to all
+    /// objects, the given layout must already include space for that header
+    /// word. Therefore, this method is effectively only usable with layouts
+    /// derived from a `Gc{Struct,Array}Layout` returned by this collector.
+    ///
+    /// Failure to uphold any of the above is memory safe, but may result in
+    /// general failures such as panics or incorrect results.
+    ///
+    /// Return values:
+    ///
+    /// * `Ok(Ok(_))`: The allocation was successful.
+    ///
+    /// * `Ok(Err(n))`: There is currently not enough available space for this
+    ///   allocation of size `n`. The caller should either grow the heap or run
+    ///   a collection to reclaim space, and then try allocating again.
+    ///
+    /// * `Err(_)`: The collector cannot satisfy this allocation request, and
+    ///   would not be able to even after the caller were to trigger a
+    ///   collection. This could be because, for example, the requested
+    ///   alignment is larger than this collector's implementation limit.
+    fn alloc_raw(&mut self, header: VMGcHeader, layout: Layout) -> Result<Result<VMGcRef, u64>>;
+
+    /// Allocate a GC-managed struct of the given type and layout.
+    ///
+    /// The struct's fields are left uninitialized. It is the caller's
+    /// responsibility to initialize them before exposing the struct to Wasm or
+    /// triggering a GC.
+    ///
+    /// The `ty` and `layout` must match.
+    ///
+    /// Failure to do either of the above is memory safe, but may result in
+    /// general failures such as panics or incorrect results.
+    ///
+    /// Return values:
+    ///
+    /// * `Ok(Ok(_))`: The allocation was successful.
+    ///
+    /// * `Ok(Err(n))`: There is currently not enough available space for this
+    ///   allocation of size `n`. The caller should either grow the heap or run
+    ///   a collection to reclaim space, and then try allocating again.
+    ///
+    /// * `Err(_)`: The collector cannot satisfy this allocation request, and
+    ///   would not be able to even after the caller were to trigger a
+    ///   collection. This could be because, for example, the requested
+    ///   allocation is larger than this collector's implementation limit for
+    ///   object size.
+    fn alloc_uninit_struct_or_exn(
+        &mut self,
+        ty: VMSharedTypeIndex,
+        layout: &GcStructLayout,
+    ) -> Result<Result<VMGcRef, u64>>;
+
+    /// Deallocate an uninitialized, GC-managed struct or exception.
+    ///
+    /// This is useful for if initialization of the struct's fields fails, so
+    /// that the struct's allocation can be eagerly reclaimed, and so that the
+    /// collector doesn't attempt to treat any of the uninitialized fields as
+    /// valid GC references, or something like that.
+    fn dealloc_uninit_struct_or_exn(&mut self, structref: VMGcRef);
+
+    /// * `Ok(Ok(_))`: The allocation was successful.
+    ///
+    /// * `Ok(Err(n))`: There is currently not enough available space for this
+    ///   allocation of size `n`. The caller should either grow the heap or run
+    ///   a collection to reclaim space, and then try allocating again.
+    ///
+    /// * `Err(_)`: The collector cannot satisfy this allocation request, and
+    ///   would not be able to even after the caller were to trigger a
+    ///   collection. This could be because, for example, the requested
+    ///   allocation is larger than this collector's implementation limit for
+    ///   object size.
+    fn alloc_uninit_array(
+        &mut self,
+        ty: VMSharedTypeIndex,
+        len: u32,
+        layout: &GcArrayLayout,
+    ) -> Result<Result<VMArrayRef, u64>>;
+
+    /// Deallocate an uninitialized, GC-managed array.
+    ///
+    /// This is useful for if initialization of the array's fields fails, so
+    /// that the array's allocation can be eagerly reclaimed, and so that the
+    /// collector doesn't attempt to treat any of the uninitialized fields as
+    /// valid GC references, or something like that.
+    fn dealloc_uninit_array(&mut self, arrayref: VMArrayRef);
+
+    /// Get the length of the given array.
+    ///
+    /// Panics on out-of-bounds accesses.
+    ///
+    /// The given `arrayref` should be valid and of the given size. Failure to
+    /// do so is memory safe, but may result in general failures such as panics
+    /// or incorrect results.
+    fn array_len(&self, arrayref: &VMArrayRef) -> u32;
 
     ////////////////////////////////////////////////////////////////////////////
     // Garbage Collection Methods
@@ -225,34 +365,6 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     ////////////////////////////////////////////////////////////////////////////
     // JIT-Code Interaction Methods
 
-    /// Get the GC heap's base pointer.
-    ///
-    /// # Safety
-    ///
-    /// The memory region
-    ///
-    /// ```ignore
-    /// self.vmctx_gc_heap_base..self.vmctx_gc_heap_base + self.vmctx_gc_heap_bound
-    /// ```
-    ///
-    /// must be the GC heap region, and must remain valid for JIT code as long
-    /// as `self` is not dropped.
-    unsafe fn vmctx_gc_heap_base(&self) -> *mut u8;
-
-    /// Get the GC heap's bound.
-    ///
-    /// # Safety
-    ///
-    /// The memory region
-    ///
-    /// ```ignore
-    /// self.vmctx_gc_heap_base..self.vmctx_gc_heap_base + self.vmctx_gc_heap_bound
-    /// ```
-    ///
-    /// must be the GC heap region, and must remain valid for JIT code as long
-    /// as `self` is not dropped.
-    unsafe fn vmctx_gc_heap_bound(&self) -> usize;
-
     /// Get the pointer that will be stored in the `VMContext::gc_heap_data`
     /// field and be accessible from JIT code via collaboration with the
     /// corresponding `GcCompiler` trait.
@@ -261,27 +373,169 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     ///
     /// The returned pointer, if any, must remain valid as long as `self` is not
     /// dropped.
-    unsafe fn vmctx_gc_heap_data(&self) -> *mut u8;
+    unsafe fn vmctx_gc_heap_data(&self) -> NonNull<u8>;
 
     ////////////////////////////////////////////////////////////////////////////
-    // Recycling GC Heap Methods
+    // Accessors for the raw bytes of the GC heap
 
-    /// Reset this heap.
+    /// Take the underlying memory storage out of this GC heap.
     ///
-    /// Calling this method unassociates this heap with the store that it has
-    /// been associated with, making it available to be associated with a new
-    /// heap.
+    /// # Panics
     ///
-    /// This should refill free lists, reset bump pointers, and etc... as if
-    /// nothing were allocated in this heap (because nothing is allocated in
-    /// this heap anymore).
+    /// If this GC heap is used while the memory is taken then a panic will
+    /// occur. This will also panic if the memory is already taken.
+    fn take_memory(&mut self) -> crate::vm::Memory;
+
+    /// Replace this GC heap's underlying memory storage.
     ///
-    /// This should retain any allocated memory from the global allocator and
-    /// any virtual memory mappings.
+    /// # Safety
     ///
-    /// This method is only used with the pooling allocator.
-    #[cfg(feature = "pooling-allocator")]
-    fn reset(&mut self);
+    /// The `memory` must have been taken via `take_memory` and the GC heap must
+    /// not have been used at all since the memory was taken. The memory must be
+    /// the same size or larger than it was.
+    unsafe fn replace_memory(&mut self, memory: crate::vm::Memory, delta_bytes_grown: u64);
+
+    /// Get a raw `VMMemoryDefinition` for this heap's underlying memory storage.
+    ///
+    /// If/when exposing this `VMMemoryDefinition` to Wasm, it is your
+    /// responsibility to ensure that you do not do that in such a way as to
+    /// violate Rust's borrowing rules (e.g. make sure there is no active
+    /// `heap_slice_mut()` call at the same time) and that if this GC heap is
+    /// resized (and its base potentially moves) then that Wasm gets a new,
+    /// updated `VMMemoryDefinition` record.
+    fn vmmemory(&self) -> VMMemoryDefinition;
+
+    /// Get a slice of the raw bytes of the GC heap.
+    #[inline]
+    fn heap_slice(&self) -> &[u8] {
+        let vmmemory = self.vmmemory();
+        let ptr = vmmemory.base.as_ptr().cast_const();
+        let len = vmmemory.current_length();
+        unsafe { slice::from_raw_parts(ptr, len) }
+    }
+
+    /// Get a mutable slice of the raw bytes of the GC heap.
+    #[inline]
+    fn heap_slice_mut(&mut self) -> &mut [u8] {
+        let vmmemory = self.vmmemory();
+        let ptr = vmmemory.base.as_ptr();
+        let len = vmmemory.current_length();
+        unsafe { slice::from_raw_parts_mut(ptr, len) }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Provided helper methods.
+
+    /// Index into this heap and get a shared reference to the `T` that `gc_ref`
+    /// points to.
+    ///
+    /// # Panics
+    ///
+    /// Panics on out of bounds or if the `gc_ref` is an `i31ref`.
+    #[inline]
+    fn index<T>(&self, gc_ref: &TypedGcRef<T>) -> &T
+    where
+        Self: Sized,
+        T: GcHeapObject,
+    {
+        assert!(!mem::needs_drop::<T>());
+        let gc_ref = gc_ref.as_untyped();
+        let start = gc_ref.as_heap_index().unwrap().get();
+        let start = usize::try_from(start).unwrap();
+        let len = mem::size_of::<T>();
+        let slice = &self.heap_slice()[start..][..len];
+        unsafe { &*(slice.as_ptr().cast::<T>()) }
+    }
+
+    /// Index into this heap and get an exclusive reference to the `T` that
+    /// `gc_ref` points to.
+    ///
+    /// # Panics
+    ///
+    /// Panics on out of bounds or if the `gc_ref` is an `i31ref`.
+    #[inline]
+    fn index_mut<T>(&mut self, gc_ref: &TypedGcRef<T>) -> &mut T
+    where
+        Self: Sized,
+        T: GcHeapObject,
+    {
+        assert!(!mem::needs_drop::<T>());
+        let gc_ref = gc_ref.as_untyped();
+        let start = gc_ref.as_heap_index().unwrap().get();
+        let start = usize::try_from(start).unwrap();
+        let len = mem::size_of::<T>();
+        let slice = &mut self.heap_slice_mut()[start..][..len];
+        unsafe { &mut *(slice.as_mut_ptr().cast::<T>()) }
+    }
+
+    /// Get the range of bytes that the given object occupies in the heap.
+    ///
+    /// # Panics
+    ///
+    /// Panics on out of bounds or if the `gc_ref` is an `i31ref`.
+    fn object_range(&self, gc_ref: &VMGcRef) -> Range<usize> {
+        let start = gc_ref.as_heap_index().unwrap().get();
+        let start = usize::try_from(start).unwrap();
+        let size = self.object_size(gc_ref);
+        let end = start.checked_add(size).unwrap();
+        start..end
+    }
+
+    /// Get a mutable borrow of the given object's data.
+    ///
+    /// # Panics
+    ///
+    /// Panics on out-of-bounds accesses or if the `gc_ref` is an `i31ref`.
+    fn gc_object_data(&self, gc_ref: &VMGcRef) -> &VMGcObjectData {
+        let range = self.object_range(gc_ref);
+        let data = &self.heap_slice()[range];
+        data.into()
+    }
+
+    /// Get a mutable borrow of the given object's data.
+    ///
+    /// # Panics
+    ///
+    /// Panics on out-of-bounds accesses or if the `gc_ref` is an `i31ref`.
+    fn gc_object_data_mut(&mut self, gc_ref: &VMGcRef) -> &mut VMGcObjectData {
+        let range = self.object_range(gc_ref);
+        let data = &mut self.heap_slice_mut()[range];
+        data.into()
+    }
+
+    /// Get a pair of mutable borrows of the given objects' data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `a == b` or on out-of-bounds accesses or if either GC ref is
+    /// an `i31ref`.
+    fn gc_object_data_pair(
+        &mut self,
+        a: &VMGcRef,
+        b: &VMGcRef,
+    ) -> (&mut VMGcObjectData, &mut VMGcObjectData) {
+        assert_ne!(a, b);
+
+        let a_range = self.object_range(a);
+        let b_range = self.object_range(b);
+
+        // Assert that the two objects do not overlap.
+        assert!(a_range.start <= a_range.end);
+        assert!(b_range.start <= b_range.end);
+        assert!(a_range.end <= b_range.start || b_range.end <= a_range.start);
+
+        let (a_data, b_data) = if a_range.start < b_range.start {
+            let (a_half, b_half) = self.heap_slice_mut().split_at_mut(b_range.start);
+            let b_len = b_range.end - b_range.start;
+            (&mut a_half[a_range], &mut b_half[..b_len])
+        } else {
+            let (b_half, a_half) = self.heap_slice_mut().split_at_mut(a_range.start);
+            let a_len = a_range.end - a_range.start;
+            (&mut a_half[..a_len], &mut b_half[b_range])
+        };
+
+        (a_data.into(), b_data.into())
+    }
 }
 
 /// A list of GC roots.
@@ -305,30 +559,44 @@ pub struct GcRootsList(Vec<RawGcRoot>);
 //    such that it is easily reusable across GCs is in the store itself. But the
 //    contents of the roots list (when it is non-empty, during GCs) borrow from
 //    the store, which creates self-references.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(
+    not(feature = "gc"),
+    expect(
+        dead_code,
+        reason = "not worth it at this time to #[cfg] away these variants",
+    )
+)]
 enum RawGcRoot {
-    Stack(SendSyncPtr<u64>),
+    Stack(SendSyncPtr<u32>),
     NonStack(SendSyncPtr<VMGcRef>),
 }
 
+#[cfg(feature = "gc")]
 impl GcRootsList {
     /// Add a GC root that is inside a Wasm stack frame to this list.
     #[inline]
-    pub unsafe fn add_wasm_stack_root(&mut self, ptr_to_root: SendSyncPtr<u64>) {
-        log::trace!(
-            "Adding Wasm stack root: {:#p}",
-            VMGcRef::from_r64(*ptr_to_root.as_ref()).unwrap().unwrap()
-        );
+    pub unsafe fn add_wasm_stack_root(&mut self, ptr_to_root: SendSyncPtr<u32>) {
+        unsafe {
+            log::trace!(
+                "Adding Wasm stack root: {:#p} -> {:#p}",
+                ptr_to_root,
+                VMGcRef::from_raw_u32(*ptr_to_root.as_ref()).unwrap()
+            );
+            debug_assert!(VMGcRef::from_raw_u32(*ptr_to_root.as_ref()).is_some());
+        }
         self.0.push(RawGcRoot::Stack(ptr_to_root));
     }
 
     /// Add a GC root to this list.
     #[inline]
-    pub unsafe fn add_root(&mut self, ptr_to_root: SendSyncPtr<VMGcRef>) {
-        log::trace!(
-            "Adding non-stack root: {:#p}",
-            ptr_to_root.as_ref().unchecked_copy()
-        );
+    pub unsafe fn add_root(&mut self, ptr_to_root: SendSyncPtr<VMGcRef>, why: &str) {
+        unsafe {
+            log::trace!(
+                "Adding non-stack root: {why}: {:#p}",
+                ptr_to_root.as_ref().unchecked_copy()
+            );
+        }
         self.0.push(RawGcRoot::NonStack(ptr_to_root))
     }
 
@@ -384,6 +652,7 @@ impl<'a> Iterator for GcRootsIter<'a> {
 ///
 /// Collector implementations should update the `VMGcRef` if they move the
 /// `VMGcRef`'s referent during the course of a GC.
+#[derive(Debug)]
 pub struct GcRoot<'a> {
     raw: RawGcRoot,
     _phantom: marker::PhantomData<&'a mut VMGcRef>,
@@ -404,10 +673,8 @@ impl GcRoot<'_> {
         match self.raw {
             RawGcRoot::NonStack(ptr) => unsafe { ptr::read(ptr.as_ptr()) },
             RawGcRoot::Stack(ptr) => unsafe {
-                let r64 = ptr::read(ptr.as_ptr());
-                VMGcRef::from_r64(r64)
-                    .expect("valid r64")
-                    .expect("non-null")
+                let raw: u32 = ptr::read(ptr.as_ptr());
+                VMGcRef::from_raw_u32(raw).expect("non-null")
             },
         }
     }
@@ -425,8 +692,7 @@ impl GcRoot<'_> {
                 ptr::write(ptr.as_ptr(), new_ref);
             },
             RawGcRoot::Stack(ptr) => unsafe {
-                let r64 = new_ref.into_r64();
-                ptr::write(ptr.as_ptr(), r64);
+                ptr::write(ptr.as_ptr(), new_ref.as_raw_u32());
             },
         }
     }
@@ -480,11 +746,18 @@ pub enum GcProgress {
 
 /// Asynchronously run the given garbage collection process to completion,
 /// cooperatively yielding back to the event loop after each increment of work.
-#[cfg(feature = "async")]
-pub async fn collect_async<'a>(mut collection: Box<dyn GarbageCollection<'a> + 'a>) {
+pub async fn collect_async<'a>(
+    mut collection: Box<dyn GarbageCollection<'a> + 'a>,
+    asyncness: Asyncness,
+) {
     loop {
         match collection.collect_increment() {
-            GcProgress::Continue => crate::runtime::vm::Yield::new().await,
+            GcProgress::Continue => {
+                if asyncness != Asyncness::No {
+                    #[cfg(feature = "async")]
+                    crate::runtime::vm::Yield::new().await
+                }
+            }
             GcProgress::Complete => return,
         }
     }
@@ -499,7 +772,7 @@ mod collect_async_tests {
         fn _assert_send_sync<T: Send + Sync>(_: T) {}
 
         fn _foo<'a>(collection: Box<dyn GarbageCollection<'a>>) {
-            _assert_send_sync(collect_async(collection));
+            _assert_send_sync(collect_async(collection, Asyncness::Yes));
         }
     }
 }

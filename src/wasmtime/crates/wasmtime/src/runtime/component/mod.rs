@@ -97,52 +97,71 @@
 //!
 //! See the docs for [`bindgen!`] for more information on how to use it.
 
-// rustdoc appears to lie about a warning above, so squelch it for now.
-#![allow(rustdoc::redundant_explicit_links)]
+#![allow(
+    rustdoc::redundant_explicit_links,
+    reason = "rustdoc appears to lie about a warning above, so squelch it for now"
+)]
 
 mod component;
+#[cfg(feature = "component-model-async")]
+pub(crate) mod concurrent;
 mod func;
+mod has_data;
 mod instance;
 mod linker;
 mod matching;
 mod resource_table;
 mod resources;
 mod storage;
-mod store;
+pub(crate) mod store;
 pub mod types;
 mod values;
 pub use self::component::{Component, ComponentExportIndex};
+#[cfg(feature = "component-model-async")]
+pub use self::concurrent::{
+    Access, Accessor, AccessorTask, AsAccessor, Destination, DirectDestination, DirectSource,
+    ErrorContext, FutureAny, FutureConsumer, FutureProducer, FutureReader, GuardedFutureReader,
+    GuardedStreamReader, JoinHandle, ReadBuffer, Source, StreamAny, StreamConsumer, StreamProducer,
+    StreamReader, StreamResult, VMComponentAsyncStore, VecBuffer, WriteBuffer,
+};
 pub use self::func::{
     ComponentNamedList, ComponentType, Func, Lift, Lower, TypedFunc, WasmList, WasmStr,
 };
+pub use self::has_data::*;
 pub use self::instance::{Instance, InstanceExportLookup, InstancePre};
 pub use self::linker::{Linker, LinkerInstance};
 pub use self::resource_table::{ResourceTable, ResourceTableError};
-pub use self::resources::{Resource, ResourceAny};
+pub use self::resources::{Resource, ResourceAny, ResourceDynamic};
 pub use self::types::{ResourceType, Type};
 pub use self::values::Val;
 
+pub(crate) use self::instance::RuntimeImport;
 pub(crate) use self::resources::HostResourceData;
+pub(crate) use self::store::{ComponentInstanceId, RuntimeInstance};
 
-// These items are expected to be used by an eventual
-// `#[derive(ComponentType)]`, they are not part of Wasmtime's API stability
-// guarantees
+// Re-export wasm_wave crate so the compatible version of this dep doesn't have to be
+// tracked separately from wasmtime.
+#[cfg(feature = "wave")]
+pub use wasm_wave;
+
+// These items are used by `#[derive(ComponentType, Lift, Lower)]`, but they are not part of
+// Wasmtime's API stability guarantees
 #[doc(hidden)]
 pub mod __internal {
     pub use super::func::{
-        bad_type_info, format_flags, lower_payload, typecheck_enum, typecheck_flags,
-        typecheck_record, typecheck_variant, ComponentVariant, LiftContext, LowerContext, Options,
+        ComponentVariant, LiftContext, LowerContext, bad_type_info, format_flags, lower_payload,
+        typecheck_enum, typecheck_flags, typecheck_record, typecheck_variant,
     };
     pub use super::matching::InstanceType;
+    pub use crate::MaybeUninitExt;
     pub use crate::map_maybe_uninit;
     pub use crate::store::StoreOpaque;
-    pub use crate::MaybeUninitExt;
     pub use alloc::boxed::Box;
     pub use alloc::string::String;
     pub use alloc::vec::Vec;
-    pub use anyhow;
-    #[cfg(feature = "async")]
-    pub use async_trait::async_trait;
+    pub use core::cell::RefCell;
+    pub use core::future::Future;
+    pub use core::mem::transmute;
     pub use wasmtime_environ;
     pub use wasmtime_environ::component::{CanonicalAbiInfo, ComponentTypes, InterfaceType};
 }
@@ -239,52 +258,124 @@ pub(crate) use self::store::ComponentStoreData;
 ///         }
 ///     ",
 ///
-///     // Add calls to `tracing::span!` before each import or export is called
-///     // to log arguments and return values.
+///     // Further configuration of imported functions. This can be used to add
+///     // functionality per-function or by default for all imports. Note that
+///     // exports are also supported via the `exports` key below.
 ///     //
-///     // This option defaults to `false`.
-///     tracing: true,
+///     // Functions in this list are specified as their interface first then
+///     // the raw wasm name of the function. Interface versions can be
+///     // optionally omitted and prefixes are also supported to configure
+///     // entire interfaces at once for example. Only the first matching item
+///     // in this list is used to configure a function.
+///     //
+///     // Configuration for a function is a set of flags which can be added
+///     // per-function. Each flag's meaning is documented below and the final
+///     // set of flags for a function are calculated by the first matching
+///     // rule below unioned with the default flags inferred from the WIT
+///     // signature itself (unless below configures the `ignore_wit` flag).
+///     //
+///     // Specifically the defaults for a normal WIT function are empty,
+///     // meaning all flags below are disabled. For a WIT `async` function the
+///     // `async | store` flags are enabled by default, but all others are
+///     // still disabled.
+///     //
+///     // Note that unused keys in this map are a compile-time error. All
+///     // keys are required to be used and consulted.
+///     imports: {
+///         // The `async` flag is used to indicate that a Rust-level `async`
+///         // function is used on the host. This means that the host is allowed
+///         // to do async I/O. Note though that to WebAssembly itself the
+///         // function will still be blocking.
+///         "wasi:io/poll.poll": async,
 ///
-///     // Imports will be async functions through #[async_trait] and exports
-///     // are also invoked as async functions. Requires `Config::async_support`
-///     // to be `true`.
-///     //
-///     // Note that this is only async for the host as the guest will still
-///     // appear as if it's invoking blocking functions.
-///     //
-///     // This option defaults to `false`.
-///     async: true,
-///
-///     // Alternative mode of async configuration where this still implies
-///     // async instantiation happens, for example, but more control is
-///     // provided over which imports are async and which aren't.
-///     //
-///     // Note that in this mode all exports are still async.
-///     async: {
-///         // All imports are async except for functions with these names
-///         except_imports: ["foo", "bar"],
-///
-///         // All imports are synchronous except for functions with these names
+///         // The `store` flag means that the host function will have access
+///         // to the store during its execution. By default host functions take
+///         // `&mut self` which only has access to the data in question
+///         // implementing the generated traits from `bindgen!`. This
+///         // configuration means that in addition to `Self` the entire store
+///         // will be accessible if necessary.
 ///         //
-///         // Note that this key cannot be specified with `except_imports`,
-///         // only one or the other is accepted.
-///         only_imports: ["foo", "bar"],
+///         // Functions that have access to a `store` are generated in a
+///         // `HostWithStore` trait. Functions without a `store` are generated
+///         // in a `Host` trait.
+///         //
+///         // > Note: this is not yet implemented for non-async functions. This
+///         // > will result in bindgen errors right now and is intended to be
+///         // > implemented in the near future.
+///         "wasi:clocks/monotonic-clock.now": store,
+///
+///         // This is an example of combining flags where the `async` and
+///         // `store` flags are combined. This means that the generated
+///         // host function is both `async` and additionally has access to
+///         // the `store`. Note though that this configuration is not necessary
+///         // as the WIT function is itself already marked as `async`. That
+///         // means that this is the default already applied meaning that
+///         // specifying it here would be redundant.
+///         //
+///         // "wasi:clocks/monotonic-clock.wait-until": async | store,
+///
+///         // The `tracing` flag indicates that `tracing!` will be used to log
+///         // entries and exits into this host API. This can assist with
+///         // debugging or just generally be used to provide logs for the host.
+///         //
+///         // By default values are traced unless they contain lists, but
+///         // tracing of lists can be enabled with `verbose_tracing` below.
+///         "my:local/api.foo": tracing,
+///
+///         // The `verbose_tracing` flag indicates that when combined with
+///         // `tracing` the values of parameters/results are added to logs.
+///         // This may include lists which may be very large.
+///         "my:local/api.other-function": tracing | verbose_tracing,
+///
+///         // The `trappable` flag indicates that this import is allowed to
+///         // generate a trap.
+///         //
+///         // Imports that may trap have their return types wrapped in
+///         // `wasmtime::Result<T>` where the `Err` variant indicates that a
+///         // trap will be raised in the guest.
+///         //
+///         // By default imports cannot trap and the return value is the return
+///         // value from the WIT bindings itself.
+///         //
+///         // Note that the `trappable` configuration can be combined with the
+///         // `trappable_error_type` configuration below to avoid having a
+///         // host function return `wasmtime::Result<Result<WitOk, WitErr>>`
+///         // for example and instead return `Result<WitOk, RustErrorType>`.
+///         "my:local/api.fallible": trappable,
+///
+///         // The `ignore_wit` flag discards the WIT-level defaults of a
+///         // function. For example this `async` WIT function will be ignored
+///         // and a synchronous function will be generated on the host.
+///         "my:local/api.wait": ignore_wit,
+///
+///         // The `exact` flag ensures that the filter, here "f", only matches
+///         // functions exactly. For example "f" here would only refer to
+///         // `import f: func()` in a world. Without this flag then "f"
+///         // would also configure any package `f:*/*/*` for example.
+///         "f": exact,
+///
+///         // This is used to configure the defaults of all functions if no
+///         // other key above matches a function. Note that if specific
+///         // functions mentioned above want these flags too then the flags
+///         // must be added there too because only one matching rule in this
+///         // map is used per-function.
+///         default: async | trappable,
 ///     },
 ///
-///     // This option is used to indicate whether imports can trap.
+///     // Mostly the same as `imports` above, but applies to exported functions.
 ///     //
-///     // Imports that may trap have their return types wrapped in
-///     // `wasmtime::Result<T>` where the `Err` variant indicates that a
-///     // trap will be raised in the guest.
-///     //
-///     // By default imports cannot trap and the return value is the return
-///     // value from the WIT bindings itself. This value can be set to `true`
-///     // to indicate that any import can trap. This value can also be set to
-///     // an array-of-strings to indicate that only a set list of imports
-///     // can trap.
-///     trappable_imports: false,             // no imports can trap (default)
-///     // trappable_imports: true,           // all imports can trap
-///     // trappable_imports: ["foo", "bar"], // only these can trap
+///     // The one difference here is that, whereas the `task_exit` flag has no
+///     // effect for `imports`, it changes how bindings are generated for
+///     // exported functions as described below.
+///     exports: {
+///         /* ... */
+///
+///         // The `task_exit` flag indicates that the generated binding for
+///         // this function should return a tuple of the result produced by the
+///         // callee and a `TaskExit` future which will resolve when the task
+///         // (and any transitively created subtasks) have exited.
+///         "my:local/api.does-stuff-after-returning": task_exit,
+///     },
 ///
 ///     // This can be used to translate WIT return values of the form
 ///     // `result<T, error-type>` into `Result<T, RustErrorType>` in Rust.
@@ -295,9 +386,9 @@ pub(crate) use self::store::ComponentStoreData;
 ///     // return the raw WIT error (`ErrorType` here) or a trap.
 ///     //
 ///     // By default this option is not specified. This option only takes
-///     // effect when `trappable_imports` is set for some imports.
+///     // effect when `trappable` is set for some imports.
 ///     trappable_error_type: {
-///         "wasi:io/streams/stream-error" => RustErrorType,
+///         "wasi:io/streams.stream-error" => RustErrorType,
 ///     },
 ///
 ///     // All generated bindgen types are "owned" meaning types like `String`
@@ -332,13 +423,13 @@ pub(crate) use self::store::ComponentStoreData;
 ///         // This can be used to indicate that entire interfaces have
 ///         // bindings generated elsewhere with a path pointing to the
 ///         // bindinges-generated module.
-///         "wasi:random/random": wasmtime_wasi::bindings::random::random,
+///         "wasi:random/random": wasmtime_wasi::p2::bindings::random::random,
 ///
 ///         // Similarly entire packages can also be specified.
-///         "wasi:cli": wasmtime_wasi::bindings::cli,
+///         "wasi:cli": wasmtime_wasi::p2::bindings::cli,
 ///
 ///         // Or, if applicable, entire namespaces can additionally be mapped.
-///         "wasi": wasmtime_wasi::bindings,
+///         "wasi": wasmtime_wasi::p2::bindings,
 ///
 ///         // Versions are supported if multiple versions are in play:
 ///         "wasi:http/types@0.2.0": wasmtime_wasi_http::bindings::http::types,
@@ -348,7 +439,7 @@ pub(crate) use self::store::ComponentStoreData;
 ///         // import bindings of `Resource<T>`. This can be done to configure
 ///         // which typed resource shows up in generated bindings and can be
 ///         // useful when working with the typed methods of `ResourceTable`.
-///         "wasi:filesystem/types/descriptor": MyDescriptorType,
+///         "wasi:filesystem/types.descriptor": MyDescriptorType,
 ///     },
 ///
 ///     // Additional derive attributes to include on generated types (structs or enums).
@@ -359,13 +450,6 @@ pub(crate) use self::store::ComponentStoreData;
 ///         serde::Deserialize,
 ///         serde::Serialize,
 ///     ],
-///
-///     // A list of WIT "features" to enable when parsing the WIT document that
-///     // this bindgen macro matches. WIT features are all disabled by default
-///     // and must be opted-in-to if source level features are used.
-///     //
-///     // This option defaults to an empty array.
-///     features: ["foo", "bar", "baz"],
 ///
 ///     // An niche configuration option to require that the `T` in `Store<T>`
 ///     // is always `Send` in the generated bindings. Typically not needed
@@ -380,6 +464,16 @@ pub(crate) use self::store::ComponentStoreData;
 ///     //
 ///     // By default this is `wasmtime`.
 ///     wasmtime_crate: path::to::wasmtime,
+///
+///     // Whether to use `anyhow::Result` for trappable host-defined function
+///     // imports, rather than `wasmtime::Result`.
+///     //
+///     // By default, this is false and `wasmtime::Result` is used instead of
+///     // `anyhow::Result`.
+///     //
+///     // When enabled, the generated code requires the `"anyhow"` cargo feature
+///     // to also be enabled in the `wasmtime` crate.
+///     anyhow: false,
 ///
 ///     // This is an in-source alternative to using `WASMTIME_DEBUG_BINDGEN`.
 ///     //
@@ -512,6 +606,7 @@ pub use wasmtime_component_macro::bindgen;
 ///
 /// #[derive(ComponentType)]
 /// #[component(enum)]
+/// #[repr(u8)]
 /// enum Setting {
 ///     #[component(name = "yes")]
 ///     Yes,
@@ -661,3 +756,9 @@ pub mod bindgen_examples;
 #[cfg(not(any(docsrs, test, doctest)))]
 #[doc(hidden)]
 pub mod bindgen_examples {}
+
+#[cfg(not(feature = "component-model-async"))]
+pub(crate) mod concurrent_disabled;
+
+#[cfg(not(feature = "component-model-async"))]
+pub(crate) use concurrent_disabled as concurrent;

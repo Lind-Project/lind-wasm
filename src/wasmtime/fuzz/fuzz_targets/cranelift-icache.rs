@@ -1,13 +1,14 @@
 #![no_main]
 
 use cranelift_codegen::{
+    Context,
     cursor::{Cursor, FuncCursor},
     incremental_cache as icache,
     ir::{
-        self, immediates::Imm64, ExternalName, Function, LibCall, Signature, UserExternalName,
-        UserFuncName,
+        self, ExternalName, Function, LibCall, Signature, UserExternalName, UserFuncName,
+        immediates::Imm64,
     },
-    isa, Context,
+    isa,
 };
 use libfuzzer_sys::{
     arbitrary::{self, Arbitrary, Unstructured},
@@ -52,11 +53,11 @@ impl FunctionWithIsa {
             isa::lookup_by_name(target).map_err(|_| arbitrary::Error::IncorrectFormat)?;
         let architecture = builder.triple().architecture;
 
-        let mut gen = FuzzGen::new(u);
-        let flags = gen
+        let mut fuzz_gen = FuzzGen::new(u);
+        let flags = fuzz_gen
             .generate_flags(architecture)
             .map_err(|_| arbitrary::Error::IncorrectFormat)?;
-        gen.set_isa_flags(&mut builder, IsaFlagGen::All)?;
+        fuzz_gen.set_isa_flags(&mut builder, IsaFlagGen::All)?;
         let isa = builder
             .finish(flags)
             .map_err(|_| arbitrary::Error::IncorrectFormat)?;
@@ -65,17 +66,19 @@ impl FunctionWithIsa {
         let fname = UserFuncName::user(1, 0);
 
         // We don't actually generate these functions, we just simulate their signatures and names
-        let func_count = gen.u.int_in_range(gen.config.testcase_funcs.clone())?;
+        let func_count = fuzz_gen
+            .u
+            .int_in_range(fuzz_gen.config.testcase_funcs.clone())?;
         let usercalls = (0..func_count)
             .map(|i| {
                 let name = UserExternalName::new(2, i as u32);
-                let sig = gen.generate_signature(&*isa)?;
+                let sig = fuzz_gen.generate_signature(&*isa)?;
                 Ok((name, sig))
             })
             .collect::<anyhow::Result<Vec<(UserExternalName, Signature)>>>()
             .map_err(|_| arbitrary::Error::IncorrectFormat)?;
 
-        let func = gen
+        let func = fuzz_gen
             .generate_func(fname, isa.clone(), usercalls, ALLOWED_LIBCALLS.to_vec())
             .map_err(|_| arbitrary::Error::IncorrectFormat)?;
 

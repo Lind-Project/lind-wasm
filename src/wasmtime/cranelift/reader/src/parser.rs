@@ -9,18 +9,19 @@ use crate::testcommand::TestCommand;
 use crate::testfile::{Comment, Details, Feature, TestFile};
 use cranelift_codegen::data_value::DataValue;
 use cranelift_codegen::entity::{EntityRef, PrimaryMap};
-use cranelift_codegen::ir::entities::{AnyEntity, DynamicType, MemoryType};
-use cranelift_codegen::ir::immediates::{Ieee32, Ieee64, Imm64, Offset32, Uimm32, Uimm64};
+use cranelift_codegen::ir::entities::{AnyEntity, DynamicType};
+use cranelift_codegen::ir::immediates::{
+    Ieee16, Ieee32, Ieee64, Ieee128, Imm64, Offset32, Uimm32, Uimm64,
+};
 use cranelift_codegen::ir::instructions::{InstructionData, InstructionFormat, VariableArgs};
-use cranelift_codegen::ir::pcc::{BaseExpr, Expr, Fact};
-use cranelift_codegen::ir::types;
-use cranelift_codegen::ir::types::*;
-use cranelift_codegen::ir::{self, UserExternalNameRef};
+use cranelift_codegen::ir::{self, StackSlotKey, UserExternalNameRef};
+use cranelift_codegen::ir::{DebugTag, types::*};
+
 use cranelift_codegen::ir::{
-    AbiParam, ArgumentExtension, ArgumentPurpose, Block, Constant, ConstantData, DynamicStackSlot,
-    DynamicStackSlotData, DynamicTypeData, ExtFuncData, ExternalName, FuncRef, Function,
-    GlobalValue, GlobalValueData, JumpTableData, MemFlags, MemoryTypeData, MemoryTypeField, Opcode,
-    SigRef, Signature, StackSlot, StackSlotData, StackSlotKind, UserFuncName, Value,
+    AbiParam, ArgumentExtension, ArgumentPurpose, Block, BlockArg, Constant, ConstantData,
+    DynamicStackSlot, DynamicStackSlotData, DynamicTypeData, ExtFuncData, ExternalName, FuncRef,
+    Function, GlobalValue, GlobalValueData, JumpTableData, MemFlags, Opcode, SigRef, Signature,
+    StackSlot, StackSlotData, StackSlotKind, UserFuncName, Value, types,
 };
 use cranelift_codegen::isa::{self, CallConv};
 use cranelift_codegen::packed_option::ReservedValue;
@@ -306,13 +307,7 @@ impl Context {
     }
 
     // Allocate a global value slot.
-    fn add_gv(
-        &mut self,
-        gv: GlobalValue,
-        data: GlobalValueData,
-        maybe_fact: Option<Fact>,
-        loc: Location,
-    ) -> ParseResult<()> {
+    fn add_gv(&mut self, gv: GlobalValue, data: GlobalValueData, loc: Location) -> ParseResult<()> {
         self.map.def_gv(gv, loc)?;
         while self.function.global_values.next_key().index() <= gv.index() {
             self.function.create_global_value(GlobalValueData::Symbol {
@@ -323,19 +318,6 @@ impl Context {
             });
         }
         self.function.global_values[gv] = data;
-        if let Some(fact) = maybe_fact {
-            self.function.global_value_facts[gv] = Some(fact);
-        }
-        Ok(())
-    }
-
-    // Allocate a memory-type slot.
-    fn add_mt(&mut self, mt: MemoryType, data: MemoryTypeData, loc: Location) -> ParseResult<()> {
-        self.map.def_mt(mt, loc)?;
-        while self.function.memory_types.next_key().index() <= mt.index() {
-            self.function.create_memory_type(MemoryTypeData::default());
-        }
-        self.function.memory_types[mt] = data;
         Ok(())
     }
 
@@ -381,6 +363,7 @@ impl Context {
                 name: ExternalName::testcase(""),
                 signature: SigRef::reserved_value(),
                 colocated: false,
+                patchable: false,
             });
         }
         self.function.dfg.ext_funcs[fn_] = data;
@@ -642,17 +625,6 @@ impl<'a> Parser<'a> {
         err!(self.loc, err_msg)
     }
 
-    // Match and consume a memory-type reference.
-    fn match_mt(&mut self, err_msg: &str) -> ParseResult<MemoryType> {
-        if let Some(Token::MemoryType(mt)) = self.token() {
-            self.consume();
-            if let Some(mt) = MemoryType::with_number(mt) {
-                return Ok(mt);
-            }
-        }
-        err!(self.loc, err_msg)
-    }
-
     // Match and consume a constant reference.
     fn match_constant(&mut self) -> ParseResult<Constant> {
         if let Some(Token::Constant(c)) = self.token() {
@@ -719,8 +691,7 @@ impl<'a> Parser<'a> {
             self.consume();
             text.parse().map_err(|e| {
                 self.error(&format!(
-                    "expected hexadecimal immediate, failed to parse: {}",
-                    e
+                    "expected hexadecimal immediate, failed to parse: {e}"
                 ))
             })
         } else {
@@ -749,8 +720,7 @@ impl<'a> Parser<'a> {
             Ok(constant_data)
         } else {
             Err(self.error(&format!(
-                "expected parsed constant to have {} bytes",
-                expected_size
+                "expected parsed constant to have {expected_size} bytes"
             )))
         }
     }
@@ -786,9 +756,9 @@ impl<'a> Parser<'a> {
         if let Some(Token::Integer(text)) = self.token() {
             self.consume();
             // Lexer just gives us raw text that looks like an integer.
-            if text.starts_with("0x") {
+            if let Some(num) = text.strip_prefix("0x") {
                 // Parse it as a u8 in hexadecimal form.
-                u8::from_str_radix(&text[2..], 16)
+                u8::from_str_radix(num, 16)
                     .map_err(|_| self.error("unable to parse u8 as a hexadecimal immediate"))
             } else {
                 // Parse it as a u8 to check for overflow and other issues.
@@ -855,6 +825,18 @@ impl<'a> Parser<'a> {
         Ok(Imm64::new(0))
     }
 
+    // Match and consume an Ieee16 immediate.
+    fn match_ieee16(&mut self, err_msg: &str) -> ParseResult<Ieee16> {
+        if let Some(Token::Float(text)) = self.token() {
+            self.consume();
+            // Lexer just gives us raw text that looks like a float.
+            // Parse it as an Ieee16 to check for the right number of digits and other issues.
+            text.parse().map_err(|e| self.error(e))
+        } else {
+            err!(self.loc, err_msg)
+        }
+    }
+
     // Match and consume an Ieee32 immediate.
     fn match_ieee32(&mut self, err_msg: &str) -> ParseResult<Ieee32> {
         if let Some(Token::Float(text)) = self.token() {
@@ -873,6 +855,18 @@ impl<'a> Parser<'a> {
             self.consume();
             // Lexer just gives us raw text that looks like a float.
             // Parse it as an Ieee64 to check for the right number of digits and other issues.
+            text.parse().map_err(|e| self.error(e))
+        } else {
+            err!(self.loc, err_msg)
+        }
+    }
+
+    // Match and consume an Ieee128 immediate.
+    fn match_ieee128(&mut self, err_msg: &str) -> ParseResult<Ieee128> {
+        if let Some(Token::Float(text)) = self.token() {
+            self.consume();
+            // Lexer just gives us raw text that looks like a float.
+            // Parse it as an Ieee128 to check for the right number of digits and other issues.
             text.parse().map_err(|e| self.error(e))
         } else {
             err!(self.loc, err_msg)
@@ -928,6 +922,38 @@ impl<'a> Parser<'a> {
             }
         } else {
             Ok(Default::default())
+        }
+    }
+
+    /// Parse an optional list of debug tags.
+    fn optional_debug_tags(&mut self) -> ParseResult<Vec<DebugTag>> {
+        if self.optional(Token::LAngle) {
+            let mut tags = vec![];
+            while !self.optional(Token::RAngle) {
+                match self.token() {
+                    Some(Token::Integer(_)) => {
+                        let value: u32 = self.match_uimm32("expected a u32 value")?.into();
+                        tags.push(DebugTag::User(value));
+                    }
+                    Some(Token::StackSlot(slot)) => {
+                        self.consume();
+                        tags.push(DebugTag::StackSlot(StackSlot::from_u32(slot)));
+                    }
+                    _ => {
+                        return err!(
+                            self.loc,
+                            "expected integer user value or stack slot in debug tags"
+                        );
+                    }
+                }
+                if !self.optional(Token::Comma) {
+                    self.match_token(Token::RAngle, "expected `,` or `>`")?;
+                    break;
+                }
+            }
+            Ok(tags)
+        } else {
+            Ok(vec![])
         }
     }
 
@@ -1013,7 +1039,7 @@ impl<'a> Parser<'a> {
                     .finish(settings::Flags::new(flag_builder.clone()))
                     .map_err(|e| ParseError {
                         location: loc,
-                        message: format!("invalid ISA flags for '{}': {:?}", targ, e),
+                        message: format!("invalid ISA flags for '{targ}': {e:?}"),
                         is_warning: false,
                     })?,
             );
@@ -1041,11 +1067,7 @@ impl<'a> Parser<'a> {
         let mut flag_builder = settings::builder();
 
         let bool_to_str = |val: bool| {
-            if val {
-                "true"
-            } else {
-                "false"
-            }
+            if val { "true" } else { "false" }
         };
 
         // default to enabling cfg info
@@ -1105,10 +1127,7 @@ impl<'a> Parser<'a> {
                             .finish(settings::Flags::new(flag_builder.clone()))
                             .map_err(|e| ParseError {
                                 location: loc,
-                                message: format!(
-                                    "invalid ISA flags for '{}': {:?}",
-                                    target_name, e
-                                ),
+                                message: format!("invalid ISA flags for '{target_name}': {e:?}"),
                                 is_warning: false,
                             })?,
                     );
@@ -1143,7 +1162,7 @@ impl<'a> Parser<'a> {
                     return err!(
                         self.loc,
                         format!("Expected feature flag string, got {:?}", tok)
-                    )
+                    );
                 }
             }
             self.consume();
@@ -1355,11 +1374,6 @@ impl<'a> Parser<'a> {
                 }
                 _ => return err!(self.loc, "unknown calling convention: {}", text),
             },
-
-            Some(Token::Cold) => {
-                self.consume();
-                sig.call_conv = CallConv::Cold;
-            }
             _ => {}
         }
 
@@ -1451,12 +1465,7 @@ impl<'a> Parser<'a> {
                 Some(Token::GlobalValue(..)) => {
                     self.start_gathering_comments();
                     self.parse_global_value_decl()
-                        .and_then(|(gv, dat, maybe_fact)| ctx.add_gv(gv, dat, maybe_fact, self.loc))
-                }
-                Some(Token::MemoryType(..)) => {
-                    self.start_gathering_comments();
-                    self.parse_memory_type_decl()
-                        .and_then(|(mt, dat)| ctx.add_mt(mt, dat, self.loc))
+                        .and_then(|(gv, dat)| ctx.add_gv(gv, dat, self.loc))
                 }
                 Some(Token::SigRef(..)) => {
                     self.start_gathering_comments();
@@ -1492,7 +1501,7 @@ impl<'a> Parser<'a> {
     //                   | "spill_slot"
     //                   | "incoming_arg"
     //                   | "outgoing_arg"
-    // stack-slot-flag ::= "align" "=" Bytes
+    // stack-slot-flag ::= "align" "=" Bytes | "key" "=" uimm64
     fn parse_stack_slot_decl(&mut self) -> ParseResult<(StackSlot, StackSlotData)> {
         let ss = self.match_ss("expected stack slot number: ss«n»")?;
         self.match_token(Token::Equal, "expected '=' in stack slot declaration")?;
@@ -1509,29 +1518,42 @@ impl<'a> Parser<'a> {
             return err!(self.loc, "stack slot too large");
         }
 
-        // Parse flags.
-        let align = if self.token() == Some(Token::Comma) {
+        let mut align = 1;
+        let mut key = None;
+
+        while self.token() == Some(Token::Comma) {
             self.consume();
-            self.match_token(
-                Token::Identifier("align"),
-                "expected a valid stack-slot flag (currently only `align`)",
-            )?;
-            self.match_token(Token::Equal, "expected `=` after flag")?;
-            let align: i64 = self
-                .match_imm64("expected alignment-size after `align` flag")?
-                .into();
-            u32::try_from(align)
-                .map_err(|_| self.error("alignment must be a 32-bit unsigned integer"))?
-        } else {
-            1
-        };
+            match self.token() {
+                Some(Token::Identifier("align")) => {
+                    self.consume();
+                    self.match_token(Token::Equal, "expected `=` after flag")?;
+                    let align64: i64 = self
+                        .match_imm64("expected alignment-size after `align` flag")?
+                        .into();
+                    align = u32::try_from(align64)
+                        .map_err(|_| self.error("alignment must be a 32-bit unsigned integer"))?;
+                }
+                Some(Token::Identifier("key")) => {
+                    self.consume();
+                    self.match_token(Token::Equal, "expected `=` after flag")?;
+                    let value = self.match_uimm64("expected `u64` value for `key` flag")?;
+                    key = Some(StackSlotKey::new(value.into()));
+                }
+                _ => {
+                    return Err(self.error("invalid flag for stack slot"));
+                }
+            }
+        }
 
         if !align.is_power_of_two() {
             return err!(self.loc, "stack slot alignment is not a power of two");
         }
         let align_shift = u8::try_from(align.ilog2()).unwrap(); // Always succeeds: range 0..=31.
 
-        let data = StackSlotData::new(kind, bytes as u32, align_shift);
+        let data = match key {
+            Some(key) => StackSlotData::new_with_key(kind, bytes as u32, align_shift, key),
+            None => StackSlotData::new(kind, bytes as u32, align_shift),
+        };
 
         // Collect any trailing comments.
         self.token();
@@ -1576,24 +1598,15 @@ impl<'a> Parser<'a> {
 
     // Parse a global value decl.
     //
-    // global-val-decl ::= * GlobalValue(gv) [ "!" fact ] "=" global-val-desc
+    // global-val-decl ::= * GlobalValue(gv) "=" global-val-desc
     // global-val-desc ::= "vmctx"
     //                   | "load" "." type "notrap" "aligned" GlobalValue(base) [offset]
     //                   | "iadd_imm" "(" GlobalValue(base) ")" imm64
     //                   | "symbol" ["colocated"] name + imm64
     //                   | "dyn_scale_target_const" "." type
     //
-    fn parse_global_value_decl(
-        &mut self,
-    ) -> ParseResult<(GlobalValue, GlobalValueData, Option<Fact>)> {
+    fn parse_global_value_decl(&mut self) -> ParseResult<(GlobalValue, GlobalValueData)> {
         let gv = self.match_gv("expected global value number: gv«n»")?;
-
-        let fact = if self.token() == Some(Token::Bang) {
-            self.consume();
-            Some(self.parse_fact()?)
-        } else {
-            None
-        };
 
         self.match_token(Token::Equal, "expected '=' in global value declaration")?;
 
@@ -1665,114 +1678,7 @@ impl<'a> Parser<'a> {
         self.token();
         self.claim_gathered_comments(gv);
 
-        Ok((gv, data, fact))
-    }
-
-    // Parse one field definition in a memory-type struct decl.
-    //
-    // memory-type-field ::=  offset ":" type ["readonly"] [ "!" fact ]
-    // offset ::= uimm64
-    fn parse_memory_type_field(&mut self) -> ParseResult<MemoryTypeField> {
-        let offset: u64 = self
-            .match_uimm64(
-                "expected u64 constant value for field offset in struct memory-type declaration",
-            )?
-            .into();
-        self.match_token(
-            Token::Colon,
-            "expected colon after field offset in struct memory-type declaration",
-        )?;
-        let ty = self.match_type("expected type for field in struct memory-type declaration")?;
-        let readonly = if self.token() == Some(Token::Identifier("readonly")) {
-            self.consume();
-            true
-        } else {
-            false
-        };
-        let fact = if self.token() == Some(Token::Bang) {
-            self.consume();
-            let fact = self.parse_fact()?;
-            Some(fact)
-        } else {
-            None
-        };
-        Ok(MemoryTypeField {
-            offset,
-            ty,
-            readonly,
-            fact,
-        })
-    }
-
-    // Parse a memory-type decl.
-    //
-    // memory-type-decl ::= MemoryType(mt) "=" memory-type-desc
-    // memory-type-desc ::= "struct" size "{" memory-type-field,* "}"
-    //                    | "memory" size
-    //                    | "dynamic_memory" GlobalValue "+" offset
-    //                    | "empty"
-    // size ::= uimm64
-    // offset ::= uimm64
-    fn parse_memory_type_decl(&mut self) -> ParseResult<(MemoryType, MemoryTypeData)> {
-        let mt = self.match_mt("expected memory type number: mt«n»")?;
-        self.match_token(Token::Equal, "expected '=' in memory type declaration")?;
-
-        let data = match self.token() {
-            Some(Token::Identifier("struct")) => {
-                self.consume();
-                let size: u64 = self.match_uimm64("expected u64 constant value for struct size in struct memory-type declaration")?.into();
-                self.match_token(Token::LBrace, "expected opening brace to start struct fields in struct memory-type declaration")?;
-                let mut fields = vec![];
-                while self.token() != Some(Token::RBrace) {
-                    let field = self.parse_memory_type_field()?;
-                    fields.push(field);
-                    if self.token() == Some(Token::Comma) {
-                        self.consume();
-                    } else {
-                        break;
-                    }
-                }
-                self.match_token(
-                    Token::RBrace,
-                    "expected closing brace after struct fields in struct memory-type declaration",
-                )?;
-                MemoryTypeData::Struct { size, fields }
-            }
-            Some(Token::Identifier("memory")) => {
-                self.consume();
-                let size: u64 = self.match_uimm64("expected u64 constant value for size in static-memory memory-type declaration")?.into();
-                MemoryTypeData::Memory { size }
-            }
-            Some(Token::Identifier("dynamic_memory")) => {
-                self.consume();
-                let gv = self.match_gv(
-                    "expected a global value for `dynamic_memory` memory-type declaration",
-                )?;
-                self.match_token(
-                    Token::Plus,
-                    "expected `+` after global value in `dynamic_memory` memory-type declaration",
-                )?;
-                let size: u64 = self.match_uimm64("expected u64 constant value for size offset in `dynamic_memory` memory-type declaration")?.into();
-                MemoryTypeData::DynamicMemory { gv, size }
-            }
-            Some(Token::Identifier("empty")) => {
-                self.consume();
-                MemoryTypeData::Empty
-            }
-            other => {
-                return err!(
-                    self.loc,
-                    "Unknown memory type declaration kind '{:?}'",
-                    other
-                )
-            }
-        };
-
-        // Collect any trailing comments.
-        self.token();
-        self.claim_gathered_comments(mt);
-
-        Ok((mt, data))
+        Ok((gv, data))
     }
 
     // Parse a signature decl.
@@ -1795,7 +1701,7 @@ impl<'a> Parser<'a> {
     //
     // Two variants:
     //
-    // function-decl ::= FuncRef(fnref) "=" ["colocated"]" name function-decl-sig
+    // function-decl ::= FuncRef(fnref) "=" ["colocated"] ["patchable"] name function-decl-sig
     // function-decl-sig ::= SigRef(sig) | signature
     //
     // The first variant allocates a new signature reference. The second references an existing
@@ -1807,16 +1713,18 @@ impl<'a> Parser<'a> {
 
         let loc = self.loc;
 
-        // function-decl ::= FuncRef(fnref) "=" * ["colocated"] name function-decl-sig
+        // function-decl ::= FuncRef(fnref) "=" * ["colocated"] ["patchable"] name function-decl-sig
         let colocated = self.optional(Token::Identifier("colocated"));
+        // function-decl ::= FuncRef(fnref) "=" ["colocated"] * ["patchable"] name function-decl-sig
+        let patchable = self.optional(Token::Identifier("patchable"));
 
-        // function-decl ::= FuncRef(fnref) "=" ["colocated"] * name function-decl-sig
+        // function-decl ::= FuncRef(fnref) "=" ["colocated"] ["patchable"] * name function-decl-sig
         let name = self.parse_external_name()?;
 
-        // function-decl ::= FuncRef(fnref) "=" ["colocated"] name * function-decl-sig
+        // function-decl ::= FuncRef(fnref) "=" ["colocated"] ["patchable"] name * function-decl-sig
         let data = match self.token() {
             Some(Token::LPar) => {
-                // function-decl ::= FuncRef(fnref) "=" ["colocated"] name * signature
+                // function-decl ::= FuncRef(fnref) "=" ["colocated"] ["patchable"] name * signature
                 let sig = self.parse_signature()?;
                 let sigref = ctx.function.import_signature(sig);
                 ctx.map
@@ -1826,6 +1734,7 @@ impl<'a> Parser<'a> {
                     name,
                     signature: sigref,
                     colocated,
+                    patchable,
                 }
             }
             Some(Token::SigRef(sig_src)) => {
@@ -1841,6 +1750,7 @@ impl<'a> Parser<'a> {
                     name,
                     signature: sig,
                     colocated,
+                    patchable,
                 }
             }
             _ => return err!(self.loc, "expected 'function' or sig«n» in function decl"),
@@ -1869,7 +1779,7 @@ impl<'a> Parser<'a> {
         match self.token() {
             Some(Token::Block(dest)) => {
                 self.consume();
-                let args = self.parse_opt_value_list()?;
+                let args = self.parse_opt_block_call_args()?;
                 data.push(ctx.function.dfg.block_call(dest, &args));
 
                 loop {
@@ -1878,7 +1788,7 @@ impl<'a> Parser<'a> {
                             self.consume();
                             if let Some(Token::Block(dest)) = self.token() {
                                 self.consume();
-                                let args = self.parse_opt_value_list()?;
+                                let args = self.parse_opt_block_call_args()?;
                                 data.push(ctx.function.dfg.block_call(dest, &args));
                             } else {
                                 return err!(self.loc, "expected jump_table entry");
@@ -1900,6 +1810,76 @@ impl<'a> Parser<'a> {
             .dfg
             .jump_tables
             .push(JumpTableData::new(def, &data)))
+    }
+
+    // Parse an exception-table decl.
+    //
+    // exception-table ::= * SigRef(sig) "," BlockCall "," "[" (exception-table-entry ( "," exception-table-entry )*)? "]"
+    // exception-table-entry ::=   ExceptionTag(tag) ":" BlockCall
+    //                           | "default" ":" BlockCall
+    //                           | "context" value
+    fn parse_exception_table(&mut self, ctx: &mut Context) -> ParseResult<ir::ExceptionTable> {
+        let sig = self.match_sig("expected signature of called function")?;
+        self.match_token(Token::Comma, "expected comma after signature argument")?;
+
+        let mut handlers = vec![];
+
+        let block_num = self.match_block("expected branch destination block")?;
+        let args = self.parse_opt_block_call_args()?;
+        let normal_return = ctx.function.dfg.block_call(block_num, &args);
+
+        self.match_token(
+            Token::Comma,
+            "expected comma after normal-return destination",
+        )?;
+
+        self.match_token(
+            Token::LBracket,
+            "expected an open-bracket for exception table list",
+        )?;
+        loop {
+            match self.token() {
+                Some(Token::RBracket) => {
+                    break;
+                }
+                Some(Token::ExceptionTag(tag)) => {
+                    self.consume();
+                    self.match_token(Token::Colon, "expected ':' after exception tag")?;
+                    let tag = ir::ExceptionTag::from_u32(tag);
+                    let block_num = self.match_block("expected branch destination block")?;
+                    let args = self.parse_opt_block_call_args()?;
+                    let block_call = ctx.function.dfg.block_call(block_num, &args);
+                    handlers.push(ir::ExceptionTableItem::Tag(tag, block_call));
+                }
+                Some(Token::Identifier("default")) => {
+                    self.consume();
+                    self.match_token(Token::Colon, "expected ':' after 'default'")?;
+                    let block_num = self.match_block("expected branch destination block")?;
+                    let args = self.parse_opt_block_call_args()?;
+                    let block_call = ctx.function.dfg.block_call(block_num, &args);
+                    handlers.push(ir::ExceptionTableItem::Default(block_call));
+                }
+                Some(Token::Identifier("context")) => {
+                    self.consume();
+                    let val = self.match_value("expected value for exception-handler context")?;
+                    handlers.push(ir::ExceptionTableItem::Context(val));
+                }
+                _ => return err!(self.loc, "invalid token"),
+            }
+
+            if let Some(Token::Comma) = self.token() {
+                self.consume();
+            } else {
+                break;
+            }
+        }
+        self.match_token(Token::RBracket, "expected closing bracket")?;
+
+        Ok(ctx
+            .function
+            .dfg
+            .exception_tables
+            .push(ir::ExceptionTableData::new(sig, normal_return, handlers)))
     }
 
     // Parse a constant decl.
@@ -2015,16 +1995,19 @@ impl<'a> Parser<'a> {
             Some(Token::Value(_))
             | Some(Token::Identifier(_))
             | Some(Token::LBracket)
-            | Some(Token::SourceLoc(_)) => true,
+            | Some(Token::SourceLoc(_))
+            | Some(Token::LAngle) => true,
             _ => false,
         } {
             let srcloc = self.optional_srcloc()?;
+
+            let debug_tags = self.optional_debug_tags()?;
 
             // We need to parse instruction results here because they are shared
             // between the parsing of value aliases and the parsing of instructions.
             //
             // inst-results ::= Value(v) { "," Value(v) }
-            let results = self.parse_inst_results(ctx)?;
+            let results = self.parse_inst_results()?;
 
             for result in &results {
                 while ctx.function.dfg.num_values() <= result.index() {
@@ -2039,10 +2022,10 @@ impl<'a> Parser<'a> {
                 }
                 Some(Token::Equal) => {
                     self.consume();
-                    self.parse_instruction(&results, srcloc, ctx, block)?;
+                    self.parse_instruction(&results, srcloc, debug_tags, ctx, block)?;
                 }
                 _ if !results.is_empty() => return err!(self.loc, "expected -> or ="),
-                _ => self.parse_instruction(&results, srcloc, ctx, block)?,
+                _ => self.parse_instruction(&results, srcloc, debug_tags, ctx, block)?,
             }
         }
 
@@ -2079,24 +2062,15 @@ impl<'a> Parser<'a> {
 
     // Parse a single block parameter declaration, and append it to `block`.
     //
-    // block-param ::= * Value(v) [ "!" fact ]  ":" Type(t) arg-loc?
+    // block-param ::= * Value(v) ":" Type(t) arg-loc?
     // arg-loc ::= "[" value-location "]"
     //
     fn parse_block_param(&mut self, ctx: &mut Context, block: Block) -> ParseResult<()> {
-        // block-param ::= * Value(v) [ "!" fact ] ":" Type(t) arg-loc?
+        // block-param ::= * Value(v) ":" Type(t) arg-loc?
         let v = self.match_value("block argument must be a value")?;
         let v_location = self.loc;
-        // block-param ::= Value(v) * [ "!" fact ]  ":" Type(t) arg-loc?
-        let fact = if self.token() == Some(Token::Bang) {
-            self.consume();
-            // block-param ::= Value(v) [ "!" * fact ]  ":" Type(t) arg-loc?
-            Some(self.parse_fact()?)
-        } else {
-            None
-        };
         self.match_token(Token::Colon, "expected ':' after block argument")?;
-        // block-param ::= Value(v) [ "!" fact ] ":" * Type(t) arg-loc?
-
+        // block-param ::= Value(v) ":" * Type(t) arg-loc?
         while ctx.function.dfg.num_values() <= v.index() {
             ctx.function.dfg.make_invalid_value_for_parser();
         }
@@ -2105,246 +2079,15 @@ impl<'a> Parser<'a> {
         // Allocate the block argument.
         ctx.function.dfg.append_block_param_for_parser(block, t, v);
         ctx.map.def_value(v, v_location)?;
-        ctx.function.dfg.facts[v] = fact;
 
         Ok(())
-    }
-
-    // Parse a "fact" for proof-carrying code, attached to a value.
-    //
-    // fact ::= "range" "(" bit-width "," min-value "," max-value ")"
-    //        | "dynamic_range" "(" bit-width "," expr "," expr ")"
-    //        | "mem" "(" memory-type "," mt-offset "," mt-offset [ "," "nullable" ] ")"
-    //        | "dynamic_mem" "(" memory-type "," expr "," expr [ "," "nullable" ] ")"
-    //        | "conflict"
-    // bit-width ::= uimm64
-    // min-value ::= uimm64
-    // max-value ::= uimm64
-    // valid-range ::= uimm64
-    // mt-offset ::= uimm64
-    fn parse_fact(&mut self) -> ParseResult<Fact> {
-        match self.token() {
-            Some(Token::Identifier("range")) => {
-                self.consume();
-                self.match_token(Token::LPar, "`range` fact needs an opening `(`")?;
-                let bit_width: u64 = self
-                    .match_uimm64("expected a bit-width value for `range` fact")?
-                    .into();
-                self.match_token(Token::Comma, "expected a comma")?;
-                let min: u64 = self
-                    .match_uimm64("expected a min value for `range` fact")?
-                    .into();
-                self.match_token(Token::Comma, "expected a comma")?;
-                let max: u64 = self
-                    .match_uimm64("expected a max value for `range` fact")?
-                    .into();
-                self.match_token(Token::RPar, "`range` fact needs a closing `)`")?;
-                let bit_width_max = match bit_width {
-                    x if x > 64 => {
-                        return Err(self.error("bitwidth must be <= 64 bits on a `range` fact"));
-                    }
-                    64 => u64::MAX,
-                    x => (1u64 << x) - 1,
-                };
-                if min > max {
-                    return Err(self.error(
-                        "min value must be less than or equal to max value on a `range` fact",
-                    ));
-                }
-                if max > bit_width_max {
-                    return Err(
-                        self.error("max value is out of range for bitwidth on a `range` fact")
-                    );
-                }
-                Ok(Fact::Range {
-                    bit_width: u16::try_from(bit_width).unwrap(),
-                    min: min.into(),
-                    max: max.into(),
-                })
-            }
-            Some(Token::Identifier("dynamic_range")) => {
-                self.consume();
-                self.match_token(Token::LPar, "`dynamic_range` fact needs an opening `(`")?;
-                let bit_width: u64 = self
-                    .match_uimm64("expected a bit-width value for `dynamic_range` fact")?
-                    .into();
-                self.match_token(Token::Comma, "expected a comma")?;
-                let min = self.parse_expr()?;
-                self.match_token(Token::Comma, "expected a comma")?;
-                let max = self.parse_expr()?;
-                self.match_token(Token::RPar, "`dynamic_range` fact needs a closing `)`")?;
-                Ok(Fact::DynamicRange {
-                    bit_width: u16::try_from(bit_width).unwrap(),
-                    min,
-                    max,
-                })
-            }
-            Some(Token::Identifier("mem")) => {
-                self.consume();
-                self.match_token(Token::LPar, "expected a `(`")?;
-                let ty = self.match_mt("expected a memory type for `mem` fact")?;
-                self.match_token(
-                    Token::Comma,
-                    "expected a comma after memory type in `mem` fact",
-                )?;
-                let min_offset: u64 = self
-                    .match_uimm64("expected a uimm64 minimum pointer offset for `mem` fact")?
-                    .into();
-                self.match_token(Token::Comma, "expected a comma after offset in `mem` fact")?;
-                let max_offset: u64 = self
-                    .match_uimm64("expected a uimm64 maximum pointer offset for `mem` fact")?
-                    .into();
-                let nullable = if self.token() == Some(Token::Comma) {
-                    self.consume();
-                    self.match_token(
-                        Token::Identifier("nullable"),
-                        "expected `nullable` in last optional field of `dynamic_mem`",
-                    )?;
-                    true
-                } else {
-                    false
-                };
-                self.match_token(Token::RPar, "expected a `)`")?;
-                Ok(Fact::Mem {
-                    ty,
-                    min_offset,
-                    max_offset,
-                    nullable,
-                })
-            }
-            Some(Token::Identifier("dynamic_mem")) => {
-                self.consume();
-                self.match_token(Token::LPar, "expected a `(`")?;
-                let ty = self.match_mt("expected a memory type for `dynamic_mem` fact")?;
-                self.match_token(
-                    Token::Comma,
-                    "expected a comma after memory type in `dynamic_mem` fact",
-                )?;
-                let min = self.parse_expr()?;
-                self.match_token(
-                    Token::Comma,
-                    "expected a comma after offset in `dynamic_mem` fact",
-                )?;
-                let max = self.parse_expr()?;
-                let nullable = if self.token() == Some(Token::Comma) {
-                    self.consume();
-                    self.match_token(
-                        Token::Identifier("nullable"),
-                        "expected `nullable` in last optional field of `dynamic_mem`",
-                    )?;
-                    true
-                } else {
-                    false
-                };
-                self.match_token(Token::RPar, "expected a `)`")?;
-                Ok(Fact::DynamicMem {
-                    ty,
-                    min,
-                    max,
-                    nullable,
-                })
-            }
-            Some(Token::Identifier("def")) => {
-                self.consume();
-                self.match_token(Token::LPar, "expected a `(`")?;
-                let value = self.match_value("expected a value number in `def` fact")?;
-                self.match_token(Token::RPar, "expected a `)`")?;
-                Ok(Fact::Def { value })
-            }
-            Some(Token::Identifier("compare")) => {
-                self.consume();
-                self.match_token(Token::LPar, "expected a `(`")?;
-                let kind = self.match_enum("expected intcc condition code in `compare` fact")?;
-                self.match_token(
-                    Token::Comma,
-                    "expected comma in `compare` fact after condition code",
-                )?;
-                let lhs = self.parse_expr()?;
-                self.match_token(Token::Comma, "expected comma in `compare` fact after LHS")?;
-                let rhs = self.parse_expr()?;
-                self.match_token(Token::RPar, "expected a `)`")?;
-                Ok(Fact::Compare { kind, lhs, rhs })
-            }
-            Some(Token::Identifier("conflict")) => {
-                self.consume();
-                Ok(Fact::Conflict)
-            }
-            _ => Err(self.error(
-                "expected a `range`, 'dynamic_range', `mem`, `dynamic_mem`, `def`, `compare` or `conflict` fact",
-            )),
-        }
-    }
-
-    // Parse a dynamic expression used in some kinds of PCC facts.
-    //
-    // expr ::= base-expr
-    //        | base-expr + uimm64  // but in-range for imm64
-    //        | base-expr - uimm64  // but in-range for imm64
-    //        | imm64
-    fn parse_expr(&mut self) -> ParseResult<Expr> {
-        if let Some(Token::Integer(_)) = self.token() {
-            let offset: i64 = self
-                .match_imm64("expected imm64 for dynamic expression")?
-                .into();
-            Ok(Expr {
-                base: BaseExpr::None,
-                offset,
-            })
-        } else {
-            let base = self.parse_base_expr()?;
-            match self.token() {
-                Some(Token::Plus) => {
-                    self.consume();
-                    let offset: u64 = self
-                        .match_uimm64(
-                            "expected uimm64 in imm64 range for offset in dynamic expression",
-                        )?
-                        .into();
-                    let offset: i64 = i64::try_from(offset).map_err(|_| {
-                        self.error("integer offset in dynamic expression is out of range")
-                    })?;
-                    Ok(Expr { base, offset })
-                }
-                Some(Token::Integer(x)) if x.starts_with("-") => {
-                    let offset: i64 = self
-                        .match_imm64("expected an imm64 range for offset in dynamic expression")?
-                        .into();
-                    Ok(Expr { base, offset })
-                }
-                _ => Ok(Expr { base, offset: 0 }),
-            }
-        }
-    }
-
-    // Parse the base part of a dynamic expression, used in some PCC facts.
-    //
-    // base-expr ::= GlobalValue(base)
-    //             | Value(base)
-    //             | "max"
-    //             | (epsilon)
-    fn parse_base_expr(&mut self) -> ParseResult<BaseExpr> {
-        match self.token() {
-            Some(Token::Identifier("max")) => {
-                self.consume();
-                Ok(BaseExpr::Max)
-            }
-            Some(Token::GlobalValue(..)) => {
-                let gv = self.match_gv("expected global value")?;
-                Ok(BaseExpr::GlobalValue(gv))
-            }
-            Some(Token::Value(..)) => {
-                let value = self.match_value("expected value")?;
-                Ok(BaseExpr::Value(value))
-            }
-            _ => Ok(BaseExpr::None),
-        }
     }
 
     // Parse instruction results and return them.
     //
     // inst-results ::= Value(v) { "," Value(v) }
     //
-    fn parse_inst_results(&mut self, ctx: &mut Context) -> ParseResult<SmallVec<[Value; 1]>> {
+    fn parse_inst_results(&mut self) -> ParseResult<SmallVec<[Value; 1]>> {
         // Result value numbers.
         let mut results = SmallVec::new();
 
@@ -2355,29 +2098,11 @@ impl<'a> Parser<'a> {
 
             results.push(v);
 
-            let fact = if self.token() == Some(Token::Bang) {
-                self.consume();
-                // block-param ::= Value(v) [ "!" * fact ]  ":" Type(t) arg-loc?
-                Some(self.parse_fact()?)
-            } else {
-                None
-            };
-            ctx.function.dfg.facts[v] = fact;
-
             // inst-results ::= Value(v) * { "," Value(v) }
             while self.optional(Token::Comma) {
                 // inst-results ::= Value(v) { "," * Value(v) }
                 let v = self.match_value("expected result value")?;
                 results.push(v);
-
-                let fact = if self.token() == Some(Token::Bang) {
-                    self.consume();
-                    // block-param ::= Value(v) [ "!" * fact ]  ":" Type(t) arg-loc?
-                    Some(self.parse_fact()?)
-                } else {
-                    None
-                };
-                ctx.function.dfg.facts[v] = fact;
             }
         }
 
@@ -2433,6 +2158,7 @@ impl<'a> Parser<'a> {
         &mut self,
         results: &[Value],
         srcloc: ir::SourceLoc,
+        debug_tags: Vec<DebugTag>,
         ctx: &mut Context,
         block: Block,
     ) -> ParseResult<()> {
@@ -2472,16 +2198,22 @@ impl<'a> Parser<'a> {
         // instruction ::=  [inst-results "="] Opcode(opc) ["." Type] * ...
         let inst_data = self.parse_inst_operands(ctx, opcode, explicit_ctrl_type)?;
 
-        // We're done parsing the instruction data itself.
-        //
-        // We still need to check that the number of result values in the source
-        // matches the opcode or function call signature. We also need to create
-        // values with the right type for all the instruction results and parse
-        // and attach stack map entries, if present.
         let ctrl_typevar = self.infer_typevar(ctx, opcode, explicit_ctrl_type, &inst_data)?;
         let inst = ctx.function.dfg.make_inst(inst_data);
-        if opcode.is_call() && !opcode.is_return() && self.optional(Token::Comma) {
-            self.match_identifier("stack_map", "expected `stack_map = [...]`")?;
+
+        // Attach stack map, if present.
+        if self.optional(Token::Comma) {
+            self.match_token(
+                Token::Identifier("stack_map"),
+                "expected `stack_map = [...]`",
+            )?;
+            if !opcode.is_call() || opcode.is_return() {
+                return err!(
+                    self.loc,
+                    "stack map can only be attached to a (non-tail) call"
+                );
+            }
+
             self.match_token(Token::Equal, "expected `= [...]`")?;
             self.match_token(Token::LBracket, "expected `[...]`")?;
             while !self.optional(Token::RBracket) {
@@ -2506,6 +2238,13 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+
+        // We're done parsing the instruction data itself.
+        //
+        // We still need to check that the number of result values in
+        // the source matches the opcode or function call
+        // signature. We also need to create values with the right
+        // type for all the instruction results.
         let num_results =
             ctx.function
                 .dfg
@@ -2517,6 +2256,9 @@ impl<'a> Parser<'a> {
 
         if !srcloc.is_default() {
             ctx.function.set_srcloc(inst, srcloc);
+        }
+        if !debug_tags.is_empty() {
+            ctx.function.debug_tags.set(inst, debug_tags);
         }
 
         if results.len() != num_results {
@@ -2642,17 +2384,44 @@ impl<'a> Parser<'a> {
         Ok(args)
     }
 
-    // Parse an optional value list enclosed in parentheses.
-    fn parse_opt_value_list(&mut self) -> ParseResult<VariableArgs> {
+    /// Parse an optional list of block-call arguments enclosed in
+    /// parentheses.
+    fn parse_opt_block_call_args(&mut self) -> ParseResult<Vec<BlockArg>> {
         if !self.optional(Token::LPar) {
-            return Ok(VariableArgs::new());
+            return Ok(vec![]);
         }
 
-        let args = self.parse_value_list()?;
+        let mut args = vec![];
+        while self.token() != Some(Token::RPar) {
+            args.push(self.parse_block_call_arg()?);
+            if self.token() == Some(Token::Comma) {
+                self.consume();
+            } else {
+                break;
+            }
+        }
 
         self.match_token(Token::RPar, "expected ')' after arguments")?;
 
         Ok(args)
+    }
+
+    fn parse_block_call_arg(&mut self) -> ParseResult<BlockArg> {
+        match self.token() {
+            Some(Token::Value(v)) => {
+                self.consume();
+                Ok(BlockArg::Value(v))
+            }
+            Some(Token::TryCallRet(i)) => {
+                self.consume();
+                Ok(BlockArg::TryCallRet(i))
+            }
+            Some(Token::TryCallExn(i)) => {
+                self.consume();
+                Ok(BlockArg::TryCallExn(i))
+            }
+            tok => Err(self.error(&format!("unexpected token: {tok:?}"))),
+        }
     }
 
     /// Parse a CLIF run command.
@@ -2793,23 +2562,26 @@ impl<'a> Parser<'a> {
             I32 => DataValue::from(self.match_imm32("expected an i32")?),
             I64 => DataValue::from(Into::<i64>::into(self.match_imm64("expected an i64")?)),
             I128 => DataValue::from(self.match_imm128("expected an i128")?),
+            F16 => DataValue::from(self.match_ieee16("expected an f16")?),
             F32 => DataValue::from(self.match_ieee32("expected an f32")?),
             F64 => DataValue::from(self.match_ieee64("expected an f64")?),
+            F128 => DataValue::from(self.match_ieee128("expected an f128")?),
             _ if (ty.is_vector() || ty.is_dynamic_vector()) => {
                 let as_vec = self.match_uimm128(ty)?.into_vec();
-                if as_vec.len() == 16 {
-                    let mut as_array = [0; 16];
-                    as_array.copy_from_slice(&as_vec[..]);
-                    DataValue::from(as_array)
-                } else if as_vec.len() == 8 {
-                    let mut as_array = [0; 8];
-                    as_array.copy_from_slice(&as_vec[..]);
-                    DataValue::from(as_array)
-                } else {
-                    return Err(self.error("only 128-bit vectors are currently supported"));
+                let slice = as_vec.as_slice();
+                match slice.len() {
+                    16 => DataValue::V128(slice.try_into().unwrap()),
+                    8 => DataValue::V64(slice.try_into().unwrap()),
+                    4 => DataValue::V32(slice.try_into().unwrap()),
+                    2 => DataValue::V16(slice.try_into().unwrap()),
+                    _ => {
+                        return Err(
+                            self.error("vectors larger than 128 bits are not currently supported")
+                        );
+                    }
                 }
             }
-            _ => return Err(self.error(&format!("don't know how to parse data values of: {}", ty))),
+            _ => return Err(self.error(&format!("don't know how to parse data values of: {ty}"))),
         };
         Ok(dv)
     }
@@ -2838,7 +2610,7 @@ impl<'a> Parser<'a> {
                         return err!(
                             self.loc,
                             "expected one of the following type: i8, i16, i32 or i64"
-                        )
+                        );
                     }
                 };
                 InstructionData::UnaryImm {
@@ -2846,6 +2618,10 @@ impl<'a> Parser<'a> {
                     imm: Imm64::new(unsigned),
                 }
             }
+            InstructionFormat::UnaryIeee16 => InstructionData::UnaryIeee16 {
+                opcode,
+                imm: self.match_ieee16("expected immediate 16-bit float operand")?,
+            },
             InstructionFormat::UnaryIeee32 => InstructionData::UnaryIeee32 {
                 opcode,
                 imm: self.match_ieee32("expected immediate 32-bit float operand")?,
@@ -2860,6 +2636,9 @@ impl<'a> Parser<'a> {
                     let c = self.match_constant()?;
                     ctx.check_constant(c, self.loc)?;
                     c
+                } else if opcode == Opcode::F128const {
+                    let ieee128 = self.match_ieee128("expected immediate 128-bit float operand")?;
+                    ctx.function.dfg.constants.insert(ieee128.into())
                 } else if let Some(controlling_type) = explicit_control_type {
                     // If an explicit control type is present, we expect a sized value and insert
                     // it in the constant pool.
@@ -2933,7 +2712,7 @@ impl<'a> Parser<'a> {
             InstructionFormat::Jump => {
                 // Parse the destination block number.
                 let block_num = self.match_block("expected jump destination block")?;
-                let args = self.parse_opt_value_list()?;
+                let args = self.parse_opt_block_call_args()?;
                 let destination = ctx.function.dfg.block_call(block_num, &args);
                 InstructionData::Jump {
                     opcode,
@@ -2945,13 +2724,13 @@ impl<'a> Parser<'a> {
                 self.match_token(Token::Comma, "expected ',' between operands")?;
                 let block_then = {
                     let block_num = self.match_block("expected branch then block")?;
-                    let args = self.parse_opt_value_list()?;
+                    let args = self.parse_opt_block_call_args()?;
                     ctx.function.dfg.block_call(block_num, &args)
                 };
                 self.match_token(Token::Comma, "expected ',' between operands")?;
                 let block_else = {
                     let block_num = self.match_block("expected branch else block")?;
-                    let args = self.parse_opt_value_list()?;
+                    let args = self.parse_opt_block_call_args()?;
                     ctx.function.dfg.block_call(block_num, &args)
                 };
                 InstructionData::Brif {
@@ -2964,7 +2743,7 @@ impl<'a> Parser<'a> {
                 let arg = self.match_value("expected SSA value operand")?;
                 self.match_token(Token::Comma, "expected ',' between operands")?;
                 let block_num = self.match_block("expected branch destination block")?;
-                let args = self.parse_opt_value_list()?;
+                let args = self.parse_opt_block_call_args()?;
                 let destination = ctx.function.dfg.block_call(block_num, &args);
                 self.match_token(Token::Comma, "expected ',' between operands")?;
                 let table = self.parse_jump_table(ctx, destination)?;
@@ -3053,6 +2832,34 @@ impl<'a> Parser<'a> {
                     opcode,
                     sig_ref,
                     args: args.into_value_list(&[callee], &mut ctx.function.dfg.value_lists),
+                }
+            }
+            InstructionFormat::TryCall => {
+                let func_ref = self.match_fn("expected function reference")?;
+                ctx.check_fn(func_ref, self.loc)?;
+                self.match_token(Token::LPar, "expected '(' before arguments")?;
+                let args = self.parse_value_list()?;
+                self.match_token(Token::RPar, "expected ')' after arguments")?;
+                self.match_token(Token::Comma, "expected ',' after argument list")?;
+                let exception = self.parse_exception_table(ctx)?;
+                InstructionData::TryCall {
+                    opcode,
+                    func_ref,
+                    args: args.into_value_list(&[], &mut ctx.function.dfg.value_lists),
+                    exception,
+                }
+            }
+            InstructionFormat::TryCallIndirect => {
+                let callee = self.match_value("expected SSA value callee operand")?;
+                self.match_token(Token::LPar, "expected '(' before arguments")?;
+                let args = self.parse_value_list()?;
+                self.match_token(Token::RPar, "expected ')' after arguments")?;
+                self.match_token(Token::Comma, "expected ',' after argument list")?;
+                let exception = self.parse_exception_table(ctx)?;
+                InstructionData::TryCallIndirect {
+                    opcode,
+                    args: args.into_value_list(&[callee], &mut ctx.function.dfg.value_lists),
+                    exception,
                 }
             }
             InstructionFormat::FuncAddr => {
@@ -3194,6 +3001,12 @@ impl<'a> Parser<'a> {
                     code,
                 }
             }
+            InstructionFormat::ExceptionHandlerAddress => {
+                let block = self.match_block("expected block")?;
+                self.match_token(Token::Comma, "expected ',' between operands")?;
+                let imm = self.match_imm64("expected immediate handler index")?;
+                InstructionData::ExceptionHandlerAddress { opcode, block, imm }
+            }
         };
         Ok(idata)
     }
@@ -3243,7 +3056,7 @@ mod tests {
                 let aliased_to = func.dfg.resolve_aliases(v3);
                 assert_eq!(aliased_to.to_string(), "v4");
             }
-            _ => panic!("expected value: {}", v3),
+            _ => panic!("expected value: {v3}"),
         }
     }
 
@@ -3254,12 +3067,13 @@ mod tests {
         assert_eq!(sig.returns.len(), 0);
         assert_eq!(sig.call_conv, CallConv::SystemV);
 
-        let sig2 = Parser::new("(i8 uext, f32, f64, i32 sret) -> i32 sext, f64 system_v")
-            .parse_signature()
-            .unwrap();
+        let sig2 =
+            Parser::new("(i8 uext, f16, f32, f64, f128, i32 sret) -> i32 sext, f64 system_v")
+                .parse_signature()
+                .unwrap();
         assert_eq!(
             sig2.to_string(),
-            "(i8 uext, f32, f64, i32 sret) -> i32 sext, f64 system_v"
+            "(i8 uext, f16, f32, f64, f128, i32 sret) -> i32 sext, f64 system_v"
         );
         assert_eq!(sig2.call_conv, CallConv::SystemV);
 
@@ -3525,7 +3339,7 @@ mod tests {
             r#"; before
                              test cfg option=5
                              test verify
-                             set enable_float=false
+                             set unwind_info=false
                              feature "foo"
                              feature !"bar"
                              ; still preamble
@@ -3539,7 +3353,7 @@ mod tests {
         match tf.isa_spec {
             IsaSpec::None(s) => {
                 assert!(s.enable_verifier());
-                assert!(!s.enable_float());
+                assert!(!s.unwind_info());
             }
             _ => panic!("unexpected ISAs"),
         }
@@ -3554,23 +3368,27 @@ mod tests {
 
     #[test]
     fn isa_spec() {
-        assert!(parse_test(
-            "target
+        assert!(
+            parse_test(
+                "target
                             function %foo() system_v {}",
-            ParseOptions::default()
-        )
-        .is_err());
+                ParseOptions::default()
+            )
+            .is_err()
+        );
 
-        assert!(parse_test(
-            "target x86_64
-                            set enable_float=false
+        assert!(
+            parse_test(
+                "target x86_64
+                            set unwind_info=false
                             function %foo() system_v {}",
-            ParseOptions::default()
-        )
-        .is_err());
+                ParseOptions::default()
+            )
+            .is_err()
+        );
 
         match parse_test(
-            "set enable_float=false
+            "set unwind_info=false
                           target x86_64
                           function %foo() system_v {}",
             ParseOptions::default(),
@@ -3650,10 +3468,10 @@ mod tests {
         );
 
         // However, we can specify a different calling convention to be the default.
-        let mut parser = Parser::new(code).with_default_calling_convention(CallConv::Cold);
+        let mut parser = Parser::new(code).with_default_calling_convention(CallConv::PreserveAll);
         assert_eq!(
             parser.parse_function().unwrap().0.signature.call_conv,
-            CallConv::Cold
+            CallConv::PreserveAll
         );
     }
 
@@ -3744,19 +3562,13 @@ mod tests {
     #[test]
     fn uimm128() {
         macro_rules! parse_as_constant_data {
-            ($text:expr, $type:expr) => {{
-                Parser::new($text).parse_literals_to_constant_data($type)
-            }};
+            ($text:expr, $type:expr) => {{ Parser::new($text).parse_literals_to_constant_data($type) }};
         }
         macro_rules! can_parse_as_constant_data {
-            ($text:expr, $type:expr) => {{
-                assert!(parse_as_constant_data!($text, $type).is_ok())
-            }};
+            ($text:expr, $type:expr) => {{ assert!(parse_as_constant_data!($text, $type).is_ok()) }};
         }
         macro_rules! cannot_parse_as_constant_data {
-            ($text:expr, $type:expr) => {{
-                assert!(parse_as_constant_data!($text, $type).is_err())
-            }};
+            ($text:expr, $type:expr) => {{ assert!(parse_as_constant_data!($text, $type).is_err()) }};
         }
 
         can_parse_as_constant_data!("1 2 3 4", I32X4);
@@ -3779,7 +3591,9 @@ mod tests {
             .unwrap();
         assert_eq!(
             c.into_vec(),
-            [0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0]
+            [
+                0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0
+            ]
         )
     }
 
@@ -3794,9 +3608,11 @@ mod tests {
         );
 
         // Only parse hexadecimal constants:
-        assert!(Parser::new("228")
-            .match_hexadecimal_constant("err message")
-            .is_err());
+        assert!(
+            Parser::new("228")
+                .match_hexadecimal_constant("err message")
+                .is_err()
+        );
     }
 
     #[test]
@@ -3865,12 +3681,20 @@ mod tests {
             "1512366032949150931280199141537564007"
         );
         assert_eq!(parse("1234567", I128).to_string(), "1234567");
+        assert_eq!(parse("0x16.1", F16).to_string(), "0x1.610p4");
         assert_eq!(parse("0x32.32", F32).to_string(), "0x1.919000p5");
         assert_eq!(parse("0x64.64", F64).to_string(), "0x1.9190000000000p6");
+        assert_eq!(
+            parse("0x128.128", F128).to_string(),
+            "0x1.2812800000000000000000000000p8"
+        );
         assert_eq!(
             parse("[0 1 2 3]", I32X4).to_string(),
             "0x00000003000000020000000100000000"
         );
+        assert_eq!(parse("[1 2]", I32X2).to_string(), "0x0000000200000001");
+        assert_eq!(parse("[1 2 3 4]", I8X4).to_string(), "0x04030201");
+        assert_eq!(parse("[1 2]", I8X2).to_string(), "0x0201");
     }
 
     #[test]
