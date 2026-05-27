@@ -196,9 +196,11 @@ pub fn execute_with_lind(
                 "[debug] main module table size: {}",
                 main_module_table_size
             );
-            println!(
-                "[debug] main module stack pointer starts from {} to {}",
-                stack_low, stack_high
+            lind_log!(
+                DYLINK,
+                "main module stack pointer starts from {} to {}",
+                stack_low,
+                stack_high
             );
         }
 
@@ -282,7 +284,7 @@ pub fn execute_with_lind(
 
         // Add the module's functions to the linker.
         for (name, path, module) in modules.iter().skip(1) {
-            lind_log!(DYLINK, "[debug] link module {}.{}", name, path);
+            lind_log!(DYLINK, "link module {}.{}", name, path);
             let mut lib_linker = linker.lock().unwrap();
             let mut table_inner = dylink_metadata.table.as_mut().unwrap();
 
@@ -316,7 +318,7 @@ pub fn execute_with_lind(
             // The linker records the module under `name` and uses `table_start`
             // to relocate/interpret the library's function references into the
             // shared table. GOT entries are patched through the shared LindGOT.
-            lind_log!(DYLINK, "[debug] library {} instantiate", name);
+            lind_log!(DYLINK, "library {} instantiate", name);
             let mut got_guard = lind_got.lock().unwrap();
             lib_linker
                 .module_with_preload(

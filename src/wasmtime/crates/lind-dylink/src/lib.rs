@@ -92,7 +92,7 @@ pub fn dlsym_call<
             None => return -(DylinkErrorCode::ENOFOUND as i32),
         }
     };
-    lind_log!(DYLINK, "[debug] dlsym resolves {} to {}", symbol, val);
+    lind_log!(DYLINK, "dlsym resolves {} to {}", symbol, val);
     val as i32
 }
 

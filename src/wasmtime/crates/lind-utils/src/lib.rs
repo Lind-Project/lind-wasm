@@ -265,7 +265,7 @@ impl LindGOT {
             let val = cell.load(Ordering::Acquire);
 
             if val == 0 {
-                lind_log!(DYLINK, "[lind] Warning: GOT entry \"{}\" unresolved", name);
+                lind_log!(DYLINK, "Warning: GOT entry \"{}\" unresolved", name);
             }
         }
     }

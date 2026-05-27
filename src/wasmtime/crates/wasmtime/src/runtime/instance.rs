@@ -640,7 +640,7 @@ impl Instance {
                 let rounded_size =
                     round_up_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
                 let rounded_size = round_up_size(rounded_size, PAGESIZE);
-                lind_log!(DYLINK, "[debug] library size round to {}", rounded_size);
+                lind_log!(DYLINK, "library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
                     cageid,                // self cageid
@@ -670,7 +670,7 @@ impl Instance {
                     *memory_base = addr;
                 }
 
-                lind_log!(DYLINK, "[debug] library memory starts at {}", addr);
+                lind_log!(DYLINK, "library memory starts at {}", addr);
             }
         }
 
@@ -694,14 +694,14 @@ impl Instance {
                             "__wasm_apply_data_relocs",
                         )
                         .unwrap();
-                    lind_log!(DYLINK, "[debug] main module start reloc func");
+                    lind_log!(DYLINK, "main module start reloc func");
                     let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                     // apply tls relocations if any
                     if let Ok(init) = instance
                         .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
                     {
-                        lind_log!(DYLINK, "[debug] main module start __wasm_apply_tls_relocs");
+                        lind_log!(DYLINK, "main module start __wasm_apply_tls_relocs");
                         let _ = init.call(store.as_context_mut(), ()).unwrap();
                     }
 
@@ -1305,9 +1305,11 @@ impl Instance {
                 let val = global.get(&mut store);
                 // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                 let Some(raw) = val.i32() else {
-                    eprintln!(
-                        "[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
-                        name, val
+                    lind_log!(
+                        DYLINK,
+                        "Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
+                        name,
+                        val
                     );
                     continue;
                 };
@@ -1315,13 +1317,13 @@ impl Instance {
                 let val = match (raw as u32).checked_add(memory_base) {
                     Some(val) => val,
                     None => {
-                        eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                        lind_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
                         continue;
                     }
                 };
                 // Cache the resolved address; also updates the GOT cell if it already exists.
                 if got_inner.cache_symbol(&name, val) {
-                    lind_log!(DYLINK, "[debug] update GOT.mem.{} to {}", name, val);
+                    lind_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
                 }
             }
         }

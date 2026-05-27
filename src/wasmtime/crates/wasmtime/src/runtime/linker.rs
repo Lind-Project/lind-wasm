@@ -870,7 +870,7 @@ impl<T> Linker<T> {
     /// # let engine = Engine::default();
     /// let mut linker = Linker::new(&engine);
     /// linker.func_wrap("host", "double", |x: i32| x * 2)?;
-    /// linker.func_wrap("host", "log_i32", |x: i32| println!("{}", x))?;
+    /// linker.func_wrap("host", "log_i32", |x: i32| lind_log!(DYLINK, "{}", x))?;
     /// linker.func_wrap("host", "log_str", |caller: Caller<'_, ()>, ptr: i32, len: i32| {
     ///     // ...
     /// })?;
@@ -1595,9 +1595,11 @@ impl<T> Linker<T> {
                     let val = global.get(&mut store);
                     // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                     let Some(raw) = val.i32() else {
-                        eprintln!(
-                            "[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
-                            name, val
+                        lind_log!(
+                            DYLINK,
+                            "Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
+                            name,
+                            val
                         );
                         continue;
                     };
@@ -1605,13 +1607,13 @@ impl<T> Linker<T> {
                     let val = match (raw as u32).checked_add(memory_base) {
                         Some(val) => val,
                         None => {
-                            eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                            lind_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
                             continue;
                         }
                     };
                     // Cache the resolved address; also updates the GOT cell if it already exists.
                     if got.cache_symbol(&name, val) {
-                        lind_log!(DYLINK, "[debug] update GOT.mem.{} to {}", name, val);
+                        lind_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
                     }
                     // Only expose as dlsym-resolvable if it's a known GOT data symbol.
                     if got.has_entry(&name) {
