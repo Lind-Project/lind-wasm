@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 
         printf("[Grate|zlib-python] registering deflateInit2_ handler for cage %d\n", cageid);
         int ret = register_lib_handler(cageid, "env", "deflateInit2_",
-            LIBCALL_BASE + 1, grateid, (uint64_t)(uintptr_t)&deflate_init2_handler);
+            grateid, (uint64_t)(uintptr_t)&deflate_init2_handler);
         if (ret != 0) {
             fprintf(stderr, "[Grate|zlib-python] register deflateInit2_ failed: %d\n", ret);
             assert(0);
@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
 
         printf("[Grate|zlib-python] registering deflate handler for cage %d\n", cageid);
         ret = register_lib_handler(cageid, "env", "deflate",
-            LIBCALL_BASE + 2, grateid, (uint64_t)(uintptr_t)&deflate_handler);
+            grateid, (uint64_t)(uintptr_t)&deflate_handler);
         if (ret != 0) {
             fprintf(stderr, "[Grate|zlib-python] register deflate failed: %d\n", ret);
             assert(0);
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
 
         printf("[Grate|zlib-python] registering deflateEnd handler for cage %d\n", cageid);
         ret = register_lib_handler(cageid, "env", "deflateEnd",
-            LIBCALL_BASE + 3, grateid, (uint64_t)(uintptr_t)&deflate_end_handler);
+            grateid, (uint64_t)(uintptr_t)&deflate_end_handler);
         if (ret != 0) {
             fprintf(stderr, "[Grate|zlib-python] register deflateEnd failed: %d\n", ret);
             assert(0);

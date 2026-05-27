@@ -153,7 +153,6 @@ int register_handler (int64_t targetcage,
 int register_lib_handler(uint64_t target_cage,
     const char *lib_name,
     const char *symbol_name,
-    uint64_t call_id,
     uint64_t handler_cage,
     uint64_t handler_fn)
 {
@@ -165,9 +164,9 @@ int register_lib_handler(uint64_t target_cage,
         target_cage, NOTUSED,
         (uint64_t)TRANSLATE_GUEST_POINTER_TO_HOST(lib_name), NOTUSED,
         (uint64_t)TRANSLATE_GUEST_POINTER_TO_HOST(symbol_name), NOTUSED,
-        call_id, NOTUSED,
         handler_cage, NOTUSED,
         handler_fn, NOTUSED,
+        NOTUSED, NOTUSED,
         TRANSLATE_ERRNO_OFF
     );
 }

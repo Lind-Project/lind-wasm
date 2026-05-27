@@ -66,8 +66,7 @@ int main(int argc, char *argv[]) {
         uint64_t rand_fn = (uint64_t)(uintptr_t)&rand_handler;
 
         printf("[Grate|libc-rand] registering rand handler for cage %d\n", cageid);
-        int ret = register_lib_handler(cageid, "env", "rand",
-                                       LIBCALL_BASE + 1, grateid, rand_fn);
+        int ret = register_lib_handler(cageid, "env", "rand", grateid, rand_fn);
         if (ret != 0) {
             fprintf(stderr, "[Grate|libc-rand] register rand failed: %d\n", ret);
             assert(0);

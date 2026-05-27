@@ -77,8 +77,7 @@ int main(int argc, char *argv[]) {
         uint64_t fn = (uint64_t)(uintptr_t)&strlen_handler;
 
         printf("[Grate|libc-strlen] registering strlen handler for cage %d\n", cageid);
-        int ret = register_lib_handler(cageid, "env", "strlen",
-                                       LIBCALL_BASE + 1, grateid, fn);
+        int ret = register_lib_handler(cageid, "env", "strlen", grateid, fn);
         if (ret != 0) {
             fprintf(stderr, "[Grate|libc-strlen] register strlen failed: %d\n", ret);
             assert(0);

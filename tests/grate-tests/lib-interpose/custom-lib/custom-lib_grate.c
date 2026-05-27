@@ -84,16 +84,14 @@ int main(int argc, char *argv[]) {
         uint64_t mul_fn = (uint64_t)(uintptr_t)&toy_mul_handler;
 
         printf("[Grate|lib-interpose] registering toy_add handler for cage %d\n", cageid);
-        int ret = register_lib_handler(cageid, "env", "toy_add",
-                                       LIBCALL_BASE + 1, grateid, add_fn);
+        int ret = register_lib_handler(cageid, "env", "toy_add", grateid, add_fn);
         if (ret != 0) {
             fprintf(stderr, "[Grate|lib-interpose] register toy_add failed: %d\n", ret);
             assert(0);
         }
 
         printf("[Grate|lib-interpose] registering toy_mul handler for cage %d\n", cageid);
-        ret = register_lib_handler(cageid, "env", "toy_mul",
-                                   LIBCALL_BASE + 2, grateid, mul_fn);
+        ret = register_lib_handler(cageid, "env", "toy_mul", grateid, mul_fn);
         if (ret != 0) {
             fprintf(stderr, "[Grate|lib-interpose] register toy_mul failed: %d\n", ret);
             assert(0);

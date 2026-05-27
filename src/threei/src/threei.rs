@@ -977,7 +977,10 @@ pub fn copy_data_between_cages(
     let host_dest_addr = _ensure_host_addr(destcage, destaddr);
 
     if host_src_addr == 0 || host_dest_addr == 0 {
-        eprintln!("[3i|copy] address translation failed: src={:#x} dest={:#x}", srcaddr, destaddr);
+        eprintln!(
+            "[3i|copy] address translation failed: src={:#x} dest={:#x}",
+            srcaddr, destaddr
+        );
         return threei_const::ELINDAPIABORTED;
     }
 
@@ -1017,22 +1020,18 @@ pub fn copy_data_between_cages(
 
 /// Register a library-level 3i handler for a specific (lib_name, symbol_name) in target_cage.
 ///
-/// This stores the (lib_name, symbol_name) -> call_id mapping in LIB_SYMBOL_TABLE so
-/// instance_dylink can install portal stubs, and registers the handler function in
-/// HANDLERTABLE under call_id so the existing make_syscall dispatch path routes the
-/// portal call to the grate handler.
+/// Stores (lib_name, symbol_name) → (handler_cage_id, handler_fn_ptr) in LIB_HANDLER_TABLE.
+/// The portal installed by define_lib_interpose_stubs captures these values at link time
+/// and dispatches via dispatch_lib_call, bypassing HANDLERTABLE entirely.
 ///
 /// Arguments (following the make_syscall/GrateTrampolineFn convention):
 ///   _self_cageid, _target_cageid: injected by make_syscall dispatch, unused here
 ///   arg1 = target_cage_id  — cage whose library calls are being intercepted
 ///   arg2 = lib_name_ptr    — host pointer to null-terminated library name string
 ///   arg3 = symbol_name_ptr — host pointer to null-terminated symbol name string
-///   arg4 = call_id         — fake syscall number (must be >= LIBCALL_BASE)
-///   arg5 = handler_cage_id — grate cage that will handle the call
-///   arg6 = handler_fn_ptr  — function pointer in the handler cage
-///
-/// All values are passed in the arg-value slots (not the cageid slots) with NOTUSED
-/// cageids so TRANSLATE_ARG_TO_HOST leaves them unchanged.
+///   arg4 = handler_cage_id — grate cage that will handle the call
+///   arg5 = handler_fn_ptr  — function pointer in the handler cage
+///   arg6 = unused
 pub fn register_lib_handler(
     _self_cageid: u64,
     _target_cageid: u64,
@@ -1042,23 +1041,15 @@ pub fn register_lib_handler(
     _arg2cage: u64,
     symbol_name_ptr: u64,
     _arg3cage: u64,
-    call_id: u64,
-    _arg4cage: u64,
     handler_cage_id: u64,
-    _arg5cage: u64,
+    _arg4cage: u64,
     handler_fn_ptr: u64,
+    _arg5cage: u64,
+    _arg6: u64,
     _arg6cage: u64,
 ) -> i32 {
     if lib_name_ptr == 0 || symbol_name_ptr == 0 {
         eprintln!("[3i|register_lib_handler] null string pointer");
-        return -1;
-    }
-    if call_id < threei_const::LIBCALL_BASE {
-        eprintln!(
-            "[3i|register_lib_handler] call_id {} is below LIBCALL_BASE {}",
-            call_id,
-            threei_const::LIBCALL_BASE
-        );
         return -1;
     }
 
@@ -1081,32 +1072,79 @@ pub fn register_lib_handler(
         }
     };
 
-    // Store symbol -> call_id mapping for instance_dylink to find at link time
-    crate::lib_symbol_table::register_lib_symbol(
+    crate::lib_handler_table::register_lib_handler_entry(
         target_cage_id,
         &lib_name,
         &symbol_name,
-        call_id,
-    );
-
-    // Register in HANDLERTABLE so make_syscall can dispatch the portal call
-    let ret = register_handler_impl(
-        target_cage_id,
-        call_id,
         handler_cage_id,
         handler_fn_ptr,
     );
-    if ret != 0 {
-        eprintln!(
-            "[3i|register_lib_handler] register_handler_impl failed: {}",
-            ret
-        );
-        return -1;
+
+    0
+}
+
+/***************************** dispatch_lib_call *****************************/
+
+/// Invoke a library-level 3i handler directly, bypassing HANDLERTABLE.
+///
+/// Called by portal closures installed by define_lib_interpose_stubs. The portal
+/// captures (handler_cage_id, fn_ptr) at link time from LIB_HANDLER_TABLE, so
+/// this function just applies the same grate dispatch path as make_syscall would,
+/// without requiring a HANDLERTABLE lookup.
+pub fn dispatch_lib_call(
+    handler_cage_id: u64,
+    fn_ptr: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let cage_dead = with_cage(handler_cage_id, |grate| {
+        grate
+            .grate_inflight
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        if grate.is_dead.load(std::sync::atomic::Ordering::Acquire) {
+            grate
+                .grate_inflight
+                .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+            return -(Errno::ESRCH as i32);
+        }
+        0
+    });
+    if cage_dead != Some(0) {
+        return -(Errno::ESRCH as i32);
     }
 
-    eprintln!(
-        "[3i|register_lib_handler] cage={} lib={} sym={} call_id={} handler_cage={} fn={:#x}",
-        target_cage_id, lib_name, symbol_name, call_id, handler_cage_id, handler_fn_ptr
+    let result = _call_grate_func(
+        handler_cage_id,
+        fn_ptr,
+        arg1,
+        arg1_cageid,
+        arg2,
+        arg2_cageid,
+        arg3,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
     );
-    0
+
+    with_cage(handler_cage_id, |grate| {
+        grate
+            .grate_inflight
+            .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    });
+
+    result.unwrap_or(-(Errno::ESRCH as i32))
 }

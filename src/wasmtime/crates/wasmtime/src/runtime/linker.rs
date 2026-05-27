@@ -7,7 +7,6 @@ use crate::{
     GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result, SharedMemory,
     StoreContextMut, Table, Val, ValRaw, ValType, prelude::*,
 };
-use threei::make_syscall;
 use alloc::sync::Arc;
 use cage::DashMap;
 use core::fmt::{self, Debug};
@@ -19,6 +18,7 @@ use log::warn;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
+use threei::make_syscall;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
 use wasmtime_lind_utils::LindGOT;
 use wasmtime_lind_utils::symbol_table::SymbolMap;
@@ -388,22 +388,20 @@ impl<T> Linker<T> {
             let ExternType::Func(func_ty) = import.ty() else {
                 continue;
             };
-            // Check for a registered handler first; if none, skip entirely.
-            // A handler overrides any existing definition (including libc).
-            let call_id = match threei::get_lib_call_id(cage_id, import.module(), import.name()) {
-                Some(id) => id,
-                None => continue,
-            };
+            // Look up the handler at install time. Capture (handler_cage, fn_ptr)
+            // in the closure so dispatch_lib_call bypasses HANDLERTABLE entirely.
+            let (handler_cage_id, fn_ptr) =
+                match threei::get_lib_handler(cage_id, import.module(), import.name()) {
+                    Some(pair) => pair,
+                    None => continue,
+                };
             let func_ty_portal = func_ty.clone();
             let name_for_err = import.name().to_string();
             self.func_new(
                 import.module(),
                 import.name(),
                 func_ty,
-                move |mut caller, params, results| {
-                    // Pass raw WASM values to make_syscall. For pointer arguments,
-                    // copy_data_between_cages translates WASM virtual → host internally
-                    // using the cage's memory base. Non-pointer integers are passed as-is.
+                move |_caller, params, results| {
                     let mut raw = [0u64; 6];
                     for (i, v) in params.iter().enumerate().take(6) {
                         raw[i] = match v {
@@ -414,8 +412,8 @@ impl<T> Linker<T> {
                             _ => 0,
                         };
                     }
-                    let ret = make_syscall(
-                        cage_id, call_id, 0, cage_id,
+                    let ret = threei::dispatch_lib_call(
+                        handler_cage_id, fn_ptr,
                         raw[0], cage_id, raw[1], cage_id, raw[2], cage_id,
                         raw[3], cage_id, raw[4], cage_id, raw[5], cage_id,
                     );
@@ -1098,22 +1096,18 @@ impl<T> Linker<T> {
             let export = match export {
                 Extern::Func(original_func) => {
                     // Library-level 3i: if a handler has been registered for this
-                    // (cage_id, module_name, symbol) via register_lib_handler, install a
-                    // portal stub that dispatches through make_syscall using the fake call_id.
+                    // (cage_id, module_name, symbol), install a portal that captures
+                    // (handler_cage_id, fn_ptr) at link time and calls dispatch_lib_call.
                     if let Some(cid) = cage_id {
-                        if let Some(call_id) =
-                            threei::get_lib_call_id(cid, module_name, &name)
+                        if let Some((handler_cage_id, fn_ptr)) =
+                            threei::get_lib_handler(cid, module_name, &name)
                         {
                             let func_ty = original_func.ty(&store);
                             let func_ty_for_portal = func_ty.clone();
                             let portal = Func::new(
                                 &mut store,
                                 func_ty,
-                                move |mut caller, params, results| {
-                                    // Extract up to 6 args as raw u64 values.
-                                    // WASM i32 args are zero-extended; i64 pass directly.
-                                    // Raw WASM values are passed; copy_data_between_cages
-                                    // translates WASM virtual → host using cage memory bases.
+                                move |_caller, params, results| {
                                     let mut raw = [0u64; 6];
                                     for (i, v) in params.iter().enumerate().take(6) {
                                         raw[i] = match v {
@@ -1124,15 +1118,24 @@ impl<T> Linker<T> {
                                             _ => 0,
                                         };
                                     }
-                                    let ret = make_syscall(
-                                        cid, call_id, 0, cid,
-                                        raw[0], cid, raw[1], cid, raw[2], cid,
-                                        raw[3], cid, raw[4], cid, raw[5], cid,
+                                    let ret = threei::dispatch_lib_call(
+                                        handler_cage_id,
+                                        fn_ptr,
+                                        raw[0],
+                                        cid,
+                                        raw[1],
+                                        cid,
+                                        raw[2],
+                                        cid,
+                                        raw[3],
+                                        cid,
+                                        raw[4],
+                                        cid,
+                                        raw[5],
+                                        cid,
                                     );
-                                    // Pack the i32 result back into the expected return type.
-                                    for (slot, ty) in results
-                                        .iter_mut()
-                                        .zip(func_ty_for_portal.results())
+                                    for (slot, ty) in
+                                        results.iter_mut().zip(func_ty_for_portal.results())
                                     {
                                         *slot = match ty {
                                             ValType::I32 => Val::I32(ret),
