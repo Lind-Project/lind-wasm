@@ -166,8 +166,12 @@ pub struct LindLoggerConfig {
 
 impl Default for LindLoggerConfig {
     fn default() -> Self {
+        let log_path = match std::env::var("LIND_WASM_ROOT") {
+            Ok(root) => PathBuf::from(root).join("LIND.log"),
+            Err(_) => PathBuf::from("/tmp/LIND.log"),
+        };
         Self {
-            output: LogOutput::File(PathBuf::from("LIND.log")),
+            output: LogOutput::File(log_path),
             panic_behavior: PanicBehavior::PanicAndExit,
             enabled_categories: LogCategorySet::default_only(),
         }
@@ -231,7 +235,8 @@ static LIND_LOGGER: OnceLock<LindLogger> = OnceLock::new();
 /// and leave the existing configuration unchanged.
 ///
 /// If this is never called and `lind-logging` is enabled, the defaults are:
-/// `LIND.log` file output, `PanicAndExit` behavior, `Default` category only.
+/// `$LIND_WASM_ROOT/LIND.log` (or `/tmp/LIND.log` if unset), `PanicAndExit` behavior,
+/// `Default` category only.
 pub fn init_lind_logger(config: LindLoggerConfig) -> Result<(), LindLoggerInitError> {
     let writer = match config.output {
         LogOutput::Stdout => LogWriter::Stdout,
