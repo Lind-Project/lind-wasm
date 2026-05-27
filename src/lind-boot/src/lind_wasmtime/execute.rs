@@ -18,6 +18,7 @@ use sysdefs::constants::lind_platform_const::{
 use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
 use sysdefs::lind_debug_panic;
+use sysdefs::lind_log;
 use threei::threei_const;
 use wasmtime::{
     AsContext, AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module,
@@ -189,9 +190,12 @@ pub fn execute_with_lind(
         let memory_base = stack_high + GUARD_SIZE as i32; // memory base starts after the stack space (plus guard)
         let table_base = TABLE_START_INDEX as i32;
 
-        #[cfg(feature = "debug-dylink")]
         {
-            println!("[debug] main module table size: {}", main_module_table_size);
+            lind_log!(
+                DYLINK,
+                "[debug] main module table size: {}",
+                main_module_table_size
+            );
             println!(
                 "[debug] main module stack pointer starts from {} to {}",
                 stack_low, stack_high
@@ -278,8 +282,7 @@ pub fn execute_with_lind(
 
         // Add the module's functions to the linker.
         for (name, path, module) in modules.iter().skip(1) {
-            #[cfg(feature = "debug-dylink")]
-            println!("[debug] link module {}.{}", name, path);
+            lind_log!(DYLINK, "[debug] link module {}.{}", name, path);
             let mut lib_linker = linker.lock().unwrap();
             let mut table_inner = dylink_metadata.table.as_mut().unwrap();
 
@@ -294,10 +297,11 @@ pub fn execute_with_lind(
             // within the global indirect function table.
             let table_start = table_inner.size(&mut wstore) as i32;
 
-            #[cfg(feature = "debug-dylink")]
-            println!(
+            lind_log!(
+                DYLINK,
                 "[debug] library table_start: {}, grow: {}",
-                table_start, dylink_info.table_size
+                table_start,
+                dylink_info.table_size
             );
             // Grow the shared indirect function table by the amount requested by the
             // library (as recorded in its dylink section). New slots are initialized
@@ -312,8 +316,7 @@ pub fn execute_with_lind(
             // The linker records the module under `name` and uses `table_start`
             // to relocate/interpret the library's function references into the
             // shared table. GOT entries are patched through the shared LindGOT.
-            #[cfg(feature = "debug-dylink")]
-            println!("[debug] library {} instantiate", name);
+            lind_log!(DYLINK, "[debug] library {} instantiate", name);
             let mut got_guard = lind_got.lock().unwrap();
             lib_linker
                 .module_with_preload(
@@ -821,8 +824,10 @@ fn load_library_module(
                 }
             }
             None => {
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] no __indirect_function_table in linker; cannot load library");
+                lind_log!(
+                    DYLINK,
+                    "[debug] no __indirect_function_table in linker; cannot load library"
+                );
                 return -(DylinkErrorCode::EINTERNAL as i32);
             }
         }
@@ -856,8 +861,12 @@ fn load_library_module(
     ) {
         Ok(handle) => handle as i32,
         Err(e) => {
-            #[cfg(feature = "debug-dylink")]
-            println!("failed to process library `{}`: {:?}", library_name, e);
+            lind_log!(
+                DYLINK,
+                "failed to process library `{}`: {:?}",
+                library_name,
+                e
+            );
             -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
         }
     };

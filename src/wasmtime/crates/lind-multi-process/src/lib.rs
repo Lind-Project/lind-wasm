@@ -11,6 +11,7 @@ use sysdefs::constants::lind_platform_const::{
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::lind_debug_panic;
+use sysdefs::lind_log;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
@@ -484,10 +485,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -611,10 +613,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -788,7 +791,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            eprintln!("Child Error: {:?}", err);
+                            lind_log!(Default, "Child Error: {:?}", err);
                             cage::cage_record_exit_status(
                                 child_cageid,
                                 cage::ExitStatus::Exited(1),
@@ -801,7 +804,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
                             cage::cage_finalize(child_cageid);
                             if !rm_vmctx_thread(child_cageid, 0) {
-                                eprintln!(
+                                lind_log!(
+                                    Default,
                                     "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
                                     child_cageid
                                 );
@@ -817,7 +821,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         match exit_code {
                             Val::I32(val) => {}
                             _ => {
-                                eprintln!("unexpected _start function return type!");
+                                lind_log!(Default, "unexpected _start function return type!");
                             }
                         }
                     }
@@ -897,7 +901,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let next_tid = match self.next_thread_id() {
             Some(val) => val,
             None => {
-                eprintln!("running out of thread id!");
+                lind_log!(Default, "running out of thread id!");
                 0
             }
         };
@@ -1072,10 +1076,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -1182,10 +1187,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] dlopen library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             child_table
                                 .grow(
@@ -1343,7 +1349,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     // print errors if any when running the thread
                     if let Err(err) = invoke_res {
-                        eprintln!("Error: {:?}", err);
+                        lind_log!(Default, "Error: {:?}", err);
                         return 0;
                     }
 
@@ -1357,7 +1363,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             rm_vmctx_thread(child_cageid as u64, next_tid as u64);
                         }
                         _ => {
-                            eprintln!("unexpected _start function return type: {:?}", exit_code);
+                            lind_log!(
+                                Default,
+                                "unexpected _start function return type: {:?}",
+                                exit_code
+                            );
                         }
                     }
 
@@ -1617,7 +1627,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                 // Remove the VMContext pool
                 if !rm_vmctx_thread(deferred_cageid, 0) {
-                    eprintln!(
+                    lind_log!(
+                        Default,
                         "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
                         deferred_cageid
                     );

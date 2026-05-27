@@ -1,7 +1,7 @@
 use crate::cage::get_cage;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use sysdefs::constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL};
-use sysdefs::lind_debug_panic;
+use sysdefs::lind_log;
 
 const EPOCH_NORMAL: u64 = 0;
 const EPOCH_SIGNAL: u64 = 0xc0ffee;
@@ -18,7 +18,7 @@ pub fn signal_epoch_trigger(cageid: u64) {
         let cage = match get_cage(cageid) {
             Some(c) => c,
             None => {
-                lind_debug_panic!("signal_epoch_trigger: cage {} not found", cageid);
+                lind_log!("signal_epoch_trigger: cage {} not found", cageid);
 
                 return;
             }
@@ -29,7 +29,7 @@ pub fn signal_epoch_trigger(cageid: u64) {
         let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
             Some(h) => h,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "signal_epoch_trigger: epoch_handler for thread {} not found",
                     main_threadid
                 );
@@ -40,7 +40,7 @@ pub fn signal_epoch_trigger(cageid: u64) {
         let epoch = epoch_handler.load(Ordering::Acquire);
 
         if epoch.is_null() {
-            lind_debug_panic!(
+            lind_log!(
                 "signal_epoch_trigger: epoch pointer for thread {} is null",
                 main_threadid
             );
@@ -87,7 +87,7 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
         let cage = match get_cage(cageid) {
             Some(c) => c,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "epoch_kill_all: cage {} not found for thread {}",
                     cageid,
                     caller_tid
@@ -105,7 +105,7 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
             let epoch_handler = entry.value();
             let epoch = epoch_handler.load(Ordering::Acquire);
             if epoch.is_null() {
-                lind_debug_panic!(
+                lind_log!(
                     "epoch_kill_all: epoch pointer for thread {} is null",
                     entry.key()
                 );
@@ -145,7 +145,7 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
         let cage = match get_cage(cageid) {
             Some(c) => c,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "get_epoch_state: cage {} not found for thread {}",
                     cageid,
                     thread_id
@@ -157,7 +157,7 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
         let epoch_handler = match cage.epoch_handler.get(&(thread_id as i32)) {
             Some(h) => h,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "get_epoch_state: epoch_handler for thread {} not found",
                     thread_id
                 );
@@ -167,7 +167,7 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
         };
         let epoch = epoch_handler.load(Ordering::Acquire);
         if epoch.is_null() {
-            lind_debug_panic!(
+            lind_log!(
                 "get_epoch_state: epoch pointer for thread {} is null",
                 thread_id
             );
@@ -190,7 +190,7 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
         let cage = match get_cage(cageid) {
             Some(c) => c,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "thread_check_killed: cage {} not found for thread {}",
                     cageid,
                     thread_id
@@ -202,7 +202,7 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
         let epoch_handler = match cage.epoch_handler.get(&(thread_id as i32)) {
             Some(h) => h,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "thread_check_killed: epoch_handler for thread {} not found",
                     thread_id
                 );
@@ -212,7 +212,7 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
         };
         let epoch = epoch_handler.load(Ordering::Acquire);
         if epoch.is_null() {
-            lind_debug_panic!(
+            lind_log!(
                 "thread_check_killed: epoch pointer for thread {} is null",
                 thread_id
             );
@@ -238,7 +238,7 @@ pub fn wait_all_threads_exited(cageid: u64, _except_tid: u64) {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!(
+            lind_log!(
                 "wait_all_threads_exited: cage {} not found for thread {}",
                 cageid,
                 _except_tid
@@ -282,7 +282,7 @@ pub fn signal_epoch_reset(cageid: u64) {
         let cage = match get_cage(cageid) {
             Some(c) => c,
             None => {
-                lind_debug_panic!("signal_epoch_reset: cage {} not found", cageid);
+                lind_log!("signal_epoch_reset: cage {} not found", cageid);
 
                 return;
             }
@@ -293,7 +293,7 @@ pub fn signal_epoch_reset(cageid: u64) {
         let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
             Some(h) => h,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "signal_epoch_reset: epoch_handler for thread {} not found",
                     main_threadid
                 );
@@ -303,7 +303,7 @@ pub fn signal_epoch_reset(cageid: u64) {
         };
         let epoch = epoch_handler.load(Ordering::Acquire);
         if epoch.is_null() {
-            lind_debug_panic!(
+            lind_log!(
                 "signal_epoch_reset: epoch pointer for thread {} is null",
                 main_threadid
             );
@@ -329,7 +329,7 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
         let cage = match get_cage(cageid) {
             Some(c) => c,
             None => {
-                lind_debug_panic!("signal_check_trigger: cage {} not found", cageid);
+                lind_log!("signal_check_trigger: cage {} not found", cageid);
 
                 return false;
             }
@@ -341,7 +341,7 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
         let epoch_handler = match cage.epoch_handler.get(&main_threadid) {
             Some(h) => h,
             None => {
-                lind_debug_panic!(
+                lind_log!(
                     "signal_check_trigger: epoch_handler for thread {} not found",
                     main_threadid
                 );
@@ -351,7 +351,7 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
         };
         let epoch = epoch_handler.load(Ordering::Acquire);
         if epoch.is_null() {
-            lind_debug_panic!(
+            lind_log!(
                 "signal_check_trigger: epoch pointer for thread {} is null",
                 main_threadid
             );
@@ -370,7 +370,7 @@ pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!("signal_check_block: cage {} not found", cageid);
+            lind_log!("signal_check_block: cage {} not found", cageid);
 
             return false;
         }
@@ -388,7 +388,7 @@ pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!("signal_get_handler: cage {} not found", cageid);
+            lind_log!("signal_get_handler: cage {} not found", cageid);
 
             return SIG_DFL as u32;
         }
@@ -533,7 +533,7 @@ pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!("lind_check_no_pending_signal: cage {} not found", cageid);
+            lind_log!("lind_check_no_pending_signal: cage {} not found", cageid);
 
             return true;
         }
@@ -557,7 +557,7 @@ pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!(
+            lind_log!(
                 "lind_signal_init: cage {} not found for thread {}",
                 cageid,
                 threadid
@@ -587,7 +587,7 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!(
+            lind_log!(
                 "lind_thread_exit: cage {} not found for thread {}",
                 cageid,
                 thread_id
@@ -635,7 +635,7 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
                 if saved_epoch_state == EPOCH_SIGNAL {
                     let new_thread_epoch_ptr = entry.value().load(Ordering::Acquire);
                     if new_thread_epoch_ptr.is_null() {
-                        lind_debug_panic!(
+                        lind_log!(
                             "lind_thread_exit: epoch pointer for new main thread {} is null",
                             id
                         );
@@ -666,7 +666,7 @@ pub fn signal_may_trigger(cageid: u64) {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!("signal_may_trigger: cage {} not found", cageid);
+            lind_log!("signal_may_trigger: cage {} not found", cageid);
 
             return;
         }

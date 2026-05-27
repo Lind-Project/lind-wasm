@@ -25,6 +25,7 @@ use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use sysdefs::constants::{
     DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE, lind_platform_const,
 };
+use sysdefs::lind_log;
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
@@ -457,10 +458,11 @@ impl Instance {
                     let stack_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
                     let rounded_stack_size = round_up_size(stack_size, PAGESIZE);
 
-                    #[cfg(feature = "debug-dylink")]
-                    println!(
+                    lind_log!(
+                        DYLINK,
                         "[debug] main module allocate {} + {} bytes",
-                        rounded_stack_size, rounded_data_size
+                        rounded_stack_size,
+                        rounded_data_size
                     );
 
                     (rounded_stack_size, rounded_data_size)
@@ -638,8 +640,7 @@ impl Instance {
                 let rounded_size =
                     round_up_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
                 let rounded_size = round_up_size(rounded_size, PAGESIZE);
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] library size round to {}", rounded_size);
+                lind_log!(DYLINK, "[debug] library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
                     cageid,                // self cageid
@@ -669,8 +670,7 @@ impl Instance {
                     *memory_base = addr;
                 }
 
-                #[cfg(feature = "debug-dylink")]
-                println!("[debug] library memory starts at {}", addr);
+                lind_log!(DYLINK, "[debug] library memory starts at {}", addr);
             }
         }
 
@@ -694,16 +694,14 @@ impl Instance {
                             "__wasm_apply_data_relocs",
                         )
                         .unwrap();
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] main module start reloc func");
+                    lind_log!(DYLINK, "[debug] main module start reloc func");
                     let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                     // apply tls relocations if any
                     if let Ok(init) = instance
                         .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
                     {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] main module start __wasm_apply_tls_relocs");
+                        lind_log!(DYLINK, "[debug] main module start __wasm_apply_tls_relocs");
                         let _ = init.call(store.as_context_mut(), ()).unwrap();
                     }
 
@@ -1284,8 +1282,12 @@ impl Instance {
                     // Cache the resolved table index; also updates the GOT cell if it exists.
                     let got_inner = got.as_ref().unwrap();
                     if got_inner.cache_symbol(final_name, index as u32) {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] update GOT.func.{} to {}", final_name, index);
+                        lind_log!(
+                            DYLINK,
+                            "[debug] update GOT.func.{} to {}",
+                            final_name,
+                            index
+                        );
                     }
                 }
             }
@@ -1319,8 +1321,7 @@ impl Instance {
                 };
                 // Cache the resolved address; also updates the GOT cell if it already exists.
                 if got_inner.cache_symbol(&name, val) {
-                    #[cfg(feature = "debug-dylink")]
-                    println!("[debug] update GOT.mem.{} to {}", name, val);
+                    lind_log!(DYLINK, "[debug] update GOT.mem.{} to {}", name, val);
                 }
             }
         }

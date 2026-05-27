@@ -20,6 +20,7 @@ use log::warn;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
+use sysdefs::lind_log;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
 use wasmtime_lind_utils::LindGOT;
 use wasmtime_lind_utils::symbol_table::SymbolMap;
@@ -308,8 +309,8 @@ impl<T> Linker<T> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
-                    #[cfg(feature = "debug-dylink")]
-                    println!(
+                    lind_log!(
+                        DYLINK,
                         "[debug] Warning: link undefined symbol \"{}\" to trap",
                         import.name()
                     );
@@ -348,8 +349,8 @@ impl<T> Linker<T> {
                     if !weak_imports.is_weak_symbol(import.module(), import.name()) {
                         continue;
                     }
-                    #[cfg(feature = "debug-dylink")]
-                    println!(
+                    lind_log!(
+                        DYLINK,
                         "[debug] define weak symbol {}.{} into trap",
                         import.module(),
                         import.name()
@@ -380,8 +381,8 @@ impl<T> Linker<T> {
     {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
-                #[cfg(feature = "debug-dylink")]
-                println!(
+                lind_log!(
+                    DYLINK,
                     "[debug]: define_GOT_dispatcher: import module: {}, name: {}",
                     import.module(),
                     import.name()
@@ -1578,8 +1579,12 @@ impl<T> Linker<T> {
 
                         // Cache the resolved table index; also updates the GOT cell if it exists.
                         if got.cache_symbol(final_name, index) {
-                            #[cfg(feature = "debug-dylink")]
-                            println!("[debug] update GOT.func.{} to {}", final_name, index);
+                            lind_log!(
+                                DYLINK,
+                                "[debug] update GOT.func.{} to {}",
+                                final_name,
+                                index
+                            );
                         }
 
                         // append the symbol into mappings
@@ -1606,8 +1611,7 @@ impl<T> Linker<T> {
                     };
                     // Cache the resolved address; also updates the GOT cell if it already exists.
                     if got.cache_symbol(&name, val) {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] update GOT.mem.{} to {}", name, val);
+                        lind_log!(DYLINK, "[debug] update GOT.mem.{} to {}", name, val);
                     }
                     // Only expose as dlsym-resolvable if it's a known GOT data symbol.
                     if got.has_entry(&name) {
@@ -1824,14 +1828,14 @@ impl<T> Linker<T> {
                 None => bail!("import of `{module}` defined twice"),
             }
         }
-        #[cfg(feature = "debug-dylink")]
+        #[cfg(feature = "lind-logging")]
         if self.map.contains_key(&key) {
             let module = &self.pool[key.module];
             let desc = match key.name.and_then(|n| self.pool.get(n)) {
                 Some(name) => format!("{}::{}", module, name),
                 None => module.to_string(),
             };
-            println!("[debug]: warning: {:?} definition overwrite", desc);
+            sysdefs::lind_log!(DYLINK, "warning: {:?} definition overwrite", desc);
         }
 
         self.map.insert(key, item)?;

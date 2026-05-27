@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use sysdefs::{
     constants::{DylinkErrorCode, RTLD_DEFAULT, RTLD_NEXT},
-    lind_debug_panic,
+    lind_debug_panic, lind_log,
 };
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{LindHost, get_memory_base};
@@ -92,8 +92,7 @@ pub fn dlsym_call<
             None => return -(DylinkErrorCode::ENOFOUND as i32),
         }
     };
-    #[cfg(feature = "debug-dylink")]
-    println!("[debug] dlsym resolves {} to {}", symbol, val);
+    lind_log!(DYLINK, "[debug] dlsym resolves {} to {}", symbol, val);
     val as i32
 }
 
