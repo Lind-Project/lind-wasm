@@ -147,8 +147,5 @@
 #define COPY_HANDLER_TABLE_TO_CAGE_SYSCALL 1003
 #define REGISTER_LIB_HANDLER_SYSCALL 1004
 
-/* Base value for library-level 3i fake call IDs */
-#define LIBCALL_BASE 2000
-
 #endif /* _LIND_SYSCALL_NUM_H */
  

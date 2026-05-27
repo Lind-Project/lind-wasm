@@ -147,7 +147,6 @@ int register_handler (int64_t targetcage,
 // target_cage: the cage whose library calls are being intercepted
 // lib_name: name of the library (e.g., "libtoy.so")
 // symbol_name: name of the function symbol (e.g., "toy_add")
-// call_id: fake syscall number >= LIBCALL_BASE assigned to this symbol
 // handler_cage: cage ID of the grate that will handle the call
 // handler_fn: function pointer in the handler cage
 int register_lib_handler(uint64_t target_cage,
