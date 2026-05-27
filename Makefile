@@ -249,7 +249,7 @@ lint:
 	# and pin to the default fdtables impl.
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
-	    --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
+	    --features "disable_signals secure lind_debug lind-logging debug-grate-calls fdtables-dashmaparray" \
 	    --keep-going \
 	    -- \
 	    -A warnings \
