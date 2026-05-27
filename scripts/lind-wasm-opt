@@ -175,7 +175,7 @@ else  # library
     LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
   fi
   if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
-    LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import)
+    LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module)
   fi
   if [[ "${WITHOUT_ASYNCIFY}" == "false" ]]; then
     LIND_FLAGS+=(--asyncify --pass-arg=asyncify-import-globals)
