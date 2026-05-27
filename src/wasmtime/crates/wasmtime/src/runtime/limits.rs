@@ -29,7 +29,7 @@ pub const DEFAULT_MEMORY_LIMIT: usize = 10000;
 /// or not and you're otherwise working in an asynchronous context the
 /// [`ResourceLimiterAsync`] trait is also provided to avoid blocking an OS
 /// thread while a limit is determined.
-pub trait ResourceLimiter {
+pub trait ResourceLimiter: Send {
     /// Notifies the resource limiter that an instance's linear memory has been
     /// requested to grow.
     ///
@@ -85,7 +85,7 @@ pub trait ResourceLimiter {
     ///
     /// See the details on the return values for `memory_growing` for what the
     /// return value of this function indicates.
-    fn memory_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
+    fn memory_grow_failed(&mut self, error: crate::Error) -> Result<()> {
         log::debug!("ignoring memory growth failure error: {error:?}");
         Ok(())
     }
@@ -103,7 +103,12 @@ pub trait ResourceLimiter {
     ///
     /// See the details on the return values for `memory_growing` for what the
     /// return value of this function indicates.
-    fn table_growing(&mut self, current: u32, desired: u32, maximum: Option<u32>) -> Result<bool>;
+    fn table_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> Result<bool>;
 
     /// Notifies the resource limiter that growing a linear memory, permitted by
     /// the `table_growing` method, has failed.
@@ -115,7 +120,7 @@ pub trait ResourceLimiter {
     ///
     /// See the details on the return values for `memory_growing` for what the
     /// return value of this function indicates.
-    fn table_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
+    fn table_grow_failed(&mut self, error: crate::Error) -> Result<()> {
         log::debug!("ignoring table growth failure error: {error:?}");
         Ok(())
     }
@@ -152,9 +157,7 @@ pub trait ResourceLimiter {
 /// asynchronously if necessary.
 ///
 /// This trait is identical to [`ResourceLimiter`], except that the
-/// `memory_growing` and `table_growing` functions are `async`. Must be used
-/// with an async [`Store`](`crate::Store`) configured via
-/// [`Config::async_support`](crate::Config::async_support).
+/// `memory_growing` and `table_growing` functions are `async`.
 ///
 /// This trait is used with
 /// [`Store::limiter_async`](`crate::Store::limiter_async`)`: see those docs
@@ -167,7 +170,7 @@ pub trait ResourceLimiter {
 /// answer the question whether growing a memory or table is allowed.
 #[cfg(feature = "async")]
 #[async_trait::async_trait]
-pub trait ResourceLimiterAsync {
+pub trait ResourceLimiterAsync: Send {
     /// Async version of [`ResourceLimiter::memory_growing`]
     async fn memory_growing(
         &mut self,
@@ -177,7 +180,7 @@ pub trait ResourceLimiterAsync {
     ) -> Result<bool>;
 
     /// Identical to [`ResourceLimiter::memory_grow_failed`]
-    fn memory_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
+    fn memory_grow_failed(&mut self, error: crate::Error) -> Result<()> {
         log::debug!("ignoring memory growth failure error: {error:?}");
         Ok(())
     }
@@ -185,13 +188,13 @@ pub trait ResourceLimiterAsync {
     /// Asynchronous version of [`ResourceLimiter::table_growing`]
     async fn table_growing(
         &mut self,
-        current: u32,
-        desired: u32,
-        maximum: Option<u32>,
+        current: usize,
+        desired: usize,
+        maximum: Option<usize>,
     ) -> Result<bool>;
 
     /// Identical to [`ResourceLimiter::table_grow_failed`]
-    fn table_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
+    fn table_grow_failed(&mut self, error: crate::Error) -> Result<()> {
         log::debug!("ignoring table growth failure error: {error:?}");
         Ok(())
     }
@@ -244,7 +247,7 @@ impl StoreLimitsBuilder {
     /// they're all allowed to reach up to the `limit` specified.
     ///
     /// By default, table elements will not be limited.
-    pub fn table_elements(mut self, limit: u32) -> Self {
+    pub fn table_elements(mut self, limit: usize) -> Self {
         self.0.table_elements = Some(limit);
         self
     }
@@ -310,7 +313,7 @@ impl StoreLimitsBuilder {
 #[derive(Clone, Debug)]
 pub struct StoreLimits {
     memory_size: Option<usize>,
-    table_elements: Option<u32>,
+    table_elements: Option<usize>,
     instances: usize,
     tables: usize,
     memories: usize,
@@ -351,7 +354,7 @@ impl ResourceLimiter for StoreLimits {
         }
     }
 
-    fn memory_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
+    fn memory_grow_failed(&mut self, error: crate::Error) -> Result<()> {
         if self.trap_on_grow_failure {
             Err(error.context("forcing a memory growth failure to be a trap"))
         } else {
@@ -360,7 +363,12 @@ impl ResourceLimiter for StoreLimits {
         }
     }
 
-    fn table_growing(&mut self, _current: u32, desired: u32, maximum: Option<u32>) -> Result<bool> {
+    fn table_growing(
+        &mut self,
+        _current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> Result<bool> {
         let allow = match self.table_elements {
             Some(limit) if desired > limit => false,
             _ => match maximum {
@@ -375,7 +383,7 @@ impl ResourceLimiter for StoreLimits {
         }
     }
 
-    fn table_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
+    fn table_grow_failed(&mut self, error: crate::Error) -> Result<()> {
         if self.trap_on_grow_failure {
             Err(error.context("forcing a table growth failure to be a trap"))
         } else {

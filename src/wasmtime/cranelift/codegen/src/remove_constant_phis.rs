@@ -3,11 +3,11 @@
 use crate::dominator_tree::DominatorTree;
 use crate::ir;
 use crate::ir::Function;
-use crate::ir::{Block, BlockCall, Inst, Value};
+use crate::ir::{Block, BlockArg, BlockCall, Inst, Value};
 use crate::timing;
+use crate::{FxHashMap, FxHashSet};
 use bumpalo::Bump;
 use cranelift_entity::SecondaryMap;
-use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 // A note on notation.  For the sake of clarity, this file uses the phrase
@@ -116,7 +116,7 @@ struct OutEdge<'a> {
     /// The arguments to that block.
     ///
     /// These values can be from both groups A and B.
-    args: &'a [Value],
+    args: &'a [BlockArg],
 }
 
 impl<'a> OutEdge<'a> {
@@ -132,10 +132,10 @@ impl<'a> OutEdge<'a> {
         branch_index: usize,
         block: BlockCall,
     ) -> Option<Self> {
-        let inst_var_args = block.args_slice(&dfg.value_lists);
+        let inst_var_args = block.args(&dfg.value_lists);
 
         // Skip edges without params.
-        if inst_var_args.is_empty() {
+        if inst_var_args.len() == 0 {
             return None;
         }
 
@@ -144,9 +144,7 @@ impl<'a> OutEdge<'a> {
             branch_index: branch_index as u32,
             block: block.block(&dfg.value_lists),
             args: bump.alloc_slice_fill_iter(
-                inst_var_args
-                    .iter()
-                    .map(|value| dfg.resolve_aliases(*value)),
+                inst_var_args.map(|arg| arg.map_value(|value| dfg.resolve_aliases(value))),
             ),
         })
     }
@@ -203,7 +201,7 @@ impl SolverState {
         *self
             .absvals
             .get(&actual)
-            .unwrap_or_else(|| panic!("SolverState::get: formal param {:?} is untracked?!", actual))
+            .unwrap_or_else(|| panic!("SolverState::get: formal param {actual:?} is untracked?!"))
     }
 
     fn maybe_get(&self, actual: Value) -> Option<&AbstractValue> {
@@ -213,7 +211,7 @@ impl SolverState {
     fn set(&mut self, actual: Value, lp: AbstractValue) {
         match self.absvals.insert(actual, lp) {
             Some(_old_lp) => {}
-            None => panic!("SolverState::set: formal param {:?} is untracked?!", actual),
+            None => panic!("SolverState::set: formal param {actual:?} is untracked?!"),
         }
     }
 }
@@ -229,17 +227,17 @@ pub fn do_remove_constant_phis(func: &mut Function, domtree: &mut DominatorTree)
     // info.  The solver will iterate over the summaries, rather than having
     // to inspect each instruction in each block.
     let bump =
-        Bump::with_capacity(domtree.cfg_postorder().len() * 4 * std::mem::size_of::<Value>());
+        Bump::with_capacity(domtree.cfg_postorder().len() * 4 * core::mem::size_of::<Value>());
     let mut summaries =
         SecondaryMap::<Block, BlockSummary>::with_capacity(domtree.cfg_postorder().len());
 
-    for b in domtree.cfg_postorder().iter().rev().copied() {
+    for b in domtree.cfg_rpo().copied() {
         let formals = func.dfg.block_params(b);
         let mut summary = BlockSummary::new(&bump, formals);
 
         for inst in func.layout.block_insts(b) {
             for (ix, dest) in func.dfg.insts[inst]
-                .branch_destination(&func.dfg.jump_tables)
+                .branch_destination(&func.dfg.jump_tables, &func.dfg.exception_tables)
                 .iter()
                 .enumerate()
             {
@@ -269,7 +267,7 @@ pub fn do_remove_constant_phis(func: &mut Function, domtree: &mut DominatorTree)
     // Set up initial solver state
     let mut state = SolverState::new();
 
-    for b in domtree.cfg_postorder().iter().rev().copied() {
+    for b in domtree.cfg_rpo().copied() {
         // For each block, get the formals
         if b == entry_block {
             continue;
@@ -288,7 +286,7 @@ pub fn do_remove_constant_phis(func: &mut Function, domtree: &mut DominatorTree)
         iter_no += 1;
         let mut changed = false;
 
-        for src in domtree.cfg_postorder().iter().rev().copied() {
+        for src in domtree.cfg_rpo().copied() {
             let src_summary = &summaries[src];
             for edge in &src_summary.dests {
                 assert!(edge.block != entry_block);
@@ -305,9 +303,12 @@ pub fn do_remove_constant_phis(func: &mut Function, domtree: &mut DominatorTree)
                     // to be found in the solver state.  If not, then it's a
                     // real value defining point (not a phi), in which case
                     // return it itself.
-                    let actual_absval = match state.maybe_get(*actual) {
-                        Some(pt) => *pt,
-                        None => AbstractValue::One(*actual),
+                    let actual_absval = match actual {
+                        BlockArg::Value(actual) => match state.maybe_get(*actual) {
+                            Some(pt) => *pt,
+                            None => AbstractValue::One(*actual),
+                        },
+                        _ => AbstractValue::Many,
                     };
 
                     // And `join` the new value with the old.
@@ -385,10 +386,11 @@ pub fn do_remove_constant_phis(func: &mut Function, domtree: &mut DominatorTree)
             }
 
             let dfg = &mut func.dfg;
-            let dests = dfg.insts[edge.inst].branch_destination_mut(&mut dfg.jump_tables);
+            let dests = dfg.insts[edge.inst]
+                .branch_destination_mut(&mut dfg.jump_tables, &mut dfg.exception_tables);
             let block = &mut dests[edge.branch_index as usize];
 
-            old_actuals.extend(block.args_slice(&dfg.value_lists));
+            old_actuals.extend(block.args(&dfg.value_lists));
 
             // Check that the numbers of arguments make sense.
             let formals = &summaries[edge.block].formals;
@@ -405,8 +407,7 @@ pub fn do_remove_constant_phis(func: &mut Function, domtree: &mut DominatorTree)
             // This leaks the value list from the old block,
             // https://github.com/bytecodealliance/wasmtime/issues/5451 for more information.
             let destination = block.block(&dfg.value_lists);
-            *block = BlockCall::new(destination, &old_actuals, &mut dfg.value_lists);
-            old_actuals.clear();
+            *block = BlockCall::new(destination, old_actuals.drain(..), &mut dfg.value_lists);
         }
     }
 

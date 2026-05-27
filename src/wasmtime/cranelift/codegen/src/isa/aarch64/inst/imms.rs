@@ -4,7 +4,7 @@ use crate::ir::types::*;
 use crate::isa::aarch64::inst::{OperandSize, ScalarSize};
 use crate::machinst::PrettyPrint;
 
-use std::string::String;
+use alloc::string::String;
 
 /// An immediate that represents the NZCV flags.
 #[derive(Clone, Copy, Debug)]
@@ -270,6 +270,12 @@ pub struct Imm12 {
 }
 
 impl Imm12 {
+    /// Handy 0-value constant.
+    pub const ZERO: Imm12 = Imm12 {
+        bits: 0,
+        shift12: false,
+    };
+
     /// Compute a Imm12 from raw bits, if possible.
     pub fn maybe_from_u64(val: u64) -> Option<Imm12> {
         if val & !0xfff == 0 {
@@ -289,11 +295,7 @@ impl Imm12 {
 
     /// Bits for 2-bit "shift" field in e.g. AddI.
     pub fn shift_bits(&self) -> u32 {
-        if self.shift12 {
-            0b01
-        } else {
-            0b00
-        }
+        if self.shift12 { 0b01 } else { 0b00 }
     }
 
     /// Bits for 12-bit "imm" field in e.g. AddI.
@@ -304,11 +306,7 @@ impl Imm12 {
     /// Get the actual value that this immediate corresponds to.
     pub fn value(&self) -> u32 {
         let base = self.bits as u32;
-        if self.shift12 {
-            base << 12
-        } else {
-            base
-        }
+        if self.shift12 { base << 12 } else { base }
     }
 }
 
@@ -604,7 +602,7 @@ impl MoveWideConst {
         None
     }
 
-    /// Create a `MoveWideCosnt` from a given shift, if possible.
+    /// Create a `MoveWideConst` from a given shift, if possible.
     pub fn maybe_with_shift(imm: u16, shift: u8) -> Option<MoveWideConst> {
         let shift_enc = shift / 16;
         if shift_enc > 3 {
@@ -750,7 +748,7 @@ impl ASIMDMovModImm {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ASIMDFPModImm {
     imm: u8,
-    is_64bit: bool,
+    size: ScalarSize,
 }
 
 impl ASIMDFPModImm {
@@ -759,6 +757,21 @@ impl ASIMDFPModImm {
         // In all cases immediates are encoded as an 8-bit number 0b_abcdefgh;
         // let `D` be the inverse of the digit `d`.
         match size {
+            ScalarSize::Size16 => {
+                // In this case the representable immediates are 16-bit numbers of the form
+                // 0b_aBbb_cdef_gh00_0000.
+                let value = value as u16;
+                let b0_5 = (value >> 6) & 0b111111;
+                let b6 = (value >> 6) & (1 << 6);
+                let b7 = (value >> 8) & (1 << 7);
+                let imm = (b0_5 | b6 | b7) as u8;
+
+                if value == Self::value16(imm) {
+                    Some(ASIMDFPModImm { imm, size })
+                } else {
+                    None
+                }
+            }
             ScalarSize::Size32 => {
                 // In this case the representable immediates are 32-bit numbers of the form
                 // 0b_aBbb_bbbc_defg_h000 shifted to the left by 16.
@@ -769,10 +782,7 @@ impl ASIMDFPModImm {
                 let imm = (b0_5 | b6 | b7) as u8;
 
                 if value == Self::value32(imm) {
-                    Some(ASIMDFPModImm {
-                        imm,
-                        is_64bit: false,
-                    })
+                    Some(ASIMDFPModImm { imm, size })
                 } else {
                     None
                 }
@@ -786,10 +796,7 @@ impl ASIMDFPModImm {
                 let imm = (b0_5 | b6 | b7) as u8;
 
                 if value == Self::value64(imm) {
-                    Some(ASIMDFPModImm {
-                        imm,
-                        is_64bit: true,
-                    })
+                    Some(ASIMDFPModImm { imm, size })
                 } else {
                     None
                 }
@@ -801,6 +808,17 @@ impl ASIMDFPModImm {
     /// Returns bits ready for encoding.
     pub fn enc_bits(&self) -> u8 {
         self.imm
+    }
+
+    /// Returns the 16-bit value that corresponds to an 8-bit encoding.
+    fn value16(imm: u8) -> u16 {
+        let imm = imm as u16;
+        let b0_5 = imm & 0b111111;
+        let b6 = (imm >> 6) & 1;
+        let b6_inv = b6 ^ 1;
+        let b7 = (imm >> 7) & 1;
+
+        b0_5 << 6 | (b6 * 0b11) << 12 | b6_inv << 14 | b7 << 15
     }
 
     /// Returns the 32-bit value that corresponds to an 8-bit encoding.
@@ -849,7 +867,7 @@ impl PrettyPrint for Imm12 {
     fn pretty_print(&self, _: u8) -> String {
         let shift = if self.shift12 { 12 } else { 0 };
         let value = u32::from(self.bits) << shift;
-        format!("#{}", value)
+        format!("#{value}")
     }
 }
 
@@ -919,7 +937,7 @@ impl PrettyPrint for ASIMDMovModImm {
                 imm |= (-b as u8 as u64) << (i * 8);
             }
 
-            format!("#{}", imm)
+            format!("#{imm}")
         } else if self.shift == 0 {
             format!("#{}", self.imm)
         } else {
@@ -931,10 +949,21 @@ impl PrettyPrint for ASIMDMovModImm {
 
 impl PrettyPrint for ASIMDFPModImm {
     fn pretty_print(&self, _: u8) -> String {
-        if self.is_64bit {
-            format!("#{}", f64::from_bits(Self::value64(self.imm)))
-        } else {
-            format!("#{}", f32::from_bits(Self::value32(self.imm)))
+        match self.size {
+            ScalarSize::Size16 => {
+                // FIXME(#8312): Use `f16` once it is stable.
+                // `value` will always be a normal number. Convert it to a `f32`.
+                let value: u32 = Self::value16(self.imm).into();
+                let sign = (value & 0x8000) << 16;
+                // Adjust the exponent for the difference between the `f16` exponent bias and the
+                // `f32` exponent bias.
+                let exponent = ((value & 0x7c00) + ((127 - 15) << 10)) << 13;
+                let significand = (value & 0x3ff) << 13;
+                format!("#{}", f32::from_bits(sign | exponent | significand))
+            }
+            ScalarSize::Size32 => format!("#{}", f32::from_bits(Self::value32(self.imm))),
+            ScalarSize::Size64 => format!("#{}", f64::from_bits(Self::value64(self.imm))),
+            _ => unreachable!(),
         }
     }
 }

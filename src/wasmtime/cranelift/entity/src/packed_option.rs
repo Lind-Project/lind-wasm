@@ -7,8 +7,8 @@
 //! This module provides a `PackedOption<T>` for types that have a reserved value that can be used
 //! to represent `None`.
 
-use core::fmt;
-use core::mem;
+use core::{fmt, mem};
+use wasmtime_core::{alloc::TryClone, error::OutOfMemory};
 
 #[cfg(feature = "enable-serde")]
 use serde_derive::{Deserialize, Serialize};
@@ -22,9 +22,22 @@ pub trait ReservedValue {
 }
 
 /// Packed representation of `Option<T>`.
+///
+/// This is a wrapper around a `T`, using `T::reserved_value` to represent
+/// `None`.
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+#[repr(transparent)]
 pub struct PackedOption<T: ReservedValue>(T);
+
+impl<T> TryClone for PackedOption<T>
+where
+    T: ReservedValue + TryClone,
+{
+    fn try_clone(&self) -> Result<Self, OutOfMemory> {
+        Ok(Self(self.0.try_clone()?))
+    }
+}
 
 impl<T: ReservedValue> PackedOption<T> {
     /// Returns `true` if the packed option is a `None` value.
@@ -39,11 +52,7 @@ impl<T: ReservedValue> PackedOption<T> {
 
     /// Expand the packed option into a normal `Option`.
     pub fn expand(self) -> Option<T> {
-        if self.is_none() {
-            None
-        } else {
-            Some(self.0)
-        }
+        if self.is_none() { None } else { Some(self.0) }
     }
 
     /// Maps a `PackedOption<T>` to `Option<U>` by applying a function to a contained value.
@@ -55,11 +64,13 @@ impl<T: ReservedValue> PackedOption<T> {
     }
 
     /// Unwrap a packed `Some` value or panic.
+    #[track_caller]
     pub fn unwrap(self) -> T {
         self.expand().unwrap()
     }
 
     /// Unwrap a packed `Some` value or panic.
+    #[track_caller]
     pub fn expect(self, msg: &str) -> T {
         self.expand().expect(msg)
     }
@@ -98,9 +109,9 @@ impl<T: ReservedValue> From<Option<T>> for PackedOption<T> {
     }
 }
 
-impl<T: ReservedValue> Into<Option<T>> for PackedOption<T> {
-    fn into(self) -> Option<T> {
-        self.expand()
+impl<T: ReservedValue> From<PackedOption<T>> for Option<T> {
+    fn from(packed: PackedOption<T>) -> Option<T> {
+        packed.expand()
     }
 }
 

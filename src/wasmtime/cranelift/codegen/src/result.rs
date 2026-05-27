@@ -1,10 +1,8 @@
 //! Result and error types representing the outcome of compiling a function.
 
-use regalloc2::checker::CheckerErrors;
-
-use crate::ir::pcc::PccError;
 use crate::{ir::Function, verifier::VerifierErrors};
-use std::string::String;
+use alloc::string::String;
+use regalloc2::checker::CheckerErrors;
 
 /// A compilation error.
 ///
@@ -42,9 +40,6 @@ pub enum CodegenError {
 
     /// Register allocator internal error discovered by the symbolic checker.
     Regalloc(CheckerErrors),
-
-    /// Proof-carrying-code validation error.
-    Pcc(PccError),
 }
 
 /// A convenient alias for a `Result` that uses `CodegenError` as the error type.
@@ -52,8 +47,8 @@ pub type CodegenResult<T> = Result<T, CodegenError>;
 
 // This is manually implementing Error and Display instead of using thiserror to reduce the amount
 // of dependencies used by Cranelift.
-impl std::error::Error for CodegenError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for CodegenError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             CodegenError::Verifier(source) => Some(source),
             CodegenError::ImplLimitExceeded { .. }
@@ -62,25 +57,20 @@ impl std::error::Error for CodegenError {
             #[cfg(feature = "unwind")]
             CodegenError::RegisterMappingError { .. } => None,
             CodegenError::Regalloc(..) => None,
-            CodegenError::Pcc(..) => None,
         }
     }
 }
 
-impl std::fmt::Display for CodegenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Display for CodegenError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             CodegenError::Verifier(_) => write!(f, "Verifier errors"),
             CodegenError::ImplLimitExceeded => write!(f, "Implementation limit exceeded"),
             CodegenError::CodeTooLarge => write!(f, "Code for function is too large"),
-            CodegenError::Unsupported(feature) => write!(f, "Unsupported feature: {}", feature),
+            CodegenError::Unsupported(feature) => write!(f, "Unsupported feature: {feature}"),
             #[cfg(feature = "unwind")]
             CodegenError::RegisterMappingError(_0) => write!(f, "Register mapping error"),
-            CodegenError::Regalloc(errors) => write!(f, "Regalloc validation errors: {:?}", errors),
-
-            // NOTE: if this is changed, please update the `is_pcc_error` function defined in
-            // `wasmtime/crates/fuzzing/src/oracles.rs`
-            CodegenError::Pcc(e) => write!(f, "Proof-carrying-code validation error: {:?}", e),
+            CodegenError::Regalloc(errors) => write!(f, "Regalloc validation errors: {errors:?}"),
         }
     }
 }

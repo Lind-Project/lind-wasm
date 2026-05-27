@@ -26,6 +26,9 @@ pub struct TypeInfo {
 
     /// Whether or not this type (transitively) has a handle.
     pub has_handle: bool,
+
+    /// Whether or not this type (transitively) has a future or a stream.
+    pub has_future_or_stream: bool,
 }
 
 impl std::ops::BitOrAssign for TypeInfo {
@@ -35,6 +38,7 @@ impl std::ops::BitOrAssign for TypeInfo {
         self.error |= rhs.error;
         self.has_list |= rhs.has_list;
         self.has_handle |= rhs.has_handle;
+        self.has_future_or_stream |= rhs.has_future_or_stream;
     }
 }
 
@@ -67,7 +71,7 @@ impl Types {
                         self.type_info_func(resolve, f, import);
                     }
                 }
-                WorldItem::Type(id) => {
+                WorldItem::Type { id, .. } => {
                     self.type_id_info(resolve, *id);
                 }
             }
@@ -76,9 +80,9 @@ impl Types {
 
     fn type_info_func(&mut self, resolve: &Resolve, func: &Function, import: bool) {
         let mut live = LiveTypes::default();
-        for (_, ty) in func.params.iter() {
-            self.type_info(resolve, ty);
-            live.add_type(resolve, ty);
+        for param in func.params.iter() {
+            self.type_info(resolve, &param.ty);
+            live.add_type(resolve, &param.ty);
         }
         for id in live.iter() {
             if resolve.types[id].name.is_some() {
@@ -91,7 +95,7 @@ impl Types {
             }
         }
         let mut live = LiveTypes::default();
-        for ty in func.results.iter_types() {
+        if let Some(ty) = &func.result {
             self.type_info(resolve, ty);
             live.add_type(resolve, ty);
         }
@@ -101,16 +105,12 @@ impl Types {
             }
         }
 
-        for ty in func.results.iter_types() {
-            let id = match ty {
-                Type::Id(id) => *id,
-                _ => continue,
-            };
-            let err = match &resolve.types[id].kind {
-                TypeDefKind::Result(Result_ { err, .. }) => err,
-                _ => continue,
-            };
-            if let Some(Type::Id(id)) = err {
+        if let Some(Type::Id(id)) = func.result {
+            if let TypeDefKind::Result(Result_ {
+                err: Some(Type::Id(id)),
+                ..
+            }) = &resolve.types[id].kind
+            {
                 let id = super::resolve_type_definition_id(resolve, *id);
                 self.type_info.get_mut(&id).unwrap().error = true;
             }
@@ -148,26 +148,26 @@ impl Types {
                 info = self.type_info(resolve, ty);
                 info.has_list = true;
             }
-            TypeDefKind::Type(ty) => {
-                info = self.type_info(resolve, ty);
+            TypeDefKind::Map(k, v) => {
+                info = self.type_info(resolve, k);
+                info |= self.type_info(resolve, v);
+                info.has_list = true;
             }
-            TypeDefKind::Option(ty) => {
+            TypeDefKind::Type(ty) | TypeDefKind::Option(ty) => {
                 info = self.type_info(resolve, ty);
             }
             TypeDefKind::Result(r) => {
                 info = self.optional_type_info(resolve, r.ok.as_ref());
                 info |= self.optional_type_info(resolve, r.err.as_ref());
             }
-            TypeDefKind::Future(ty) => {
+            TypeDefKind::Future(ty) | TypeDefKind::Stream(ty) => {
                 info = self.optional_type_info(resolve, ty.as_ref());
-            }
-            TypeDefKind::Stream(stream) => {
-                info = self.optional_type_info(resolve, stream.element.as_ref());
-                info |= self.optional_type_info(resolve, stream.end.as_ref());
+                info.has_future_or_stream = true;
             }
             TypeDefKind::Handle(_) => info.has_handle = true,
             TypeDefKind::Resource => {}
             TypeDefKind::Unknown => unreachable!(),
+            TypeDefKind::FixedLengthList(..) => todo!(),
         }
         self.type_info.insert(ty, info);
         info
@@ -193,10 +193,10 @@ impl Types {
 
 impl TypeInfo {
     pub fn is_copy(&self) -> bool {
-        !self.has_list && !self.has_handle
+        !self.has_list && !self.has_handle && !self.has_future_or_stream
     }
 
     pub fn is_clone(&self) -> bool {
-        !self.has_handle
+        !self.has_handle && !self.has_future_or_stream
     }
 }

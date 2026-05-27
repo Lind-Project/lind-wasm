@@ -92,23 +92,7 @@ fn midpoint(a: SequenceNumber, b: SequenceNumber) -> Option<SequenceNumber> {
     debug_assert!(a < b);
     // Avoid integer overflow.
     let m = a + (b - a) / 2;
-    if m > a {
-        Some(m)
-    } else {
-        None
-    }
-}
-
-#[test]
-fn test_midpoint() {
-    assert_eq!(midpoint(0, 1), None);
-    assert_eq!(midpoint(0, 2), Some(1));
-    assert_eq!(midpoint(0, 3), Some(1));
-    assert_eq!(midpoint(0, 4), Some(2));
-    assert_eq!(midpoint(1, 4), Some(2));
-    assert_eq!(midpoint(2, 4), Some(3));
-    assert_eq!(midpoint(3, 4), None);
-    assert_eq!(midpoint(3, 4), None);
+    if m > a { Some(m) } else { None }
 }
 
 impl Layout {
@@ -331,7 +315,7 @@ impl Layout {
     }
 
     /// Return an iterator over all blocks in layout order.
-    pub fn blocks(&self) -> Blocks {
+    pub fn blocks(&self) -> Blocks<'_> {
         Blocks {
             layout: self,
             next: self.first_block,
@@ -524,12 +508,18 @@ impl Layout {
     }
 
     /// Iterate over the instructions in `block` in layout order.
-    pub fn block_insts(&self, block: Block) -> Insts {
+    pub fn block_insts(&self, block: Block) -> Insts<'_> {
         Insts {
             layout: self,
             head: self.blocks[block].first_inst.into(),
             tail: self.blocks[block].last_inst.into(),
         }
+    }
+
+    /// Does the given block contain exactly one instruction?
+    pub fn block_contains_exactly_one_inst(&self, block: Block) -> bool {
+        let block = &self.blocks[block];
+        block.first_inst.is_some() && block.first_inst == block.last_inst
     }
 
     /// Split the block containing `before` in two.
@@ -763,12 +753,24 @@ mod serde {
 
 #[cfg(test)]
 mod tests {
-    use super::Layout;
+    use super::*;
     use crate::cursor::{Cursor, CursorPosition};
     use crate::entity::EntityRef;
     use crate::ir::{Block, Inst, SourceLoc};
     use alloc::vec::Vec;
     use core::cmp::Ordering;
+
+    #[test]
+    fn test_midpoint() {
+        assert_eq!(midpoint(0, 1), None);
+        assert_eq!(midpoint(0, 2), Some(1));
+        assert_eq!(midpoint(0, 3), Some(1));
+        assert_eq!(midpoint(0, 4), Some(2));
+        assert_eq!(midpoint(1, 4), Some(2));
+        assert_eq!(midpoint(2, 4), Some(3));
+        assert_eq!(midpoint(3, 4), None);
+        assert_eq!(midpoint(3, 4), None);
+    }
 
     struct LayoutCursor<'f> {
         /// Borrowed function layout. Public so it can be re-borrowed from this cursor.

@@ -1,31 +1,34 @@
 use crate::prelude::*;
+#[cfg(feature = "std")]
+use crate::runtime::vm::open_file_for_mmap;
 use crate::runtime::vm::{CompiledModuleId, MmapVec, ModuleMemoryImages, VMWasmCallFunction};
 use crate::sync::OnceLock;
 use crate::{
-    code::CodeObject,
+    Engine,
+    code::EngineCode,
     code_memory::CodeMemory,
     instantiate::CompiledModule,
     resources::ResourcesRequired,
-    type_registry::TypeCollection,
     types::{ExportType, ExternType, ImportType},
-    Engine,
 };
 use alloc::sync::Arc;
 use core::fmt;
 use core::ops::Range;
 use core::ptr::NonNull;
 #[cfg(feature = "std")]
-use std::path::Path;
+use std::{fs::File, path::Path};
 use wasmparser::{Parser, ValidPayload, Validator};
+#[cfg(feature = "debug")]
+use wasmtime_environ::FrameTable;
 use wasmtime_environ::{
-    CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, EntityIndex, HostPtr, ModuleTypes,
-    ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex,
+    CompiledFunctionsTable, CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, EntityIndex,
+    HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex, WasmChecksum,
 };
+#[cfg(feature = "gc")]
+use wasmtime_unwinder::ExceptionTable;
 mod registry;
 
-pub use registry::{
-    get_wasm_trap, register_code, unregister_code, ModuleRegistry, RegisteredModuleId,
-};
+pub use registry::*;
 
 /// A compiled WebAssembly module, ready to be instantiated.
 ///
@@ -70,7 +73,7 @@ pub use registry::{
 ///
 /// ```no_run
 /// # use wasmtime::*;
-/// # fn main() -> anyhow::Result<()> {
+/// # fn main() -> Result<()> {
 /// let engine = Engine::default();
 /// let module = Module::from_file(&engine, "path/to/foo.wasm")?;
 /// # Ok(())
@@ -81,7 +84,7 @@ pub use registry::{
 ///
 /// ```no_run
 /// # use wasmtime::*;
-/// # fn main() -> anyhow::Result<()> {
+/// # fn main() -> Result<()> {
 /// let engine = Engine::default();
 /// // Now we're using the WebAssembly text extension: `.wat`!
 /// let module = Module::from_file(&engine, "path/to/foo.wat")?;
@@ -94,7 +97,7 @@ pub use registry::{
 ///
 /// ```no_run
 /// # use wasmtime::*;
-/// # fn main() -> anyhow::Result<()> {
+/// # fn main() -> Result<()> {
 /// let engine = Engine::default();
 /// # let wasm_bytes: Vec<u8> = Vec::new();
 /// let module = Module::new(&engine, &wasm_bytes)?;
@@ -109,7 +112,7 @@ pub use registry::{
 ///
 /// ```no_run
 /// # use wasmtime::*;
-/// # fn main() -> anyhow::Result<()> {
+/// # fn main() -> Result<()> {
 /// let engine = Engine::default();
 /// # let wasm_bytes: Vec<u8> = Vec::new();
 /// let module = Module::new(&engine, &wasm_bytes)?;
@@ -141,7 +144,7 @@ struct ModuleInner {
     /// Note that this `Arc` is used to share information between compiled
     /// modules within a component. For bare core wasm modules created with
     /// `Module::new`, for example, this is a uniquely owned `Arc`.
-    code: Arc<CodeObject>,
+    code: Arc<EngineCode>,
 
     /// A set of initialization images for memories, if any.
     ///
@@ -153,10 +156,14 @@ struct ModuleInner {
     memory_images: OnceLock<Option<ModuleMemoryImages>>,
 
     /// Flag indicating whether this module can be serialized or not.
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
     serializable: bool,
 
     /// Runtime offset information for `VMContext`.
     offsets: VMOffsets<HostPtr>,
+
+    /// The checksum of the source binary from which this module was compiled.
+    checksum: WasmChecksum,
 }
 
 impl fmt::Debug for Module {
@@ -221,7 +228,7 @@ impl Module {
     ///
     /// ```no_run
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let wasm_bytes: Vec<u8> = Vec::new();
     /// let module = Module::new(&engine, &wasm_bytes)?;
@@ -234,7 +241,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let module = Module::new(&engine, "(module (func))")?;
     /// # Ok(())
@@ -243,7 +250,7 @@ impl Module {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn new(engine: &Engine, bytes: impl AsRef<[u8]>) -> Result<Module> {
         crate::CodeBuilder::new(engine)
-            .wasm(bytes.as_ref(), None)?
+            .wasm_binary_or_text(bytes.as_ref(), None)?
             .compile_module()
     }
 
@@ -258,7 +265,7 @@ impl Module {
     ///
     /// ```no_run
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// let engine = Engine::default();
     /// let module = Module::from_file(&engine, "./path/to/foo.wasm")?;
     /// # Ok(())
@@ -269,7 +276,7 @@ impl Module {
     ///
     /// ```no_run
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let module = Module::from_file(&engine, "./path/to/foo.wat")?;
     /// # Ok(())
@@ -278,7 +285,7 @@ impl Module {
     #[cfg(all(feature = "std", any(feature = "cranelift", feature = "winch")))]
     pub fn from_file(engine: &Engine, file: impl AsRef<Path>) -> Result<Module> {
         crate::CodeBuilder::new(engine)
-            .wasm_file(file.as_ref())?
+            .wasm_binary_or_text_file(file.as_ref())?
             .compile_module()
     }
 
@@ -295,7 +302,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let wasm = b"\0asm\x01\0\0\0";
     /// let module = Module::from_binary(&engine, wasm)?;
@@ -307,7 +314,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// assert!(Module::from_binary(&engine, b"(module)").is_err());
     /// # Ok(())
@@ -316,8 +323,7 @@ impl Module {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn from_binary(engine: &Engine, binary: &[u8]) -> Result<Module> {
         crate::CodeBuilder::new(engine)
-            .wasm(binary, None)?
-            .wat(false)?
+            .wasm_binary(binary, None)?
             .compile_module()
     }
 
@@ -344,14 +350,15 @@ impl Module {
     /// state of the file.
     #[cfg(all(feature = "std", any(feature = "cranelift", feature = "winch")))]
     pub unsafe fn from_trusted_file(engine: &Engine, file: impl AsRef<Path>) -> Result<Module> {
-        let mmap = MmapVec::from_file(file.as_ref())?;
+        let open_file = open_file_for_mmap(file.as_ref())?;
+        let mmap = crate::runtime::vm::MmapVec::from_file(open_file)?;
         if &mmap[0..4] == b"\x7fELF" {
             let code = engine.load_code(mmap, ObjectKind::Module)?;
             return Module::from_parts(engine, code, None);
         }
 
         crate::CodeBuilder::new(engine)
-            .wasm(&mmap, Some(file.as_ref()))?
+            .wasm_binary_or_text(&mmap[..], Some(file.as_ref()))?
             .compile_module()
     }
 
@@ -402,6 +409,26 @@ impl Module {
         Module::from_parts(engine, code, None)
     }
 
+    /// In-place deserialization of an in-memory compiled module previously
+    /// created with [`Module::serialize`] or [`Engine::precompile_module`].
+    ///
+    /// See [`Self::deserialize`] for additional information; this method
+    /// works identically except that it will not create a copy of the provided
+    /// memory but will use it directly.
+    ///
+    /// # Unsafety
+    ///
+    /// All of the safety notes from [`Self::deserialize`] apply here as well
+    /// with the additional constraint that the code memory provide by `memory`
+    /// lives for as long as the module and is nevery externally modified for
+    /// the lifetime of the deserialized module.
+    pub unsafe fn deserialize_raw(engine: &Engine, memory: NonNull<[u8]>) -> Result<Module> {
+        // SAFETY: the contract required by `load_code_raw` is the same as this
+        // function.
+        let code = unsafe { engine.load_code_raw(memory, ObjectKind::Module)? };
+        Module::from_parts(engine, code, None)
+    }
+
     /// Same as [`deserialize`], except that the contents of `path` are read to
     /// deserialize into a [`Module`].
     ///
@@ -427,7 +454,39 @@ impl Module {
     /// state of the file.
     #[cfg(feature = "std")]
     pub unsafe fn deserialize_file(engine: &Engine, path: impl AsRef<Path>) -> Result<Module> {
-        let code = engine.load_code_file(path.as_ref(), ObjectKind::Module)?;
+        let file = open_file_for_mmap(path.as_ref())?;
+        // SAFETY: the contract of `deserialize_open_file` is the samea s this
+        // function.
+        unsafe {
+            Self::deserialize_open_file(engine, file)
+                .with_context(|| format!("failed deserialization for: {}", path.as_ref().display()))
+        }
+    }
+
+    /// Same as [`deserialize_file`], except that it takes an open `File`
+    /// instead of a path.
+    ///
+    /// This method is provided because it can be used instead of
+    /// [`deserialize_file`] in situations where `wasmtime` is running with
+    /// limited file system permissions. In that case a process
+    /// with file system access can pass already opened files to `wasmtime`.
+    ///
+    /// [`deserialize_file`]: Module::deserialize_file
+    ///
+    /// Note that the corresponding will be mapped as private writeable
+    /// (copy-on-write) and executable. For `windows` this means the file needs
+    /// to be opened with at least `FILE_GENERIC_READ | FILE_GENERIC_EXECUTE`
+    /// [`access_mode`].
+    ///
+    /// [`access_mode`]: https://doc.rust-lang.org/std/os/windows/fs/trait.OpenOptionsExt.html#tymethod.access_mode
+    ///
+    /// # Unsafety
+    ///
+    /// All of the reasons that [`deserialize_file`] is `unsafe` applies to this
+    /// function as well.
+    #[cfg(feature = "std")]
+    pub unsafe fn deserialize_open_file(engine: &Engine, file: File) -> Result<Module> {
+        let code = engine.load_code_file(file, ObjectKind::Module)?;
         Module::from_parts(engine, code, None)
     }
 
@@ -441,14 +500,14 @@ impl Module {
     pub(crate) fn from_parts(
         engine: &Engine,
         code_memory: Arc<CodeMemory>,
-        info_and_types: Option<(CompiledModuleInfo, ModuleTypes)>,
+        info_and_types: Option<(CompiledModuleInfo, CompiledFunctionsTable, ModuleTypes)>,
     ) -> Result<Self> {
         // Acquire this module's metadata and type information, deserializing
         // it from the provided artifact if it wasn't otherwise provided
         // already.
-        let (info, types) = match info_and_types {
-            Some((info, types)) => (info, types),
-            None => postcard::from_bytes(code_memory.wasmtime_info()).err2anyhow()?,
+        let (mut info, index, mut types) = match info_and_types {
+            Some((info, index, types)) => (info, index, types),
+            None => postcard::from_bytes(code_memory.wasmtime_info())?,
         };
 
         // Register function type signatures into the engine for the lifetime
@@ -459,22 +518,25 @@ impl Module {
         // Note that the unsafety here should be ok since the `trampolines`
         // field should only point to valid trampoline function pointers
         // within the text section.
-        let signatures = TypeCollection::new_for_module(engine, &types);
+        let signatures = engine
+            .register_and_canonicalize_types(&mut types, core::iter::once(&mut info.module))?;
 
-        // Package up all our data into a `CodeObject` and delegate to the final
+        // Package up all our data into an `EngineCode` and delegate to the final
         // step of module compilation.
-        let code = Arc::new(CodeObject::new(code_memory, signatures, types.into()));
-        Module::from_parts_raw(engine, code, info, true)
+        let code = try_new::<Arc<_>>(EngineCode::new(code_memory, signatures, types.into())?)?;
+        let index = try_new::<Arc<_>>(index)?;
+        Module::from_parts_raw(engine, code, info, index, true)
     }
 
     pub(crate) fn from_parts_raw(
         engine: &Engine,
-        code: Arc<CodeObject>,
+        code: Arc<EngineCode>,
         info: CompiledModuleInfo,
+        index: Arc<CompiledFunctionsTable>,
         serializable: bool,
     ) -> Result<Self> {
-        let module =
-            CompiledModule::from_artifacts(code.code_memory().clone(), info, engine.profiler())?;
+        let checksum = info.checksum;
+        let module = CompiledModule::from_artifacts(code.clone(), info, index, engine.profiler())?;
 
         // Validate the module can be used with the current instance allocator.
         let offsets = VMOffsets::new(HostPtr, module.module());
@@ -482,15 +544,19 @@ impl Module {
             .allocator()
             .validate_module(module.module(), &offsets)?;
 
+        let _ = serializable;
+
         Ok(Self {
-            inner: Arc::new(ModuleInner {
+            inner: try_new::<Arc<_>>(ModuleInner {
                 engine: engine.clone(),
                 code,
                 memory_images: OnceLock::new(),
                 module,
+                #[cfg(any(feature = "cranelift", feature = "winch"))]
                 serializable,
                 offsets,
-            }),
+                checksum,
+            })?,
         })
     }
 
@@ -514,12 +580,12 @@ impl Module {
     ///
     /// [binary]: https://webassembly.github.io/spec/core/binary/index.html
     pub fn validate(engine: &Engine, binary: &[u8]) -> Result<()> {
-        let mut validator = Validator::new_with_features(engine.config().features);
+        let mut validator = Validator::new_with_features(engine.features());
 
         let mut functions = Vec::new();
         for payload in Parser::new(0).parse_all(binary) {
-            let payload = payload.err2anyhow()?;
-            if let ValidPayload::Func(a, b) = validator.payload(&payload).err2anyhow()? {
+            let payload = payload?;
+            if let ValidPayload::Func(a, b) = validator.payload(&payload)? {
                 functions.push((a, b));
             }
             if let wasmparser::Payload::Version { encoding, .. } = &payload {
@@ -529,15 +595,13 @@ impl Module {
             }
         }
 
-        engine
-            .run_maybe_parallel(functions, |(validator, body)| {
-                // FIXME: it would be best here to use a rayon-specific parallel
-                // iterator that maintains state-per-thread to share the function
-                // validator allocations (`Default::default` here) across multiple
-                // functions.
-                validator.into_validator(Default::default()).validate(&body)
-            })
-            .err2anyhow()?;
+        engine.run_maybe_parallel(functions, |(validator, body)| {
+            // FIXME: it would be best here to use a rayon-specific parallel
+            // iterator that maintains state-per-thread to share the function
+            // validator allocations (`Default::default` here) across multiple
+            // functions.
+            validator.into_validator(Default::default()).validate(&body)
+        })?;
         Ok(())
     }
 
@@ -572,14 +636,14 @@ impl Module {
         if !self.inner.serializable {
             bail!("cannot serialize a module exported from a component");
         }
-        Ok(self.compiled_module().mmap().to_vec())
+        Ok(self.engine_code().image().to_vec())
     }
 
     pub(crate) fn compiled_module(&self) -> &CompiledModule {
         &self.inner.module
     }
 
-    pub(crate) fn code_object(&self) -> &Arc<CodeObject> {
+    pub(crate) fn engine_code(&self) -> &Arc<EngineCode> {
         &self.inner.code
     }
 
@@ -591,7 +655,8 @@ impl Module {
         self.inner.code.module_types()
     }
 
-    pub(crate) fn signatures(&self) -> &TypeCollection {
+    #[cfg(any(feature = "component-model", feature = "gc-drc"))]
+    pub(crate) fn signatures(&self) -> &crate::type_registry::TypeCollection {
         self.inner.code.signatures()
     }
 
@@ -606,7 +671,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let module = Module::new(&engine, "(module $foo)")?;
     /// assert_eq!(module.name(), Some("foo"));
@@ -618,7 +683,21 @@ impl Module {
     /// # }
     /// ```
     pub fn name(&self) -> Option<&str> {
-        self.compiled_module().module().name.as_deref()
+        let module = self.compiled_module().module();
+        let name = module.name?;
+        Some(&module.strings[name])
+    }
+
+    /// Returns the original Wasm bytecode for this module, if it is
+    /// available.
+    ///
+    /// Bytecode is only retained when the [`Engine`] was configured with
+    /// `guest-debug` support enabled (see [`Config::guest_debug`]). Returns
+    /// `None` when the module was compiled without that option.
+    ///
+    /// [`Config::guest_debug`]: crate::Config::guest_debug
+    pub fn debug_bytecode(&self) -> Option<&[u8]> {
+        self.compiled_module().bytecode()
     }
 
     /// Returns the list of imports that this [`Module`] has and must be
@@ -639,7 +718,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let module = Module::new(&engine, "(module)")?;
     /// assert_eq!(module.imports().len(), 0);
@@ -651,7 +730,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let wat = r#"
     ///     (module
@@ -676,16 +755,10 @@ impl Module {
         let module = self.compiled_module().module();
         let types = self.types();
         let engine = self.engine();
-        module
-            .imports()
-            .map(move |(imp_mod, imp_field, mut ty)| {
-                ty.canonicalize_for_runtime_usage(&mut |i| {
-                    self.signatures().shared_type(i).unwrap()
-                });
-                ImportType::new(imp_mod, imp_field, ty, types, engine)
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
+        module.imports().map(move |(imp_mod, imp_field, ty)| {
+            debug_assert!(ty.is_canonicalized_for_runtime_usage());
+            ImportType::new(imp_mod, imp_field, ty, types, engine)
+        })
     }
 
     /// Returns the list of exports that this [`Module`] has and will be
@@ -702,7 +775,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let module = Module::new(&engine, "(module)")?;
     /// assert!(module.exports().next().is_none());
@@ -714,7 +787,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let wat = r#"
     ///     (module
@@ -749,34 +822,13 @@ impl Module {
         let types = self.types();
         let engine = self.engine();
         module.exports.iter().map(move |(name, entity_index)| {
-            ExportType::new(name, module.type_of(*entity_index), types, engine)
+            ExportType::new(
+                &module.strings[name],
+                module.type_of(*entity_index),
+                types,
+                engine,
+            )
         })
-    }
-
-    /// Return a raw iterator over the module's export table.
-    ///
-    /// This exposes the underlying `(name, EntityIndex)` pairs directly from
-    /// the compiled module without converting them into high-level `Extern`
-    /// values or performing any instantiation-time resolution.
-    ///
-    /// The returned iterator:
-    /// - Preserves the exact export entries as recorded in the compiled module.
-    /// - Does not allocate or clone export data.
-    /// - Reflects static module metadata, not instance state.
-    ///
-    /// This is useful for low-level linking or relocation logic (e.g., Lind's
-    /// dynamic loader) where we need access to the raw export indices rather
-    /// than fully materialized runtime objects.
-    pub fn raw_exports<'module>(
-        &'module self,
-    ) -> impl ExactSizeIterator<Item = (&String, &EntityIndex)> + 'module {
-        let module = self.compiled_module().module();
-        let types = self.types();
-        let engine = self.engine();
-        module
-            .exports
-            .iter()
-            .map(move |(name, entity_index)| (name, entity_index))
     }
 
     /// Looks up an export in this [`Module`] by name.
@@ -789,7 +841,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let module = Module::new(&engine, "(module)")?;
     /// assert!(module.get_export("foo").is_none());
@@ -801,7 +853,7 @@ impl Module {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let wat = r#"
     ///     (module
@@ -824,7 +876,8 @@ impl Module {
     /// ```
     pub fn get_export(&self, name: &str) -> Option<ExternType> {
         let module = self.compiled_module().module();
-        let entity_index = module.exports.get(name)?;
+        let name = module.strings.get_atom(name)?;
+        let entity_index = module.exports.get(&name)?;
         Some(ExternType::from_wasmtime(
             self.engine(),
             self.types(),
@@ -841,19 +894,26 @@ impl Module {
     pub fn get_export_index(&self, name: &str) -> Option<ModuleExport> {
         let compiled_module = self.compiled_module();
         let module = compiled_module.module();
-        module
-            .exports
-            .get_full(name)
-            .map(|(export_name_index, _, &entity)| ModuleExport {
-                module: self.id(),
-                entity,
-                export_name_index,
-            })
+        let name = module.strings.get_atom(name)?;
+        let entity = *module.exports.get(&name)?;
+        Some(ModuleExport {
+            module: self.id(),
+            entity,
+        })
     }
 
     /// Returns the [`Engine`] that this [`Module`] was compiled by.
     pub fn engine(&self) -> &Engine {
         &self.inner.engine
+    }
+
+    #[allow(
+        unused,
+        reason = "used only for verification with wasmtime `rr` feature \
+        and requires a lot of unnecessary gating across crates"
+    )]
+    pub(crate) fn checksum(&self) -> &WasmChecksum {
+        &self.inner.checksum
     }
 
     /// Returns a summary of the resources required to instantiate this
@@ -903,19 +963,19 @@ impl Module {
     /// ```
     pub fn resources_required(&self) -> ResourcesRequired {
         let em = self.env_module();
-        let num_memories = u32::try_from(em.memory_plans.len() - em.num_imported_memories).unwrap();
+        let num_memories = u32::try_from(em.num_defined_memories()).unwrap();
         let max_initial_memory_size = em
-            .memory_plans
+            .memories
             .values()
             .skip(em.num_imported_memories)
-            .map(|plan| plan.memory.minimum)
+            .map(|memory| memory.limits.min)
             .max();
-        let num_tables = u32::try_from(em.table_plans.len() - em.num_imported_tables).unwrap();
+        let num_tables = u32::try_from(em.num_defined_tables()).unwrap();
         let max_initial_table_size = em
-            .table_plans
+            .tables
             .values()
             .skip(em.num_imported_tables)
-            .map(|plan| plan.table.minimum)
+            .map(|table| table.limits.min)
             .max();
         ResourcesRequired {
             num_memories,
@@ -923,10 +983,6 @@ impl Module {
             num_tables,
             max_initial_table_size,
         }
-    }
-
-    pub(crate) fn module_info(&self) -> &dyn crate::runtime::vm::ModuleInfo {
-        &*self.inner
     }
 
     /// Returns the range of bytes in memory where this module's compilation
@@ -943,8 +999,11 @@ impl Module {
     ///
     /// It is not safe to modify the memory in this range, nor is it safe to
     /// modify the protections of memory in this range.
+    ///
+    /// Note that depending on the engine configuration, this image
+    /// range may not actually be the code that is directly executed.
     pub fn image_range(&self) -> Range<*const u8> {
-        self.compiled_module().mmap().image_range()
+        self.engine_code().image().as_ptr_range()
     }
 
     /// Force initialization of copy-on-write images to happen here-and-now
@@ -1013,17 +1072,15 @@ impl Module {
     /// ```
     pub fn address_map<'a>(&'a self) -> Option<impl Iterator<Item = (usize, Option<u32>)> + 'a> {
         Some(
-            wasmtime_environ::iterate_address_map(
-                self.code_object().code_memory().address_map_data(),
-            )?
-            .map(|(offset, file_pos)| (offset as usize, file_pos.file_offset())),
+            wasmtime_environ::iterate_address_map(self.engine_code().address_map_data())?
+                .map(|(offset, file_pos)| (offset as usize, file_pos.file_offset())),
         )
     }
 
     /// Get this module's code object's `.text` section, containing its compiled
     /// executable code.
     pub fn text(&self) -> &[u8] {
-        self.code_object().code_memory().text()
+        self.engine_code().text()
     }
 
     /// Get information about functions in this module's `.text` section: their
@@ -1032,7 +1089,7 @@ impl Module {
     /// Results are yielded in a ModuleFunction struct.
     pub fn functions<'a>(&'a self) -> impl ExactSizeIterator<Item = ModuleFunction> + 'a {
         let module = self.compiled_module();
-        module.finished_functions().map(|(idx, _)| {
+        self.env_module().defined_func_indices().map(|idx| {
             let loc = module.func_loc(idx);
             let idx = module.module().func_index(idx);
             ModuleFunction {
@@ -1045,11 +1102,13 @@ impl Module {
     }
 
     // lind-wasm: retrieve dynamic loading memory information
+    #[allow(missing_docs)]
     pub fn dylink_meminfo<'a>(&'a self) -> Option<&DylinkMemInfo> {
         self.compiled_module().dylink_mem_info()
     }
 
     // lind-wasm: retrieve dynamic loading memory information
+    #[allow(missing_docs)]
     pub fn dylink_importinfo<'a>(&'a self) -> Option<&DylinkImportInfo> {
         self.compiled_module().dylink_import_info()
     }
@@ -1062,8 +1121,22 @@ impl Module {
         &self.inner.offsets
     }
 
+    /// Return the unique-within-Engine ID for this module.
+    ///
+    /// Allows distinguishing module identities when introspecting
+    /// modules, e.g. via debug APIs.
+    #[cfg(feature = "debug")]
+    pub fn debug_index_in_engine(&self) -> u64 {
+        self.id().as_u64()
+    }
+
     /// Return the address, in memory, of the trampoline that allows Wasm to
     /// call a array function of the given signature.
+    ///
+    /// Note that unlike all other code-pointer-returning functions,
+    /// this *can* be present on `Module` (without a `StoreCode`)
+    /// because we can execute the `EngineCode` for trampolines that
+    /// leave the store to call the host.
     pub(crate) fn wasm_to_array_trampoline(
         &self,
         signature: VMSharedTypeIndex,
@@ -1075,24 +1148,26 @@ impl Module {
             .code
             .signatures()
             .trampoline_type(trampoline_shared_ty)?;
-        debug_assert!(self
-            .inner
-            .engine
-            .signatures()
-            .borrow(
-                self.inner
-                    .code
-                    .signatures()
-                    .shared_type(trampoline_module_ty)
-                    .unwrap()
-            )
-            .unwrap()
-            .unwrap_func()
-            .is_trampoline_type());
+        debug_assert!(
+            self.inner
+                .engine
+                .signatures()
+                .borrow(
+                    self.inner
+                        .code
+                        .signatures()
+                        .shared_type(trampoline_module_ty)
+                        .unwrap()
+                )
+                .unwrap()
+                .unwrap_func()
+                .is_trampoline_type()
+        );
 
         let ptr = self
             .compiled_module()
             .wasm_to_array_trampoline(trampoline_module_ty)
+            .expect("always have a trampoline for the trampoline type")
             .as_ptr()
             .cast::<VMWasmCallFunction>()
             .cast_mut();
@@ -1103,9 +1178,48 @@ impl Module {
         let images = self
             .inner
             .memory_images
-            .get_or_try_init(|| memory_images(&self.inner.engine, &self.inner.module))?
+            .get_or_try_init(|| memory_images(&self.inner))?
             .as_ref();
         Ok(images)
+    }
+
+    /// Obtain an exception-table parser on this module's exception metadata.
+    #[cfg(feature = "gc")]
+    pub(crate) fn exception_table<'a>(&'a self) -> ExceptionTable<'a> {
+        ExceptionTable::parse(self.inner.code.exception_tables())
+            .expect("Exception tables were validated on module load")
+    }
+
+    /// Obtain a frame-table parser on this module's frame state slot
+    /// (debug instrumentation) metadata.
+    #[cfg(feature = "debug")]
+    pub(crate) fn frame_table<'a>(&'a self) -> Option<FrameTable<'a>> {
+        let data = self.inner.code.frame_tables();
+        if data.is_empty() {
+            None
+        } else {
+            let orig_text = self.inner.code.text();
+            Some(
+                FrameTable::parse(data, orig_text)
+                    .expect("Frame tables were validated on module load"),
+            )
+        }
+    }
+
+    /// Is this `Module` the same as another?
+    ///
+    /// Ordinarily, module identity does not matter: a Wasmtime user
+    /// will create or obtain a module from some source and
+    /// instantiate it, and any two `Module` objects created from the
+    /// same source module are interchangeable. However, introspecting
+    /// module identity may be useful when examining Wasm VM state,
+    /// e.g. via debug APIs. It is guaranteed that `Module::same`
+    /// returns true for `Module` objects that reference the same
+    /// underlying module (e.g., one created via a `clone` of the
+    /// other).
+    #[inline]
+    pub fn same(a: &Module, b: &Module) -> bool {
+        Arc::ptr_eq(&a.inner, &b.inner)
     }
 }
 
@@ -1136,8 +1250,6 @@ pub struct ModuleExport {
     pub(crate) module: CompiledModuleId,
     /// A raw index into the wasm module.
     pub(crate) entity: EntityIndex,
-    /// The index of the export name.
-    pub(crate) export_name_index: usize,
 }
 
 fn _assert_send_sync() {
@@ -1145,54 +1257,37 @@ fn _assert_send_sync() {
     _assert::<Module>();
 }
 
-impl crate::runtime::vm::ModuleInfo for ModuleInner {
-    fn lookup_stack_map(&self, pc: usize) -> Option<&wasmtime_environ::StackMap> {
-        let text_offset = pc - self.module.text().as_ptr() as usize;
-        let (index, func_offset) = self.module.func_by_text_offset(text_offset)?;
-        let info = self.module.wasm_func_info(index);
-
-        // Do a binary search to find the stack map for the given offset.
-        let index = match info
-            .stack_maps
-            .binary_search_by_key(&func_offset, |i| i.code_offset)
-        {
-            // Found it.
-            Ok(i) => i,
-
-            // No stack map associated with this PC.
-            //
-            // Because we know we are in Wasm code, and we must be at some kind
-            // of call/safepoint, then the Cranelift backend must have avoided
-            // emitting a stack map for this location because no refs were live.
-            Err(_) => return None,
-        };
-
-        Some(&info.stack_maps[index].stack_map)
-    }
-}
-
 /// Helper method to construct a `ModuleMemoryImages` for an associated
 /// `CompiledModule`.
-fn memory_images(engine: &Engine, module: &CompiledModule) -> Result<Option<ModuleMemoryImages>> {
+fn memory_images(inner: &Arc<ModuleInner>) -> Result<Option<ModuleMemoryImages>> {
     // If initialization via copy-on-write is explicitly disabled in
     // configuration then this path is skipped entirely.
-    if !engine.config().memory_init_cow {
+    if !inner.engine.tunables().memory_init_cow {
         return Ok(None);
     }
 
     // ... otherwise logic is delegated to the `ModuleMemoryImages::new`
     // constructor.
-    let mmap = if engine.config().force_memory_init_memfd {
-        None
-    } else {
-        Some(module.mmap())
-    };
-    ModuleMemoryImages::new(module.module(), module.code_memory().wasm_data(), mmap)
+    ModuleMemoryImages::new(
+        &inner.engine,
+        inner.module.module(),
+        inner.code.module_memory_image_source(),
+    )
+}
+
+impl crate::vm::ModuleMemoryImageSource for CodeMemory {
+    fn wasm_data(&self) -> &[u8] {
+        <Self>::wasm_data(self)
+    }
+
+    fn mmap(&self) -> Option<&MmapVec> {
+        Some(<Self>::mmap(self))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Engine, Module};
+    use crate::{CodeBuilder, Engine, Module};
     use wasmtime_environ::MemoryInitialization;
 
     #[test]
@@ -1211,5 +1306,27 @@ mod tests {
 
         let init = &module.env_module().memory_initialization;
         assert!(matches!(init, MemoryInitialization::Static { .. }));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn image_range_is_whole_image() {
+        let wat = r#"
+                (module
+                    (memory 1)
+                    (data (i32.const 0) "1234")
+                    (func (export "f") (param i32) (result i32)
+                        local.get 0))
+            "#;
+        let engine = Engine::default();
+        let mut builder = CodeBuilder::new(&engine);
+        builder.wasm_binary_or_text(wat.as_bytes(), None).unwrap();
+        let bytes = builder.compile_module_serialized().unwrap();
+
+        let module = unsafe { Module::deserialize(&engine, &bytes).unwrap() };
+        let image_range = module.image_range();
+        let len = image_range.end.addr() - image_range.start.addr();
+        // Length may be strictly greater if it becomes page-aligned.
+        assert!(len >= bytes.len());
     }
 }

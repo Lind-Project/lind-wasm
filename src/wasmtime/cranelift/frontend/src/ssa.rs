@@ -12,8 +12,8 @@ use alloc::vec::Vec;
 use core::mem;
 use cranelift_codegen::cursor::{Cursor, FuncCursor};
 use cranelift_codegen::entity::{EntityList, EntitySet, ListPool, SecondaryMap};
-use cranelift_codegen::ir::immediates::{Ieee32, Ieee64};
-use cranelift_codegen::ir::types::{F32, F64, I128, I64};
+use cranelift_codegen::ir::immediates::{Ieee16, Ieee32, Ieee64, Ieee128};
+use cranelift_codegen::ir::types::{F16, F32, F64, F128, I64, I128};
 use cranelift_codegen::ir::{Block, Function, Inst, InstBuilder, Type, Value};
 use cranelift_codegen::packed_option::PackedOption;
 
@@ -71,7 +71,10 @@ pub struct SideEffects {
 
 impl SideEffects {
     fn is_empty(&self) -> bool {
-        self.instructions_added_to_blocks.is_empty()
+        let Self {
+            instructions_added_to_blocks,
+        } = self;
+        instructions_added_to_blocks.is_empty()
     }
 }
 
@@ -133,37 +136,48 @@ enum Call {
 
 /// Emit instructions to produce a zero value in the given type.
 fn emit_zero(ty: Type, mut cur: FuncCursor) -> Value {
-    if ty == I128 {
-        let zero = cur.ins().iconst(I64, 0);
-        cur.ins().uextend(I128, zero)
-    } else if ty.is_int() {
-        cur.ins().iconst(ty, 0)
-    } else if ty == F32 {
-        cur.ins().f32const(Ieee32::with_bits(0))
-    } else if ty == F64 {
-        cur.ins().f64const(Ieee64::with_bits(0))
-    } else if ty.is_ref() {
-        cur.ins().null(ty)
-    } else if ty.is_vector() {
-        let scalar_ty = ty.lane_type();
-        if scalar_ty.is_int() {
-            let zero = cur.func.dfg.constants.insert(
-                core::iter::repeat(0)
-                    .take(ty.bytes().try_into().unwrap())
-                    .collect(),
-            );
-            cur.ins().vconst(ty, zero)
-        } else if scalar_ty == F32 {
-            let scalar = cur.ins().f32const(Ieee32::with_bits(0));
-            cur.ins().splat(ty, scalar)
-        } else if scalar_ty == F64 {
-            let scalar = cur.ins().f64const(Ieee64::with_bits(0));
-            cur.ins().splat(ty, scalar)
-        } else {
-            panic!("unimplemented scalar type: {:?}", ty)
+    match ty {
+        I128 => {
+            let zero = cur.ins().iconst(I64, 0);
+            cur.ins().uextend(I128, zero)
         }
-    } else {
-        panic!("unimplemented type: {:?}", ty)
+        ty if ty.is_int() => cur.ins().iconst(ty, 0),
+        F16 => cur.ins().f16const(Ieee16::with_bits(0)),
+        F32 => cur.ins().f32const(Ieee32::with_bits(0)),
+        F64 => cur.ins().f64const(Ieee64::with_bits(0)),
+        F128 => {
+            let zero = cur.func.dfg.constants.insert(Ieee128::with_bits(0).into());
+            cur.ins().f128const(zero)
+        }
+        ty if ty.is_vector() => match ty.lane_type() {
+            scalar_ty if scalar_ty.is_int() => {
+                let zero = cur
+                    .func
+                    .dfg
+                    .constants
+                    .insert(vec![0; ty.bytes().try_into().unwrap()].into());
+                cur.ins().vconst(ty, zero)
+            }
+            F16 => {
+                let scalar = cur.ins().f16const(Ieee16::with_bits(0));
+                cur.ins().splat(ty, scalar)
+            }
+            F32 => {
+                let scalar = cur.ins().f32const(Ieee32::with_bits(0));
+                cur.ins().splat(ty, scalar)
+            }
+            F64 => {
+                let scalar = cur.ins().f64const(Ieee64::with_bits(0));
+                cur.ins().splat(ty, scalar)
+            }
+            F128 => {
+                let zero = cur.func.dfg.constants.insert(Ieee128::with_bits(0).into());
+                let scalar = cur.ins().f128const(zero);
+                cur.ins().splat(ty, scalar)
+            }
+            _ => panic!("unimplemented scalar type: {ty:?}"),
+        },
+        ty => panic!("unimplemented type: {ty:?}"),
     }
 }
 
@@ -187,6 +201,12 @@ fn emit_zero(ty: Type, mut cur: FuncCursor) -> Value {
 /// Phi functions.
 ///
 impl SSABuilder {
+    /// Get all of the values associated with the given variable that we have
+    /// inserted in the function thus far.
+    pub fn values_for_var(&self, var: Variable) -> impl Iterator<Item = Value> + '_ {
+        self.variables[var].values().filter_map(|v| v.expand())
+    }
+
     /// Declares a new definition of a variable in a given basic block.
     /// The SSA value is passed as an argument because it should be created with
     /// `ir::DataFlowGraph::append_result`.
@@ -380,8 +400,7 @@ impl SSABuilder {
     pub fn seal_block(&mut self, block: Block, func: &mut Function) -> SideEffects {
         debug_assert!(
             !self.is_sealed(block),
-            "Attempting to seal {} which is already sealed.",
-            block
+            "Attempting to seal {block} which is already sealed."
         );
         self.seal_one_block(block, func);
         mem::take(&mut self.side_effects)
@@ -545,7 +564,8 @@ impl SSABuilder {
                 let pred = preds.get_mut(idx, &mut self.inst_pool).unwrap();
                 let branch = *pred;
 
-                let dests = dfg.insts[branch].branch_destination_mut(&mut dfg.jump_tables);
+                let dests = dfg.insts[branch]
+                    .branch_destination_mut(&mut dfg.jump_tables, &mut dfg.exception_tables);
                 assert!(
                     !dests.is_empty(),
                     "you have declared a non-branch instruction as a predecessor to a block!"
@@ -603,8 +623,8 @@ impl SSABuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::ssa::SSABuilder;
     use crate::Variable;
+    use crate::ssa::SSABuilder;
     use cranelift_codegen::cursor::{Cursor, FuncCursor};
     use cranelift_codegen::entity::EntityRef;
     use cranelift_codegen::ir;
@@ -762,9 +782,9 @@ mod tests {
                 ..
             } => {
                 assert_eq!(block_then.block(&func.dfg.value_lists), block2);
-                assert_eq!(block_then.args_slice(&func.dfg.value_lists).len(), 0);
+                assert_eq!(block_then.args(&func.dfg.value_lists).len(), 0);
                 assert_eq!(block_else.block(&func.dfg.value_lists), block1);
-                assert_eq!(block_else.args_slice(&func.dfg.value_lists).len(), 0);
+                assert_eq!(block_else.args(&func.dfg.value_lists).len(), 0);
             }
             _ => assert!(false),
         };
@@ -774,9 +794,9 @@ mod tests {
                 ..
             } => {
                 assert_eq!(block_then.block(&func.dfg.value_lists), block2);
-                assert_eq!(block_then.args_slice(&func.dfg.value_lists).len(), 0);
+                assert_eq!(block_then.args(&func.dfg.value_lists).len(), 0);
                 assert_eq!(block_else.block(&func.dfg.value_lists), block1);
-                assert_eq!(block_else.args_slice(&func.dfg.value_lists).len(), 0);
+                assert_eq!(block_else.args(&func.dfg.value_lists).len(), 0);
             }
             _ => assert!(false),
         };
@@ -785,7 +805,7 @@ mod tests {
                 destination: dest, ..
             } => {
                 assert_eq!(dest.block(&func.dfg.value_lists), block2);
-                assert_eq!(dest.args_slice(&func.dfg.value_lists).len(), 0);
+                assert_eq!(dest.args(&func.dfg.value_lists).len(), 0);
             }
             _ => assert!(false),
         };

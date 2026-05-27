@@ -45,19 +45,24 @@ sysroot: build-dir
 # via Cargo features.
 #
 # Examples:
-#   make                                  # default (dashmaparray)
-#   make build FDTABLES_IMPL=muthashmax   # full build with muthashmax
-#   make lind-boot FDTABLES_IMPL=vanilla  # rebuild only lind-boot with vanilla
-#   make fpcast FDTABLES_IMPL=dashmapvec  # fpcast variant with dashmapvec
-#   make lind-debug FDTABLES_IMPL=muthashmax   # debug build with muthashmax
-#   FDTABLES_IMPL=muthashmax make         # also works via env var
+#   make                                              # default (dashmaparray, EH setjmp)
+#   make build FDTABLES_IMPL=muthashmax               # full build with muthashmax
+#   make lind-boot FDTABLES_IMPL=vanilla              # rebuild only lind-boot with vanilla
+#   make fpcast FDTABLES_IMPL=dashmapvec              # fpcast variant with dashmapvec
+#   make lind-debug FDTABLES_IMPL=muthashmax          # debug build with muthashmax
+#   FDTABLES_IMPL=muthashmax make                     # also works via env var
+#   LIND_ASYNCIFY_SETJMP=1 make lind-boot             # asyncify-based setjmp/longjmp
 FDTABLES_IMPL ?= dashmaparray
+
+# When LIND_ASYNCIFY_SETJMP=1, build lind-boot with the asyncify-setjmp Cargo feature so the
+# runtime uses asyncify-unwind/rewind based setjmp/longjmp instead of the wasm-EH based one.
+LIND_BOOT_EXTRA_FEATURES ?= $(if $(filter 1,$(LIND_ASYNCIFY_SETJMP)),asyncify-setjmp,)
 
 .PHONY: lind-boot
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
-		--no-default-features --features fdtables-$(FDTABLES_IMPL)
+    --no-default-features --features "fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES)"
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lind-boot-debug

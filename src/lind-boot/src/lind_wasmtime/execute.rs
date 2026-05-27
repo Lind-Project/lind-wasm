@@ -20,8 +20,8 @@ use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_S
 use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
-    AsContextMut, Engine, Export, Func, InstantiateType, Linker, Module, Precompiled, SharedMemory,
-    Store, Val, ValType, WasmBacktraceDetails,
+    AsContext, AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module,
+    Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
@@ -88,7 +88,9 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     let wasm_file_path = Path::new(lindboot_cli.wasm_file());
     let wt_config =
         make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
-    let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
+    let engine = Engine::new(&wt_config)
+        .map_err(anyhow::Error::from)
+        .context("failed to create execution engine")?;
     let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
 
     // -- Run the first module in the first cage --
@@ -199,7 +201,7 @@ pub fn execute_with_lind(
         // Allocate the main module's indirect function table with
         // the minimal required size.
         let table_inner = linker
-            .attach_function_table(&mut wstore, main_module_table_size)
+            .attach_function_table(&mut wstore, main_module_table_size as u32)
             .expect("failed to create table");
         linker
             .attach_stack_imports(&mut wstore, stack_low, stack_high)
@@ -302,7 +304,7 @@ pub fn execute_with_lind(
             // to null funcref.
             table_inner.grow(
                 &mut wstore,
-                dylink_info.table_size,
+                dylink_info.table_size as u64,
                 wasmtime::Ref::Func(None),
             );
 
@@ -324,6 +326,7 @@ pub fn execute_with_lind(
                     &got_guard,
                     path.clone(),
                 )
+                .map_err(anyhow::Error::from)
                 .context(format!("failed to process preload `{}`", name,))?;
         }
 
@@ -511,10 +514,23 @@ fn attach_api(
         dynamic_loader,
     )?;
 
-    let main_module = &modules.get(0).unwrap().2;
-
     // attach SharedMemory to the instance
-    attach_shared_memory(&mut *wstore, &mut linker_guard, &main_module, true, cageid)?;
+    // Pass all modules so the memory is created with limits that satisfy every
+    // module's import declaration (union: max of mins, min of maxes).
+    let all_modules: Vec<Module> = modules.iter().map(|(_, _, m)| m.clone()).collect();
+    attach_shared_memory(&mut *wstore, &mut linker_guard, &all_modules, true, cageid)?;
+
+    // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp.
+    // libc.so (wasm_eh_setjmp.o) and user programs both import "env"."__c_longjmp";
+    // the host must supply one shared tag object so throw/catch identity matches.
+    #[cfg(not(feature = "asyncify-setjmp"))]
+    {
+        use wasmtime::{FuncType, Tag, TagType};
+        let engine = wstore.engine().clone();
+        let tag_type = TagType::new(FuncType::new(&engine, [ValType::I32], []));
+        let tag = Tag::new(&mut *wstore, &tag_type)?;
+        linker_guard.define(&*wstore, "env", "__c_longjmp", tag)?;
+    }
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
@@ -581,6 +597,7 @@ fn load_main_module(
             &module,
             InstantiateType::InstantiateFirst(cageid),
         )
+        .map_err(anyhow::Error::from)
         .context(format!("failed to instantiate"))?;
 
     // Register the main module so get_global_snapshot can find it by name.
@@ -672,7 +689,7 @@ fn load_main_module(
     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
     let cage_storeopaque = store.inner_mut();
     let cage_instancehandler = cage_storeopaque.instance(cage_instanceid);
-    let vmctx_ptr: *mut c_void = cage_instancehandler.vmctx().cast();
+    let vmctx_ptr: *mut c_void = cage_instancehandler.vmctx().as_ptr().cast();
 
     // 2) Extract vmctx pointer and put in a Send+Sync wrapper
     let vmctx_wrapper = VmCtxWrapper {
@@ -772,13 +789,44 @@ fn load_library_module(
         None => return -(DylinkErrorCode::EDYLINKINFO as i32), // dylink section is not found
     };
 
-    // Record the current size of the shared indirect function table.
-    // The library's functions will be appended starting from this index.
-    let table_size = main_module.get_table_size();
-    match main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None)) {
-        Ok(_) => {}
-        Err(_) => return -(DylinkErrorCode::EINTERNAL as i32),
-    };
+    // Look up the shared indirect function table from the linker.
+    // Instance::get_table only finds *exported* items; the main module imports
+    // __indirect_function_table from env but does not re-export it.
+    let table = linker
+        .get(&mut *main_module, "env", "__indirect_function_table")
+        .ok()
+        .and_then(|e| {
+            if let wasmtime::Extern::Table(t) = e {
+                Some(t)
+            } else {
+                None
+            }
+        });
+
+    let table_size = table
+        .as_ref()
+        .map_or(0, |t| t.size(main_module.as_context()) as u32);
+
+    if dylink_info.table_size > 0 {
+        match table {
+            Some(t) => {
+                if t.grow(
+                    main_module.as_context_mut(),
+                    dylink_info.table_size as u64,
+                    wasmtime::Ref::Func(None),
+                )
+                .is_err()
+                {
+                    return -(DylinkErrorCode::EINTERNAL as i32);
+                }
+            }
+            None => {
+                #[cfg(feature = "debug-dylink")]
+                println!("[debug] no __indirect_function_table in linker; cannot load library");
+                return -(DylinkErrorCode::EINTERNAL as i32);
+            }
+        }
+    }
 
     // Grow the shared function table to reserve space for this library's
     // function entries, as declared in its dylink section.
@@ -807,9 +855,9 @@ fn load_library_module(
         library_name.to_string(),
     ) {
         Ok(handle) => handle as i32,
-        Err(_) => {
+        Err(e) => {
             #[cfg(feature = "debug-dylink")]
-            println!("failed to process library `{}`", library_name);
+            println!("failed to process library `{}`: {:?}", library_name, e);
             -(DylinkErrorCode::EINTERNAL as i32) // consider as internal error for now
         }
     };
@@ -830,11 +878,14 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     let cwasm_path = wasm_path.with_extension("cwasm");
 
     let wt_config = make_wasmtime_config(cli.wasmtime_backtrace, false);
-    let engine = Engine::new(&wt_config).context("failed to create engine")?;
+    let engine = Engine::new(&wt_config)
+        .map_err(anyhow::Error::from)
+        .context("failed to create engine")?;
     let wasm_bytes = std::fs::read(wasm_path)
         .with_context(|| format!("failed to read {}", wasm_path.display()))?;
     let cwasm_bytes = engine
         .precompile_module(&wasm_bytes)
+        .map_err(anyhow::Error::from)
         .with_context(|| format!("failed to precompile module {}", wasm_path.display()))?;
     std::fs::write(&cwasm_path, cwasm_bytes)
         .with_context(|| format!("failed to write {}", cwasm_path.display()))?;
@@ -854,14 +905,17 @@ fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
     //
     // When passing in a .wasm file, the ELF parsing unwinds early. (`ElfFile64::parse(&read_cache)?;`)
     // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
-    match engine.detect_precompiled_file(path) {
-        Ok(_) => unsafe { Module::deserialize_file(engine, path) }.with_context(|| {
-            format!(
-                "failed to deserialize precompiled module {}",
-                path.display()
-            )
-        }),
+    match Engine::detect_precompiled_file(path) {
+        Ok(_) => unsafe { Module::deserialize_file(engine, path) }
+            .map_err(anyhow::Error::from)
+            .with_context(|| {
+                format!(
+                    "failed to deserialize precompiled module {}",
+                    path.display()
+                )
+            }),
         Err(_) => Module::from_file(engine, path)
+            .map_err(anyhow::Error::from)
             .with_context(|| format!("failed to compile module {}", path.display())),
     }
 }
@@ -899,6 +953,7 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
     // Unwind in case of an error, this allows us to pretty-print the WasmBacktrace context when option
     // is enabled.
     func.call(&mut *store, &values, &mut results)
+        .map_err(anyhow::Error::from)
         .with_context(|| format!("failed to invoke command default"))?;
 
     Ok(results)
@@ -910,6 +965,12 @@ fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Confi
     let mut wt_config = wasmtime::Config::new();
     wt_config.wasm_backtrace(backtrace);
     wt_config.fpcast_enabled(enable_fpcast);
+    wt_config.wasm_threads(true);
+    wt_config.shared_memory(true);
+    // wasm-opt --translate-to-exnref converts clang 18's legacy EH to the standard proposal.
+    // The standard EXCEPTIONS proposal is supported by Cranelift; the legacy proposal is not.
+    #[cfg(not(feature = "asyncify-setjmp"))]
+    wt_config.wasm_exceptions(true);
 
     let details = if backtrace {
         WasmBacktraceDetails::Enable
@@ -941,8 +1002,13 @@ fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Confi
     // Enable compilation cache — compiled .wasm artifacts are stored on disk
     // so subsequent runs skip compilation. Best-effort: if config loading
     // fails (e.g. no home dir), caching is simply disabled.
-    if let Err(e) = wt_config.cache_config_load_default() {
-        eprintln!("[lind-boot] warning: failed to enable wasm cache: {e}");
+    match Cache::from_file(None) {
+        Ok(cache) => {
+            wt_config.cache(Some(cache));
+        }
+        Err(e) => {
+            eprintln!("[lind-boot] warning: failed to enable wasm cache: {e}");
+        }
     }
 
     wt_config

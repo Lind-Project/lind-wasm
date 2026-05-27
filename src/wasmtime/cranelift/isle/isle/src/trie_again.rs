@@ -5,7 +5,7 @@ use crate::error::{Error, Span};
 use crate::lexer::Pos;
 use crate::sema;
 use crate::stablemapset::StableSet;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 
 /// A field index in a tuple or an enum variant.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -48,6 +48,13 @@ impl BindingId {
 /// such as constants or function calls; but it also includes names bound in pattern matches.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Binding {
+    /// Evaluates to the given boolean literal.
+    ConstBool {
+        /// The constant value.
+        val: bool,
+        /// The constant's type.
+        ty: sema::TypeId,
+    },
     /// Evaluates to the given integer literal.
     ConstInt {
         /// The constant value.
@@ -149,6 +156,13 @@ pub enum Constraint {
         /// convenience, to avoid needing to look up the variant in a [sema::TypeEnv].
         fields: TupleIndex,
     },
+    /// The value must equal this boolean literal.
+    ConstBool {
+        /// The constant value.
+        val: bool,
+        /// The constant's type.
+        ty: sema::TypeId,
+    },
     /// The value must equal this integer literal.
     ConstInt {
         /// The constant value.
@@ -247,6 +261,7 @@ impl Binding {
     /// Returns the binding sites which must be evaluated before this binding.
     pub fn sources(&self) -> &[BindingId] {
         match self {
+            Binding::ConstBool { .. } => &[][..],
             Binding::ConstInt { .. } => &[][..],
             Binding::ConstPrim { .. } => &[][..],
             Binding::Argument { .. } => &[][..],
@@ -267,7 +282,9 @@ impl Constraint {
     pub fn bindings_for(self, source: BindingId) -> Vec<Binding> {
         match self {
             // These constraints never introduce any bindings.
-            Constraint::ConstInt { .. } | Constraint::ConstPrim { .. } => vec![],
+            Constraint::ConstBool { .. }
+            | Constraint::ConstInt { .. }
+            | Constraint::ConstPrim { .. } => vec![],
             Constraint::Some => vec![Binding::MatchSome { source }],
             Constraint::Variant {
                 variant, fields, ..
@@ -425,6 +442,7 @@ impl RuleSetBuilder {
     /// copy the constraint and push the equality inside it. For example:
     /// - `(term x @ 2 x)` is rewritten to `(term 2 2)`
     /// - `(term x @ (T.A _ _) x)` is rewritten to `(term (T.A y z) (T.A y z))`
+    ///
     /// In the latter case, note that every field of `T.A` has been replaced with a fresh variable
     /// and each of the copies are set equal.
     ///
@@ -524,6 +542,11 @@ impl sema::PatternVisitor for RuleSetBuilder {
         }
     }
 
+    fn add_match_bool(&mut self, input: BindingId, ty: sema::TypeId, val: bool) {
+        let bindings = self.set_constraint(input, Constraint::ConstBool { val, ty });
+        debug_assert_eq!(bindings, &[]);
+    }
+
     fn add_match_int(&mut self, input: BindingId, ty: sema::TypeId, val: i128) {
         let bindings = self.set_constraint(input, Constraint::ConstInt { val, ty });
         debug_assert_eq!(bindings, &[]);
@@ -593,6 +616,10 @@ impl sema::PatternVisitor for RuleSetBuilder {
 impl sema::ExprVisitor for RuleSetBuilder {
     type ExprId = BindingId;
 
+    fn add_const_bool(&mut self, ty: sema::TypeId, val: bool) -> BindingId {
+        self.dedup_binding(Binding::ConstBool { val, ty })
+    }
+
     fn add_const_int(&mut self, ty: sema::TypeId, val: i128) -> BindingId {
         self.dedup_binding(Binding::ConstInt { val, ty })
     }
@@ -622,6 +649,7 @@ impl sema::ExprVisitor for RuleSetBuilder {
         pure: bool,
         infallible: bool,
         multi: bool,
+        _rec: bool,
     ) -> BindingId {
         let instance = if pure {
             0

@@ -21,6 +21,7 @@
 mod decommit_queue;
 mod index_allocator;
 mod memory_pool;
+mod metrics;
 mod table_pool;
 
 #[cfg(feature = "gc")]
@@ -44,14 +45,19 @@ use self::decommit_queue::DecommitQueue;
 use self::memory_pool::MemoryPool;
 use self::table_pool::TablePool;
 use super::{
-    InstanceAllocationRequest, InstanceAllocatorImpl, MemoryAllocationIndex, TableAllocationIndex,
+    InstanceAllocationRequest, InstanceAllocator, MemoryAllocationIndex, TableAllocationIndex,
 };
+use crate::Enabled;
 use crate::prelude::*;
 use crate::runtime::vm::{
-    instance::Instance,
-    mpk::{self, MpkEnabled, ProtectionKey, ProtectionMask},
     CompiledModuleId, Memory, Table,
+    instance::Instance,
+    mpk::{self, ProtectionKey, ProtectionMask},
+    sys::vm::PageMap,
 };
+use core::future::Future;
+use core::pin::Pin;
+use core::sync::atomic::AtomicUsize;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::sync::{Mutex, MutexGuard};
@@ -60,9 +66,10 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 use wasmtime_environ::{
-    DefinedMemoryIndex, DefinedTableIndex, HostPtr, MemoryPlan, Module, TablePlan, Tunables,
-    VMOffsets,
+    DefinedMemoryIndex, DefinedTableIndex, HostPtr, Module, Tunables, VMOffsets,
 };
+
+pub use self::metrics::PoolingAllocatorMetrics;
 
 #[cfg(feature = "gc")]
 use super::GcHeapAllocationIndex;
@@ -76,8 +83,8 @@ use stack_pool::StackPool;
 
 #[cfg(feature = "component-model")]
 use wasmtime_environ::{
-    component::{Component, VMComponentOffsets},
     StaticModuleIndex,
+    component::{Component, VMComponentOffsets},
 };
 
 fn round_up_to_pow2(n: usize, to: usize) -> usize {
@@ -95,8 +102,8 @@ pub struct InstanceLimits {
     /// concurrently.
     pub total_component_instances: u32,
 
-    /// The maximum size of a component's `VMComponentContext`, not including
-    /// any of its inner core modules' `VMContext` sizes.
+    /// The maximum size of a component's `VMComponentContext`, including
+    /// the aggregate size of all its inner core modules' `VMContext` sizes.
     pub component_instance_size: usize,
 
     /// The maximum number of core module instances that may be allocated
@@ -130,14 +137,18 @@ pub struct InstanceLimits {
     /// Maximum number of tables per instance.
     pub max_tables_per_module: u32,
 
-    /// Maximum number of table elements per table.
-    pub table_elements: u32,
+    /// Maximum number of word-size elements per table.
+    ///
+    /// Note that tables for element types such as continuations
+    /// that use more than one word of storage may store fewer
+    /// elements.
+    pub table_elements: usize,
 
     /// Maximum number of linear memories per instance.
     pub max_memories_per_module: u32,
 
     /// Maximum byte size of a linear memory, must be smaller than
-    /// `static_memory_reservation` in `Tunables`.
+    /// `memory_reservation` in `Tunables`.
     pub max_memory_size: usize,
 
     /// The total number of GC heaps in the pool, across all instances.
@@ -147,28 +158,36 @@ pub struct InstanceLimits {
 
 impl Default for InstanceLimits {
     fn default() -> Self {
+        let total = if cfg!(target_pointer_width = "32") {
+            100
+        } else {
+            1000
+        };
         // See doc comments for `wasmtime::PoolingAllocationConfig` for these
         // default values
         Self {
-            total_component_instances: 1000,
+            total_component_instances: total,
             component_instance_size: 1 << 20, // 1 MiB
-            total_core_instances: 1000,
-            max_core_instances_per_component: 20,
-            max_memories_per_component: 20,
-            max_tables_per_component: 20,
-            total_memories: 1000,
-            total_tables: 1000,
+            total_core_instances: total,
+            max_core_instances_per_component: u32::MAX,
+            max_memories_per_component: u32::MAX,
+            max_tables_per_component: u32::MAX,
+            total_memories: total,
+            total_tables: total,
             #[cfg(feature = "async")]
-            total_stacks: 1000,
+            total_stacks: total,
             core_instance_size: 1 << 20, // 1 MiB
             max_tables_per_module: 1,
             // NB: in #8504 it was seen that a C# module in debug module can
             // have 10k+ elements.
             table_elements: 20_000,
             max_memories_per_module: 1,
+            #[cfg(target_pointer_width = "64")]
             max_memory_size: 1 << 32, // 4G,
+            #[cfg(target_pointer_width = "32")]
+            max_memory_size: 10 << 20, // 10 MiB
             #[cfg(feature = "gc")]
-            total_gc_heaps: 1000,
+            total_gc_heaps: total,
         }
     }
 }
@@ -195,6 +214,7 @@ pub struct PoolingInstanceAllocatorConfig {
     /// how much memory to zero out with `memset`.
     ///
     /// The rest of memory will be zeroed out with `madvise`.
+    #[cfg(feature = "async")]
     pub async_stack_keep_resident: usize,
     /// How much linear memory, in bytes, to keep resident after resetting for
     /// use with the next instance. This much memory will be `memset` to zero
@@ -208,9 +228,11 @@ pub struct PoolingInstanceAllocatorConfig {
     /// Same as `linear_memory_keep_resident` but for tables.
     pub table_keep_resident: usize,
     /// Whether to enable memory protection keys.
-    pub memory_protection_keys: MpkEnabled,
+    pub memory_protection_keys: Enabled,
     /// How many memory protection keys to allocate.
     pub max_memory_protection_keys: usize,
+    /// Whether to enable PAGEMAP_SCAN on Linux.
+    pub pagemap_scan: Enabled,
 }
 
 impl Default for PoolingInstanceAllocatorConfig {
@@ -221,12 +243,20 @@ impl Default for PoolingInstanceAllocatorConfig {
             stack_size: 2 << 20,
             limits: InstanceLimits::default(),
             async_stack_zeroing: false,
+            #[cfg(feature = "async")]
             async_stack_keep_resident: 0,
             linear_memory_keep_resident: 0,
             table_keep_resident: 0,
-            memory_protection_keys: MpkEnabled::Disable,
+            memory_protection_keys: Enabled::No,
             max_memory_protection_keys: 16,
+            pagemap_scan: Enabled::No,
         }
+    }
+}
+
+impl PoolingInstanceAllocatorConfig {
+    pub fn is_pagemap_scan_available() -> bool {
+        PageMap::new().is_some()
     }
 }
 
@@ -239,7 +269,7 @@ pub struct PoolConcurrencyLimitError {
     kind: Cow<'static, str>,
 }
 
-impl std::error::Error for PoolConcurrencyLimitError {}
+impl core::error::Error for PoolConcurrencyLimitError {}
 
 impl Display for PoolConcurrencyLimitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -281,19 +311,32 @@ pub struct PoolingInstanceAllocator {
     live_component_instances: AtomicU64,
 
     decommit_queue: Mutex<DecommitQueue>,
+
     memories: MemoryPool,
+    live_memories: AtomicUsize,
+
     tables: TablePool,
+    live_tables: AtomicUsize,
 
     #[cfg(feature = "gc")]
     gc_heaps: GcHeapPool,
+    #[cfg(feature = "gc")]
+    live_gc_heaps: AtomicUsize,
 
     #[cfg(feature = "async")]
     stacks: StackPool,
+    #[cfg(feature = "async")]
+    live_stacks: AtomicUsize,
+
+    pagemap: Option<PageMap>,
 }
 
-#[cfg(debug_assertions)]
 impl Drop for PoolingInstanceAllocator {
     fn drop(&mut self) {
+        if !cfg!(debug_assertions) {
+            return;
+        }
+
         // NB: when cfg(not(debug_assertions)) it is okay that we don't flush
         // the queue, as the sub-pools will unmap those ranges anyways, so
         // there's no point in decommitting them. But we do need to flush the
@@ -306,15 +349,23 @@ impl Drop for PoolingInstanceAllocator {
 
         debug_assert_eq!(self.live_component_instances.load(Ordering::Acquire), 0);
         debug_assert_eq!(self.live_core_instances.load(Ordering::Acquire), 0);
+        debug_assert_eq!(self.live_memories.load(Ordering::Acquire), 0);
+        debug_assert_eq!(self.live_tables.load(Ordering::Acquire), 0);
 
         debug_assert!(self.memories.is_empty());
         debug_assert!(self.tables.is_empty());
 
         #[cfg(feature = "gc")]
-        debug_assert!(self.gc_heaps.is_empty());
+        {
+            debug_assert!(self.gc_heaps.is_empty());
+            debug_assert_eq!(self.live_gc_heaps.load(Ordering::Acquire), 0);
+        }
 
         #[cfg(feature = "async")]
-        debug_assert!(self.stacks.is_empty());
+        {
+            debug_assert!(self.stacks.is_empty());
+            debug_assert_eq!(self.live_stacks.load(Ordering::Acquire), 0);
+        }
     }
 }
 
@@ -328,11 +379,27 @@ impl PoolingInstanceAllocator {
             live_core_instances: AtomicU64::new(0),
             decommit_queue: Mutex::new(DecommitQueue::default()),
             memories: MemoryPool::new(config, tunables)?,
+            live_memories: AtomicUsize::new(0),
             tables: TablePool::new(config)?,
+            live_tables: AtomicUsize::new(0),
             #[cfg(feature = "gc")]
             gc_heaps: GcHeapPool::new(config)?,
+            #[cfg(feature = "gc")]
+            live_gc_heaps: AtomicUsize::new(0),
             #[cfg(feature = "async")]
             stacks: StackPool::new(config)?,
+            #[cfg(feature = "async")]
+            live_stacks: AtomicUsize::new(0),
+            pagemap: match config.pagemap_scan {
+                Enabled::Auto => PageMap::new(),
+                Enabled::Yes => Some(PageMap::new().ok_or_else(|| {
+                    format_err!(
+                        "required to enable PAGEMAP_SCAN but this system \
+                         does not support it"
+                    )
+                })?),
+                Enabled::No => None,
+            },
         })
     }
 
@@ -345,7 +412,7 @@ impl PoolingInstanceAllocator {
     }
 
     fn validate_memory_plans(&self, module: &Module) -> Result<()> {
-        self.memories.validate(module)
+        self.memories.validate_memories(module)
     }
 
     fn validate_core_instance_size(&self, offsets: &VMOffsets<HostPtr>) -> Result<()> {
@@ -402,25 +469,28 @@ impl PoolingInstanceAllocator {
         // double-check we accounted for all the bytes
         assert_eq!(remaining, 0);
 
-        bail!("{}", message)
+        bail!("{message}")
     }
 
     #[cfg(feature = "component-model")]
     fn validate_component_instance_size(
         &self,
         offsets: &VMComponentOffsets<HostPtr>,
+        core_instances_aggregate_size: usize,
     ) -> Result<()> {
-        if usize::try_from(offsets.size_of_vmctx()).unwrap() <= self.limits.component_instance_size
-        {
+        let vmcomponentctx_size = usize::try_from(offsets.size_of_vmctx()).unwrap();
+        let total_instance_size = core_instances_aggregate_size.saturating_add(vmcomponentctx_size);
+        if total_instance_size <= self.limits.component_instance_size {
             return Ok(());
         }
 
         // TODO: Add context with detailed accounting of what makes up all the
         // `VMComponentContext`'s space like we do for module instances.
         bail!(
-            "instance allocation for this component requires {} bytes of `VMComponentContext` \
-             space which exceeds the configured maximum of {} bytes",
-            offsets.size_of_vmctx(),
+            "instance allocation for this component requires {total_instance_size} bytes of `VMComponentContext` \
+             and aggregated core instance runtime space which exceeds the configured maximum of {} bytes. \
+             `VMComponentContext` used {vmcomponentctx_size} bytes, `core module instances` used \
+             {core_instances_aggregate_size} bytes.",
             self.limits.component_instance_size
         )
     }
@@ -436,6 +506,7 @@ impl PoolingInstanceAllocator {
     /// Execute `f` and if it returns `Err(PoolConcurrencyLimitError)`, then try
     /// flushing the decommit queue. If flushing the queue freed up slots, then
     /// try running `f` again.
+    #[cfg(feature = "async")]
     fn with_flush_and_retry<T>(&self, mut f: impl FnMut() -> Result<T>) -> Result<T> {
         f().or_else(|e| {
             if e.is::<PoolConcurrencyLimitError>() {
@@ -484,39 +555,42 @@ impl PoolingInstanceAllocator {
     }
 }
 
-unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
+unsafe impl InstanceAllocator for PoolingInstanceAllocator {
     #[cfg(feature = "component-model")]
-    fn validate_component_impl<'a>(
+    fn validate_component<'a>(
         &self,
         component: &Component,
         offsets: &VMComponentOffsets<HostPtr>,
         get_module: &'a dyn Fn(StaticModuleIndex) -> &'a Module,
     ) -> Result<()> {
-        self.validate_component_instance_size(offsets)?;
-
         let mut num_core_instances = 0;
         let mut num_memories = 0;
         let mut num_tables = 0;
+        let mut core_instances_aggregate_size: usize = 0;
         for init in &component.initializers {
             use wasmtime_environ::component::GlobalInitializer::*;
             use wasmtime_environ::component::InstantiateModule;
             match init {
-                InstantiateModule(InstantiateModule::Import(_, _)) => {
+                InstantiateModule(InstantiateModule::Import(_, _), _) => {
                     num_core_instances += 1;
                     // Can't statically account for the total vmctx size, number
                     // of memories, and number of tables in this component.
                 }
-                InstantiateModule(InstantiateModule::Static(static_module_index, _)) => {
+                InstantiateModule(InstantiateModule::Static(static_module_index, _), _) => {
                     let module = get_module(*static_module_index);
                     let offsets = VMOffsets::new(HostPtr, &module);
-                    self.validate_module_impl(module, &offsets)?;
+                    let layout = Instance::alloc_layout(&offsets);
+                    self.validate_module(module, &offsets)?;
                     num_core_instances += 1;
-                    num_memories += module.memory_plans.len() - module.num_imported_memories;
-                    num_tables += module.table_plans.len() - module.num_imported_tables;
+                    num_memories += module.num_defined_memories();
+                    num_tables += module.num_defined_tables();
+                    core_instances_aggregate_size += layout.size();
                 }
                 LowerImport { .. }
                 | ExtractMemory(_)
+                | ExtractTable(_)
                 | ExtractRealloc(_)
+                | ExtractCallback(_)
                 | ExtractPostReturn(_)
                 | Resource(_) => {}
             }
@@ -527,7 +601,7 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         {
             bail!(
                 "The component transitively contains {num_core_instances} core module instances, \
-                 which exceeds the configured maximum of {}",
+                 which exceeds the configured maximum of {} in the pooling allocator",
                 self.limits.max_core_instances_per_component
             );
         }
@@ -535,7 +609,7 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         if num_memories > usize::try_from(self.limits.max_memories_per_component).unwrap() {
             bail!(
                 "The component transitively contains {num_memories} Wasm linear memories, which \
-                 exceeds the configured maximum of {}",
+                 exceeds the configured maximum of {} in the pooling allocator",
                 self.limits.max_memories_per_component
             );
         }
@@ -543,21 +617,33 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         if num_tables > usize::try_from(self.limits.max_tables_per_component).unwrap() {
             bail!(
                 "The component transitively contains {num_tables} tables, which exceeds the \
-                 configured maximum of {}",
+                 configured maximum of {} in the pooling allocator",
                 self.limits.max_tables_per_component
             );
         }
 
+        self.validate_component_instance_size(offsets, core_instances_aggregate_size)
+            .context("component instance size does not fit in pooling allocator requirements")?;
+
         Ok(())
     }
 
-    fn validate_module_impl(&self, module: &Module, offsets: &VMOffsets<HostPtr>) -> Result<()> {
-        self.validate_memory_plans(module)?;
-        self.validate_table_plans(module)?;
-        self.validate_core_instance_size(offsets)?;
+    fn validate_module(&self, module: &Module, offsets: &VMOffsets<HostPtr>) -> Result<()> {
+        self.validate_memory_plans(module)
+            .context("module memory does not fit in pooling allocator requirements")?;
+        self.validate_table_plans(module)
+            .context("module table does not fit in pooling allocator requirements")?;
+        self.validate_core_instance_size(offsets)
+            .context("module instance size does not fit in pooling allocator requirements")?;
         Ok(())
     }
 
+    #[cfg(feature = "gc")]
+    fn validate_memory(&self, memory: &wasmtime_environ::Memory) -> Result<()> {
+        self.memories.validate_memory(memory)
+    }
+
+    #[cfg(feature = "component-model")]
     fn increment_component_instance_count(&self) -> Result<()> {
         let old_count = self.live_component_instances.fetch_add(1, Ordering::AcqRel);
         if old_count >= u64::from(self.limits.total_component_instances) {
@@ -571,6 +657,7 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         Ok(())
     }
 
+    #[cfg(feature = "component-model")]
     fn decrement_component_instance_count(&self) {
         self.live_component_instances.fetch_sub(1, Ordering::AcqRel);
     }
@@ -592,43 +679,126 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         self.live_core_instances.fetch_sub(1, Ordering::AcqRel);
     }
 
-    unsafe fn allocate_memory(
-        &self,
-        request: &mut InstanceAllocationRequest,
-        memory_plan: &MemoryPlan,
-        memory_index: DefinedMemoryIndex,
-    ) -> Result<(MemoryAllocationIndex, Memory)> {
-        self.with_flush_and_retry(|| self.memories.allocate(request, memory_plan, memory_index))
+    fn allocate_memory<'a, 'b: 'a, 'c: 'a>(
+        &'a self,
+        request: &'a mut InstanceAllocationRequest<'b, 'c>,
+        ty: &'a wasmtime_environ::Memory,
+        memory_index: Option<DefinedMemoryIndex>,
+    ) -> Pin<Box<dyn Future<Output = Result<(MemoryAllocationIndex, Memory)>> + Send + 'a>> {
+        crate::runtime::box_future(async move {
+            async {
+                // FIXME(rust-lang/rust#145127) this should ideally use a version of
+                // `with_flush_and_retry` but adapted for async closures instead of only
+                // sync closures. Right now that won't compile though so this is the
+                // manually expanded version of the method.
+                let e = match self.memories.allocate(request, ty, memory_index).await {
+                    Ok(result) => return Ok(result),
+                    Err(e) => e,
+                };
+
+                if e.is::<PoolConcurrencyLimitError>() {
+                    let queue = self.decommit_queue.lock().unwrap();
+                    if self.flush_decommit_queue(queue) {
+                        return self.memories.allocate(request, ty, memory_index).await;
+                    }
+                }
+
+                Err(e)
+            }
+            .await
+            .inspect(|_| {
+                self.live_memories.fetch_add(1, Ordering::Relaxed);
+            })
+        })
     }
 
     unsafe fn deallocate_memory(
         &self,
-        _memory_index: DefinedMemoryIndex,
+        _memory_index: Option<DefinedMemoryIndex>,
         allocation_index: MemoryAllocationIndex,
         memory: Memory,
     ) {
-        // Reset the image slot. If there is any error clearing the
-        // image, just drop it here, and let the drop handler for the
-        // slot unmap in a way that retains the address space
-        // reservation.
+        let prev = self.live_memories.fetch_sub(1, Ordering::Relaxed);
+        debug_assert!(prev > 0);
+
+        // Reset the image slot. Depending on whether this is successful or not
+        // the `image` is preserved for future use. On success it's queued up to
+        // get deallocated later, and on failure the slot is deallocated
+        // immediately without preserving the image.
         let mut image = memory.unwrap_static_image();
         let mut queue = DecommitQueue::default();
-        image
-            .clear_and_remain_ready(self.memories.keep_resident, |ptr, len| {
-                queue.push_raw(ptr, len);
-            })
-            .expect("failed to reset memory image");
-        queue.push_memory(allocation_index, image);
-        self.merge_or_flush(queue);
+        let bytes_resident = image.clear_and_remain_ready(
+            self.pagemap.as_ref(),
+            self.memories.keep_resident,
+            |ptr, len| {
+                // SAFETY: the memory in `image` won't be used until this
+                // decommit queue is flushed, and by definition the memory is
+                // not in use when calling this function.
+                unsafe {
+                    queue.push_raw(ptr, len);
+                }
+            },
+        );
+
+        match bytes_resident {
+            Ok(bytes_resident) => {
+                // SAFETY: this image is not in use and its memory regions were enqueued
+                // with `push_raw` above.
+                unsafe {
+                    queue.push_memory(allocation_index, image, bytes_resident);
+                }
+                self.merge_or_flush(queue);
+            }
+            Err(e) => {
+                log::warn!("ignoring clear_and_remain_ready error {e}");
+                // SAFETY: `allocation_index` comes from this pool, as an unsafe
+                // contract of this function itself, and it's guaranteed to be no
+                // longer in use so safe to deallocate. The slot couldn't be
+                // preserved so it's dropped here.
+                //
+                // Note that at this point it's not clear how many bytes are
+                // resident in memory, so it's inevitably going to leave statistics
+                // a little off. Also note though that non-Linux platforms don't
+                // keep track of resident bytes anyway, and this path is only
+                // reachable on non-Linux platforms because Linux can't return an
+                // error.
+                unsafe {
+                    self.memories.deallocate(allocation_index, None, 0);
+                }
+            }
+        }
     }
 
-    unsafe fn allocate_table(
-        &self,
-        request: &mut InstanceAllocationRequest,
-        table_plan: &TablePlan,
+    fn allocate_table<'a, 'b: 'a, 'c: 'a>(
+        &'a self,
+        request: &'a mut InstanceAllocationRequest<'b, 'c>,
+        ty: &'a wasmtime_environ::Table,
         _table_index: DefinedTableIndex,
-    ) -> Result<(super::TableAllocationIndex, Table)> {
-        self.with_flush_and_retry(|| self.tables.allocate(request, table_plan))
+    ) -> Pin<Box<dyn Future<Output = Result<(super::TableAllocationIndex, Table)>> + Send + 'a>>
+    {
+        crate::runtime::box_future(async move {
+            async {
+                // FIXME: see `allocate_memory` above for comments about duplication
+                // with `with_flush_and_retry`.
+                let e = match self.tables.allocate(request, ty).await {
+                    Ok(result) => return Ok(result),
+                    Err(e) => e,
+                };
+
+                if e.is::<PoolConcurrencyLimitError>() {
+                    let queue = self.decommit_queue.lock().unwrap();
+                    if self.flush_decommit_queue(queue) {
+                        return self.tables.allocate(request, ty).await;
+                    }
+                }
+
+                Err(e)
+            }
+            .await
+            .inspect(|_| {
+                self.live_tables.fetch_add(1, Ordering::Relaxed);
+            })
+        })
     }
 
     unsafe fn deallocate_table(
@@ -637,26 +807,54 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         allocation_index: TableAllocationIndex,
         mut table: Table,
     ) {
+        let prev = self.live_tables.fetch_sub(1, Ordering::Relaxed);
+        debug_assert!(prev > 0);
+
         let mut queue = DecommitQueue::default();
-        self.tables
-            .reset_table_pages_to_zero(allocation_index, &mut table, |ptr, len| {
-                queue.push_raw(ptr, len);
-            });
-        queue.push_table(allocation_index, table);
+        // SAFETY: This table is no longer in use by the allocator when this
+        // method is called and additionally all image ranges are pushed with
+        // the understanding that the memory won't get used until the whole
+        // queue is flushed.
+        let bytes_resident = unsafe {
+            self.tables.reset_table_pages_to_zero(
+                self.pagemap.as_ref(),
+                allocation_index,
+                &mut table,
+                |ptr, len| {
+                    queue.push_raw(ptr, len);
+                },
+            )
+        };
+
+        // SAFETY: the table has had all its memory regions enqueued above.
+        unsafe {
+            queue.push_table(allocation_index, table, bytes_resident);
+        }
         self.merge_or_flush(queue);
     }
 
     #[cfg(feature = "async")]
     fn allocate_fiber_stack(&self) -> Result<wasmtime_fiber::FiberStack> {
-        self.with_flush_and_retry(|| self.stacks.allocate())
+        let ret = self.with_flush_and_retry(|| self.stacks.allocate())?;
+        self.live_stacks.fetch_add(1, Ordering::Relaxed);
+        Ok(ret)
     }
 
     #[cfg(feature = "async")]
     unsafe fn deallocate_fiber_stack(&self, mut stack: wasmtime_fiber::FiberStack) {
+        self.live_stacks.fetch_sub(1, Ordering::Relaxed);
         let mut queue = DecommitQueue::default();
-        self.stacks
-            .zero_stack(&mut stack, |ptr, len| queue.push_raw(ptr, len));
-        queue.push_stack(stack);
+        // SAFETY: the stack is no longer in use by definition when this
+        // function is called and memory ranges pushed here are otherwise no
+        // longer in use.
+        let bytes_resident = unsafe {
+            self.stacks
+                .zero_stack(&mut stack, |ptr, len| queue.push_raw(ptr, len))
+        };
+        // SAFETY: this stack's memory regions were enqueued above.
+        unsafe {
+            queue.push_stack(stack, bytes_resident);
+        }
         self.merge_or_flush(queue);
     }
 
@@ -679,9 +877,16 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
     #[cfg(feature = "gc")]
     fn allocate_gc_heap(
         &self,
+        engine: &crate::Engine,
         gc_runtime: &dyn GcRuntime,
+        memory_alloc_index: MemoryAllocationIndex,
+        memory: Memory,
     ) -> Result<(GcHeapAllocationIndex, Box<dyn GcHeap>)> {
-        self.gc_heaps.allocate(gc_runtime)
+        let ret = self
+            .gc_heaps
+            .allocate(engine, gc_runtime, memory_alloc_index, memory)?;
+        self.live_gc_heaps.fetch_add(1, Ordering::Relaxed);
+        Ok(ret)
     }
 
     #[cfg(feature = "gc")]
@@ -689,12 +894,18 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         &self,
         allocation_index: GcHeapAllocationIndex,
         gc_heap: Box<dyn GcHeap>,
-    ) {
-        self.gc_heaps.deallocate(allocation_index, gc_heap);
+    ) -> (MemoryAllocationIndex, Memory) {
+        self.live_gc_heaps.fetch_sub(1, Ordering::Relaxed);
+        self.gc_heaps.deallocate(allocation_index, gc_heap)
+    }
+
+    fn as_pooling(&self) -> Option<&PoolingInstanceAllocator> {
+        Some(self)
     }
 }
 
 #[cfg(test)]
+#[cfg(target_pointer_width = "64")]
 mod test {
     use super::*;
 
@@ -712,18 +923,24 @@ mod test {
             PoolingInstanceAllocator::new(
                 &config,
                 &Tunables {
-                    static_memory_reservation: 0x10000,
+                    memory_reservation: 0x10000,
                     ..Tunables::default_host()
                 },
             )
             .map_err(|e| e.to_string())
             .expect_err("expected a failure constructing instance allocator"),
             "maximum memory size of 0x100010000 bytes exceeds the configured \
-             static memory reservation of 0x10000 bytes"
+             memory reservation of 0x10000 bytes"
         );
     }
 
-    #[cfg(all(unix, target_pointer_width = "64", feature = "async", not(miri)))]
+    #[cfg(all(
+        unix,
+        target_pointer_width = "64",
+        feature = "async",
+        not(miri),
+        not(asan)
+    ))]
     #[test]
     fn test_stack_zeroed() -> Result<()> {
         let config = PoolingInstanceAllocatorConfig {
@@ -757,7 +974,13 @@ mod test {
         Ok(())
     }
 
-    #[cfg(all(unix, target_pointer_width = "64", feature = "async", not(miri)))]
+    #[cfg(all(
+        unix,
+        target_pointer_width = "64",
+        feature = "async",
+        not(miri),
+        not(asan)
+    ))]
     #[test]
     fn test_stack_unzeroed() -> Result<()> {
         let config = PoolingInstanceAllocatorConfig {

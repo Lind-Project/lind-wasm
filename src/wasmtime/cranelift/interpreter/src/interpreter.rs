@@ -7,7 +7,7 @@ use crate::environment::{FuncIndex, FunctionStore};
 use crate::frame::Frame;
 use crate::instruction::DfgInstructionContext;
 use crate::state::{InterpreterFunctionRef, MemoryError, State};
-use crate::step::{step, ControlFlow, StepError};
+use crate::step::{ControlFlow, StepError, step};
 use crate::value::{DataValueExt, ValueError};
 use cranelift_codegen::data_value::DataValue;
 use cranelift_codegen::ir::{

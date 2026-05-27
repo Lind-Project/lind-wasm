@@ -13,22 +13,30 @@
 //! function body, the imported wasm function do not. The trampolines symbol
 //! names have format "_trampoline_N", where N is `SignatureIndex`.
 
-use crate::{CompiledFunction, RelocationTarget};
-use anyhow::Result;
-use cranelift_codegen::binemit::Reloc;
-use cranelift_codegen::isa::unwind::{systemv, UnwindInfo};
+use crate::CompiledFunction;
 use cranelift_codegen::TextSectionBuilder;
+use cranelift_codegen::isa::unwind::{UnwindInfo, systemv};
 use cranelift_control::ControlPlane;
-use gimli::write::{Address, EhFrame, EndianVec, FrameTable, Writer};
 use gimli::RunTimeEndian;
+use gimli::write::{Address, EhFrame, EndianVec, FrameTable, Writer};
 use object::write::{Object, SectionId, StandardSegment, Symbol, SymbolId, SymbolSection};
-use object::{Architecture, SectionKind, SymbolFlags, SymbolKind, SymbolScope};
-use std::collections::HashMap;
+use object::{Architecture, SectionFlags, SectionKind, SymbolFlags, SymbolKind, SymbolScope};
 use std::ops::Range;
-use wasmtime_environ::obj::LibCall;
-use wasmtime_environ::Compiler;
+use wasmtime_environ::error::Result;
+use wasmtime_environ::{Compiler, TripleExt};
+use wasmtime_environ::{FuncKey, obj};
 
 const TEXT_SECTION_NAME: &[u8] = b".text";
+
+fn text_align(compiler: &dyn Compiler) -> u64 {
+    // text pages will not be made executable with pulley, so the section
+    // doesn't need to be padded out to page alignment boundaries.
+    if compiler.triple().is_pulley() {
+        0x1
+    } else {
+        compiler.page_size_align()
+    }
+}
 
 /// A helper structure used to assemble the final text section of an executable,
 /// plus unwinding information and other related details.
@@ -53,13 +61,6 @@ pub struct ModuleTextBuilder<'a> {
     /// build to resolve relocations (calls) between functions.
     text: Box<dyn TextSectionBuilder>,
 
-    /// Symbols defined in the object for libcalls that relocations are applied
-    /// against.
-    ///
-    /// Note that this isn't typically used. It's only used for SSE-disabled
-    /// builds without SIMD on x86_64 right now.
-    libcall_symbols: HashMap<LibCall, SymbolId>,
-
     ctrl_plane: ControlPlane,
 }
 
@@ -83,13 +84,24 @@ impl<'a> ModuleTextBuilder<'a> {
             SectionKind::Text,
         );
 
+        // If this target is Pulley then flag the text section as not needing the
+        // executable bit in virtual memory which means that the runtime won't
+        // try to call `Mmap::make_executable`, which makes Pulley more
+        // portable.
+        if compiler.triple().is_pulley() {
+            let section = obj.section_mut(text_section);
+            assert!(matches!(section.flags, SectionFlags::None));
+            section.flags = SectionFlags::Elf {
+                sh_flags: obj::SH_WASMTIME_NOT_EXECUTED,
+            };
+        }
+
         Self {
             compiler,
             obj,
             text_section,
             unwind_info: Default::default(),
             text,
-            libcall_symbols: HashMap::default(),
             ctrl_plane: ControlPlane::default(),
         }
     }
@@ -108,7 +120,7 @@ impl<'a> ModuleTextBuilder<'a> {
         &mut self,
         name: &str,
         compiled_func: &'a CompiledFunction,
-        resolve_reloc_target: impl Fn(wasmtime_environ::RelocationTarget) -> usize,
+        resolve_reloc_target: impl Fn(wasmtime_environ::FuncKey) -> usize,
     ) -> (SymbolId, Range<u64>) {
         let body = compiled_func.buffer.data();
         let alignment = compiled_func.alignment;
@@ -133,79 +145,50 @@ impl<'a> ModuleTextBuilder<'a> {
         }
 
         for r in compiled_func.relocations() {
-            match r.reloc_target {
-                // Relocations against user-defined functions means that this is
-                // a relocation against a module-local function, typically a
-                // call between functions. The `text` field is given priority to
-                // resolve this relocation before we actually emit an object
-                // file, but if it can't handle it then we pass through the
-                // relocation.
-                RelocationTarget::Wasm(_) | RelocationTarget::Builtin(_) => {
-                    let target = resolve_reloc_target(r.reloc_target);
-                    if self
-                        .text
-                        .resolve_reloc(off + u64::from(r.offset), r.reloc, r.addend, target)
-                    {
-                        continue;
-                    }
+            let reloc_offset = off + u64::from(r.offset);
 
-                    // At this time it's expected that all relocations are
-                    // handled by `text.resolve_reloc`, and anything that isn't
-                    // handled is a bug in `text.resolve_reloc` or something
-                    // transitively there. If truly necessary, though, then this
-                    // loop could also be updated to forward the relocation to
-                    // the final object file as well.
-                    panic!(
-                        "unresolved relocation could not be processed against \
-                         {:?}: {r:?}",
-                        r.reloc_target,
-                    );
+            // This relocation is used to fill in which hostcall id is
+            // desired within the `call_indirect_host` opcode of Pulley
+            // itself. The relocation target is the start of the instruction
+            // and the goal is to insert the static signature number, `n`,
+            // into the instruction.
+            //
+            // At this time the instruction looks like:
+            //
+            //      +------+------+------+------+
+            //      | OP   | OP_EXTENDED |  N   |
+            //      +------+------+------+------+
+            //
+            // This 4-byte encoding has `OP` indicating this is an "extended
+            // opcode" where `OP_EXTENDED` is a 16-bit extended opcode.
+            // The `N` byte is the index of the signature being called and
+            // is what's b eing filled in.
+            //
+            // See the `test_call_indirect_host_width` in
+            // `pulley/tests/all.rs` for this guarantee as well.
+            if let FuncKey::PulleyHostCall(host_call) = r.reloc_target {
+                #[cfg(feature = "pulley")]
+                {
+                    use pulley_interpreter::encode::Encode;
+                    assert_eq!(pulley_interpreter::CallIndirectHost::WIDTH, 4);
                 }
+                let n = host_call.index();
+                let byte = u8::try_from(n).unwrap();
+                self.text.write(reloc_offset + 3, &[byte]);
+                continue;
+            }
 
-                // Relocations against libcalls are not common at this time and
-                // are only used in non-default configurations that disable wasm
-                // SIMD, disable SSE features, and for wasm modules that still
-                // use floating point operations.
-                //
-                // Currently these relocations are all expected to be absolute
-                // 8-byte relocations so that's asserted here and then encoded
-                // directly into the object as a normal object relocation. This
-                // is processed at module load time to resolve the relocations.
-                RelocationTarget::HostLibcall(call) => {
-                    let symbol = *self.libcall_symbols.entry(call).or_insert_with(|| {
-                        self.obj.add_symbol(Symbol {
-                            name: call.symbol().as_bytes().to_vec(),
-                            value: 0,
-                            size: 0,
-                            kind: SymbolKind::Text,
-                            scope: SymbolScope::Linkage,
-                            weak: false,
-                            section: SymbolSection::Undefined,
-                            flags: SymbolFlags::None,
-                        })
-                    });
-                    let flags = match r.reloc {
-                        Reloc::Abs8 => object::RelocationFlags::Generic {
-                            encoding: object::RelocationEncoding::Generic,
-                            kind: object::RelocationKind::Absolute,
-                            size: 64,
-                        },
-                        other => unimplemented!("unimplemented relocation kind {other:?}"),
-                    };
-                    self.obj
-                        .add_relocation(
-                            self.text_section,
-                            object::write::Relocation {
-                                symbol,
-                                flags,
-                                offset: off + u64::from(r.offset),
-                                addend: r.addend,
-                            },
-                        )
-                        .unwrap();
-                }
-            };
+            let target = resolve_reloc_target(r.reloc_target);
+            if self
+                .text
+                .resolve_reloc(reloc_offset, r.reloc, r.addend, target)
+            {
+                continue;
+            }
+
+            panic!("failed to resolve relocation: {r:?} -> {target}");
         }
+
         (symbol_id, off..off + body_len)
     }
 
@@ -235,12 +218,15 @@ impl<'a> ModuleTextBuilder<'a> {
     ///
     /// Note that this will also write out the unwind information sections if
     /// necessary.
-    pub fn finish(mut self) {
+    pub fn finish(mut self, postprocess_text: impl FnOnce(&mut [u8])) {
         // Finish up the text section now that we're done adding functions.
-        let text = self.text.finish(&mut self.ctrl_plane);
+        let mut text = self.text.finish(&mut self.ctrl_plane);
+
+        postprocess_text(&mut text[..]);
+
         self.obj
             .section_mut(self.text_section)
-            .set_data(text, self.compiler.page_size_align());
+            .set_data(text, text_align(self.compiler));
 
         // Append the unwind information for all our functions, if necessary.
         self.unwind_info
@@ -262,7 +248,7 @@ struct UnwindInfoBuilder<'a> {
 // platforms. Note that all of these specifiers here are relative to a "base
 // address" which we define as the base of where the text section is eventually
 // loaded.
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types, reason = "matching Windows style, not Rust")]
 struct RUNTIME_FUNCTION {
     begin: u32,
     end: u32,
@@ -293,19 +279,19 @@ impl<'a> UnwindInfoBuilder<'a> {
             // actually assembled byte-wise here. Instead that's deferred to
             // happen later during `write_windows_unwind_info` which will apply
             // a further offset to `unwind_address`.
+            //
+            // FIXME: in theory we could "intern" the `unwind_info` value
+            // here within the `.xdata` section. Most of our unwind
+            // information for functions is probably pretty similar in which
+            // case the `.xdata` could be quite small and `.pdata` could
+            // have multiple functions point to the same unwinding
+            // information.
             UnwindInfo::WindowsX64(info) => {
                 let unwind_size = info.emit_size();
                 let mut unwind_info = vec![0; unwind_size];
                 info.emit(&mut unwind_info);
 
                 // `.xdata` entries are always 4-byte aligned
-                //
-                // FIXME: in theory we could "intern" the `unwind_info` value
-                // here within the `.xdata` section. Most of our unwind
-                // information for functions is probably pretty similar in which
-                // case the `.xdata` could be quite small and `.pdata` could
-                // have multiple functions point to the same unwinding
-                // information.
                 while self.windows_xdata.len() % 4 != 0 {
                     self.windows_xdata.push(0x00);
                 }
@@ -316,6 +302,58 @@ impl<'a> UnwindInfoBuilder<'a> {
                 self.windows_pdata.push(RUNTIME_FUNCTION {
                     begin: u32::try_from(function_offset).unwrap(),
                     end: u32::try_from(function_offset + function_len).unwrap(),
+                    unwind_address: u32::try_from(unwind_address).unwrap(),
+                });
+            }
+
+            // See https://learn.microsoft.com/en-us/cpp/build/arm64-exception-handling
+            UnwindInfo::WindowsArm64(info) => {
+                let code_words = info.code_words();
+                let mut unwind_codes = vec![0; (code_words * 4) as usize];
+                info.emit(&mut unwind_codes);
+
+                // `.xdata` entries are always 4-byte aligned
+                while self.windows_xdata.len() % 4 != 0 {
+                    self.windows_xdata.push(0x00);
+                }
+
+                // First word:
+                // 0-17:    Function Length
+                // 18-19:   Version (must be 0)
+                // 20:      X bit (is exception data present?)
+                // 21:      E bit (has single packed epilogue?)
+                // 22-26:   Epilogue count
+                // 27-31:   Code words count
+                let requires_extended_counts = code_words > (1 << 5);
+                let encoded_function_len = function_len / 4;
+                assert!(encoded_function_len < (1 << 18), "function too large");
+                let mut word1 = u32::try_from(encoded_function_len).unwrap();
+                if !requires_extended_counts {
+                    word1 |= u32::from(code_words) << 27;
+                }
+                let unwind_address = self.windows_xdata.len();
+                self.windows_xdata.extend_from_slice(&word1.to_le_bytes());
+
+                if requires_extended_counts {
+                    // Extended counts word:
+                    // 0-15:    Epilogue count
+                    // 16-23:   Code words count
+                    let extended_counts_word = (code_words as u32) << 16;
+                    self.windows_xdata
+                        .extend_from_slice(&extended_counts_word.to_le_bytes());
+                }
+
+                // Skip epilogue information: Per comment on [`UnwindInst`], we
+                // do not emit information about epilogues.
+
+                // Emit the unwind codes.
+                self.windows_xdata.extend_from_slice(&unwind_codes);
+
+                // Record a `RUNTIME_FUNCTION` which this will point to.
+                // NOTE: `end` is not used, so leave it as 0.
+                self.windows_pdata.push(RUNTIME_FUNCTION {
+                    begin: u32::try_from(function_offset).unwrap(),
+                    end: 0,
                     unwind_address: u32::try_from(unwind_address).unwrap(),
                 });
             }
@@ -346,8 +384,7 @@ impl<'a> UnwindInfoBuilder<'a> {
         // This write will align the text section to a page boundary and then
         // return the offset at that point. This gives us the full size of the
         // text section at that point, after alignment.
-        let text_section_size =
-            obj.append_section_data(text_section, &[], compiler.page_size_align());
+        let text_section_size = obj.append_section_data(text_section, &[], text_align(compiler));
 
         if self.windows_xdata.len() > 0 {
             assert!(self.systemv_unwind_info.len() == 0);
@@ -385,11 +422,6 @@ impl<'a> UnwindInfoBuilder<'a> {
         pdata_id: SectionId,
         text_section_size: u64,
     ) {
-        // Currently the binary format supported here only supports
-        // little-endian for x86_64, or at least that's all where it's tested.
-        // This may need updates for other platforms.
-        assert_eq!(obj.architecture(), Architecture::X86_64);
-
         // Append the `.xdata` section, or the actual unwinding information
         // codes and such which were built as we found unwind information for
         // functions.
@@ -409,14 +441,35 @@ impl<'a> UnwindInfoBuilder<'a> {
         // `xdata` section follows the `.text` section so the
         // `text_section_size` is added in to calculate the final
         // `.text`-section-relative address of the unwind information.
-        let mut pdata = Vec::with_capacity(self.windows_pdata.len() * 3 * 4);
-        for info in self.windows_pdata.iter() {
-            pdata.extend_from_slice(&info.begin.to_le_bytes());
-            pdata.extend_from_slice(&info.end.to_le_bytes());
-            let address = text_section_size + u64::from(info.unwind_address);
-            let address = u32::try_from(address).unwrap();
-            pdata.extend_from_slice(&address.to_le_bytes());
-        }
+        let xdata_rva = |address| {
+            let address = u64::from(address);
+            let address = address + text_section_size;
+            u32::try_from(address).unwrap()
+        };
+        let pdata = match obj.architecture() {
+            Architecture::X86_64 => {
+                let mut pdata = Vec::with_capacity(self.windows_pdata.len() * 3 * 4);
+                for info in self.windows_pdata.iter() {
+                    pdata.extend_from_slice(&info.begin.to_le_bytes());
+                    pdata.extend_from_slice(&info.end.to_le_bytes());
+                    pdata.extend_from_slice(&xdata_rva(info.unwind_address).to_le_bytes());
+                }
+                pdata
+            }
+
+            Architecture::Aarch64 => {
+                // Windows Arm64 .pdata also supports packed unwind data, but
+                // we're not currently using that.
+                let mut pdata = Vec::with_capacity(self.windows_pdata.len() * 2 * 4);
+                for info in self.windows_pdata.iter() {
+                    pdata.extend_from_slice(&info.begin.to_le_bytes());
+                    pdata.extend_from_slice(&xdata_rva(info.unwind_address).to_le_bytes());
+                }
+                pdata
+            }
+
+            _ => unimplemented!("unsupported architecture for windows unwind info"),
+        };
         obj.append_section_data(pdata_id, &pdata, 4);
     }
 
@@ -480,7 +533,7 @@ impl<'a> UnwindInfoBuilder<'a> {
             // unwinders just use this constant for a relative addition with the
             // address of the FDE, which means that the sign doesn't actually
             // matter.
-            let fde = unwind_info.to_fde(Address::Constant(actual_offset as u64));
+            let fde = unwind_info.to_fde(Address::Constant(actual_offset.cast_unsigned()));
             table.add_fde(cie_id, fde);
         }
         let endian = match compiler.triple().endianness().unwrap() {

@@ -65,7 +65,7 @@ impl<K: Hash + Eq, V> StableMap<K, V> {
         self.0.get(k)
     }
 
-    pub(crate) fn entry(&mut self, k: K) -> Entry<K, V> {
+    pub(crate) fn entry(&mut self, k: K) -> Entry<'_, K, V> {
         self.0.entry(k)
     }
 }
@@ -75,5 +75,17 @@ impl<K: Hash + Eq, V> Index<&K> for StableMap<K, V> {
 
     fn index(&self, index: &K) -> &Self::Output {
         self.0.index(index)
+    }
+}
+
+impl<K, V> From<HashMap<K, V>> for StableMap<K, V> {
+    fn from(map: HashMap<K, V>) -> Self {
+        StableMap(map)
+    }
+}
+
+impl<K: Hash + Eq, V> FromIterator<(K, V)> for StableMap<K, V> {
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        StableMap(HashMap::from_iter(iter))
     }
 }

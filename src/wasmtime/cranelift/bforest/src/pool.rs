@@ -7,6 +7,7 @@ use crate::entity::PrimaryMap;
 #[cfg(test)]
 use core::fmt;
 use core::ops::{Index, IndexMut};
+use wasmtime_core::error::OutOfMemory;
 
 /// A pool of nodes, including a free list.
 pub(super) struct NodePool<F: Forest> {
@@ -30,7 +31,7 @@ impl<F: Forest> NodePool<F> {
     }
 
     /// Allocate a new node containing `data`.
-    pub fn alloc_node(&mut self, data: NodeData<F>) -> Node {
+    pub fn alloc_node(&mut self, data: NodeData<F>) -> Result<Node, OutOfMemory> {
         debug_assert!(!data.is_free(), "can't allocate free node");
         match self.freelist {
             Some(node) => {
@@ -40,11 +41,12 @@ impl<F: Forest> NodePool<F> {
                     _ => panic!("Invalid {} on free list", node),
                 }
                 self.nodes[node] = data;
-                node
+                Ok(node)
             }
             None => {
                 // The free list is empty. Allocate a new node.
-                self.nodes.push(data)
+                self.nodes.try_reserve(1)?;
+                Ok(self.nodes.push(data))
             }
         }
     }
@@ -52,7 +54,7 @@ impl<F: Forest> NodePool<F> {
     /// Free a node.
     pub fn free_node(&mut self, node: Node) {
         // Quick check for a double free.
-        debug_assert!(!self.nodes[node].is_free(), "{} is already free", node);
+        debug_assert!(!self.nodes[node].is_free(), "{node} is already free");
         self.nodes[node] = NodeData::Free {
             next: self.freelist,
         };
@@ -162,7 +164,7 @@ impl<F: Forest> NodePool<F> {
 
                     // Verify occupancy.
                     // Right-most nodes can be small, but others must be at least half full.
-                    assert!(size > 0, "Leaf {} is empty", node);
+                    assert!(size > 0, "Leaf {node} is empty");
                     assert!(
                         rkey.is_none() || size * 2 >= capacity,
                         "Only {}/{} entries in {}:{}, upper={}",
