@@ -1021,8 +1021,8 @@ pub fn copy_data_between_cages(
 /// Register a library-level 3i handler for a specific (lib_name, symbol_name) in target_cage.
 ///
 /// Stores (lib_name, symbol_name) → (handler_cage_id, handler_fn_ptr) in LIB_HANDLER_TABLE.
-/// The portal installed by define_lib_interpose_stubs captures these values at link time
-/// and dispatches via dispatch_lib_call, bypassing HANDLERTABLE entirely.
+/// Portals installed by instance_dylink capture these values at link time and dispatch
+/// via dispatch_lib_call, bypassing HANDLERTABLE entirely.
 ///
 /// Arguments (following the make_syscall/GrateTrampolineFn convention):
 ///   _self_cageid, _target_cageid: injected by make_syscall dispatch, unused here
@@ -1087,10 +1087,9 @@ pub fn register_lib_handler(
 
 /// Invoke a library-level 3i handler directly, bypassing HANDLERTABLE.
 ///
-/// Called by portal closures installed by define_lib_interpose_stubs. The portal
-/// captures (handler_cage_id, fn_ptr) at link time from LIB_HANDLER_TABLE, so
-/// this function just applies the same grate dispatch path as make_syscall would,
-/// without requiring a HANDLERTABLE lookup.
+/// Called by portal closures installed by instance_dylink. The portal captures
+/// (handler_cage_id, fn_ptr) at link time from LIB_HANDLER_TABLE, so this function
+/// applies the same grate dispatch path as make_syscall without a HANDLERTABLE lookup.
 pub fn dispatch_lib_call(
     handler_cage_id: u64,
     fn_ptr: u64,

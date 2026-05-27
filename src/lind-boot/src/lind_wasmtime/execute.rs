@@ -333,8 +333,6 @@ pub fn execute_with_lind(
         // Resolve any remaining unknown imports to trap stubs so the library can
         // instantiate even when it has optional/unused imports.
         let mut linker_guard = linker.lock().unwrap();
-        // Install lib-3i portal stubs for symbols the cage has registered handlers for.
-        let _ = linker_guard.define_lib_interpose_stubs(&module, cageid as u64);
         linker_guard.define_unknown_imports_as_traps(&module);
 
         drop(linker_guard);
@@ -343,15 +341,6 @@ pub fn execute_with_lind(
         // preloads and defining trap stubs.
         let mut got_guard = lind_got.lock().unwrap();
         got_guard.warning_undefined();
-    }
-
-    // For non-dylink (statically-linked) modules, install lib-3i portal stubs
-    // here so that interposed symbols (registered via register_lib_handler before
-    // this exec) get real portals rather than trap stubs or missing-import errors.
-    if !dylink_metadata.dylink_enabled {
-        let mut linker_guard = linker.lock().unwrap();
-        let _ = linker_guard.define_lib_interpose_stubs(&module, cageid as u64);
-        drop(linker_guard);
     }
 
     // -- Run the module in the cage --

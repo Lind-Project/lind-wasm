@@ -51,6 +51,17 @@ pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
     )
 }
 
+/// Symbols that may be exported by multiple shared libraries (e.g. as re-exports of
+/// an import they received from libc). The first definition wins; subsequent duplicates
+/// are silently ignored rather than causing a "defined twice" error.
+pub(crate) fn is_dylink_dedup_symbol(name: &str) -> bool {
+    matches!(
+        name,
+        // Provided by libc; other libraries re-export it via GOT but must not redefine it.
+        "signal_callback"
+    )
+}
+
 /// Structure used to link wasm modules/instances together.
 ///
 /// This structure is used to assist in instantiating a [`Module`]. A [`Linker`]
@@ -358,81 +369,6 @@ impl<T> Linker<T> {
                     })?;
                 }
             }
-        }
-        Ok(())
-    }
-
-    /// Install library-level 3i portal stubs for unresolved imports that have a
-    /// registered handler in the LIB_SYMBOL_TABLE for `cage_id`.
-    ///
-    /// Called before `define_unknown_imports_as_traps` so that interposed symbols
-    /// get a real portal closure rather than a trap stub.
-    pub fn define_lib_interpose_stubs(&mut self, module: &Module, cage_id: u64) -> Result<()>
-    where
-        T: 'static,
-    {
-        // Allow shadowing so portals can override preloaded-library definitions
-        // (e.g. libc.cwasm already providing `env::rand`).
-        let prev_shadowing = self.allow_shadowing;
-        self.allow_shadowing(true);
-        let result = self._define_lib_interpose_stubs_inner(module, cage_id);
-        self.allow_shadowing(prev_shadowing);
-        result
-    }
-
-    fn _define_lib_interpose_stubs_inner(&mut self, module: &Module, cage_id: u64) -> Result<()>
-    where
-        T: 'static,
-    {
-        for import in module.imports() {
-            let ExternType::Func(func_ty) = import.ty() else {
-                continue;
-            };
-            // Look up the handler at install time. Capture (handler_cage, fn_ptr)
-            // in the closure so dispatch_lib_call bypasses HANDLERTABLE entirely.
-            let (handler_cage_id, fn_ptr) =
-                match threei::get_lib_handler(cage_id, import.module(), import.name()) {
-                    Some(pair) => pair,
-                    None => continue,
-                };
-            let func_ty_portal = func_ty.clone();
-            let name_for_err = import.name().to_string();
-            self.func_new(
-                import.module(),
-                import.name(),
-                func_ty,
-                move |_caller, params, results| {
-                    let mut raw = [0u64; 6];
-                    for (i, v) in params.iter().enumerate().take(6) {
-                        raw[i] = match v {
-                            Val::I32(x) => *x as u32 as u64,
-                            Val::I64(x) => *x as u64,
-                            Val::F32(b) => *b as u64,
-                            Val::F64(b) => *b,
-                            _ => 0,
-                        };
-                    }
-                    let ret = threei::dispatch_lib_call(
-                        handler_cage_id, fn_ptr,
-                        raw[0], cage_id, raw[1], cage_id, raw[2], cage_id,
-                        raw[3], cage_id, raw[4], cage_id, raw[5], cage_id,
-                    );
-                    for (slot, ty) in results.iter_mut().zip(func_ty_portal.results()) {
-                        *slot = match ty {
-                            ValType::I32 => Val::I32(ret),
-                            ValType::I64 => Val::I64(ret as i64),
-                            ValType::F32 => Val::F32(ret as u32),
-                            ValType::F64 => Val::F64(ret as u64),
-                            other => {
-                                return Err(format_err!(
-                                    "lib-3i portal: unsupported return type {other} for {name_for_err}"
-                                ));
-                            }
-                        };
-                    }
-                    Ok(())
-                },
-            )?;
         }
         Ok(())
     }
@@ -1256,6 +1192,11 @@ impl<T> Linker<T> {
                 }
                 other => other,
             };
+            // For dedup symbols, silently skip if already defined (first definition wins).
+            if module_name == "env" && is_dylink_dedup_symbol(&name) && self.map.get(&key).is_some()
+            {
+                continue;
+            }
             self.insert(key, Definition::new(store.0, export))?;
         }
         Ok(self)
