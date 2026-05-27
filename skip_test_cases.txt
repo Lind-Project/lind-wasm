@@ -15,3 +15,5 @@ dylink_tests/deterministic/rdynamic_main.c
 dylink_tests/deterministic/rdynamic_lib.c
 process_tests/deterministic/fork_max_cages.c
 ci/deterministic/ci_intentional_failure_tmp.c
+memory_tests/fail/mmap_address_truncation.c
+memory_tests/fail/mmap_null_address_mapping.c
