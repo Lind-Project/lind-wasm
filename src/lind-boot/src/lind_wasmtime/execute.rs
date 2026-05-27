@@ -525,13 +525,6 @@ fn attach_api(
         dynamic_loader,
     )?;
 
-    // Install register_lib_handler as a HostFunc so it is available even when
-    // libc.cwasm was built before the function was added to lind_syscall.c, and
-    // so it is propagated to child linkers via get_linker_snapshot_for_child.
-    if let Err(e) = linker_guard.define_register_lib_handler_stub() {
-        eprintln!("[lind] WARNING: define_register_lib_handler_stub failed: {:?}", e);
-    }
-
     // attach SharedMemory to the instance
     // Pass all modules so the memory is created with limits that satisfy every
     // module's import declaration (union: max of mins, min of maxes).
