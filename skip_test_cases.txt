@@ -10,3 +10,5 @@ dylink_tests/deterministic/dlopen_thread.c
 dylink_tests/deterministic/double_fork_dlopen.c
 dylink_tests/deterministic/fork_dlopen.c
 ci/deterministic/ci_intentional_failure_tmp.c
+memory_tests/fail/mmap_address_truncation.c
+memory_tests/fail/mmap_null_address_mapping.c
