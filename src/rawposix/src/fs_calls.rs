@@ -4547,7 +4547,7 @@ pub extern "C" fn ioctl_syscall(
     }
 
     // handle FIOCLEX, set close_on_exec flag for the file descriptor
-    if req as u64 == FIOCLEX {
+    if req as u64 == FIOCLEX as u64 {
         let ret = match fdtables::set_cloexec(cageid, vfd_arg, true) {
             Ok(_) => 0,
             Err(_) => syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor"),
@@ -4569,7 +4569,13 @@ pub extern "C" fn ioctl_syscall(
 
     let vfd = wrappedvfd.unwrap();
 
-    let ret = unsafe { libc::ioctl(vfd.underfd as i32, req as u64, ptrunion as *mut c_void) };
+    let ret = unsafe {
+        libc::ioctl(
+            vfd.underfd as i32,
+            req as libc::Ioctl,
+            ptrunion as *mut c_void,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
