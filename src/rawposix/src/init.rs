@@ -190,7 +190,11 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
     );
 
     // Check registration results and panic if any fail
-    if register_ret != 0 || copy_data_ret != 0 || copy_handler_table_ret != 0 || register_lib_ret != 0 {
+    if register_ret != 0
+        || copy_data_ret != 0
+        || copy_handler_table_ret != 0
+        || register_lib_ret != 0
+    {
         panic!(
             "register_threei_syscall: failed to register 3i syscalls, register_ret {}, copy_data_ret {}, copy_handler_table_ret {}, register_lib_ret {}",
             register_ret, copy_data_ret, copy_handler_table_ret, register_lib_ret
