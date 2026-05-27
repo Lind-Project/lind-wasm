@@ -58,11 +58,14 @@ FDTABLES_IMPL ?= dashmaparray
 # runtime uses asyncify-unwind/rewind based setjmp/longjmp instead of the wasm-EH based one.
 LIND_BOOT_EXTRA_FEATURES ?= $(if $(filter 1,$(LIND_ASYNCIFY_SETJMP)),asyncify-setjmp,)
 
+# When NO_LOGGING=1, omit the lind-logging feature (e.g. make lind-boot NO_LOGGING=1).
+LIND_LOGGING_FEATURE ?= $(if $(filter 1,$(NO_LOGGING)),,lind-logging)
+
 .PHONY: lind-boot
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
-	    --no-default-features --features "lind-logging fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES)"
+	    --no-default-features --features "$(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES)"
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
@@ -90,7 +93,7 @@ clean-lindfs:
 lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
 	cargo build --manifest-path src/lind-boot/Cargo.toml \
-	    --no-default-features --features "lind_debug lind-logging fdtables-$(FDTABLES_IMPL)"
+	    --no-default-features --features "lind_debug $(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL)"
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)

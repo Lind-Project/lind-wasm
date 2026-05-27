@@ -56,7 +56,10 @@ pub fn is_mmap_error(ret: usize) -> bool {
     }
 
     // Unaligned but not in errno range - this should never happen
-    lind_debug_panic!("mmap returned unaligned address outside errno range: 0x{:x}", ret);
+    lind_debug_panic!(
+        "mmap returned unaligned address outside errno range: 0x{:x}",
+        ret
+    );
     true // treat as error in LogOnly/NoAction mode
 }
 

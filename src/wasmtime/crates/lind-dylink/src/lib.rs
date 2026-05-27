@@ -84,7 +84,7 @@ pub fn dlsym_call<
             None => return -(DylinkErrorCode::ENOFOUND as i32),
         }
     } else if handle == RTLD_NEXT {
-        lind_debug_panic!(DYLINK, "[lind-dylink] dlsym RTLD_NEXT: not currently supported");
+        lind_debug_panic!("[lind-dylink] dlsym RTLD_NEXT: not currently supported");
         return -(DylinkErrorCode::ENOFOUND as i32);
     } else {
         match caller.find_library_symbol_from_local(handle, symbol) {

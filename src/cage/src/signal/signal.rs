@@ -89,7 +89,8 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
             None => {
                 lind_debug_panic!(
                     "epoch_kill_all: cage {} not found for thread {}",
-                    cageid, caller_tid
+                    cageid,
+                    caller_tid
                 );
 
                 return;
@@ -146,7 +147,8 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
             None => {
                 lind_debug_panic!(
                     "get_epoch_state: cage {} not found for thread {}",
-                    cageid, thread_id
+                    cageid,
+                    thread_id
                 );
 
                 return EPOCH_KILLED;
@@ -190,7 +192,8 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
             None => {
                 lind_debug_panic!(
                     "thread_check_killed: cage {} not found for thread {}",
-                    cageid, thread_id
+                    cageid,
+                    thread_id
                 );
 
                 return true;
@@ -237,7 +240,8 @@ pub fn wait_all_threads_exited(cageid: u64, _except_tid: u64) {
         None => {
             lind_debug_panic!(
                 "wait_all_threads_exited: cage {} not found for thread {}",
-                cageid, _except_tid
+                cageid,
+                _except_tid
             );
 
             return;
@@ -529,10 +533,7 @@ pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_debug_panic!(
-                "lind_check_no_pending_signal: cage {} not found",
-                cageid
-            );
+            lind_debug_panic!("lind_check_no_pending_signal: cage {} not found", cageid);
 
             return true;
         }
@@ -558,7 +559,8 @@ pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_
         None => {
             lind_debug_panic!(
                 "lind_signal_init: cage {} not found for thread {}",
-                cageid, threadid
+                cageid,
+                threadid
             );
 
             return;
@@ -587,7 +589,8 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
         None => {
             lind_debug_panic!(
                 "lind_thread_exit: cage {} not found for thread {}",
-                cageid, thread_id
+                cageid,
+                thread_id
             );
             return false;
         }

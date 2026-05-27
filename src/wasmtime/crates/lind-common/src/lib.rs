@@ -531,7 +531,8 @@ pub fn add_dylink_to_linker<
                     cloned_dynamic_loader.clone().unwrap(),
                 )
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;
@@ -543,7 +544,8 @@ pub fn add_dylink_to_linker<
             if dylink_enabled {
                 wasmtime_lind_dylink::dlsym_call(&mut caller, handle, name)
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;
@@ -555,7 +557,8 @@ pub fn add_dylink_to_linker<
             if dylink_enabled {
                 wasmtime_lind_dylink::dlclose_call(&mut caller, handle)
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;

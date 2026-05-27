@@ -861,7 +861,11 @@ pub extern "C" fn mmap_syscall(
         | MAP_ANONYMOUS as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic!("mmap: unsupported flags {:#x} (allowed: {:#x})", flags, allowed_flags);
+        lind_debug_panic!(
+            "mmap: unsupported flags {:#x} (allowed: {:#x})",
+            flags,
+            allowed_flags
+        );
     }
 
     if prot & PROT_EXEC > 0 {
@@ -1136,7 +1140,8 @@ pub extern "C" fn munmap_syscall(
         if result != act_start_addr {
             lind_debug_panic!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-                result as *const c_void, act_start_addr as *const c_void
+                result as *const c_void,
+                act_start_addr as *const c_void
             );
         }
         if result as isize == -1 {

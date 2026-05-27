@@ -1754,7 +1754,7 @@ impl<'a, T> StoreContextMut<'a, T> {
             .iter()
             .find(|(n, _)| n == &name)
         {
-            lind_debug_panic!(DYLINK,
+            lind_debug_panic!(
                 "[register_named_instance] wasm module with same name \"{}\" detected, currently not supported",
                 name
             );

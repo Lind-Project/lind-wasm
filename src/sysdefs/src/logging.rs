@@ -38,11 +38,15 @@ use std::sync::{Mutex, OnceLock};
 // Log categories
 // ---------------------------------------------------------------------------
 
-/// A log category used to route and filter log messages.
+/// A log category used to route and filter [`lind_log!`] messages.
+///
+/// `lind_debug_panic!` does not use categories — it always fires regardless
+/// of the active category set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LogCategory {
     /// Default category for uncategorized Lind diagnostics.
-    General,
+    /// Used when `lind_log!` is called without an explicit category.
+    Default,
     /// Dynamic linking: dlopen/dlsym/dlclose, GOT updates, symbol resolution,
     /// library replay, and related loader/runtime behavior.
     DYLINK,
@@ -54,14 +58,14 @@ pub enum LogCategory {
 impl LogCategory {
     fn as_str(self) -> &'static str {
         match self {
-            LogCategory::General => "General",
+            LogCategory::Default => "Default",
             LogCategory::DYLINK => "DYLINK",
             LogCategory::THREEI => "THREEI",
         }
     }
 }
 
-const BIT_GENERAL: u8 = 0b001;
+const BIT_DEFAULT: u8 = 0b001;
 const BIT_DYLINK: u8 = 0b010;
 const BIT_THREEI: u8 = 0b100;
 
@@ -71,7 +75,7 @@ pub struct LogCategorySet(u8);
 impl LogCategorySet {
     /// All categories enabled.
     pub fn all() -> Self {
-        Self(BIT_GENERAL | BIT_DYLINK | BIT_THREEI)
+        Self(BIT_DEFAULT | BIT_DYLINK | BIT_THREEI)
     }
 
     /// No categories enabled.
@@ -79,15 +83,15 @@ impl LogCategorySet {
         Self(0)
     }
 
-    /// Only `General` enabled.
-    pub fn general_only() -> Self {
-        Self(BIT_GENERAL)
+    /// Only `Default` category enabled.
+    pub fn default_only() -> Self {
+        Self(BIT_DEFAULT)
     }
 
     /// Returns `true` if `category` is in this set.
     pub fn contains(&self, category: LogCategory) -> bool {
         let bit = match category {
-            LogCategory::General => BIT_GENERAL,
+            LogCategory::Default => BIT_DEFAULT,
             LogCategory::DYLINK => BIT_DYLINK,
             LogCategory::THREEI => BIT_THREEI,
         };
@@ -96,7 +100,7 @@ impl LogCategorySet {
 
     /// Parse a comma-separated list of category names (case-insensitive).
     ///
-    /// Accepted values: `all`, `none`, `general`, `dylink`, `threei`, and
+    /// Accepted values: `all`, `none`, `default`, `dylink`, `threei`, and
     /// any comma-separated combination of the individual names.
     ///
     /// Returns an error for unrecognised names.
@@ -111,7 +115,7 @@ impl LogCategorySet {
         let mut bits: u8 = 0;
         for part in lower.split(',') {
             match part.trim() {
-                "general" => bits |= BIT_GENERAL,
+                "default" => bits |= BIT_DEFAULT,
                 "dylink" => bits |= BIT_DYLINK,
                 "threei" => bits |= BIT_THREEI,
                 other => {
@@ -373,6 +377,12 @@ pub fn log(
 
 /// Execute the soft-panic behavior.  Called by the `lind_debug_panic!` macro.
 ///
+/// Does **not** use log categories — `lind_debug_panic!` always fires regardless
+/// of the active [`LogCategorySet`].  [`LogOutput::None`] suppresses the log
+/// line but does **not** suppress the `panic!` in `PanicAndExit` mode; this
+/// lets CI environments silence ordinary log noise while still detecting
+/// unexpected conditions as test failures.
+///
 /// Behavior depends on the [`PanicBehavior`] in the active configuration:
 ///
 /// - [`PanicBehavior::PanicAndExit`]: logs then calls `panic!`.
@@ -384,13 +394,7 @@ pub fn log(
 /// Call sites **must always** supply explicit fallback control flow
 /// (a `return`, a default value, etc.) because this function may return
 /// normally in `LogOnly` and `NoAction` modes.
-pub fn debug_panic(
-    category: LogCategory,
-    args: fmt::Arguments<'_>,
-    file: &'static str,
-    line: u32,
-    module: &'static str,
-) {
+pub fn debug_panic(args: fmt::Arguments<'_>, file: &'static str, line: u32, module: &'static str) {
     let behavior = LIND_LOGGER
         .get()
         .map(|l| match &l.panic_behavior {
@@ -405,26 +409,17 @@ pub fn debug_panic(
         1 => {
             // LogOnly: write and return
             let line_str = format!(
-                "[LIND][DEBUG PANIC continuing][{}][{}:{} {}] {}",
-                category.as_str(),
-                file,
-                line,
-                module,
-                args
+                "[LIND][DEBUG PANIC continuing][{}:{} {}] {}",
+                file, line, module, args
             );
             write_to_logger(&line_str);
         }
         _ => {
-            // PanicAndExit: render to String so we can log and panic
+            // PanicAndExit: render to String first so we can both log and panic.
+            // Note: write_to_logger is a no-op when LogOutput::None, but the
+            // panic! still fires — intentional for CI environments.
             let msg = fmt::format(args);
-            let line_str = format!(
-                "[LIND][DEBUG PANIC][{}][{}:{} {}] {}",
-                category.as_str(),
-                file,
-                line,
-                module,
-                msg
-            );
+            let line_str = format!("[LIND][DEBUG PANIC][{}:{} {}] {}", file, line, module, msg);
             write_to_logger(&line_str);
             panic!("{}", line_str);
         }
@@ -481,16 +476,19 @@ macro_rules! lind_log {
     (THREEI, $($arg:tt)*) => {
         $crate::lind_log!(@cat $crate::logging::LogCategory::THREEI, $($arg)*)
     };
-    (General, $($arg:tt)*) => {
-        $crate::lind_log!(@cat $crate::logging::LogCategory::General, $($arg)*)
+    (Default, $($arg:tt)*) => {
+        $crate::lind_log!(@cat $crate::logging::LogCategory::Default, $($arg)*)
     };
-    // Default: General — must be last
+    // Default: Default category — must be last
     ($($arg:tt)*) => {
-        $crate::lind_log!(@cat $crate::logging::LogCategory::General, $($arg)*)
+        $crate::lind_log!(@cat $crate::logging::LogCategory::Default, $($arg)*)
     };
 }
 
 /// Soft panic for unexpected but potentially survivable conditions.
+///
+/// Does **not** accept a category — it always fires regardless of the active
+/// [`LogCategorySet`].  Use [`lind_log!`] for category-filtered diagnostics.
 ///
 /// Expands to nothing when the `lind-logging` Cargo feature is disabled.
 /// Formatting arguments are **not evaluated** in that case.
@@ -500,12 +498,7 @@ macro_rules! lind_log {
 /// ```rust
 /// use sysdefs::lind_debug_panic;
 ///
-/// // Default category (General)
 /// lind_debug_panic!("cage {} not found", 3u64);
-///
-/// // Explicit category
-/// lind_debug_panic!(DYLINK, "GOT entry for symbol {} missing", "malloc");
-/// lind_debug_panic!(THREEI, "handler for call {} not registered", 7u32);
 /// ```
 ///
 /// # Important
@@ -529,32 +522,17 @@ macro_rules! lind_log {
 /// ```
 #[macro_export]
 macro_rules! lind_debug_panic {
-    (@cat $category:expr, $($arg:tt)*) => {
+    ($($arg:tt)*) => {
         {
             #[cfg(feature = "lind-logging")]
             {
-                if $crate::logging::category_enabled($category) {
-                    $crate::logging::debug_panic(
-                        $category,
-                        ::core::format_args!($($arg)*),
-                        ::core::file!(),
-                        ::core::line!(),
-                        ::core::module_path!(),
-                    );
-                }
+                $crate::logging::debug_panic(
+                    ::core::format_args!($($arg)*),
+                    ::core::file!(),
+                    ::core::line!(),
+                    ::core::module_path!(),
+                );
             }
         }
-    };
-    (DYLINK, $($arg:tt)*) => {
-        $crate::lind_debug_panic!(@cat $crate::logging::LogCategory::DYLINK, $($arg)*)
-    };
-    (THREEI, $($arg:tt)*) => {
-        $crate::lind_debug_panic!(@cat $crate::logging::LogCategory::THREEI, $($arg)*)
-    };
-    (General, $($arg:tt)*) => {
-        $crate::lind_debug_panic!(@cat $crate::logging::LogCategory::General, $($arg)*)
-    };
-    ($($arg:tt)*) => {
-        $crate::lind_debug_panic!(@cat $crate::logging::LogCategory::General, $($arg)*)
     };
 }
