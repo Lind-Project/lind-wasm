@@ -8,6 +8,10 @@
 //                    buffer, update total_out/avail_out/next_out, return Z_STREAM_END
 //   deflateEnd     → return Z_OK (no real state to free)
 //
+// Compile:
+//   lind-clang -s --compile-grate zlib-python_grate.c -o zlib-python_grate.wasm
+//   cp zlib-python_grate.cwasm ../../lindfs/grates/
+//
 // Run:
 //   cd lindfs/
 //   lind-wasm --preload env=/lib/libz.so \

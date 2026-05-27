@@ -1005,6 +1005,9 @@ impl<T> Linker<T> {
         // The cage that owns this linker. None means apply global routes only.
         cage_id: Option<u64>,
         skiplist: Vec<&str>,
+        // Optional GOT to update when a portal is installed (so GOT.func.X also
+        // points to the portal rather than the real library function).
+        got: Option<&LindGOT>,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1040,9 +1043,9 @@ impl<T> Linker<T> {
                     // (cage_id, module_name, symbol), install a portal that captures
                     // (handler_cage_id, fn_ptr) at link time and calls dispatch_lib_call.
                     if let Some(cid) = cage_id {
-                        if let Some((handler_cage_id, fn_ptr)) =
-                            threei::get_lib_handler(cid, module_name, &name)
-                        {
+                        let maybe_handler = threei::get_lib_handler(cid, module_name, &name);
+                        if let Some((handler_cage_id, fn_ptr)) = maybe_handler {
+                            let name_for_got = name.clone();
                             let func_ty = original_func.ty(&store);
                             let func_ty_for_portal = func_ty.clone();
                             let portal = Func::new(
@@ -1093,6 +1096,30 @@ impl<T> Linker<T> {
                                     Ok(())
                                 },
                             );
+                            // Also add the portal to the shared function table and update
+                            // the GOT cache, so that PIC calls via GOT.func.X also hit the
+                            // portal rather than the original library function.
+                            if let Some(g) = got {
+                                let shared_table = self
+                                    .get(&mut store, "env", "__indirect_function_table")
+                                    .ok()
+                                    .and_then(|e| {
+                                        if let Extern::Table(t) = e {
+                                            Some(t)
+                                        } else {
+                                            None
+                                        }
+                                    });
+                                if let Some(table) = shared_table {
+                                    if let Ok(idx) = table.grow(
+                                        store.as_context_mut(),
+                                        1,
+                                        crate::Ref::Func(Some(portal.clone())),
+                                    ) {
+                                        g.cache_symbol(&name_for_got, idx as u32);
+                                    }
+                                }
+                            }
                             self.insert(key, Definition::new(store.0, Extern::Func(portal)))?;
                             continue;
                         }
@@ -1486,7 +1513,14 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                self.instance_dylink(store, module_name, instance, Some(cageid), vec![])
+                self.instance_dylink(
+                    store,
+                    module_name,
+                    instance,
+                    Some(cageid),
+                    vec![],
+                    Some(got),
+                )
             }
         }
     }
@@ -1583,7 +1617,7 @@ impl<T> Linker<T> {
                     }
                 }
 
-                self.instance_dylink(store, module_name, instance, Some(cageid), vec![])
+                self.instance_dylink(store, module_name, instance, Some(cageid), vec![], None)
             }
         }
     }
@@ -1796,8 +1830,14 @@ impl<T> Linker<T> {
 
                 if !is_local {
                     // only attach library symbol to Linker if it is global scope
-                    let _ =
-                        self.instance_dylink(store, module_name, instance, Some(cageid), vec![]);
+                    let _ = self.instance_dylink(
+                        store,
+                        module_name,
+                        instance,
+                        Some(cageid),
+                        vec![],
+                        Some(got),
+                    );
                 }
 
                 Ok(handler)

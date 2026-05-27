@@ -601,6 +601,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 instance,
                                 Some(child_cageid),
                                 vec!["signal_callback"],
+                                None,
                             )
                             .unwrap();
 
@@ -1179,6 +1180,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 instance,
                                 Some(child_cageid as u64),
                                 vec!["signal_callback"],
+                                None,
                             )
                             .unwrap();
 
