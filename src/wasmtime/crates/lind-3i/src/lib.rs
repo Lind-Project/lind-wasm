@@ -80,7 +80,7 @@ use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
 use wasmtime::error::Context as WasmtimeContext;
-use wasmtime::{Engine, Global, Instance, Linker, Module, Store, TypedFunc, Val};
+use wasmtime::{Engine, Global, Linker, Module, Store, TypedFunc, Val};
 
 type PassFptrTyped = TypedFunc<
     (
@@ -237,11 +237,6 @@ struct GrateWorker<T: 'static> {
     /// runtime context from other concurrently executing workers.
     store: Store<T>,
 
-    /// Worker-local instance of the grate module.
-    ///
-    /// Calls submitted to this worker execute inside this instance.
-    _instance: Instance,
-
     /// Typed handle to the grate entry export, if present.
     ///
     /// This is usually the `pass_fptr_to_wt` trampoline used to enter the
@@ -293,6 +288,7 @@ fn worker_stack_top(cageid: u64, workerid: WorkerId) -> u32 {
 }
 
 fn configured_grate_workers() -> usize {
+    // Defaults to MAX_GRATE_WORKERS; set LIND_GRATE_WORKERS to configure a smaller positive pool size.
     env::var(GRATE_WORKERS_ENV)
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
@@ -363,15 +359,6 @@ pub struct GrateHandler<T: 'static> {
     ///
     /// This is mainly used for diagnostics and error reporting.
     grate_id: u64,
-
-    /// Id of the designated main worker.
-    ///
-    /// This field records the canonical first worker in the pool.
-    ///
-    /// todo:
-    /// It may be useful for debugging or future policy decisions, even
-    /// though the current submission path leases any available worker.
-    main_worker: WorkerId,
 
     /// Configured concurrency policy for this grate.
     ///
@@ -447,7 +434,6 @@ impl<T: Clone + 'static> GrateHandler<T> {
             self.inner.lock().unwrap().workers.push_back(worker);
         }
 
-        self.main_worker = 1;
         Ok(())
     }
 }
@@ -727,12 +713,11 @@ where
     let stack_top = worker_stack_top(cageid, worker_id);
     let stack_pointer = instance
         .get_global(&mut store, "__stack_pointer")
-        .context("missing __stack_pointer")?;
+        .ok_or_else(|| anyhow::anyhow!("missing __stack_pointer"))?;
 
     Ok(GrateWorker {
         worker_id,
         store,
-        _instance: instance,
         pass_fptr_func,
         stack_pointer,
         stack_base,
@@ -750,6 +735,9 @@ where
 ///
 /// This function eagerly creates the configured worker pool so that the handler
 /// is ready to serve grate calls immediately after registration.
+///
+/// By default, the pool size is MAX_GRATE_WORKERS; set LIND_GRATE_WORKERS
+/// to configure it.
 pub fn create_handler_for_cage<T: Clone + 'static>(
     template: &GrateTemplate<T>,
     host: T,
@@ -758,7 +746,6 @@ pub fn create_handler_for_cage<T: Clone + 'static>(
 ) -> anyhow::Result<GrateHandler<T>> {
     let mut handler = GrateHandler {
         grate_id: cageid,
-        main_worker: 1,
         concurrency_mode,
         serial_executor: SerialExecutor::new(),
         inner: Mutex::new(GrateHandlerInner {
