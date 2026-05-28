@@ -130,8 +130,8 @@ COPY tools ./tools
 COPY --parents src/glibc Makefile .
 COPY --from=build-lind-boot --parents build/lind-boot .
 RUN make sysroot \
- && test -f lindfs/lib/libc.cwasm \
- && test -f lindfs/lib/libm.cwasm
+ && test -f lindfs/lib/libc.so \
+ && test -f lindfs/lib/libm.so
 
 
 # Build Docker image that includes the full lind-wasm toolchain
@@ -171,7 +171,7 @@ RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_compi
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 # NOTE: Precompiled lindfs runtime libraries are mounted and copied into the
-# writable test lindfs so runtime preloads like /lib/libc.cwasm are available.
+# writable test lindfs so runtime preloads like /lib/libc.so are available.
 # Create symlink so hardcoded paths in wasmtime match Docker environment
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time

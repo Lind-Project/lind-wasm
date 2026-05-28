@@ -1762,6 +1762,13 @@ impl<'a, T> StoreContextMut<'a, T> {
         self.0.named_module_instances.push((name, id));
     }
 
+    // Return true if a WASM module with the given intrinsic name has already been
+    // instantiated and registered (covers both preloaded and dlopen'd libraries).
+    #[allow(missing_docs)]
+    pub fn is_named_instance_registered(&self, name: &str) -> bool {
+        self.0.named_module_instances.iter().any(|(n, _)| n == name)
+    }
+
     // get and set library symbol table, used for cloning symbol table across fork/thread
     #[allow(missing_docs)]
     pub fn get_library_symbol_table(&self) -> &SymbolTable {

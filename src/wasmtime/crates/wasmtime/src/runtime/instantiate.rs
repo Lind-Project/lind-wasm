@@ -12,8 +12,8 @@ use core::ops::Range;
 use core::str;
 use wasmtime_environ::{
     CompiledFunctionsTable, CompiledModuleInfo, DefinedFuncIndex, DylinkImportInfo, DylinkMemInfo,
-    EntityRef, FilePos, FuncIndex, FuncKey, FunctionLoc, FunctionName, Metadata, Module,
-    ModuleInternedTypeIndex, StaticModuleIndex,
+    DylinkNeededInfo, EntityRef, FilePos, FuncIndex, FuncKey, FunctionLoc, FunctionName, Metadata,
+    Module, ModuleInternedTypeIndex, StaticModuleIndex,
 };
 
 /// A compiled wasm module, ready to be instantiated.
@@ -103,6 +103,11 @@ impl CompiledModule {
     /// lind-wasm: retrieve dynamic loading information
     pub fn dylink_import_info(&self) -> Option<&DylinkImportInfo> {
         self.module.dylink_import_info.as_ref()
+    }
+
+    /// lind-wasm: retrieve dynamic loading needed (dependency) information
+    pub fn dylink_needed_info(&self) -> Option<&DylinkNeededInfo> {
+        self.module.dylink_needed_info.as_ref()
     }
 
     /// Looks up the `name` section name for the function index `idx`, if one

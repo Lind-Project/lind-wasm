@@ -21,8 +21,9 @@ use wasmparser::{Parser, ValidPayload, Validator};
 #[cfg(feature = "debug")]
 use wasmtime_environ::FrameTable;
 use wasmtime_environ::{
-    CompiledFunctionsTable, CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, EntityIndex,
-    HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex, WasmChecksum,
+    CompiledFunctionsTable, CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, DylinkNeededInfo,
+    EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex,
+    WasmChecksum,
 };
 #[cfg(feature = "gc")]
 use wasmtime_unwinder::ExceptionTable;
@@ -1111,6 +1112,12 @@ impl Module {
     #[allow(missing_docs)]
     pub fn dylink_importinfo<'a>(&'a self) -> Option<&DylinkImportInfo> {
         self.compiled_module().dylink_import_info()
+    }
+
+    // lind-wasm: retrieve dynamic loading needed (dependency) information
+    #[allow(missing_docs)]
+    pub fn dylink_neededinfo<'a>(&'a self) -> Option<&DylinkNeededInfo> {
+        self.compiled_module().dylink_needed_info()
     }
 
     pub(crate) fn id(&self) -> CompiledModuleId {
