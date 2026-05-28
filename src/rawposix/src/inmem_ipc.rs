@@ -16,13 +16,16 @@ use sysdefs::constants::fs_const::O_NONBLOCK;
 use sysdefs::constants::lind_platform_const::{FDKIND_IMPIPE, FDKIND_IMSOCK};
 
 const PIPE_CAPACITY: usize = 65_536;
+const UDSOCK_CAPACITY: usize = 212_992;
 const PAGE_SIZE: usize = 4096;
 const CANCEL_CHECK_INTERVAL: usize = 1_048_576;
-const EPHEMERAL_PORT_START: u16 = 49_152;
+const EPHEMERAL_PORT_RANGE_START: u16 = 32_768;
+const EPHEMERAL_PORT_RANGE_END: u16 = 60_999;
+const LOOPBACK_ADDR: u32 = 0x7f00_0007;
 
 static NEXT_ENDPOINT_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_SOCKET_ID: AtomicU64 = AtomicU64::new(1);
-static NEXT_EPHEMERAL_PORT: AtomicU64 = AtomicU64::new(EPHEMERAL_PORT_START as u64);
+static NEXT_EPHEMERAL_PORT: AtomicU64 = AtomicU64::new(EPHEMERAL_PORT_RANGE_END as u64);
 
 static ENDPOINTS: Lazy<Mutex<HashMap<u64, Arc<PipeEndpoint>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -235,8 +238,9 @@ struct SocketState {
 
 impl InmemSocket {
     fn new(domain: i32, socktype: i32, protocol: i32) -> Self {
+        let capacity = socket_capacity(domain);
         Self {
-            incoming: Arc::new(ByteQueue::new(PIPE_CAPACITY)),
+            incoming: Arc::new(ByteQueue::new(capacity)),
             state: Mutex::new(SocketState {
                 domain,
                 socktype,
@@ -249,8 +253,8 @@ impl InmemSocket {
                 write_shutdown: false,
                 reuseaddr: 0,
                 reuseport: 0,
-                sndbuf: PIPE_CAPACITY as i32,
-                rcvbuf: PIPE_CAPACITY as i32,
+                sndbuf: capacity as i32,
+                rcvbuf: capacity as i32,
                 linger: linger {
                     l_onoff: 0,
                     l_linger: 0,
@@ -260,6 +264,14 @@ impl InmemSocket {
             }),
             accept_ready: Condvar::new(),
         }
+    }
+}
+
+fn socket_capacity(domain: i32) -> usize {
+    if domain == libc::AF_UNIX || domain == libc::AF_INET {
+        UDSOCK_CAPACITY
+    } else {
+        PIPE_CAPACITY
     }
 }
 
@@ -878,18 +890,27 @@ fn unix_sockaddr_key(addr: *mut u8, addrlen: socklen_t) -> Option<String> {
 fn inet_sockaddr_key(addr: *mut u8) -> Option<String> {
     let sockaddr = unsafe { &*(addr as *const sockaddr_in) };
     let ip = u32::from_be(sockaddr.sin_addr.s_addr);
-    if (ip >> 24) != 127 {
+    if ip != LOOPBACK_ADDR {
         return None;
     }
 
     let port = u16::from_be(sockaddr.sin_port);
-    Some(format!("inet:{}", port))
+    Some(format!("unix:tmp/loopback{}", port))
 }
 
 fn next_ephemeral_key(domain: i32) -> String {
     match domain {
         libc::AF_INET => {
-            let port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed) as u16;
+            let port = NEXT_EPHEMERAL_PORT
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                    let next = if current <= EPHEMERAL_PORT_RANGE_START as u64 {
+                        EPHEMERAL_PORT_RANGE_END as u64
+                    } else {
+                        current - 1
+                    };
+                    Some(next)
+                })
+                .unwrap_or(EPHEMERAL_PORT_RANGE_END as u64) as u16;
             format!("inet:{}", port)
         }
         _ => {
