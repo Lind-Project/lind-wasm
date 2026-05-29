@@ -58,8 +58,8 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __wasm_apply_global_relocs func __wasm_apply_global_relocs
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __stack_pointer global __stack_pointer
 
-# apply wasm-opt
-$REPO_ROOT/scripts/lind-wasm-opt --target=library $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
+# apply wasm-opt (use --target=libc: libc owns signal_callback, so epoch-main-module must be omitted)
+$REPO_ROOT/scripts/lind-wasm-opt --target=libc $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
 
 # do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libc.cwasm
