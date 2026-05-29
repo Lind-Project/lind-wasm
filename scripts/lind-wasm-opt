@@ -10,6 +10,7 @@ set -Eeuo pipefail
 # Exactly one of --target or --static must be given:
 #   --target=main      Dynamic main-module binary.
 #   --target=library   Dynamic shared-library binary.
+#   --target=libc      libc shared library (already owns signal_callback; omits epoch-main-module).
 #   --static           Static (non-dynamic) binary.
 #
 # Options:
@@ -22,6 +23,7 @@ set -Eeuo pipefail
 # Examples:
 #   lind-wasm-opt --target=main    input.wasm -o output.wasm
 #   lind-wasm-opt --target=library input.wasm -o output.wasm
+#   lind-wasm-opt --target=libc    libc.so -o libc.so
 #   lind-wasm-opt --static         input.wasm -o output.wasm
 #   lind-wasm-opt --target=main --fpcast-emu input.wasm -o output.wasm
 #   lind-wasm-opt --static --fpcast-emu      input.wasm -o output.wasm
@@ -41,11 +43,11 @@ PRINT_CMD="false"
 # --- option parsing ---
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
-    --target=main|--target=library)
+    --target=main|--target=library|--target=libc)
       TARGET="${1#--target=}"
       ;;
     --target=*)
-      echo "error: unknown target '${1#--target=}' (expected: main, library)" >&2
+      echo "error: unknown target '${1#--target=}' (expected: main, library, libc)" >&2
       usage
       exit 2
       ;;
@@ -86,7 +88,7 @@ if [[ "${STATIC}" == "true" && -n "${TARGET}" ]]; then
 fi
 
 if [[ "${STATIC}" == "false" && -z "${TARGET}" ]]; then
-  echo "error: one of --target=main, --target=library, or --static is required" >&2
+  echo "error: one of --target=main, --target=library, --target=libc, or --static is required" >&2
   usage
   exit 2
 fi
@@ -168,7 +170,7 @@ elif [[ "${TARGET}" == "main" ]]; then
   # --enable-reference-types is required because --translate-to-exnref emits (ref exn) blocks
   # (via catch_all_ref) when setjmp frames are nested across function calls.
   [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
-else  # library
+elif [[ "${TARGET}" == "library" ]]; then
   if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
     LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
   else
@@ -183,10 +185,22 @@ else  # library
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
   fi
-  # Convert clang 18 legacy EH (try/catch/throw) to standard EH (try_table/throw) after
-  # asyncify: asyncify handles legacy EH natively but Cranelift only supports standard EH.
-  # --enable-reference-types is required because --translate-to-exnref emits (ref exn) blocks
-  # (via catch_all_ref) when setjmp frames are nested across function calls.
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
+else  # libc — owns signal_callback; inject epoch calls without redefining/reimporting it
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  else
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  fi
+  if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
+    LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import)
+  fi
+  if [[ "${WITHOUT_ASYNCIFY}" == "false" ]]; then
+    LIND_FLAGS+=(--asyncify --pass-arg=asyncify-import-globals)
+  fi
+  if [[ "${WITH_FPCAST}" == "true" ]]; then
+    LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
+  fi
   [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 fi
 
