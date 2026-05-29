@@ -667,13 +667,14 @@ pub fn recvfrom(fdentry: FDTableEntry, buf: *mut c_void, buflen: usize, flags: i
     read_with_mode(fdentry, buf as *mut u8, buflen, force_nonblocking)
 }
 
-pub fn getsockname(socket_id: u64) -> Result<(sockaddr_storage, socklen_t), i32> {
-    let socket = get_socket(socket_id)?;
-    let state = socket.state.lock().unwrap();
-    let key = state.local_key.as_deref();
+fn sockaddr_from_key(
+    domain: i32,
+    key: Option<&str>,
+    opname: &str,
+) -> Result<(sockaddr_storage, socklen_t), i32> {
     let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
 
-    match state.domain {
+    match domain {
         libc::AF_INET => {
             let sockaddr = unsafe { &mut *(&mut storage as *mut _ as *mut sockaddr_in) };
             sockaddr.sin_family = libc::AF_INET as libc::sa_family_t;
@@ -699,10 +700,37 @@ pub fn getsockname(socket_id: u64) -> Result<(sockaddr_storage, socklen_t), i32>
         }
         _ => Err(syscall_error(
             Errno::EOPNOTSUPP,
-            "getsockname",
+            opname,
             "unsupported in-memory socket family",
         )),
     }
+}
+
+pub fn getsockname(socket_id: u64) -> Result<(sockaddr_storage, socklen_t), i32> {
+    let socket = get_socket(socket_id)?;
+    let state = socket.state.lock().unwrap();
+    sockaddr_from_key(state.domain, state.local_key.as_deref(), "getsockname")
+}
+
+pub fn getpeername(socket_id: u64) -> Result<(sockaddr_storage, socklen_t), i32> {
+    let socket = get_socket(socket_id)?;
+    let (domain, peer) = {
+        let state = socket.state.lock().unwrap();
+        (state.domain, state.peer.as_ref().and_then(Weak::upgrade))
+    };
+
+    let peer = match peer {
+        Some(peer) => peer,
+        None => {
+            return Err(syscall_error(
+                Errno::ENOTCONN,
+                "getpeername",
+                "socket is not connected",
+            ))
+        }
+    };
+    let peer_state = peer.state.lock().unwrap();
+    sockaddr_from_key(domain, peer_state.local_key.as_deref(), "getpeername")
 }
 
 pub fn setsockopt(

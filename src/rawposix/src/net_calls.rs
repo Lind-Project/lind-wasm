@@ -2417,6 +2417,22 @@ pub extern "C" fn getpeername_syscall(
         return syscall_error(Errno::EFAULT, "getpeername_syscall", "len is null");
     }
 
+    match fdtables::translate_virtual_fd(fd_cageid, fd_arg) {
+        Ok(entry) if entry.fdkind == FDKIND_IMSOCK => {
+            let (storage, actual_len) = match inmem_ipc::getpeername(entry.underfd) {
+                Ok(value) => value,
+                Err(e) => return e,
+            };
+            unsafe {
+                let requested_len = *lenp;
+                copy_out_sockaddr(user_addr, lenp, &storage);
+                *lenp = actual_len.min(requested_len);
+            }
+            return 0;
+        }
+        _ => {}
+    }
+
     let mut len: socklen_t = unsafe { *lenp };
     let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
     if len > max_len {
