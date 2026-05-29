@@ -2687,6 +2687,18 @@ pub extern "C" fn renameat2_syscall(
 /// Linux's `chown(path, uid, gid)` is implemented as `fchownat(AT_FDCWD, path, uid, gid, 0)`,
 /// and `lchown` as `fchownat(AT_FDCWD, path, uid, gid, AT_SYMLINK_NOFOLLOW)` — but glibc may
 /// route them via dedicated syscalls, so we expose all three.
+fn ignore_inmem_unix_socket_enoent(errno: i32, guest_path: Option<&str>) -> bool {
+    if errno != Errno::ENOENT as i32 {
+        return false;
+    }
+
+    if let Some(path) = guest_path {
+        return inmem_ipc::unix_path_is_bound(path);
+    }
+
+    false
+}
+
 pub extern "C" fn fchownat_syscall(
     cageid: u64,
     dirfd_arg: u64,
@@ -2706,6 +2718,11 @@ pub extern "C" fn fchownat_syscall(
     let owner = sc_convert_sysarg_to_u32(owner_arg, owner_cageid, cageid);
     let group = sc_convert_sysarg_to_u32(group_arg, group_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+    let guest_path = if dirfd == AT_FDCWD {
+        get_cstr(pathname_arg).ok().map(str::to_owned)
+    } else {
+        None
+    };
 
     if !sc_unusedarg(arg6, arg6_cageid) {
         panic!(
@@ -2735,6 +2752,9 @@ pub extern "C" fn fchownat_syscall(
     let ret = unsafe { libc::fchownat(kernel_fd, c_path.as_ptr(), owner, group, flags) };
     if ret < 0 {
         let errno = get_errno();
+        if ignore_inmem_unix_socket_enoent(errno, guest_path.as_deref()) {
+            return 0;
+        }
         return handle_errno(errno, "fchownat");
     }
     ret
@@ -2755,6 +2775,7 @@ pub extern "C" fn chown_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    let guest_path = get_cstr(path_arg).ok().map(str::to_owned);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "chown", "path conversion failed"),
@@ -2775,6 +2796,9 @@ pub extern "C" fn chown_syscall(
     let ret = unsafe { libc::chown(path.as_ptr(), owner, group) };
     if ret < 0 {
         let errno = get_errno();
+        if ignore_inmem_unix_socket_enoent(errno, guest_path.as_deref()) {
+            return 0;
+        }
         return handle_errno(errno, "chown");
     }
     ret
@@ -2795,6 +2819,7 @@ pub extern "C" fn lchown_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    let guest_path = get_cstr(path_arg).ok().map(str::to_owned);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "lchown", "path conversion failed"),
@@ -2815,6 +2840,9 @@ pub extern "C" fn lchown_syscall(
     let ret = unsafe { libc::lchown(path.as_ptr(), owner, group) };
     if ret < 0 {
         let errno = get_errno();
+        if ignore_inmem_unix_socket_enoent(errno, guest_path.as_deref()) {
+            return 0;
+        }
         return handle_errno(errno, "lchown");
     }
     ret
