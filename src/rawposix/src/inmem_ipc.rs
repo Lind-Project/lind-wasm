@@ -429,6 +429,19 @@ pub fn close_fd(fdentry: FDTableEntry, _count: u64) -> Result<(), i32> {
     Ok(())
 }
 
+pub fn unix_path_is_bound(path: &str) -> bool {
+    let mut key = String::from("unix:");
+    key.push_str(path);
+    if LISTENERS.lock().unwrap().contains_key(&key) {
+        return true;
+    }
+
+    SOCKETS.lock().unwrap().values().any(|socket| {
+        let state = socket.state.lock().unwrap();
+        state.closed == false && state.local_key.as_deref() == Some(key.as_str())
+    })
+}
+
 fn close_socket(socket: &Arc<InmemSocket>) {
     let (key, peer) = {
         let mut state = socket.state.lock().unwrap();

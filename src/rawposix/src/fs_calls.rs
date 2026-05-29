@@ -4089,6 +4089,7 @@ pub extern "C" fn chmod_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Type conversion
+    let guest_path = get_cstr(path_arg).ok().map(str::to_owned);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "chmod", "path conversion failed"),
@@ -4113,6 +4114,13 @@ pub extern "C" fn chmod_syscall(
     // Error handling
     if ret < 0 {
         let errno = get_errno();
+        if errno == Errno::ENOENT as i32 {
+            if let Some(guest_path) = guest_path.as_deref() {
+                if inmem_ipc::unix_path_is_bound(guest_path) {
+                    return 0;
+                }
+            }
+        }
         return handle_errno(errno, "chmod");
     }
 
