@@ -1631,7 +1631,18 @@ pub extern "C" fn accept_syscall(
                 Ok(socket_id) => socket_id,
                 Err(e) => return e,
             };
-            inmem_ipc::clear_sockaddr(addr, _len_arg as *mut socklen_t);
+            if !addr.is_null() && _len_arg != 0 {
+                let (storage, actual_len) = match inmem_ipc::getpeername(socket_id) {
+                    Ok(value) => value,
+                    Err(e) => return e,
+                };
+                unsafe {
+                    let lenp = _len_arg as *mut socklen_t;
+                    let requested_len = *lenp;
+                    copy_out_sockaddr(addr as *mut SockAddr, lenp, &storage);
+                    *lenp = actual_len.min(requested_len);
+                }
+            }
             return fdtables::get_unused_virtual_fd(cageid, FDKIND_IMSOCK, socket_id, false, 0)
                 .unwrap() as i32;
         }
@@ -1693,7 +1704,18 @@ pub extern "C" fn accept4_syscall(
                 Ok(socket_id) => socket_id,
                 Err(e) => return e,
             };
-            inmem_ipc::clear_sockaddr(addr, len_arg as *mut socklen_t);
+            if !addr.is_null() && len_arg != 0 {
+                let (storage, actual_len) = match inmem_ipc::getpeername(socket_id) {
+                    Ok(value) => value,
+                    Err(e) => return e,
+                };
+                unsafe {
+                    let lenp = len_arg as *mut socklen_t;
+                    let requested_len = *lenp;
+                    copy_out_sockaddr(addr as *mut SockAddr, lenp, &storage);
+                    *lenp = actual_len.min(requested_len);
+                }
+            }
             let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
             let perfdinfo = if (flags & libc::SOCK_NONBLOCK) != 0 {
                 libc::O_NONBLOCK as u64
