@@ -829,13 +829,6 @@ pub extern "C" fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let addr = {
-        if addr_arg == 0 {
-            0 as *mut u8
-        } else {
-            sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
-        }
-    };
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -871,9 +864,11 @@ pub extern "C" fn mmap_syscall(
         lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
     }
 
-    // check if the provided address is multiple of pages
-    let rounded_addr = round_up_page(addr as u64);
-    if rounded_addr != addr as u64 {
+    // Page-align check on the low bits of addr_arg.  Page alignment is a
+    // numeric property of the low bits regardless of which cage's base
+    // address gets added, since base_address is itself page-aligned.
+    let rounded_addr = round_up_page(addr_arg);
+    if rounded_addr != addr_arg {
         return syscall_error(Errno::EINVAL, "mmap", "address it not aligned");
     }
 
@@ -889,31 +884,50 @@ pub extern "C" fn mmap_syscall(
     // round up length to be multiple of pages
     let rounded_length = round_up_page(len as u64);
 
-    let mut useraddr = addr as u32;
-    // if MAP_FIXED is not set, then we need to find an address for the user
-    if flags & MAP_FIXED as i32 == 0 {
-        let vmmap = cage.vmmap.write();
-        let result;
+    // Resolve (useraddr in calling cage, sysaddr host pointer).  The addr
+    // arrives in one of two forms, distinguished inside
+    // `sc_convert_uaddr_to_host` by checking whether the address is already in
+    // `addr_cageid`'s host linear-memory reservation:
+    //   - cage uaddr outside that host reservation: translated via the cage's base.
+    //   - host pointer already inside that reservation: passthrough.
+    let useraddr: u32;
+    let sysaddr: usize;
 
-        // pick an address of appropriate size, anywhere
-        if useraddr == 0 {
-            result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
+    if flags & MAP_FIXED as i32 == 0 {
+        // No fixed address — runtime picks via the calling cage's vmmap.
+        // Treat addr_arg as a hint only if it looks like a cage uaddr (the
+        // calling cage's range); otherwise ignore (a grate-supplied host
+        // pointer hint isn't meaningful in the calling cage's address space).
+        let hint_useraddr = sc_convert_host_to_uaddr(addr_arg as usize, cageid).unwrap_or(0);
+
+        let vmmap = cage.vmmap.write();
+        let result = if hint_useraddr == 0 {
+            vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1)
         } else {
-            // use address user provided as hint to find address
-            result = vmmap.find_map_space_with_hint(
+            vmmap.find_map_space_with_hint(
                 rounded_length as u32 >> PAGESHIFT,
                 1,
-                addr as u32 >> PAGESHIFT,
-            );
-        }
+                hint_useraddr >> PAGESHIFT,
+            )
+        };
 
-        // did not find desired memory region
         if result.is_none() {
             return syscall_error(Errno::ENOMEM, "mmap", "no memory");
         }
 
-        let space = result.unwrap();
-        useraddr = (space.start() << PAGESHIFT) as u32;
+        useraddr = (result.unwrap().start() << PAGESHIFT) as u32;
+        sysaddr = vmmap.user_to_sys(useraddr);
+        drop(vmmap);
+    } else {
+        // Caller specified an exact address.
+        sysaddr = sc_convert_uaddr_to_host(addr_arg, addr_cageid, cageid) as usize;
+        // Derive the calling cage's uaddr for the return value + vmmap
+        // bookkeeping.  Errors here mean the sysaddr is outside the cage's
+        // linear memory range — invalid for MAP_FIXED in this cage.
+        useraddr = match sc_convert_host_to_uaddr(sysaddr, cageid) {
+            Ok(u) => u,
+            Err(e) => return syscall_error(e, "mmap", "addr outside cage"),
+        };
     }
 
     flags |= MAP_FIXED as i32;
@@ -922,12 +936,6 @@ pub extern "C" fn mmap_syscall(
     if (flags & MAP_PRIVATE as i32 == 0) == (flags & MAP_SHARED as i32 == 0) {
         return syscall_error(Errno::EINVAL, "mmap", "invalid flags");
     }
-
-    let vmmap = cage.vmmap.read();
-
-    let sysaddr = vmmap.user_to_sys(useraddr);
-
-    drop(vmmap);
 
     if rounded_length > 0 {
         if flags & MAP_ANONYMOUS as i32 > 0 {
@@ -1188,7 +1196,17 @@ pub extern "C" fn brk_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let brk = sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid);
+    // Cage-side glibc brk.c passes a raw uaddr (low 32 bits); the runtime
+    // page-aligns it and compares against vmmap.heap_start in user space.
+    // A grate forwarding the call via make_threei_call goes through glibc's
+    // TRANSLATE_ARG_TO_HOST which produces a host sysaddr — convert back to a
+    // cage uaddr before proceeding.  `sc_convert_host_to_uaddr` returns Err
+    // when the arg is below the cage's base (i.e. already a small uaddr); in
+    // that case fall back to the standard u64→i32 cast.
+    let brk = match sc_convert_host_to_uaddr(brk_arg as usize, cageid) {
+        Ok(u) => u as i32,
+        Err(_) => sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid),
+    };
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)

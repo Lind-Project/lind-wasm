@@ -890,6 +890,15 @@ pub fn copy_data_between_cages(
         panic!("Dynamic allocation not yet supported in copy_data_between_cages");
     }
 
+    // Resolve src/dest to host pointers.  glibc's TRANSLATE_UADDR_TO_HOST only
+    // fires when the arg is in the calling cage; cross-cage args (e.g. a uaddr
+    // returned from a previous mmap that the caller is passing back in for
+    // someone else's cage) arrive untranslated.  `sc_convert_uaddr_to_host`
+    // handles both forms — already-host passthrough, cage uaddr gets the
+    // named cage's base added.
+    let srcaddr = sc_convert_uaddr_to_host(srcaddr, srccage, _thiscage);
+    let destaddr = sc_convert_uaddr_to_host(destaddr, destcage, _thiscage);
+
     // Decide the actual number of bytes to copy depending on CopyType.
     //
     // `RawMemcpy`:
