@@ -897,11 +897,11 @@ pub extern "C" fn mmap_syscall(
 
         // pick an address of appropriate size, anywhere
         if useraddr == 0 {
-            result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
+            result = vmmap.find_map_space((rounded_length >> PAGESHIFT) as u32, 1);
         } else {
             // use address user provided as hint to find address
             result = vmmap.find_map_space_with_hint(
-                rounded_length as u32 >> PAGESHIFT,
+                (rounded_length >> PAGESHIFT) as u32,
                 1,
                 addr as u32 >> PAGESHIFT,
             );
@@ -914,6 +914,10 @@ pub extern "C" fn mmap_syscall(
 
         let space = result.unwrap();
         useraddr = (space.start() << PAGESHIFT) as u32;
+    }
+
+    if (useraddr as u64) + rounded_length > 0x100000000u64 {
+        return syscall_error(Errno::EINVAL, "mmap", "address range overflows 32-bit space");
     }
 
     flags |= MAP_FIXED as i32;
@@ -1117,8 +1121,12 @@ pub extern "C" fn munmap_syscall(
 
     let mut vmmap = cage.vmmap.write();
 
-    let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
-    let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
+    let req_start: u32 = (vmmap.sys_to_user(rounded_addr) >> PAGESHIFT) as u32;
+    let page_count: u32 = (rounded_length >> PAGESHIFT) as u32;
+    let req_end: u32 = match req_start.checked_add(page_count) {
+        Some(end) => end,
+        None => return syscall_error(Errno::EINVAL, "munmap", "address range overflows 32-bit space"),
+    };
 
     let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
 
@@ -1263,11 +1271,24 @@ pub extern "C" fn brk_syscall(
         heap.file_size,
         heap.cage_id,
     );
+    
 
-    let old_heap_end_usr = (old_brk_page * PAGESIZE) as u32;
+    let old_heap_end_u64 = (old_brk_page as u64) * (PAGESIZE as u64);
+    let new_heap_end_u64 = (brk_page as u64) * (PAGESIZE as u64);
+
+    // Prevent 32-bit address-space overflow
+    if old_heap_end_u64 > 0xFFFF_FFFFu64 || new_heap_end_u64 > 0xFFFF_FFFFu64 {
+        return syscall_error(
+            Errno::ENOMEM,
+            "brk",
+            "heap end address overflows 32-bit space",
+        );
+    }
+
+    let old_heap_end_usr = old_heap_end_u64 as u32;
     let old_heap_end_sys = vmmap.user_to_sys(old_heap_end_usr) as *mut u8;
 
-    let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
+    let new_heap_end_usr = new_heap_end_u64 as u32;
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
 
     drop(vmmap);
@@ -4911,6 +4932,10 @@ pub extern "C" fn shmat_syscall(
     let space = result.unwrap();
     // Update the user address to the start of the allocated memory space.
     useraddr = (space.start() << PAGESHIFT) as u32;
+
+    if (useraddr as u64) + rounded_length > 0x100000000u64 {
+        return syscall_error(Errno::EINVAL, "shmat", "address range overflows 32-bit space");
+    }
 
     // Convert the user address into a system address.
     // Read the virtual memory map to access the user address space.
