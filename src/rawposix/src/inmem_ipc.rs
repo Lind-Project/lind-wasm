@@ -931,7 +931,7 @@ fn unix_sockaddr_key(addr: *mut u8, addrlen: socklen_t) -> Option<String> {
 fn inet_sockaddr_key(addr: *mut u8) -> Option<String> {
     let sockaddr = unsafe { &*(addr as *const sockaddr_in) };
     let ip = u32::from_be(sockaddr.sin_addr.s_addr);
-    if ip != LOOPBACK_ADDR {
+    if ip != LOOPBACK_ADDR && ip != 0 {
         return None;
     }
 
