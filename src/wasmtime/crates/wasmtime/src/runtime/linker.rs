@@ -52,6 +52,17 @@ pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
     )
 }
 
+/// Symbols that may be exported by multiple shared libraries (e.g. as re-exports of
+/// an import they received from libc). The first definition wins; subsequent duplicates
+/// are silently ignored rather than causing a "defined twice" error.
+pub(crate) fn is_dylink_dedup_symbol(name: &str) -> bool {
+    matches!(
+        name,
+        // Provided by libc; other libraries re-export it via GOT but must not redefine it.
+        "signal_callback"
+    )
+}
+
 /// Structure used to link wasm modules/instances together.
 ///
 /// This structure is used to assist in instantiating a [`Module`]. A [`Linker`]
@@ -1028,11 +1039,16 @@ impl<T> Linker<T> {
                 } else {
                     self.import_key(module_name, Some(name))
                         .ok()
-                        .map(|key| (key, e.into_extern()))
+                        .map(|key| (key, e.into_extern(), name.to_string()))
                 }
             })
             .collect::<Vec<_>>();
-        for (key, export) in exports {
+        for (key, export, name) in exports {
+            // For dedup symbols, silently skip if already defined (first definition wins).
+            if module_name == "env" && is_dylink_dedup_symbol(&name) && self.map.get(&key).is_some()
+            {
+                continue;
+            }
             self.insert(key, Definition::new(store.0, export))?;
         }
         Ok(self)
