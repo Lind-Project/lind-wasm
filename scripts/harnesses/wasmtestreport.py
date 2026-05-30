@@ -17,6 +17,7 @@
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+import contextlib
 import html
 import json
 import os
@@ -67,6 +68,12 @@ TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
 TESTFILES_DST = LINDFS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 FAIL_PARENT_NAME = "fail"
+LIBRARY_PARENT_NAME = "library"
+RDYNAMIC_PARENT_NAME = "rdynamic"
+
+# Maps shared-library filename (e.g. "lib.so") -> Path of compiled native .so.
+# Populated by compile_dylink_libraries(); used to swap native libs in for native test runs.
+DYLINK_NATIVE_LIB_CACHE: dict = {}
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 GLOBAL_COMPILE_FLAGS = []
@@ -168,6 +175,134 @@ def resolve_compile_flags(source_file: Path, kind: str):
         extra_flags.append("-lm")
 
     return [*base_flags, *selected_flags, *extra_flags]
+
+def is_library_file(file_path: Path) -> bool:
+    """Return True if file_path lives inside a library/ folder (not a runnable test)."""
+    for parent in file_path.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == LIBRARY_PARENT_NAME:
+            return True
+    return False
+
+
+def resolve_lind_pre_flags(source_file: Path) -> list:
+    """Return extra pre-source flags for lind_compile (inserted before the source path)."""
+    for parent in source_file.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == RDYNAMIC_PARENT_NAME:
+            return ["-rdynamic"]
+    return []
+
+
+def resolve_native_extra_flags(source_file: Path) -> list:
+    """Return extra native compiler flags for special test directories."""
+    for parent in source_file.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == RDYNAMIC_PARENT_NAME:
+            return ["-rdynamic"]
+    return []
+
+
+def _find_library_source_files() -> list:
+    """Return all .c files living inside any library/ subfolder under TEST_FILE_BASE."""
+    found = []
+    for path in TEST_FILE_BASE.rglob("*.c"):
+        if is_library_file(path):
+            found.append(path)
+    return found
+
+
+def compile_dylink_libraries() -> None:
+    """Pre-compile library/ .c files as wasm (via lind_compile) and native .so.
+
+    The wasm .so is placed in LINDFS_ROOT by lind_compile automatically.
+    The native .so is stored in LINDFS_ROOT with a .native.so suffix and
+    cached in DYLINK_NATIVE_LIB_CACHE for use during native test runs.
+    """
+    library_files = _find_library_source_files()
+    if not library_files:
+        return
+
+    logger.info(f"Pre-compiling {len(library_files)} dylink library file(s)")
+    for lib_c in library_files:
+        stem = lib_c.stem
+        so_name = f"{stem}.so"
+
+        # --- wasm build (output goes to LINDFS_ROOT/<stem>.so) ---
+        lind_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), "--compile-library", str(lib_c)]
+        logger.info(f"  [wasm] {so_name}")
+        result = run_subprocess(lind_cmd, label="wasm lib compile", shell=False)
+        if result.returncode != 0:
+            logger.error(f"Failed to compile wasm library {lib_c.name}: {result.stdout}{result.stderr}")
+            continue
+
+        # --- native shared library build (stored as <stem>.native.so in LINDFS_ROOT) ---
+        native_out = LINDFS_ROOT / f"{stem}.native.so"
+        native_cmd = [CC, "-shared", "-fPIC", str(lib_c), "-o", str(native_out)]
+        logger.info(f"  [native] {native_out.name}")
+        native_result = run_subprocess(native_cmd, label="native lib compile", shell=False)
+        if native_result.returncode != 0:
+            logger.warning(
+                f"Failed to compile native library {lib_c.name}: "
+                f"{native_result.stdout}{native_result.stderr}"
+            )
+            continue
+
+        DYLINK_NATIVE_LIB_CACHE[so_name] = native_out
+
+
+@contextlib.contextmanager
+def _native_dylink_libs():
+    """Swap wasm .so -> native .so in LINDFS_ROOT and set LD_LIBRARY_PATH, restore on exit.
+
+    Linux dlopen("lib.so") does not search cwd; LD_LIBRARY_PATH pointing at LINDFS_ROOT
+    is required. The wasm .so files are also replaced with native ELF .so so dlopen
+    succeeds. Both are restored after the native run so the wasm test sees the wasm .so.
+    """
+    if not DYLINK_NATIVE_LIB_CACHE:
+        yield
+        return
+
+    old_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    os.environ["LD_LIBRARY_PATH"] = f"{LINDFS_ROOT}:{old_ld}" if old_ld else str(LINDFS_ROOT)
+
+    backed_up: dict = {}
+    try:
+        for so_name, native_path in DYLINK_NATIVE_LIB_CACHE.items():
+            wasm_path = LINDFS_ROOT / so_name
+            if wasm_path.exists():
+                backup = wasm_path.with_suffix(".wasm.bak")
+                shutil.copy2(str(wasm_path), str(backup))
+                backed_up[wasm_path] = backup
+            shutil.copy2(str(native_path), str(wasm_path))
+        yield
+    finally:
+        if old_ld:
+            os.environ["LD_LIBRARY_PATH"] = old_ld
+        else:
+            os.environ.pop("LD_LIBRARY_PATH", None)
+        for wasm_path, backup in backed_up.items():
+            try:
+                shutil.move(str(backup), str(wasm_path))
+            except Exception as exc:
+                logger.warning(f"Failed to restore {wasm_path}: {exc}")
+        for so_name in DYLINK_NATIVE_LIB_CACHE:
+            wasm_path = LINDFS_ROOT / so_name
+            if wasm_path not in backed_up and wasm_path.exists():
+                wasm_path.unlink(missing_ok=True)
+
+
+def _is_dylink_test(source_file: Path) -> bool:
+    """Return True if the file is under a dylink_tests directory."""
+    try:
+        rel = source_file.resolve().relative_to(TEST_FILE_BASE.resolve())
+    except ValueError:
+        return False
+    return bool(rel.parts) and rel.parts[0] == "dylink_tests"
+
 
 # Function: get_empty_result
 #
@@ -387,7 +522,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     timing_info = build_timing_info()
 
     # Compile
-    compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), "-o", str(native_output)]
+    compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), *resolve_native_extra_flags(source_file), "-o", str(native_output)]
     try:
         compile_start = time.perf_counter()
         proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
@@ -479,7 +614,8 @@ def get_expected_output(source_file):
 def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), *LIND_PRE_FLAGS, source_file, *resolve_compile_flags(source_file, "lind")]
+    extra_pre_flags = resolve_lind_pre_flags(source_file)
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), *LIND_PRE_FLAGS, *extra_pre_flags, source_file, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -652,7 +788,9 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
     expected_output = None
     native_timing = build_timing_info()
     if test_mode == "deterministic":
-        success, expected_output, error_msg, error_type, native_timing = get_expected_output(source_file)
+        ctx = _native_dylink_libs() if _is_dylink_test(source_file) else contextlib.nullcontext()
+        with ctx:
+            success, expected_output, error_msg, error_type, native_timing = get_expected_output(source_file)
         if not success:
             add_test_result(result, str(source_file), "Failure", error_type, error_msg, timing_info=native_timing)
             return
@@ -1372,8 +1510,9 @@ def setup_test_environment(args):
         test_cases = list(TEST_FILE_BASE.rglob("*.c"))
         config['tests_to_run'] = [
             test_case for test_case in test_cases
-            if should_run_file(test_case, config['run_folders_paths'], 
+            if should_run_file(test_case, config['run_folders_paths'],
                                config['skip_folders_paths'], config['skip_test_cases'])
+            and not is_library_file(test_case)
         ]
     
     # Propagate allow_precompiled flag into the config
@@ -1637,6 +1776,9 @@ def main():
             logger.info(f"Testfiles copied to {TESTFILES_DST}")
             return
 
+        # Pre-compile dylink shared libraries (wasm + native) before any tests run
+        compile_dylink_libraries()
+
         # Run all tests
         run_tests(config, artifacts_root, results, timeout_sec)
 
@@ -1665,6 +1807,13 @@ def main():
             shutil.rmtree(TESTFILES_DST)
         except (FileNotFoundError, PermissionError):
             pass
+
+        # Clean up native .so files staged in LINDFS_ROOT
+        for so_name, native_path in DYLINK_NATIVE_LIB_CACHE.items():
+            try:
+                native_path.unlink(missing_ok=True)
+            except Exception:
+                pass
             
         # Remove artifacts directory if it was temp and not requested to keep
         if created_temp_dir and not keep_artifacts:

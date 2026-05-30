@@ -15,7 +15,7 @@ int main(void) {
         // child routine
 
         /* Load the math library */
-        handle = dlopen("lib.cwasm", RTLD_LAZY);
+        handle = dlopen("lib.so", RTLD_LAZY);
         if (!handle) {
             fprintf(stderr, "dlopen failed: %s\n", dlerror());
             return 1;
@@ -43,7 +43,7 @@ int main(void) {
         // parent routine
 
         /* Load the math library */
-        handle = dlopen("lib.cwasm", RTLD_LAZY);
+        handle = dlopen("lib.so", RTLD_LAZY);
         if (!handle) {
             fprintf(stderr, "dlopen failed: %s\n", dlerror());
             return 1;

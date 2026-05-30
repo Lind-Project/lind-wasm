@@ -511,6 +511,10 @@ case "${MODE}" in
     do_compile
     do_optimize
     do_precompile
+    if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+      mv "${OUT_CWASM}" "${SRC%.c}.so"
+      OUT_CWASM="${SRC%.c}.so"
+    fi
     cp_to_lindfs
     ;;
   "compile-only")
