@@ -637,10 +637,12 @@ impl VmmapOps for Vmmap {
         // Calculate page range
         let new_region_end_page = match page_num.checked_add(npages) {
             Some(end) => end,
-            None => return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "page_num + npages overflows 32-bit address space",
-            )),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "page_num + npages overflows 32-bit address space",
+                ));
+            }
         };
         let new_region_start_page = page_num;
 
