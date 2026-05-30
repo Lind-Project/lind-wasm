@@ -39,7 +39,7 @@ static void *thread_routine(void *arg)
 int main(void)
 {
     /* Open the shared library in the main thread before spawning. */
-    void *handle = dlopen("lib.cwasm", RTLD_LAZY);
+    void *handle = dlopen("lib.so", RTLD_LAZY);
     if (!handle) {
         fprintf(stderr, "dlopen failed\n");
         return 1;
