@@ -1,4 +1,5 @@
 use sysdefs::constants::{SIG_DFL, SIG_IGN};
+use sysdefs::{lind_debug_panic, lind_log};
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, ThrownException};
 
 use crate::LindHost;
@@ -82,7 +83,11 @@ pub fn signal_handler<
                 return Err(err);
             }
             // Signal handler crashed during rewind — run cage-termination routine.
-            eprintln!("Error: signal handler crashed during rewind: {:?}", err);
+            lind_log!(
+                Default,
+                "Error: signal handler crashed during rewind: {:?}",
+                err
+            );
             cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
             if let Some(c) = cage::get_cage(cageid) {
                 c.is_dead.store(true, std::sync::atomic::Ordering::Release);
@@ -141,16 +146,23 @@ pub fn signal_handler<
                 }
                 sysdefs::constants::SignalDefaultHandler::Stop => {
                     // TODO: support STOP signals
-                    eprintln!("Warning: STOP signal received but currently not supported!");
+                    lind_log!(
+                        Default,
+                        "Warning: STOP signal received but currently not supported!"
+                    );
                     continue;
                 }
                 sysdefs::constants::SignalDefaultHandler::Continue => {
                     // TODO: support CONTINUE signals
-                    eprintln!("Warning: CONTINUE signal received but currently not supported!");
+                    lind_log!(
+                        Default,
+                        "Warning: CONTINUE signal received but currently not supported!"
+                    );
                     continue;
                 }
                 sysdefs::constants::SignalDefaultHandler::NONEXIST => {
-                    panic!("signal_handler: NONEXIST signal received!");
+                    lind_debug_panic!("signal_handler: NONEXIST signal received!");
+                    continue;
                 }
             }
         } else if signal_handler == SIG_IGN as u32 {
@@ -179,7 +191,7 @@ pub fn signal_handler<
                 }
                 // Any other error means the signal handler itself crashed (trap, OOB,
                 // divide-by-zero, etc.).  Run the original cage-termination routine.
-                eprintln!("Error: signal handler crashed: {:?}", err);
+                lind_log!(Default, "Error: signal handler crashed: {:?}", err);
                 cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
                 if let Some(c) = cage::get_cage(cageid) {
                     c.is_dead.store(true, std::sync::atomic::Ordering::Release);

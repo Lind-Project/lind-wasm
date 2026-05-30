@@ -48,7 +48,7 @@ jobs:
           # See `cargo clippy` and `cargo check` for available options
           cargo clippy \
               --manifest-path src/lind-boot/Cargo.toml \
-              --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
+              --features "disable_signals secure lind_debug lind-logging debug-grate-calls fdtables-dashmaparray" \
               --keep-going \
               -- \
               -A warnings \

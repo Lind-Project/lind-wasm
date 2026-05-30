@@ -21,5 +21,8 @@ report.html
 #Ignore python cache
 __pycache__/
 
-#Ignore upstream wasmtime lockfile (not ours to manage)
-src/wasmtime/Cargo.lock
+#Ignore lockfile
+Cargo.lock
+
+#Ignore Lind runtime log file
+LIND.log
