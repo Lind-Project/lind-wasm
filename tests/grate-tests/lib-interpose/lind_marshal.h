@@ -119,6 +119,23 @@ struct lind_marshal_spec {
 };
 
 // ---------------------------------------------------------------------------
+// Current-call cage ID accessors
+//
+// LIND_SOURCE_CAGE() — cage ID of the application cage that made the call
+// LIND_GRATE_CAGE()  — cage ID of this grate (the handler's cage)
+//
+// Valid only while inside a lind_marshal_dispatch handler invocation.
+// Use these when a handler still needs a manual copy_data_between_cages call
+// (e.g. writing into a nested pointer that Stage 1 does not automatically chase).
+// ---------------------------------------------------------------------------
+
+static uint64_t _lind_marshal_source_cage = 0;
+static uint64_t _lind_marshal_grate_cage  = 0;
+
+#define LIND_SOURCE_CAGE() (_lind_marshal_source_cage)
+#define LIND_GRATE_CAGE()  (_lind_marshal_grate_cage)
+
+// ---------------------------------------------------------------------------
 // Shadow memory bump allocator (per-grate static arena, reset after each call)
 // ---------------------------------------------------------------------------
 
@@ -175,6 +192,8 @@ static inline uint64_t lind_marshal_dispatch(
     uint32_t                     nargs)
 {
     _lind_marshal_reset();
+    _lind_marshal_source_cage = source_cage;
+    _lind_marshal_grate_cage  = grate_cage;
 
     uint64_t handler_args[16] = {0};
     struct _lind_shadow shadows[16];

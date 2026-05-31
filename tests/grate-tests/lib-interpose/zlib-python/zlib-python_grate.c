@@ -2,14 +2,16 @@
 // Intercepts deflateInit2_, deflate, and deflateEnd so that Python's
 // zlib.compress() returns a fixed 4-byte output b"LIND" regardless of input.
 //
-// How it works:
-//   deflateInit2_  → return Z_OK without allocating real zlib state
-//   deflate        → read z_stream from cage 2, write b"LIND" into its output
-//                    buffer, update total_out/avail_out/next_out, return Z_STREAM_END
-//   deflateEnd     → return Z_OK (no real state to free)
+// Uses lind_marshal.h for automated argument marshalling:
+//   deflateInit2_  → all args treated as scalars; handler returns Z_OK
+//   deflate        → z_stream* auto-marshalled INOUT (struct copy-in/copy-out);
+//                    one manual copy_data_between_cages to write FIXED_OUTPUT
+//                    into the source cage's next_out buffer (nested pointer)
+//   deflateEnd     → z_stream* treated as scalar; handler returns Z_OK
 //
 // Compile:
-//   lind-clang -s --compile-grate zlib-python_grate.c -o zlib-python_grate.wasm
+//   lind-clang -s --compile-grate zlib-python_grate.c \
+//     -o zlib-python_grate.wasm -- -I..
 //   cp zlib-python_grate.cwasm ../../lindfs/grates/
 //
 // Run:
@@ -28,8 +30,9 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "../lind_marshal.h"
+
 // z_stream layout in wasm32 (all pointers are uint32_t, uLong = uint32_t).
-// Only the first 6 fields are needed; the rest are left unread.
 typedef struct {
     uint32_t next_in;    // offset  0: const Bytef*
     uint32_t avail_in;   // offset  4: uInt
@@ -39,12 +42,118 @@ typedef struct {
     uint32_t total_out;  // offset 20: uLong
 } ZStreamWasm32;
 
-// Fixed 4-byte output that our deflate handler writes into the stream.
 static const uint8_t FIXED_OUTPUT[] = { 'L', 'I', 'N', 'D' };
 #define FIXED_OUTPUT_LEN 4
 
-// Set by deflate_handler; checked by main() after the child exits.
 static volatile int intercepted_deflate_count = 0;
+
+// ---------------------------------------------------------------------------
+// deflateInit2_: ignore all args, return Z_OK.
+// All 8 args treated as scalars — no pointer dereference needed.
+// ---------------------------------------------------------------------------
+
+static struct lind_marshal_spec deflate_init2_spec = {
+    .nargs = 8,
+    .args = {
+        { .kind = LIND_ARG_SCALAR }, // z_stream* (unused)
+        { .kind = LIND_ARG_SCALAR }, // level
+        { .kind = LIND_ARG_SCALAR }, // method
+        { .kind = LIND_ARG_SCALAR }, // windowBits
+        { .kind = LIND_ARG_SCALAR }, // memLevel
+        { .kind = LIND_ARG_SCALAR }, // strategy
+        { .kind = LIND_ARG_SCALAR }, // version* (unused)
+        { .kind = LIND_ARG_SCALAR }, // stream_size
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+
+static uint64_t handler_deflate_init2(uint64_t a0, uint64_t a1, uint64_t a2,
+                                       uint64_t a3, uint64_t a4, uint64_t a5) {
+    (void)a0; (void)a1; (void)a2; (void)a3; (void)a4; (void)a5;
+    printf("[Grate|zlib-python] deflateInit2_ intercepted — returning Z_OK\n");
+    return 0; // Z_OK
+}
+
+LIND_DEFINE_MARSHAL_HANDLER(deflate_init2_, &deflate_init2_spec, handler_deflate_init2)
+
+// ---------------------------------------------------------------------------
+// deflate: auto-marshal z_stream* INOUT (struct copy-in/copy-out).
+// One manual cross-cage copy remains for writing FIXED_OUTPUT into next_out
+// (a nested pointer inside the struct — Stage 1 does not chase these).
+// ---------------------------------------------------------------------------
+
+static struct lind_marshal_spec deflate_spec = {
+    .nargs = 2,
+    .args = {
+        {
+            .kind          = LIND_ARG_PTR,
+            .ptr_direction = LIND_PTR_INOUT,
+            .size_kind     = LIND_SIZE_CONST,
+            .const_size    = sizeof(ZStreamWasm32),
+        },
+        { .kind = LIND_ARG_SCALAR }, // flush flag
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+
+static uint64_t handler_deflate(uint64_t strm_u64, uint64_t flush,
+                                 uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5) {
+    (void)flush; (void)a2; (void)a3; (void)a4; (void)a5;
+
+    ZStreamWasm32 *zst = LIND_AS_PTR(strm_u64);
+
+    if (zst->avail_out < FIXED_OUTPUT_LEN) {
+        fprintf(stderr, "[Grate|zlib-python] deflate: avail_out=%u < %d, aborting\n",
+                zst->avail_out, FIXED_OUTPUT_LEN);
+        return (uint64_t)(uint32_t)(-4); // Z_MEM_ERROR as unsigned
+    }
+
+    // Write FIXED_OUTPUT into the source cage's output buffer at next_out.
+    // next_out is a WASM virtual address in the source cage — this is a nested
+    // pointer that Stage 1 does not automatically chase, so one manual call remains.
+    copy_data_between_cages(
+        LIND_GRATE_CAGE(),  LIND_SOURCE_CAGE(),
+        (uint64_t)(uintptr_t)FIXED_OUTPUT, LIND_GRATE_CAGE(),
+        (uint64_t)zst->next_out,           LIND_SOURCE_CAGE(),
+        FIXED_OUTPUT_LEN, 0);
+
+    // Update the local z_stream shadow — auto-marshal copies it back on return.
+    zst->next_out  += FIXED_OUTPUT_LEN;
+    zst->avail_out -= FIXED_OUTPUT_LEN;
+    zst->total_out += FIXED_OUTPUT_LEN;
+
+    intercepted_deflate_count++;
+    printf("[Grate|zlib-python] deflate intercepted — wrote %d fixed bytes, returning Z_STREAM_END\n",
+           FIXED_OUTPUT_LEN);
+    return 1; // Z_STREAM_END
+}
+
+LIND_DEFINE_MARSHAL_HANDLER(deflate, &deflate_spec, handler_deflate)
+
+// ---------------------------------------------------------------------------
+// deflateEnd: ignore z_stream*, return Z_OK.
+// ---------------------------------------------------------------------------
+
+static struct lind_marshal_spec deflate_end_spec = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR }, // z_stream* (unused)
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+
+static uint64_t handler_deflate_end(uint64_t a0, uint64_t a1, uint64_t a2,
+                                     uint64_t a3, uint64_t a4, uint64_t a5) {
+    (void)a0; (void)a1; (void)a2; (void)a3; (void)a4; (void)a5;
+    printf("[Grate|zlib-python] deflateEnd intercepted — returning Z_OK\n");
+    return 0; // Z_OK
+}
+
+LIND_DEFINE_MARSHAL_HANDLER(deflateEnd, &deflate_end_spec, handler_deflate_end)
+
+// ---------------------------------------------------------------------------
+// Standard grate dispatcher (required export)
+// ---------------------------------------------------------------------------
 
 int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
                     uint64_t arg1, uint64_t arg1cage,
@@ -68,85 +177,9 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,
               arg5, arg5cage, arg6, arg6cage);
 }
 
-// deflateInit2_: succeed without allocating real zlib state.
-// Python only checks the return value; the state pointer stays NULL.
-// Since we intercept all subsequent calls (deflate, deflateEnd), no
-// dereference of the uninitialized state pointer ever reaches real zlib.
-int deflate_init2_handler(uint64_t cageid,
-    uint64_t arg1, uint64_t arg1cage,
-    uint64_t arg2, uint64_t arg2cage,
-    uint64_t arg3, uint64_t arg3cage,
-    uint64_t arg4, uint64_t arg4cage,
-    uint64_t arg5, uint64_t arg5cage,
-    uint64_t arg6, uint64_t arg6cage) {
-    printf("[Grate|zlib-python] deflateInit2_ intercepted — returning Z_OK\n");
-    return 0; // Z_OK
-}
-
-// deflate: write FIXED_OUTPUT into the stream's output buffer and signal completion.
-//   arg1      = z_stream* (WASM virtual address in the child cage)
-//   arg1cage  = child cage id
-//   arg2      = flush flag (ignored)
-int deflate_handler(uint64_t cageid,
-    uint64_t arg1, uint64_t arg1cage,
-    uint64_t arg2, uint64_t arg2cage,
-    uint64_t arg3, uint64_t arg3cage,
-    uint64_t arg4, uint64_t arg4cage,
-    uint64_t arg5, uint64_t arg5cage,
-    uint64_t arg6, uint64_t arg6cage) {
-
-    uint64_t thiscage = cageid; // grate cage id
-
-    // Read the z_stream struct from the child cage's memory.
-    // copy_data_between_cages handles WASM virtual → host translation for
-    // cross-cage pointers via _ensure_host_addr on the Rust side.
-    ZStreamWasm32 zst;
-    copy_data_between_cages(thiscage, arg1cage,
-        arg1, arg1cage,                       // src: z_stream* in child cage
-        (uint64_t)(uintptr_t)&zst, thiscage,  // dest: local copy in grate
-        sizeof(ZStreamWasm32), 0);            // RawMemcpy
-
-    if (zst.avail_out < FIXED_OUTPUT_LEN) {
-        fprintf(stderr, "[Grate|zlib-python] deflate: avail_out=%u < %d, aborting\n",
-                zst.avail_out, FIXED_OUTPUT_LEN);
-        return -4; // Z_MEM_ERROR
-    }
-
-    // Write FIXED_OUTPUT into the child cage's output buffer at next_out.
-    // next_out is a WASM virtual address in the child cage; Rust translates it.
-    copy_data_between_cages(thiscage, arg1cage,
-        (uint64_t)(uintptr_t)FIXED_OUTPUT, thiscage, // src: grate's static array
-        (uint64_t)zst.next_out, arg1cage,             // dest: stream output buffer
-        FIXED_OUTPUT_LEN, 0);                         // RawMemcpy
-
-    // Update the stream fields to reflect the written output.
-    zst.next_out  += FIXED_OUTPUT_LEN;
-    zst.avail_out -= FIXED_OUTPUT_LEN;
-    zst.total_out += FIXED_OUTPUT_LEN;
-
-    // Write the updated struct back to the child cage.
-    copy_data_between_cages(thiscage, arg1cage,
-        (uint64_t)(uintptr_t)&zst, thiscage,  // src: updated local copy
-        arg1, arg1cage,                        // dest: z_stream* in child cage
-        sizeof(ZStreamWasm32), 0);             // RawMemcpy
-
-    intercepted_deflate_count++;
-    printf("[Grate|zlib-python] deflate intercepted — wrote %d fixed bytes, returning Z_STREAM_END\n",
-           FIXED_OUTPUT_LEN);
-    return 1; // Z_STREAM_END
-}
-
-// deflateEnd: succeed without freeing (no real state was allocated).
-int deflate_end_handler(uint64_t cageid,
-    uint64_t arg1, uint64_t arg1cage,
-    uint64_t arg2, uint64_t arg2cage,
-    uint64_t arg3, uint64_t arg3cage,
-    uint64_t arg4, uint64_t arg4cage,
-    uint64_t arg5, uint64_t arg5cage,
-    uint64_t arg6, uint64_t arg6cage) {
-    printf("[Grate|zlib-python] deflateEnd intercepted — returning Z_OK\n");
-    return 0; // Z_OK
-}
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -155,7 +188,6 @@ int main(int argc, char *argv[]) {
     }
 
     int grateid = getpid();
-
     pid_t pid = fork();
     if (pid < 0) { perror("fork failed"); assert(0); }
 
@@ -164,7 +196,7 @@ int main(int argc, char *argv[]) {
 
         printf("[Grate|zlib-python] registering deflateInit2_ handler for cage %d\n", cageid);
         int ret = register_lib_handler(cageid, "env", "deflateInit2_",
-            grateid, (uint64_t)(uintptr_t)&deflate_init2_handler);
+            grateid, (uint64_t)(uintptr_t)&lind_mh_deflate_init2_);
         if (ret != 0) {
             fprintf(stderr, "[Grate|zlib-python] register deflateInit2_ failed: %d\n", ret);
             assert(0);
@@ -172,7 +204,7 @@ int main(int argc, char *argv[]) {
 
         printf("[Grate|zlib-python] registering deflate handler for cage %d\n", cageid);
         ret = register_lib_handler(cageid, "env", "deflate",
-            grateid, (uint64_t)(uintptr_t)&deflate_handler);
+            grateid, (uint64_t)(uintptr_t)&lind_mh_deflate);
         if (ret != 0) {
             fprintf(stderr, "[Grate|zlib-python] register deflate failed: %d\n", ret);
             assert(0);
@@ -180,7 +212,7 @@ int main(int argc, char *argv[]) {
 
         printf("[Grate|zlib-python] registering deflateEnd handler for cage %d\n", cageid);
         ret = register_lib_handler(cageid, "env", "deflateEnd",
-            grateid, (uint64_t)(uintptr_t)&deflate_end_handler);
+            grateid, (uint64_t)(uintptr_t)&lind_mh_deflateEnd);
         if (ret != 0) {
             fprintf(stderr, "[Grate|zlib-python] register deflateEnd failed: %d\n", ret);
             assert(0);

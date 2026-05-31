@@ -74,3 +74,26 @@ Not a bug; the PASS assertions in both cage and grate confirm correctness.
 
 **All 7 tests pass**: libc-rand, libc-strlen, custom-lib, zlib-python,
 auto-scalar, auto-memcpy, auto-strncpy.
+
+### 2026-05-30 — Migrated zlib-python to lind_marshal.h
+
+**What changed in zlib-python_grate.c:**
+
+- `deflateInit2_` / `deflateEnd`: were raw handlers with ignored args;
+  now use `LIND_ARG_SCALAR` for all args → `LIND_DEFINE_MARSHAL_HANDLER`
+  generates the wrapper. Zero `copy_data_between_cages` calls.
+
+- `deflate`: was 3× `copy_data_between_cages` (read struct, write output,
+  write struct back). Now:
+  - z_stream* declared as `LIND_PTR_INOUT, LIND_SIZE_CONST(sizeof(ZStreamWasm32))`
+    → auto-marshal handles the struct copy-in / copy-out
+  - Handler receives a local shadow pointer to the z_stream; can read/write
+    fields directly
+  - 1× manual `copy_data_between_cages` remains: writing FIXED_OUTPUT into
+    `zst->next_out` in the source cage (nested pointer, outside Stage 1 scope)
+  - Uses `LIND_GRATE_CAGE()` / `LIND_SOURCE_CAGE()` accessors set by dispatch
+
+**New in lind_marshal.h:**
+- `_lind_marshal_source_cage` / `_lind_marshal_grate_cage` globals
+- `LIND_SOURCE_CAGE()` / `LIND_GRATE_CAGE()` accessor macros
+  for handlers that still need a manual cross-cage copy (nested pointers)
