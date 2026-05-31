@@ -256,6 +256,9 @@ pub struct Cage {
     /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
     /// tracking is considered a VMContext-level concern.
     pub grate_inflight: AtomicU64,
+    /// MPK protection key for this cage's Wasm linear memory.
+    /// `None` when MPK is unavailable or the pool is exhausted.
+    pub pkey: Option<u32>,
 }
 
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
@@ -402,6 +405,11 @@ pub fn cage_finalize(cageid: u64) {
             std::hint::spin_loop();
         }
 
+        // Return the cage's protection key to the pool before removal.
+        if let Some(p) = cage.pkey {
+            crate::mpk::free_pkey(p);
+        }
+
         // Record zombie and notify parent.
         if cage.parent != cageid {
             if let Some(parent) = get_cage(cage.parent) {
@@ -469,6 +477,7 @@ mod tests {
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
+            pkey: None,
         };
 
         add_cage(2, test_cage);

@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use wasmtime::{
-    AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
+    AsContext, AsContextMut, AsyncifyState, CallHook, Caller, ChildLibraryType, Engine, ExternType,
     InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque,
     VMContext, VMOpaqueContext, Val, ValRaw, ValType,
 };
@@ -444,19 +444,45 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner)
                         .expect("failed to create store");
 
+                    // Install PKRU call hook for the fork child cage.
+                    let child_captured_pkey: Option<u32> =
+                       cage::get_cage(child_cageid).and_then(|c| c.pkey);
+                    store.call_hook(move |_ctx, hook: CallHook| {
+                       if let Some(pkey) = child_captured_pkey {
+                           if hook.exiting_host() {
+                               cage::mpk::set_cage_pkru(pkey);
+                           } else {
+                               cage::mpk::relax_pkru();
+                           }
+                       }
+                       Ok(())
+                    });
+
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
-                        Linker::new_child_linker(
-                            &mut store,
-                            &engine,
-                            &mut child_got,
-                            &snapshot.0,
-                            &snapshot.1,
-                            &snapshot.2,
-                        )
-                        .expect("failed to create child linker");
+                       Linker::new_child_linker(
+                           &mut store,
+                           &engine,
+                           &mut child_got,
+                           &snapshot.0,
+                           &snapshot.1,
+                           &snapshot.2,
+                       )
+                       .expect("failed to create child linker");
 
                     // early init vmmap
                     cage::init_vmmap(child_cageid, child_memory_base.unwrap() as usize, None);
+
+                    // Tag the child's Wasm linear memory with its protection key.
+                    // fork_vmmap (called inside new_child_linker above) uses plain mprotect
+                    // which resets the pkey to 0, so we must re-tag after it completes.
+                    if let Some(pkey) = child_captured_pkey {
+                       cage::mpk::tag_memory(
+                           child_memory_base.unwrap() as *mut u8,
+                           1usize << 32,
+                           libc::PROT_READ | libc::PROT_WRITE,
+                           pkey,
+                       );
+                    }
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     // e.g. __stack_pointer, __indirect_function_table, etc.
@@ -1027,6 +1053,20 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner)
                         .expect("failed to create store");
+
+                    // Install PKRU call hook for the thread (shares parent's cageid/pkey).
+                    let thread_captured_pkey: Option<u32> =
+                        cage::get_cage(child_cageid as u64).and_then(|c| c.pkey);
+                    store.call_hook(move |_ctx, hook: CallHook| {
+                        if let Some(pkey) = thread_captured_pkey {
+                            if hook.exiting_host() {
+                                cage::mpk::set_cage_pkru(pkey);
+                            } else {
+                                cage::mpk::relax_pkru();
+                            }
+                        }
+                        Ok(())
+                    });
 
                     let mut child_got = if dylink_enabled {
                         Some(LindGOT::new())

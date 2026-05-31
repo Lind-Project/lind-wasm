@@ -1040,6 +1040,16 @@ pub extern "C" fn mmap_inner(
                     ) as i64
                 };
 
+                // Re-tag newly mapped pages with the cage's protection key so
+                // that the MPK PKRU restriction covers them while Wasm runs.
+                if ret != -1 {
+                    if let Some(cage) = cage::get_cage(cageid) {
+                        if let Some(pkey) = cage.pkey {
+                            cage::mpk::tag_memory(ret as *mut u8, len, prot, pkey);
+                        }
+                    }
+                }
+
                 // Return raw result (including -1 on error)
                 // Caller will check page alignment to detect errors
                 ret as usize
@@ -1051,6 +1061,16 @@ pub extern "C" fn mmap_inner(
     } else {
         // Handle mmap with fd = -1 (anonymous memory mapping or special case)
         let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
+
+        // Re-tag newly mapped pages with the cage's protection key.
+        if ret != -1 {
+            if let Some(cage) = cage::get_cage(cageid) {
+                if let Some(pkey) = cage.pkey {
+                    cage::mpk::tag_memory(ret as *mut u8, len, prot, pkey);
+                }
+            }
+        }
+
         // Return raw result (including -1 on error)
         // Caller will check page alignment to detect errors
         ret as usize

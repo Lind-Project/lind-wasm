@@ -7,6 +7,7 @@ use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampo
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
+use libc;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::ptr::NonNull;
@@ -20,8 +21,8 @@ use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_S
 use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
 use wasmtime::{
-    AsContext, AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module,
-    Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails,
+    AsContext, AsContextMut, Cache, CallHook, Engine, Export, Func, InstantiateType, Linker,
+    Module, Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
@@ -161,6 +162,19 @@ pub fn execute_with_lind(
     let args = lind_boot.args.clone();
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
+
+    // Install PKRU call hook: tighten when entering Wasm, relax when entering host.
+    let captured_pkey: Option<u32> = cage::get_cage(cageid).and_then(|c| c.pkey);
+    wstore.call_hook(move |_ctx, hook: CallHook| {
+        if let Some(pkey) = captured_pkey {
+            if hook.exiting_host() {
+                cage::mpk::set_cage_pkru(pkey);
+            } else {
+                cage::mpk::relax_pkru();
+            }
+        }
+        Ok(())
+    });
 
     // -- Attach host APIs --
     let mut linker = Arc::new(Mutex::new(Linker::new(&engine)));
@@ -599,6 +613,27 @@ fn load_main_module(
         )
         .map_err(anyhow::Error::from)
         .context(format!("failed to instantiate"))?;
+
+    // Tag the cage's Wasm linear memory with its protection key so that the
+    // PKRU call hook can restrict cross-cage access at Wasm/host boundaries.
+    if let Some(pkey) = cage::get_cage(cageid).and_then(|c| c.pkey) {
+        let em = store.inner().all_memories().next();
+        if let Some(em) = em {
+            let base = if let Some(b) = em.shared_base_ptr() {
+                b
+            } else {
+                em.unshared()
+                    .expect("expected unshared memory")
+                    .data_ptr(store.as_context())
+            };
+            cage::mpk::tag_memory(
+                base,
+                1usize << 32,
+                libc::PROT_READ | libc::PROT_WRITE,
+                pkey,
+            );
+        }
+    }
 
     // Register the main module so get_global_snapshot can find it by name.
     if let Some(name) = module.name() {

@@ -246,6 +246,9 @@ pub fn rawposix_start(verbosity: isize) {
     // init cage table
     cagetable_init();
 
+    // initialize MPK protection-key pool for cage memory isolation
+    cage::mpk::init_pkey_pool();
+
     // register kernel close to fdtables
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
 
@@ -287,6 +290,7 @@ pub fn rawposix_start(verbosity: isize) {
         exit_group_initiated: AtomicBool::new(false),
         is_dead: AtomicBool::new(false),
         grate_inflight: AtomicU64::new(0),
+        pkey: cage::mpk::alloc_pkey(),
     };
 
     // Add cage to cagetable

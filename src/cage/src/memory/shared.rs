@@ -159,6 +159,12 @@ impl ShmSegment {
             ) as usize
         };
 
+        // Tag shared-memory pages with pkey 0 so that all cages can access
+        // them regardless of which cage is currently executing Wasm.
+        if result != usize::MAX {
+            crate::mpk::tag_memory(result as *mut u8, self.size as usize, prot, 0);
+        }
+
         result
     }
 
