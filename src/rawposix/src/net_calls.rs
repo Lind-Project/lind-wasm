@@ -268,23 +268,10 @@ pub extern "C" fn poll_syscall(
 
     if all_kernel_pollfds.is_empty() && !inmem_pollfds.is_empty() {
         let start_time = starttimer();
-        let (duration, chunk_timeout) = timeout_setup_ms(original_timeout);
+        let (duration, _) = timeout_setup_ms(original_timeout);
 
         loop {
-            let current_chunk_timeout = if duration == Duration::MAX {
-                chunk_timeout
-            } else {
-                std::cmp::min(
-                    chunk_timeout as u128,
-                    duration.saturating_sub(readtimer(start_time)).as_millis(),
-                ) as i32
-            };
-
-            if current_chunk_timeout > 0 {
-                std::thread::sleep(std::time::Duration::from_millis(
-                    current_chunk_timeout as u64,
-                ));
-            }
+            std::thread::yield_now();
 
             total_ready += poll_inmem_once(fds_slice);
             if total_ready > 0 || readtimer(start_time) >= duration {
@@ -296,15 +283,16 @@ pub extern "C" fn poll_syscall(
             }
         }
     }
-
-    // Poll all kernel-backed fds with timeout/signal checking loop
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
         // Keep track of total duration for our exit check in the poll loop
         let (duration, chunk_timeout) = timeout_setup_ms(original_timeout);
+        let has_inmem_fds = !inmem_pollfds.is_empty();
 
         loop {
-            let current_chunk_timeout = if duration == Duration::MAX {
+            let current_chunk_timeout = if has_inmem_fds {
+                0
+            } else if duration == Duration::MAX {
                 chunk_timeout
             } else {
                 std::cmp::min(
@@ -330,6 +318,9 @@ pub extern "C" fn poll_syscall(
             total_ready += poll_inmem_once(fds_slice);
             if poll_ret > 0 || total_ready > 0 || readtimer(start_time) >= duration {
                 break;
+            }
+            if has_inmem_fds {
+                std::thread::yield_now();
             }
 
             // Check for signals that may have interrupted the select operation
@@ -655,6 +646,11 @@ pub extern "C" fn select_syscall(
 
         (read_ready, write_ready, error_ready, ready_count)
     };
+    let has_inmem_fds = unparsedtables
+        .iter()
+        .any(|table| table.contains_key(&FDKIND_IMPIPE) || table.contains_key(&FDKIND_IMSOCK));
+
+    let has_kernel_fds = realnewnfds > 0;
 
     let (inmem_read_ready, inmem_write_ready, inmem_error_ready) = loop {
         let (read_ready, write_ready, error_ready, inmem_ret) = poll_inmem_select_once();
@@ -666,7 +662,9 @@ pub extern "C" fn select_syscall(
         let mut tmp_writefds = real_writefds.clone();
         let mut tmp_errorfds = real_errorfds.clone();
 
-        let current_chunk_ms = if duration == Duration::MAX {
+        let current_chunk_ms = if has_inmem_fds {
+            0
+        } else if duration == Duration::MAX {
             chunk_timeout
         } else {
             std::cmp::min(
@@ -679,12 +677,8 @@ pub extern "C" fn select_syscall(
             tv_sec: 0,
             tv_usec: (current_chunk_ms as i64) * 1000,
         };
-
-        let has_kernel_fds = realnewnfds > 0;
         let select_ret = if !has_kernel_fds {
-            if current_chunk_ms > 0 {
-                std::thread::sleep(std::time::Duration::from_millis(current_chunk_ms as u64));
-            }
+            std::thread::yield_now();
             0
         } else {
             // Call libc select with proper null handling
@@ -730,6 +724,9 @@ pub extern "C" fn select_syscall(
             real_writefds = tmp_writefds;
             real_errorfds = tmp_errorfds;
             break (read_ready, write_ready, error_ready);
+        }
+        if has_inmem_fds {
+            std::thread::yield_now();
         }
 
         // Check for signals that may have interrupted the select operation
