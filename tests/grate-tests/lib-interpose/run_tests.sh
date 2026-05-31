@@ -87,6 +87,27 @@ run_test "zlib-python" \
     grates/zlib-python_grate.cwasm \
     /usr/local/bin/python /test-zlib.py
 
+# --- Stage-1 automated marshalling tests ---
+
+# auto-scalar: intercepts toy_add with SCALAR spec; handler returns a*b
+run_test "auto-scalar" \
+    "$SCRIPT_DIR/auto-scalar/auto-scalar.cwasm" \
+    "auto-scalar.cwasm" \
+    --preload env=/lib/libtoy.cwasm \
+    grates/auto-scalar_grate.cwasm /auto-scalar.cwasm
+
+# auto-memcpy: intercepts memcpy with PTR IN/OUT spec + return alias
+run_test "auto-memcpy" \
+    "$SCRIPT_DIR/auto-memcpy/auto-memcpy.cwasm" \
+    "auto-memcpy.cwasm" \
+    grates/auto-memcpy_grate.cwasm /auto-memcpy.cwasm
+
+# auto-strncpy: intercepts strncpy with PTR IN/OUT spec + return alias
+run_test "auto-strncpy" \
+    "$SCRIPT_DIR/auto-strncpy/auto-strncpy.cwasm" \
+    "auto-strncpy.cwasm" \
+    grates/auto-strncpy_grate.cwasm /auto-strncpy.cwasm
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 
