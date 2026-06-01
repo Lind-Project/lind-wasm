@@ -2585,22 +2585,28 @@ fn renameat_inner(
     };
 
     let ret = unsafe {
-        if use_renameat2 {
-            libc::renameat2(
-                old_kernel_fd,
-                c_oldpath.as_ptr(),
-                new_kernel_fd,
-                c_newpath.as_ptr(),
-                flags,
-            )
-        } else {
-            libc::renameat(
-                old_kernel_fd,
-                c_oldpath.as_ptr(),
-                new_kernel_fd,
-                c_newpath.as_ptr(),
-            )
-        }
+        // if use_renameat2 {
+        //     libc::renameat2(
+        //         old_kernel_fd,
+        //         c_oldpath.as_ptr(),
+        //         new_kernel_fd,
+        //         c_newpath.as_ptr(),
+        //         flags,
+        //     )
+        // } else {
+        //     libc::renameat(
+        //         old_kernel_fd,
+        //         c_oldpath.as_ptr(),
+        //         new_kernel_fd,
+        //         c_newpath.as_ptr(),
+        //     )
+        // }
+        libc::renameat(
+            old_kernel_fd,
+            c_oldpath.as_ptr(),
+            new_kernel_fd,
+            c_newpath.as_ptr(),
+        )
     };
     if ret < 0 {
         let errno = get_errno();
