@@ -2,15 +2,16 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{
-    unset_stack_arena_base, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
+use sysdefs::lind_log;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
@@ -22,11 +23,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
-use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
     InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque,
-    Val, ValRaw, ValType,
+    VMContext, VMOpaqueContext, Val, ValRaw, ValType,
 };
 
 use cage::alloc_cage_id;
@@ -49,17 +49,21 @@ const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 
-const UNWIND_METADATA_SIZE: u64 = 16;
+// Two u32 fields: buf[0] = write/read position, buf[4] = end limit.
+// Binaryen's asyncify uses 32-bit pointers regardless of host word size.
+const UNWIND_METADATA_SIZE: u64 = 8;
 
 // Define the trait with the required method
 pub trait LindHost<T, U> {
     fn get_ctx(&self) -> LindCtx<T, U>;
+    fn get_ctx_mut(&mut self) -> &mut LindCtx<T, U>;
 }
 
 // Closures are abused in this file, mainly because the architecture of wasmtime itself does not support
 // the sub modules to directly interact with the top level runtime engine. But multi-processing, especially exec syscall,
 // would heavily require to do so. So the only convenient way to break the rule and communicate with the
 // top level runtime engine is abusing closures.
+#[derive(Clone)]
 pub struct LindCtx<T, U> {
     // linker used by the module
     pub linker: Option<Linker<T>>,
@@ -87,11 +91,38 @@ pub struct LindCtx<T, U> {
     // from lind-boot, used for exec call
     lindboot_cli: U,
 
+    // Optional parent-visible return value for a pending `clone`/`fork`.
+    //
+    // `fork` is special in the Lind/Wasmtime runtime because the guest-visible
+    // return value is not necessarily the immediate return value of the first
+    // hostcall. The logical fork operation is split by Asyncify:
+    //
+    // 1. the first normal `clone` hostcall performs the real fork setup and may
+    //    return through an interposed grate;
+    // 2. Wasmtime unwinds and later rewinds the guest stack;
+    // 3. the guest's actual `fork()` call site receives the value returned during
+    //    the rewind replay.
+    //
+    // This field is used to carry a grate-defined "visible" fork return value
+    // from the normal hostcall path to the later parent-side rewind replay path.
+    // The real child cage id is still used internally for RawPOSIX/Wasmtime
+    // bookkeeping; this value only affects what the parent guest observes as the
+    // return value of `fork()`.
+    //
+    // This must be shared state rather than a plain `Option<i32>` because the
+    // host/Lind context can be cloned during fork/rewind setup. Using an
+    // `Arc<Mutex<_>>` ensures that the normal path and the rewind replay path
+    // observe the same pending slot.
+    pending_clone_visible_retval: Arc<Mutex<Option<i32>>>,
+
+    // host thread stack size for spawned cage/thread processes
+    pub thread_stack_size: usize,
+
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
 
-    // fork the host
-    fork_host: Arc<dyn Fn(&T) -> T + Send + Sync + 'static>,
+    // fork the host; is_thread=true for thread creation, false for process fork
+    fork_host: Arc<dyn Fn(&T, bool) -> T + Send + Sync + 'static>,
 
     // exec the host
     exec_host: Arc<
@@ -111,10 +142,8 @@ pub struct LindCtx<T, U> {
     >,
 }
 
-impl<
-        T: Clone + Send + 'static + std::marker::Sync,
-        U: Clone + Send + 'static + std::marker::Sync,
-    > LindCtx<T, U>
+impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+    LindCtx<T, U>
 {
     // create a new LindContext
     // Function Argument:
@@ -133,21 +162,22 @@ impl<
         lind_manager: Arc<LindCageManager>,
         lindboot_cli: U,
         cageid: i32,
+        thread_stack_size: usize,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
-        fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
+        fork_host: impl Fn(&T, bool) -> T + Send + Sync + 'static,
         exec: impl Fn(
-                &U,
-                &str,
-                &Vec<String>,
-                Engine,
-                Module,
-                i32,
-                &Arc<LindCageManager>,
-                &Option<Vec<(String, Option<String>)>>,
-            ) -> Result<Vec<Val>>
-            + Send
-            + Sync
-            + 'static,
+            &U,
+            &str,
+            &Vec<String>,
+            Engine,
+            Module,
+            i32,
+            &Arc<LindCageManager>,
+            &Option<Vec<(String, Option<String>)>>,
+        ) -> Result<Vec<Val>>
+        + Send
+        + Sync
+        + 'static,
     ) -> Result<Self> {
         // this method should only be called once from run.rs, other instances of LindCtx
         // are supposed to be created from fork() method
@@ -168,6 +198,8 @@ impl<
             next_threadid,
             lind_manager: lind_manager.clone(),
             lindboot_cli,
+            pending_clone_visible_retval: Arc::new(Mutex::new(None)),
+            thread_stack_size,
             get_cx,
             fork_host,
             exec_host,
@@ -317,14 +349,17 @@ impl<
         // |         .....          | |
         // -------------------------- <----- stack high
         unsafe {
-            // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            // Write buf[0] (start) and buf[4] (end) as u32 to match the 32-bit
+            // asyncify data structure.  A u64 write would zero buf[4] (the high
+            // word), making start > end and firing the bounds-check ud2 every time.
+            *(unwind_data_start_sys as *mut u32) =
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         let get_cx = self.get_cx.clone();
         // retrieve the child host
-        let mut child_host = (self.fork_host)(caller.data());
+        let mut child_host = (self.fork_host)(caller.data(), false);
 
         let mut snapshot = {
             let mut parent_host = caller.data_mut();
@@ -352,6 +387,7 @@ impl<
         let _cloned_address = address as u64;
 
         let parent_cageid = self.cageid;
+        let thread_stack_size = self.thread_stack_size;
 
         // use the same engine for parent and child
         let engine = main_module.engine().clone();
@@ -377,11 +413,14 @@ impl<
             let barrier = Arc::new(Barrier::new(2));
             let barrier_clone = Arc::clone(&barrier);
 
-            let builder = thread::Builder::new().name(format!("lind-fork-{}", child_cageid));
+            let builder = thread::Builder::new()
+                .name(format!("lind-fork-{}", child_cageid))
+                .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table)
+                        .expect("failed to create store inner");
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -394,13 +433,17 @@ impl<
                     let module = main_module.clone();
                     let modules = child_ctx.modules.clone();
                     let dlopen_modules = child_ctx.dlopen_modules.clone();
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
                     let mut child_got = if dylink_enabled {
-                        Some(LindGOT::new())
+                        let got = child_ctx.got_table.as_ref().unwrap();
+                        let got_guard = got.lock().unwrap();
+                        Some(got_guard.clone_with_cache())
                     } else {
                         None
                     };
+
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner)
+                        .expect("failed to create store");
 
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
@@ -420,14 +463,14 @@ impl<
                     // e.g. __stack_pointer, __indirect_function_table, etc.
 
                     let child_table = if dylink_enabled {
-                        let mut table_size = 0;
+                        let mut table_size: u64 = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
                                 table_size = table.minimum();
                             }
                         }
                         let mut child_table = linker
-                            .attach_function_table(&mut store, table_size)
+                            .attach_function_table(&mut store, table_size as u32)
                             .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
@@ -442,10 +485,11 @@ impl<
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -453,14 +497,15 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -470,9 +515,10 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -527,9 +573,10 @@ impl<
                     //    Snapshots are looked up by module name from the HashMap captured before
                     //    the unwind; backup instances are never registered so they are naturally
                     //    excluded from the snapshot map.
-                    let main_module_name = module
-                        .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    let main_module_name = module.name().unwrap_or_else(|| {
+                        lind_debug_panic!("module has no name");
+                        "" // best-effort fallback in LogOnly/NoAction mode
+                    });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -543,7 +590,18 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
-                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+                        let fpcast_enabled = engine.fpcast_enabled();
+                        instance.apply_GOT_relocs(
+                            &mut store,
+                            None,
+                            &child_table,
+                            None,
+                            fpcast_enabled,
+                        );
+
+                        linker
+                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
                             // Read dylink metadata for this dlopen'd module.
@@ -555,10 +613,11 @@ impl<
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -566,14 +625,15 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -650,7 +710,7 @@ impl<
 
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().as_ptr().cast();
 
                     // 2) Extract vmctx pointer and put in a Send+Sync wrapper
                     let vmctx_wrapper = VmCtxWrapper {
@@ -731,8 +791,7 @@ impl<
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            let e = wasi_common::maybe_exit_on_error(err);
-                            eprintln!("Child Error: {:?}", e);
+                            lind_log!(Default, "Child Error: {:?}", err);
                             cage::cage_record_exit_status(
                                 child_cageid,
                                 cage::ExitStatus::Exited(1),
@@ -745,7 +804,8 @@ impl<
                             cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
                             cage::cage_finalize(child_cageid);
                             if !rm_vmctx_thread(child_cageid, 0) {
-                                eprintln!(
+                                lind_log!(
+                                    Default,
                                     "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
                                     child_cageid
                                 );
@@ -761,7 +821,7 @@ impl<
                         match exit_code {
                             Val::I32(val) => {}
                             _ => {
-                                eprintln!("unexpected _start function return type!");
+                                lind_log!(Default, "unexpected _start function return type!");
                             }
                         }
                     }
@@ -832,17 +892,16 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) =
-                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(parent_unwind_data_start_sys as *mut u32) =
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((parent_unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // set up child_tid
         let next_tid = match self.next_thread_id() {
             Some(val) => val,
             None => {
-                println!("running out of thread id!");
+                lind_log!(Default, "running out of thread id!");
                 0
             }
         };
@@ -871,6 +930,9 @@ impl<
 
         let get_cx = self.get_cx.clone();
 
+        // retrieve the child host
+        let mut child_host = (self.fork_host)(caller.data(), true);
+
         // retrieve a snapshot of the Globals defined in the main module, which will be used to initialize the Globals in child instance.
         let mut snapshot = {
             let mut parent_host = caller.data_mut();
@@ -883,9 +945,6 @@ impl<
 
             snapshot
         };
-
-        // retrieve the child host
-        let mut child_host = caller.data().clone();
 
         let global_snapshots = caller.as_context_mut().get_global_snapshot();
 
@@ -906,6 +965,7 @@ impl<
 
         // get current cageid, child should have the same cageid
         let child_cageid = self.cageid;
+        let thread_stack_size = self.thread_stack_size;
 
         // use the same engine for parent and child
         let engine = main_module.engine().clone();
@@ -913,9 +973,9 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         store.set_on_called(Box::new(move |mut store| {
-            // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
-            // end address of the unwind_data
-            let parent_unwind_data_end_usr = unsafe { *(parent_unwind_data_start_sys as *mut u64) };
+            // once unwind is finished, buf[0] (u32) holds the final write position
+            let parent_unwind_data_end_usr =
+                unsafe { *(parent_unwind_data_start_sys as *mut u32) } as u64;
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -941,17 +1001,23 @@ impl<
             // so a seperate copy is needed for child. The unwind context also contains some absolute address that is relative to parent
             // hence we also need to translate it to be relative to child's stack
             unsafe {
-                // first 4 bytes in unwind data represent the address of the end of the unwind data
-                // we also need to change this for child
-                *(child_unwind_data_start_sys as *mut u64) =
-                    child_unwind_data_start_usr + rewind_total_size as u64;
+                // buf[0] (u32): backward read starts at the end of the copied data.
+                // buf[4] (u32): set equal to buf[0] so the bounds check (start > end)
+                //               does not fire on asyncify_start_rewind.
+                let child_rewind_end =
+                    (child_unwind_data_start_usr + rewind_total_size as u64) as u32;
+                *(child_unwind_data_start_sys as *mut u32) = child_rewind_end;
+                *((child_unwind_data_start_sys as usize + 4) as *mut u32) = child_rewind_end;
             }
 
-            let builder = thread::Builder::new().name(format!("lind-thread-{}", next_tid));
+            let builder = thread::Builder::new()
+                .name(format!("lind-thread-{}", next_tid))
+                .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table)
+                        .expect("failed to create store inner");
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -967,7 +1033,8 @@ impl<
                     let modules = child_ctx.modules.clone();
                     let dlopen_modules = child_ctx.dlopen_modules.clone();
 
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner)
+                        .expect("failed to create store");
 
                     let mut child_got = if dylink_enabled {
                         Some(LindGOT::new())
@@ -987,14 +1054,14 @@ impl<
                         .expect("failed to create child linker");
 
                     let child_table = if dylink_enabled {
-                        let mut table_size = 0;
+                        let mut table_size: u64 = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
                                 table_size = table.minimum();
                             }
                         }
                         let mut child_table = linker
-                            .attach_function_table(&mut store, table_size)
+                            .attach_function_table(&mut store, table_size as u32)
                             .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
@@ -1009,10 +1076,11 @@ impl<
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -1020,14 +1088,15 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1037,9 +1106,10 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1082,9 +1152,10 @@ impl<
                     //    Store/Instance, so globals must be explicitly synced from the parent's
                     //    snapshot. Snapshots are looked up by module name; backup instances are
                     //    never registered and are therefore naturally excluded.
-                    let main_module_name = module
-                        .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    let main_module_name = module.name().unwrap_or_else(|| {
+                        lind_debug_panic!("module has no name");
+                        "" // best-effort fallback in LogOnly/NoAction mode
+                    });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -1098,29 +1169,42 @@ impl<
 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
-                        instance.apply_GOT_relocs(&mut store, None, &child_table, None, false);
+                        let fpcast_enabled = engine.fpcast_enabled();
+                        instance.apply_GOT_relocs(
+                            &mut store,
+                            None,
+                            &child_table,
+                            None,
+                            fpcast_enabled,
+                        );
+
+                        linker
+                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
                             let dylink_info = module.dylink_meminfo();
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] dlopen library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1166,10 +1250,9 @@ impl<
                     // we might also want to perserve the offset of current stack pointer to stack bottom
                     // not very sure if this is required, but just keep everything the same from parent seems to be good
                     let offset = parent_stack_high_usr as u32 - stack_pointer;
-                    let stack_pointer_setter = instance
-                        .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
+                    instance
+                        .set_stack_pointer(&mut store, (stack_addr - offset) as i32)
                         .unwrap();
-                    let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
                     // TODO: set up __stack_low and __stack_high
                     // TODO: should share the imported wasm global
 
@@ -1211,7 +1294,7 @@ impl<
                     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().as_ptr().cast();
 
                     // 2) Extract vmctx pointer and put in a Send+Sync wrapper
                     let vmctx_wrapper = VmCtxWrapper {
@@ -1266,8 +1349,7 @@ impl<
 
                     // print errors if any when running the thread
                     if let Err(err) = invoke_res {
-                        let e = wasi_common::maybe_exit_on_error(err);
-                        eprintln!("Error: {:?}", e);
+                        lind_log!(Default, "Error: {:?}", err);
                         return 0;
                     }
 
@@ -1281,7 +1363,11 @@ impl<
                             rm_vmctx_thread(child_cageid as u64, next_tid as u64);
                         }
                         _ => {
-                            eprintln!("unexpected _start function return type: {:?}", exit_code);
+                            lind_log!(
+                                Default,
+                                "unexpected _start function return type: {:?}",
+                                exit_code
+                            );
                         }
                     }
 
@@ -1341,7 +1427,7 @@ impl<
 
         let engine = main_module.engine().clone();
         let exec_file_path = Path::new(&path);
-        let exec_module = match engine.detect_precompiled_file(exec_file_path) {
+        let exec_module = match Engine::detect_precompiled_file(exec_file_path) {
             Ok(_) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
             Err(_) => Module::from_file(&engine, exec_file_path),
         };
@@ -1390,10 +1476,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) =
-                parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(parent_unwind_data_start_sys as *mut u32) =
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((parent_unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1450,7 +1535,26 @@ impl<
                 &environs,
             );
 
-            return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
+            // If the exec'd module crashed (wasm trap, unreachable, etc.) rather
+            // than exiting cleanly, we must still finalize the cage so the parent's
+            // waitpid() unblocks.  Without this, the parent hangs forever because
+            // cage_finalize (which records the zombie and sends SIGCHLD) is never
+            // called.  Mirror the fork-crash cleanup path (see fork_call error
+            // handling) exactly.
+            if let Err(ref _e) = ret {
+                cage::cage_record_exit_status(cloned_cageid as u64, cage::ExitStatus::Exited(1));
+                if let Some(c) = cage::get_cage(cloned_cageid as u64) {
+                    c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                }
+                threei::EXITING_TABLE.insert(cloned_cageid as u64);
+                threei::handler_table::_rm_grate_from_handler(cloned_cageid as u64);
+                cage::signal::lind_thread_exit(cloned_cageid as u64, THREAD_START_ID as u64);
+                cage::cage_finalize(cloned_cageid as u64);
+                cloned_lind_manager.decrement();
+                return Ok(OnCalledAction::Finish(vec![Val::I32(1)]));
+            }
+
+            return Ok(OnCalledAction::Finish(ret.unwrap()));
         }));
 
         // set asyncify state to unwind
@@ -1493,9 +1597,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
-            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(parent_unwind_data_start_sys as *mut u32) =
+                (parent_unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((parent_unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1523,7 +1627,8 @@ impl<
 
                 // Remove the VMContext pool
                 if !rm_vmctx_thread(deferred_cageid, 0) {
-                    eprintln!(
+                    lind_log!(
+                        Default,
                         "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
                         deferred_cageid
                     );
@@ -1568,9 +1673,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(unwind_data_start_sys as *mut u32) =
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1587,9 +1692,8 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         store.set_on_called(Box::new(move |mut store| {
-            // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
-            // end address of the unwind_data
-            let unwind_data_end_usr = unsafe { *(unwind_data_start_sys as *mut u64) };
+            // once unwind is finished, buf[0] (u32) holds the final write position
+            let unwind_data_end_usr = unsafe { *(unwind_data_start_sys as *mut u32) } as u64;
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -1647,9 +1751,9 @@ impl<
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
-            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+            *(unwind_data_start_sys as *mut u32) =
+                (unwind_data_start_usr + UNWIND_METADATA_SIZE) as u32;
+            *((unwind_data_start_sys + 4) as *mut u32) = stack_pointer as u32;
         }
 
         // mark the start of unwind
@@ -1743,9 +1847,16 @@ impl<
 
     // fork the state for new process
     pub fn fork_process(&self) -> Self {
+        let cloned_got = if let Some(got) = self.got_table.as_ref() {
+            let got_guard = got.lock().unwrap();
+            Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
+        } else {
+            None
+        };
+
         let forked_ctx = Self {
-            linker: None,    // Linker is explicitly set up by the caller
-            got_table: None, // new process should use a new GOT
+            linker: None,          // Linker is explicitly set up by the caller
+            got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: 0,                                  // cageid is managed by lind-common
@@ -1753,6 +1864,8 @@ impl<
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
@@ -1763,9 +1876,16 @@ impl<
 
     // fork the state for new thread
     pub fn fork_thread(&self) -> Self {
+        let cloned_got = if let Some(got) = self.got_table.as_ref() {
+            let got_guard = got.lock().unwrap();
+            Some(Arc::new(Mutex::new(got_guard.clone_with_cache())))
+        } else {
+            None
+        };
+
         let forked_ctx = Self {
-            linker: None,    // Linker is explicitly set up by the caller
-            got_table: None, // threads within a process should use same GOT
+            linker: None,          // Linker is explicitly set up by the caller
+            got_table: cloned_got, // use GOT with cloned cache, GOT entries will be constructed later
             modules: self.modules.clone(),
             dlopen_modules: self.dlopen_modules.clone(),
             cageid: self.cageid,
@@ -1773,6 +1893,8 @@ impl<
             next_threadid: self.next_threadid.clone(),
             lind_manager: self.lind_manager.clone(),
             lindboot_cli: self.lindboot_cli.clone(),
+            pending_clone_visible_retval: self.pending_clone_visible_retval.clone(),
+            thread_stack_size: self.thread_stack_size,
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
@@ -1782,25 +1904,23 @@ impl<
     }
 }
 
-impl<T, U> Clone for LindCtx<T, U>
-where
-    T: Clone + Send + Sync + 'static,
-    U: Clone + Send + Sync + 'static,
-{
-    fn clone(&self) -> Self {
-        self.fork_thread()
-    }
-}
-
 // get the base address of the wasm process
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    let mut memory_iter = caller.as_context_mut().0.all_memories();
-    let memory = memory_iter.next().expect("no defined memory found").clone();
-    drop(memory_iter);
-
-    memory.data_ptr(caller.as_context()) as usize as u64
+    let em = caller
+        .as_context_mut()
+        .0
+        .all_memories()
+        .next()
+        .expect("no defined memory found");
+    if let Some(base) = em.shared_base_ptr() {
+        base as usize as u64
+    } else {
+        em.unshared()
+            .expect("expected memory")
+            .data_ptr(caller.as_context()) as usize as u64
+    }
 }
 
 /// Returns `(base_ptr_as_u64, data_size_in_bytes)` for the first guest linear
@@ -1809,13 +1929,26 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
 pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> (u64, usize) {
-    let mut memory_iter = caller.as_context_mut().0.all_memories();
-    let memory = memory_iter.next().expect("no defined memory found").clone();
-    drop(memory_iter);
-
-    let base = memory.data_ptr(caller.as_context()) as usize as u64;
-    let size = memory.data_size(caller.as_context());
-    (base, size)
+    let em = caller
+        .as_context_mut()
+        .0
+        .all_memories()
+        .next()
+        .expect("no defined memory found");
+    if let Some(base) = em.shared_base_ptr() {
+        let size = unsafe {
+            let vm = em.shared().expect("shared memory");
+            (*vm.vmmemory_ptr().as_ptr())
+                .current_length
+                .load(std::sync::atomic::Ordering::SeqCst)
+        };
+        (base as usize as u64, size)
+    } else {
+        let m = em.unshared().expect("expected memory");
+        let base = m.data_ptr(caller.as_context()) as usize as u64;
+        let size = m.data_size(caller.as_context());
+        (base, size)
+    }
 }
 
 // entry point of fork syscall
@@ -1923,7 +2056,8 @@ where
 
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
-        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         let ret = Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             // Validate clone_arg inside Caller::with where memory bounds are available.
@@ -2040,7 +2174,8 @@ where
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
-        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             let host = caller.data().clone();
@@ -2147,7 +2282,8 @@ where
         // Convert the stored opaque pointer back into a concrete VMContext
         // so that we can safely re-enter Wasmtime execution.
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
-        let vmctx_raw: *mut VMContext = VMContext::from_opaque(opaque);
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         // Re-enter Wasmtime with the recovered VMContext.
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
@@ -2222,34 +2358,112 @@ where
 
 // attach a new SharedMemory to the Linker for multi-threading usage
 // Warning: only set need_init to true for first cage initialization
+//
+// `all_modules` should include the main module plus all preload library modules.
+// The shared memory is created with limits that satisfy every module's import
+// declaration: min = max(all declared mins), max = min(all declared maxes).
 pub fn attach_shared_memory<
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 >(
     store: impl AsContext<Data = T>,
     mut linker: &mut Linker<T>,
-    module: &Module,
+    all_modules: &[Module],
     need_init: bool,
     cageid: i32,
 ) -> Result<()> {
-    for import in module.imports() {
+    // Find the shared memory import in the first module (main module) to get
+    // the import namespace / name under which to register the memory.
+    let main_module = all_modules
+        .first()
+        .ok_or_else(|| anyhow!("no modules provided"))?;
+
+    let mut import_module_name = "";
+    let mut import_name = "";
+    let mut found = false;
+    for import in main_module.imports() {
         if let Some(m) = import.ty().memory() {
             if m.is_shared() {
-                let mem = SharedMemory::new(module.engine(), m.clone())?;
-                if need_init {
-                    // in case of first cage
-                    // Initialize vmmap immediately after creating the shared linear memory
-                    let memory_base = mem.get_memory_base();
-                    cage::init_vmmap(cageid as u64, memory_base as usize, None);
-                }
-                linker.define(&store, import.module(), import.name(), mem.clone())?;
+                import_module_name = import.module();
+                import_name = import.name();
+                found = true;
+                break;
+            }
+        }
+    }
+    if !found {
+        return Err(anyhow!("Main Module does not contain a shared memory"));
+    }
 
-                return Ok(());
+    // In lind-wasm the linear memory is always a fixed 4 GiB physical
+    // reservation (MmapMemory overrides max to MAX_MEMORY_SIZE = 4 GiB).
+    // The wasm modules may declare a smaller `max` (e.g. 1024 pages = 64 MiB)
+    // but that is a compiler artifact — the runtime must honour the full 4 GiB.
+    // We therefore always create the shared memory with max = 65536 pages (4 GiB)
+    // and grow to that size immediately, so that `current_length` reflects the
+    // true accessible extent.  The max-limit type check in matching.rs is
+    // relaxed for shared memories to allow this.
+    //
+    // We still compute combined_min (= max of all declared mins) to satisfy
+    // every module's minimum requirement.
+    let mut combined_min: u64 = 0;
+    for module in all_modules.iter() {
+        for import in module.imports() {
+            if let Some(m) = import.ty().memory() {
+                if m.is_shared() {
+                    combined_min = combined_min.max(m.minimum());
+                    break;
+                }
             }
         }
     }
 
-    Err(anyhow!("Main Module does not contain a shared memory"))
+    // Always use 65536 pages (4 GiB) as the declared maximum so that
+    // current_length can be grown to the full physical reservation.
+    const LIND_MAX_PAGES: u64 = 65536;
+
+    let mem_type = wasmtime::MemoryTypeBuilder::new()
+        .shared(true)
+        .min(combined_min)
+        .max(Some(LIND_MAX_PAGES))
+        .build()
+        .map_err(anyhow::Error::from)?;
+
+    let mem = SharedMemory::new(main_module.engine(), mem_type)?;
+
+    // Grow to the full 4 GiB so that every wasm address in [0, 4GiB) passes
+    // the current_length bounds check.  The physical pages are already reserved
+    // by MmapMemory; this just makes them PROT_READ|PROT_WRITE and updates
+    // current_length atomically.
+    let delta = LIND_MAX_PAGES.saturating_sub(combined_min);
+    if delta > 0 {
+        mem.grow(delta)
+            .map_err(anyhow::Error::from)
+            .context("failed to grow shared memory to 4 GiB")?;
+    }
+
+    if need_init {
+        let memory_base = mem.get_memory_base();
+
+        // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
+        // before handing it to rawposix. rawposix vmmap is solely responsible
+        // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses
+        // them. early_init_stack (dylink) and the make_syscall in
+        // new_started_impl_with_lind re-establish the required initial regions
+        // before any wasm code runs.
+        unsafe {
+            libc::mprotect(
+                memory_base as *mut libc::c_void,
+                1usize << 32,
+                libc::PROT_NONE,
+            );
+        }
+
+        cage::init_vmmap(cageid as u64, memory_base as usize, None);
+    }
+    linker.define(&store, import_module_name, import_name, mem.clone())?;
+
+    Ok(())
 }
 
 pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {
@@ -2330,4 +2544,63 @@ fn has_correct_signature(module: &Module) -> bool {
     }
 
     true
+}
+
+/// Stores a pending parent-visible return value for the current logical
+/// `clone`/`fork`.
+///
+/// This should be called on the first, non-rewind execution path after the
+/// syscall/interposition layer has produced the value that should be exposed
+/// to the parent guest. For example, a grate may perform the real fork but
+/// return a spoofed value that should later be returned from the guest's
+/// `fork()` call site.
+///
+/// The value is not returned to the guest immediately here. Instead, it is
+/// saved until the parent-side Asyncify rewind replay reaches the same
+/// `make-syscall` import again. At that point, `take_pending_clone_visible_retval`
+/// consumes this value and uses it to override the positive real child cage id.
+///
+/// The slot is protected by a mutex and stored behind an `Arc` so that it
+/// survives `HostCtx`/`LindCtx` cloning across fork setup.
+pub fn set_pending_clone_visible_retval<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+    retval: i32,
+) -> Result<()> {
+    let ctx = caller.data_mut().get_ctx_mut();
+
+    let mut slot = ctx.pending_clone_visible_retval.lock().unwrap();
+
+    *slot = Some(retval);
+
+    Ok(())
+}
+
+/// Consumes the pending parent-visible `clone`/`fork` return value, if any.
+///
+/// This is intended to be called from the `CLONE_SYSCALL` rewind replay path,
+/// after `catch_rewind` returns a positive `rewind_res`. A positive rewind
+/// result means we are replaying the parent side of `fork`, where the default
+/// return value would be the real child cage id.
+///
+/// If a pending visible value exists, this function returns it and clears the
+/// slot, so the override applies to exactly one logical fork. If no pending
+/// value exists, the caller should fall back to the original `rewind_res`.
+///
+/// Child-side fork replay should not use this override: the child must still
+/// observe `fork()` returning 0.
+pub fn take_pending_clone_visible_retval<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+) -> Option<i32> {
+    let ctx = caller.data_mut().get_ctx_mut();
+
+    let mut slot = ctx.pending_clone_visible_retval.lock().unwrap();
+    let ret = slot.take();
+
+    ret
 }

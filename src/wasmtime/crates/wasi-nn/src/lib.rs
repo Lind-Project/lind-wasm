@@ -1,13 +1,35 @@
-mod ctx;
-mod registry;
-
 pub mod backend;
-pub use ctx::{preload, WasiNnCtx};
-pub use registry::{GraphRegistry, InMemoryRegistry};
+mod registry;
 pub mod wit;
 pub mod witx;
 
+use crate::backend::{BackendError, Id, NamedTensor as BackendNamedTensor};
+use crate::wit::generated_::wasi::nn::tensor::TensorType;
+use core::fmt;
+pub use registry::{GraphRegistry, InMemoryRegistry};
+use std::path::Path;
 use std::sync::Arc;
+use wasmtime::format_err;
+
+/// Construct an in-memory registry from the available backends and a list of
+/// `(<backend name>, <graph directory>)`. This assumes graphs can be loaded
+/// from a local directory, which is a safe assumption currently for the current
+/// model types.
+pub fn preload(preload_graphs: &[(String, String)]) -> wasmtime::Result<(Vec<Backend>, Registry)> {
+    let mut backends = backend::list();
+    let mut registry = InMemoryRegistry::new();
+    for (kind, path) in preload_graphs {
+        let kind_ = kind.parse()?;
+        let backend = backends
+            .iter_mut()
+            .find(|b| b.encoding() == kind_)
+            .ok_or(format_err!("unsupported backend: {kind}"))?
+            .as_dir_loadable()
+            .ok_or(format_err!("{kind} does not support directory loading"))?;
+        registry.load(backend, Path::new(path))?;
+    }
+    Ok((backends, Registry::from(registry)))
+}
 
 /// A machine learning backend.
 pub struct Backend(Box<dyn backend::BackendInner>);
@@ -40,6 +62,27 @@ impl std::ops::Deref for Graph {
     type Target = dyn backend::BackendGraph;
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
+    }
+}
+
+/// A host-side tensor.
+///
+/// Eventually, this may be defined in each backend as they gain the ability to
+/// hold tensors on various devices (TODO:
+/// https://github.com/WebAssembly/wasi-nn/pull/70).
+#[derive(Clone, PartialEq)]
+pub struct Tensor {
+    pub dimensions: Vec<u32>,
+    pub ty: TensorType,
+    pub data: Vec<u8>,
+}
+impl fmt::Debug for Tensor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Tensor")
+            .field("dimensions", &self.dimensions)
+            .field("ty", &self.ty)
+            .field("data (bytes)", &self.data.len())
+            .finish()
     }
 }
 
@@ -81,5 +124,39 @@ where
 {
     fn from(value: T) -> Self {
         Self(Box::new(value))
+    }
+}
+
+impl ExecutionContext {
+    pub fn set_input(&mut self, id: Id, tensor: &Tensor) -> Result<(), BackendError> {
+        self.0.set_input(id, tensor)
+    }
+
+    pub fn compute(&mut self) -> Result<(), BackendError> {
+        self.0.compute(None).map(|_| ())
+    }
+
+    pub fn get_output(&mut self, id: Id) -> Result<Tensor, BackendError> {
+        self.0.get_output(id)
+    }
+
+    pub fn compute_with_io(
+        &mut self,
+        inputs: Vec<BackendNamedTensor>,
+    ) -> Result<Vec<BackendNamedTensor>, BackendError> {
+        match self.0.compute(Some(inputs))? {
+            Some(outputs) => Ok(outputs),
+            None => Ok(Vec::new()),
+        }
+    }
+}
+
+impl Tensor {
+    pub fn new(dimensions: Vec<u32>, ty: TensorType, data: Vec<u8>) -> Self {
+        Self {
+            dimensions,
+            ty,
+            data,
+        }
     }
 }

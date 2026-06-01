@@ -3,12 +3,13 @@
 // proxy world.
 #![cfg_attr(
     feature = "proxy",
-    allow(
+    expect(
         unused_mut,
         unused_variables,
         dead_code,
         unused_imports,
-        unreachable_code
+        unreachable_code,
+        reason = "stripped down in proxy build",
     )
 )]
 
@@ -21,13 +22,13 @@ use core::cell::{Cell, RefCell, RefMut, UnsafeCell};
 use core::cmp::min;
 use core::ffi::c_void;
 use core::hint::black_box;
-use core::mem::{self, align_of, forget, size_of, ManuallyDrop, MaybeUninit};
+use core::mem::{self, ManuallyDrop, MaybeUninit, align_of, forget, size_of};
 use core::num::NonZeroUsize;
 use core::ops::{Deref, DerefMut};
 use core::ptr::{self, null_mut};
 use core::slice;
 use poll::Pollable;
-use wasi::*;
+use wasip1::*;
 
 #[cfg(not(feature = "proxy"))]
 use crate::bindings::wasi::filesystem::types as filesystem;
@@ -50,9 +51,8 @@ use crate::descriptors::{Descriptor, Descriptors, StreamType, Streams};
 pub mod bindings {
     #[cfg(feature = "command")]
     wit_bindgen_rust_macro::generate!({
-        path: "../wasi/wit",
+        path: "../wasi/src/p2/wit",
         world: "wasi:cli/command",
-        std_feature,
         raw_strings,
         runtime_path: "crate::bindings::wit_bindgen_rt_shim",
         // Automatically generated bindings for these functions will allocate
@@ -61,14 +61,20 @@ pub mod bindings {
         // can't support in these special core-wasm adapters.
         // Instead, we manually define the bindings for these functions in
         // terms of raw pointers.
-        skip: ["run", "get-environment", "poll"],
+        skip: [
+            "run",
+            "get-environment",
+            "poll",
+            "[method]outgoing-datagram-stream.send",
+        ],
+        generate_all,
+        disable_custom_section_link_helpers: true,
     });
 
     #[cfg(feature = "reactor")]
     wit_bindgen_rust_macro::generate!({
-        path: "../wasi/wit",
+        path: "../wasi/src/p2/wit",
         world: "wasi:cli/imports",
-        std_feature,
         raw_strings,
         runtime_path: "crate::bindings::wit_bindgen_rt_shim",
         // Automatically generated bindings for these functions will allocate
@@ -77,7 +83,13 @@ pub mod bindings {
         // can't support in these special core-wasm adapters.
         // Instead, we manually define the bindings for these functions in
         // terms of raw pointers.
-        skip: ["get-environment", "poll"],
+        skip: [
+            "get-environment",
+            "poll",
+            "[method]outgoing-datagram-stream.send",
+        ],
+        generate_all,
+        disable_custom_section_link_helpers: true,
     });
 
     #[cfg(feature = "proxy")]
@@ -87,18 +99,20 @@ pub mod bindings {
             package wasmtime:adapter;
 
             world adapter {
-                import wasi:clocks/wall-clock@0.2.0;
-                import wasi:clocks/monotonic-clock@0.2.0;
-                import wasi:random/random@0.2.0;
-                import wasi:cli/stdout@0.2.0;
-                import wasi:cli/stderr@0.2.0;
-                import wasi:cli/stdin@0.2.0;
+                import wasi:clocks/wall-clock@0.2.6;
+                import wasi:clocks/monotonic-clock@0.2.6;
+                import wasi:random/random@0.2.6;
+                import wasi:cli/stdout@0.2.6;
+                import wasi:cli/stderr@0.2.6;
+                import wasi:cli/stdin@0.2.6;
             }
         "#,
-        std_feature,
+        world: "wasmtime:adapter/adapter",
         raw_strings,
         runtime_path: "crate::bindings::wit_bindgen_rt_shim",
-        skip: ["poll"],
+        skip: ["poll", "[method]outgoing-datagram-stream.send"],
+        generate_all,
+        disable_custom_section_link_helpers: true,
     });
 
     pub mod wit_bindgen_rt_shim {
@@ -108,12 +122,12 @@ pub mod bindings {
     }
 }
 
-#[export_name = "wasi:cli/run@0.2.0#run"]
+#[unsafe(export_name = "wasi:cli/run@0.2.6#run")]
 #[cfg(feature = "command")]
-pub unsafe extern "C" fn run() -> u32 {
+pub extern "C" fn run() -> u32 {
     #[link(wasm_import_module = "__main_module__")]
-    extern "C" {
-        fn _start();
+    unsafe extern "C" {
+        safe fn _start();
     }
     _start();
     0
@@ -122,7 +136,7 @@ pub unsafe extern "C" fn run() -> u32 {
 #[cfg(feature = "proxy")]
 macro_rules! cfg_filesystem_available {
     ($($t:tt)*) => {
-        wasi::ERRNO_NOTSUP
+        wasip1::ERRNO_NOTSUP
     };
 }
 #[cfg(not(feature = "proxy"))]
@@ -161,8 +175,8 @@ impl<T, E> TrappingUnwrap<T> for Result<T, E> {
 /// This is intended for use by `wasi-libc` during its incremental transition
 /// from WASI Preview 1 to Preview 2.  It will use this function to reserve
 /// descriptors for its own use, valid only for use with libc functions.
-#[no_mangle]
-pub unsafe extern "C" fn adapter_open_badfd(fd: *mut u32) -> Errno {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn adapter_open_badfd(fd: &mut u32) -> Errno {
     State::with(|state| {
         *fd = state.descriptors_mut().open(Descriptor::Bad)?;
         Ok(())
@@ -170,20 +184,22 @@ pub unsafe extern "C" fn adapter_open_badfd(fd: *mut u32) -> Errno {
 }
 
 /// Close a descriptor previously opened using `adapter_open_badfd`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn adapter_close_badfd(fd: u32) -> Errno {
     State::with(|state| state.descriptors_mut().close(fd))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn reset_adapter_state() {
-    let state = get_state_ptr();
-    if !state.is_null() {
-        State::init(state)
+    unsafe {
+        let state = get_state_ptr();
+        if !state.is_null() {
+            State::init(state)
+        }
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cabi_import_realloc(
     old_ptr: *mut u8,
     old_size: usize,
@@ -193,7 +209,7 @@ pub unsafe extern "C" fn cabi_import_realloc(
     let mut ptr = null_mut::<u8>();
     State::with(|state| {
         let mut alloc = state.import_alloc.replace(ImportAlloc::None);
-        ptr = alloc.alloc(old_ptr, old_size, align, new_size);
+        ptr = unsafe { alloc.alloc(old_ptr, old_size, align, new_size) };
         state.import_alloc.set(alloc);
         Ok(())
     });
@@ -372,32 +388,33 @@ impl ImportAlloc {
             return old_ptr;
         }
         match self {
-            ImportAlloc::OneAlloc(alloc) => {
+            ImportAlloc::OneAlloc(alloc) => unsafe {
                 let ret = alloc.alloc(align, size);
                 *self = ImportAlloc::None;
                 ret
-            }
-            ImportAlloc::SeparateStringsAndPointers { strings, pointers } => {
+            },
+            ImportAlloc::SeparateStringsAndPointers { strings, pointers } => unsafe {
                 if align == 1 {
                     strings.alloc(align, size + 1)
                 } else {
                     pointers.alloc(align, size)
                 }
-            }
+            },
             ImportAlloc::CountAndDiscardStrings {
                 strings_size,
                 alloc,
-            } => {
+            } => unsafe {
                 if align == 1 {
                     *strings_size += size;
                     alloc.clone().alloc(align, size)
                 } else {
                     alloc.alloc(align, size)
                 }
-            }
-            ImportAlloc::GetPreopenPath { cur, nth, alloc } => {
+            },
+            ImportAlloc::GetPreopenPath { cur, nth, alloc } => unsafe {
                 if align == 1 {
                     let real_alloc = *nth == *cur;
+                    *cur += 1;
                     if real_alloc {
                         alloc.alloc(align, size)
                     } else {
@@ -406,7 +423,7 @@ impl ImportAlloc {
                 } else {
                     alloc.alloc(align, size)
                 }
-            }
+            },
             ImportAlloc::None => {
                 unreachable!("no allocator configured")
             }
@@ -426,13 +443,15 @@ struct BumpAlloc {
 
 impl BumpAlloc {
     unsafe fn alloc(&mut self, align: usize, size: usize) -> *mut u8 {
-        self.align_to(align);
+        unsafe {
+            self.align_to(align);
+        }
         if size > self.len {
             unreachable!("allocation size is too large")
         }
         self.len -= size;
         let ret = self.base;
-        self.base = ret.add(size);
+        self.base = unsafe { ret.add(size) };
         ret
     }
 
@@ -441,17 +460,17 @@ impl BumpAlloc {
             unreachable!("invalid alignment");
         }
         let align_offset = self.base.align_offset(align);
-        if align_offset >= self.len {
+        if align_offset > self.len {
             unreachable!("failed to allocate")
         }
         self.len -= align_offset;
-        self.base = self.base.add(align_offset);
+        self.base = unsafe { self.base.add(align_offset) };
     }
 }
 
 #[cfg(not(feature = "proxy"))]
-#[link(wasm_import_module = "wasi:cli/environment@0.2.0")]
-extern "C" {
+#[link(wasm_import_module = "wasi:cli/environment@0.2.6")]
+unsafe extern "C" {
     #[link_name = "get-arguments"]
     fn wasi_cli_get_arguments(rval: *mut WasmStrList);
     #[link_name = "get-environment"]
@@ -460,7 +479,7 @@ extern "C" {
 
 /// Read command-line argument data.
 /// The size of the array should match that returned by `args_sizes_get`
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn args_get(argv: *mut *mut u8, argv_buf: *mut u8) -> Errno {
     State::with(|state| {
         #[cfg(not(feature = "proxy"))]
@@ -470,7 +489,7 @@ pub unsafe extern "C" fn args_get(argv: *mut *mut u8, argv_buf: *mut u8) -> Errn
                     base: argv_buf,
                     len: usize::MAX,
                 },
-                pointers: state.temporary_alloc(),
+                pointers: unsafe { state.temporary_alloc() },
             };
             let (list, _) = state.with_import_alloc(alloc, || unsafe {
                 let mut list = WasmStrList {
@@ -484,10 +503,12 @@ pub unsafe extern "C" fn args_get(argv: *mut *mut u8, argv_buf: *mut u8) -> Errn
             // Fill in `argv` by walking over the returned `list` and then
             // additionally apply the nul-termination for each argument itself
             // here.
-            for i in 0..list.len {
-                let s = list.base.add(i).read();
-                *argv.add(i) = s.ptr.cast_mut();
-                *s.ptr.add(s.len).cast_mut() = 0;
+            unsafe {
+                for i in 0..list.len {
+                    let s = list.base.add(i).read();
+                    *argv.add(i) = s.ptr.cast_mut();
+                    *s.ptr.add(s.len).cast_mut() = 0;
+                }
             }
         }
         Ok(())
@@ -495,8 +516,8 @@ pub unsafe extern "C" fn args_get(argv: *mut *mut u8, argv_buf: *mut u8) -> Errn
 }
 
 /// Return command-line argument data sizes.
-#[no_mangle]
-pub unsafe extern "C" fn args_sizes_get(argc: *mut Size, argv_buf_size: *mut Size) -> Errno {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn args_sizes_get(argc: &mut Size, argv_buf_size: &mut Size) -> Errno {
     State::with(|state| {
         #[cfg(feature = "proxy")]
         {
@@ -507,7 +528,7 @@ pub unsafe extern "C" fn args_sizes_get(argc: *mut Size, argv_buf_size: *mut Siz
         {
             let alloc = ImportAlloc::CountAndDiscardStrings {
                 strings_size: 0,
-                alloc: state.temporary_alloc(),
+                alloc: unsafe { state.temporary_alloc() },
             };
             let (len, alloc) = state.with_import_alloc(alloc, || unsafe {
                 let mut list = WasmStrList {
@@ -536,7 +557,7 @@ pub unsafe extern "C" fn args_sizes_get(argc: *mut Size, argv_buf_size: *mut Siz
 
 /// Read environment variable data.
 /// The sizes of the buffers should match that returned by `environ_sizes_get`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn environ_get(environ: *mut *const u8, environ_buf: *mut u8) -> Errno {
     State::with(|state| {
         #[cfg(not(feature = "proxy"))]
@@ -546,7 +567,7 @@ pub unsafe extern "C" fn environ_get(environ: *mut *const u8, environ_buf: *mut 
                     base: environ_buf,
                     len: usize::MAX,
                 },
-                pointers: state.temporary_alloc(),
+                pointers: unsafe { state.temporary_alloc() },
             };
             let (list, _) = state.with_import_alloc(alloc, || unsafe {
                 let mut list = StrTupleList {
@@ -561,11 +582,13 @@ pub unsafe extern "C" fn environ_get(environ: *mut *const u8, environ_buf: *mut 
             // are guaranteed to be allocated next to each other with one
             // extra byte at the end, so also insert the `=` between keys and
             // the `\0` at the end of the env var.
-            for i in 0..list.len {
-                let s = list.base.add(i).read();
-                *environ.add(i) = s.key.ptr;
-                *s.key.ptr.add(s.key.len).cast_mut() = b'=';
-                *s.value.ptr.add(s.value.len).cast_mut() = 0;
+            unsafe {
+                for i in 0..list.len {
+                    let s = list.base.add(i).read();
+                    *environ.add(i) = s.key.ptr;
+                    *s.key.ptr.add(s.key.len).cast_mut() = b'=';
+                    *s.value.ptr.add(s.value.len).cast_mut() = 0;
+                }
             }
         }
 
@@ -574,13 +597,13 @@ pub unsafe extern "C" fn environ_get(environ: *mut *const u8, environ_buf: *mut 
 }
 
 /// Return environment variable data sizes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn environ_sizes_get(
-    environc: *mut Size,
-    environ_buf_size: *mut Size,
+    environc: &mut Size,
+    environ_buf_size: &mut Size,
 ) -> Errno {
     if !matches!(
-        get_allocation_state(),
+        unsafe { get_allocation_state() },
         AllocationState::StackAllocated | AllocationState::StateAllocated
     ) {
         *environc = 0;
@@ -598,7 +621,7 @@ pub unsafe extern "C" fn environ_sizes_get(
         {
             let alloc = ImportAlloc::CountAndDiscardStrings {
                 strings_size: 0,
-                alloc: state.temporary_alloc(),
+                alloc: unsafe { state.temporary_alloc() },
             };
             let (len, alloc) = state.with_import_alloc(alloc, || unsafe {
                 let mut list = StrTupleList {
@@ -630,7 +653,7 @@ pub unsafe extern "C" fn environ_sizes_get(
 /// Implementations are required to provide a non-zero value for supported clocks. For unsupported clocks,
 /// return `errno::inval`.
 /// Note: This is similar to `clock_getres` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn clock_res_get(id: Clockid, resolution: &mut Timestamp) -> Errno {
     match id {
         CLOCKID_MONOTONIC => {
@@ -654,7 +677,7 @@ pub extern "C" fn clock_res_get(id: Clockid, resolution: &mut Timestamp) -> Errn
 
 /// Return the time value of a clock.
 /// Note: This is similar to `clock_gettime` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn clock_time_get(
     id: Clockid,
     _precision: Timestamp,
@@ -682,7 +705,7 @@ pub unsafe extern "C" fn clock_time_get(
 
 /// Provide file advisory information on a file descriptor.
 /// Note: This is similar to `posix_fadvise` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_advise(
     fd: Fd,
     offset: Filesize,
@@ -710,7 +733,7 @@ pub unsafe extern "C" fn fd_advise(
 
 /// Force the allocation of space in a file.
 /// Note: This is similar to `posix_fallocate` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_allocate(fd: Fd, _offset: Filesize, _len: Filesize) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
@@ -718,18 +741,18 @@ pub unsafe extern "C" fn fd_allocate(fd: Fd, _offset: Filesize, _len: Filesize) 
             // For not-files, fail with BADF
             ds.get_file(fd)?;
             // For all files, fail with NOTSUP, because this call does not exist in preview 2.
-            Err(wasi::ERRNO_NOTSUP)
+            Err(wasip1::ERRNO_NOTSUP)
         })
     }
 }
 
 /// Close a file descriptor.
 /// Note: This is similar to `close` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_close(fd: Fd) -> Errno {
     State::with(|state| {
         if let Descriptor::Bad = state.descriptors().get(fd)? {
-            return Err(wasi::ERRNO_BADF);
+            return Err(wasip1::ERRNO_BADF);
         }
 
         // If there's a dirent cache entry for this file descriptor then drop
@@ -747,7 +770,7 @@ pub unsafe extern "C" fn fd_close(fd: Fd) -> Errno {
 
 /// Synchronize the data of a file to disk.
 /// Note: This is similar to `fdatasync` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_datasync(fd: Fd) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
@@ -761,7 +784,7 @@ pub unsafe extern "C" fn fd_datasync(fd: Fd) -> Errno {
 
 /// Get the attributes of a file descriptor.
 /// Note: This returns similar flags to `fsync(fd, F_GETFL)` in POSIX, as well as additional fields.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
@@ -776,44 +799,46 @@ pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
                     match type_ {
                         filesystem::DescriptorType::Directory => {
                             // Hard-coded set of rights expected by many userlands:
-                            let fs_rights_base = wasi::RIGHTS_PATH_CREATE_DIRECTORY
-                                | wasi::RIGHTS_PATH_CREATE_FILE
-                                | wasi::RIGHTS_PATH_LINK_SOURCE
-                                | wasi::RIGHTS_PATH_LINK_TARGET
-                                | wasi::RIGHTS_PATH_OPEN
-                                | wasi::RIGHTS_FD_READDIR
-                                | wasi::RIGHTS_PATH_READLINK
-                                | wasi::RIGHTS_PATH_RENAME_SOURCE
-                                | wasi::RIGHTS_PATH_RENAME_TARGET
-                                | wasi::RIGHTS_PATH_SYMLINK
-                                | wasi::RIGHTS_PATH_REMOVE_DIRECTORY
-                                | wasi::RIGHTS_PATH_UNLINK_FILE
-                                | wasi::RIGHTS_PATH_FILESTAT_GET
-                                | wasi::RIGHTS_PATH_FILESTAT_SET_TIMES
-                                | wasi::RIGHTS_FD_FILESTAT_GET
-                                | wasi::RIGHTS_FD_FILESTAT_SET_TIMES;
+                            let fs_rights_base = wasip1::RIGHTS_PATH_CREATE_DIRECTORY
+                                | wasip1::RIGHTS_PATH_CREATE_FILE
+                                | wasip1::RIGHTS_PATH_LINK_SOURCE
+                                | wasip1::RIGHTS_PATH_LINK_TARGET
+                                | wasip1::RIGHTS_PATH_OPEN
+                                | wasip1::RIGHTS_FD_READDIR
+                                | wasip1::RIGHTS_PATH_READLINK
+                                | wasip1::RIGHTS_PATH_RENAME_SOURCE
+                                | wasip1::RIGHTS_PATH_RENAME_TARGET
+                                | wasip1::RIGHTS_PATH_SYMLINK
+                                | wasip1::RIGHTS_PATH_REMOVE_DIRECTORY
+                                | wasip1::RIGHTS_PATH_UNLINK_FILE
+                                | wasip1::RIGHTS_PATH_FILESTAT_GET
+                                | wasip1::RIGHTS_PATH_FILESTAT_SET_TIMES
+                                | wasip1::RIGHTS_FD_FILESTAT_GET
+                                | wasip1::RIGHTS_FD_FILESTAT_SET_TIMES;
 
                             let fs_rights_inheriting = fs_rights_base
-                                | wasi::RIGHTS_FD_DATASYNC
-                                | wasi::RIGHTS_FD_READ
-                                | wasi::RIGHTS_FD_SEEK
-                                | wasi::RIGHTS_FD_FDSTAT_SET_FLAGS
-                                | wasi::RIGHTS_FD_SYNC
-                                | wasi::RIGHTS_FD_TELL
-                                | wasi::RIGHTS_FD_WRITE
-                                | wasi::RIGHTS_FD_ADVISE
-                                | wasi::RIGHTS_FD_ALLOCATE
-                                | wasi::RIGHTS_FD_FILESTAT_GET
-                                | wasi::RIGHTS_FD_FILESTAT_SET_SIZE
-                                | wasi::RIGHTS_FD_FILESTAT_SET_TIMES
-                                | wasi::RIGHTS_POLL_FD_READWRITE;
+                                | wasip1::RIGHTS_FD_DATASYNC
+                                | wasip1::RIGHTS_FD_READ
+                                | wasip1::RIGHTS_FD_SEEK
+                                | wasip1::RIGHTS_FD_FDSTAT_SET_FLAGS
+                                | wasip1::RIGHTS_FD_SYNC
+                                | wasip1::RIGHTS_FD_TELL
+                                | wasip1::RIGHTS_FD_WRITE
+                                | wasip1::RIGHTS_FD_ADVISE
+                                | wasip1::RIGHTS_FD_ALLOCATE
+                                | wasip1::RIGHTS_FD_FILESTAT_GET
+                                | wasip1::RIGHTS_FD_FILESTAT_SET_SIZE
+                                | wasip1::RIGHTS_FD_FILESTAT_SET_TIMES
+                                | wasip1::RIGHTS_POLL_FD_READWRITE;
 
-                            stat.write(Fdstat {
-                                fs_filetype: wasi::FILETYPE_DIRECTORY,
-                                fs_flags: 0,
-                                fs_rights_base,
-                                fs_rights_inheriting,
-                            });
+                            unsafe {
+                                stat.write(Fdstat {
+                                    fs_filetype: wasip1::FILETYPE_DIRECTORY,
+                                    fs_flags: 0,
+                                    fs_rights_base,
+                                    fs_rights_inheriting,
+                                });
+                            }
                             Ok(())
                         }
                         _ => {
@@ -845,12 +870,14 @@ pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
                             }
                             let fs_rights_inheriting = fs_rights_base;
 
-                            stat.write(Fdstat {
-                                fs_filetype,
-                                fs_flags,
-                                fs_rights_base,
-                                fs_rights_inheriting,
-                            });
+                            unsafe {
+                                stat.write(Fdstat {
+                                    fs_filetype,
+                                    fs_flags,
+                                    fs_rights_base,
+                                    fs_rights_inheriting,
+                                });
+                            }
                             Ok(())
                         }
                     }
@@ -869,12 +896,14 @@ pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
                         fs_rights_base |= RIGHTS_FD_WRITE;
                     }
                     let fs_rights_inheriting = fs_rights_base;
-                    stat.write(Fdstat {
-                        fs_filetype: stdio.filetype(),
-                        fs_flags,
-                        fs_rights_base,
-                        fs_rights_inheriting,
-                    });
+                    unsafe {
+                        stat.write(Fdstat {
+                            fs_filetype: stdio.filetype(),
+                            fs_flags,
+                            fs_rights_base,
+                            fs_rights_inheriting,
+                        });
+                    }
                     Ok(())
                 }
                 Descriptor::Closed(_) | Descriptor::Bad => Err(ERRNO_BADF),
@@ -885,11 +914,11 @@ pub unsafe extern "C" fn fd_fdstat_get(fd: Fd, stat: *mut Fdstat) -> Errno {
 
 /// Adjust the flags associated with a file descriptor.
 /// Note: This is similar to `fcntl(fd, F_SETFL, flags)` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_fdstat_set_flags(fd: Fd, flags: Fdflags) -> Errno {
     // Only support changing the NONBLOCK or APPEND flags.
     if flags & !(FDFLAGS_NONBLOCK | FDFLAGS_APPEND) != 0 {
-        return wasi::ERRNO_INVAL;
+        return wasip1::ERRNO_INVAL;
     }
 
     cfg_filesystem_available! {
@@ -900,7 +929,7 @@ pub unsafe extern "C" fn fd_fdstat_set_flags(fd: Fd, flags: Fdflags) -> Errno {
                     type_: StreamType::File(file),
                     ..
                 }) if !file.is_dir() => file,
-                _ => Err(wasi::ERRNO_BADF)?,
+                _ => Err(wasip1::ERRNO_BADF)?,
             };
             file.append = flags & FDFLAGS_APPEND == FDFLAGS_APPEND;
             file.blocking_mode = if flags & FDFLAGS_NONBLOCK == FDFLAGS_NONBLOCK {
@@ -913,8 +942,8 @@ pub unsafe extern "C" fn fd_fdstat_set_flags(fd: Fd, flags: Fdflags) -> Errno {
     }
 }
 
-/// Does not do anything if `fd` corresponds to a valid descriptor and returns [`wasi::ERRNO_BADF`] otherwise.
-#[no_mangle]
+/// Does not do anything if `fd` corresponds to a valid descriptor and returns [`wasip1::ERRNO_BADF`] otherwise.
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_fdstat_set_rights(
     fd: Fd,
     _fs_rights_base: Rights,
@@ -923,15 +952,15 @@ pub unsafe extern "C" fn fd_fdstat_set_rights(
     State::with(|state| {
         let ds = state.descriptors();
         match ds.get(fd)? {
-            Descriptor::Streams(..) => Ok(()),
-            Descriptor::Closed(..) | Descriptor::Bad => Err(wasi::ERRNO_BADF),
+            Descriptor::Streams(..) => Err(wasip1::ERRNO_NOTSUP),
+            Descriptor::Closed(..) | Descriptor::Bad => Err(wasip1::ERRNO_BADF),
         }
     })
 }
 
 /// Return the attributes of an open file.
-#[no_mangle]
-pub unsafe extern "C" fn fd_filestat_get(fd: Fd, buf: *mut Filestat) -> Errno {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn fd_filestat_get(fd: Fd, buf: &mut Filestat) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
             let ds = state.descriptors();
@@ -972,7 +1001,7 @@ pub unsafe extern "C" fn fd_filestat_get(fd: Fd, buf: *mut Filestat) -> Errno {
                     };
                     Ok(())
                 }
-                _ => Err(wasi::ERRNO_BADF),
+                _ => Err(wasip1::ERRNO_BADF),
             }
         })
     }
@@ -980,7 +1009,7 @@ pub unsafe extern "C" fn fd_filestat_get(fd: Fd, buf: *mut Filestat) -> Errno {
 
 /// Adjust the size of an open file. If this increases the file's size, the extra bytes are filled with zeros.
 /// Note: This is similar to `ftruncate` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_filestat_set_size(fd: Fd, size: Filesize) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
@@ -995,7 +1024,7 @@ pub unsafe extern "C" fn fd_filestat_set_size(fd: Fd, size: Filesize) -> Errno {
 #[cfg(not(feature = "proxy"))]
 fn systimespec(set: bool, ts: Timestamp, now: bool) -> Result<filesystem::NewTimestamp, Errno> {
     if set && now {
-        Err(wasi::ERRNO_INVAL)
+        Err(wasip1::ERRNO_INVAL)
     } else if set {
         Ok(filesystem::NewTimestamp::Timestamp(filesystem::Datetime {
             seconds: ts / 1_000_000_000,
@@ -1010,7 +1039,7 @@ fn systimespec(set: bool, ts: Timestamp, now: bool) -> Result<filesystem::NewTim
 
 /// Adjust the timestamps of an open file or directory.
 /// Note: This is similar to `futimens` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_filestat_set_times(
     fd: Fd,
     atim: Timestamp,
@@ -1039,28 +1068,29 @@ pub unsafe extern "C" fn fd_filestat_set_times(
 
 /// Read from a file descriptor, without using and updating the file descriptor's offset.
 /// Note: This is similar to `preadv` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_pread(
     fd: Fd,
     mut iovs_ptr: *const Iovec,
     mut iovs_len: usize,
     offset: Filesize,
-    nread: *mut Size,
+    nread: &mut Size,
 ) -> Errno {
     cfg_filesystem_available! {
-        // Skip leading non-empty buffers.
-        while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
-            iovs_ptr = iovs_ptr.add(1);
-            iovs_len -= 1;
-        }
-        if iovs_len == 0 {
-            *nread = 0;
-            return ERRNO_SUCCESS;
-        }
+        let (ptr, len) = unsafe {
+            // Skip leading non-empty buffers.
+            while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
+                iovs_ptr = iovs_ptr.add(1);
+                iovs_len -= 1;
+            }
+            if iovs_len == 0 {
+                *nread = 0;
+                return ERRNO_SUCCESS;
+            }
+            ((*iovs_ptr).buf, (*iovs_ptr).buf_len)
+        };
 
         State::with(|state| {
-            let ptr = (*iovs_ptr).buf;
-            let len = (*iovs_ptr).buf_len;
 
             let ds = state.descriptors();
             let file = ds.get_file(fd)?;
@@ -1082,10 +1112,10 @@ pub unsafe extern "C" fn fd_pread(
 }
 
 /// Return a description of the given preopened file descriptor.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_prestat_get(fd: Fd, buf: *mut Prestat) -> Errno {
     if !matches!(
-        get_allocation_state(),
+        unsafe { get_allocation_state() },
         AllocationState::StackAllocated | AllocationState::StateAllocated
     ) {
         return ERRNO_BADF;
@@ -1109,14 +1139,16 @@ pub unsafe extern "C" fn fd_prestat_get(fd: Fd, buf: *mut Prestat) -> Errno {
                     }),
                     ..
                 }) => {
-                    buf.write(Prestat {
-                        tag: 0,
-                        u: PrestatU {
-                            dir: PrestatDir {
-                                pr_name_len: len.get(),
+                    unsafe {
+                        buf.write(Prestat {
+                            tag: 0,
+                            u: PrestatU {
+                                dir: PrestatDir {
+                                    pr_name_len: len.get(),
+                                },
                             },
-                        },
-                    });
+                        });
+                    }
 
                     Ok(())
                 }
@@ -1127,7 +1159,7 @@ pub unsafe extern "C" fn fd_prestat_get(fd: Fd, buf: *mut Prestat) -> Errno {
 }
 
 /// Return a description of the given preopened file descriptor.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_prestat_dir_name(fd: Fd, path: *mut u8, path_max_len: Size) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
@@ -1146,7 +1178,9 @@ pub unsafe extern "C" fn fd_prestat_dir_name(fd: Fd, path: *mut u8, path_max_len
                 return Err(ERRNO_NAMETOOLONG)
             }
 
-            ds.get_preopen_path(state, fd, path, path_max_len);
+            unsafe {
+                ds.get_preopen_path(state, fd, path, path_max_len);
+            }
             Ok(())
         })
     }
@@ -1154,32 +1188,34 @@ pub unsafe extern "C" fn fd_prestat_dir_name(fd: Fd, path: *mut u8, path_max_len
 
 /// Write to a file descriptor, without using and updating the file descriptor's offset.
 /// Note: This is similar to `pwritev` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_pwrite(
     fd: Fd,
     mut iovs_ptr: *const Ciovec,
     mut iovs_len: usize,
     offset: Filesize,
-    nwritten: *mut Size,
+    nwritten: &mut Size,
 ) -> Errno {
     cfg_filesystem_available! {
-        // Skip leading non-empty buffers.
-        while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
-            iovs_ptr = iovs_ptr.add(1);
-            iovs_len -= 1;
-        }
-        if iovs_len == 0 {
-            *nwritten = 0;
-            return ERRNO_SUCCESS;
-        }
+        let bytes = unsafe {
+            // Skip leading non-empty buffers.
+            while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
+                iovs_ptr = iovs_ptr.add(1);
+                iovs_len -= 1;
+            }
+            if iovs_len == 0 {
+                *nwritten = 0;
+                return ERRNO_SUCCESS;
+            }
 
-        let ptr = (*iovs_ptr).buf;
-        let len = (*iovs_ptr).buf_len;
+            let ptr = (*iovs_ptr).buf;
+            let len = (*iovs_ptr).buf_len;
+            slice::from_raw_parts(ptr, len)
+        };
 
         State::with(|state| {
             let ds = state.descriptors();
             let file = ds.get_seekable_file(fd)?;
-            let bytes = slice::from_raw_parts(ptr, len);
             let bytes = if file.append {
                 match file.fd.append_via_stream()?.blocking_write_and_flush(bytes) {
                     Ok(()) => bytes.len(),
@@ -1199,25 +1235,26 @@ pub unsafe extern "C" fn fd_pwrite(
 
 /// Read from a file descriptor.
 /// Note: This is similar to `readv` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_read(
     fd: Fd,
     mut iovs_ptr: *const Iovec,
     mut iovs_len: usize,
-    nread: *mut Size,
+    nread: &mut Size,
 ) -> Errno {
-    // Skip leading non-empty buffers.
-    while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
-        iovs_ptr = iovs_ptr.add(1);
-        iovs_len -= 1;
-    }
-    if iovs_len == 0 {
-        *nread = 0;
-        return ERRNO_SUCCESS;
-    }
+    let (ptr, len) = unsafe {
+        // Skip leading non-empty buffers.
+        while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
+            iovs_ptr = iovs_ptr.add(1);
+            iovs_len -= 1;
+        }
+        if iovs_len == 0 {
+            *nread = 0;
+            return ERRNO_SUCCESS;
+        }
 
-    let ptr = (*iovs_ptr).buf;
-    let len = (*iovs_ptr).buf_len;
+        ((*iovs_ptr).buf, (*iovs_ptr).buf_len)
+    };
 
     State::with(|state| {
         let ds = state.descriptors();
@@ -1286,7 +1323,7 @@ fn stream_error_to_errno(err: streams::Error) -> Errno {
 /// truncating the last directory entry. This allows the caller to grow its
 /// read buffer size in case it's too small to fit a single large directory
 /// entry, or skip the oversized directory entry.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[cfg(feature = "proxy")]
 pub unsafe extern "C" fn fd_readdir(
     fd: Fd,
@@ -1295,19 +1332,19 @@ pub unsafe extern "C" fn fd_readdir(
     cookie: Dircookie,
     bufused: *mut Size,
 ) -> Errno {
-    wasi::ERRNO_NOTSUP
+    wasip1::ERRNO_NOTSUP
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[cfg(not(feature = "proxy"))]
 pub unsafe extern "C" fn fd_readdir(
     fd: Fd,
     buf: *mut u8,
     buf_len: Size,
     cookie: Dircookie,
-    bufused: *mut Size,
+    bufused: &mut Size,
 ) -> Errno {
-    let mut buf = slice::from_raw_parts_mut(buf, buf_len);
+    let mut buf = unsafe { slice::from_raw_parts_mut(buf, buf_len) };
     return State::with(|state| {
         // First determine if there's an entry in the dirent cache to use. This
         // is done to optimize the use case where a large directory is being
@@ -1357,7 +1394,7 @@ pub unsafe extern "C" fn fd_readdir(
             None => {
                 iter = DirectoryEntryIterator {
                     state,
-                    cookie: wasi::DIRCOOKIE_START,
+                    cookie: wasip1::DIRCOOKIE_START,
                     use_cache: false,
                     stream: DirectoryEntryStream(dir.fd.read_directory()?),
                     dir_descriptor: &dir.fd,
@@ -1365,11 +1402,14 @@ pub unsafe extern "C" fn fd_readdir(
 
                 // Skip to the entry that is requested by the `cookie`
                 // parameter.
-                for _ in wasi::DIRCOOKIE_START..cookie {
+                for _ in wasip1::DIRCOOKIE_START..cookie {
                     match iter.next() {
                         Some(Ok(_)) => {}
                         Some(Err(e)) => return Err(e),
-                        None => return Ok(()),
+                        None => {
+                            *bufused = 0;
+                            return Ok(());
+                        }
                     }
                 }
             }
@@ -1384,12 +1424,16 @@ pub unsafe extern "C" fn fd_readdir(
 
             // Copy a `dirent` describing this entry into the destination `buf`,
             // truncating it if it doesn't fit entirely.
-            let bytes = slice::from_raw_parts(
-                (&dirent as *const wasi::Dirent).cast::<u8>(),
-                size_of::<Dirent>(),
-            );
+            let bytes = unsafe {
+                slice::from_raw_parts(
+                    (&dirent as *const wasip1::Dirent).cast::<u8>(),
+                    size_of::<Dirent>(),
+                )
+            };
             let dirent_bytes_to_copy = buf.len().min(bytes.len());
-            buf[..dirent_bytes_to_copy].copy_from_slice(&bytes[..dirent_bytes_to_copy]);
+            unsafe {
+                ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr(), dirent_bytes_to_copy);
+            }
             buf = &mut buf[dirent_bytes_to_copy..];
 
             // Copy the name bytes into the output `buf`, truncating it if it
@@ -1398,7 +1442,13 @@ pub unsafe extern "C" fn fd_readdir(
             // Note that this might be a 0-byte copy if the `dirent` was
             // truncated or fit entirely into the destination.
             let name_bytes_to_copy = buf.len().min(name.len());
-            ptr::copy_nonoverlapping(name.as_ptr().cast(), buf.as_mut_ptr(), name_bytes_to_copy);
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    name.as_ptr().cast(),
+                    buf.as_mut_ptr(),
+                    name_bytes_to_copy,
+                );
+            }
 
             buf = &mut buf[name_bytes_to_copy..];
 
@@ -1421,11 +1471,13 @@ pub unsafe extern "C" fn fd_readdir(
                 state.dirent_cache.for_fd.set(fd);
                 state.dirent_cache.cookie.set(cookie - 1);
                 state.dirent_cache.cached_dirent.set(dirent);
-                ptr::copy(
-                    name.as_ptr().cast::<u8>(),
-                    (*state.dirent_cache.path_data.get()).as_mut_ptr() as *mut u8,
-                    name.len(),
-                );
+                unsafe {
+                    ptr::copy(
+                        name.as_ptr().cast::<u8>(),
+                        (*state.dirent_cache.path_data.get()).as_mut_ptr() as *mut u8,
+                        name.len(),
+                    );
+                }
                 break;
             }
         }
@@ -1445,7 +1497,7 @@ pub unsafe extern "C" fn fd_readdir(
     impl<'a> Iterator for DirectoryEntryIterator<'a> {
         // Note the usage of `UnsafeCell<u8>` here to indicate that the data can
         // alias the storage within `state`.
-        type Item = Result<(wasi::Dirent, &'a [UnsafeCell<u8>]), Errno>;
+        type Item = Result<(wasip1::Dirent, &'a [UnsafeCell<u8>]), Errno>;
 
         fn next(&mut self) -> Option<Self::Item> {
             let current_cookie = self.cookie;
@@ -1460,19 +1512,19 @@ pub unsafe extern "C" fn fd_readdir(
                         Ok(h) => h,
                         Err(e) => return Some(Err(e.into())),
                     };
-                    let dirent = wasi::Dirent {
+                    let dirent = wasip1::Dirent {
                         d_next: self.cookie,
                         d_ino: metadata_hash.lower,
-                        d_type: wasi::FILETYPE_DIRECTORY,
+                        d_type: wasip1::FILETYPE_DIRECTORY,
                         d_namlen: 1,
                     };
                     return Some(Ok((dirent, &self.state.dotdot[..1])));
                 }
                 1 => {
-                    let dirent = wasi::Dirent {
+                    let dirent = wasip1::Dirent {
                         d_next: self.cookie,
                         d_ino: 0,
-                        d_type: wasi::FILETYPE_DIRECTORY,
+                        d_type: wasip1::FILETYPE_DIRECTORY,
                         d_namlen: 2,
                     };
                     return Some(Ok((dirent, &self.state.dotdot[..])));
@@ -1507,7 +1559,7 @@ pub unsafe extern "C" fn fd_readdir(
                 .map(|h| h.lower)
                 .unwrap_or(0);
             let name = ManuallyDrop::new(name);
-            let dirent = wasi::Dirent {
+            let dirent = wasip1::Dirent {
                 d_next: self.cookie,
                 d_ino,
                 d_namlen: u32::try_from(name.len()).trapping_unwrap(),
@@ -1532,19 +1584,19 @@ pub unsafe extern "C" fn fd_readdir(
 /// thread at the same time.
 /// This function provides a way to atomically renumber file descriptors, which
 /// would disappear if `dup2()` were to be removed entirely.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_renumber(fd: Fd, to: Fd) -> Errno {
     State::with(|state| state.descriptors_mut().renumber(fd, to))
 }
 
 /// Move the offset of a file descriptor.
 /// Note: This is similar to `lseek` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_seek(
     fd: Fd,
     offset: Filedelta,
     whence: Whence,
-    newoffset: *mut Filesize,
+    newoffset: &mut Filesize,
 ) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
@@ -1584,7 +1636,7 @@ pub unsafe extern "C" fn fd_seek(
 
 /// Synchronize the data and metadata of a file to disk.
 /// Note: This is similar to `fsync` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_sync(fd: Fd) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
@@ -1598,8 +1650,8 @@ pub unsafe extern "C" fn fd_sync(fd: Fd) -> Errno {
 
 /// Return the current offset of a file descriptor.
 /// Note: This is similar to `lseek(fd, 0, SEEK_CUR)` in POSIX.
-#[no_mangle]
-pub unsafe extern "C" fn fd_tell(fd: Fd, offset: *mut Filesize) -> Errno {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn fd_tell(fd: Fd, offset: &mut Filesize) -> Errno {
     cfg_filesystem_available! {
         State::with(|state| {
             let ds = state.descriptors();
@@ -1612,34 +1664,35 @@ pub unsafe extern "C" fn fd_tell(fd: Fd, offset: *mut Filesize) -> Errno {
 
 /// Write to a file descriptor.
 /// Note: This is similar to `writev` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_write(
     fd: Fd,
     mut iovs_ptr: *const Ciovec,
     mut iovs_len: usize,
-    nwritten: *mut Size,
+    nwritten: &mut Size,
 ) -> Errno {
     if !matches!(
-        get_allocation_state(),
+        unsafe { get_allocation_state() },
         AllocationState::StackAllocated | AllocationState::StateAllocated
     ) {
         *nwritten = 0;
         return ERRNO_IO;
     }
 
-    // Skip leading empty buffers.
-    while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
-        iovs_ptr = iovs_ptr.add(1);
-        iovs_len -= 1;
-    }
-    if iovs_len == 0 {
-        *nwritten = 0;
-        return ERRNO_SUCCESS;
-    }
-
-    let ptr = (*iovs_ptr).buf;
-    let len = (*iovs_ptr).buf_len;
-    let bytes = slice::from_raw_parts(ptr, len);
+    let bytes = unsafe {
+        // Skip leading empty buffers.
+        while iovs_len > 1 && (*iovs_ptr).buf_len == 0 {
+            iovs_ptr = iovs_ptr.add(1);
+            iovs_len -= 1;
+        }
+        if iovs_len == 0 {
+            *nwritten = 0;
+            return ERRNO_SUCCESS;
+        }
+        let ptr = (*iovs_ptr).buf;
+        let len = (*iovs_ptr).buf_len;
+        slice::from_raw_parts(ptr, len)
+    };
 
     State::with(|state| {
         let ds = state.descriptors();
@@ -1685,14 +1738,14 @@ pub unsafe extern "C" fn fd_write(
 
 /// Create a directory.
 /// Note: This is similar to `mkdirat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_create_directory(
     fd: Fd,
     path_ptr: *const u8,
     path_len: usize,
 ) -> Errno {
     cfg_filesystem_available! {
-        let path = slice::from_raw_parts(path_ptr, path_len);
+        let path = unsafe { slice::from_raw_parts(path_ptr, path_len) };
 
         State::with(|state| {
             let ds = state.descriptors();
@@ -1705,16 +1758,16 @@ pub unsafe extern "C" fn path_create_directory(
 
 /// Return the attributes of a file or directory.
 /// Note: This is similar to `stat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_filestat_get(
     fd: Fd,
     flags: Lookupflags,
     path_ptr: *const u8,
     path_len: usize,
-    buf: *mut Filestat,
+    buf: &mut Filestat,
 ) -> Errno {
     cfg_filesystem_available! {
-        let path = slice::from_raw_parts(path_ptr, path_len);
+        let path = unsafe { slice::from_raw_parts(path_ptr, path_len) };
         let at_flags = at_flags_from_lookupflags(flags);
 
         State::with(|state| {
@@ -1740,7 +1793,7 @@ pub unsafe extern "C" fn path_filestat_get(
 
 /// Adjust the timestamps of a file or directory.
 /// Note: This is similar to `utimensat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_filestat_set_times(
     fd: Fd,
     flags: Lookupflags,
@@ -1751,7 +1804,7 @@ pub unsafe extern "C" fn path_filestat_set_times(
     fst_flags: Fstflags,
 ) -> Errno {
     cfg_filesystem_available! {
-        let path = slice::from_raw_parts(path_ptr, path_len);
+        let path = unsafe { slice::from_raw_parts(path_ptr, path_len) };
         let at_flags = at_flags_from_lookupflags(flags);
 
         State::with(|state| {
@@ -1776,7 +1829,7 @@ pub unsafe extern "C" fn path_filestat_set_times(
 
 /// Create a hard link.
 /// Note: This is similar to `linkat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_link(
     old_fd: Fd,
     old_flags: Lookupflags,
@@ -1787,8 +1840,8 @@ pub unsafe extern "C" fn path_link(
     new_path_len: usize,
 ) -> Errno {
     cfg_filesystem_available! {
-        let old_path = slice::from_raw_parts(old_path_ptr, old_path_len);
-        let new_path = slice::from_raw_parts(new_path_ptr, new_path_len);
+        let old_path = unsafe { slice::from_raw_parts(old_path_ptr, old_path_len) };
+        let new_path = unsafe { slice::from_raw_parts(new_path_ptr, new_path_len) };
         let at_flags = at_flags_from_lookupflags(old_flags);
 
         State::with(|state| {
@@ -1808,7 +1861,7 @@ pub unsafe extern "C" fn path_link(
 /// is error-prone in multi-threaded contexts. The returned file descriptor is
 /// guaranteed to be less than 2**31.
 /// Note: This is similar to `openat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_open(
     fd: Fd,
     dirflags: Lookupflags,
@@ -1818,19 +1871,19 @@ pub unsafe extern "C" fn path_open(
     fs_rights_base: Rights,
     fs_rights_inheriting: Rights,
     fdflags: Fdflags,
-    opened_fd: *mut Fd,
+    opened_fd: &mut Fd,
 ) -> Errno {
     cfg_filesystem_available! {
         let _ = fs_rights_inheriting;
 
-        let path = slice::from_raw_parts(path_ptr, path_len);
+        let path = unsafe { slice::from_raw_parts(path_ptr, path_len) };
         let at_flags = at_flags_from_lookupflags(dirflags);
         let o_flags = o_flags_from_oflags(oflags);
         let flags = descriptor_flags_from_flags(fs_rights_base, fdflags);
-        let append = fdflags & wasi::FDFLAGS_APPEND == wasi::FDFLAGS_APPEND;
+        let append = fdflags & wasip1::FDFLAGS_APPEND == wasip1::FDFLAGS_APPEND;
 
         #[cfg(feature = "proxy")]
-        return wasi::ERRNO_NOTSUP;
+        return wasip1::ERRNO_NOTSUP;
 
         #[cfg(not(feature = "proxy"))]
         State::with(|state| {
@@ -1848,7 +1901,7 @@ pub unsafe extern "C" fn path_open(
                     descriptor_type,
                     position: Cell::new(0),
                     append,
-                    blocking_mode: if fdflags & wasi::FDFLAGS_NONBLOCK == 0 {
+                    blocking_mode: if fdflags & wasip1::FDFLAGS_NONBLOCK == 0 {
                         BlockingMode::Blocking
                     } else {
                         BlockingMode::NonBlocking
@@ -1866,17 +1919,17 @@ pub unsafe extern "C" fn path_open(
 
 /// Read the contents of a symbolic link.
 /// Note: This is similar to `readlinkat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_readlink(
     fd: Fd,
     path_ptr: *const u8,
     path_len: usize,
     buf: *mut u8,
     buf_len: Size,
-    bufused: *mut Size,
+    bufused: &mut Size,
 ) -> Errno {
     cfg_filesystem_available! {
-        let path = slice::from_raw_parts(path_ptr, path_len);
+        let path = unsafe { slice::from_raw_parts(path_ptr, path_len) };
 
         State::with(|state| {
             // If the user gave us a buffer shorter than `PATH_MAX`, it may not be
@@ -1900,7 +1953,9 @@ pub unsafe extern "C" fn path_readlink(
                 // Preview1 follows POSIX in truncating the returned path if it
                 // doesn't fit.
                 let len = min(path.len(), buf_len);
-                ptr::copy_nonoverlapping(path.as_ptr().cast(), buf, len);
+                unsafe {
+                    ptr::copy_nonoverlapping(path.as_ptr().cast(), buf, len);
+                }
                 *bufused = len;
             } else {
                 *bufused = path.len();
@@ -1918,14 +1973,14 @@ pub unsafe extern "C" fn path_readlink(
 /// Remove a directory.
 /// Return `errno::notempty` if the directory is not empty.
 /// Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_remove_directory(
     fd: Fd,
     path_ptr: *const u8,
     path_len: usize,
 ) -> Errno {
     cfg_filesystem_available! {
-        let path = slice::from_raw_parts(path_ptr, path_len);
+        let path = unsafe { slice::from_raw_parts(path_ptr, path_len) };
 
         State::with(|state| {
             let ds = state.descriptors();
@@ -1938,7 +1993,7 @@ pub unsafe extern "C" fn path_remove_directory(
 
 /// Rename a file or directory.
 /// Note: This is similar to `renameat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_rename(
     old_fd: Fd,
     old_path_ptr: *const u8,
@@ -1948,8 +2003,8 @@ pub unsafe extern "C" fn path_rename(
     new_path_len: usize,
 ) -> Errno {
     cfg_filesystem_available! {
-        let old_path = slice::from_raw_parts(old_path_ptr, old_path_len);
-        let new_path = slice::from_raw_parts(new_path_ptr, new_path_len);
+        let old_path = unsafe { slice::from_raw_parts(old_path_ptr, old_path_len) };
+        let new_path = unsafe { slice::from_raw_parts(new_path_ptr, new_path_len) };
 
         State::with(|state| {
             let ds = state.descriptors();
@@ -1963,7 +2018,7 @@ pub unsafe extern "C" fn path_rename(
 
 /// Create a symbolic link.
 /// Note: This is similar to `symlinkat` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_symlink(
     old_path_ptr: *const u8,
     old_path_len: usize,
@@ -1972,8 +2027,8 @@ pub unsafe extern "C" fn path_symlink(
     new_path_len: usize,
 ) -> Errno {
     cfg_filesystem_available! {
-        let old_path = slice::from_raw_parts(old_path_ptr, old_path_len);
-        let new_path = slice::from_raw_parts(new_path_ptr, new_path_len);
+        let old_path = unsafe { slice::from_raw_parts(old_path_ptr, old_path_len) };
+        let new_path = unsafe { slice::from_raw_parts(new_path_ptr, new_path_len) };
 
         State::with(|state| {
             let ds = state.descriptors();
@@ -1987,10 +2042,10 @@ pub unsafe extern "C" fn path_symlink(
 /// Unlink a file.
 /// Return `errno::isdir` if the path refers to a directory.
 /// Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn path_unlink_file(fd: Fd, path_ptr: *const u8, path_len: usize) -> Errno {
     cfg_filesystem_available! {
-        let path = slice::from_raw_parts(path_ptr, path_len);
+        let path = unsafe { slice::from_raw_parts(path_ptr, path_len) };
 
         State::with(|state| {
             let ds = state.descriptors();
@@ -2012,7 +2067,9 @@ impl Pollables {
         assert!(self.index < self.length);
         // Use `ptr::write` instead of `*... = pollable` because `ptr::write`
         // doesn't call drop on the old memory.
-        self.pointer.add(self.index).write(pollable);
+        unsafe {
+            self.pointer.add(self.index).write(pollable);
+        }
         self.index += 1;
     }
 }
@@ -2031,16 +2088,16 @@ impl Drop for Pollables {
 }
 
 /// Concurrently poll for the occurrence of a set of events.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn poll_oneoff(
     r#in: *const Subscription,
     out: *mut Event,
     nsubscriptions: Size,
-    nevents: *mut Size,
+    nevents: &mut Size,
 ) -> Errno {
     *nevents = 0;
 
-    let subscriptions = slice::from_raw_parts(r#in, nsubscriptions);
+    let subscriptions = unsafe { slice::from_raw_parts(r#in, nsubscriptions) };
 
     // We're going to split the `nevents` buffer into two non-overlapping
     // buffers: one to store the pollable handles, and the other to store
@@ -2066,7 +2123,7 @@ pub unsafe extern "C" fn poll_oneoff(
     // Store the pollable handles at the beginning, and the bool results at the
     // end, so that we don't clobber the bool results when writing the events.
     let pollables = out as *mut c_void as *mut Pollable;
-    let results = out.add(nsubscriptions).cast::<u32>().sub(nsubscriptions);
+    let results = unsafe { out.add(nsubscriptions).cast::<u32>().sub(nsubscriptions) };
 
     // Indefinite sleeping is not supported in preview1.
     if nsubscriptions == 0 {
@@ -2074,9 +2131,9 @@ pub unsafe extern "C" fn poll_oneoff(
     }
 
     State::with(|state| {
-        const EVENTTYPE_CLOCK: u8 = wasi::EVENTTYPE_CLOCK.raw();
-        const EVENTTYPE_FD_READ: u8 = wasi::EVENTTYPE_FD_READ.raw();
-        const EVENTTYPE_FD_WRITE: u8 = wasi::EVENTTYPE_FD_WRITE.raw();
+        const EVENTTYPE_CLOCK: u8 = wasip1::EVENTTYPE_CLOCK.raw();
+        const EVENTTYPE_FD_READ: u8 = wasip1::EVENTTYPE_FD_READ.raw();
+        const EVENTTYPE_FD_WRITE: u8 = wasip1::EVENTTYPE_FD_WRITE.raw();
 
         let mut pollables = Pollables {
             pointer: pollables,
@@ -2085,9 +2142,9 @@ pub unsafe extern "C" fn poll_oneoff(
         };
 
         for subscription in subscriptions {
-            pollables.push(match subscription.u.tag {
+            let pollable = match subscription.u.tag {
                 EVENTTYPE_CLOCK => {
-                    let clock = &subscription.u.u.clock;
+                    let clock = unsafe { &subscription.u.u.clock };
                     let absolute = (clock.flags & SUBCLOCKFLAGS_SUBSCRIPTION_CLOCK_ABSTIME)
                         == SUBCLOCKFLAGS_SUBSCRIPTION_CLOCK_ABSTIME;
                     match clock.id {
@@ -2137,21 +2194,23 @@ pub unsafe extern "C" fn poll_oneoff(
 
                 EVENTTYPE_FD_READ => state
                     .descriptors()
-                    .get_read_stream(subscription.u.u.fd_read.file_descriptor)
+                    .get_read_stream(unsafe { subscription.u.u.fd_read.file_descriptor })
                     .map(|stream| stream.subscribe())?,
 
                 EVENTTYPE_FD_WRITE => state
                     .descriptors()
-                    .get_write_stream(subscription.u.u.fd_write.file_descriptor)
+                    .get_write_stream(unsafe { subscription.u.u.fd_write.file_descriptor })
                     .map(|stream| stream.subscribe())?,
 
                 _ => return Err(ERRNO_INVAL),
-            });
+            };
+            unsafe {
+                pollables.push(pollable);
+            }
         }
 
-        #[link(wasm_import_module = "wasi:io/poll@0.2.0")]
-        #[allow(improper_ctypes)] // FIXME(bytecodealliance/wit-bindgen#684)
-        extern "C" {
+        #[link(wasm_import_module = "wasi:io/poll@0.2.6")]
+        unsafe extern "C" {
             #[link_name = "poll"]
             fn poll_import(pollables: *const Pollable, len: usize, rval: *mut ReadyList);
         }
@@ -2165,7 +2224,7 @@ pub unsafe extern "C" fn poll_oneoff(
             nsubscriptions
                 .checked_mul(size_of::<u32>())
                 .trapping_unwrap(),
-            || {
+            || unsafe {
                 poll_import(
                     pollables.pointer,
                     pollables.length,
@@ -2179,26 +2238,26 @@ pub unsafe extern "C" fn poll_oneoff(
 
         drop(pollables);
 
-        let ready = std::slice::from_raw_parts(ready_list.base, ready_list.len);
+        let ready = unsafe { std::slice::from_raw_parts(ready_list.base, ready_list.len) };
 
         let mut count = 0;
 
         for subscription in ready {
-            let subscription = *subscriptions.as_ptr().add(*subscription as usize);
+            let subscription = unsafe { *subscriptions.as_ptr().add(*subscription as usize) };
 
             let type_;
 
             let (error, nbytes, flags) = match subscription.u.tag {
                 EVENTTYPE_CLOCK => {
-                    type_ = wasi::EVENTTYPE_CLOCK;
+                    type_ = wasip1::EVENTTYPE_CLOCK;
                     (ERRNO_SUCCESS, 0, 0)
                 }
 
                 EVENTTYPE_FD_READ => {
-                    type_ = wasi::EVENTTYPE_FD_READ;
+                    type_ = wasip1::EVENTTYPE_FD_READ;
                     let ds = state.descriptors();
                     let desc = ds
-                        .get(subscription.u.u.fd_read.file_descriptor)
+                        .get(unsafe { subscription.u.u.fd_read.file_descriptor })
                         .trapping_unwrap();
                     match desc {
                         Descriptor::Streams(streams) => match &streams.type_ {
@@ -2224,10 +2283,10 @@ pub unsafe extern "C" fn poll_oneoff(
                     }
                 }
                 EVENTTYPE_FD_WRITE => {
-                    type_ = wasi::EVENTTYPE_FD_WRITE;
+                    type_ = wasip1::EVENTTYPE_FD_WRITE;
                     let ds = state.descriptors();
                     let desc = ds
-                        .get(subscription.u.u.fd_write.file_descriptor)
+                        .get(unsafe { subscription.u.u.fd_write.file_descriptor })
                         .trapping_unwrap();
                     match desc {
                         Descriptor::Streams(streams) => match &streams.type_ {
@@ -2242,12 +2301,14 @@ pub unsafe extern "C" fn poll_oneoff(
                 _ => unreachable!(),
             };
 
-            *out.add(count) = Event {
-                userdata: subscription.userdata,
-                error,
-                type_,
-                fd_readwrite: EventFdReadwrite { nbytes, flags },
-            };
+            unsafe {
+                *out.add(count) = Event {
+                    userdata: subscription.userdata,
+                    error,
+                    type_,
+                    fd_readwrite: EventFdReadwrite { nbytes, flags },
+                };
+            }
 
             count += 1;
         }
@@ -2261,7 +2322,7 @@ pub unsafe extern "C" fn poll_oneoff(
 /// Terminate the process normally. An exit code of 0 indicates successful
 /// termination of the program. The meanings of other values is dependent on
 /// the environment.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn proc_exit(rval: Exitcode) -> ! {
     #[cfg(feature = "proxy")]
     {
@@ -2277,14 +2338,14 @@ pub unsafe extern "C" fn proc_exit(rval: Exitcode) -> ! {
 
 /// Send a signal to the process of the calling thread.
 /// Note: This is similar to `raise` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn proc_raise(_sig: Signal) -> Errno {
     unreachable!()
 }
 
 /// Temporarily yield execution of the calling thread.
 /// Note: This is similar to `sched_yield` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sched_yield() -> Errno {
     // TODO: This is not yet covered in Preview2.
 
@@ -2297,10 +2358,10 @@ pub unsafe extern "C" fn sched_yield() -> Errno {
 /// This function may execute slowly, so when large mounts of random data are
 /// required, it's advisable to use this function to seed a pseudo-random
 /// number generator, rather than to provide the random data directly.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn random_get(buf: *mut u8, buf_len: Size) -> Errno {
     if matches!(
-        get_allocation_state(),
+        unsafe { get_allocation_state() },
         AllocationState::StackAllocated | AllocationState::StateAllocated
     ) {
         State::with(|state| {
@@ -2322,7 +2383,7 @@ pub unsafe extern "C" fn random_get(buf: *mut u8, buf_len: Size) -> Errno {
 
 /// Accept a new incoming connection.
 /// Note: This is similar to `accept` in POSIX.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sock_accept(_fd: Fd, _flags: Fdflags, _connection: *mut Fd) -> Errno {
     unreachable!()
 }
@@ -2330,7 +2391,7 @@ pub unsafe extern "C" fn sock_accept(_fd: Fd, _flags: Fdflags, _connection: *mut
 /// Receive a message from a socket.
 /// Note: This is similar to `recv` in POSIX, though it also supports reading
 /// the data into multiple buffers in the manner of `readv`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sock_recv(
     _fd: Fd,
     _ri_data_ptr: *const Iovec,
@@ -2345,7 +2406,7 @@ pub unsafe extern "C" fn sock_recv(
 /// Send a message on a socket.
 /// Note: This is similar to `send` in POSIX, though it also supports writing
 /// the data from multiple buffers in the manner of `writev`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sock_send(
     _fd: Fd,
     _si_data_ptr: *const Ciovec,
@@ -2358,9 +2419,14 @@ pub unsafe extern "C" fn sock_send(
 
 /// Shut down socket send and receive channels.
 /// Note: This is similar to `shutdown` in POSIX.
-#[no_mangle]
-pub unsafe extern "C" fn sock_shutdown(_fd: Fd, _how: Sdflags) -> Errno {
-    unreachable!()
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sock_shutdown(fd: Fd, _how: Sdflags) -> Errno {
+    State::with(|state| {
+        state
+            .descriptors_mut()
+            .get_stream_with_error_mut(fd, wasip1::ERRNO_BADF)?;
+        Err(wasip1::ERRNO_NOTSOCK)
+    })
 }
 
 #[cfg(not(feature = "proxy"))]
@@ -2402,19 +2468,19 @@ fn o_flags_from_oflags(flags: Oflags) -> filesystem::OpenFlags {
 #[cfg(not(feature = "proxy"))]
 fn descriptor_flags_from_flags(rights: Rights, fdflags: Fdflags) -> filesystem::DescriptorFlags {
     let mut flags = filesystem::DescriptorFlags::empty();
-    if rights & wasi::RIGHTS_FD_READ == wasi::RIGHTS_FD_READ {
+    if rights & wasip1::RIGHTS_FD_READ == wasip1::RIGHTS_FD_READ {
         flags |= filesystem::DescriptorFlags::READ;
     }
-    if rights & wasi::RIGHTS_FD_WRITE == wasi::RIGHTS_FD_WRITE {
+    if rights & wasip1::RIGHTS_FD_WRITE == wasip1::RIGHTS_FD_WRITE {
         flags |= filesystem::DescriptorFlags::WRITE;
     }
-    if fdflags & wasi::FDFLAGS_SYNC == wasi::FDFLAGS_SYNC {
+    if fdflags & wasip1::FDFLAGS_SYNC == wasip1::FDFLAGS_SYNC {
         flags |= filesystem::DescriptorFlags::FILE_INTEGRITY_SYNC;
     }
-    if fdflags & wasi::FDFLAGS_DSYNC == wasi::FDFLAGS_DSYNC {
+    if fdflags & wasip1::FDFLAGS_DSYNC == wasip1::FDFLAGS_DSYNC {
         flags |= filesystem::DescriptorFlags::DATA_INTEGRITY_SYNC;
     }
-    if fdflags & wasi::FDFLAGS_RSYNC == wasi::FDFLAGS_RSYNC {
+    if fdflags & wasip1::FDFLAGS_RSYNC == wasip1::FDFLAGS_RSYNC {
         flags |= filesystem::DescriptorFlags::REQUESTED_WRITE_SYNC;
     }
     flags
@@ -2469,8 +2535,8 @@ impl From<filesystem::ErrorCode> for Errno {
 }
 
 #[cfg(not(feature = "proxy"))]
-impl From<filesystem::DescriptorType> for wasi::Filetype {
-    fn from(ty: filesystem::DescriptorType) -> wasi::Filetype {
+impl From<filesystem::DescriptorType> for wasip1::Filetype {
+    fn from(ty: filesystem::DescriptorType) -> wasip1::Filetype {
         match ty {
             filesystem::DescriptorType::RegularFile => FILETYPE_REGULAR_FILE,
             filesystem::DescriptorType::Directory => FILETYPE_DIRECTORY,
@@ -2524,7 +2590,7 @@ impl BlockingMode {
                         Ok(()) => {}
                         Err(streams::StreamError::Closed) => return Err(ERRNO_IO),
                         Err(streams::StreamError::LastOperationFailed(e)) => {
-                            return Err(stream_error_to_errno(e))
+                            return Err(stream_error_to_errno(e));
                         }
                     }
                 }
@@ -2536,7 +2602,7 @@ impl BlockingMode {
                     Ok(n) => n,
                     Err(streams::StreamError::Closed) => 0,
                     Err(streams::StreamError::LastOperationFailed(e)) => {
-                        return Err(stream_error_to_errno(e))
+                        return Err(stream_error_to_errno(e));
                     }
                 };
 
@@ -2546,7 +2612,7 @@ impl BlockingMode {
                     Ok(_) => {}
                     Err(streams::StreamError::Closed) => return Ok(0),
                     Err(streams::StreamError::LastOperationFailed(e)) => {
-                        return Err(stream_error_to_errno(e))
+                        return Err(stream_error_to_errno(e));
                     }
                 }
 
@@ -2554,7 +2620,7 @@ impl BlockingMode {
                     Ok(_) => {}
                     Err(streams::StreamError::Closed) => return Ok(0),
                     Err(streams::StreamError::LastOperationFailed(e)) => {
-                        return Err(stream_error_to_errno(e))
+                        return Err(stream_error_to_errno(e));
                     }
                 }
 
@@ -2605,7 +2671,7 @@ const PAGE_SIZE: usize = 65536;
 /// polyfill.
 const PATH_MAX: usize = 4096;
 
-/// Maximum number of bytes to cache for a `wasi::Dirent` plus its path name.
+/// Maximum number of bytes to cache for a `wasip1::Dirent` plus its path name.
 const DIRENT_CACHE: usize = 256;
 
 /// A canary value to detect memory corruption within `State`.
@@ -2630,7 +2696,7 @@ struct State {
     /// TODO
     temporary_data: UnsafeCell<MaybeUninit<[u8; temporary_data_size()]>>,
 
-    /// Cache for the `fd_readdir` call for a final `wasi::Dirent` plus path
+    /// Cache for the `fd_readdir` call for a final `wasip1::Dirent` plus path
     /// name that didn't fit into the caller's buffer.
     #[cfg(not(feature = "proxy"))]
     dirent_cache: DirentCache,
@@ -2647,9 +2713,9 @@ struct State {
 #[cfg(not(feature = "proxy"))]
 struct DirentCache {
     stream: Cell<Option<DirectoryEntryStream>>,
-    for_fd: Cell<wasi::Fd>,
-    cookie: Cell<wasi::Dircookie>,
-    cached_dirent: Cell<wasi::Dirent>,
+    for_fd: Cell<wasip1::Fd>,
+    cookie: Cell<wasip1::Dircookie>,
+    cached_dirent: Cell<wasip1::Dirent>,
     path_data: UnsafeCell<MaybeUninit<[u8; DIRENT_CACHE]>>,
 }
 
@@ -2715,7 +2781,7 @@ const _: () = {
     let _size_assert: [(); PAGE_SIZE] = [(); size_of::<State>()];
 };
 
-#[allow(unused)]
+#[expect(unused, reason = "not used in all configurations")]
 #[repr(i32)]
 enum AllocationState {
     StackUnallocated,
@@ -2725,8 +2791,8 @@ enum AllocationState {
     StateAllocated,
 }
 
-#[allow(improper_ctypes)]
-extern "C" {
+#[expect(improper_ctypes, reason = "types behind pointers")]
+unsafe extern "C" {
     fn get_state_ptr() -> *mut State;
     fn set_state_ptr(state: *mut State);
     fn get_allocation_state() -> AllocationState;
@@ -2759,7 +2825,7 @@ impl State {
     #[cold]
     fn new() -> *mut State {
         #[link(wasm_import_module = "__main_module__")]
-        extern "C" {
+        unsafe extern "C" {
             fn cabi_realloc(
                 old_ptr: *mut u8,
                 old_len: usize,
@@ -2795,28 +2861,30 @@ impl State {
 
     #[cold]
     unsafe fn init(state: *mut State) {
-        state.write(State {
-            magic1: MAGIC,
-            magic2: MAGIC,
-            import_alloc: Cell::new(ImportAlloc::None),
-            descriptors: RefCell::new(None),
-            temporary_data: UnsafeCell::new(MaybeUninit::uninit()),
-            #[cfg(not(feature = "proxy"))]
-            dirent_cache: DirentCache {
-                stream: Cell::new(None),
-                for_fd: Cell::new(0),
-                cookie: Cell::new(wasi::DIRCOOKIE_START),
-                cached_dirent: Cell::new(wasi::Dirent {
-                    d_next: 0,
-                    d_ino: 0,
-                    d_type: FILETYPE_UNKNOWN,
-                    d_namlen: 0,
-                }),
-                path_data: UnsafeCell::new(MaybeUninit::uninit()),
-            },
-            #[cfg(not(feature = "proxy"))]
-            dotdot: [UnsafeCell::new(b'.'), UnsafeCell::new(b'.')],
-        });
+        unsafe {
+            state.write(State {
+                magic1: MAGIC,
+                magic2: MAGIC,
+                import_alloc: Cell::new(ImportAlloc::None),
+                descriptors: RefCell::new(None),
+                temporary_data: UnsafeCell::new(MaybeUninit::uninit()),
+                #[cfg(not(feature = "proxy"))]
+                dirent_cache: DirentCache {
+                    stream: Cell::new(None),
+                    for_fd: Cell::new(0),
+                    cookie: Cell::new(wasip1::DIRCOOKIE_START),
+                    cached_dirent: Cell::new(wasip1::Dirent {
+                        d_next: 0,
+                        d_ino: 0,
+                        d_type: FILETYPE_UNKNOWN,
+                        d_namlen: 0,
+                    }),
+                    path_data: UnsafeCell::new(MaybeUninit::uninit()),
+                },
+                #[cfg(not(feature = "proxy"))]
+                dotdot: [UnsafeCell::new(b'.'), UnsafeCell::new(b'.')],
+            });
+        }
     }
 
     /// Accessor for the descriptors member that ensures it is properly initialized

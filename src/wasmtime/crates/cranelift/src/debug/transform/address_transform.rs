@@ -1,5 +1,5 @@
-use crate::debug::Compilation;
 use crate::FunctionAddressMap;
+use crate::debug::Compilation;
 use gimli::write;
 use std::collections::BTreeMap;
 use wasmtime_environ::{DefinedFuncIndex, FilePos, PrimaryMap, StaticModuleIndex};
@@ -184,7 +184,7 @@ fn build_function_lookup(
     }
     active_ranges.sort();
     index.insert(last_wasm_pos.unwrap(), active_ranges.into_boxed_slice());
-    let index = Vec::from_iter(index.into_iter());
+    let index = Vec::from_iter(index);
     (fn_start, fn_end, FuncLookup { index, ranges })
 }
 
@@ -486,7 +486,7 @@ impl AddressTransform {
         }
 
         let map = build_function_addr_map(compilation, module);
-        let func = Vec::from_iter(func.into_iter());
+        let func = Vec::from_iter(func);
         AddressTransform { map, func }
     }
 
@@ -498,8 +498,10 @@ impl AddressTransform {
         >,
         wasm_file: wasmtime_environ::WasmFileInfo,
     ) -> Self {
+        use cranelift_entity::EntityRef;
+
         let mut translations = wasmtime_environ::PrimaryMap::new();
-        let mut translation = wasmtime_environ::ModuleTranslation::default();
+        let mut translation = wasmtime_environ::ModuleTranslation::new(StaticModuleIndex::new(0));
         translation.debuginfo.wasm_file = wasm_file;
         translation
             .module
@@ -552,8 +554,10 @@ impl AddressTransform {
     }
 
     fn translate_raw(&self, addr: u64) -> Option<(usize, GeneratedAddress)> {
-        if addr == 0 {
-            // It's normally 0 for debug info without the linked code.
+        const TOMBSTONE: u64 = u32::MAX as u64;
+        if addr == 0 || addr == TOMBSTONE {
+            // Addresses for unlinked code may be left as 0 or replaced
+            // with -1, depending on the linker used.
             return None;
         }
         if let Some(func) = self.find_func(addr) {
@@ -661,7 +665,7 @@ impl AddressTransform {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_function_lookup, get_wasm_code_offset, AddressTransform};
+    use super::{AddressTransform, build_function_lookup, get_wasm_code_offset};
     use crate::{CompiledFunctionMetadata, FunctionAddressMap};
     use cranelift_entity::PrimaryMap;
     use gimli::write::Address;
@@ -751,7 +755,7 @@ mod tests {
         assert_eq!(20, end);
 
         assert_eq!(2, lookup.index.len());
-        let index_entries = Vec::from_iter(lookup.index.into_iter());
+        let index_entries = Vec::from_iter(lookup.index);
         assert_eq!((10u64, vec![0].into_boxed_slice()), index_entries[0]);
         assert_eq!((12u64, vec![0, 1].into_boxed_slice()), index_entries[1]);
         assert_eq!(2, lookup.ranges.len());
@@ -784,6 +788,10 @@ mod tests {
 
     #[test]
     fn test_addr_translate() {
+        // Ignore this test if cranelift doesn't support the native platform.
+        if cranelift_native::builder().is_err() {
+            return;
+        }
         let func = CompiledFunctionMetadata {
             address_map: create_simple_func(11),
             ..Default::default()

@@ -19,12 +19,21 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sysdep.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
-
+/* Lind: route the dynamic-loader's openat64 through the same
+   OPENAT_SYSCALL handler the rest of the libc uses, instead of the
+   broken INLINE_SYSCALL stub.  */
 int
 openat64 (int dfd, const char *file, int oflag, ...)
 {
   assert (!__OPEN_NEEDS_MODE (oflag));
 
-  return INLINE_SYSCALL (openat, 3, dfd, file, oflag | O_LARGEFILE);
+  return MAKE_LEGACY_SYSCALL (OPENAT_SYSCALL, "syscall|openat",
+			      (uint64_t) dfd,
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
+			      (uint64_t) (oflag | O_LARGEFILE),
+			      0, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

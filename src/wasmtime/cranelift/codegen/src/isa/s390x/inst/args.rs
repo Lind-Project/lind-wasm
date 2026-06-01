@@ -1,7 +1,7 @@
 //! S390x ISA definitions: instruction arguments.
 
-use crate::ir::condcodes::{FloatCC, IntCC};
 use crate::ir::MemFlags;
+use crate::ir::condcodes::{FloatCC, IntCC};
 use crate::isa::s390x::inst::*;
 
 //=============================================================================
@@ -32,6 +32,9 @@ pub enum MemArg {
     /// PC-relative Reference to a label.
     Label { target: MachLabel },
 
+    /// PC-relative Reference to a constant pool entry.
+    Constant { constant: VCodeConstant },
+
     /// PC-relative Reference to a near symbol.
     Symbol {
         name: Box<ExternalName>,
@@ -49,6 +52,12 @@ pub enum MemArg {
     /// Offset from the stack pointer at function entry.
     InitialSPOffset { off: i64 },
 
+    /// Offset from the top of the incoming argument area.
+    IncomingArgOffset { off: i64 },
+
+    /// Offset from the bottom of the outgoing argument area.
+    OutgoingArgOffset { off: i64 },
+
     /// Offset into the slot area of the stack, which lies just above the
     /// outgoing argument area that's setup by the function prologue.
     /// At emission time, this is converted to `SPOffset` with a fixup added to
@@ -60,6 +69,9 @@ pub enum MemArg {
     /// adjustment meta-instructions). See the diagram in the documentation
     /// for [crate::isa::aarch64::abi](the ABI module) for more details.
     SlotOffset { off: i64 },
+
+    /// Offset into the spill area of the stack.
+    SpillOffset { off: i64 },
 }
 
 impl MemArg {
@@ -83,7 +95,7 @@ impl MemArg {
         }
     }
 
-    /// Memory reference using the sum of a register an an offset as address.
+    /// Memory reference using the sum of a register an offset as address.
     pub fn reg_plus_off(reg: Reg, off: i64, flags: MemFlags) -> MemArg {
         MemArg::RegOffset { reg, off, flags }
     }
@@ -94,56 +106,13 @@ impl MemArg {
             MemArg::BXD20 { flags, .. } => *flags,
             MemArg::RegOffset { flags, .. } => *flags,
             MemArg::Label { .. } => MemFlags::trusted(),
+            MemArg::Constant { .. } => MemFlags::trusted(),
             MemArg::Symbol { flags, .. } => *flags,
             MemArg::InitialSPOffset { .. } => MemFlags::trusted(),
+            MemArg::IncomingArgOffset { .. } => MemFlags::trusted(),
+            MemArg::OutgoingArgOffset { .. } => MemFlags::trusted(),
             MemArg::SlotOffset { .. } => MemFlags::trusted(),
-        }
-    }
-}
-
-/// A memory argument for an instruction with two memory operands.
-/// We cannot use two instances of MemArg, because we do not have
-/// two free temp registers that would be needed to reload two
-/// addresses in the general case.  Also, two copies of MemArg would
-/// increase the size of Inst beyond its current limit.  Use this
-/// simplified form instead that never needs any reloads, and suffices
-/// for all current users.
-#[derive(Clone, Debug)]
-pub struct MemArgPair {
-    pub base: Reg,
-    pub disp: UImm12,
-    pub flags: MemFlags,
-}
-
-impl MemArgPair {
-    /// Convert a MemArg to a MemArgPair if possible.
-    pub fn maybe_from_memarg(mem: &MemArg) -> Option<MemArgPair> {
-        match mem {
-            &MemArg::BXD12 {
-                base,
-                index,
-                disp,
-                flags,
-            } => {
-                if index != zero_reg() {
-                    None
-                } else {
-                    Some(MemArgPair { base, disp, flags })
-                }
-            }
-            &MemArg::RegOffset { reg, off, flags } => {
-                if off < 0 {
-                    None
-                } else {
-                    let disp = UImm12::maybe_from_u64(off as u64)?;
-                    Some(MemArgPair {
-                        base: reg,
-                        disp,
-                        flags,
-                    })
-                }
-            }
-            _ => None,
+            MemArg::SpillOffset { .. } => MemFlags::trusted(),
         }
     }
 }
@@ -261,12 +230,16 @@ impl PrettyPrint for MemArg {
                 }
             }
             &MemArg::Label { target } => target.to_string(),
+            &MemArg::Constant { constant } => format!("[const({})]", constant.as_u32()),
             &MemArg::Symbol {
                 ref name, offset, ..
             } => format!("{} + {}", name.display(None), offset),
             // Eliminated by `mem_finalize()`.
             &MemArg::InitialSPOffset { .. }
+            | &MemArg::IncomingArgOffset { .. }
+            | &MemArg::OutgoingArgOffset { .. }
             | &MemArg::SlotOffset { .. }
+            | &MemArg::SpillOffset { .. }
             | &MemArg::RegOffset { .. } => {
                 panic!("Unexpected pseudo mem-arg mode (stack-offset or generic reg-offset)!")
             }

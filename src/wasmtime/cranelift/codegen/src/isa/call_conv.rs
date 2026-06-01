@@ -1,3 +1,5 @@
+use crate::ir::Type;
+use crate::ir::types;
 use crate::settings::{self, LibcallCallConv};
 use core::fmt;
 use core::str;
@@ -12,9 +14,16 @@ use serde_derive::{Deserialize, Serialize};
 pub enum CallConv {
     /// Best performance, not ABI-stable.
     Fast,
-    /// Smallest caller code size, not ABI-stable.
-    Cold,
-    /// Supports tail calls, not ABI-stable.
+    /// Supports tail calls, not ABI-stable except for exception
+    /// payload registers.
+    ///
+    /// On exception resume, a caller to a `tail`-convention function
+    /// assumes that the exception payload values are in the following
+    /// registers (per platform):
+    /// - x86-64: rax, rdx
+    /// - aarch64: x0, x1
+    /// - riscv64: a0, a1
+    /// - pulley{32,64}: x0, x1
     //
     // Currently, this is basically sys-v except that callees pop stack
     // arguments, rather than callers. Expected to change even more in the
@@ -28,17 +37,25 @@ pub enum CallConv {
     AppleAarch64,
     /// Specialized convention for the probestack function.
     Probestack,
-    /// Wasmtime equivalent of SystemV, not ABI-stable.
-    ///
-    /// FIXME: remove this when Wasmtime uses the "tail" calling convention for
-    /// all wasm functions.
-    WasmtimeSystemV,
     /// The winch calling convention, not ABI-stable.
     ///
-    /// The main difference to WasmtimeSystemV is that the winch calling
-    /// convention defines no callee-save registers, and restricts the number
-    /// of return registers to one integer, and one floating point.
+    /// The main difference to SystemV is that the winch calling convention
+    /// defines no callee-save registers, and restricts the number of return
+    /// registers to one integer, and one floating point.
     Winch,
+    /// Calling convention optimized for callsite efficiency, at the
+    /// cost of the callee. It does so by not clobbering any
+    /// registers.
+    ///
+    /// This is designed for a very specific need: we want callsites
+    /// that we can insert as instrumentation (perhaps patchable)
+    /// while affecting surrounding instructions' register allocation
+    /// as little as possible.
+    ///
+    /// The ABI is based on the native register-argument ABI on each
+    /// respective platform. It does not support tail-calls. It also
+    /// does not support return values.
+    PreserveAll,
 }
 
 impl CallConv {
@@ -59,10 +76,10 @@ impl CallConv {
         match flags.libcall_call_conv() {
             LibcallCallConv::IsaDefault => default_call_conv,
             LibcallCallConv::Fast => Self::Fast,
-            LibcallCallConv::Cold => Self::Cold,
             LibcallCallConv::SystemV => Self::SystemV,
             LibcallCallConv::WindowsFastcall => Self::WindowsFastcall,
             LibcallCallConv::AppleAarch64 => Self::AppleAarch64,
+            LibcallCallConv::PreserveAll => Self::PreserveAll,
             LibcallCallConv::Probestack => Self::Probestack,
         }
     }
@@ -75,19 +92,33 @@ impl CallConv {
         }
     }
 
-    /// Is the calling convention extending the Windows Fastcall ABI?
-    pub fn extends_windows_fastcall(self) -> bool {
+    /// Does this calling convention support exceptions?
+    pub fn supports_exceptions(&self) -> bool {
         match self {
-            Self::WindowsFastcall => true,
+            CallConv::Tail | CallConv::SystemV | CallConv::Winch | CallConv::PreserveAll => true,
             _ => false,
         }
     }
 
-    /// Is the calling convention extending the Apple aarch64 ABI?
-    pub fn extends_apple_aarch64(self) -> bool {
+    /// What types do the exception payload value(s) have?
+    ///
+    /// Note that this function applies to the *callee* of a `try_call`
+    /// instruction. The calling convention of the callee may differ from the
+    /// caller, but the exceptional payload types available are defined by the
+    /// callee calling convention.
+    ///
+    /// Also note that individual backends are responsible for reporting
+    /// register destinations for exceptional types. Internally Cranelift
+    /// asserts that the backend supports the exact same number of register
+    /// destinations as this return value.
+    pub fn exception_payload_types(&self, pointer_ty: Type) -> &[Type] {
         match self {
-            Self::AppleAarch64 => true,
-            _ => false,
+            CallConv::Tail | CallConv::SystemV | CallConv::PreserveAll => match pointer_ty {
+                types::I32 => &[types::I32, types::I32],
+                types::I64 => &[types::I64, types::I64],
+                _ => unreachable!(),
+            },
+            _ => &[],
         }
     }
 }
@@ -96,14 +127,13 @@ impl fmt::Display for CallConv {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(match *self {
             Self::Fast => "fast",
-            Self::Cold => "cold",
             Self::Tail => "tail",
             Self::SystemV => "system_v",
             Self::WindowsFastcall => "windows_fastcall",
             Self::AppleAarch64 => "apple_aarch64",
             Self::Probestack => "probestack",
-            Self::WasmtimeSystemV => "wasmtime_system_v",
             Self::Winch => "winch",
+            Self::PreserveAll => "preserve_all",
         })
     }
 }
@@ -113,14 +143,13 @@ impl str::FromStr for CallConv {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "fast" => Ok(Self::Fast),
-            "cold" => Ok(Self::Cold),
             "tail" => Ok(Self::Tail),
             "system_v" => Ok(Self::SystemV),
             "windows_fastcall" => Ok(Self::WindowsFastcall),
             "apple_aarch64" => Ok(Self::AppleAarch64),
             "probestack" => Ok(Self::Probestack),
-            "wasmtime_system_v" => Ok(Self::WasmtimeSystemV),
             "winch" => Ok(Self::Winch),
+            "preserve_all" => Ok(Self::PreserveAll),
             _ => Err(()),
         }
     }

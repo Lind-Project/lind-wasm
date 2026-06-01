@@ -13,6 +13,7 @@ use crate::alias_analysis::AliasAnalysis;
 use crate::dominator_tree::DominatorTree;
 use crate::egraph::EgraphPass;
 use crate::flowgraph::ControlFlowGraph;
+use crate::inline::{Inline, do_inlining};
 use crate::ir::Function;
 use crate::isa::TargetIsa;
 use crate::legalizer::simple_legalize;
@@ -24,8 +25,8 @@ use crate::result::{CodegenResult, CompileResult};
 use crate::settings::{FlagsOrIsa, OptLevel};
 use crate::trace;
 use crate::unreachable_code::eliminate_unreachable_code;
-use crate::verifier::{verify_context, VerifierErrors, VerifierResult};
-use crate::{timing, CompileError};
+use crate::verifier::{VerifierErrors, VerifierResult, verify_context};
+use crate::{CompileError, timing};
 #[cfg(feature = "souper-harvest")]
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -109,27 +110,13 @@ impl Context {
     }
 
     /// Compile the function, and emit machine code into a `Vec<u8>`.
-    ///
-    /// Run the function through all the passes necessary to generate
-    /// code for the target ISA represented by `isa`, as well as the
-    /// final step of emitting machine code into a `Vec<u8>`. The
-    /// machine code is not relocated. Instead, any relocations can be
-    /// obtained from `compiled_code()`.
-    ///
-    /// Performs any optimizations that are enabled, unless
-    /// `optimize()` was already invoked.
-    ///
-    /// This function calls `compile`, taking care to resize `mem` as
-    /// needed.
-    ///
-    /// Returns information about the function's code and read-only
-    /// data.
+    #[deprecated = "use Context::compile"]
     pub fn compile_and_emit(
         &mut self,
         isa: &dyn TargetIsa,
         mem: &mut Vec<u8>,
         ctrl_plane: &mut ControlPlane,
-    ) -> CompileResult<&CompiledCode> {
+    ) -> CompileResult<'_, &CompiledCode> {
         let compiled_code = self.compile(isa, ctrl_plane)?;
         mem.extend_from_slice(compiled_code.code_buffer());
         Ok(compiled_code)
@@ -143,13 +130,17 @@ impl Context {
         isa: &dyn TargetIsa,
         ctrl_plane: &mut ControlPlane,
     ) -> CodegenResult<CompiledCodeStencil> {
-        let _tt = timing::compile();
+        let result;
+        trace!("****** START compiling {}", self.func.display_spec());
+        {
+            let _tt = timing::compile();
 
-        self.verify_if(isa)?;
-
-        self.optimize(isa, ctrl_plane)?;
-
-        isa.compile_function(&self.func, &self.domtree, self.want_disasm, ctrl_plane)
+            self.verify_if(isa)?;
+            self.optimize(isa, ctrl_plane)?;
+            result = isa.compile_function(&self.func, &self.domtree, self.want_disasm, ctrl_plane);
+        }
+        trace!("****** DONE compiling {}\n", self.func.display_spec());
+        result
     }
 
     /// Optimize the function, performing all compilation steps up to
@@ -178,13 +169,13 @@ impl Context {
             self.func.display()
         );
 
-        self.compute_cfg();
         if isa.flags().enable_nan_canonicalization() {
             self.canonicalize_nans(isa)?;
         }
 
         self.legalize(isa)?;
 
+        self.compute_cfg();
         self.compute_domtree();
         self.eliminate_unreachable_code(isa)?;
         self.remove_constant_phis(isa)?;
@@ -198,18 +189,30 @@ impl Context {
         Ok(())
     }
 
-    /// Compile the function.
+    /// Perform function call inlining.
     ///
-    /// Run the function through all the passes necessary to generate code for the target ISA
-    /// represented by `isa`. This does not include the final step of emitting machine code into a
-    /// code sink.
+    /// Returns `true` if any function call was inlined, `false` otherwise.
+    pub fn inline(&mut self, inliner: impl Inline) -> CodegenResult<bool> {
+        do_inlining(&mut self.func, inliner)
+    }
+
+    /// Compile the function,
     ///
-    /// Returns information about the function's code and read-only data.
+    /// Run the function through all the passes necessary to generate
+    /// code for the target ISA represented by `isa`. The generated
+    /// machine code is not relocated. Instead, any relocations can be
+    /// obtained from `compiled_code.buffer.relocs()`.
+    ///
+    /// Performs any optimizations that are enabled, unless
+    /// `optimize()` was already invoked.
+    ///
+    /// Returns the generated machine code as well as information about
+    /// the function's code and read-only data.
     pub fn compile(
         &mut self,
         isa: &dyn TargetIsa,
         ctrl_plane: &mut ControlPlane,
-    ) -> CompileResult<&CompiledCode> {
+    ) -> CompileResult<'_, &CompiledCode> {
         let stencil = self
             .compile_stencil(isa, ctrl_plane)
             .map_err(|error| CompileError {
@@ -296,9 +299,10 @@ impl Context {
         // TODO: Avoid doing this when legalization doesn't actually mutate the CFG.
         self.domtree.clear();
         self.loop_analysis.clear();
+        self.cfg.clear();
 
         // Run some specific legalizations only.
-        simple_legalize(&mut self.func, &mut self.cfg, isa);
+        simple_legalize(&mut self.func, isa);
         self.verify_if(isa)
     }
 
@@ -309,7 +313,7 @@ impl Context {
 
     /// Compute dominator tree.
     pub fn compute_domtree(&mut self) {
-        self.domtree.compute(&self.func, &self.cfg)
+        self.domtree.compute(&self.func, &self.cfg);
     }
 
     /// Compute the loop analysis.
@@ -377,12 +381,10 @@ impl Context {
             &self.domtree,
             &self.loop_analysis,
             &mut alias_analysis,
-            &fisa.flags,
             ctrl_plane,
         );
         pass.run();
         log::debug!("egraph stats: {:?}", pass.stats);
-        trace!("pinned_union_count: {}", pass.eclasses.pinned_union_count);
         trace!("After egraph optimization:\n{}", self.func.display());
 
         self.verify_if(fisa)

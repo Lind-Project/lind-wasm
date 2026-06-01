@@ -17,12 +17,24 @@ BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 
-WITH_FPCAST=""
+FPCAST_FLAG=""
 if [[ "$1" == "--with-fpcast" ]]; then
-    WITH_FPCAST="--fpcast-emu --pass-arg=relocatable-fpcast"
+    FPCAST_FLAG="--fpcast-emu"
 fi
 
 symbols=$($SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $SCRIPTS_DIR/extract_versions.py --flags --paths-file $SCRIPTS_DIR/version-path-minimal.txt)
+
+# wasm_eh_c_longjmp_tag.o introduces a wasm Tag section into libc.so.  The
+# prebuilt add-export-tool binary cannot handle binaries with a Tag section
+# (it miscounts globals, causing "exported global index out of bounds").  The
+# tag is only needed in the static libc.a as a fallback for programs that
+# never call setjmp themselves; in the shared build every user compilation
+# unit that uses setjmp will define __c_longjmp in its own object, so exclude
+# it here.
+SHARED_ARCHIVE=$(mktemp /tmp/libc_shared_XXXXXX.a)
+cp "$SYSROOT_ARCHIVE" "$SHARED_ARCHIVE"
+llvm-ar d "$SHARED_ARCHIVE" wasm_eh_c_longjmp_tag.o 2>/dev/null || true
+trap "rm -f $SHARED_ARCHIVE" EXIT
 
 # --import-memory, --shared-memory: to make memory shared across wasm module
 # --export-dynamic, --experimental-pic, --unresolved-symbols=import-dynamic, -shared: flags for dynamic build of libraries
@@ -35,7 +47,7 @@ wasm-ld \
     --unresolved-symbols=import-dynamic \
     -shared \
     --whole-archive \
-    $SYSROOT_ARCHIVE \
+    "$SHARED_ARCHIVE" \
     --no-whole-archive \
     $symbols \
     --export-if-defined=__libc_setup_tls \
@@ -49,6 +61,12 @@ wasm-ld \
     --export-if-defined=copy_handler_table_to_cage \
     --export-if-defined=make_threei_call \
     --export-if-defined=register_handler \
+    $([ -z "${LIND_ASYNCIFY_SETJMP:-}" ] && printf '%s\n' \
+        --export-if-defined=saveSetjmp \
+        --export-if-defined=testSetjmp \
+        --export-if-defined=getTempRet0 \
+        --export-if-defined=setTempRet0 \
+        --export-if-defined=__wasm_longjmp) \
     -o "$SYSROOT/lib/wasm32-wasi/libc.so" "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
 
 mkdir -p $REPO_ROOT/lindfs/lib
@@ -58,8 +76,8 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __wasm_apply_global_relocs func __wasm_apply_global_relocs
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __stack_pointer global __stack_pointer
 
-# apply wasm-opt
-$REPO_ROOT/tools/binaryen/bin/wasm-opt --enable-bulk-memory --enable-threads --epoch-injection --pass-arg=epoch-import --asyncify --pass-arg=asyncify-import-globals $WITH_FPCAST -O2 --debuginfo $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
+# apply wasm-opt (use --target=libc: libc owns signal_callback, so epoch-main-module must be omitted)
+$REPO_ROOT/scripts/lind-wasm-opt --target=libc $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
 
 # do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libc.cwasm

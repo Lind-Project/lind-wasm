@@ -75,13 +75,13 @@ use crate::bindings::{
 use crate::{
     FsError, IsATTY, ResourceTable, StreamError, StreamResult, WasiCtx, WasiImpl, WasiView,
 };
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use std::collections::{BTreeMap, HashSet};
 use std::mem::{self, size_of, size_of_val};
 use std::ops::{Deref, DerefMut};
 use std::slice;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use system_interface::fs::FileIoExt;
 use wasmtime::component::Resource;
 use wiggle::tracing::instrument;
@@ -1290,7 +1290,7 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiP1Ctx {
                     .map_err(types::Error::trap)?
             }
             types::Clockid::ProcessCputimeId | types::Clockid::ThreadCputimeId => {
-                return Err(types::Errno::Badf.into())
+                return Err(types::Errno::Badf.into());
             }
         };
         Ok(res)
@@ -1312,7 +1312,7 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiP1Ctx {
                 .context("failed to call `monotonic_clock::now`")
                 .map_err(types::Error::trap)?,
             types::Clockid::ProcessCputimeId | types::Clockid::ThreadCputimeId => {
-                return Err(types::Errno::Badf.into())
+                return Err(types::Errno::Badf.into());
             }
         };
         Ok(now)

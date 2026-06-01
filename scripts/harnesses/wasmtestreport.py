@@ -11,10 +11,14 @@
 #   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 30"
 #   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
 #   (flags are collected until the next option starting with "--")
+#   "./wasmtestreport.py --grate grates/ipc-grate.cwasm" to run each test under a grate
+#   (the grate path is forwarded to lind_run before the test wasm)
 #
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+import contextlib
+import html
 import json
 import os
 import subprocess
@@ -22,10 +26,15 @@ from pathlib import Path
 import argparse
 import shutil
 import logging
+import shlex
 import tempfile
 import sys
 import time
 from typing import Any, Callable
+try:
+    from harnesses import libcpptestreport
+except ImportError:
+    import libcpptestreport
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -38,6 +47,9 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 30 # in seconds
+GRATE_DEFAULT_TIMEOUT = 90  # bumped default when running tests under a grate
+DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for lind_run on libc++ smoke .cwasm
+DEFAULT_NON_GRATE_TEST_WORKERS = "1"
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
@@ -56,12 +68,24 @@ TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
 TESTFILES_DST = LINDFS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 FAIL_PARENT_NAME = "fail"
+LIBRARY_PARENT_NAME = "library"
+RDYNAMIC_PARENT_NAME = "rdynamic"
+
+# Maps shared-library filename (e.g. "lib.so") -> Path of compiled native .so.
+# Populated by compile_dylink_libraries(); used to swap native libs in for native test runs.
+DYLINK_NATIVE_LIB_CACHE: dict = {}
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 GLOBAL_COMPILE_FLAGS = []
 LIND_PRE_FLAGS = []
 DIR_FLAGS = []
+GRATE_PREFIX = None
+GRATE_ARGS = []
+GRATE_CHAIN = []  # raw token list to prepend before the test wasm (set when --grate-prefix is used)
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
+
+def running_under_grate():
+    return bool(GRATE_CHAIN or GRATE_PREFIX)
 
 
 error_types = {
@@ -151,6 +175,134 @@ def resolve_compile_flags(source_file: Path, kind: str):
         extra_flags.append("-lm")
 
     return [*base_flags, *selected_flags, *extra_flags]
+
+def is_library_file(file_path: Path) -> bool:
+    """Return True if file_path lives inside a library/ folder (not a runnable test)."""
+    for parent in file_path.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == LIBRARY_PARENT_NAME:
+            return True
+    return False
+
+
+def resolve_lind_pre_flags(source_file: Path) -> list:
+    """Return extra pre-source flags for lind_compile (inserted before the source path)."""
+    for parent in source_file.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == RDYNAMIC_PARENT_NAME:
+            return ["-rdynamic"]
+    return []
+
+
+def resolve_native_extra_flags(source_file: Path) -> list:
+    """Return extra native compiler flags for special test directories."""
+    for parent in source_file.parents:
+        if parent == TEST_FILE_BASE:
+            break
+        if parent.name == RDYNAMIC_PARENT_NAME:
+            return ["-rdynamic"]
+    return []
+
+
+def _find_library_source_files() -> list:
+    """Return all .c files living inside any library/ subfolder under TEST_FILE_BASE."""
+    found = []
+    for path in TEST_FILE_BASE.rglob("*.c"):
+        if is_library_file(path):
+            found.append(path)
+    return found
+
+
+def compile_dylink_libraries() -> None:
+    """Pre-compile library/ .c files as wasm (via lind_compile) and native .so.
+
+    The wasm .so is placed in LINDFS_ROOT by lind_compile automatically.
+    The native .so is stored in LINDFS_ROOT with a .native.so suffix and
+    cached in DYLINK_NATIVE_LIB_CACHE for use during native test runs.
+    """
+    library_files = _find_library_source_files()
+    if not library_files:
+        return
+
+    logger.info(f"Pre-compiling {len(library_files)} dylink library file(s)")
+    for lib_c in library_files:
+        stem = lib_c.stem
+        so_name = f"{stem}.so"
+
+        # --- wasm build (output goes to LINDFS_ROOT/<stem>.so) ---
+        lind_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), "--compile-library", str(lib_c)]
+        logger.info(f"  [wasm] {so_name}")
+        result = run_subprocess(lind_cmd, label="wasm lib compile", shell=False)
+        if result.returncode != 0:
+            logger.error(f"Failed to compile wasm library {lib_c.name}: {result.stdout}{result.stderr}")
+            continue
+
+        # --- native shared library build (stored as <stem>.native.so in LINDFS_ROOT) ---
+        native_out = LINDFS_ROOT / f"{stem}.native.so"
+        native_cmd = [CC, "-shared", "-fPIC", str(lib_c), "-o", str(native_out)]
+        logger.info(f"  [native] {native_out.name}")
+        native_result = run_subprocess(native_cmd, label="native lib compile", shell=False)
+        if native_result.returncode != 0:
+            logger.warning(
+                f"Failed to compile native library {lib_c.name}: "
+                f"{native_result.stdout}{native_result.stderr}"
+            )
+            continue
+
+        DYLINK_NATIVE_LIB_CACHE[so_name] = native_out
+
+
+@contextlib.contextmanager
+def _native_dylink_libs():
+    """Swap wasm .so -> native .so in LINDFS_ROOT and set LD_LIBRARY_PATH, restore on exit.
+
+    Linux dlopen("lib.so") does not search cwd; LD_LIBRARY_PATH pointing at LINDFS_ROOT
+    is required. The wasm .so files are also replaced with native ELF .so so dlopen
+    succeeds. Both are restored after the native run so the wasm test sees the wasm .so.
+    """
+    if not DYLINK_NATIVE_LIB_CACHE:
+        yield
+        return
+
+    old_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    os.environ["LD_LIBRARY_PATH"] = f"{LINDFS_ROOT}:{old_ld}" if old_ld else str(LINDFS_ROOT)
+
+    backed_up: dict = {}
+    try:
+        for so_name, native_path in DYLINK_NATIVE_LIB_CACHE.items():
+            wasm_path = LINDFS_ROOT / so_name
+            if wasm_path.exists():
+                backup = wasm_path.with_suffix(".wasm.bak")
+                shutil.copy2(str(wasm_path), str(backup))
+                backed_up[wasm_path] = backup
+            shutil.copy2(str(native_path), str(wasm_path))
+        yield
+    finally:
+        if old_ld:
+            os.environ["LD_LIBRARY_PATH"] = old_ld
+        else:
+            os.environ.pop("LD_LIBRARY_PATH", None)
+        for wasm_path, backup in backed_up.items():
+            try:
+                shutil.move(str(backup), str(wasm_path))
+            except Exception as exc:
+                logger.warning(f"Failed to restore {wasm_path}: {exc}")
+        for so_name in DYLINK_NATIVE_LIB_CACHE:
+            wasm_path = LINDFS_ROOT / so_name
+            if wasm_path not in backed_up and wasm_path.exists():
+                wasm_path.unlink(missing_ok=True)
+
+
+def _is_dylink_test(source_file: Path) -> bool:
+    """Return True if the file is under a dylink_tests directory."""
+    try:
+        rel = source_file.resolve().relative_to(TEST_FILE_BASE.resolve())
+    except ValueError:
+        return False
+    return bool(rel.parts) and rel.parts[0] == "dylink_tests"
+
 
 # Function: get_empty_result
 #
@@ -370,7 +522,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     timing_info = build_timing_info()
 
     # Compile
-    compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), "-o", str(native_output)]
+    compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), *resolve_native_extra_flags(source_file), "-o", str(native_output)]
     try:
         compile_start = time.perf_counter()
         proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
@@ -462,7 +614,8 @@ def get_expected_output(source_file):
 def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), *LIND_PRE_FLAGS, source_file, *resolve_compile_flags(source_file, "lind")]
+    extra_pre_flags = resolve_lind_pre_flags(source_file)
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), *LIND_PRE_FLAGS, *extra_pre_flags, source_file, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -511,7 +664,13 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     wasm_file = Path(wasm_file)
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file.name]
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run")]
+    if GRATE_CHAIN:
+        run_cmd.extend(GRATE_CHAIN)
+    elif GRATE_PREFIX:
+        run_cmd.append(GRATE_PREFIX)
+        run_cmd.extend(GRATE_ARGS)
+    run_cmd.append(wasm_file.name)
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
@@ -521,8 +680,19 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 
 
     try:
+        run_env = os.environ.copy()
+        if not running_under_grate():
+            run_env["LIND_GRATE_WORKERS"] = DEFAULT_NON_GRATE_TEST_WORKERS
+
         run_start = time.perf_counter()
-        proc = run_subprocess(run_cmd,label="wasm run",timeout=timeout_sec, cwd=None, shell = False)
+        proc = run_subprocess(
+            run_cmd,
+            label="wasm run",
+            timeout=timeout_sec,
+            cwd=None,
+            shell=False,
+            env=run_env,
+        )
         run_time = round(time.perf_counter() - run_start, 6)       
         output = proc.stdout if proc.returncode == 0 else (proc.stdout + proc.stderr)
 
@@ -618,7 +788,9 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
     expected_output = None
     native_timing = build_timing_info()
     if test_mode == "deterministic":
-        success, expected_output, error_msg, error_type, native_timing = get_expected_output(source_file)
+        ctx = _native_dylink_libs() if _is_dylink_test(source_file) else contextlib.nullcontext()
+        with ctx:
+            success, expected_output, error_msg, error_type, native_timing = get_expected_output(source_file)
         if not success:
             add_test_result(result, str(source_file), "Failure", error_type, error_msg, timing_info=native_timing)
             return
@@ -938,6 +1110,19 @@ def generate_html_report(report):
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
         }
+        /* Same look as .test-section but not matched by PR-comment wrap_sections_as_details */
+        .wasm-harness-subsection {
+            margin: 30px 0;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .wasm-harness-subsection h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
         .summary-table {
             width: 100%;
             margin-bottom: 20px;
@@ -971,8 +1156,11 @@ def generate_html_report(report):
 
     html_content.append(html_header)
 
-    # Generate sections for Deterministic/Non-Deterministic test type
-    for test_type, test_result in report.items():
+    # Generate sections for Deterministic/Non-Deterministic test type (skip embedded libcpp blob)
+    for test_type in ("deterministic", "fail"):
+        if test_type not in report:
+            continue
+        test_result = report[test_type]
         html_content.append(f'<div class="test-section">')
         html_content.append(f'<h2>{test_type.replace("_", " ").title()} Tests</h2>')
         
@@ -1033,22 +1221,30 @@ def generate_html_report(report):
                     # Extract just the test file name for display
                     test_name = test_path.split('/')[-1]
                     
-                    # For successful tests, just show "Success" instead of full output
-                    # For failures, show the full output for debugging
-                    output_display = "Success" if result['status'].lower() == "success" else result["output"]
-                    
+                    # Escape cell text and <pre> bodies so downstream HTML consumers
+                    # (e.g. PR comment wrap_sections_as_details) never see literal </div></body>.
+                    if result["status"].lower() == "success":
+                        output_display = "Success"
+                    else:
+                        output_display = html.escape(str(result.get("output", "")))
                     native_time, wasm_time = get_row_time_values(result)
 
                     html_content.append(
-                        f'<tr class="{row_class}"><td>{test_name}</td>'
-                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<tr class="{row_class}"><td>{html.escape(test_name)}</td>'
+                        f'<td>{html.escape(str(result["status"]))}</td>'
+                        f'<td>{html.escape(str(result["error_type"]))}</td>'
                         f'<td>{format_time_cell(native_time)}</td>'
                         f'<td>{format_time_cell(wasm_time)}</td>'
-                        f'<td><pre>{output_display}</pre></td></tr>'
+                        f"<td><pre>{output_display}</pre></td></tr>"
                     )
             
             html_content.append('</table>')
-        html_content.append('</div>') 
+        html_content.append('</div>')
+
+    # Omit libc++ HTML when skipped or never run (empty bucket still exists in JSON for schema).
+    libcpp_report = report.get("libcpp")
+    if libcpp_report and libcpp_report.get("total_test_cases", 0) > 0:
+        html_content.append(libcpptestreport.generate_html_section(libcpp_report))
 
     html_content.append("</body>\n</html>")
     html_content.append("\n")
@@ -1171,7 +1367,7 @@ def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description="Specify folders to skip or run.")
     parser.add_argument("--skip", nargs="*", default=SKIP_FOLDERS, help="List of folders to be skipped")
     parser.add_argument("--run", nargs="*", default=RUN_FOLDERS, help="List of folders to be run")
-    parser.add_argument("--timeout", type=check_timeout, default=DEFAULT_TIMEOUT, help="Timeout in seconds")
+    parser.add_argument("--timeout", type=check_timeout, default=None, help=f"Timeout in seconds (default: {DEFAULT_TIMEOUT}, or {GRATE_DEFAULT_TIMEOUT} when running under a grate)")
     parser.add_argument("--output", default=JSON_OUTPUT, help="Name of the output file")
     parser.add_argument("--report", default=HTML_OUTPUT, help="Name of the report HTML file")
     parser.add_argument("--generate-html", action="store_true", help="Flag to generate HTML file")
@@ -1186,6 +1382,20 @@ def parse_arguments(argv=None):
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
     parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
+    parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a single grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
+    parser.add_argument("--grate-args", default="", help="Extra args passed to the grate, between the grate cwasm and the test wasm (shlex-split). Example: --grate-args '--chroot-dir /tmp'")
+    parser.add_argument("--grate-prefix", default=None, help="Raw prefix string of grates and their args, prepended verbatim before the test wasm (shlex-split). Use for chaining multiple grates including any grate-side group syntax. Example: --grate-prefix 'grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm'")
+    parser.add_argument(
+        "--libcpp-timeout",
+        type=check_timeout,
+        default=DEFAULT_LIBCPP_RUN_TIMEOUT,
+        help="Timeout in seconds for libc++ smoke test lind_run (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--skip-libcpp",
+        action="store_true",
+        help="Skip libc++ integration smoke (full lind_compile_cpp + lind_run)",
+    )
 
     args = parser.parse_args(argv)
     return args
@@ -1232,7 +1442,7 @@ def compare_test_results(file1, file2):
 #   subprocess.TimeoutExpired - If the command exceeds the timeout.
 #   Exception - For all other unexpected execution errors.
 # ----------------------------------------------------------------------
-def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
+def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None, env=None):
     """
     Wrapper for subprocess.run with optional debug logging.
     """
@@ -1249,7 +1459,8 @@ def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
             text=True,
             cwd=cwd,
             shell=shell,
-            timeout=timeout
+            timeout=timeout,
+            env=env,
         )
 
         
@@ -1299,8 +1510,9 @@ def setup_test_environment(args):
         test_cases = list(TEST_FILE_BASE.rglob("*.c"))
         config['tests_to_run'] = [
             test_case for test_case in test_cases
-            if should_run_file(test_case, config['run_folders_paths'], 
+            if should_run_file(test_case, config['run_folders_paths'],
                                config['skip_folders_paths'], config['skip_test_cases'])
+            and not is_library_file(test_case)
         ]
     
     # Propagate allow_precompiled flag into the config
@@ -1427,12 +1639,11 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
-    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS
+    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX, GRATE_ARGS, GRATE_CHAIN
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
-    timeout_sec = args.timeout
     output_file = str(Path(args.output).with_suffix('.json'))
     output_html_file = str(Path(args.report).with_suffix('.html'))
     should_generate_html = True
@@ -1443,6 +1654,48 @@ def main():
     keep_artifacts = args.keep_artifacts
     GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
     LIND_PRE_FLAGS = ["--static"] if args.static_build else []
+    GRATE_PREFIX = args.grate
+    GRATE_ARGS = shlex.split(args.grate_args) if args.grate_args else []
+    GRATE_CHAIN = shlex.split(args.grate_prefix) if args.grate_prefix else []
+
+    if GRATE_CHAIN and (GRATE_PREFIX or args.grate_args):
+        logger.error("--grate-prefix is mutually exclusive with --grate / --grate-args")
+        return
+
+    if GRATE_PREFIX:
+        grate_full = LINDFS_ROOT / GRATE_PREFIX.lstrip("/")
+        if not grate_full.exists():
+            grate_name = Path(GRATE_PREFIX).stem
+            logger.error(
+                f"Grate not found at {grate_full}.\n"
+                f"  Build it in the lind-wasm-example-grates repo:\n"
+                f"      cd ../lind-wasm-example-grates && make rust/{grate_name}\n"
+                f"  (or `make c/{grate_name}` for a C grate, `make list` to see available targets).\n"
+                f"  The build installs the cwasm into {LINDFS_ROOT}/grates/."
+            )
+            return
+
+    if GRATE_CHAIN:
+        missing = []
+        for tok in GRATE_CHAIN:
+            if tok.endswith(".cwasm") or tok.endswith(".wasm"):
+                full = LINDFS_ROOT / tok.lstrip("/")
+                if not full.exists():
+                    missing.append(full)
+        if missing:
+            paths = "\n    ".join(str(m) for m in missing)
+            logger.error(
+                f"Grate chain references missing cwasm/wasm files:\n"
+                f"    {paths}\n"
+                f"  Build them in the lind-wasm-example-grates repo (e.g. "
+                f"`cd ../lind-wasm-example-grates && make rust/<name>` per grate, "
+                f"or `make all`). Builds install into {LINDFS_ROOT}/grates/."
+            )
+            return
+
+    timeout_sec = args.timeout
+    if timeout_sec is None:
+        timeout_sec = GRATE_DEFAULT_TIMEOUT if (GRATE_PREFIX or GRATE_CHAIN) else DEFAULT_TIMEOUT
 
     if args.dir_flags:
         try:
@@ -1472,7 +1725,8 @@ def main():
 
     results = {
         "deterministic": get_empty_result(),
-        "fail": get_empty_result()
+        "fail": get_empty_result(),
+        "libcpp": libcpptestreport.get_empty_result(),
     }
 
     # Prepare artifacts root
@@ -1522,8 +1776,16 @@ def main():
             logger.info(f"Testfiles copied to {TESTFILES_DST}")
             return
 
+        # Pre-compile dylink shared libraries (wasm + native) before any tests run
+        compile_dylink_libraries()
+
         # Run all tests
         run_tests(config, artifacts_root, results, timeout_sec)
+
+        if not args.skip_libcpp:
+            libcpptestreport.run_libcpp_integration(
+                results["libcpp"], None, args.libcpp_timeout, logger=logger
+            )
 
         os.chdir(LIND_WASM_BASE)
         with open(output_file, "w") as fp:
@@ -1545,6 +1807,13 @@ def main():
             shutil.rmtree(TESTFILES_DST)
         except (FileNotFoundError, PermissionError):
             pass
+
+        # Clean up native .so files staged in LINDFS_ROOT
+        for so_name, native_path in DYLINK_NATIVE_LIB_CACHE.items():
+            try:
+                native_path.unlink(missing_ok=True)
+            except Exception:
+                pass
             
         # Remove artifacts directory if it was temp and not requested to keep
         if created_temp_dir and not keep_artifacts:

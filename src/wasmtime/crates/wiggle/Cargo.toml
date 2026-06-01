@@ -20,7 +20,7 @@ wiggle-macro = { workspace = true }
 tracing = { workspace = true }
 bitflags = { workspace = true }
 async-trait = { workspace = true }
-wasmtime = { workspace = true, optional = true }
+wasmtime = { workspace = true, optional = true, features = ['anyhow'] }
 anyhow = { workspace = true }
 
 [dev-dependencies]

@@ -2,41 +2,46 @@
 
 // Pull in the ISLE generated code.
 pub(crate) mod generated_code;
-use crate::{ir::types, ir::AtomicRmwOp, isa, isle_common_prelude_methods};
-use generated_code::{Context, MInst, RegisterClass};
+use crate::{ir::AtomicRmwOp, ir::types};
+use generated_code::{AssemblerOutputs, Context, MInst, RegisterClass};
 
 // Types that the generated ISLE code uses via `use super::*`.
-use super::{is_int_or_ref_ty, is_mergeable_load, lower_to_amode, MergeableLoadSize};
-use crate::ir::LibCall;
-use crate::isa::x64::lower::emit_vm_call;
-use crate::isa::x64::X64Backend;
-use crate::{
-    ir::{
-        condcodes::{FloatCC, IntCC},
-        immediates::*,
-        types::*,
-        BlockCall, Inst, InstructionData, MemFlags, Opcode, TrapCode, Value, ValueList,
-    },
-    isa::x64::{
-        abi::X64CallSite,
-        inst::{args::*, regs, CallInfo, ReturnCallInfo},
-    },
-    machinst::{
-        isle::*, valueregs, ArgPair, InsnInput, InstOutput, MachAtomicRmwOp, MachInst,
-        VCodeConstant, VCodeConstantData,
-    },
+use super::external::{CraneliftRegisters, PairedGpr, PairedXmm, isle_assembler_methods};
+use super::{MergeableLoadSize, is_int_or_ref_ty, is_mergeable_load, lower_to_amode};
+use crate::ir::condcodes::{FloatCC, IntCC};
+use crate::ir::immediates::*;
+use crate::ir::types::*;
+use crate::ir::{
+    BlockCall, Inst, InstructionData, LibCall, MemFlags, Opcode, TrapCode, Value, ValueList,
 };
+use crate::isa::x64::X64Backend;
+use crate::isa::x64::inst::{ReturnCallInfo, args::*, regs};
+use crate::isa::x64::lower::{InsnInput, emit_vm_call};
+use crate::machinst::isle::*;
+use crate::machinst::{
+    ArgPair, CallArgList, CallInfo, CallRetList, InstOutput, MachInst, VCodeConstant,
+    VCodeConstantData,
+};
+use alloc::boxed::Box;
 use alloc::vec::Vec;
+use cranelift_assembler_x64 as asm;
 use regalloc2::PReg;
-use std::boxed::Box;
 
 /// Type representing out-of-line data for calls. This type optional because the
 /// call instruction is also used by Winch to emit calls, but the
 /// `Box<CallInfo>` field is not used, it's only used by Cranelift. By making it
 /// optional, we reduce the number of heap allocations in Winch.
-type BoxCallInfo = Option<Box<CallInfo>>;
-type BoxReturnCallInfo = Box<ReturnCallInfo>;
+type BoxCallInfo = Box<CallInfo<ExternalName>>;
+type BoxCallIndInfo = Box<CallInfo<RegMem>>;
+type BoxReturnCallInfo = Box<ReturnCallInfo<ExternalName>>;
+type BoxReturnCallIndInfo = Box<ReturnCallInfo<Reg>>;
 type VecArgPair = Vec<ArgPair>;
+type BoxAtomic128RmwSeqArgs = Box<Atomic128RmwSeqArgs>;
+type BoxAtomic128XchgSeqArgs = Box<Atomic128XchgSeqArgs>;
+
+/// When interacting with the external assembler (see `external.rs`), we
+/// need to fix the types we'll use.
+type AssemblerInst = asm::Inst<CraneliftRegisters>;
 
 pub struct SinkableLoad {
     inst: Inst,
@@ -65,67 +70,90 @@ pub(crate) fn lower_branch(
     // TODO: reuse the ISLE context across lowerings so we can reuse its
     // internal heap allocations.
     let mut isle_ctx = IsleContext { lower_ctx, backend };
-    generated_code::constructor_lower_branch(&mut isle_ctx, branch, &targets.to_vec())
+    generated_code::constructor_lower_branch(&mut isle_ctx, branch, &targets)
 }
 
 impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     isle_lower_prelude_methods!();
-    isle_prelude_caller_methods!(X64ABIMachineSpec, X64CallSite);
+    isle_assembler_methods!();
 
-    fn gen_return_call_indirect(
+    fn gen_call_info(
         &mut self,
-        callee_sig: SigRef,
-        callee: Value,
-        args: ValueSlice,
-    ) -> InstOutput {
-        let caller_conv = isa::CallConv::Tail;
-        debug_assert_eq!(
-            self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
-            caller_conv,
-            "Can only do `return_call`s from within a `tail` calling convention function"
-        );
+        sig: Sig,
+        dest: ExternalName,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<TryCallInfo>,
+        patchable: bool,
+    ) -> BoxCallInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
 
-        let callee = self.put_in_reg(callee);
-
-        let call_site = X64CallSite::from_ptr(
-            self.lower_ctx.sigs(),
-            callee_sig,
-            callee,
-            Opcode::ReturnCallIndirect,
-            caller_conv,
-            self.backend.flags().clone(),
-        );
-        call_site.emit_return_call(self.lower_ctx, args);
-
-        InstOutput::new()
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, patchable),
+        )
     }
 
-    fn gen_return_call(
+    fn gen_call_ind_info(
         &mut self,
-        callee_sig: SigRef,
-        callee: ExternalName,
-        distance: RelocDistance,
-        args: ValueSlice,
-    ) -> InstOutput {
-        let caller_conv = isa::CallConv::Tail;
-        debug_assert_eq!(
-            self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
-            caller_conv,
-            "Can only do `return_call`s from within a `tail` calling convention function"
-        );
+        sig: Sig,
+        dest: &RegMem,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<TryCallInfo>,
+    ) -> BoxCallIndInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
 
-        let call_site = X64CallSite::from_func(
-            self.lower_ctx.sigs(),
-            callee_sig,
-            &callee,
-            Opcode::ReturnCall,
-            distance,
-            caller_conv,
-            self.backend.flags().clone(),
-        );
-        call_site.emit_return_call(self.lower_ctx, args);
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest.clone(), uses, defs, try_call_info, false),
+        )
+    }
 
-        InstOutput::new()
+    fn gen_return_call_info(
+        &mut self,
+        sig: Sig,
+        dest: ExternalName,
+        uses: CallArgList,
+    ) -> BoxReturnCallInfo {
+        let new_stack_arg_size = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_tail_args_size(new_stack_arg_size);
+
+        Box::new(ReturnCallInfo {
+            dest,
+            uses,
+            tmp: self.lower_ctx.temp_writable_gpr(),
+            new_stack_arg_size,
+        })
+    }
+
+    fn gen_return_call_ind_info(
+        &mut self,
+        sig: Sig,
+        dest: Reg,
+        uses: CallArgList,
+    ) -> BoxReturnCallIndInfo {
+        let new_stack_arg_size = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_tail_args_size(new_stack_arg_size);
+
+        Box::new(ReturnCallInfo {
+            dest,
+            uses,
+            tmp: self.lower_ctx.temp_writable_gpr(),
+            new_stack_arg_size,
+        })
     }
 
     #[inline]
@@ -143,12 +171,11 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     fn put_in_reg_mem_imm(&mut self, val: Value) -> RegMemImm {
-        let inputs = self.lower_ctx.get_value_as_source_or_const(val);
-
-        if let Some(c) = inputs.constant {
-            let ty = self.lower_ctx.dfg().value_type(val);
-            if let Some(imm) = to_simm32(c as i64, ty) {
-                return imm.to_reg_mem_imm();
+        if let Some(imm) = self.i64_from_iconst(val) {
+            if let Ok(imm) = i32::try_from(imm) {
+                return RegMemImm::Imm {
+                    simm32: imm.cast_unsigned(),
+                };
             }
         }
 
@@ -156,12 +183,11 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     fn put_in_xmm_mem_imm(&mut self, val: Value) -> XmmMemImm {
-        let inputs = self.lower_ctx.get_value_as_source_or_const(val);
-
-        if let Some(c) = inputs.constant {
-            let ty = self.lower_ctx.dfg().value_type(val);
-            if let Some(imm) = to_simm32(c as i64, ty) {
-                return XmmMemImm::new(imm.to_reg_mem_imm()).unwrap();
+        if let Some(imm) = self.i64_from_iconst(val) {
+            if let Ok(imm) = i32::try_from(imm) {
+                return XmmMemImm::unwrap_new(RegMemImm::Imm {
+                    simm32: imm.cast_unsigned(),
+                });
             }
         }
 
@@ -170,7 +196,7 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
             RegMem::Mem { addr } => RegMemImm::Mem { addr },
         };
 
-        XmmMemImm::new(res).unwrap()
+        XmmMemImm::unwrap_new(res)
     }
 
     fn put_in_xmm_mem(&mut self, val: Value) -> XmmMem {
@@ -183,11 +209,10 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
             // NOTE: this is where behavior differs from `put_in_reg_mem`, as we always force
             // constants to be 16 bytes when a constant will be used in place of an xmm register.
             let vcode_constant = self.emit_u128_le_const(c as u128);
-            return XmmMem::new(RegMem::mem(SyntheticAmode::ConstantOffset(vcode_constant)))
-                .unwrap();
+            return XmmMem::unwrap_new(RegMem::mem(SyntheticAmode::ConstantOffset(vcode_constant)));
         }
 
-        XmmMem::new(self.put_in_reg_mem(val)).unwrap()
+        XmmMem::unwrap_new(self.put_in_reg_mem(val))
     }
 
     fn put_in_reg_mem(&mut self, val: Value) -> RegMem {
@@ -221,95 +246,88 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     #[inline]
-    fn use_avx(&mut self) -> bool {
-        self.backend.x64_flags.use_avx()
+    fn has_avx(&mut self) -> bool {
+        self.backend.x64_flags.has_avx()
     }
 
     #[inline]
     fn use_avx2(&mut self) -> bool {
-        self.backend.x64_flags.use_avx2()
+        self.backend.x64_flags.has_avx() && self.backend.x64_flags.has_avx2()
     }
 
     #[inline]
-    fn use_avx512vl(&mut self) -> bool {
-        self.backend.x64_flags.use_avx512vl()
+    fn has_avx512vl(&mut self) -> bool {
+        self.backend.x64_flags.has_avx512vl()
     }
 
     #[inline]
-    fn use_avx512dq(&mut self) -> bool {
-        self.backend.x64_flags.use_avx512dq()
+    fn has_avx512dq(&mut self) -> bool {
+        self.backend.x64_flags.has_avx512dq()
     }
 
     #[inline]
-    fn use_avx512f(&mut self) -> bool {
-        self.backend.x64_flags.use_avx512f()
+    fn has_avx512f(&mut self) -> bool {
+        self.backend.x64_flags.has_avx512f()
     }
 
     #[inline]
-    fn use_avx512bitalg(&mut self) -> bool {
-        self.backend.x64_flags.use_avx512bitalg()
+    fn has_avx512bitalg(&mut self) -> bool {
+        self.backend.x64_flags.has_avx512bitalg()
     }
 
     #[inline]
-    fn use_avx512vbmi(&mut self) -> bool {
-        self.backend.x64_flags.use_avx512vbmi()
+    fn has_avx512vbmi(&mut self) -> bool {
+        self.backend.x64_flags.has_avx512vbmi()
     }
 
     #[inline]
-    fn use_lzcnt(&mut self) -> bool {
-        self.backend.x64_flags.use_lzcnt()
+    fn has_lzcnt(&mut self) -> bool {
+        self.backend.x64_flags.has_lzcnt()
     }
 
     #[inline]
-    fn use_bmi1(&mut self) -> bool {
-        self.backend.x64_flags.use_bmi1()
+    fn has_bmi1(&mut self) -> bool {
+        self.backend.x64_flags.has_bmi1()
     }
 
     #[inline]
-    fn use_bmi2(&mut self) -> bool {
-        self.backend.x64_flags.use_bmi2()
+    fn has_bmi2(&mut self) -> bool {
+        self.backend.x64_flags.has_bmi2()
     }
 
     #[inline]
     fn use_popcnt(&mut self) -> bool {
-        self.backend.x64_flags.use_popcnt()
+        self.backend.x64_flags.has_popcnt() && self.backend.x64_flags.has_sse42()
     }
 
     #[inline]
     fn use_fma(&mut self) -> bool {
-        self.backend.x64_flags.use_fma()
+        self.backend.x64_flags.has_avx() && self.backend.x64_flags.has_fma()
     }
 
     #[inline]
-    fn use_ssse3(&mut self) -> bool {
-        self.backend.x64_flags.use_ssse3()
+    fn has_sse3(&mut self) -> bool {
+        self.backend.x64_flags.has_sse3()
     }
 
     #[inline]
-    fn use_sse41(&mut self) -> bool {
-        self.backend.x64_flags.use_sse41()
+    fn has_ssse3(&mut self) -> bool {
+        self.backend.x64_flags.has_ssse3()
+    }
+
+    #[inline]
+    fn has_sse41(&mut self) -> bool {
+        self.backend.x64_flags.has_sse41()
     }
 
     #[inline]
     fn use_sse42(&mut self) -> bool {
-        self.backend.x64_flags.use_sse42()
+        self.backend.x64_flags.has_sse41() && self.backend.x64_flags.has_sse42()
     }
 
     #[inline]
-    fn imm8_from_value(&mut self, val: Value) -> Option<Imm8Reg> {
-        let inst = self.lower_ctx.dfg().value_def(val).inst()?;
-        let constant = self.lower_ctx.get_constant(inst)?;
-        let imm = u8::try_from(constant).ok()?;
-        Some(Imm8Reg::Imm8 { imm })
-    }
-
-    #[inline]
-    fn const_to_type_masked_imm8(&mut self, c: u64, ty: Type) -> Imm8Gpr {
-        let mask = self.shift_mask(ty) as u64;
-        Imm8Gpr::new(Imm8Reg::Imm8 {
-            imm: (c & mask) as u8,
-        })
-        .unwrap()
+    fn has_cmpxchg16b(&mut self) -> bool {
+        self.backend.x64_flags.has_cmpxchg16b()
     }
 
     #[inline]
@@ -325,16 +343,14 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
 
     #[inline]
     fn simm32_from_value(&mut self, val: Value) -> Option<GprMemImm> {
-        let inst = self.lower_ctx.dfg().value_def(val).inst()?;
-        let constant: u64 = self.lower_ctx.get_constant(inst)?;
-        let ty = self.lower_ctx.dfg().value_type(val);
-        let constant = constant as i64;
-        to_simm32(constant, ty)
+        let imm = self.i64_from_iconst(val)?;
+        Some(GprMemImm::unwrap_new(RegMemImm::Imm {
+            simm32: i32::try_from(imm).ok()?.cast_unsigned(),
+        }))
     }
 
     fn sinkable_load(&mut self, val: Value) -> Option<SinkableLoad> {
-        let input = self.lower_ctx.get_value_as_source_or_const(val);
-        if let InputSourceInst::UniqueUse(inst, 0) = input.inst {
+        if let Some(inst) = self.is_sinkable_inst(val) {
             if let Some((addr_input, offset)) =
                 is_mergeable_load(self.lower_ctx, inst, MergeableLoadSize::Min32)
             {
@@ -349,8 +365,7 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     fn sinkable_load_exact(&mut self, val: Value) -> Option<SinkableLoad> {
-        let input = self.lower_ctx.get_value_as_source_or_const(val);
-        if let InputSourceInst::UniqueUse(inst, 0) = input.inst {
+        if let Some(inst) = self.is_sinkable_inst(val) {
             if let Some((addr_input, offset)) =
                 is_mergeable_load(self.lower_ctx, inst, MergeableLoadSize::Exact)
             {
@@ -380,15 +395,6 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     #[inline]
-    fn nonzero_u64_fits_in_u32(&mut self, x: u64) -> Option<u64> {
-        if x != 0 && x < u64::from(u32::MAX) {
-            Some(x)
-        } else {
-            None
-        }
-    }
-
-    #[inline]
     fn sse_insertps_lane_imm(&mut self, lane: u8) -> u8 {
         // Insert 32-bits from replacement (at index 00, bits 7:8) to vector (lane
         // shifted into bits 5:6).
@@ -403,6 +409,11 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     #[inline]
     fn amode_to_synthetic_amode(&mut self, amode: &Amode) -> SyntheticAmode {
         amode.clone().into()
+    }
+
+    #[inline]
+    fn synthetic_amode_slot(&mut self, offset: i32) -> SyntheticAmode {
+        SyntheticAmode::SlotOffset { simm32: offset }
     }
 
     #[inline]
@@ -458,7 +469,7 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
 
     #[inline]
     fn writable_reg_to_xmm(&mut self, r: WritableReg) -> WritableXmm {
-        Writable::from_reg(Xmm::new(r.to_reg()).unwrap())
+        Writable::from_reg(Xmm::unwrap_new(r.to_reg()))
     }
 
     #[inline]
@@ -488,7 +499,7 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
 
     #[inline]
     fn xmm_mem_to_xmm_mem_imm(&mut self, r: &XmmMem) -> XmmMemImm {
-        XmmMemImm::new(r.clone().to_reg_mem().into()).unwrap()
+        XmmMemImm::unwrap_new(r.clone().to_reg_mem().into())
     }
 
     #[inline]
@@ -508,17 +519,17 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
 
     #[inline]
     fn reg_mem_to_xmm_mem(&mut self, rm: &RegMem) -> XmmMem {
-        XmmMem::new(rm.clone()).unwrap()
+        XmmMem::unwrap_new(rm.clone())
     }
 
     #[inline]
     fn gpr_mem_imm_new(&mut self, rmi: &RegMemImm) -> GprMemImm {
-        GprMemImm::new(rmi.clone()).unwrap()
+        GprMemImm::unwrap_new(rmi.clone())
     }
 
     #[inline]
     fn xmm_mem_imm_new(&mut self, rmi: &RegMemImm) -> XmmMemImm {
-        XmmMemImm::new(rmi.clone()).unwrap()
+        XmmMemImm::unwrap_new(rmi.clone())
     }
 
     #[inline]
@@ -538,27 +549,22 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
 
     #[inline]
     fn xmm_new(&mut self, r: Reg) -> Xmm {
-        Xmm::new(r).unwrap()
+        Xmm::unwrap_new(r)
     }
 
     #[inline]
     fn gpr_new(&mut self, r: Reg) -> Gpr {
-        Gpr::new(r).unwrap()
+        Gpr::unwrap_new(r)
     }
 
     #[inline]
     fn reg_mem_to_gpr_mem(&mut self, rm: &RegMem) -> GprMem {
-        GprMem::new(rm.clone()).unwrap()
+        GprMem::unwrap_new(rm.clone())
     }
 
     #[inline]
     fn reg_to_gpr_mem(&mut self, r: Reg) -> GprMem {
-        GprMem::new(RegMem::reg(r)).unwrap()
-    }
-
-    #[inline]
-    fn imm8_reg_to_imm8_gpr(&mut self, ir: &Imm8Reg) -> Imm8Gpr {
-        Imm8Gpr::new(ir.clone()).unwrap()
+        GprMem::unwrap_new(RegMem::reg(r))
     }
 
     #[inline]
@@ -572,36 +578,12 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     #[inline]
-    fn gpr_to_imm8_gpr(&mut self, gpr: Gpr) -> Imm8Gpr {
-        Imm8Gpr::from(gpr)
-    }
-
-    #[inline]
-    fn imm8_to_imm8_gpr(&mut self, imm: u8) -> Imm8Gpr {
-        Imm8Gpr::new(Imm8Reg::Imm8 { imm }).unwrap()
-    }
-
-    fn gpr_from_imm8_gpr(&mut self, val: &Imm8Gpr) -> Option<Gpr> {
-        match val.as_imm8_reg() {
-            &Imm8Reg::Reg { reg } => Some(Gpr::new(reg).unwrap()),
-            Imm8Reg::Imm8 { .. } => None,
-        }
-    }
-
-    fn imm8_from_imm8_gpr(&mut self, val: &Imm8Gpr) -> Option<u8> {
-        match val.as_imm8_reg() {
-            &Imm8Reg::Imm8 { imm } => Some(imm),
-            Imm8Reg::Reg { .. } => None,
-        }
-    }
-
-    #[inline]
     fn type_register_class(&mut self, ty: Type) -> Option<RegisterClass> {
         if is_int_or_ref_ty(ty) || ty == I128 {
             Some(RegisterClass::Gpr {
                 single_register: ty != I128,
             })
-        } else if ty == F32 || ty == F64 || (ty.is_vector() && ty.bits() == 128) {
+        } else if ty.is_float() || (ty.is_vector() && ty.bits() <= 128) {
             Some(RegisterClass::Xmm)
         } else {
             None
@@ -611,8 +593,7 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     #[inline]
     fn ty_int_bool_or_ref(&mut self, ty: Type) -> Option<()> {
         match ty {
-            types::I8 | types::I16 | types::I32 | types::I64 | types::R64 => Some(()),
-            types::R32 => panic!("shouldn't have 32-bits refs on x64"),
+            types::I8 | types::I16 | types::I32 | types::I64 => Some(()),
             _ => None,
         }
     }
@@ -659,18 +640,13 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     #[inline]
-    fn amode_offset(&mut self, addr: &Amode, offset: i32) -> Amode {
+    fn amode_try_offset(&mut self, addr: &SyntheticAmode, offset: i32) -> Option<SyntheticAmode> {
         addr.offset(offset)
     }
 
     #[inline]
     fn zero_offset(&mut self) -> Offset32 {
         Offset32::new(0)
-    }
-
-    #[inline]
-    fn atomic_rmw_op_to_mach_atomic_rmw_op(&mut self, op: &AtomicRmwOp) -> MachAtomicRmwOp {
-        MachAtomicRmwOp::from(*op)
     }
 
     #[inline]
@@ -689,57 +665,48 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     fn libcall_1(&mut self, libcall: &LibCall, a: Reg) -> Reg {
-        let call_conv = self.lower_ctx.abi().call_conv(self.lower_ctx.sigs());
-        let ret_ty = libcall.signature(call_conv, I64).returns[0].value_type;
-        let output_reg = self.lower_ctx.alloc_tmp(ret_ty).only_reg().unwrap();
-
-        emit_vm_call(
+        let outputs = emit_vm_call(
             self.lower_ctx,
             &self.backend.flags,
             &self.backend.triple,
-            libcall.clone(),
-            &[a],
-            &[output_reg],
+            *libcall,
+            &[ValueRegs::one(a)],
         )
         .expect("Failed to emit LibCall");
 
-        output_reg.to_reg()
+        debug_assert_eq!(outputs.len(), 1);
+
+        outputs[0].only_reg().unwrap()
     }
 
     fn libcall_2(&mut self, libcall: &LibCall, a: Reg, b: Reg) -> Reg {
-        let call_conv = self.lower_ctx.abi().call_conv(self.lower_ctx.sigs());
-        let ret_ty = libcall.signature(call_conv, I64).returns[0].value_type;
-        let output_reg = self.lower_ctx.alloc_tmp(ret_ty).only_reg().unwrap();
-
-        emit_vm_call(
+        let outputs = emit_vm_call(
             self.lower_ctx,
             &self.backend.flags,
             &self.backend.triple,
-            libcall.clone(),
-            &[a, b],
-            &[output_reg],
+            *libcall,
+            &[ValueRegs::one(a), ValueRegs::one(b)],
         )
         .expect("Failed to emit LibCall");
 
-        output_reg.to_reg()
+        debug_assert_eq!(outputs.len(), 1);
+
+        outputs[0].only_reg().unwrap()
     }
 
     fn libcall_3(&mut self, libcall: &LibCall, a: Reg, b: Reg, c: Reg) -> Reg {
-        let call_conv = self.lower_ctx.abi().call_conv(self.lower_ctx.sigs());
-        let ret_ty = libcall.signature(call_conv, I64).returns[0].value_type;
-        let output_reg = self.lower_ctx.alloc_tmp(ret_ty).only_reg().unwrap();
-
-        emit_vm_call(
+        let outputs = emit_vm_call(
             self.lower_ctx,
             &self.backend.flags,
             &self.backend.triple,
-            libcall.clone(),
-            &[a, b, c],
-            &[output_reg],
+            *libcall,
+            &[ValueRegs::one(a), ValueRegs::one(b), ValueRegs::one(c)],
         )
         .expect("Failed to emit LibCall");
 
-        output_reg.to_reg()
+        debug_assert_eq!(outputs.len(), 1);
+
+        outputs[0].only_reg().unwrap()
     }
 
     #[inline]
@@ -973,11 +940,7 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
         // corresponding bit.
         let bit = |x: u8, c: u8| {
             if x % 8 == c {
-                if x < 8 {
-                    Some(0)
-                } else {
-                    Some(1 << c)
-                }
+                if x < 8 { Some(0) } else { Some(1 << c) }
             } else {
                 None
             }
@@ -995,26 +958,305 @@ impl Context for IsleContext<'_, '_, MInst, X64Backend> {
     }
 
     fn xmi_imm(&mut self, imm: u32) -> XmmMemImm {
-        XmmMemImm::new(RegMemImm::imm(imm)).unwrap()
+        XmmMemImm::unwrap_new(RegMemImm::imm(imm))
     }
 
     fn insert_i8x16_lane_hole(&mut self, hole_idx: u8) -> VCodeConstant {
         let mask = -1i128 as u128;
         self.emit_u128_le_const(mask ^ (0xff << (hole_idx * 8)))
     }
+
+    fn writable_invalid_gpr(&mut self) -> WritableGpr {
+        let reg = Gpr::new(self.invalid_reg()).unwrap();
+        WritableGpr::from_reg(reg)
+    }
+
+    fn atomic128_rmw_seq_args(
+        &mut self,
+        op: &Atomic128RmwSeqOp,
+        mem_low: &SyntheticAmode,
+        mem_high: &SyntheticAmode,
+        operand_low: Gpr,
+        operand_high: Gpr,
+        temp_low: WritableGpr,
+        temp_high: WritableGpr,
+        dst_old_low: WritableGpr,
+        dst_old_high: WritableGpr,
+    ) -> BoxAtomic128RmwSeqArgs {
+        Box::new(Atomic128RmwSeqArgs {
+            op: *op,
+            mem_low: mem_low.clone(),
+            mem_high: mem_high.clone(),
+            operand_low,
+            operand_high,
+            temp_low,
+            temp_high,
+            dst_old_low,
+            dst_old_high,
+        })
+    }
+
+    fn atomic128_xchg_seq_args(
+        &mut self,
+        mem_low: &SyntheticAmode,
+        mem_high: &SyntheticAmode,
+        operand_low: Gpr,
+        operand_high: Gpr,
+        dst_old_low: WritableGpr,
+        dst_old_high: WritableGpr,
+    ) -> BoxAtomic128XchgSeqArgs {
+        Box::new(Atomic128XchgSeqArgs {
+            mem_low: mem_low.clone(),
+            mem_high: mem_high.clone(),
+            operand_low,
+            operand_high,
+            dst_old_low,
+            dst_old_high,
+        })
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    ///// External assembler methods.
+    ////////////////////////////////////////////////////////////////////////////
+
+    fn is_imm8(&mut self, src: &GprMemImm) -> Option<u8> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Imm { simm32 } => {
+                Some(i8::try_from(simm32.cast_signed()).ok()?.cast_unsigned())
+            }
+            _ => None,
+        }
+    }
+
+    fn is_imm8_xmm(&mut self, src: &XmmMemImm) -> Option<u8> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Imm { simm32 } => {
+                Some(i8::try_from(simm32.cast_signed()).ok()?.cast_unsigned())
+            }
+            _ => None,
+        }
+    }
+
+    fn is_simm8(&mut self, src: &GprMemImm) -> Option<i8> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Imm { simm32 } => Some(i8::try_from(simm32.cast_signed()).ok()?),
+            _ => None,
+        }
+    }
+
+    fn is_imm16(&mut self, src: &GprMemImm) -> Option<u16> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Imm { simm32 } => {
+                Some(i16::try_from(simm32.cast_signed()).ok()?.cast_unsigned())
+            }
+            _ => None,
+        }
+    }
+
+    fn is_simm16(&mut self, src: &GprMemImm) -> Option<i16> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Imm { simm32 } => Some(i16::try_from(simm32.cast_signed()).ok()?),
+            _ => None,
+        }
+    }
+
+    fn is_imm32(&mut self, src: &GprMemImm) -> Option<u32> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Imm { simm32 } => Some(simm32),
+            _ => None,
+        }
+    }
+
+    fn is_simm32(&mut self, src: &GprMemImm) -> Option<i32> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Imm { simm32 } => Some(simm32 as i32),
+            _ => None,
+        }
+    }
+
+    fn is_gpr(&mut self, src: &GprMemImm) -> Option<Gpr> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Reg { reg } => Gpr::new(reg),
+            _ => None,
+        }
+    }
+
+    fn is_xmm(&mut self, src: &XmmMem) -> Option<Xmm> {
+        match src.clone().to_reg_mem() {
+            RegMem::Reg { reg } => Xmm::new(reg),
+            _ => None,
+        }
+    }
+
+    fn is_gpr_mem(&mut self, src: &GprMemImm) -> Option<GprMem> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Reg { reg } => GprMem::new(RegMem::Reg { reg }),
+            RegMemImm::Mem { addr } => GprMem::new(RegMem::Mem { addr }),
+            _ => None,
+        }
+    }
+
+    fn is_xmm_mem(&mut self, src: &XmmMemImm) -> Option<XmmMem> {
+        match src.clone().to_reg_mem_imm() {
+            RegMemImm::Reg { reg } => XmmMem::new(RegMem::Reg { reg }),
+            RegMemImm::Mem { addr } => XmmMem::new(RegMem::Mem { addr }),
+            _ => None,
+        }
+    }
+
+    fn is_mem(&mut self, src: &XmmMem) -> Option<SyntheticAmode> {
+        match src.clone().to_reg_mem() {
+            RegMem::Reg { .. } => None,
+            RegMem::Mem { addr } => Some(addr),
+        }
+    }
+
+    // Custom constructors for `mulx` which only calculates the high half of the
+    // result meaning that the same output operand is used in both destination
+    // registers. This is in contrast to the assembler-generated version of this
+    // instruction which generates two distinct temporary registers for output
+    // which calculates both the high and low halves of the result.
+
+    fn x64_mulxl_rvm_hi(&mut self, src1: &GprMem, src2: Gpr) -> Gpr {
+        let ret = self.temp_writable_gpr();
+        let src1 = self.convert_gpr_mem_to_assembler_read_gpr_mem(src1);
+        let inst = asm::inst::mulxl_rvm::new(ret, ret, src1, src2);
+        self.emit(&MInst::External { inst: inst.into() });
+        ret.to_reg()
+    }
+
+    fn x64_mulxq_rvm_hi(&mut self, src1: &GprMem, src2: Gpr) -> Gpr {
+        let ret = self.temp_writable_gpr();
+        let src1 = self.convert_gpr_mem_to_assembler_read_gpr_mem(src1);
+        let inst = asm::inst::mulxq_rvm::new(ret, ret, src1, src2);
+        self.emit(&MInst::External { inst: inst.into() });
+        ret.to_reg()
+    }
+
+    fn bt_imm(&mut self, val: u64) -> Option<u8> {
+        if val.count_ones() == 1 {
+            Some(u8::try_from(val.trailing_zeros()).unwrap())
+        } else {
+            None
+        }
+    }
 }
 
 impl IsleContext<'_, '_, MInst, X64Backend> {
-    isle_prelude_method_helpers!(X64CallSite);
-
     fn load_xmm_unaligned(&mut self, addr: SyntheticAmode) -> Xmm {
         let tmp = self.lower_ctx.alloc_tmp(types::F32X4).only_reg().unwrap();
-        self.lower_ctx.emit(MInst::XmmUnaryRmRUnaligned {
-            op: SseOpcode::Movdqu,
-            src: XmmMem::new(RegMem::mem(addr)).unwrap(),
-            dst: Writable::from_reg(Xmm::new(tmp.to_reg()).unwrap()),
+        self.lower_ctx.emit(MInst::External {
+            inst: asm::inst::movdqu_a::new(
+                Writable::from_reg(Xmm::unwrap_new(tmp.to_reg())),
+                asm::XmmMem::Mem(addr.into()),
+            )
+            .into(),
         });
-        Xmm::new(tmp.to_reg()).unwrap()
+        Xmm::unwrap_new(tmp.to_reg())
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_gpr_to_assembler_read_write_gpr(&mut self, read: Gpr) -> asm::Gpr<PairedGpr> {
+        let write = self.lower_ctx.alloc_tmp(types::I64).only_reg().unwrap();
+        let write = WritableGpr::from_writable_reg(write).unwrap();
+        asm::Gpr::new(PairedGpr { read, write })
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_gpr_to_assembler_fixed_read_write_gpr<const E: u8>(
+        &mut self,
+        read: Gpr,
+    ) -> asm::Fixed<PairedGpr, E> {
+        let write = self.lower_ctx.alloc_tmp(types::I64).only_reg().unwrap();
+        let write = WritableGpr::from_writable_reg(write).unwrap();
+        asm::Fixed(PairedGpr { read, write })
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_xmm_to_assembler_read_write_xmm(&mut self, read: Xmm) -> asm::Xmm<PairedXmm> {
+        let write = self.lower_ctx.alloc_tmp(types::F32X4).only_reg().unwrap();
+        let write = WritableXmm::from_writable_reg(write).unwrap();
+        asm::Xmm::new(PairedXmm { read, write })
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_gpr_mem_to_assembler_read_gpr_mem(&self, read: &GprMem) -> asm::GprMem<Gpr, Gpr> {
+        match read.clone().into() {
+            RegMem::Reg { reg } => asm::GprMem::Gpr(Gpr::new(reg).unwrap()),
+            RegMem::Mem { addr } => asm::GprMem::Mem(addr.into()),
+        }
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_xmm_mem_to_assembler_read_xmm_mem_aligned(
+        &self,
+        read: &XmmMemAligned,
+    ) -> asm::XmmMem<Xmm, Gpr> {
+        match read.clone().into() {
+            RegMem::Reg { reg } => asm::XmmMem::Xmm(Xmm::new(reg).unwrap()),
+            RegMem::Mem { addr } => asm::XmmMem::Mem(addr.into()),
+        }
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_xmm_mem_to_assembler_read_xmm_mem(&self, read: &XmmMem) -> asm::XmmMem<Xmm, Gpr> {
+        match read.clone().into() {
+            RegMem::Reg { reg } => asm::XmmMem::Xmm(Xmm::new(reg).unwrap()),
+            RegMem::Mem { addr } => asm::XmmMem::Mem(addr.into()),
+        }
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_xmm_mem_to_assembler_write_xmm_mem(
+        &self,
+        write: &XmmMem,
+    ) -> asm::XmmMem<Writable<Xmm>, Gpr> {
+        match write.clone().into() {
+            RegMem::Reg { reg } => asm::XmmMem::Xmm(Writable::from_reg(Xmm::new(reg).unwrap())),
+            RegMem::Mem { addr } => asm::XmmMem::Mem(addr.into()),
+        }
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_xmm_mem_to_assembler_write_xmm_mem_aligned(
+        &self,
+        write: &XmmMemAligned,
+    ) -> asm::XmmMem<Writable<Xmm>, Gpr> {
+        match write.clone().into() {
+            RegMem::Reg { reg } => asm::XmmMem::Xmm(Writable::from_reg(Xmm::new(reg).unwrap())),
+            RegMem::Mem { addr } => asm::XmmMem::Mem(addr.into()),
+        }
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_gpr_mem_to_assembler_read_write_gpr_mem(
+        &mut self,
+        read: &GprMem,
+    ) -> asm::GprMem<PairedGpr, Gpr> {
+        match read.clone().into() {
+            RegMem::Reg { reg } => asm::GprMem::Gpr(
+                *self
+                    .convert_gpr_to_assembler_read_write_gpr(Gpr::new(reg).unwrap())
+                    .as_ref(),
+            ),
+            RegMem::Mem { addr } => asm::GprMem::Mem(addr.into()),
+        }
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_gpr_mem_to_assembler_write_gpr_mem(
+        &mut self,
+        read: &GprMem,
+    ) -> asm::GprMem<WritableGpr, Gpr> {
+        match read.clone().into() {
+            RegMem::Reg { reg } => asm::GprMem::Gpr(WritableGpr::from_reg(Gpr::new(reg).unwrap())),
+            RegMem::Mem { addr } => asm::GprMem::Mem(addr.into()),
+        }
+    }
+
+    /// Helper used by code generated by the `cranelift-assembler-x64` crate.
+    fn convert_amode_to_assembler_amode(&mut self, amode: &SyntheticAmode) -> asm::Amode<Gpr> {
+        amode.clone().into()
     }
 }
 
@@ -1048,17 +1290,3 @@ const I8X16_USHR_MASKS: [u8; 128] = [
     0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03,
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 ];
-
-#[inline]
-fn to_simm32(constant: i64, ty: Type) -> Option<GprMemImm> {
-    if ty.bits() <= 32 || constant == ((constant << 32) >> 32) {
-        Some(
-            GprMemImm::new(RegMemImm::Imm {
-                simm32: constant as u32,
-            })
-            .unwrap(),
-        )
-    } else {
-        None
-    }
-}

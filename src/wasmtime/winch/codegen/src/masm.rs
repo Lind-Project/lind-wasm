@@ -1,10 +1,10 @@
-use crate::abi::{self, align_to, LocalSlot};
+use crate::abi::{self, LocalSlot, align_to};
 use crate::codegen::{CodeGenContext, FuncEnv};
 use crate::isa::reg::Reg;
 use cranelift_codegen::{
+    Final, MachBufferFinalized, MachLabel,
     binemit::CodeOffset,
     ir::{Endianness, LibCall, MemFlags, RelSourceLoc, SourceLoc, UserExternalNameRef},
-    Final, MachBufferFinalized, MachLabel,
 };
 use std::{fmt::Debug, ops::Range};
 use wasmtime_environ::PtrSize;

@@ -59,8 +59,10 @@
 //!
 //! ```plain
 //!   (high address)
-//!
-//!                              +---------------------------+
+//!                              |          ...              |
+//!                              | caller frames             |
+//!                              |          ...              |
+//!                              +===========================+
 //!                              |          ...              |
 //!                              | stack args                |
 //! Canonical Frame Address -->  | (accessed via FP)         |
@@ -68,24 +70,24 @@
 //! SP at function entry ----->  | return address            |
 //!                              +---------------------------+
 //! FP after prologue -------->  | FP (pushed by prologue)   |
-//!                              +---------------------------+
-//!                              |          ...              |
-//!                              | clobbered callee-saves    |
-//! unwind-frame base -------->  | (pushed by prologue)      |
-//!                              +---------------------------+
-//!                              |          ...              |
-//!                              | spill slots               |
-//!                              | (accessed via SP)         |
-//!                              |          ...              |
-//!                              | stack slots               |
-//!                              | (accessed via SP)         |
-//!                              | (alloc'd by prologue)     |
-//!                              +---------------------------+
-//!                              | [alignment as needed]     |
-//!                              |          ...              |
-//!                              | args for largest call     |
-//! SP ----------------------->  | (alloc'd by prologue)     |
-//!                              +---------------------------+
+//!                              +---------------------------+           -----
+//!                              |          ...              |             |
+//!                              | clobbered callee-saves    |             |
+//! unwind-frame base -------->  | (pushed by prologue)      |             |
+//!                              +---------------------------+   -----     |
+//!                              |          ...              |     |       |
+//!                              | spill slots               |     |       |
+//!                              | (accessed via SP)         |   fixed   active
+//!                              |          ...              |   frame    size
+//!                              | stack slots               |  storage    |
+//!                              | (accessed via SP)         |    size     |
+//!                              | (alloc'd by prologue)     |     |       |
+//!                              +---------------------------+   -----     |
+//!                              | [alignment as needed]     |             |
+//!                              |          ...              |             |
+//!                              | args for largest call     |             |
+//! SP ----------------------->  | (alloc'd by prologue)     |             |
+//!                              +===========================+           -----
 //!
 //!   (low address)
 //! ```
@@ -96,20 +98,20 @@
 //! registers. In some cases this is an extension of the base system
 //! ABI. See each platform's `abi.rs` implementation for details.
 
+use crate::CodegenError;
+use crate::FxHashMap;
+use crate::HashMap;
 use crate::entity::SecondaryMap;
-use crate::ir::types::*;
-use crate::ir::{ArgumentExtension, ArgumentPurpose, Signature};
+use crate::ir::{ArgumentExtension, ArgumentPurpose, ExceptionTag, Signature};
+use crate::ir::{StackSlotKey, types::*};
 use crate::isa::TargetIsa;
 use crate::settings::ProbestackStrategy;
-use crate::CodegenError;
 use crate::{ir, isa};
 use crate::{machinst::*, trace};
+use alloc::boxed::Box;
+use core::marker::PhantomData;
 use regalloc2::{MachineEnv, PReg, PRegSet};
-use rustc_hash::FxHashMap;
 use smallvec::smallvec;
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::mem;
 
 /// A small vector of instructions (with some reasonable size); appropriate for
 /// a small fixed sequence implementing one operation.
@@ -203,10 +205,6 @@ pub enum ABIArg {
     /// area; on the callee side, we compute a pointer to this stack area and
     /// provide that as the argument's value.
     StructArg {
-        /// Register or stack slot holding a pointer to the buffer as passed
-        /// by the caller to the callee.  If None, the ABI defines the buffer
-        /// to reside at a well-known location (i.e. at `offset` below).
-        pointer: Option<ABIArgSlot>,
         /// Offset of this arg relative to base of stack args.
         offset: i64,
         /// Size of this arg on the stack.
@@ -274,7 +272,7 @@ pub enum ArgsOrRets {
 
 /// Abstract location for a machine-specific ABI impl to translate into the
 /// appropriate addressing mode.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StackAMode {
     /// Offset into the current frame's argument area.
     IncomingArg(i64, u32),
@@ -282,6 +280,20 @@ pub enum StackAMode {
     Slot(i64),
     /// Offset into the callee frame's argument area.
     OutgoingArg(i64),
+}
+
+impl StackAMode {
+    fn offset_by(&self, offset: u32) -> Self {
+        match self {
+            StackAMode::IncomingArg(off, size) => {
+                StackAMode::IncomingArg(off.checked_add(i64::from(offset)).unwrap(), *size)
+            }
+            StackAMode::Slot(off) => StackAMode::Slot(off.checked_add(i64::from(offset)).unwrap()),
+            StackAMode::OutgoingArg(off) => {
+                StackAMode::OutgoingArg(off.checked_add(i64::from(offset)).unwrap())
+            }
+        }
+    }
 }
 
 /// Trait implemented by machine-specific backend to represent ISA flags.
@@ -344,6 +356,11 @@ pub trait ABIMachineSpec {
 
     /// The ISA flags type.
     type F: IsaFlags;
+
+    /// This is the limit for the size of argument and return-value areas on the
+    /// stack. We place a reasonable limit here to avoid integer overflow issues
+    /// with 32-bit arithmetic.
+    const STACK_ARG_RET_SIZE_LIMIT: u32;
 
     /// Returns the number of bits in a word, that is 32/64 for 32/64-bit architecture.
     fn word_bits() -> u32;
@@ -473,9 +490,10 @@ pub trait ABIMachineSpec {
         flags: &settings::Flags,
         sig: &Signature,
         regs: &[Writable<RealReg>],
-        is_leaf: bool,
+        function_calls: FunctionCalls,
         incoming_args_size: u32,
         tail_args_size: u32,
+        stackslots_size: u32,
         fixed_frame_storage_size: u32,
         outgoing_args_size: u32,
     ) -> FrameLayout;
@@ -537,20 +555,6 @@ pub trait ABIMachineSpec {
         frame_layout: &FrameLayout,
     ) -> SmallVec<[Self::I; 16]>;
 
-    /// Generate a call instruction/sequence. This method is provided one
-    /// temporary register to use to synthesize the called address, if needed.
-    fn gen_call(
-        dest: &CallDest,
-        uses: CallArgList,
-        defs: CallRetList,
-        clobbers: PRegSet,
-        opcode: ir::Opcode,
-        tmp: Writable<Reg>,
-        callee_conv: isa::CallConv,
-        caller_conv: isa::CallConv,
-        callee_pop_size: u32,
-    ) -> SmallVec<[Self::I; 2]>;
-
     /// Generate a memcpy invocation. Used to set up struct
     /// args. Takes `src`, `dst` as read-only inputs and passes a temporary
     /// allocator.
@@ -574,7 +578,10 @@ pub trait ABIMachineSpec {
 
     /// Get all caller-save registers, that is, registers that we expect
     /// not to be saved across a call to a callee with the given ABI.
-    fn get_regs_clobbered_by_call(call_conv_of_callee: isa::CallConv) -> PRegSet;
+    fn get_regs_clobbered_by_call(
+        call_conv_of_callee: isa::CallConv,
+        is_exception: bool,
+    ) -> PRegSet;
 
     /// Get the needed extension mode, given the mode attached to the argument
     /// in the signature and the calling convention. The input (the attribute in
@@ -585,6 +592,93 @@ pub trait ABIMachineSpec {
         call_conv: isa::CallConv,
         specified: ir::ArgumentExtension,
     ) -> ir::ArgumentExtension;
+
+    /// Get a temporary register that is available to use after a call
+    /// completes and that does not interfere with register-carried
+    /// return values. This is used to move stack-carried return
+    /// values directly into spillslots if needed.
+    fn retval_temp_reg(call_conv_of_callee: isa::CallConv) -> Writable<Reg>;
+
+    /// Get the exception payload registers, if any, for a calling
+    /// convention.
+    ///
+    /// Note that the argument here is the calling convention of the *callee*.
+    /// This might differ from the caller but the exceptional payloads that are
+    /// available are defined by the callee, not the caller.
+    fn exception_payload_regs(callee_conv: isa::CallConv) -> &'static [Reg] {
+        let _ = callee_conv;
+        &[]
+    }
+}
+
+/// Out-of-line data for calls, to keep the size of `Inst` down.
+#[derive(Clone, Debug)]
+pub struct CallInfo<T> {
+    /// Receiver of this call
+    pub dest: T,
+    /// Register uses of this call.
+    pub uses: CallArgList,
+    /// Register defs of this call.
+    pub defs: CallRetList,
+    /// Registers clobbered by this call, as per its calling convention.
+    pub clobbers: PRegSet,
+    /// The calling convention of the callee.
+    pub callee_conv: isa::CallConv,
+    /// The calling convention of the caller.
+    pub caller_conv: isa::CallConv,
+    /// The number of bytes that the callee will pop from the stack for the
+    /// caller, if any. (Used for popping stack arguments with the `tail`
+    /// calling convention.)
+    pub callee_pop_size: u32,
+    /// Information for a try-call, if this is one. We combine
+    /// handling of calls and try-calls as much as possible to share
+    /// argument/return logic; they mostly differ in the metadata that
+    /// they emit, which this information feeds into.
+    pub try_call_info: Option<TryCallInfo>,
+    /// Whether this call is patchable.
+    pub patchable: bool,
+}
+
+/// Out-of-line information present on `try_call` instructions only:
+/// information that is used to generate exception-handling tables and
+/// link up to destination blocks properly.
+#[derive(Clone, Debug)]
+pub struct TryCallInfo {
+    /// The target to jump to on a normal returhn.
+    pub continuation: MachLabel,
+    /// Exception tags to catch and corresponding destination labels.
+    pub exception_handlers: Box<[TryCallHandler]>,
+}
+
+/// Information about an individual handler at a try-call site.
+#[derive(Clone, Debug)]
+pub enum TryCallHandler {
+    /// If the tag matches (given the current context), recover at the
+    /// label.
+    Tag(ExceptionTag, MachLabel),
+    /// Recover at the label unconditionally.
+    Default(MachLabel),
+    /// Set the dynamic context for interpreting tags at this point in
+    /// the handler list.
+    Context(Reg),
+}
+
+impl<T> CallInfo<T> {
+    /// Creates an empty set of info with no clobbers/uses/etc with the
+    /// specified ABI
+    pub fn empty(dest: T, call_conv: isa::CallConv) -> CallInfo<T> {
+        CallInfo {
+            dest,
+            uses: smallvec![],
+            defs: smallvec![],
+            clobbers: PRegSet::empty(),
+            caller_conv: call_conv,
+            callee_conv: call_conv,
+            callee_pop_size: 0,
+            try_call_info: None,
+            patchable: false,
+        }
+    }
 }
 
 /// The id of an ABI signature within the `SigSet`.
@@ -646,13 +740,13 @@ pub struct SigData {
 
 impl SigData {
     /// Get total stack space required for arguments.
-    pub fn sized_stack_arg_space(&self) -> i64 {
-        self.sized_stack_arg_space.into()
+    pub fn sized_stack_arg_space(&self) -> u32 {
+        self.sized_stack_arg_space
     }
 
     /// Get total stack space required for return values.
-    pub fn sized_stack_ret_space(&self) -> i64 {
-        self.sized_stack_ret_space.into()
+    pub fn sized_stack_ret_space(&self) -> u32 {
+        self.sized_stack_ret_space
     }
 
     /// Get calling convention used.
@@ -771,11 +865,7 @@ impl SigSet {
 
     /// Get the already-interned ABI signature id for the given `ir::SigRef`.
     pub fn abi_sig_for_sig_ref(&self, sig_ref: ir::SigRef) -> Sig {
-        self.ir_sig_ref_to_abi_sig
-            .get(sig_ref)
-            // Should have a secondary map entry...
-            .expect("must call `make_abi_sig_from_ir_sig_ref` before `get_abi_sig_for_sig_ref`")
-            // ...and that entry should be initialized.
+        self.ir_sig_ref_to_abi_sig[sig_ref]
             .expect("must call `make_abi_sig_from_ir_sig_ref` before `get_abi_sig_for_sig_ref`")
     }
 
@@ -792,12 +882,21 @@ impl SigSet {
         sig: &ir::Signature,
         flags: &settings::Flags,
     ) -> CodegenResult<SigData> {
-        use std::borrow::Cow;
-
-        let returns = if let Some(sret) = missing_struct_return(sig) {
-            Cow::from_iter(std::iter::once(&sret).chain(&sig.returns).copied())
+        // Keep in sync with ensure_struct_return_ptr_is_returned
+        if sig.uses_special_return(ArgumentPurpose::StructReturn) {
+            panic!("Explicit StructReturn return value not allowed: {sig:?}")
+        }
+        let tmp;
+        let returns = if let Some(struct_ret_index) =
+            sig.special_param_index(ArgumentPurpose::StructReturn)
+        {
+            if !sig.returns.is_empty() {
+                panic!("No return values are allowed when using StructReturn: {sig:?}");
+            }
+            tmp = [sig.params[struct_ret_index]];
+            &tmp
         } else {
-            Cow::from(sig.returns.as_slice())
+            sig.returns.as_slice()
         };
 
         // Compute args and retvals from signature. Handle retvals first,
@@ -814,9 +913,21 @@ impl SigSet {
             /* extra ret-area ptr = */ false,
             ArgsAccumulator::new(&mut self.abi_args),
         )?;
+        if !flags.enable_multi_ret_implicit_sret() {
+            assert_eq!(sized_stack_ret_space, 0);
+        }
         let rets_end = u32::try_from(self.abi_args.len()).unwrap();
 
+        // To avoid overflow issues, limit the return size to something reasonable.
+        if sized_stack_ret_space > M::STACK_ARG_RET_SIZE_LIMIT {
+            return Err(CodegenError::ImplLimitExceeded);
+        }
+
         let need_stack_return_area = sized_stack_ret_space > 0;
+        if need_stack_return_area {
+            assert!(!sig.uses_special_param(ir::ArgumentPurpose::StructReturn));
+        }
+
         let (sized_stack_arg_space, stack_ret_arg) = M::compute_arg_locs(
             sig.call_conv,
             flags,
@@ -826,6 +937,11 @@ impl SigSet {
             ArgsAccumulator::new(&mut self.abi_args),
         )?;
         let args_end = u32::try_from(self.abi_args.len()).unwrap();
+
+        // To avoid overflow issues, limit the arg size to something reasonable.
+        if sized_stack_arg_space > M::STACK_ARG_RET_SIZE_LIMIT {
+            return Err(CodegenError::ImplLimitExceeded);
+        }
 
         trace!(
             "ABISig: sig {:?} => args end = {} rets end = {}
@@ -888,39 +1004,6 @@ impl SigSet {
         self.rets(sig)[idx].clone()
     }
 
-    /// Return all clobbers for the callsite.
-    pub fn call_clobbers<M: ABIMachineSpec>(&self, sig: Sig) -> PRegSet {
-        let sig_data = &self.sigs[sig];
-        // Get clobbers: all caller-saves. These may include return value
-        // regs, which we will remove from the clobber set below.
-        let mut clobbers = M::get_regs_clobbered_by_call(sig_data.call_conv);
-
-        // Remove retval regs from clobbers. Skip StructRets: these
-        // are not, semantically, returns at the CLIF level, so we
-        // treat such a value as a clobber instead.
-        for ret in self.rets(sig) {
-            if let &ABIArg::Slots {
-                ref slots, purpose, ..
-            } = ret
-            {
-                if purpose == ir::ArgumentPurpose::StructReturn {
-                    continue;
-                }
-                for slot in slots {
-                    match slot {
-                        &ABIArgSlot::Reg { reg, .. } => {
-                            crate::trace!("call_clobbers: retval reg {:?}", reg);
-                            clobbers.remove(PReg::from(reg));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        clobbers
-    }
-
     /// Get the number of arguments expected.
     pub fn num_args(&self, sig: Sig) -> usize {
         let len = self.args(sig).len();
@@ -939,7 +1022,7 @@ impl SigSet {
 
 // NB: we do _not_ implement `IndexMut` because these signatures are
 // deduplicated and shared!
-impl std::ops::Index<Sig> for SigSet {
+impl core::ops::Index<Sig> for SigSet {
     type Output = SigData;
 
     fn index(&self, sig: Sig) -> &Self::Output {
@@ -950,6 +1033,10 @@ impl std::ops::Index<Sig> for SigSet {
 /// Structure describing the layout of a function's stack frame.
 #[derive(Clone, Debug, Default)]
 pub struct FrameLayout {
+    /// Word size in bytes, so this struct can be
+    /// monomorphic/independent of `ABIMachineSpec`.
+    pub word_bytes: u32,
+
     /// N.B. The areas whose sizes are given in this structure fully
     /// cover the current function's stack frame, from high to low
     /// stack addresses in the sequence below.  Each size contains
@@ -986,6 +1073,9 @@ pub struct FrameLayout {
     /// This contains stack slots and spill slots.
     pub fixed_frame_storage_size: u32,
 
+    /// The size of all stackslots.
+    pub stackslots_size: u32,
+
     /// Stack size to be reserved for outgoing arguments, if used by
     /// the current ABI, or 0 otherwise.  After gen_clobber_save and
     /// before gen_clobber_restore, the stack pointer points to the
@@ -996,6 +1086,9 @@ pub struct FrameLayout {
     /// according to the ABI.  These registers will be saved and
     /// restored by gen_clobber_save and gen_clobber_restore.
     pub clobbered_callee_saves: Vec<Writable<RealReg>>,
+
+    /// The function's call pattern classification.
+    pub function_calls: FunctionCalls,
 }
 
 impl FrameLayout {
@@ -1012,6 +1105,32 @@ impl FrameLayout {
         debug_assert!(floats.iter().all(|r| r.to_reg().class() == RegClass::Float));
         (ints, floats)
     }
+
+    /// The size of FP to SP while the frame is active (not during prologue
+    /// setup or epilogue tear down).
+    pub fn active_size(&self) -> u32 {
+        self.outgoing_args_size + self.fixed_frame_storage_size + self.clobber_size
+    }
+
+    /// Get the offset from the SP to the sized stack slots area.
+    pub fn sp_to_sized_stack_slots(&self) -> u32 {
+        self.outgoing_args_size
+    }
+
+    /// Get the offset of a spill slot from SP.
+    pub fn spillslot_offset(&self, spillslot: SpillSlot) -> i64 {
+        // Offset from beginning of spillslot area.
+        let islot = spillslot.index() as i64;
+        let spill_off = islot * self.word_bytes as i64;
+        let sp_off = self.stackslots_size as i64 + spill_off;
+
+        sp_off
+    }
+
+    /// Get the offset from SP up to FP.
+    pub fn sp_to_fp(&self) -> u32 {
+        self.outgoing_args_size + self.fixed_frame_storage_size + self.clobber_size
+    }
 }
 
 /// ABI object for a function body.
@@ -1026,6 +1145,8 @@ pub struct Callee<M: ABIMachineSpec> {
     dynamic_stackslots: PrimaryMap<DynamicStackSlot, u32>,
     /// Offsets to each sized stackslot.
     sized_stackslots: PrimaryMap<StackSlot, u32>,
+    /// Descriptors for sized stackslots.
+    sized_stackslot_keys: SecondaryMap<StackSlot, Option<StackSlotKey>>,
     /// Total stack size of all stackslots
     stackslots_size: u32,
     /// Stack size to be reserved for outgoing arguments.
@@ -1047,9 +1168,6 @@ pub struct Callee<M: ABIMachineSpec> {
     flags: settings::Flags,
     /// The ISA-specific flag values controlling this function's compilation.
     isa_flags: M::F,
-    /// Whether or not this function is a "leaf", meaning it calls no other
-    /// functions
-    is_leaf: bool,
     /// If this function has a stack limit specified, then `Reg` is where the
     /// stack limit will be located after the instructions specified have been
     /// executed.
@@ -1104,58 +1222,75 @@ impl<M: ABIMachineSpec> Callee<M> {
             call_conv == isa::CallConv::SystemV
                 || call_conv == isa::CallConv::Tail
                 || call_conv == isa::CallConv::Fast
-                || call_conv == isa::CallConv::Cold
-                || call_conv.extends_windows_fastcall()
-                || call_conv == isa::CallConv::WasmtimeSystemV
+                || call_conv == isa::CallConv::WindowsFastcall
                 || call_conv == isa::CallConv::AppleAarch64
-                || call_conv == isa::CallConv::Winch,
-            "Unsupported calling convention: {:?}",
-            call_conv
+                || call_conv == isa::CallConv::Winch
+                || call_conv == isa::CallConv::PreserveAll,
+            "Unsupported calling convention: {call_conv:?}"
         );
 
         // Compute sized stackslot locations and total stackslot size.
-        let mut sized_stack_offset: u32 = 0;
+        let mut end_offset: u32 = 0;
         let mut sized_stackslots = PrimaryMap::new();
+        let mut sized_stackslot_keys = SecondaryMap::new();
+
         for (stackslot, data) in f.sized_stack_slots.iter() {
-            let off = sized_stack_offset;
-            sized_stack_offset = sized_stack_offset
-                .checked_add(data.size)
-                .ok_or(CodegenError::ImplLimitExceeded)?;
-            // Always at least machine-word-align slots, but also
+            // We start our computation possibly unaligned where the previous
+            // stackslot left off.
+            let unaligned_start_offset = end_offset;
+
+            // The start of the stackslot must be aligned.
+            //
+            // We always at least machine-word-align slots, but also
             // satisfy the user's requested alignment.
             debug_assert!(data.align_shift < 32);
-            let align = std::cmp::max(M::word_bytes(), 1u32 << data.align_shift);
+            let align = core::cmp::max(M::word_bytes(), 1u32 << data.align_shift);
             let mask = align - 1;
-            sized_stack_offset = checked_round_up(sized_stack_offset, mask)
+            let start_offset = checked_round_up(unaligned_start_offset, mask)
                 .ok_or(CodegenError::ImplLimitExceeded)?;
+
+            // The end offset is the start offset increased by the size
+            end_offset = start_offset
+                .checked_add(data.size)
+                .ok_or(CodegenError::ImplLimitExceeded)?;
+
             debug_assert_eq!(stackslot.as_u32() as usize, sized_stackslots.len());
-            sized_stackslots.push(off);
+            sized_stackslots.push(start_offset);
+            sized_stackslot_keys[stackslot] = data.key;
         }
 
         // Compute dynamic stackslot locations and total stackslot size.
         let mut dynamic_stackslots = PrimaryMap::new();
-        let mut dynamic_stack_offset: u32 = sized_stack_offset;
         for (stackslot, data) in f.dynamic_stack_slots.iter() {
             debug_assert_eq!(stackslot.as_u32() as usize, dynamic_stackslots.len());
-            let off = dynamic_stack_offset;
+
+            // This computation is similar to the stackslots above
+            let unaligned_start_offset = end_offset;
+
+            let mask = M::word_bytes() - 1;
+            let start_offset = checked_round_up(unaligned_start_offset, mask)
+                .ok_or(CodegenError::ImplLimitExceeded)?;
+
             let ty = f.get_concrete_dynamic_ty(data.dyn_ty).ok_or_else(|| {
                 CodegenError::Unsupported(format!("invalid dynamic vector type: {}", data.dyn_ty))
             })?;
-            dynamic_stack_offset = dynamic_stack_offset
+
+            end_offset = start_offset
                 .checked_add(isa.dynamic_vector_bytes(ty))
                 .ok_or(CodegenError::ImplLimitExceeded)?;
-            let mask = M::word_bytes() - 1;
-            dynamic_stack_offset = checked_round_up(dynamic_stack_offset, mask)
-                .ok_or(CodegenError::ImplLimitExceeded)?;
-            dynamic_stackslots.push(off);
+
+            dynamic_stackslots.push(start_offset);
         }
-        let stackslots_size = dynamic_stack_offset;
+
+        // The size of the stackslots needs to be word aligned
+        let stackslots_size = checked_round_up(end_offset, M::word_bytes() - 1)
+            .ok_or(CodegenError::ImplLimitExceeded)?;
 
         let mut dynamic_type_sizes = HashMap::with_capacity(f.dfg.dynamic_types.len());
         for (dyn_ty, _data) in f.dfg.dynamic_types.iter() {
             let ty = f
                 .get_concrete_dynamic_ty(dyn_ty)
-                .unwrap_or_else(|| panic!("invalid dynamic vector type: {}", dyn_ty));
+                .unwrap_or_else(|| panic!("invalid dynamic vector type: {dyn_ty}"));
             let size = isa.dynamic_vector_bytes(ty);
             dynamic_type_sizes.insert(ty, size);
         }
@@ -1176,6 +1311,7 @@ impl<M: ABIMachineSpec> Callee<M> {
             dynamic_stackslots,
             dynamic_type_sizes,
             sized_stackslots,
+            sized_stackslot_keys,
             stackslots_size,
             outgoing_args_size: 0,
             tail_args_size,
@@ -1185,7 +1321,6 @@ impl<M: ABIMachineSpec> Callee<M> {
             call_conv,
             flags,
             isa_flags: isa_flags.clone(),
-            is_leaf: f.is_leaf(),
             stack_limit,
             _mach: PhantomData,
         })
@@ -1244,7 +1379,12 @@ impl<M: ABIMachineSpec> Callee<M> {
         // means we need a second scratch register for loading the stack size
         // into a register.
         let scratch = Writable::from_reg(M::get_stacklimit_reg(self.call_conv));
-        insts.extend(M::gen_add_imm(self.call_conv, scratch, stack_limit, stack_size).into_iter());
+        insts.extend(M::gen_add_imm(
+            self.call_conv,
+            scratch,
+            stack_limit,
+            stack_size,
+        ));
         insts.extend(M::gen_stack_lower_bound_trap(scratch.to_reg()));
     }
 }
@@ -1310,25 +1450,27 @@ fn generate_gv<M: ABIMachineSpec>(
             ));
             return into_reg.to_reg();
         }
-        ref other => panic!("global value for stack limit not supported: {}", other),
+        ref other => panic!("global value for stack limit not supported: {other}"),
     }
 }
 
-/// If the signature needs to be legalized, then return the struct-return
-/// parameter that should be prepended to its returns. Otherwise, return `None`.
-fn missing_struct_return(sig: &ir::Signature) -> Option<ir::AbiParam> {
-    let struct_ret_index = sig.special_param_index(ArgumentPurpose::StructReturn)?;
-    if !sig.uses_special_return(ArgumentPurpose::StructReturn) {
-        return Some(sig.params[struct_ret_index]);
-    }
-
-    None
+/// Returns true if the signature needs to be legalized.
+fn missing_struct_return(sig: &ir::Signature) -> bool {
+    sig.uses_special_param(ArgumentPurpose::StructReturn)
+        && !sig.uses_special_return(ArgumentPurpose::StructReturn)
 }
 
 fn ensure_struct_return_ptr_is_returned(sig: &ir::Signature) -> ir::Signature {
+    // Keep in sync with Callee::new
     let mut sig = sig.clone();
-    if let Some(sret) = missing_struct_return(&sig) {
-        sig.returns.insert(0, sret);
+    if sig.uses_special_return(ArgumentPurpose::StructReturn) {
+        panic!("Explicit StructReturn return value not allowed: {sig:?}")
+    }
+    if let Some(struct_ret_index) = sig.special_param_index(ArgumentPurpose::StructReturn) {
+        if !sig.returns.is_empty() {
+            panic!("No return values are allowed when using StructReturn: {sig:?}");
+        }
+        sig.returns.insert(0, sig.params[struct_ret_index]);
     }
     sig
 }
@@ -1340,7 +1482,7 @@ impl<M: ABIMachineSpec> Callee<M> {
     /// Access the (possibly legalized) signature.
     pub fn signature(&self) -> &ir::Signature {
         debug_assert!(
-            missing_struct_return(&self.ir_sig).is_none(),
+            !missing_struct_return(&self.ir_sig),
             "`Callee::ir_sig` is always legalized"
         );
         &self.ir_sig
@@ -1359,6 +1501,11 @@ impl<M: ABIMachineSpec> Callee<M> {
             self.ret_area_ptr = Some(ret_area_ptr.only_reg().unwrap());
         }
         Ok(())
+    }
+
+    /// Get the return area pointer register, if any.
+    pub fn ret_area_ptr(&self) -> Option<Reg> {
+        self.ret_area_ptr
     }
 
     /// Accumulate outgoing arguments.
@@ -1387,13 +1534,13 @@ impl<M: ABIMachineSpec> Callee<M> {
     }
 
     /// Get the calling convention implemented by this ABI object.
-    pub fn call_conv(&self, sigs: &SigSet) -> isa::CallConv {
-        sigs[self.sig].call_conv
+    pub fn call_conv(&self) -> isa::CallConv {
+        self.call_conv
     }
 
     /// Get the ABI-dependent MachineEnv for managing register allocation.
-    pub fn machine_env(&self, sigs: &SigSet) -> &MachineEnv {
-        M::get_machine_env(&self.flags, self.call_conv(sigs))
+    pub fn machine_env(&self) -> &MachineEnv {
+        M::get_machine_env(&self.flags, self.call_conv)
     }
 
     /// The offsets of all sized stack slots (not spill slots) for debuginfo purposes.
@@ -1460,20 +1607,13 @@ impl<M: ABIMachineSpec> Callee<M> {
                     copy_arg_slot_to_reg(&slot, &into_reg);
                 }
             }
-            &ABIArg::StructArg {
-                pointer, offset, ..
-            } => {
+            &ABIArg::StructArg { offset, .. } => {
                 let into_reg = into_regs.only_reg().unwrap();
-                if let Some(slot) = pointer {
-                    // Buffer address is passed in a register or stack slot.
-                    copy_arg_slot_to_reg(&slot, &into_reg);
-                } else {
-                    // Buffer address is implicitly defined by the ABI.
-                    insts.push(M::gen_get_stack_addr(
-                        StackAMode::IncomingArg(offset, sigs[self.sig].sized_stack_arg_space),
-                        into_reg,
-                    ));
-                }
+                // Buffer address is implicitly defined by the ABI.
+                insts.push(M::gen_get_stack_addr(
+                    StackAMode::IncomingArg(offset, sigs[self.sig].sized_stack_arg_space),
+                    into_reg,
+                ));
             }
             &ABIArg::ImplicitPtrArg { pointer, ty, .. } => {
                 let into_reg = into_regs.only_reg().unwrap();
@@ -1642,6 +1782,380 @@ impl<M: ABIMachineSpec> Callee<M> {
         M::gen_rets(rets)
     }
 
+    /// Set up arguments values `args` for a call with signature `sig`.
+    /// This will return a series of instructions to be emitted to set
+    /// up all arguments, as well as a `CallArgList` list representing
+    /// the arguments passed in registers.  The latter need to be added
+    /// as constraints to the actual call instruction.
+    pub fn gen_call_args(
+        &self,
+        sigs: &SigSet,
+        sig: Sig,
+        args: &[ValueRegs<Reg>],
+        is_tail_call: bool,
+        flags: &settings::Flags,
+        vregs: &mut VRegAllocator<M::I>,
+    ) -> (CallArgList, SmallInstVec<M::I>) {
+        let mut uses: CallArgList = smallvec![];
+        let mut insts = smallvec![];
+
+        assert_eq!(args.len(), sigs.num_args(sig));
+
+        let call_conv = sigs[sig].call_conv;
+        let stack_arg_space = sigs[sig].sized_stack_arg_space;
+        let stack_arg = |offset| {
+            if is_tail_call {
+                StackAMode::IncomingArg(offset, stack_arg_space)
+            } else {
+                StackAMode::OutgoingArg(offset)
+            }
+        };
+
+        let word_ty = M::word_type();
+        let word_rc = M::word_reg_class();
+        let word_bits = M::word_bits() as usize;
+
+        if is_tail_call {
+            debug_assert_eq!(
+                self.call_conv,
+                isa::CallConv::Tail,
+                "Can only do `return_call`s from within a `tail` calling convention function"
+            );
+        }
+
+        // Helper to process a single argument slot (register or stack slot).
+        // This will either add the register to the `uses` list or write the
+        // value to the stack slot in the outgoing argument area (or for tail
+        // calls, the incoming argument area).
+        let mut process_arg_slot = |insts: &mut SmallInstVec<M::I>, slot, vreg, ty| {
+            match &slot {
+                &ABIArgSlot::Reg { reg, .. } => {
+                    uses.push(CallArgPair {
+                        vreg,
+                        preg: reg.into(),
+                    });
+                }
+                &ABIArgSlot::Stack { offset, .. } => {
+                    insts.push(M::gen_store_stack(stack_arg(offset), vreg, ty));
+                }
+            };
+        };
+
+        // First pass: Handle `StructArg` arguments.  These need to be copied
+        // into their associated stack buffers.  This should happen before any
+        // of the other arguments are processed, as the `memcpy` call might
+        // clobber registers used by other arguments.
+        for (idx, from_regs) in args.iter().enumerate() {
+            match &sigs.args(sig)[idx] {
+                &ABIArg::Slots { .. } | &ABIArg::ImplicitPtrArg { .. } => {}
+                &ABIArg::StructArg { offset, size, .. } => {
+                    let tmp = vregs.alloc_with_deferred_error(word_ty).only_reg().unwrap();
+                    insts.push(M::gen_get_stack_addr(
+                        stack_arg(offset),
+                        Writable::from_reg(tmp),
+                    ));
+                    insts.extend(M::gen_memcpy(
+                        isa::CallConv::for_libcall(flags, call_conv),
+                        tmp,
+                        from_regs.only_reg().unwrap(),
+                        size as usize,
+                        |ty| {
+                            Writable::from_reg(
+                                vregs.alloc_with_deferred_error(ty).only_reg().unwrap(),
+                            )
+                        },
+                    ));
+                }
+            }
+        }
+
+        // Second pass: Handle everything except `StructArg` arguments.
+        for (idx, from_regs) in args.iter().enumerate() {
+            match sigs.args(sig)[idx] {
+                ABIArg::Slots { ref slots, .. } => {
+                    assert_eq!(from_regs.len(), slots.len());
+                    for (slot, from_reg) in slots.iter().zip(from_regs.regs().iter()) {
+                        // Load argument slot value from `from_reg`, and perform any zero-
+                        // or sign-extension that is required by the ABI.
+                        let (ty, extension) = match *slot {
+                            ABIArgSlot::Reg { ty, extension, .. } => (ty, extension),
+                            ABIArgSlot::Stack { ty, extension, .. } => (ty, extension),
+                        };
+                        let ext = M::get_ext_mode(call_conv, extension);
+                        let (vreg, ty) = if ext != ir::ArgumentExtension::None
+                            && ty_bits(ty) < word_bits
+                        {
+                            assert_eq!(word_rc, from_reg.class());
+                            let signed = match ext {
+                                ir::ArgumentExtension::Uext => false,
+                                ir::ArgumentExtension::Sext => true,
+                                _ => unreachable!(),
+                            };
+                            let tmp = vregs.alloc_with_deferred_error(word_ty).only_reg().unwrap();
+                            insts.push(M::gen_extend(
+                                Writable::from_reg(tmp),
+                                *from_reg,
+                                signed,
+                                ty_bits(ty) as u8,
+                                word_bits as u8,
+                            ));
+                            (tmp, word_ty)
+                        } else {
+                            (*from_reg, ty)
+                        };
+                        process_arg_slot(&mut insts, *slot, vreg, ty);
+                    }
+                }
+                ABIArg::ImplicitPtrArg {
+                    offset,
+                    pointer,
+                    ty,
+                    ..
+                } => {
+                    let vreg = from_regs.only_reg().unwrap();
+                    let tmp = vregs.alloc_with_deferred_error(word_ty).only_reg().unwrap();
+                    insts.push(M::gen_get_stack_addr(
+                        stack_arg(offset),
+                        Writable::from_reg(tmp),
+                    ));
+                    insts.push(M::gen_store_base_offset(tmp, 0, vreg, ty));
+                    process_arg_slot(&mut insts, pointer, tmp, word_ty);
+                }
+                ABIArg::StructArg { .. } => {}
+            }
+        }
+
+        // Finally, set the stack-return pointer to the return argument area.
+        // For tail calls, this means forwarding the incoming stack-return pointer.
+        if let Some(ret_arg) = sigs.get_ret_arg(sig) {
+            let ret_area = if is_tail_call {
+                self.ret_area_ptr.expect(
+                    "if the tail callee has a return pointer, then the tail caller must as well",
+                )
+            } else {
+                let tmp = vregs.alloc_with_deferred_error(word_ty).only_reg().unwrap();
+                let amode = StackAMode::OutgoingArg(stack_arg_space.into());
+                insts.push(M::gen_get_stack_addr(amode, Writable::from_reg(tmp)));
+                tmp
+            };
+            match ret_arg {
+                // The return pointer must occupy a single slot.
+                ABIArg::Slots { slots, .. } => {
+                    assert_eq!(slots.len(), 1);
+                    process_arg_slot(&mut insts, slots[0], ret_area, word_ty);
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        (uses, insts)
+    }
+
+    /// Set up return values `outputs` for a call with signature `sig`.
+    /// This does not emit (or return) any instructions, but returns a
+    /// `CallRetList` representing the return value constraints.  This
+    /// needs to be added to the actual call instruction.
+    ///
+    /// If `try_call_payloads` is non-zero, it is expected to hold
+    /// exception payload registers for try_call instructions.  These
+    /// will be added as needed to the `CallRetList` as well.
+    pub fn gen_call_rets(
+        &self,
+        sigs: &SigSet,
+        sig: Sig,
+        outputs: &[ValueRegs<Reg>],
+        try_call_payloads: Option<&[Writable<Reg>]>,
+        vregs: &mut VRegAllocator<M::I>,
+    ) -> CallRetList {
+        let callee_conv = sigs[sig].call_conv;
+        let stack_arg_space = sigs[sig].sized_stack_arg_space;
+
+        let word_ty = M::word_type();
+        let word_bits = M::word_bits() as usize;
+
+        let mut defs: CallRetList = smallvec![];
+        let mut outputs = outputs.into_iter();
+        let num_rets = sigs.num_rets(sig);
+        for idx in 0..num_rets {
+            let ret = sigs.rets(sig)[idx].clone();
+            match ret {
+                ABIArg::Slots {
+                    ref slots, purpose, ..
+                } => {
+                    // We do not use the returned copy of the return buffer pointer,
+                    // so skip any StructReturn returns that may be present.
+                    if purpose == ArgumentPurpose::StructReturn {
+                        continue;
+                    }
+                    let retval_regs = outputs.next().unwrap();
+                    assert_eq!(retval_regs.len(), slots.len());
+                    for (slot, retval_reg) in slots.iter().zip(retval_regs.regs().iter()) {
+                        // We do not perform any extension because we're copying out, not in,
+                        // and we ignore high bits in our own registers by convention.  However,
+                        // we still need to use the proper extended type to access stack slots
+                        // (this is critical on big-endian systems).
+                        let (ty, extension) = match *slot {
+                            ABIArgSlot::Reg { ty, extension, .. } => (ty, extension),
+                            ABIArgSlot::Stack { ty, extension, .. } => (ty, extension),
+                        };
+                        let ext = M::get_ext_mode(callee_conv, extension);
+                        let ty = if ext != ir::ArgumentExtension::None && ty_bits(ty) < word_bits {
+                            word_ty
+                        } else {
+                            ty
+                        };
+
+                        match slot {
+                            &ABIArgSlot::Reg { reg, .. } => {
+                                defs.push(CallRetPair {
+                                    vreg: Writable::from_reg(*retval_reg),
+                                    location: RetLocation::Reg(reg.into(), ty),
+                                });
+                            }
+                            &ABIArgSlot::Stack { offset, .. } => {
+                                let amode =
+                                    StackAMode::OutgoingArg(offset + i64::from(stack_arg_space));
+                                defs.push(CallRetPair {
+                                    vreg: Writable::from_reg(*retval_reg),
+                                    location: RetLocation::Stack(amode, ty),
+                                });
+                            }
+                        }
+                    }
+                }
+                ABIArg::StructArg { .. } => {
+                    panic!("StructArg not supported in return position");
+                }
+                ABIArg::ImplicitPtrArg { .. } => {
+                    panic!("ImplicitPtrArg not supported in return position");
+                }
+            }
+        }
+        assert!(outputs.next().is_none());
+
+        if let Some(try_call_payloads) = try_call_payloads {
+            // Let `M` say where the payload values are going to end up and then
+            // double-check it's the same size as the calling convention's
+            // reported number of exception types.
+            let pregs = M::exception_payload_regs(callee_conv);
+            assert_eq!(
+                callee_conv.exception_payload_types(M::word_type()).len(),
+                pregs.len()
+            );
+
+            // We need to update `defs` to contain the exception
+            // payload regs as well. We have two sources of info that
+            // we join:
+            //
+            // - The machine-specific ABI implementation `M`, which
+            //   tells us the particular registers that payload values
+            //   must be in
+            // - The passed-in lowering context, which gives us the
+            //   vregs we must define.
+            //
+            // Note that payload values may need to end up in the same
+            // physical registers as ordinary return values; this is
+            // not a conflict, because we either get one or the
+            // other. For regalloc's purposes, we define both starting
+            // here at the callsite, but we can share one def in the
+            // `defs` list and alias one vreg to another. Thus we
+            // handle the two cases below for each payload register:
+            // overlaps a return value (and we alias to it) or not
+            // (and we add a def).
+            for (i, &preg) in pregs.iter().enumerate() {
+                let vreg = try_call_payloads[i];
+                if let Some(existing) = defs.iter().find(|def| match def.location {
+                    RetLocation::Reg(r, _) => r == preg,
+                    _ => false,
+                }) {
+                    vregs.set_vreg_alias(vreg.to_reg(), existing.vreg.to_reg());
+                } else {
+                    defs.push(CallRetPair {
+                        vreg,
+                        location: RetLocation::Reg(preg, word_ty),
+                    });
+                }
+            }
+        }
+
+        defs
+    }
+
+    /// Populate a `CallInfo` for a call with signature `sig`.
+    ///
+    /// `dest` is the target-specific call destination value
+    /// `uses` is the `CallArgList` describing argument constraints
+    /// `defs` is the `CallRetList` describing return constraints
+    /// `try_call_info` describes exception targets for try_call instructions
+    /// `patchable` describes whether this callsite should emit metadata
+    /// for patching to enable/disable it.
+    ///
+    /// The clobber list is computed here from the above data.
+    pub fn gen_call_info<T>(
+        &self,
+        sigs: &SigSet,
+        sig: Sig,
+        dest: T,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<TryCallInfo>,
+        patchable: bool,
+    ) -> CallInfo<T> {
+        let caller_conv = self.call_conv;
+        let callee_conv = sigs[sig].call_conv;
+        let stack_arg_space = sigs[sig].sized_stack_arg_space;
+
+        let clobbers = {
+            // Get clobbers: all caller-saves. These may include return value
+            // regs, which we will remove from the clobber set below.
+            let mut clobbers =
+                <M>::get_regs_clobbered_by_call(callee_conv, try_call_info.is_some());
+
+            // Remove retval regs from clobbers.
+            for def in &defs {
+                if let RetLocation::Reg(preg, _) = def.location {
+                    clobbers.remove(PReg::from(preg.to_real_reg().unwrap()));
+                }
+            }
+
+            clobbers
+        };
+
+        // Any adjustment to SP to account for required outgoing arguments/stack return values must
+        // be done inside of the call pseudo-op, to ensure that SP is always in a consistent
+        // state for all other instructions. For example, if a tail-call abi function is called
+        // here, the reclamation of the outgoing argument area must be done inside of the call
+        // pseudo-op's emission to ensure that SP is consistent at all other points in the lowered
+        // function. (Except the prologue and epilogue, but those are fairly special parts of the
+        // function that establish the SP invariants that are relied on elsewhere and are generated
+        // after the register allocator has run and thus cannot have register allocator-inserted
+        // references to SP offsets.)
+
+        let callee_pop_size = if callee_conv == isa::CallConv::Tail {
+            // The tail calling convention has callees pop stack arguments.
+            stack_arg_space
+        } else {
+            0
+        };
+
+        CallInfo {
+            dest,
+            uses,
+            defs,
+            clobbers,
+            callee_conv,
+            caller_conv,
+            callee_pop_size,
+            try_call_info,
+            patchable,
+        }
+    }
+
+    /// Get the raw offset of a sized stackslot in the slot region.
+    pub fn sized_stackslot_offset(&self, slot: StackSlot) -> u32 {
+        self.sized_stackslots[slot]
+    }
+
     /// Produce an instruction that computes a sized stackslot address.
     pub fn sized_stackslot_addr(
         &self,
@@ -1669,7 +2183,7 @@ impl<M: ABIMachineSpec> Callee<M> {
             // establishes live-ranges for in-register arguments and
             // constrains them at the start of the function to the
             // locations defined by the ABI.
-            Some(M::gen_args(std::mem::take(&mut self.reg_args)))
+            Some(M::gen_args(core::mem::take(&mut self.reg_args)))
         } else {
             None
         }
@@ -1681,38 +2195,6 @@ impl<M: ABIMachineSpec> Callee<M> {
 /// These methods of `Callee` may only be called after
 /// regalloc.
 impl<M: ABIMachineSpec> Callee<M> {
-    /// Generate a stack map, given a list of spillslots and the emission state
-    /// at a given program point (prior to emission of the safepointing
-    /// instruction).
-    pub fn spillslots_to_stack_map(
-        &self,
-        slots: &[SpillSlot],
-        state: &<M::I as MachInstEmit>::State,
-    ) -> StackMap {
-        let frame_layout = state.frame_layout();
-        let outgoing_args_size = frame_layout.outgoing_args_size;
-        let clobbers_and_slots = frame_layout.fixed_frame_storage_size + frame_layout.clobber_size;
-        trace!(
-            "spillslots_to_stackmap: slots = {:?}, state = {:?}",
-            slots,
-            state
-        );
-        let map_size = outgoing_args_size + clobbers_and_slots;
-        let bytes = M::word_bytes();
-        let map_words = (map_size + bytes - 1) / bytes;
-        let mut bits = std::iter::repeat(false)
-            .take(map_words as usize)
-            .collect::<Vec<bool>>();
-
-        let first_spillslot_word = ((self.stackslots_size + outgoing_args_size) / bytes) as usize;
-        for &slot in slots {
-            let slot = slot.index();
-            bits[first_spillslot_word + slot] = true;
-        }
-
-        StackMap::from_slice(&bits[..])
-    }
-
     /// Compute the final frame layout, post-regalloc.
     ///
     /// This must be called before gen_prologue or gen_epilogue.
@@ -1721,6 +2203,7 @@ impl<M: ABIMachineSpec> Callee<M> {
         sigs: &SigSet,
         spillslots: usize,
         clobbered: Vec<Writable<RealReg>>,
+        function_calls: FunctionCalls,
     ) {
         let bytes = M::word_bytes();
         let total_stacksize = self.stackslots_size + bytes * spillslots as u32;
@@ -1731,9 +2214,10 @@ impl<M: ABIMachineSpec> Callee<M> {
             &self.flags,
             self.signature(),
             &clobbered,
-            self.is_leaf,
+            function_calls,
             self.stack_args_size(sigs),
             self.tail_args_size,
+            self.stackslots_size,
             total_stacksize,
             self.outgoing_args_size,
         ));
@@ -1767,7 +2251,7 @@ impl<M: ABIMachineSpec> Callee<M> {
             + frame_layout.clobber_size
             + frame_layout.fixed_frame_storage_size
             + frame_layout.outgoing_args_size
-            + if self.is_leaf {
+            + if frame_layout.function_calls == FunctionCalls::None {
                 0
             } else {
                 frame_layout.setup_area_size
@@ -1775,7 +2259,7 @@ impl<M: ABIMachineSpec> Callee<M> {
 
         // Leaf functions with zero stack don't need a stack check if one's
         // specified, otherwise always insert the stack check.
-        if total_stacksize > 0 || !self.is_leaf {
+        if total_stacksize > 0 || frame_layout.function_calls != FunctionCalls::None {
             if let Some((reg, stack_limit_load)) = &self.stack_limit {
                 insts.extend(stack_limit_load.clone());
                 self.insert_stack_check(*reg, total_stacksize, &mut insts);
@@ -1783,16 +2267,16 @@ impl<M: ABIMachineSpec> Callee<M> {
 
             if self.flags.enable_probestack() {
                 let guard_size = 1 << self.flags.probestack_size_log2();
-                if total_stacksize >= guard_size {
-                    match self.flags.probestack_strategy() {
-                        ProbestackStrategy::Inline => M::gen_inline_probestack(
-                            &mut insts,
-                            self.call_conv,
-                            total_stacksize,
-                            guard_size,
-                        ),
-                        ProbestackStrategy::Outline => {
-                            M::gen_probestack(&mut insts, total_stacksize)
+                match self.flags.probestack_strategy() {
+                    ProbestackStrategy::Inline => M::gen_inline_probestack(
+                        &mut insts,
+                        self.call_conv,
+                        total_stacksize,
+                        guard_size,
+                    ),
+                    ProbestackStrategy::Outline => {
+                        if total_stacksize >= guard_size {
+                            M::gen_probestack(&mut insts, total_stacksize);
                         }
                     }
                 }
@@ -1852,22 +2336,29 @@ impl<M: ABIMachineSpec> Callee<M> {
             .expect("frame layout not computed before prologue generation")
     }
 
-    /// Returns the full frame size for the given function, after prologue
-    /// emission has run. This comprises the spill slots and stack-storage
-    /// slots as well as storage for clobbered callee-save registers, but
-    /// not arguments arguments pushed at callsites within this function,
-    /// or other ephemeral pushes.
-    pub fn frame_size(&self) -> u32 {
+    /// Returns the offset from SP to FP for the given function, after
+    /// the prologue has set up the frame. This comprises the spill
+    /// slots and stack-storage slots as well as storage for clobbered
+    /// callee-save registers and outgoing arguments at callsites
+    /// (space for which is reserved during frame setup).
+    pub fn sp_to_fp_offset(&self) -> u32 {
         let frame_layout = self.frame_layout();
-        frame_layout.clobber_size + frame_layout.fixed_frame_storage_size
+        frame_layout.clobber_size
+            + frame_layout.fixed_frame_storage_size
+            + frame_layout.outgoing_args_size
     }
 
     /// Returns offset from the slot base in the current frame to the caller's SP.
     pub fn slot_base_to_caller_sp_offset(&self) -> u32 {
+        // Note: this looks very similar to `frame_size()` above, but
+        // it differs in both endpoints: it measures from the bottom
+        // of stackslots, excluding outgoing args; and it includes the
+        // setup area (FP/LR) size and any extra tail-args space.
         let frame_layout = self.frame_layout();
         frame_layout.clobber_size
             + frame_layout.fixed_frame_storage_size
             + frame_layout.setup_area_size
+            + (frame_layout.tail_args_size - frame_layout.incoming_args_size)
     }
 
     /// Returns the size of arguments expected on the stack.
@@ -1892,12 +2383,7 @@ impl<M: ABIMachineSpec> Callee<M> {
 
     /// Get the spill slot offset relative to the fixed allocation area start.
     pub fn get_spillslot_offset(&self, slot: SpillSlot) -> i64 {
-        // Offset from beginning of spillslot area.
-        let islot = slot.index() as i64;
-        let spill_off = islot * M::word_bytes() as i64;
-        let sp_off = self.stackslots_size as i64 + spill_off;
-
-        sp_off
+        self.frame_layout().spillslot_offset(slot)
     }
 
     /// Generate a spill.
@@ -1923,6 +2409,28 @@ impl<M: ABIMachineSpec> Callee<M> {
         let from = StackAMode::Slot(sp_off);
         <M>::gen_load_stack(from, to_reg.map(Reg::from), ty)
     }
+
+    /// Provide metadata to be emitted alongside machine code.
+    ///
+    /// This metadata describes the frame layout sufficiently to find
+    /// stack slots, so that runtimes and unwinders can observe state
+    /// set up by compiled code in stackslots allocated for that
+    /// purpose.
+    pub fn frame_slot_metadata(&self) -> MachBufferFrameLayout {
+        let frame_to_fp_offset = self.sp_to_fp_offset();
+        let mut stackslots = SecondaryMap::with_capacity(self.sized_stackslots.len());
+        let storage_area_base = self.frame_layout().outgoing_args_size;
+        for (slot, storage_area_offset) in &self.sized_stackslots {
+            stackslots[slot] = MachBufferStackSlot {
+                offset: storage_area_base.checked_add(*storage_area_offset).unwrap(),
+                key: self.sized_stackslot_keys[slot],
+            };
+        }
+        MachBufferFrameLayout {
+            frame_to_fp_offset,
+            stackslots,
+        }
+    }
 }
 
 /// An input argument to a call instruction: the vreg that is used,
@@ -1936,472 +2444,162 @@ pub struct CallArgPair {
 }
 
 /// An output return value from a call instruction: the vreg that is
-/// defined, and the preg it is constrained to (per the ABI).
+/// defined, and the preg or stack location it is constrained to (per
+/// the ABI).
 #[derive(Clone, Debug)]
 pub struct CallRetPair {
     /// The virtual register to define from this return value.
     pub vreg: Writable<Reg>,
     /// The real register from which the return value is read.
-    pub preg: Reg,
+    pub location: RetLocation,
+}
+
+/// A location to load a return-value from after a call completes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RetLocation {
+    /// A physical register.
+    Reg(Reg, Type),
+    /// A stack location, identified by a `StackAMode`.
+    Stack(StackAMode, Type),
 }
 
 pub type CallArgList = SmallVec<[CallArgPair; 8]>;
 pub type CallRetList = SmallVec<[CallRetPair; 8]>;
 
-/// ABI object for a callsite.
-pub struct CallSite<M: ABIMachineSpec> {
-    /// The called function's signature.
-    sig: Sig,
-    /// All register uses for the callsite, i.e., function args, with
-    /// VReg and the physical register it is constrained to.
-    uses: CallArgList,
-    /// All defs for the callsite, i.e., return values.
-    defs: CallRetList,
-    /// Caller-save clobbers.
-    clobbers: PRegSet,
-    /// Call destination.
-    dest: CallDest,
-    /// Actual call opcode; used to distinguish various types of calls.
-    opcode: ir::Opcode,
-    /// Caller's calling convention.
-    caller_conv: isa::CallConv,
-    /// The settings controlling this compilation.
-    flags: settings::Flags,
-
-    _mach: PhantomData<M>,
-}
-
-/// Destination for a call.
-#[derive(Debug, Clone)]
-pub enum CallDest {
-    /// Call to an ExtName (named function symbol).
-    ExtName(ir::ExternalName, RelocDistance),
-    /// Indirect call to a function pointer in a register.
-    Reg(Reg),
-}
-
-impl<M: ABIMachineSpec> CallSite<M> {
-    /// Create a callsite ABI object for a call directly to the specified function.
-    pub fn from_func(
-        sigs: &SigSet,
-        sig_ref: ir::SigRef,
-        extname: &ir::ExternalName,
-        opcode: ir::Opcode,
-        dist: RelocDistance,
-        caller_conv: isa::CallConv,
-        flags: settings::Flags,
-    ) -> CallSite<M> {
-        let sig = sigs.abi_sig_for_sig_ref(sig_ref);
-        let clobbers = sigs.call_clobbers::<M>(sig);
-        CallSite {
-            sig,
-            uses: smallvec![],
-            defs: smallvec![],
-            clobbers,
-            dest: CallDest::ExtName(extname.clone(), dist),
-            opcode,
-            caller_conv,
-            flags,
-            _mach: PhantomData,
-        }
-    }
-
-    /// Create a callsite ABI object for a call directly to the specified
-    /// libcall.
-    pub fn from_libcall(
-        sigs: &SigSet,
-        sig: &ir::Signature,
-        extname: &ir::ExternalName,
-        dist: RelocDistance,
-        caller_conv: isa::CallConv,
-        flags: settings::Flags,
-    ) -> CallSite<M> {
-        let sig = sigs.abi_sig_for_signature(sig);
-        let clobbers = sigs.call_clobbers::<M>(sig);
-        CallSite {
-            sig,
-            uses: smallvec![],
-            defs: smallvec![],
-            clobbers,
-            dest: CallDest::ExtName(extname.clone(), dist),
-            opcode: ir::Opcode::Call,
-            caller_conv,
-            flags,
-            _mach: PhantomData,
-        }
-    }
-
-    /// Create a callsite ABI object for a call to a function pointer with the
-    /// given signature.
-    pub fn from_ptr(
-        sigs: &SigSet,
-        sig_ref: ir::SigRef,
-        ptr: Reg,
-        opcode: ir::Opcode,
-        caller_conv: isa::CallConv,
-        flags: settings::Flags,
-    ) -> CallSite<M> {
-        let sig = sigs.abi_sig_for_sig_ref(sig_ref);
-        let clobbers = sigs.call_clobbers::<M>(sig);
-        CallSite {
-            sig,
-            uses: smallvec![],
-            defs: smallvec![],
-            clobbers,
-            dest: CallDest::Reg(ptr),
-            opcode,
-            caller_conv,
-            flags,
-            _mach: PhantomData,
-        }
-    }
-
-    pub(crate) fn dest(&self) -> &CallDest {
-        &self.dest
-    }
-
-    pub(crate) fn opcode(&self) -> ir::Opcode {
-        self.opcode
-    }
-
-    pub(crate) fn take_uses(self) -> CallArgList {
-        self.uses
-    }
-
-    pub(crate) fn sig<'a>(&self, sigs: &'a SigSet) -> &'a SigData {
-        &sigs[self.sig]
-    }
-
-    pub(crate) fn is_tail_call(&self) -> bool {
-        matches!(
-            self.opcode,
-            ir::Opcode::ReturnCall | ir::Opcode::ReturnCallIndirect
-        )
-    }
-}
-
-impl<M: ABIMachineSpec> CallSite<M> {
-    /// Get the number of arguments expected.
-    pub fn num_args(&self, sigs: &SigSet) -> usize {
-        sigs.num_args(self.sig)
-    }
-
-    /// Emit a copy of a large argument into its associated stack buffer, if
-    /// any.  We must be careful to perform all these copies (as necessary)
-    /// before setting up the argument registers, since we may have to invoke
-    /// memcpy(), which could clobber any registers already set up.  The
-    /// back-end should call this routine for all arguments before calling
-    /// `gen_arg` for all arguments.
-    pub fn emit_copy_regs_to_buffer(
+impl<T> CallInfo<T> {
+    /// Emit loads for any stack-carried return values using the call
+    /// info and allocations.
+    pub fn emit_retval_loads<
+        M: ABIMachineSpec,
+        EmitFn: FnMut(M::I),
+        IslandFn: Fn(u32) -> Option<M::I>,
+    >(
         &self,
-        ctx: &mut Lower<M::I>,
-        idx: usize,
-        from_regs: ValueRegs<Reg>,
+        stackslots_size: u32,
+        mut emit: EmitFn,
+        emit_island: IslandFn,
     ) {
-        match &ctx.sigs().args(self.sig)[idx] {
-            &ABIArg::Slots { .. } | &ABIArg::ImplicitPtrArg { .. } => {}
-            &ABIArg::StructArg { offset, size, .. } => {
-                let src_ptr = from_regs.only_reg().unwrap();
-                let dst_ptr = ctx.alloc_tmp(M::word_type()).only_reg().unwrap();
-                ctx.emit(M::gen_get_stack_addr(
-                    StackAMode::OutgoingArg(offset),
-                    dst_ptr,
-                ));
-                // Emit a memcpy from `src_ptr` to `dst_ptr` of `size` bytes.
-                // N.B.: because we process StructArg params *first*, this is
-                // safe w.r.t. clobbers: we have not yet filled in any other
-                // arg regs.
-                let memcpy_call_conv =
-                    isa::CallConv::for_libcall(&self.flags, ctx.sigs()[self.sig].call_conv);
-                for insn in M::gen_memcpy(
-                    memcpy_call_conv,
-                    dst_ptr.to_reg(),
-                    src_ptr,
-                    size as usize,
-                    |ty| ctx.alloc_tmp(ty).only_reg().unwrap(),
-                )
-                .into_iter()
-                {
-                    ctx.emit(insn);
-                }
+        // Count stack-ret locations and emit an island to account for
+        // this space usage.
+        let mut space_needed = 0;
+        for CallRetPair { location, .. } in &self.defs {
+            if let RetLocation::Stack(..) = location {
+                // Assume up to ten instructions, semi-arbitrarily:
+                // load from stack, store to spillslot, codegen of
+                // large offsets on RISC ISAs.
+                space_needed += 10 * M::I::worst_case_size();
             }
         }
-    }
-
-    /// Add a constraint for an argument value from a source register.
-    /// For large arguments with associated stack buffer, this may
-    /// load the address of the buffer into the argument register, if
-    /// required by the ABI.
-    pub fn gen_arg(&mut self, ctx: &mut Lower<M::I>, idx: usize, from_regs: ValueRegs<Reg>) {
-        let stack_arg_space = ctx.sigs()[self.sig].sized_stack_arg_space;
-        let stack_arg = if self.is_tail_call() {
-            StackAMode::IncomingArg
-        } else {
-            |offset, _| StackAMode::OutgoingArg(offset)
-        };
-        let word_rc = M::word_reg_class();
-        let word_bits = M::word_bits() as usize;
-
-        match ctx.sigs().args(self.sig)[idx].clone() {
-            ABIArg::Slots { ref slots, .. } => {
-                assert_eq!(from_regs.len(), slots.len());
-                for (slot, from_reg) in slots.iter().zip(from_regs.regs().iter()) {
-                    match slot {
-                        &ABIArgSlot::Reg {
-                            reg, ty, extension, ..
-                        } => {
-                            let ext = M::get_ext_mode(ctx.sigs()[self.sig].call_conv, extension);
-                            let vreg = if ext != ir::ArgumentExtension::None
-                                && ty_bits(ty) < word_bits
-                            {
-                                assert_eq!(word_rc, reg.class());
-                                let signed = match ext {
-                                    ir::ArgumentExtension::Uext => false,
-                                    ir::ArgumentExtension::Sext => true,
-                                    _ => unreachable!(),
-                                };
-                                let extend_result =
-                                    ctx.alloc_tmp(M::word_type()).only_reg().unwrap();
-                                ctx.emit(M::gen_extend(
-                                    extend_result,
-                                    *from_reg,
-                                    signed,
-                                    ty_bits(ty) as u8,
-                                    word_bits as u8,
-                                ));
-                                extend_result.to_reg()
-                            } else if ty.is_ref() {
-                                // Reference-typed args need to be
-                                // passed as a copy; the original vreg
-                                // is constrained to the stack and
-                                // this copy is in a reg.
-                                let ref_copy = ctx.alloc_tmp(M::word_type()).only_reg().unwrap();
-                                ctx.emit(M::gen_move(ref_copy, *from_reg, M::word_type()));
-
-                                ref_copy.to_reg()
-                            } else {
-                                *from_reg
-                            };
-
-                            let preg = reg.into();
-                            self.uses.push(CallArgPair { vreg, preg });
-                        }
-                        &ABIArgSlot::Stack {
-                            offset,
-                            ty,
-                            extension,
-                            ..
-                        } => {
-                            let ext = M::get_ext_mode(ctx.sigs()[self.sig].call_conv, extension);
-                            let (data, ty) =
-                                if ext != ir::ArgumentExtension::None && ty_bits(ty) < word_bits {
-                                    assert_eq!(word_rc, from_reg.class());
-                                    let signed = match ext {
-                                        ir::ArgumentExtension::Uext => false,
-                                        ir::ArgumentExtension::Sext => true,
-                                        _ => unreachable!(),
-                                    };
-                                    let extend_result =
-                                        ctx.alloc_tmp(M::word_type()).only_reg().unwrap();
-                                    ctx.emit(M::gen_extend(
-                                        extend_result,
-                                        *from_reg,
-                                        signed,
-                                        ty_bits(ty) as u8,
-                                        word_bits as u8,
-                                    ));
-                                    // Store the extended version.
-                                    (extend_result.to_reg(), M::word_type())
-                                } else {
-                                    (*from_reg, ty)
-                                };
-                            ctx.emit(M::gen_store_stack(
-                                stack_arg(offset, stack_arg_space),
-                                data,
-                                ty,
-                            ));
-                        }
-                    }
-                }
-            }
-            ABIArg::StructArg { pointer, .. } => {
-                assert!(pointer.is_none()); // Only supported via ISLE.
-            }
-            ABIArg::ImplicitPtrArg {
-                offset,
-                pointer,
-                ty,
-                purpose: _,
-            } => {
-                assert_eq!(from_regs.len(), 1);
-                let vreg = from_regs.regs()[0];
-                let amode = StackAMode::OutgoingArg(offset);
-                let tmp = ctx.alloc_tmp(M::word_type()).only_reg().unwrap();
-                ctx.emit(M::gen_get_stack_addr(amode, tmp));
-                let tmp = tmp.to_reg();
-                ctx.emit(M::gen_store_base_offset(tmp, 0, vreg, ty));
-                match pointer {
-                    ABIArgSlot::Reg { reg, .. } => self.uses.push(CallArgPair {
-                        vreg: tmp,
-                        preg: reg.into(),
-                    }),
-                    ABIArgSlot::Stack { offset, .. } => ctx.emit(M::gen_store_stack(
-                        stack_arg(offset, stack_arg_space),
-                        tmp,
-                        M::word_type(),
-                    )),
-                }
+        if space_needed > 0 {
+            if let Some(island_inst) = emit_island(space_needed) {
+                emit(island_inst);
             }
         }
-    }
 
-    /// Call `gen_arg` for each non-hidden argument and emit all instructions
-    /// generated.
-    pub fn emit_args(&mut self, ctx: &mut Lower<M::I>, (inputs, off): isle::ValueSlice) {
-        let num_args = self.num_args(ctx.sigs());
-        assert_eq!(inputs.len(&ctx.dfg().value_lists) - off, num_args);
-
-        let mut arg_value_regs: SmallVec<[_; 16]> = smallvec![];
-        for i in 0..num_args {
-            let input = inputs.get(off + i, &ctx.dfg().value_lists).unwrap();
-            arg_value_regs.push(ctx.put_value_in_regs(input));
-        }
-        for (i, arg_regs) in arg_value_regs.iter().enumerate() {
-            self.emit_copy_regs_to_buffer(ctx, i, *arg_regs);
-        }
-        for (i, value_regs) in arg_value_regs.iter().enumerate() {
-            self.gen_arg(ctx, i, *value_regs);
-        }
-    }
-
-    /// Emit the code to forward a stack-return pointer argument through a tail
-    /// call.
-    pub fn emit_stack_ret_arg_for_tail_call(&mut self, ctx: &mut Lower<M::I>) {
-        if let Some(i) = ctx.sigs()[self.sig].stack_ret_arg() {
-            let ret_area_ptr = ctx.abi().ret_area_ptr.expect(
-                "if the tail callee has a return pointer, then the tail caller \
-                 must as well",
-            );
-            self.gen_arg(ctx, i.into(), ValueRegs::one(ret_area_ptr));
-        }
-    }
-
-    /// Define a return value after the call returns.
-    pub fn gen_retval(
-        &mut self,
-        ctx: &Lower<M::I>,
-        idx: usize,
-        into_regs: ValueRegs<Writable<Reg>>,
-    ) -> SmallInstVec<M::I> {
-        let mut insts = smallvec![];
-        match &ctx.sigs().rets(self.sig)[idx] {
-            &ABIArg::Slots { ref slots, .. } => {
-                assert_eq!(into_regs.len(), slots.len());
-                for (slot, into_reg) in slots.iter().zip(into_regs.regs().iter()) {
-                    match slot {
-                        // Extension mode doesn't matter because we're copying out, not in,
-                        // and we ignore high bits in our own registers by convention.
-                        &ABIArgSlot::Reg { reg, .. } => {
-                            self.defs.push(CallRetPair {
-                                vreg: *into_reg,
-                                preg: reg.into(),
-                            });
-                        }
-                        &ABIArgSlot::Stack { offset, ty, .. } => {
-                            let sig_data = &ctx.sigs()[self.sig];
-                            // The outgoing argument area must always be restored after a call,
-                            // ensuring that the return values will be in a consistent place after
-                            // any call.
-                            let ret_area_base = sig_data.sized_stack_arg_space();
-                            insts.push(M::gen_load_stack(
-                                StackAMode::OutgoingArg(offset + ret_area_base),
-                                *into_reg,
-                                ty,
-                            ));
-                        }
-                    }
-                }
-            }
-            &ABIArg::StructArg { .. } => {
-                panic!("StructArg not supported in return position");
-            }
-            &ABIArg::ImplicitPtrArg { .. } => {
-                panic!("ImplicitPtrArg not supported in return position");
-            }
-        }
-        insts
-    }
-
-    /// Emit the call itself.
-    ///
-    /// The returned instruction should have proper use- and def-sets according
-    /// to the argument registers, return-value registers, and clobbered
-    /// registers for this function signature in this ABI.
-    ///
-    /// (Arg registers are uses, and retval registers are defs. Clobbered
-    /// registers are also logically defs, but should never be read; their
-    /// values are "defined" (to the regalloc) but "undefined" in every other
-    /// sense.)
-    ///
-    /// This function should only be called once, as it is allowed to re-use
-    /// parts of the `CallSite` object in emitting instructions.
-    pub fn emit_call(&mut self, ctx: &mut Lower<M::I>) {
-        let word_type = M::word_type();
-        if let Some(i) = ctx.sigs()[self.sig].stack_ret_arg {
-            let rd = ctx.alloc_tmp(word_type).only_reg().unwrap();
-            let ret_area_base = ctx.sigs()[self.sig].sized_stack_arg_space();
-            ctx.emit(M::gen_get_stack_addr(
-                StackAMode::OutgoingArg(ret_area_base),
-                rd,
-            ));
-            self.gen_arg(ctx, i.into(), ValueRegs::one(rd.to_reg()));
-        }
-
-        let (uses, defs) = (
-            mem::replace(&mut self.uses, Default::default()),
-            mem::replace(&mut self.defs, Default::default()),
+        let temp = M::retval_temp_reg(self.callee_conv);
+        // The temporary must be noted as clobbered unless there are
+        // no returns (hence it isn't needed). The latter can only be
+        // the case statically for an ABI when the ABI doesn't allow
+        // any returns at all (e.g., preserve-all ABI).
+        debug_assert!(
+            self.defs.is_empty()
+                || M::get_regs_clobbered_by_call(self.callee_conv, self.try_call_info.is_some())
+                    .contains(PReg::from(temp.to_reg().to_real_reg().unwrap()))
         );
 
-        let sig = &ctx.sigs()[self.sig];
-        let callee_pop_size = if sig.call_conv() == isa::CallConv::Tail {
-            // The tail calling convention has callees pop stack arguments.
-            sig.sized_stack_arg_space
-        } else {
-            0
-        };
+        for CallRetPair { vreg, location } in &self.defs {
+            match location {
+                RetLocation::Reg(preg, ..) => {
+                    // The temporary must not also be an actual return
+                    // value register.
+                    debug_assert!(*preg != temp.to_reg());
+                }
+                RetLocation::Stack(amode, ty) => {
+                    if let Some(spillslot) = vreg.to_reg().to_spillslot() {
+                        // `temp` is an integer register of machine word
+                        // width, but `ty` may be floating-point/vector,
+                        // which (i) may not be loadable directly into an
+                        // int reg, and (ii) may be wider than a machine
+                        // word. For simplicity, and because there are not
+                        // always easy choices for volatile float/vec regs
+                        // (see e.g. x86-64, where fastcall clobbers only
+                        // xmm0-xmm5, but tail uses xmm0-xmm7 for
+                        // returns), we use the integer temp register in
+                        // steps.
+                        let parts = (ty.bytes() + M::word_bytes() - 1) / M::word_bytes();
+                        let one_part_load_ty =
+                            Type::int_with_byte_size(M::word_bytes().min(ty.bytes()) as u16)
+                                .unwrap();
+                        for part in 0..parts {
+                            emit(M::gen_load_stack(
+                                amode.offset_by(part * M::word_bytes()),
+                                temp,
+                                one_part_load_ty,
+                            ));
+                            emit(M::gen_store_stack(
+                                StackAMode::Slot(
+                                    i64::from(stackslots_size)
+                                        + i64::from(M::word_bytes())
+                                            * ((spillslot.index() as i64) + (part as i64)),
+                                ),
+                                temp.to_reg(),
+                                M::word_type(),
+                            ));
+                        }
+                    } else {
+                        assert_ne!(*vreg, temp);
+                        emit(M::gen_load_stack(*amode, *vreg, *ty));
+                    }
+                }
+            }
+        }
+    }
+}
 
-        let call_conv = sig.call_conv;
-        let ret_space = sig.sized_stack_ret_space;
-        let arg_space = sig.sized_stack_arg_space;
+impl TryCallInfo {
+    pub(crate) fn exception_handlers(
+        &self,
+        layout: &FrameLayout,
+    ) -> impl Iterator<Item = MachExceptionHandler> {
+        self.exception_handlers.iter().map(|handler| match handler {
+            TryCallHandler::Tag(tag, label) => MachExceptionHandler::Tag(*tag, *label),
+            TryCallHandler::Default(label) => MachExceptionHandler::Default(*label),
+            TryCallHandler::Context(reg) => {
+                let loc = if let Some(spillslot) = reg.to_spillslot() {
+                    // The spillslot offset is relative to the "fixed
+                    // storage area", which comes after outgoing args.
+                    let offset = layout.spillslot_offset(spillslot) + i64::from(layout.outgoing_args_size);
+                    ExceptionContextLoc::SPOffset(u32::try_from(offset).expect("SP offset cannot be negative or larger than 4GiB"))
+                } else if let Some(realreg) = reg.to_real_reg() {
+                    ExceptionContextLoc::GPR(realreg.hw_enc())
+                } else {
+                    panic!("Virtual register present in try-call handler clause after register allocation");
+                };
+                MachExceptionHandler::Context(loc)
+            }
+        })
+    }
 
-        ctx.abi_mut()
-            .accumulate_outgoing_args_size(ret_space + arg_space);
+    pub(crate) fn pretty_print_dests(&self) -> String {
+        self.exception_handlers
+            .iter()
+            .map(|handler| match handler {
+                TryCallHandler::Tag(tag, label) => format!("{tag:?}: {label:?}"),
+                TryCallHandler::Default(label) => format!("default: {label:?}"),
+                TryCallHandler::Context(loc) => format!("context {loc:?}"),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 
-        let tmp = ctx.alloc_tmp(word_type).only_reg().unwrap();
-
-        // Any adjustment to SP to account for required outgoing arguments/stack return values must
-        // be done inside of the call pseudo-op, to ensure that SP is always in a consistent
-        // state for all other instructions. For example, if a tail-call abi function is called
-        // here, the reclamation of the outgoing argument area must be done inside of the call
-        // pseudo-op's emission to ensure that SP is consistent at all other points in the lowered
-        // function. (Except the prologue and epilogue, but those are fairly special parts of the
-        // function that establish the SP invariants that are relied on elsewhere and are generated
-        // after the register allocator has run and thus cannot have register allocator-inserted
-        // references to SP offsets.)
-        for inst in M::gen_call(
-            &self.dest,
-            uses,
-            defs,
-            self.clobbers,
-            self.opcode,
-            tmp,
-            call_conv,
-            self.caller_conv,
-            callee_pop_size,
-        )
-        .into_iter()
-        {
-            ctx.emit(inst);
+    pub(crate) fn collect_operands(&mut self, collector: &mut impl OperandVisitor) {
+        for handler in &mut self.exception_handlers {
+            match handler {
+                TryCallHandler::Context(ctx) => {
+                    collector.any_late_use(ctx);
+                }
+                TryCallHandler::Tag(_, _) | TryCallHandler::Default(_) => {}
+            }
         }
     }
 }
@@ -2414,6 +2612,6 @@ mod tests {
     fn sig_data_size() {
         // The size of `SigData` is performance sensitive, so make sure
         // we don't regress it unintentionally.
-        assert_eq!(std::mem::size_of::<SigData>(), 24);
+        assert_eq!(core::mem::size_of::<SigData>(), 24);
     }
 }

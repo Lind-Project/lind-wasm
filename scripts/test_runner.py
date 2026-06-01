@@ -16,6 +16,7 @@ import argparse
 import importlib
 import inspect
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -82,7 +83,7 @@ def discover_harness_modules(selected: set[str] | None = None) -> list[str]:
     modules: list[str] = []
     for path in sorted(HARNESS_DIR.glob("*.py")):
         name = path.stem
-        if name == "__init__" or name.startswith("_"):
+        if name == "__init__" or name.startswith("_") or name == "libcpptestreport":
             continue
         if selected and name not in selected:
             continue
@@ -97,6 +98,10 @@ def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, 
         tuple(return_code, combined_output)
     """
     output_lines: list[str] = []
+    env = os.environ.copy()
+    env.setdefault("LIND_DEBUG_PANIC", "panic-and-exit")
+    env.setdefault("LIND_LOG_OUTPUT", "none")
+
     proc = subprocess.Popen(
         command,
         cwd=cwd,
@@ -104,6 +109,7 @@ def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, 
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        env=env,
     )
 
     assert proc.stdout is not None
@@ -162,7 +168,8 @@ def write_outputs(result: dict[str, Any], reports_dir: Path) -> dict[str, Any]:
 
 
 def extract_html_body(raw_html: str) -> str:
-    match = re.search(r"(?is)<\s*body\b[^>]*>(.*?)</\s*body\s*>", raw_html)
+    # Greedy body: use the last </body> so literal </body> inside <pre> cannot truncate.
+    match = re.search(r"(?is)<\s*body\b[^>]*>(.*)</\s*body\s*>", raw_html)
     return match.group(1) if match else raw_html
 
 

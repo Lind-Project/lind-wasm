@@ -1,16 +1,17 @@
 //! Densely numbered entity references as mapping keys.
+use crate::EntityRef;
 use crate::boxed_slice::BoxedSlice;
 use crate::iter::{IntoIter, Iter, IterMut};
 use crate::keys::Keys;
-use crate::EntityRef;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::fmt;
 use core::marker::PhantomData;
-use core::mem;
 use core::ops::{Index, IndexMut};
 use core::slice;
 #[cfg(feature = "enable-serde")]
 use serde_derive::{Deserialize, Serialize};
+use wasmtime_core::error::OutOfMemory;
 
 /// A primary mapping `K -> V` allocating dense entity references.
 ///
@@ -27,7 +28,7 @@ use serde_derive::{Deserialize, Serialize};
 /// that it only allows indexing with the distinct `EntityRef` key type, so converting to a
 /// plain slice would make it easier to use incorrectly. To make a slice of a `PrimaryMap`, use
 /// `into_boxed_slice`.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct PrimaryMap<K, V>
 where
@@ -57,6 +58,13 @@ where
         }
     }
 
+    /// Like `with_capacity` but returns an error on allocation failure.
+    pub fn try_with_capacity(capacity: usize) -> Result<Self, OutOfMemory> {
+        let mut map = Self::new();
+        map.try_reserve(capacity)?;
+        Ok(map)
+    }
+
     /// Check if `k` is a valid key in the map.
     pub fn is_valid(&self, k: K) -> bool {
         k.index() < self.elems.len()
@@ -65,6 +73,11 @@ where
     /// Get the element at `k` if it exists.
     pub fn get(&self, k: K) -> Option<&V> {
         self.elems.get(k.index())
+    }
+
+    /// Get the slice of values associated with the given range of keys, if any.
+    pub fn get_range(&self, range: core::ops::Range<K>) -> Option<&[V]> {
+        self.elems.get(range.start.index()..range.end.index())
     }
 
     /// Get the element at `k` if it exists, mutable version.
@@ -88,22 +101,27 @@ where
     }
 
     /// Iterate over all the values in this map.
-    pub fn values(&self) -> slice::Iter<V> {
+    pub fn values(&self) -> slice::Iter<'_, V> {
         self.elems.iter()
     }
 
     /// Iterate over all the values in this map, mutable edition.
-    pub fn values_mut(&mut self) -> slice::IterMut<V> {
+    pub fn values_mut(&mut self) -> slice::IterMut<'_, V> {
         self.elems.iter_mut()
     }
 
+    /// Get this map's underlying values as a slice.
+    pub fn as_values_slice(&self) -> &[V] {
+        &self.elems
+    }
+
     /// Iterate over all the keys and values in this map.
-    pub fn iter(&self) -> Iter<K, V> {
+    pub fn iter(&self) -> Iter<'_, K, V> {
         Iter::new(self.elems.iter())
     }
 
     /// Iterate over all the keys and values in this map, mutable edition.
-    pub fn iter_mut(&mut self) -> IterMut<K, V> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
         IterMut::new(self.elems.iter_mut())
     }
 
@@ -143,9 +161,23 @@ where
         self.elems.reserve(additional)
     }
 
+    /// Like `reserve` but returns an error on allocation failure.
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), OutOfMemory> {
+        self.elems
+            .try_reserve(additional)
+            .map_err(|_| OutOfMemory::new(self.len().saturating_add(additional)))
+    }
+
     /// Reserves the minimum capacity for exactly `additional` more elements to be inserted.
     pub fn reserve_exact(&mut self, additional: usize) {
         self.elems.reserve_exact(additional)
+    }
+
+    /// Like `reserve_exact` but returns an error on allocation failure.
+    pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), OutOfMemory> {
+        self.elems
+            .try_reserve_exact(additional)
+            .map_err(|_| OutOfMemory::new(self.len().saturating_add(additional)))
     }
 
     /// Shrinks the capacity of the `PrimaryMap` as much as possible.
@@ -162,35 +194,11 @@ where
     ///
     /// Returns an error if an element does not exist, or if the same key was passed more than
     /// once.
-    // This implementation is taken from the unstable `get_many_mut`.
-    //
-    // Once it has been stabilised we can call that method directly.
-    pub fn get_many_mut<const N: usize>(
+    pub fn get_disjoint_mut<const N: usize>(
         &mut self,
         indices: [K; N],
-    ) -> Result<[&mut V; N], GetManyMutError<K>> {
-        for (i, &idx) in indices.iter().enumerate() {
-            if idx.index() >= self.len() {
-                return Err(GetManyMutError::DoesNotExist(idx));
-            }
-            for &idx2 in &indices[..i] {
-                if idx == idx2 {
-                    return Err(GetManyMutError::MultipleOf(idx));
-                }
-            }
-        }
-
-        let slice: *mut V = self.elems.as_mut_ptr();
-        let mut arr: mem::MaybeUninit<[&mut V; N]> = mem::MaybeUninit::uninit();
-        let arr_ptr = arr.as_mut_ptr();
-
-        unsafe {
-            for i in 0..N {
-                let idx = *indices.get_unchecked(i);
-                *(*arr_ptr).get_unchecked_mut(i) = &mut *slice.add(idx.index());
-            }
-            Ok(arr.assume_init())
-        }
+    ) -> Result<[&mut V; N], slice::GetDisjointMutError> {
+        self.elems.get_disjoint_mut(indices.map(|k| k.index()))
     }
 
     /// Performs a binary search on the values with a key extraction function.
@@ -214,12 +222,25 @@ where
             .map(|i| K::new(i))
             .map_err(|i| K::new(i))
     }
-}
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum GetManyMutError<K> {
-    DoesNotExist(K),
-    MultipleOf(K),
+    /// Analog of `get_raw` except that a raw pointer is returned rather than a
+    /// mutable reference.
+    ///
+    /// The default accessors of items in [`PrimaryMap`] will invalidate all
+    /// previous borrows obtained from the map according to miri. This function
+    /// can be used to acquire a pointer and then subsequently acquire a second
+    /// pointer later on without invalidating the first one. In other words
+    /// this is only here to help borrow two elements simultaneously with miri.
+    pub fn get_raw_mut(&mut self, k: K) -> Option<*mut V> {
+        if k.index() < self.elems.len() {
+            // SAFETY: the `add` function requires that the index is in-bounds
+            // with respect to the allocation which is satisfied here due to
+            // the bounds-check above.
+            unsafe { Some(self.elems.as_mut_ptr().add(k.index())) }
+        } else {
+            None
+        }
+    }
 }
 
 impl<K, V> Default for PrimaryMap<K, V>
@@ -305,6 +326,18 @@ where
     }
 }
 
+impl<K, V> Extend<V> for PrimaryMap<K, V>
+where
+    K: EntityRef,
+{
+    fn extend<T>(&mut self, iter: T)
+    where
+        T: IntoIterator<Item = V>,
+    {
+        self.elems.extend(iter);
+    }
+}
+
 impl<K, V> From<Vec<V>> for PrimaryMap<K, V>
 where
     K: EntityRef,
@@ -314,6 +347,25 @@ where
             elems,
             unused: PhantomData,
         }
+    }
+}
+
+impl<K, V> From<PrimaryMap<K, V>> for Vec<V>
+where
+    K: EntityRef,
+{
+    fn from(map: PrimaryMap<K, V>) -> Self {
+        map.elems
+    }
+}
+
+impl<K: EntityRef + fmt::Debug, V: fmt::Debug> fmt::Debug for PrimaryMap<K, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut struct_ = f.debug_struct("PrimaryMap");
+        for (k, v) in self {
+            struct_.field(&alloc::format!("{k:?}"), v);
+        }
+        struct_.finish()
     }
 }
 
@@ -527,14 +579,14 @@ mod tests {
         let _1 = m.push(1);
         let _2 = m.push(2);
 
-        assert_eq!([&mut 0, &mut 2], m.get_many_mut([_0, _2]).unwrap());
+        assert_eq!([&mut 0, &mut 2], m.get_disjoint_mut([_0, _2]).unwrap());
         assert_eq!(
-            m.get_many_mut([_0, _0]),
-            Err(GetManyMutError::MultipleOf(_0))
+            m.get_disjoint_mut([_0, _0]),
+            Err(slice::GetDisjointMutError::OverlappingIndices)
         );
         assert_eq!(
-            m.get_many_mut([E(4)]),
-            Err(GetManyMutError::DoesNotExist(E(4)))
+            m.get_disjoint_mut([E(4)]),
+            Err(slice::GetDisjointMutError::IndexOutOfBounds)
         );
     }
 }

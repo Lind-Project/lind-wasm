@@ -1,4 +1,4 @@
-use crate::{wasm_externtype_t, wasm_limits_t, CExternType};
+use crate::{CExternType, wasm_externtype_t, wasm_limits_t};
 use once_cell::unsync::OnceCell;
 use std::convert::TryFrom;
 use wasmtime::MemoryType;

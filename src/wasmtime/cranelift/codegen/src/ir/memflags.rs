@@ -2,6 +2,7 @@
 
 use super::TrapCode;
 use core::fmt;
+use core::num::NonZeroU8;
 use core::str::FromStr;
 
 #[cfg(feature = "enable-serde")]
@@ -19,11 +20,33 @@ pub enum Endianness {
 /// Which disjoint region of aliasing memory is accessed in this memory
 /// operation.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-#[allow(missing_docs)]
+#[repr(u8)]
+#[expect(missing_docs, reason = "self-describing variants")]
+#[rustfmt::skip]
 pub enum AliasRegion {
-    Heap,
-    Table,
-    Vmctx,
+    // None = 0b00;
+    Heap    = 0b01,
+    Table   = 0b10,
+    Vmctx   = 0b11,
+}
+
+impl AliasRegion {
+    const fn from_bits(bits: u8) -> Option<Self> {
+        match bits {
+            0b00 => None,
+            0b01 => Some(Self::Heap),
+            0b10 => Some(Self::Table),
+            0b11 => Some(Self::Vmctx),
+            _ => panic!("invalid alias region bits"),
+        }
+    }
+
+    const fn to_bits(region: Option<Self>) -> u8 {
+        match region {
+            None => 0b00,
+            Some(r) => r as u8,
+        }
+    }
 }
 
 /// Flags for memory operations like load/store.
@@ -49,8 +72,8 @@ pub struct MemFlags {
     // * 3 - big endian flag
     // * 4 - checked flag
     // * 5/6 - alias region
-    // * 7/8/9/10 - trap code
-    // * 11/12/13/14/15 - unallocated
+    // * 7/8/9/10/11/12/13/14 - trap code
+    // * 15 - can_move flag
     //
     // Current properties upheld are:
     //
@@ -74,25 +97,26 @@ const BIT_LITTLE_ENDIAN: u16 = 1 << 2;
 /// Load multi-byte values from memory in a big-endian format.
 const BIT_BIG_ENDIAN: u16 = 1 << 3;
 
-/// Check this load or store for safety when using the
-/// proof-carrying-code framework. The address must have a
-/// `PointsTo` fact attached with a sufficiently large valid range
-/// for the accessed size.
-const BIT_CHECKED: u16 = 1 << 4;
-
 /// Used for alias analysis, indicates which disjoint part of the abstract state
 /// is being accessed.
 const MASK_ALIAS_REGION: u16 = 0b11 << ALIAS_REGION_OFFSET;
 const ALIAS_REGION_OFFSET: u16 = 5;
 
 /// Trap code, if any, for this memory operation.
-const MASK_TRAP_CODE: u16 = 0b1111 << TRAP_CODE_OFFSET;
+const MASK_TRAP_CODE: u16 = 0b1111_1111 << TRAP_CODE_OFFSET;
 const TRAP_CODE_OFFSET: u16 = 7;
+
+/// Whether this memory operation may be freely moved by the optimizer so long
+/// as its data dependencies are satisfied. That is, by setting this flag, the
+/// producer is guaranteeing that this memory operation's safety is not guarded
+/// by outside-the-data-flow-graph properties, like implicit bounds-checking
+/// control dependencies.
+const BIT_CAN_MOVE: u16 = 1 << 15;
 
 impl MemFlags {
     /// Create a new empty set of flags.
     pub const fn new() -> Self {
-        Self { bits: 0 }
+        Self { bits: 0 }.with_trap_code(Some(TrapCode::HEAP_OUT_OF_BOUNDS))
     }
 
     /// Create a set of flags representing an access from a "trusted" address, meaning it's
@@ -114,27 +138,14 @@ impl MemFlags {
 
     /// Reads the alias region that this memory operation works with.
     pub const fn alias_region(self) -> Option<AliasRegion> {
-        // NB: keep in sync with `with_alias_region`
-        match (self.bits & MASK_ALIAS_REGION) >> ALIAS_REGION_OFFSET {
-            0b00 => None,
-            0b01 => Some(AliasRegion::Heap),
-            0b10 => Some(AliasRegion::Table),
-            0b11 => Some(AliasRegion::Vmctx),
-            _ => unreachable!(),
-        }
+        AliasRegion::from_bits(((self.bits & MASK_ALIAS_REGION) >> ALIAS_REGION_OFFSET) as u8)
     }
 
     /// Sets the alias region that this works on to the specified `region`.
     pub const fn with_alias_region(mut self, region: Option<AliasRegion>) -> Self {
-        // NB: keep in sync with `alias_region`
-        let bits = match region {
-            None => 0b00,
-            Some(AliasRegion::Heap) => 0b01,
-            Some(AliasRegion::Table) => 0b10,
-            Some(AliasRegion::Vmctx) => 0b11,
-        };
+        let bits = AliasRegion::to_bits(region);
         self.bits &= !MASK_ALIAS_REGION;
-        self.bits |= bits << ALIAS_REGION_OFFSET;
+        self.bits |= (bits as u16) << ALIAS_REGION_OFFSET;
         self
     }
 
@@ -187,10 +198,9 @@ impl MemFlags {
                 }
                 self.with_alias_region(Some(AliasRegion::Vmctx))
             }
-            "checked" => self.with_checked(),
+            "can_move" => self.with_can_move(),
 
             other => match TrapCode::from_str(other) {
-                Ok(TrapCode::User(_)) => return Err("cannot set user trap code on mem flags"),
                 Ok(code) => self.with_trap_code(Some(code)),
                 Err(()) => return Ok(false),
             },
@@ -210,6 +220,20 @@ impl MemFlags {
             Endianness::Big
         } else {
             native_endianness
+        }
+    }
+
+    /// Return endianness of the memory access, if explicitly specified.
+    ///
+    /// If the endianness is not explicitly specified, this will return `None`,
+    /// which means "native endianness".
+    pub const fn explicit_endianness(self) -> Option<Endianness> {
+        if self.read_bit(BIT_LITTLE_ENDIAN) {
+            Some(Endianness::Little)
+        } else if self.read_bit(BIT_BIG_ENDIAN) {
+            Some(Endianness::Big)
+        } else {
+            None
         }
     }
 
@@ -238,6 +262,12 @@ impl MemFlags {
     /// If this returns `true` then the memory is *accessible*, which means
     /// that accesses will not trap. This makes it possible to delete an unused
     /// load or a dead store instruction.
+    ///
+    /// This flag does *not* mean that the associated instruction can be
+    /// code-motioned to arbitrary places in the function so long as its data
+    /// dependencies are met. This only means that, given its current location
+    /// in the function, it will never trap. See the `can_move` method for more
+    /// details.
     pub const fn notrap(self) -> bool {
         self.trap_code().is_none()
     }
@@ -251,6 +281,35 @@ impl MemFlags {
     /// flags.
     pub const fn with_notrap(self) -> Self {
         self.with_trap_code(None)
+    }
+
+    /// Is this memory operation safe to move so long as its data dependencies
+    /// remain satisfied?
+    ///
+    /// If this is `true`, then it is okay to code motion this instruction to
+    /// arbitrary locations, in the function, including across blocks and
+    /// conditional branches, so long as data dependencies (and trap ordering,
+    /// if any) are upheld.
+    ///
+    /// If this is `false`, then this memory operation's safety potentially
+    /// relies upon invariants that are not reflected in its data dependencies,
+    /// and therefore it is not safe to code motion this operation. For example,
+    /// this operation could be in a block that is dominated by a control-flow
+    /// bounds check, which is not reflected in its operands, and it would be
+    /// unsafe to code motion it above the bounds check, even if its data
+    /// dependencies would still be satisfied.
+    pub const fn can_move(self) -> bool {
+        self.read_bit(BIT_CAN_MOVE)
+    }
+
+    /// Set the `can_move` flag.
+    pub const fn set_can_move(&mut self) {
+        *self = self.with_can_move();
+    }
+
+    /// Set the `can_move` flag, returning new flags.
+    pub const fn with_can_move(self) -> Self {
+        self.with_bit(BIT_CAN_MOVE)
     }
 
     /// Test if the `aligned` flag is set.
@@ -290,87 +349,27 @@ impl MemFlags {
     pub const fn with_readonly(self) -> Self {
         self.with_bit(BIT_READONLY)
     }
-
-    /// Test if the `checked` bit is set.
-    ///
-    /// Loads and stores with this flag are verified to access
-    /// pointers only with a validated `PointsTo` fact attached, and
-    /// with that fact validated, when using the proof-carrying-code
-    /// framework. If initial facts on program inputs are correct
-    /// (i.e., correctly denote the shape and types of data structures
-    /// in memory), and if PCC validates the compiled output, then all
-    /// `checked`-marked memory accesses are guaranteed (up to the
-    /// checker's correctness) to access valid memory. This can be
-    /// used to ensure memory safety and sandboxing.
-    pub const fn checked(self) -> bool {
-        self.read_bit(BIT_CHECKED)
-    }
-
-    /// Set the `checked` bit.
-    pub fn set_checked(&mut self) {
-        *self = self.with_checked();
-    }
-
-    /// Set the `checked` bit, returning new flags.
-    pub const fn with_checked(self) -> Self {
-        self.with_bit(BIT_CHECKED)
-    }
-
     /// Get the trap code to report if this memory access traps.
     ///
     /// A `None` trap code indicates that this memory access does not trap.
     pub const fn trap_code(self) -> Option<TrapCode> {
-        // NB: keep this encoding in sync with `with_trap_code` below.
-        //
-        // Also note that the default, all zeros, is `HeapOutOfBounds`. It is
-        // intentionally not `None` so memory operations are all considered
-        // effect-ful by default.
-        match (self.bits & MASK_TRAP_CODE) >> TRAP_CODE_OFFSET {
-            0b0000 => Some(TrapCode::HeapOutOfBounds),
-            0b0001 => Some(TrapCode::StackOverflow),
-            0b0010 => Some(TrapCode::HeapMisaligned),
-            0b0011 => Some(TrapCode::TableOutOfBounds),
-            0b0100 => Some(TrapCode::IndirectCallToNull),
-            0b0101 => Some(TrapCode::BadSignature),
-            0b0110 => Some(TrapCode::IntegerOverflow),
-            0b0111 => Some(TrapCode::IntegerDivisionByZero),
-            0b1000 => Some(TrapCode::BadConversionToInteger),
-            0b1001 => Some(TrapCode::UnreachableCodeReached),
-            0b1010 => Some(TrapCode::Interrupt),
-            0b1011 => Some(TrapCode::NullReference),
-            0b1100 => Some(TrapCode::NullI31Ref),
-            // 0b1101 => {} not allocated
-            // 0b1110 => {} not allocated
-            0b1111 => None,
-            _ => unreachable!(),
+        let byte = ((self.bits & MASK_TRAP_CODE) >> TRAP_CODE_OFFSET) as u8;
+        match NonZeroU8::new(byte) {
+            Some(code) => Some(TrapCode::from_raw(code)),
+            None => None,
         }
     }
 
     /// Configures these flags with the specified trap code `code`.
     ///
-    /// Note that `TrapCode::User(_)` cannot be set in `MemFlags`. A trap code
-    /// indicates that this memory operation cannot be optimized away and it
-    /// must "stay where it is" in the programs. Traps are considered side
-    /// effects, for example, and have meaning through the trap code that is
-    /// communicated and which instruction trapped.
+    /// A trap code indicates that this memory operation cannot be optimized
+    /// away and it must "stay where it is" in the programs. Traps are
+    /// considered side effects, for example, and have meaning through the trap
+    /// code that is communicated and which instruction trapped.
     pub const fn with_trap_code(mut self, code: Option<TrapCode>) -> Self {
         let bits = match code {
-            Some(TrapCode::HeapOutOfBounds) => 0b0000,
-            Some(TrapCode::StackOverflow) => 0b0001,
-            Some(TrapCode::HeapMisaligned) => 0b0010,
-            Some(TrapCode::TableOutOfBounds) => 0b0011,
-            Some(TrapCode::IndirectCallToNull) => 0b0100,
-            Some(TrapCode::BadSignature) => 0b0101,
-            Some(TrapCode::IntegerOverflow) => 0b0110,
-            Some(TrapCode::IntegerDivisionByZero) => 0b0111,
-            Some(TrapCode::BadConversionToInteger) => 0b1000,
-            Some(TrapCode::UnreachableCodeReached) => 0b1001,
-            Some(TrapCode::Interrupt) => 0b1010,
-            Some(TrapCode::NullReference) => 0b1011,
-            Some(TrapCode::NullI31Ref) => 0b1100,
-            None => 0b1111,
-
-            Some(TrapCode::User(_)) => panic!("cannot set user trap code in mem flags"),
+            Some(code) => code.as_raw().get() as u16,
+            None => 0,
         };
         self.bits &= !MASK_TRAP_CODE;
         self.bits |= bits << TRAP_CODE_OFFSET;
@@ -384,7 +383,7 @@ impl fmt::Display for MemFlags {
             None => write!(f, " notrap")?,
             // This is the default trap code, so don't print anything extra
             // for this.
-            Some(TrapCode::HeapOutOfBounds) => {}
+            Some(TrapCode::HEAP_OUT_OF_BOUNDS) => {}
             Some(t) => write!(f, " {t}")?,
         }
         if self.aligned() {
@@ -393,14 +392,14 @@ impl fmt::Display for MemFlags {
         if self.readonly() {
             write!(f, " readonly")?;
         }
+        if self.can_move() {
+            write!(f, " can_move")?;
+        }
         if self.read_bit(BIT_BIG_ENDIAN) {
             write!(f, " big")?;
         }
         if self.read_bit(BIT_LITTLE_ENDIAN) {
             write!(f, " little")?;
-        }
-        if self.checked() {
-            write!(f, " checked")?;
         }
         match self.alias_region() {
             None => {}

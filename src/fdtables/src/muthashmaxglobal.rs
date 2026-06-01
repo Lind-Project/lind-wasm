@@ -273,11 +273,14 @@ pub fn get_specific_virtual_fd(
     _increment_fdcount(myentry);
 
     // always add the new entry.  insert returns the old entry.
-    let myoptionentry = fdtable
-        .get_mut(&cageid)
-        .unwrap()
-        .thisfdtable
-        .insert(requested_virtualfd, myentry);
+    let myfdentry = fdtable.get_mut(&cageid).unwrap();
+    let myoptionentry = myfdentry.thisfdtable.insert(requested_virtualfd, myentry);
+    // Bump highestneverusedfd past requested_virtualfd so the
+    // get_unused_virtual_fd fast path doesn't later hand out an fd
+    // that we just reserved here (e.g. stdio fds 0/1/2).
+    if requested_virtualfd >= myfdentry.highestneverusedfd {
+        myfdentry.highestneverusedfd = requested_virtualfd + 1;
+    }
     drop(fdtable);
 
     // Update the fdcount / close the old entry, if existed
@@ -489,26 +492,27 @@ pub fn close_virtualfd(cageid: u64, virtfd: u64) -> Result<(), threei::RetVal> {
         return Err(threei::Errno::EBADFD as u64);
     }
 
-    let mut fdtable = GLOBALFDTABLE.lock().unwrap();
+    let entry = {
+        let mut fdtable = GLOBALFDTABLE.lock().unwrap();
 
-    if !fdtable.contains_key(&cageid) {
-        panic!("Unknown cageid in fdtable access");
-    }
-
-    // remove the closed item from the fdtable (and inspect it)
-    let thisoption = fdtable
-        .get_mut(&cageid)
-        .unwrap()
-        .thisfdtable
-        .remove(&virtfd);
-    drop(fdtable);
-
-    match thisoption {
-        Some(entry) => {
-            _decrement_fdcount(entry).map_err(|errno| errno as threei::RetVal)?;
+        if !fdtable.contains_key(&cageid) {
+            panic!("Unknown cageid in fdtable access");
         }
-        None => Err(threei::Errno::EBADFD as u64),
-    }
+
+        match fdtable
+            .get_mut(&cageid)
+            .unwrap()
+            .thisfdtable
+            .remove(&virtfd)
+        {
+            Some(entry) => entry,
+            None => return Err(threei::Errno::EBADFD as u64),
+        }
+    };
+
+    _decrement_fdcount(entry).map_err(|errno| errno as threei::RetVal)?;
+
+    Ok(())
 }
 
 // Register a series of helpers to be called for close.  Can be called

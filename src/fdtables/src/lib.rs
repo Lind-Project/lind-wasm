@@ -112,8 +112,55 @@
 //       ENFILE The system-wide limit on the total number of open files
 //              has been reached. (mostly unimplemented)
 
-// This includes the specific implementation of the algorithm chosen.
-include!("current_impl");
+// The specific implementation of the algorithm is selected via a Cargo feature
+// (see Cargo.toml `[features]`). Exactly one impl feature must be enabled; the
+// default is `dashmaparray`. To switch, build with e.g.
+//   cargo build --no-default-features --features muthashmax
+
+#[cfg(not(any(
+    feature = "dashmaparray",
+    feature = "dashmapvec",
+    feature = "muthashmax",
+    feature = "vanilla",
+)))]
+compile_error!(
+    "fdtables: no impl feature enabled; pick exactly one of \
+     `dashmaparray`, `dashmapvec`, `muthashmax`, or `vanilla`"
+);
+
+#[cfg(any(
+    all(feature = "dashmaparray", feature = "dashmapvec"),
+    all(feature = "dashmaparray", feature = "muthashmax"),
+    all(feature = "dashmaparray", feature = "vanilla"),
+    all(feature = "dashmapvec", feature = "muthashmax"),
+    all(feature = "dashmapvec", feature = "vanilla"),
+    all(feature = "muthashmax", feature = "vanilla"),
+))]
+compile_error!(
+    "fdtables: more than one impl feature enabled; pick exactly one of \
+     `dashmaparray`, `dashmapvec`, `muthashmax`, or `vanilla` \
+     (use --no-default-features when overriding the default)"
+);
+
+#[cfg(feature = "dashmaparray")]
+mod dashmaparrayglobal;
+#[cfg(feature = "dashmaparray")]
+pub use dashmaparrayglobal::*;
+
+#[cfg(feature = "dashmapvec")]
+mod dashmapvecglobal;
+#[cfg(feature = "dashmapvec")]
+pub use dashmapvecglobal::*;
+
+#[cfg(feature = "muthashmax")]
+mod muthashmaxglobal;
+#[cfg(feature = "muthashmax")]
+pub use muthashmaxglobal::*;
+
+#[cfg(feature = "vanilla")]
+mod vanillaglobal;
+#[cfg(feature = "vanilla")]
+pub use vanillaglobal::*;
 
 // This includes general constants and definitions for things that are
 // needed everywhere, like FDTableEntry.  I use the * import here to flatten
@@ -155,7 +202,7 @@ mod tests {
     // Import the symbols, etc. in this file...
     use super::*;
 
-    fn do_panic(_: FDTableEntry, _: u64) {
+    fn do_panic(_: FDTableEntry, _: u64) -> Result<(), i32> {
         panic!("do_panic!");
     }
 
@@ -594,13 +641,15 @@ mod tests {
     }
 
     // Helper for the close handler recursion tests...
-    fn _test_close_handler_recursion_helper(_: FDTableEntry, _: u64) {
+    fn _test_close_handler_recursion_helper(_: FDTableEntry, _: u64) -> Result<(), i32> {
         // reset helpers
         register_close_handlers(0, NULL_FUNC, NULL_FUNC);
 
         const FD: u64 = 57;
         let my_virt_fd = get_unused_virtual_fd(threei::TESTING_CAGEID, 0, FD, false, 10).unwrap();
         close_virtualfd(threei::TESTING_CAGEID, my_virt_fd).unwrap();
+
+        Ok(())
     }
 
     #[test]
@@ -689,6 +738,51 @@ mod tests {
         let _my_virt_fd =
             get_unused_virtual_fd(threei::TESTING_CAGEID, FDKIND, FD, true, 10).unwrap();
         empty_fds_for_exec(threei::TESTING_CAGEID);
+    }
+
+    #[test]
+    // Regression: after reserving fds via get_specific_virtual_fd, a
+    // subsequent get_unused_virtual_fd must not hand back one of the
+    // reserved fds.
+    //
+    // In the muthashmax backend, get_specific_virtual_fd previously
+    // didn't bump `highestneverusedfd`, so the get_unused_virtual_fd
+    // fast path would re-issue fd 0, 1, 2... and silently clobber the
+    // reservations. This surfaced in the IPC grate's preexec reserving
+    // stdio: the user binary's first pipe() call would overwrite stdin
+    // and stdout, sending printf into the pipe. The other backends scan
+    // for a vacant slot so this regression is impossible there, but the
+    // test exercises the contract for all of them.
+    fn get_specific_then_get_unused_does_not_reuse_fd() {
+        let mut _thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
+            refresh();
+            TESTMUTEX.clear_poison();
+            e.into_inner()
+        });
+        refresh();
+
+        let cage_id = threei::TESTING_CAGEID;
+
+        // Reserve fds 0, 1, 2 (e.g. stdio) via get_specific_virtual_fd.
+        get_specific_virtual_fd(cage_id, 0, 0, 100, false, 0).unwrap();
+        get_specific_virtual_fd(cage_id, 1, 0, 101, false, 0).unwrap();
+        get_specific_virtual_fd(cage_id, 2, 0, 102, false, 0).unwrap();
+
+        // The next three get_unused_virtual_fd calls must skip the
+        // reserved slots.
+        for _ in 0..3 {
+            let fd = get_unused_virtual_fd(cage_id, 0, 200, false, 0).unwrap();
+            assert!(
+                fd >= 3,
+                "get_unused_virtual_fd returned reserved fd {} after get_specific_virtual_fd",
+                fd
+            );
+        }
+
+        // Reservations survive untouched.
+        assert_eq!(translate_virtual_fd(cage_id, 0).unwrap().underfd, 100);
+        assert_eq!(translate_virtual_fd(cage_id, 1).unwrap().underfd, 101);
+        assert_eq!(translate_virtual_fd(cage_id, 2).unwrap().underfd, 102);
     }
 
     #[test]
@@ -1482,7 +1576,9 @@ mod tests {
         // considered passing the test
         let fd1 = get_unused_virtual_fd(threei::TESTING_CAGEID, 1, 123, false, 100).unwrap_or(1);
 
-        fn myfunc(_: FDTableEntry, _: u64) {}
+        fn myfunc(_: FDTableEntry, _: u64) -> Result<(), i32> {
+            Ok(())
+        }
 
         register_close_handlers(0, myfunc, myfunc);
 

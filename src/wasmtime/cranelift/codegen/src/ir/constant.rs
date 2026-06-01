@@ -8,13 +8,13 @@
 //! - ensuring alignment of constants within the pool,
 //! - bucketing constants by size.
 
-use crate::ir::immediates::{IntoBytes, V128Imm};
 use crate::ir::Constant;
+use crate::ir::immediates::{Ieee128, IntoBytes, V128Imm};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::fmt;
 use core::slice::Iter;
-use core::str::{from_utf8, FromStr};
+use core::str::{FromStr, from_utf8};
 use cranelift_entity::EntityRef;
 
 #[cfg(feature = "enable-serde")]
@@ -54,6 +54,22 @@ impl From<V128Imm> for ConstantData {
     }
 }
 
+impl From<Ieee128> for ConstantData {
+    fn from(v: Ieee128) -> Self {
+        Self(v.into_bytes())
+    }
+}
+
+impl TryFrom<&ConstantData> for Ieee128 {
+    type Error = <[u8; 16] as TryFrom<&'static [u8]>>::Error;
+
+    fn try_from(value: &ConstantData) -> Result<Self, Self::Error> {
+        Ok(Ieee128::with_bits(u128::from_le_bytes(
+            value.as_slice().try_into()?,
+        )))
+    }
+}
+
 impl ConstantData {
     /// Return the number of bytes in the constant.
     pub fn len(&self) -> usize {
@@ -76,7 +92,7 @@ impl ConstantData {
     }
 
     /// Iterate over the constant's bytes.
-    pub fn iter(&self) -> Iter<u8> {
+    pub fn iter(&self) -> Iter<'_, u8> {
         self.0.iter()
     }
 
@@ -91,10 +107,7 @@ impl ConstantData {
     /// in the high-order byte slots.
     pub fn expand_to(mut self, expected_size: usize) -> Self {
         if self.len() > expected_size {
-            panic!(
-                "The constant data is already expanded beyond {} bytes",
-                expected_size
-            )
+            panic!("The constant data is already expanded beyond {expected_size} bytes")
         }
         self.0.resize(expected_size, 0);
         self
@@ -115,7 +128,7 @@ impl fmt::Display for ConstantData {
         if !self.is_empty() {
             write!(f, "0x")?;
             for b in self.0.iter().rev() {
-                write!(f, "{:02x}", b)?;
+                write!(f, "{b:02x}")?;
             }
         }
         Ok(())
@@ -259,7 +272,7 @@ impl ConstantPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::string::ToString;
+    use alloc::string::ToString;
 
     #[test]
     fn empty() {
@@ -398,8 +411,7 @@ mod tests {
             let parsed = from.parse::<ConstantData>();
             assert!(
                 parsed.is_err(),
-                "Expected a parse error but parsing succeeded: {}",
-                from
+                "Expected a parse error but parsing succeeded: {from}"
             );
             assert_eq!(parsed.err().unwrap(), error_msg);
         }
@@ -458,5 +470,18 @@ mod tests {
             parse_to_uimm128("0x1234_5678"),
             [0x78, 0x56, 0x34, 0x12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         );
+    }
+
+    #[test]
+    fn constant_ieee128() {
+        let value = Ieee128::with_bits(0x000102030405060708090a0b0c0d0e0f);
+        let constant = ConstantData::from(value);
+        assert_eq!(
+            constant.as_slice(),
+            &[
+                0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x9, 0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1, 0x0
+            ]
+        );
+        assert_eq!(Ieee128::try_from(&constant).unwrap().bits(), value.bits());
     }
 }

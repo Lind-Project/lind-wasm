@@ -241,9 +241,6 @@ late_init (void)
    the user code (*PD->start_routine).  */
 
 
-void set_stack_pointer(int stack_addr);
-void *__dummy_reference2 = set_stack_pointer;
-
 static int _Noreturn start_thread (void *arg);
 
 static int create_thread (struct pthread *pd, const struct pthread_attr *attr,

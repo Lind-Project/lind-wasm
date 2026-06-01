@@ -2,8 +2,8 @@ use anyhow::{Ok, Result};
 
 // parse the path from the caller's memory space
 pub fn parse_path(path: u64) -> Result<String> {
-    let path_str = typemap::get_cstr(path).map_err(anyhow::Error::msg)?;
-    Ok(String::from(path_str))
+    let path_str = typemap::get_cstr_lossy(path).map_err(anyhow::Error::msg)?;
+    Ok(path_str)
 }
 
 // parse the argv from the caller's memory space
@@ -23,8 +23,8 @@ pub fn parse_argv(argv: u64) -> Result<Vec<String>> {
             break; // Stop if we encounter NULL
         }
 
-        let arg = typemap::get_cstr(arg_ptr).map_err(anyhow::Error::msg)?;
-        args.push(String::from(arg));
+        let arg = typemap::get_cstr_lossy(arg_ptr).map_err(anyhow::Error::msg)?;
+        args.push(arg);
 
         index += 1; // Move to the next argument
     }
@@ -49,7 +49,7 @@ pub fn parse_env(env_ptr: u64) -> Result<Option<Vec<(String, Option<String>)>>> 
             break; // Stop if we encounter NULL
         }
 
-        let env = typemap::get_cstr(env_ptr).map_err(anyhow::Error::msg)?;
+        let env = typemap::get_cstr_lossy(env_ptr).map_err(anyhow::Error::msg)?;
 
         let parsed = parse_env_var(&env);
         env_vec.push(parsed);
