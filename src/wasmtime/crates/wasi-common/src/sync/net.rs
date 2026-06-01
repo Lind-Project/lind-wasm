@@ -1,6 +1,6 @@
 use crate::{
-    file::{FdFlags, FileType, RiFlags, RoFlags, SdFlags, SiFlags, WasiFile},
     Error, ErrorExt,
+    file::{FdFlags, FileType, RiFlags, RoFlags, SdFlags, SiFlags, WasiFile},
 };
 #[cfg(windows)]
 use io_extras::os::windows::{AsRawHandleOrSocket, RawHandleOrSocket};
@@ -76,13 +76,13 @@ impl From<Socket> for Box<dyn WasiFile> {
 
 macro_rules! wasi_listen_write_impl {
     ($ty:ty, $stream:ty) => {
-        #[wiggle::async_trait]
+        #[async_trait::async_trait]
         impl WasiFile for $ty {
             fn as_any(&self) -> &dyn Any {
                 self
             }
             #[cfg(unix)]
-            fn pollable(&self) -> Option<rustix::fd::BorrowedFd> {
+            fn pollable(&self) -> Option<rustix::fd::BorrowedFd<'_>> {
                 Some(self.0.as_fd())
             }
             #[cfg(windows)]
@@ -169,13 +169,13 @@ wasi_listen_write_impl!(UnixListener, UnixStream);
 
 macro_rules! wasi_stream_write_impl {
     ($ty:ty, $std_ty:ty) => {
-        #[wiggle::async_trait]
+        #[async_trait::async_trait]
         impl WasiFile for $ty {
             fn as_any(&self) -> &dyn Any {
                 self
             }
             #[cfg(unix)]
-            fn pollable(&self) -> Option<rustix::fd::BorrowedFd> {
+            fn pollable(&self) -> Option<rustix::fd::BorrowedFd<'_>> {
                 Some(self.0.as_fd())
             }
             #[cfg(windows)]
@@ -225,19 +225,11 @@ macro_rules! wasi_stream_write_impl {
             }
             async fn readable(&self) -> Result<(), Error> {
                 let (readable, _writeable) = is_read_write(&self.0)?;
-                if readable {
-                    Ok(())
-                } else {
-                    Err(Error::io())
-                }
+                if readable { Ok(()) } else { Err(Error::io()) }
             }
             async fn writable(&self) -> Result<(), Error> {
                 let (_readable, writeable) = is_read_write(&self.0)?;
-                if writeable {
-                    Ok(())
-                } else {
-                    Err(Error::io())
-                }
+                if writeable { Ok(()) } else { Err(Error::io()) }
             }
 
             async fn sock_recv<'a>(
@@ -373,7 +365,9 @@ pub fn get_fd_flags<Socketlike: AsSocketlike>(f: Socketlike) -> io::Result<crate
     // query for the non-blocking flag. We can get a sufficient approximation
     // by testing whether a zero-length `recv` appears to block.
     #[cfg(windows)]
-    match rustix::net::recv(f, &mut [], rustix::net::RecvFlags::empty()) {
+    let buf: &mut [u8] = &mut [];
+    #[cfg(windows)]
+    match rustix::net::recv(f, buf, rustix::net::RecvFlags::empty()) {
         Ok(_) => Ok(crate::file::FdFlags::empty()),
         Err(rustix::io::Errno::WOULDBLOCK) => Ok(crate::file::FdFlags::NONBLOCK),
         Err(e) => Err(e.into()),

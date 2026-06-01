@@ -1,5 +1,5 @@
 use crate::fs_calls::kernel_close;
-use crate::sys_calls::exit_syscall;
+use crate::sys_calls::exit_group_syscall;
 use crate::syscall_table::*;
 use cage::{add_cage, cagetable_clear, cagetable_init, timer::IntervalTimer, Cage, Vmmap};
 use dashmap::DashMap;
@@ -7,7 +7,7 @@ use fdtables;
 use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicI32, AtomicU64, Ordering::*};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
     EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
@@ -180,6 +180,34 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
     0
 }
 
+/// Raise the host process soft fd limit to the hard maximum. Lind supports up to 1024 cages
+/// each with up to 1024 fds, so the default soft limit (typically 1024) is too low.
+fn init_fd_limit() {
+    unsafe {
+        let mut lim = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) != 0 {
+            panic!("getrlimit failed: {}", std::io::Error::last_os_error());
+        }
+
+        lim.rlim_cur = lim.rlim_max; // raise soft to hard
+
+        if libc::setrlimit(libc::RLIMIT_NOFILE, &lim) != 0 {
+            panic!("setrlimit failed: {}", std::io::Error::last_os_error());
+        }
+    }
+}
+
+/// No-op signal handler for SIGUSR2. Its sole purpose is to interrupt
+/// blocking host syscalls (causing EINTR) so threads can re-enter wasm
+/// and notice they've been killed via epoch_kill_all.
+/// This is a host-process-level handler installed once — it is inherited
+/// by all OS threads, so it does not need per-cage installation.
+extern "C" fn noop_signal_handler(_sig: libc::c_int) {}
+
 /// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
 /// detailed error messages will be printed if set.
 ///
@@ -200,6 +228,20 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
 /// - `verbosity`: controls runtime logging verbosity.
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
+
+    // Install a no-op SIGUSR2 handler at the host-process level (once).
+    // All OS threads inherit it. epoch_kill_all sends SIGUSR2 via tkill
+    // to threads blocked in host syscalls (futex_wait, read, etc.) so
+    // they return EINTR and re-enter wasm where the epoch kill is noticed.
+    unsafe {
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = noop_signal_handler as usize;
+        sa.sa_flags = 0;
+        libc::sigemptyset(&mut sa.sa_mask);
+        libc::sigaction(libc::SIGUSR2, &sa, std::ptr::null_mut());
+    }
+
+    init_fd_limit();
 
     // init cage table
     cagetable_init();
@@ -234,6 +276,7 @@ pub fn rawposix_start(verbosity: isize) {
         main_threadid: RwLock::new(0),
         interval_timer: IntervalTimer::new(INIT_CAGEID),
         epoch_handler: DashMap::new(),
+        os_tid_map: DashMap::new(),
         signalhandler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
         sigset: AtomicU64::new(0),
@@ -241,6 +284,9 @@ pub fn rawposix_start(verbosity: isize) {
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),
         final_exit_status: RwLock::new(None),
+        exit_group_initiated: AtomicBool::new(false),
+        is_dead: AtomicBool::new(false),
+        grate_inflight: AtomicU64::new(0),
     };
 
     // Add cage to cagetable
@@ -296,20 +342,20 @@ pub fn rawposix_shutdown() {
     let exitvec = cagetable_clear();
 
     for cageid in exitvec {
-        exit_syscall(
+        exit_group_syscall(
             cageid as u64,       // target cageid
             EXIT_SUCCESS as u64, // status arg
             cageid as u64,       // status arg's cageid
             MAIN_THREADID,       // always main thread
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
         );
     }
 }

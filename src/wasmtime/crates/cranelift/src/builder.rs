@@ -4,20 +4,21 @@
 //! well as providing a function to return the default configuration to build.
 
 use crate::isa_builder::IsaBuilder;
-use anyhow::Result;
 use cranelift_codegen::{
-    isa::{self, OwnedTargetIsa},
     CodegenResult,
+    isa::{self, OwnedTargetIsa},
 };
 use std::fmt;
 use std::path;
 use std::sync::Arc;
 use target_lexicon::Triple;
+use wasmtime_environ::error::Result;
 use wasmtime_environ::{CacheStore, CompilerBuilder, Setting, Tunables};
 
 struct Builder {
     tunables: Option<Tunables>,
     inner: IsaBuilder<CodegenResult<OwnedTargetIsa>>,
+    emit_debug_checks: bool,
     linkopts: LinkOptions,
     cache_store: Option<Arc<dyn CacheStore>>,
     clif_dir: Option<path::PathBuf>,
@@ -38,14 +39,28 @@ pub struct LinkOptions {
 }
 
 pub fn builder(triple: Option<Triple>) -> Result<Box<dyn CompilerBuilder>> {
-    Ok(Box::new(Builder {
+    let mut builder = Builder {
         tunables: None,
         inner: IsaBuilder::new(triple, |triple| isa::lookup(triple).map_err(|e| e.into()))?,
         linkopts: LinkOptions::default(),
         cache_store: None,
         clif_dir: None,
         wmemcheck: false,
-    }))
+        emit_debug_checks: false,
+    };
+
+    builder.set("enable_verifier", "false").unwrap();
+    builder.set("opt_level", "speed").unwrap();
+
+    // When running under MIRI try to optimize for compile time of Wasm code
+    // itself as much as possible. Disable optimizations by default and use the
+    // fastest regalloc available to us.
+    if cfg!(miri) {
+        builder.set("opt_level", "none").unwrap();
+        builder.set("regalloc_algorithm", "single_pass").unwrap();
+    }
+
+    Ok(Box::new(builder))
 }
 
 impl CompilerBuilder for Builder {
@@ -65,16 +80,30 @@ impl CompilerBuilder for Builder {
 
     fn set(&mut self, name: &str, value: &str) -> Result<()> {
         // Special wasmtime-cranelift-only settings first
-        if name == "wasmtime_linkopt_padding_between_functions" {
-            self.linkopts.padding_between_functions = value.parse()?;
-            return Ok(());
+        match name {
+            "wasmtime_linkopt_padding_between_functions" => {
+                self.linkopts.padding_between_functions = value.parse()?;
+            }
+            "wasmtime_linkopt_force_jump_veneer" => {
+                self.linkopts.force_jump_veneers = value.parse()?;
+            }
+            "wasmtime_inlining_intra_module" => {
+                self.tunables.as_mut().unwrap().inlining_intra_module = value.parse()?;
+            }
+            "wasmtime_inlining_small_callee_size" => {
+                self.tunables.as_mut().unwrap().inlining_small_callee_size = value.parse()?;
+            }
+            "wasmtime_inlining_sum_size_threshold" => {
+                self.tunables.as_mut().unwrap().inlining_sum_size_threshold = value.parse()?;
+            }
+            "wasmtime_debug_checks" => {
+                self.emit_debug_checks = true;
+            }
+            _ => {
+                self.inner.set(name, value)?;
+            }
         }
-        if name == "wasmtime_linkopt_force_jump_veneer" {
-            self.linkopts.force_jump_veneers = value.parse()?;
-            return Ok(());
-        }
-
-        self.inner.set(name, value)
+        Ok(())
     }
 
     fn enable(&mut self, name: &str) -> Result<()> {
@@ -86,6 +115,10 @@ impl CompilerBuilder for Builder {
         Ok(())
     }
 
+    fn tunables(&self) -> Option<&Tunables> {
+        self.tunables.as_ref()
+    }
+
     fn build(&self) -> Result<Box<dyn wasmtime_environ::Compiler>> {
         let isa = self.inner.build()?;
         Ok(Box::new(crate::compiler::Compiler::new(
@@ -95,6 +128,7 @@ impl CompilerBuilder for Builder {
                 .clone(),
             isa,
             self.cache_store.clone(),
+            self.emit_debug_checks,
             self.linkopts.clone(),
             self.clif_dir.clone(),
             self.wmemcheck,

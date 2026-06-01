@@ -1,5 +1,5 @@
 use crate::bindings::filesystem::types;
-use crate::runtime::{spawn_blocking, AbortOnDropJoinHandle};
+use crate::runtime::{AbortOnDropJoinHandle, spawn_blocking};
 use crate::{HostOutputStream, StreamError, Subscribe, TrappableError};
 use anyhow::anyhow;
 use bytes::{Bytes, BytesMut};

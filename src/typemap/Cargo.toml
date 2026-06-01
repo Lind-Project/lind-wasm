@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 libc = "0.2"
-fdtables = { path = "../fdtables" }
+fdtables = { path = "../fdtables", default-features = false }
 cage = { path = "../cage" }
 sysdefs = { path = "../sysdefs" }
 

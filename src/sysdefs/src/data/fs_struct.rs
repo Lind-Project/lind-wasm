@@ -52,8 +52,8 @@ pub struct StatData {
 //R Limit for getrlimit system call
 #[repr(C)]
 pub struct Rlimit {
-    pub rlim_cur: u64,
-    pub rlim_max: u64,
+    pub rlim_cur: u32,
+    pub rlim_max: u32,
 }
 
 #[derive(Eq, PartialEq, Default, Copy, Clone, Debug)]

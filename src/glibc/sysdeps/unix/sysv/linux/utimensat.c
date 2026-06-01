@@ -21,49 +21,49 @@
 #include <sysdep.h>
 #include <time.h>
 #include <kernel-features.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
-/* Helper function defined for easy reusage of the code which calls utimensat
-   and utimensat_time64 syscall.  */
+/* Helper function defined for easy reusage of the code which calls utimensat.
+
+   Lind-specific: route through MAKE_LEGACY_SYSCALL with translated guest
+   pointers so the host (rawposix or a forwarding grate) sees host
+   addresses for both `file` and the times buffer.  Both pointers may be
+   NULL — `file == NULL` means "operate on `fd` itself" (the futimens
+   path); `tsp64 == NULL` means "set both times to now".
+
+   The cage's `struct __timespec64` is `{ i64 tv_sec; i32 tv_nsec; i32
+   _pad; }` (long is 32-bit on wasm32).  The Linux kernel utimensat
+   syscall expects `struct __kernel_timespec` = `{ i64 tv_sec; i64
+   tv_nsec; }` — tv_nsec spanning 8 bytes.  Passing the cage pointer
+   verbatim would have the host read 4 bytes of stack-uninitialized
+   __padding as the high half of tv_nsec → garbage out-of-range nsec,
+   kernel returns EINVAL.  Copy into a kernel-ABI buffer here so the
+   host syscall path sees the layout it expects.  */
 int
 __utimensat64_helper (int fd, const char *file,
                       const struct __timespec64 tsp64[2], int flags)
 {
-#ifndef __NR_utimensat_time64
-# define __NR_utimensat_time64 __NR_utimensat
-#endif
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+  uint64_t host_tsp;
 
-#ifdef __ASSUME_TIME64_SYSCALLS
-  return INLINE_SYSCALL_CALL (utimensat_time64, fd, file, &tsp64[0], flags);
-#else
-  /* For UTIME_NOW and UTIME_OMIT the value of tv_sec field is ignored.  */
-# define TS_SPECIAL(ts) \
-  ((ts).tv_nsec == UTIME_NOW || (ts).tv_nsec == UTIME_OMIT)
-
-  bool need_time64 = tsp64 != NULL
-		     && ((!TS_SPECIAL (tsp64[0])
-			  && !in_int32_t_range (tsp64[0].tv_sec))
-			 || (!TS_SPECIAL (tsp64[1])
-			     && !in_int32_t_range (tsp64[1].tv_sec)));
-  if (need_time64)
+  struct { int64_t tv_sec; int64_t tv_nsec; } kts[2];
+  if (tsp64 != NULL)
     {
-      int r = INLINE_SYSCALL_CALL (utimensat_time64, fd, file, &tsp64[0],
-				   flags);
-      if (r == 0 || errno != ENOSYS)
-	return r;
-      __set_errno (EOVERFLOW);
-      return -1;
+      kts[0].tv_sec  = tsp64[0].tv_sec;
+      kts[0].tv_nsec = tsp64[0].tv_nsec;
+      kts[1].tv_sec  = tsp64[1].tv_sec;
+      kts[1].tv_nsec = tsp64[1].tv_nsec;
+      host_tsp = TRANSLATE_GUEST_POINTER_TO_HOST (kts);
     }
+  else
+    host_tsp = 0;
 
-  struct timespec tsp32[2], *ptsp32 = NULL;
-  if (tsp64)
-    {
-      tsp32[0] = valid_timespec64_to_timespec (tsp64[0]);
-      tsp32[1] = valid_timespec64_to_timespec (tsp64[1]);
-      ptsp32 = tsp32;
-    }
-
-  return INLINE_SYSCALL_CALL (utimensat, fd, file, ptsp32, flags);
-#endif
+  return MAKE_LEGACY_SYSCALL (UTIMENSAT_SYSCALL, "syscall|utimensat",
+			      (uint64_t) fd, host_file, host_tsp,
+			      (uint64_t) flags, NOTUSED, NOTUSED,
+			      TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__utimensat64_helper)
 

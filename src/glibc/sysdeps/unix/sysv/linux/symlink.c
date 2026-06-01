@@ -16,18 +16,23 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
+#include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <sysdep.h>
 
-/* Make a link to FROM called TO.  */
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
+
 int
 __symlink (const char *from, const char *to)
 {
-#ifdef __NR_symlink
-  return INLINE_SYSCALL_CALL (symlink, from, to);
-#else
-  return INLINE_SYSCALL_CALL (symlinkat, from, AT_FDCWD, to);
-#endif
+  uint64_t host_from = TRANSLATE_GUEST_POINTER_TO_HOST(from);
+  uint64_t host_to = TRANSLATE_GUEST_POINTER_TO_HOST(to);
+
+  return MAKE_LEGACY_SYSCALL(SYMLINK_SYSCALL, "syscall|symlink",
+      host_from, host_to, NOTUSED,
+      NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__symlink, symlink)
+

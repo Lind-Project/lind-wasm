@@ -63,14 +63,25 @@ int main(void) {
     printf("2. recv on unconnected socket → ENOTCONN\n");
     close(s);
 
-    /* --- 3) ECONNREFUSED: connect to port with nobody listening --- */
-    s = socket(AF_INET, SOCK_STREAM, 0);
-    assert(s >= 0);
+    /* --- 3) ECONNREFUSED: connect to a dynamically selected closed port --- */
+    int probe = socket(AF_INET, SOCK_STREAM, 0);
+    assert(probe >= 0);
 
     struct sockaddr_in refuse = {0};
     refuse.sin_family = AF_INET;
     refuse.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    refuse.sin_port = htons(PORT_BASE); /* nobody listening here */
+    refuse.sin_port = 0; /* let the OS choose an available port */
+
+    assert(bind(probe, (struct sockaddr *)&refuse, sizeof(refuse)) == 0);
+
+    socklen_t refuse_len = sizeof(refuse);
+    assert(getsockname(probe, (struct sockaddr *)&refuse, &refuse_len) == 0);
+
+    /* Close the probe socket so the selected port has no listener. */
+    close(probe);
+
+    s = socket(AF_INET, SOCK_STREAM, 0);
+    assert(s >= 0);
 
     errno = 0;
     int ret = connect(s, (struct sockaddr *)&refuse, sizeof(refuse));

@@ -23,7 +23,7 @@
 //! # #[macro_use] extern crate target_lexicon;
 //! use cranelift_codegen::isa;
 //! use cranelift_codegen::settings::{self, Configurable};
-//! use std::str::FromStr;
+//! use core::str::FromStr;
 //! use target_lexicon::Triple;
 //!
 //! let shared_builder = settings::builder();
@@ -46,20 +46,21 @@
 use crate::dominator_tree::DominatorTree;
 pub use crate::isa::call_conv::CallConv;
 
-use crate::flowgraph;
+use crate::CodegenResult;
 use crate::ir::{self, Function, Type};
 #[cfg(feature = "unwind")]
-use crate::isa::unwind::{systemv::RegisterMappingError, UnwindInfoKind};
-use crate::machinst::{CompiledCode, CompiledCodeStencil, TextSectionBuilder};
+use crate::isa::unwind::{UnwindInfoKind, systemv::RegisterMappingError};
+use crate::machinst::{CompiledCodeStencil, TextSectionBuilder};
 use crate::settings;
 use crate::settings::Configurable;
 use crate::settings::SetResult;
-use crate::CodegenResult;
+use crate::{Reg, flowgraph};
+use alloc::string::String;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::fmt;
 use core::fmt::{Debug, Formatter};
 use cranelift_control::ControlPlane;
-use target_lexicon::{triple, Architecture, PointerWidth, Triple};
+use target_lexicon::{Architecture, PointerWidth, Triple, triple};
 
 // This module is made public here for benchmarking purposes. No guarantees are
 // made regarding API stability.
@@ -75,9 +76,17 @@ pub mod riscv64;
 #[cfg(feature = "s390x")]
 mod s390x;
 
+#[cfg(feature = "pulley")]
+mod pulley32;
+#[cfg(feature = "pulley")]
+mod pulley64;
+#[cfg(feature = "pulley")]
+mod pulley_shared;
+
 pub mod unwind;
 
 mod call_conv;
+mod winch;
 
 /// Returns a builder that can create a corresponding `TargetIsa`
 /// or `Err(LookupError::SupportDisabled)` if not enabled.
@@ -104,6 +113,12 @@ pub fn lookup(triple: Triple) -> Result<Builder, LookupError> {
         Architecture::Aarch64 { .. } => isa_builder!(aarch64, (feature = "arm64"), triple),
         Architecture::S390x { .. } => isa_builder!(s390x, (feature = "s390x"), triple),
         Architecture::Riscv64 { .. } => isa_builder!(riscv64, (feature = "riscv64"), triple),
+        Architecture::Pulley32 | Architecture::Pulley32be => {
+            isa_builder!(pulley32, (feature = "pulley"), triple)
+        }
+        Architecture::Pulley64 | Architecture::Pulley64be => {
+            isa_builder!(pulley64, (feature = "pulley"), triple)
+        }
         _ => Err(LookupError::Unsupported),
     }
 }
@@ -131,7 +146,7 @@ pub enum LookupError {
 
 // This is manually implementing Error and Display instead of using thiserror to reduce the amount
 // of dependencies used by Cranelift.
-impl std::error::Error for LookupError {}
+impl core::error::Error for LookupError {}
 
 impl fmt::Display for LookupError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -197,7 +212,7 @@ impl<T> IsaBuilder<T> {
     }
 
     /// Iterates the available settings in the builder.
-    pub fn iter(&self) -> impl Iterator<Item = settings::Setting> {
+    pub fn iter(&self) -> impl Iterator<Item = settings::Setting> + use<T> {
         self.setup.iter()
     }
 
@@ -279,6 +294,9 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
     /// Get the ISA-dependent flag values that were used to make this trait object.
     fn isa_flags(&self) -> Vec<settings::Value>;
 
+    /// Get the ISA-dependent flag values as raw bytes for hashing.
+    fn isa_flags_hash_key(&self) -> IsaFlagsHashKey<'_>;
+
     /// Get a flag indicating whether branch protection is enabled.
     fn is_branch_protection_enabled(&self) -> bool {
         false
@@ -311,7 +329,7 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
     #[cfg(feature = "unwind")]
     fn emit_unwind_info(
         &self,
-        result: &CompiledCode,
+        result: &crate::machinst::CompiledCode,
         kind: UnwindInfoKind,
     ) -> CodegenResult<Option<crate::isa::unwind::UnwindInfo>>;
 
@@ -359,6 +377,10 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
         Err(capstone::Error::UnsupportedArch)
     }
 
+    /// Return the string representation of "reg" accessed as "size" bytes.
+    /// The returned string will match the usual disassemly view of "reg".
+    fn pretty_print_reg(&self, reg: Reg, size: u8) -> String;
+
     /// Returns whether this ISA has a native fused-multiply-and-add instruction
     /// for floats.
     ///
@@ -366,9 +388,12 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
     /// not detected.
     fn has_native_fma(&self) -> bool;
 
-    /// Returns whether the CLIF `x86_blendv` instruction is implemented for
+    /// Returns whether this ISA has instructions for `ceil`, `floor`, etc.
+    fn has_round(&self) -> bool;
+
+    /// Returns whether the CLIF `blendv` instruction is implemented for
     /// this ISA for the specified type.
-    fn has_x86_blendv_lowering(&self, ty: Type) -> bool;
+    fn has_blendv_lowering(&self, ty: Type) -> bool;
 
     /// Returns whether the CLIF `x86_pshufb` instruction is implemented for
     /// this ISA.
@@ -381,7 +406,21 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
     /// Returns whether the CLIF `x86_pmaddubsw` instruction is implemented for
     /// this ISA.
     fn has_x86_pmaddubsw_lowering(&self) -> bool;
+
+    /// Returns the mode of extension used for integer arguments smaller than
+    /// the pointer width in function signatures.
+    ///
+    /// Some platform ABIs require that smaller-than-pointer-width values are
+    /// either zero or sign-extended to the full register width. This value is
+    /// propagated to the `AbiParam` value created for signatures. Note that not
+    /// all ABIs for all platforms require extension of any form, so this is
+    /// generally only necessary for the `default_call_conv`.
+    fn default_argument_extension(&self) -> ir::ArgumentExtension;
 }
+
+/// A wrapper around the ISA-dependent flags types which only implements `Hash`.
+#[derive(Hash)]
+pub struct IsaFlagsHashKey<'a>(&'a [u8]);
 
 /// Function alignment specifications as required by an ISA, returned by
 /// [`TargetIsa::function_alignment`].

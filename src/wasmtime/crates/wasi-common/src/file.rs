@@ -3,13 +3,13 @@ use bitflags::bitflags;
 use std::any::Any;
 use std::sync::Arc;
 
-#[wiggle::async_trait]
+#[async_trait::async_trait]
 pub trait WasiFile: Send + Sync {
     fn as_any(&self) -> &dyn Any;
     async fn get_filetype(&self) -> Result<FileType, Error>;
 
     #[cfg(unix)]
-    fn pollable(&self) -> Option<rustix::fd::BorrowedFd> {
+    fn pollable(&self) -> Option<rustix::fd::BorrowedFd<'_>> {
         None
     }
 

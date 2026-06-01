@@ -19,16 +19,23 @@
 #include <dlfcn.h>
 #include <ldsodefs.h>
 #include <shlib-compat.h>
+#include <dlerror.h>
+
+int __lind_dlclose(void* handle) __attribute__((
+    __import_module__("lind"),
+    __import_name__("dlclose")
+));
 
 int
 __dlclose (void *handle)
 {
-#ifdef SHARED
-  if (GLRO (dl_dlfcn_hook) != NULL)
-    return GLRO (dl_dlfcn_hook)->dlclose (handle);
-#endif
+  int result = __lind_dlclose(handle);
+  if (result < 0) {
+    __lind_dlerror_result = -result;
+    return -1;
+  }
 
-  return _dlerror_run (GLRO (dl_close), handle) ? -1 : 0;
+  return result;
 }
 versioned_symbol (libc, __dlclose, dlclose, GLIBC_2_34);
 

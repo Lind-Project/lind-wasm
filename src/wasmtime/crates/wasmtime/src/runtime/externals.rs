@@ -1,38 +1,13 @@
-use std::boxed::Box;
-
 use crate::store::StoreOpaque;
 use crate::{AsContext, Engine, ExternType, Func, Memory, SharedMemory};
 
 mod global;
 mod table;
+mod tag;
 
 pub use global::Global;
 pub use table::Table;
-
-use super::Val;
-
-#[derive(Debug)]
-pub enum OnCalledAction {
-    /// Will call the function again
-    InvokeAgain,
-    /// Will return the result of the invocation
-    Finish(std::vec::Vec<Val>),
-    /// Traps with an error
-    Trap(Box<dyn std::error::Error + Send + Sync>),
-}
-
-#[derive(Copy, Clone, PartialEq)]
-pub enum AsyncifyState {
-    Normal,
-    Unwind,
-    Rewind(i32),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct SignalAsyncifyData {
-    pub signal_handler: i32,
-    pub signo: i32,
-}
+pub use tag::Tag;
 
 // Externals
 
@@ -57,12 +32,16 @@ pub enum Extern {
     /// A WebAssembly shared memory; these are handled separately from
     /// [`Memory`].
     SharedMemory(SharedMemory),
+    /// A WebAssembly exception or control tag which can be referenced
+    /// when raising an exception or stack switching.
+    Tag(Tag),
 }
 
 impl Extern {
     /// Returns the underlying `Func`, if this external is a function.
     ///
     /// Returns `None` if this is not a function.
+    #[inline]
     pub fn into_func(self) -> Option<Func> {
         match self {
             Extern::Func(func) => Some(func),
@@ -73,6 +52,7 @@ impl Extern {
     /// Returns the underlying `Global`, if this external is a global.
     ///
     /// Returns `None` if this is not a global.
+    #[inline]
     pub fn into_global(self) -> Option<Global> {
         match self {
             Extern::Global(global) => Some(global),
@@ -83,6 +63,7 @@ impl Extern {
     /// Returns the underlying `Table`, if this external is a table.
     ///
     /// Returns `None` if this is not a table.
+    #[inline]
     pub fn into_table(self) -> Option<Table> {
         match self {
             Extern::Table(table) => Some(table),
@@ -93,6 +74,7 @@ impl Extern {
     /// Returns the underlying `Memory`, if this external is a memory.
     ///
     /// Returns `None` if this is not a memory.
+    #[inline]
     pub fn into_memory(self) -> Option<Memory> {
         match self {
             Extern::Memory(memory) => Some(memory),
@@ -104,9 +86,21 @@ impl Extern {
     /// memory.
     ///
     /// Returns `None` if this is not a shared memory.
+    #[inline]
     pub fn into_shared_memory(self) -> Option<SharedMemory> {
         match self {
             Extern::SharedMemory(memory) => Some(memory),
+            _ => None,
+        }
+    }
+
+    /// Returns the underlying `Tag`, if this external is a tag.
+    ///
+    /// Returns `None` if this is not a tag.
+    #[inline]
+    pub fn into_tag(self) -> Option<Tag> {
+        match self {
+            Extern::Tag(tag) => Some(tag),
             _ => None,
         }
     }
@@ -127,40 +121,34 @@ impl Extern {
             Extern::SharedMemory(ft) => ExternType::Memory(ft.ty()),
             Extern::Table(tt) => ExternType::Table(tt.ty(store)),
             Extern::Global(gt) => ExternType::Global(gt.ty(store)),
+            Extern::Tag(tt) => ExternType::Tag(tt.ty(store)),
         }
     }
 
-    pub(crate) unsafe fn from_wasmtime_export(
+    pub(crate) fn from_wasmtime_export(
         wasmtime_export: crate::runtime::vm::Export,
-        store: &mut StoreOpaque,
+        engine: &Engine,
     ) -> Extern {
         match wasmtime_export {
-            crate::runtime::vm::Export::Function(f) => {
-                Extern::Func(Func::from_wasmtime_function(f, store))
+            crate::runtime::vm::Export::Function(f) => Extern::Func(f),
+            crate::runtime::vm::Export::Memory(m) => Extern::Memory(m),
+            crate::runtime::vm::Export::SharedMemory(m, _) => {
+                Extern::SharedMemory(crate::SharedMemory::from_raw(m, engine.clone()))
             }
-            crate::runtime::vm::Export::Memory(m) => {
-                if m.memory.memory.shared {
-                    Extern::SharedMemory(SharedMemory::from_wasmtime_memory(m, store))
-                } else {
-                    Extern::Memory(Memory::from_wasmtime_memory(m, store))
-                }
-            }
-            crate::runtime::vm::Export::Global(g) => {
-                Extern::Global(Global::from_wasmtime_global(g, store))
-            }
-            crate::runtime::vm::Export::Table(t) => {
-                Extern::Table(Table::from_wasmtime_table(t, store))
-            }
+            crate::runtime::vm::Export::Global(g) => Extern::Global(g),
+            crate::runtime::vm::Export::Table(t) => Extern::Table(t),
+            crate::runtime::vm::Export::Tag(t) => Extern::Tag(t),
         }
     }
 
     pub(crate) fn comes_from_same_store(&self, store: &StoreOpaque) -> bool {
         match self {
             Extern::Func(f) => f.comes_from_same_store(store),
-            Extern::Global(g) => store.store_data().contains(g.0),
+            Extern::Global(g) => g.comes_from_same_store(store),
             Extern::Memory(m) => m.comes_from_same_store(store),
             Extern::SharedMemory(m) => Engine::same(m.engine(), store.engine()),
-            Extern::Table(t) => store.store_data().contains(t.0),
+            Extern::Table(t) => t.comes_from_same_store(store),
+            Extern::Tag(t) => t.comes_from_same_store(store),
         }
     }
 }
@@ -192,6 +180,12 @@ impl From<SharedMemory> for Extern {
 impl From<Table> for Extern {
     fn from(r: Table) -> Self {
         Extern::Table(r)
+    }
+}
+
+impl From<Tag> for Extern {
+    fn from(t: Tag) -> Self {
+        Extern::Tag(t)
     }
 }
 
@@ -255,9 +249,21 @@ impl<'instance> Export<'instance> {
         self.definition.into_memory()
     }
 
+    /// Consume this `Export` and return the contained `SharedMemory`, if it's
+    /// a shared memory, or `None` otherwise.
+    pub fn into_shared_memory(self) -> Option<SharedMemory> {
+        self.definition.into_shared_memory()
+    }
+
     /// Consume this `Export` and return the contained `Global`, if it's a global,
     /// or `None` otherwise.
     pub fn into_global(self) -> Option<Global> {
         self.definition.into_global()
+    }
+
+    /// Consume this `Export` and return the contained `Tag`, if it's a tag,
+    /// or `None` otherwise.
+    pub fn into_tag(self) -> Option<Tag> {
+        self.definition.into_tag()
     }
 }

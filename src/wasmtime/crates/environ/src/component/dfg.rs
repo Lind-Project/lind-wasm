@@ -28,18 +28,19 @@
 //! fused adapters, what arguments make their way to core wasm modules, etc.
 
 use crate::component::*;
+use crate::error::Result;
 use crate::prelude::*;
-use crate::{EntityIndex, EntityRef, PrimaryMap, WasmValType};
-use anyhow::Result;
+use crate::{EntityIndex, EntityRef, ModuleInternedTypeIndex, PrimaryMap, WasmValType};
+use cranelift_entity::packed_option::PackedOption;
 use indexmap::IndexMap;
+use info::LinearMemoryOptions;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::Index;
-use wasmparser::types::ComponentCoreModuleTypeId;
-use wasmtime_types::ModuleInternedTypeIndex;
+use wasmparser::component_types::ComponentCoreModuleTypeId;
 
+/// High-level representation of a component as a "data-flow graph".
 #[derive(Default)]
-#[allow(missing_docs)]
 pub struct ComponentDfg {
     /// Same as `Component::import_types`
     pub import_types: PrimaryMap<ImportIndex, (String, TypeDef)>,
@@ -54,15 +55,25 @@ pub struct ComponentDfg {
     /// compiled by Cranelift.
     pub trampolines: Intern<TrampolineIndex, (ModuleInternedTypeIndex, Trampoline)>,
 
+    /// A map from `UnsafeIntrinsic::index()` to that intrinsic's
+    /// module-interned type.
+    pub unsafe_intrinsics: [PackedOption<ModuleInternedTypeIndex>; UnsafeIntrinsic::len() as usize],
+
     /// Know reallocation functions which are used by `lowerings` (e.g. will be
     /// used by the host)
     pub reallocs: Intern<ReallocId, CoreDef>,
 
+    /// Same as `reallocs`, but for async-lifted functions.
+    pub callbacks: Intern<CallbackId, CoreDef>,
+
     /// Same as `reallocs`, but for post-return.
     pub post_returns: Intern<PostReturnId, CoreDef>,
 
-    /// Same as `reallocs`, but for post-return.
+    /// Same as `reallocs`, but for memories.
     pub memories: Intern<MemoryId, CoreExport<MemoryIndex>>,
+
+    /// Same as `reallocs`, but for tables.
+    pub tables: Intern<TableId, CoreExport<TableIndex>>,
 
     /// Metadata about identified fused adapters.
     ///
@@ -87,7 +98,7 @@ pub struct ComponentDfg {
     ///
     /// This map is not filled in on the initial creation of a `ComponentDfg`.
     /// Instead these modules are filled in by the `inline::adapt` phase where
-    /// adapter modules are identifed and filled in here.
+    /// adapter modules are identified and filled in here.
     ///
     /// The payload here is the static module index representing the core wasm
     /// adapter module that was generated as well as the arguments to the
@@ -104,7 +115,7 @@ pub struct ComponentDfg {
     /// The values here are the module that the adapter is present within along
     /// as the core wasm index of the export corresponding to the lowered
     /// version of the adapter.
-    pub adapter_paritionings: PrimaryMap<AdapterId, (AdapterModuleId, EntityIndex)>,
+    pub adapter_partitionings: PrimaryMap<AdapterId, (AdapterModuleId, EntityIndex)>,
 
     /// Defined resources in this component sorted by index with metadata about
     /// each resource.
@@ -118,10 +129,15 @@ pub struct ComponentDfg {
     /// with what the corresponding runtime import is.
     pub imported_resources: PrimaryMap<ResourceIndex, RuntimeImportIndex>,
 
-    /// The total number of resource tables that will be used by this component,
-    /// currently the number of unique `TypeResourceTableIndex` allocations for
-    /// this component.
-    pub num_resource_tables: usize,
+    /// The total number of future tables that will be used by this component.
+    pub num_future_tables: usize,
+
+    /// The total number of stream tables that will be used by this component.
+    pub num_stream_tables: usize,
+
+    /// The total number of error-context tables that will be used by this
+    /// component.
+    pub num_error_context_tables: usize,
 
     /// An ordered list of side effects induced by instantiating this component.
     ///
@@ -130,6 +146,10 @@ pub struct ComponentDfg {
     /// of this component by idnicating what order operations should be
     /// performed during instantiation.
     pub side_effects: Vec<SideEffect>,
+
+    /// Interned map of id-to-`CanonicalOptions`, or all sets-of-options used by
+    /// this component.
+    pub options: Intern<OptionsId, CanonicalOptions>,
 }
 
 /// Possible side effects that are possible with instantiating this component.
@@ -140,7 +160,7 @@ pub enum SideEffect {
     /// as traps and the core wasm `start` function which may call component
     /// imports. Instantiation order from the original component must be done in
     /// the same order.
-    Instance(InstanceId),
+    Instance(InstanceId, RuntimeComponentInstanceIndex),
 
     /// A resource was declared in this component.
     ///
@@ -151,10 +171,44 @@ pub enum SideEffect {
     Resource(DefinedResourceIndex),
 }
 
+/// A sound approximation of a particular module's set of instantiations.
+///
+/// This type forms a simple lattice that we can use in static analyses that in
+/// turn let us specialize a module's compilation to exactly the imports it is
+/// given.
+#[derive(Clone, Copy, Default)]
+pub enum AbstractInstantiations<'a> {
+    /// The associated module is instantiated many times.
+    Many,
+
+    /// The module is instantiated exactly once, with the given definitions as
+    /// arguments to that instantiation.
+    One(&'a [info::CoreDef]),
+
+    /// The module is never instantiated.
+    #[default]
+    None,
+}
+
+impl AbstractInstantiations<'_> {
+    /// Join two facts about a particular module's instantiation together.
+    ///
+    /// This is the least-upper-bound operation on the lattice.
+    pub fn join(&mut self, other: Self) {
+        *self = match (*self, other) {
+            (Self::Many, _) | (_, Self::Many) => Self::Many,
+            (Self::One(a), Self::One(b)) if a == b => Self::One(a),
+            (Self::One(_), Self::One(_)) => Self::Many,
+            (Self::One(a), Self::None) | (Self::None, Self::One(a)) => Self::One(a),
+            (Self::None, Self::None) => Self::None,
+        }
+    }
+}
+
 macro_rules! id {
     ($(pub struct $name:ident(u32);)*) => ($(
         #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-        #[allow(missing_docs)]
+        #[expect(missing_docs, reason = "tedious to document")]
         pub struct $name(u32);
         cranelift_entity::entity_impl!($name);
     )*)
@@ -163,14 +217,17 @@ macro_rules! id {
 id! {
     pub struct InstanceId(u32);
     pub struct MemoryId(u32);
+    pub struct TableId(u32);
     pub struct ReallocId(u32);
+    pub struct CallbackId(u32);
     pub struct AdapterId(u32);
     pub struct PostReturnId(u32);
     pub struct AdapterModuleId(u32);
+    pub struct OptionsId(u32);
 }
 
 /// Same as `info::InstantiateModule`
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "tedious to document variants")]
 pub enum Instance {
     Static(StaticModuleIndex, Box<[CoreDef]>),
     Import(
@@ -180,12 +237,12 @@ pub enum Instance {
 }
 
 /// Same as `info::Export`
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "tedious to document variants")]
 pub enum Export {
     LiftedFunction {
         ty: TypeFuncIndex,
         func: CoreDef,
-        options: CanonicalOptions,
+        options: OptionsId,
     },
     ModuleStatic {
         ty: ComponentCoreModuleTypeId,
@@ -204,15 +261,18 @@ pub enum Export {
 
 /// Same as `info::CoreDef`, except has an extra `Adapter` variant.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "tedious to document variants")]
 pub enum CoreDef {
     Export(CoreExport<EntityIndex>),
     InstanceFlags(RuntimeComponentInstanceIndex),
     Trampoline(TrampolineIndex),
+    UnsafeIntrinsic(ModuleInternedTypeIndex, UnsafeIntrinsic),
+    TaskMayBlock,
+
     /// This is a special variant not present in `info::CoreDef` which
     /// represents that this definition refers to a fused adapter function. This
     /// adapter is fully processed after the initial translation and
-    /// identificatino of adapters.
+    /// identification of adapters.
     ///
     /// During translation into `info::CoreDef` this variant is erased and
     /// replaced by `info::CoreDef::Export` since adapters are always
@@ -231,14 +291,14 @@ where
 
 /// Same as `info::CoreExport`
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub struct CoreExport<T> {
     pub instance: InstanceId,
     pub item: ExportItem<T>,
 }
 
 impl<T> CoreExport<T> {
-    #[allow(missing_docs)]
+    #[expect(missing_docs, reason = "self-describing function")]
     pub fn map_index<U>(self, f: impl FnOnce(T) -> U) -> CoreExport<U> {
         CoreExport {
             instance: self.instance,
@@ -252,11 +312,11 @@ impl<T> CoreExport<T> {
 
 /// Same as `info::Trampoline`
 #[derive(Clone, PartialEq, Eq, Hash)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub enum Trampoline {
     LowerImport {
         import: RuntimeImportIndex,
-        options: CanonicalOptions,
+        options: OptionsId,
         lower_ty: TypeFuncIndex,
     },
     Transcoder {
@@ -266,29 +326,232 @@ pub enum Trampoline {
         to: MemoryId,
         to64: bool,
     },
-    AlwaysTrap,
-    ResourceNew(TypeResourceTableIndex),
-    ResourceRep(TypeResourceTableIndex),
-    ResourceDrop(TypeResourceTableIndex),
+    ResourceNew {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeResourceTableIndex,
+    },
+    ResourceRep {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeResourceTableIndex,
+    },
+    ResourceDrop {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeResourceTableIndex,
+    },
+    BackpressureInc {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    BackpressureDec {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    TaskReturn {
+        instance: RuntimeComponentInstanceIndex,
+        results: TypeTupleIndex,
+        options: OptionsId,
+    },
+    TaskCancel {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    WaitableSetNew {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    WaitableSetWait {
+        instance: RuntimeComponentInstanceIndex,
+        options: OptionsId,
+    },
+    WaitableSetPoll {
+        instance: RuntimeComponentInstanceIndex,
+        options: OptionsId,
+    },
+    WaitableSetDrop {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    WaitableJoin {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    ThreadYield {
+        instance: RuntimeComponentInstanceIndex,
+        cancellable: bool,
+    },
+    SubtaskDrop {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    SubtaskCancel {
+        instance: RuntimeComponentInstanceIndex,
+        async_: bool,
+    },
+    StreamNew {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+    },
+    StreamRead {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+        options: OptionsId,
+    },
+    StreamWrite {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+        options: OptionsId,
+    },
+    StreamCancelRead {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+        async_: bool,
+    },
+    StreamCancelWrite {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+        async_: bool,
+    },
+    StreamDropReadable {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+    },
+    StreamDropWritable {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+    },
+    FutureNew {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+    },
+    FutureRead {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+        options: OptionsId,
+    },
+    FutureWrite {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+        options: OptionsId,
+    },
+    FutureCancelRead {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+        async_: bool,
+    },
+    FutureCancelWrite {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+        async_: bool,
+    },
+    FutureDropReadable {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+    },
+    FutureDropWritable {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+    },
+    ErrorContextNew {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeComponentLocalErrorContextTableIndex,
+        options: OptionsId,
+    },
+    ErrorContextDebugMessage {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeComponentLocalErrorContextTableIndex,
+        options: OptionsId,
+    },
+    ErrorContextDrop {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeComponentLocalErrorContextTableIndex,
+    },
     ResourceTransferOwn,
     ResourceTransferBorrow,
-    ResourceEnterCall,
-    ResourceExitCall,
+    PrepareCall {
+        memory: Option<MemoryId>,
+    },
+    SyncStartCall {
+        callback: Option<CallbackId>,
+    },
+    AsyncStartCall {
+        callback: Option<CallbackId>,
+        post_return: Option<PostReturnId>,
+    },
+    FutureTransfer,
+    StreamTransfer,
+    ErrorContextTransfer,
+    Trap,
+    EnterSyncCall,
+    ExitSyncCall,
+    ContextGet {
+        instance: RuntimeComponentInstanceIndex,
+        slot: u32,
+    },
+    ContextSet {
+        instance: RuntimeComponentInstanceIndex,
+        slot: u32,
+    },
+    ThreadIndex,
+    ThreadNewIndirect {
+        instance: RuntimeComponentInstanceIndex,
+        start_func_ty_idx: ComponentTypeIndex,
+        start_func_table_id: TableId,
+    },
+    ThreadSuspendToSuspended {
+        instance: RuntimeComponentInstanceIndex,
+        cancellable: bool,
+    },
+    ThreadSuspend {
+        instance: RuntimeComponentInstanceIndex,
+        cancellable: bool,
+    },
+    ThreadSuspendTo {
+        instance: RuntimeComponentInstanceIndex,
+        cancellable: bool,
+    },
+    ThreadUnsuspend {
+        instance: RuntimeComponentInstanceIndex,
+    },
+    ThreadYieldToSuspended {
+        instance: RuntimeComponentInstanceIndex,
+        cancellable: bool,
+    },
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[expect(missing_docs, reason = "self-describing fields")]
+pub struct FutureInfo {
+    pub instance: RuntimeComponentInstanceIndex,
+    pub payload_type: Option<InterfaceType>,
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[expect(missing_docs, reason = "self-describing fields")]
+pub struct StreamInfo {
+    pub instance: RuntimeComponentInstanceIndex,
+    pub payload_type: InterfaceType,
+}
+
+/// Same as `info::CanonicalOptionsDataModel`.
+#[derive(Clone, Hash, Eq, PartialEq)]
+#[expect(missing_docs, reason = "self-describing fields")]
+pub enum CanonicalOptionsDataModel {
+    Gc {},
+    LinearMemory {
+        memory: Option<MemoryId>,
+        realloc: Option<ReallocId>,
+    },
 }
 
 /// Same as `info::CanonicalOptions`
 #[derive(Clone, Hash, Eq, PartialEq)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub struct CanonicalOptions {
     pub instance: RuntimeComponentInstanceIndex,
     pub string_encoding: StringEncoding,
-    pub memory: Option<MemoryId>,
-    pub realloc: Option<ReallocId>,
+    pub callback: Option<CallbackId>,
     pub post_return: Option<PostReturnId>,
+    pub async_: bool,
+    pub cancellable: bool,
+    pub core_type: ModuleInternedTypeIndex,
+    pub data_model: CanonicalOptionsDataModel,
 }
 
 /// Same as `info::Resource`
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing fields")]
 pub struct Resource {
     pub rep: WasmValType,
     pub dtor: Option<CoreDef>,
@@ -349,7 +612,7 @@ impl<K: EntityRef, V> Default for Intern<K, V> {
 
 impl ComponentDfg {
     /// Consumes the intermediate `ComponentDfg` to produce a final `Component`
-    /// with a linear innitializer list.
+    /// with a linear initializer list.
     pub fn finish(
         self,
         wasmtime_types: &mut ComponentTypesBuilder,
@@ -359,13 +622,18 @@ impl ComponentDfg {
             dfg: &self,
             initializers: Vec::new(),
             runtime_memories: Default::default(),
+            runtime_tables: Default::default(),
             runtime_post_return: Default::default(),
             runtime_reallocs: Default::default(),
+            runtime_callbacks: Default::default(),
             runtime_instances: Default::default(),
             num_lowerings: 0,
+            unsafe_intrinsics: Default::default(),
             trampolines: Default::default(),
             trampoline_defs: Default::default(),
             trampoline_map: Default::default(),
+            options: Default::default(),
+            options_map: Default::default(),
         };
 
         // Handle all side effects of this component in the order that they're
@@ -395,17 +663,23 @@ impl ComponentDfg {
                 exports,
                 export_items,
                 initializers: linearize.initializers,
+                unsafe_intrinsics: linearize.unsafe_intrinsics,
                 trampolines: linearize.trampolines,
                 num_lowerings: linearize.num_lowerings,
+                options: linearize.options,
 
                 num_runtime_memories: linearize.runtime_memories.len() as u32,
+                num_runtime_tables: linearize.runtime_tables.len() as u32,
                 num_runtime_post_returns: linearize.runtime_post_return.len() as u32,
                 num_runtime_reallocs: linearize.runtime_reallocs.len() as u32,
+                num_runtime_callbacks: linearize.runtime_callbacks.len() as u32,
                 num_runtime_instances: linearize.runtime_instances.len() as u32,
                 imports: self.imports,
                 import_types: self.import_types,
                 num_runtime_component_instances: self.num_runtime_component_instances,
-                num_resource_tables: self.num_resource_tables,
+                num_future_tables: self.num_future_tables,
+                num_stream_tables: self.num_stream_tables,
+                num_error_context_tables: self.num_error_context_tables,
                 num_resources: (self.resources.len() + self.imported_resources.len()) as u32,
                 imported_resources: self.imported_resources,
                 defined_resource_instances: self
@@ -427,13 +701,18 @@ impl ComponentDfg {
 struct LinearizeDfg<'a> {
     dfg: &'a ComponentDfg,
     initializers: Vec<GlobalInitializer>,
+    unsafe_intrinsics: [PackedOption<ModuleInternedTypeIndex>; UnsafeIntrinsic::len() as usize],
     trampolines: PrimaryMap<TrampolineIndex, ModuleInternedTypeIndex>,
     trampoline_defs: PrimaryMap<TrampolineIndex, info::Trampoline>,
+    options: PrimaryMap<OptionsIndex, info::CanonicalOptions>,
     trampoline_map: HashMap<TrampolineIndex, TrampolineIndex>,
     runtime_memories: HashMap<MemoryId, RuntimeMemoryIndex>,
+    runtime_tables: HashMap<TableId, RuntimeTableIndex>,
     runtime_reallocs: HashMap<ReallocId, RuntimeReallocIndex>,
+    runtime_callbacks: HashMap<CallbackId, RuntimeCallbackIndex>,
     runtime_post_return: HashMap<PostReturnId, RuntimePostReturnIndex>,
     runtime_instances: HashMap<RuntimeInstance, RuntimeInstanceIndex>,
+    options_map: HashMap<OptionsId, OptionsIndex>,
     num_lowerings: u32,
 }
 
@@ -446,8 +725,8 @@ enum RuntimeInstance {
 impl LinearizeDfg<'_> {
     fn side_effect(&mut self, effect: &SideEffect) {
         match effect {
-            SideEffect::Instance(i) => {
-                self.instantiate(*i, &self.dfg.instances[*i]);
+            SideEffect::Instance(i, ci) => {
+                self.instantiate(*i, &self.dfg.instances[*i], *ci);
             }
             SideEffect::Resource(i) => {
                 self.resource(*i, &self.dfg.resources[*i]);
@@ -455,7 +734,12 @@ impl LinearizeDfg<'_> {
         }
     }
 
-    fn instantiate(&mut self, instance: InstanceId, args: &Instance) {
+    fn instantiate(
+        &mut self,
+        instance: InstanceId,
+        args: &Instance,
+        component_instance: RuntimeComponentInstanceIndex,
+    ) {
         log::trace!("creating instance {instance:?}");
         let instantiation = match args {
             Instance::Static(index, args) => InstantiateModule::Static(
@@ -476,8 +760,10 @@ impl LinearizeDfg<'_> {
             ),
         };
         let index = RuntimeInstanceIndex::new(self.runtime_instances.len());
-        self.initializers
-            .push(GlobalInitializer::InstantiateModule(instantiation));
+        self.initializers.push(GlobalInitializer::InstantiateModule(
+            instantiation,
+            Some(component_instance),
+        ));
         let prev = self
             .runtime_instances
             .insert(RuntimeInstance::Normal(instance), index);
@@ -505,7 +791,7 @@ impl LinearizeDfg<'_> {
         let item = match export {
             Export::LiftedFunction { ty, func, options } => {
                 let func = self.core_def(func);
-                let options = self.options(options);
+                let options = self.options(*options);
                 info::Export::LiftedFunction {
                     ty: *ty,
                     func,
@@ -537,17 +823,38 @@ impl LinearizeDfg<'_> {
         Ok(items.push(item))
     }
 
-    fn options(&mut self, options: &CanonicalOptions) -> info::CanonicalOptions {
-        let memory = options.memory.map(|mem| self.runtime_memory(mem));
-        let realloc = options.realloc.map(|mem| self.runtime_realloc(mem));
+    fn options(&mut self, options: OptionsId) -> OptionsIndex {
+        self.intern_no_init(
+            options,
+            |me| &mut me.options_map,
+            |me, options| me.convert_options(options),
+        )
+    }
+
+    fn convert_options(&mut self, options: OptionsId) -> OptionsIndex {
+        let options = &self.dfg.options[options];
+        let data_model = match options.data_model {
+            CanonicalOptionsDataModel::Gc {} => info::CanonicalOptionsDataModel::Gc {},
+            CanonicalOptionsDataModel::LinearMemory { memory, realloc } => {
+                info::CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                    memory: memory.map(|mem| self.runtime_memory(mem)),
+                    realloc: realloc.map(|mem| self.runtime_realloc(mem)),
+                })
+            }
+        };
+        let callback = options.callback.map(|mem| self.runtime_callback(mem));
         let post_return = options.post_return.map(|mem| self.runtime_post_return(mem));
-        info::CanonicalOptions {
+        let options = info::CanonicalOptions {
             instance: options.instance,
             string_encoding: options.string_encoding,
-            memory,
-            realloc,
+            callback,
             post_return,
-        }
+            async_: options.async_,
+            cancellable: options.cancellable,
+            core_type: options.core_type,
+            data_model,
+        };
+        self.options.push(options)
     }
 
     fn runtime_memory(&mut self, mem: MemoryId) -> RuntimeMemoryIndex {
@@ -559,12 +866,30 @@ impl LinearizeDfg<'_> {
         )
     }
 
+    fn runtime_table(&mut self, table: TableId) -> RuntimeTableIndex {
+        self.intern(
+            table,
+            |me| &mut me.runtime_tables,
+            |me, table| me.core_export(&me.dfg.tables[table]),
+            |index, export| GlobalInitializer::ExtractTable(ExtractTable { index, export }),
+        )
+    }
+
     fn runtime_realloc(&mut self, realloc: ReallocId) -> RuntimeReallocIndex {
         self.intern(
             realloc,
             |me| &mut me.runtime_reallocs,
             |me, realloc| me.core_def(&me.dfg.reallocs[realloc]),
             |index, def| GlobalInitializer::ExtractRealloc(ExtractRealloc { index, def }),
+        )
+    }
+
+    fn runtime_callback(&mut self, callback: CallbackId) -> RuntimeCallbackIndex {
+        self.intern(
+            callback,
+            |me| &mut me.runtime_callbacks,
+            |me, callback| me.core_def(&me.dfg.callbacks[callback]),
+            |index, def| GlobalInitializer::ExtractCallback(ExtractCallback { index, def }),
         )
     }
 
@@ -583,6 +908,14 @@ impl LinearizeDfg<'_> {
             CoreDef::InstanceFlags(i) => info::CoreDef::InstanceFlags(*i),
             CoreDef::Adapter(id) => info::CoreDef::Export(self.adapter(*id)),
             CoreDef::Trampoline(index) => info::CoreDef::Trampoline(self.trampoline(*index)),
+            CoreDef::UnsafeIntrinsic(ty, i) => {
+                let index = usize::try_from(i.index()).unwrap();
+                if self.unsafe_intrinsics[index].is_none() {
+                    self.unsafe_intrinsics[index] = Some(*ty).into();
+                }
+                info::CoreDef::UnsafeIntrinsic(*i)
+            }
+            CoreDef::TaskMayBlock => info::CoreDef::TaskMayBlock,
         }
     }
 
@@ -605,7 +938,7 @@ impl LinearizeDfg<'_> {
                 });
                 info::Trampoline::LowerImport {
                     index,
-                    options: self.options(options),
+                    options: self.options(*options),
                     lower_ty: *lower_ty,
                 }
             }
@@ -622,14 +955,267 @@ impl LinearizeDfg<'_> {
                 to: self.runtime_memory(*to),
                 to64: *to64,
             },
-            Trampoline::AlwaysTrap => info::Trampoline::AlwaysTrap,
-            Trampoline::ResourceNew(ty) => info::Trampoline::ResourceNew(*ty),
-            Trampoline::ResourceDrop(ty) => info::Trampoline::ResourceDrop(*ty),
-            Trampoline::ResourceRep(ty) => info::Trampoline::ResourceRep(*ty),
+            Trampoline::ResourceNew { instance, ty } => info::Trampoline::ResourceNew {
+                instance: *instance,
+                ty: *ty,
+            },
+            Trampoline::ResourceDrop { instance, ty } => info::Trampoline::ResourceDrop {
+                instance: *instance,
+                ty: *ty,
+            },
+            Trampoline::ResourceRep { instance, ty } => info::Trampoline::ResourceRep {
+                instance: *instance,
+                ty: *ty,
+            },
+            Trampoline::BackpressureInc { instance } => info::Trampoline::BackpressureInc {
+                instance: *instance,
+            },
+            Trampoline::BackpressureDec { instance } => info::Trampoline::BackpressureDec {
+                instance: *instance,
+            },
+            Trampoline::TaskReturn {
+                instance,
+                results,
+                options,
+            } => info::Trampoline::TaskReturn {
+                instance: *instance,
+                results: *results,
+                options: self.options(*options),
+            },
+            Trampoline::TaskCancel { instance } => info::Trampoline::TaskCancel {
+                instance: *instance,
+            },
+            Trampoline::WaitableSetNew { instance } => info::Trampoline::WaitableSetNew {
+                instance: *instance,
+            },
+            Trampoline::WaitableSetWait { instance, options } => {
+                info::Trampoline::WaitableSetWait {
+                    instance: *instance,
+                    options: self.options(*options),
+                }
+            }
+            Trampoline::WaitableSetPoll { instance, options } => {
+                info::Trampoline::WaitableSetPoll {
+                    instance: *instance,
+                    options: self.options(*options),
+                }
+            }
+            Trampoline::WaitableSetDrop { instance } => info::Trampoline::WaitableSetDrop {
+                instance: *instance,
+            },
+            Trampoline::WaitableJoin { instance } => info::Trampoline::WaitableJoin {
+                instance: *instance,
+            },
+            Trampoline::ThreadYield {
+                instance,
+                cancellable,
+            } => info::Trampoline::ThreadYield {
+                instance: *instance,
+                cancellable: *cancellable,
+            },
+            Trampoline::SubtaskDrop { instance } => info::Trampoline::SubtaskDrop {
+                instance: *instance,
+            },
+            Trampoline::SubtaskCancel { instance, async_ } => info::Trampoline::SubtaskCancel {
+                instance: *instance,
+                async_: *async_,
+            },
+            Trampoline::StreamNew { instance, ty } => info::Trampoline::StreamNew {
+                instance: *instance,
+                ty: *ty,
+            },
+            Trampoline::StreamRead {
+                instance,
+                ty,
+                options,
+            } => info::Trampoline::StreamRead {
+                instance: *instance,
+                ty: *ty,
+                options: self.options(*options),
+            },
+            Trampoline::StreamWrite {
+                instance,
+                ty,
+                options,
+            } => info::Trampoline::StreamWrite {
+                instance: *instance,
+                ty: *ty,
+                options: self.options(*options),
+            },
+            Trampoline::StreamCancelRead {
+                instance,
+                ty,
+                async_,
+            } => info::Trampoline::StreamCancelRead {
+                instance: *instance,
+                ty: *ty,
+                async_: *async_,
+            },
+            Trampoline::StreamCancelWrite {
+                instance,
+                ty,
+                async_,
+            } => info::Trampoline::StreamCancelWrite {
+                instance: *instance,
+                ty: *ty,
+                async_: *async_,
+            },
+            Trampoline::StreamDropReadable { instance, ty } => {
+                info::Trampoline::StreamDropReadable {
+                    instance: *instance,
+                    ty: *ty,
+                }
+            }
+            Trampoline::StreamDropWritable { instance, ty } => {
+                info::Trampoline::StreamDropWritable {
+                    instance: *instance,
+                    ty: *ty,
+                }
+            }
+            Trampoline::FutureNew { instance, ty } => info::Trampoline::FutureNew {
+                instance: *instance,
+                ty: *ty,
+            },
+            Trampoline::FutureRead {
+                instance,
+                ty,
+                options,
+            } => info::Trampoline::FutureRead {
+                instance: *instance,
+                ty: *ty,
+                options: self.options(*options),
+            },
+            Trampoline::FutureWrite {
+                instance,
+                ty,
+                options,
+            } => info::Trampoline::FutureWrite {
+                instance: *instance,
+                ty: *ty,
+                options: self.options(*options),
+            },
+            Trampoline::FutureCancelRead {
+                instance,
+                ty,
+                async_,
+            } => info::Trampoline::FutureCancelRead {
+                instance: *instance,
+                ty: *ty,
+                async_: *async_,
+            },
+            Trampoline::FutureCancelWrite {
+                instance,
+                ty,
+                async_,
+            } => info::Trampoline::FutureCancelWrite {
+                instance: *instance,
+                ty: *ty,
+                async_: *async_,
+            },
+            Trampoline::FutureDropReadable { instance, ty } => {
+                info::Trampoline::FutureDropReadable {
+                    instance: *instance,
+                    ty: *ty,
+                }
+            }
+            Trampoline::FutureDropWritable { instance, ty } => {
+                info::Trampoline::FutureDropWritable {
+                    instance: *instance,
+                    ty: *ty,
+                }
+            }
+            Trampoline::ErrorContextNew {
+                instance,
+                ty,
+                options,
+            } => info::Trampoline::ErrorContextNew {
+                instance: *instance,
+                ty: *ty,
+                options: self.options(*options),
+            },
+            Trampoline::ErrorContextDebugMessage {
+                instance,
+                ty,
+                options,
+            } => info::Trampoline::ErrorContextDebugMessage {
+                instance: *instance,
+                ty: *ty,
+                options: self.options(*options),
+            },
+            Trampoline::ErrorContextDrop { instance, ty } => info::Trampoline::ErrorContextDrop {
+                instance: *instance,
+                ty: *ty,
+            },
             Trampoline::ResourceTransferOwn => info::Trampoline::ResourceTransferOwn,
             Trampoline::ResourceTransferBorrow => info::Trampoline::ResourceTransferBorrow,
-            Trampoline::ResourceEnterCall => info::Trampoline::ResourceEnterCall,
-            Trampoline::ResourceExitCall => info::Trampoline::ResourceExitCall,
+            Trampoline::PrepareCall { memory } => info::Trampoline::PrepareCall {
+                memory: memory.map(|v| self.runtime_memory(v)),
+            },
+            Trampoline::SyncStartCall { callback } => info::Trampoline::SyncStartCall {
+                callback: callback.map(|v| self.runtime_callback(v)),
+            },
+            Trampoline::AsyncStartCall {
+                callback,
+                post_return,
+            } => info::Trampoline::AsyncStartCall {
+                callback: callback.map(|v| self.runtime_callback(v)),
+                post_return: post_return.map(|v| self.runtime_post_return(v)),
+            },
+            Trampoline::FutureTransfer => info::Trampoline::FutureTransfer,
+            Trampoline::StreamTransfer => info::Trampoline::StreamTransfer,
+            Trampoline::ErrorContextTransfer => info::Trampoline::ErrorContextTransfer,
+            Trampoline::Trap => info::Trampoline::Trap,
+            Trampoline::EnterSyncCall => info::Trampoline::EnterSyncCall,
+            Trampoline::ExitSyncCall => info::Trampoline::ExitSyncCall,
+            Trampoline::ContextGet { instance, slot } => info::Trampoline::ContextGet {
+                instance: *instance,
+                slot: *slot,
+            },
+            Trampoline::ContextSet { instance, slot } => info::Trampoline::ContextSet {
+                instance: *instance,
+                slot: *slot,
+            },
+            Trampoline::ThreadIndex => info::Trampoline::ThreadIndex,
+            Trampoline::ThreadNewIndirect {
+                instance,
+                start_func_ty_idx,
+                start_func_table_id,
+            } => info::Trampoline::ThreadNewIndirect {
+                instance: *instance,
+                start_func_ty_idx: *start_func_ty_idx,
+                start_func_table_idx: self.runtime_table(*start_func_table_id),
+            },
+            Trampoline::ThreadSuspendToSuspended {
+                instance,
+                cancellable,
+            } => info::Trampoline::ThreadSuspendToSuspended {
+                instance: *instance,
+                cancellable: *cancellable,
+            },
+            Trampoline::ThreadSuspendTo {
+                instance,
+                cancellable,
+            } => info::Trampoline::ThreadSuspendTo {
+                instance: *instance,
+                cancellable: *cancellable,
+            },
+            Trampoline::ThreadSuspend {
+                instance,
+                cancellable,
+            } => info::Trampoline::ThreadSuspend {
+                instance: *instance,
+                cancellable: *cancellable,
+            },
+            Trampoline::ThreadUnsuspend { instance } => info::Trampoline::ThreadUnsuspend {
+                instance: *instance,
+            },
+            Trampoline::ThreadYieldToSuspended {
+                instance,
+                cancellable,
+            } => info::Trampoline::ThreadYieldToSuspended {
+                instance: *instance,
+                cancellable: *cancellable,
+            },
         };
         let i1 = self.trampolines.push(*signature);
         let i2 = self.trampoline_defs.push(trampoline);
@@ -651,7 +1237,7 @@ impl LinearizeDfg<'_> {
     }
 
     fn adapter(&mut self, adapter: AdapterId) -> info::CoreExport<EntityIndex> {
-        let (adapter_module, entity_index) = self.dfg.adapter_paritionings[adapter];
+        let (adapter_module, entity_index) = self.dfg.adapter_partitionings[adapter];
 
         // Instantiates the adapter module if it hasn't already been
         // instantiated or otherwise returns the index that the module was
@@ -674,7 +1260,7 @@ impl LinearizeDfg<'_> {
                 let (module_index, args) = &me.dfg.adapter_modules[adapter_module];
                 let args = args.iter().map(|arg| me.core_def(arg)).collect();
                 let instantiate = InstantiateModule::Static(*module_index, args);
-                GlobalInitializer::InstantiateModule(instantiate)
+                GlobalInitializer::InstantiateModule(instantiate, None)
             },
             |_, init| init,
         )
@@ -698,19 +1284,48 @@ impl LinearizeDfg<'_> {
         &mut self,
         key: K,
         map: impl Fn(&mut Self) -> &mut HashMap<K, V>,
-        gen: impl FnOnce(&mut Self, K) -> T,
+        generate: impl FnOnce(&mut Self, K) -> T,
         init: impl FnOnce(V, T) -> GlobalInitializer,
     ) -> V
     where
         K: Hash + Eq + Copy,
         V: EntityRef,
     {
+        self.intern_(key, map, generate, |me, key, val| {
+            me.initializers.push(init(key, val));
+        })
+    }
+
+    fn intern_no_init<K, V, T>(
+        &mut self,
+        key: K,
+        map: impl Fn(&mut Self) -> &mut HashMap<K, V>,
+        generate: impl FnOnce(&mut Self, K) -> T,
+    ) -> V
+    where
+        K: Hash + Eq + Copy,
+        V: EntityRef,
+    {
+        self.intern_(key, map, generate, |_me, _key, _val| {})
+    }
+
+    fn intern_<K, V, T>(
+        &mut self,
+        key: K,
+        map: impl Fn(&mut Self) -> &mut HashMap<K, V>,
+        generate: impl FnOnce(&mut Self, K) -> T,
+        init: impl FnOnce(&mut Self, V, T),
+    ) -> V
+    where
+        K: Hash + Eq + Copy,
+        V: EntityRef,
+    {
         if let Some(val) = map(self).get(&key) {
-            return val.clone();
+            return *val;
         }
-        let tmp = gen(self, key);
+        let tmp = generate(self, key);
         let index = V::new(map(self).len());
-        self.initializers.push(init(index, tmp));
+        init(self, index, tmp);
         let prev = map(self).insert(key, index);
         assert!(prev.is_none());
         index

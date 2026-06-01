@@ -19,16 +19,18 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sysdep.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
-/* Change the owner and group of FILE.  */
+/* Lind: route lchown through 3i to RawPOSIX's lchown_syscall.  */
 int
 __lchown (const char *file, uid_t owner, gid_t group)
 {
-#ifdef __NR_lchown
-  return INLINE_SYSCALL_CALL (lchown, file, owner, group);
-#else
-  return INLINE_SYSCALL_CALL (fchownat, AT_FDCWD, file, owner, group,
-			      AT_SYMLINK_NOFOLLOW);
-#endif
+  return MAKE_LEGACY_SYSCALL (LCHOWN_SYSCALL, "syscall|lchown",
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
+			      (uint64_t) owner,
+			      (uint64_t) group,
+			      NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__lchown, lchown)

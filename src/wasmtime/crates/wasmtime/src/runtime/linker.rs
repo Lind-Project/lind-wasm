@@ -1,23 +1,68 @@
+use crate::error::OutOfMemory;
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
-use crate::store::StoreOpaque;
-use crate::{prelude::*, IntoFunc};
+use crate::store::{StoreId, StoreOpaque};
 use crate::{
-    AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
-    Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
+    AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, Global,
+    GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result, SharedMemory,
+    StoreContextMut, Table, Val, ValRaw, ValType, prelude::*,
 };
+#[cfg(not(feature = "asyncify-setjmp"))]
+use crate::{Tag, TagType};
 use alloc::sync::Arc;
-use core::fmt;
+use cage::DashMap;
+use core::fmt::{self, Debug};
 #[cfg(feature = "async")]
 use core::future::Future;
 use core::marker;
-#[cfg(feature = "async")]
-use core::pin::Pin;
-use hashbrown::hash_map::{Entry, HashMap};
+use core::mem::MaybeUninit;
 use log::warn;
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
+use sysdefs::lind_log;
+use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
+use wasmtime_lind_utils::LindGOT;
+use wasmtime_lind_utils::symbol_table::SymbolMap;
 
-use super::store::StoreInner;
 use super::{InstanceId, InstantiateType};
+
+/// Returns true if `name` is a module-internal symbol that must not be exposed
+/// through cross-module linking or GOT entries.
+pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
+    matches!(
+        name,
+        // per-module state — not shareable
+        "__stack_pointer"
+        | "__tls_base"
+        | "memory"
+        // constructor / relocation helpers — module-private
+        | "__wasm_call_ctors"
+        | "__wasm_apply_data_relocs"
+        | "__wasm_apply_global_relocs"
+        | "__wasm_apply_tls_relocs"
+        | "__wasm_init_tls"
+        // asyncify runtime — module-private
+        | "asyncify_start_unwind"
+        | "asyncify_stop_unwind"
+        | "asyncify_start_rewind"
+        | "asyncify_stop_rewind"
+        | "asyncify_get_state"
+        // lind-specific
+        | "__get_aligned_tls_size"
+    )
+}
+
+/// Symbols that may be exported by multiple shared libraries (e.g. as re-exports of
+/// an import they received from libc). The first definition wins; subsequent duplicates
+/// are silently ignored rather than causing a "defined twice" error.
+pub(crate) fn is_dylink_dedup_symbol(name: &str) -> bool {
+    matches!(
+        name,
+        // Provided by libc; other libraries re-export it via GOT but must not redefine it.
+        "signal_callback"
+    )
+}
 
 /// Structure used to link wasm modules/instances together.
 ///
@@ -87,21 +132,25 @@ use super::{InstanceId, InstantiateType};
 /// [`Global`]: crate::Global
 pub struct Linker<T> {
     engine: Engine,
-    string2idx: HashMap<Arc<str>, usize>,
-    strings: Vec<Arc<str>>,
-    map: HashMap<ImportKey, Definition>,
+    pool: StringPool,
+    map: TryHashMap<ImportKey, Definition>,
     allow_shadowing: bool,
     allow_unknown_exports: bool,
     _marker: marker::PhantomData<fn() -> T>,
+}
+
+impl<T> Debug for Linker<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Linker").finish_non_exhaustive()
+    }
 }
 
 impl<T> Clone for Linker<T> {
     fn clone(&self) -> Linker<T> {
         Linker {
             engine: self.engine.clone(),
-            string2idx: self.string2idx.clone(),
-            strings: self.strings.clone(),
-            map: self.map.clone(),
+            pool: self.pool.clone_panic_on_oom(),
+            map: self.map.clone_panic_on_oom(),
             allow_shadowing: self.allow_shadowing,
             allow_unknown_exports: self.allow_unknown_exports,
             _marker: self._marker,
@@ -111,8 +160,28 @@ impl<T> Clone for Linker<T> {
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 struct ImportKey {
-    name: usize,
-    module: usize,
+    module: Atom,
+    name: Option<Atom>,
+}
+
+impl TryClone for ImportKey {
+    #[inline]
+    fn try_clone(&self) -> Result<Self, OutOfMemory> {
+        Ok(*self)
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Clone)]
+pub enum ClonedMemory {
+    Thread(SharedMemory),
+    New(MemoryType),
+}
+
+#[allow(missing_docs)]
+pub enum ChildLibraryType<'a> {
+    Process,
+    Thread(&'a mut u32), // stack address
 }
 
 #[derive(Clone)]
@@ -121,10 +190,16 @@ pub(crate) enum Definition {
     HostFunc(Arc<HostFunc>),
 }
 
+impl TryClone for Definition {
+    fn try_clone(&self) -> core::result::Result<Self, OutOfMemory> {
+        Ok(self.clone())
+    }
+}
+
 /// This is a sort of slimmed down `ExternType` which notably doesn't have a
 /// `FuncType`, which is an allocation, and additionally retains the current
 /// size of the table/memory.
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum DefinitionType {
     Func(wasmtime_environ::VMSharedTypeIndex),
     Global(wasmtime_environ::Global),
@@ -132,8 +207,9 @@ pub(crate) enum DefinitionType {
     // information but additionally the current size of the table/memory, as
     // this is used during linking since the min size specified in the type may
     // no longer be the current size of the table/memory.
-    Table(wasmtime_environ::Table, u32),
+    Table(wasmtime_environ::Table, u64),
     Memory(wasmtime_environ::Memory, u64),
+    Tag(wasmtime_environ::Tag),
 }
 
 impl<T> Linker<T> {
@@ -146,9 +222,8 @@ impl<T> Linker<T> {
     pub fn new(engine: &Engine) -> Linker<T> {
         Linker {
             engine: engine.clone(),
-            map: HashMap::new(),
-            string2idx: HashMap::new(),
-            strings: Vec::new(),
+            map: TryHashMap::new(),
+            pool: StringPool::new(),
             allow_shadowing: false,
             allow_unknown_exports: false,
             _marker: marker::PhantomData,
@@ -171,7 +246,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let mut linker = Linker::<()>::new(&engine);
     /// linker.func_wrap("", "", || {})?;
@@ -202,7 +277,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let module = Module::new(&engine, "(module)")?;
     /// # let mut store = Store::new(&engine, ());
@@ -228,7 +303,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let module = Module::new(&engine, "(module (import \"unknown\" \"import\" (func)))")?;
     /// # let mut store = Store::new(&engine, ());
@@ -238,10 +313,18 @@ impl<T> Linker<T> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn define_unknown_imports_as_traps(&mut self, module: &Module) -> anyhow::Result<()> {
+    pub fn define_unknown_imports_as_traps(&mut self, module: &Module) -> Result<()>
+    where
+        T: 'static,
+    {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
+                    lind_log!(
+                        DYLINK,
+                        "[debug] Warning: link undefined symbol \"{}\" to trap",
+                        import.name()
+                    );
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
                     })?;
@@ -249,6 +332,292 @@ impl<T> Linker<T> {
             }
         }
         Ok(())
+    }
+
+    /// Define unresolved *weak* function imports as trap stubs.
+    ///
+    /// ELF semantics: an undefined weak reference resolves to NULL/0 instead of
+    /// causing a link error. Many native programs rely on this to probe optional
+    /// features via `if (sym) { ... }`.
+    ///
+    pub fn define_weak_imports_as_traps(&mut self, module: &Module) -> Result<()>
+    where
+        T: 'static,
+    {
+        // for weak symbols, it should be resolved to NULL if it is not defined by any module
+        // in wasm, we will instead link these symbols into a panic function
+        let weak_imports = module.dylink_importinfo();
+        if weak_imports.is_none() {
+            return Ok(());
+        }
+        let weak_imports = weak_imports.unwrap();
+        for import in module.imports() {
+            // Only synthesize a trap stub for weak symbols that are NOT already defined
+            // in the linker/environment.
+            if let Err(import_err) = self._get_by_import(&import) {
+                if let ExternType::Func(func_ty) = import_err.ty() {
+                    // check if the undefined symbol is listed as a weak symbol
+                    if !weak_imports.is_weak_symbol(import.module(), import.name()) {
+                        continue;
+                    }
+                    lind_log!(
+                        DYLINK,
+                        "[debug] define weak symbol {}.{} into trap",
+                        import.module(),
+                        import.name()
+                    );
+                    self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
+                        bail!(import_err.clone());
+                    })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// redirect all GOT functions/symbols into a centralized dispatcher function
+    ///
+    /// We create mutable global "slots" as placeholders for GOT entries so they can be
+    /// patched after instantiation (once exports and relocation targets are known).
+    /// This enables dynamic updates of symbol addresses/indices without re-instantiating
+    /// the module.
+    pub fn define_GOT_dispatcher(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+        got: &mut LindGOT,
+    ) -> Result<()>
+    where
+        T: 'static,
+    {
+        for import in module.imports() {
+            if let Err(import_err) = self._get_by_import(&import) {
+                lind_log!(
+                    DYLINK,
+                    "[debug]: define_GOT_dispatcher: import module: {}, name: {}",
+                    import.module(),
+                    import.name()
+                );
+                if import.module() == "GOT.func" || import.module() == "GOT.mem" {
+                    // ASSUMPTION: all GOT imports are represented as `mut i32` globals.
+                    // If the module's import type does not match this representation,
+                    // `Global::new` / linking will fail (currently via unwrap/panic).
+
+                    // Create a mutable global slot initialized to 0 as a GOT placeholder.
+                    //
+                    // Rationale:
+                    // - Some GOT entries are resolved only after instantiation, since
+                    //   the module's exports become available only once instantiation
+                    //   completes and initialization runs.
+                    // - By linking imports to placeholder globals, we allow the instance
+                    //   to instantiate successfully, then patch the globals to the final
+                    //   resolved values (e.g., function indices or memory addresses)
+                    //   during/after relocation.
+                    let got_placeholder = Global::new(
+                        &mut store,
+                        GlobalType::new(ValType::I32, crate::Mutability::Var),
+                        Val::I32(0),
+                    )
+                    .unwrap();
+                    self.define(&mut store, import.module(), import.name(), got_placeholder);
+
+                    // Record the backing address of the placeholder slot in LindGOT so
+                    // the dynamic loader can update it later when the symbol is resolved.
+                    let handler = got_placeholder.get_handler_as_u32(&mut store);
+                    got.new_entry(import.name().to_string(), handler);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(missing_docs)]
+    pub fn get_linker_snapshot_for_child(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        share_memory: bool,
+    ) -> (
+        Vec<(String, String, GlobalType, Val)>,
+        Vec<(String, String, Arc<HostFunc>)>,
+        Option<(String, String, ClonedMemory)>,
+    ) {
+        // we collect two items from parent linker to child linker
+        // 1. GOT entries defined as wasm global (i.e. GOT.mem)
+        // 2. Host-defined functions, which are independent to Store
+        let mut globals = vec![];
+        let mut funcs = vec![];
+        let mut memory = None;
+
+        for (key, item) in self.map.iter() {
+            let module = &self.pool[key.module];
+            let name = match key.name {
+                Some(n) => &self.pool[n],
+                None => continue,
+            };
+
+            match item {
+                Definition::Extern(ext, _) => {
+                    match ext {
+                        Extern::Global(global) => {
+                            if module == "GOT.mem" || module == "GOT.func" // GOT entries
+                               || (module == "env" && name == "__memory_base") // main module memory base
+                               || (module == "env" && name == "__table_base") // main module table base
+                               || module == "lib.memory_base" // library __memory_base
+                               || (module == "env" && name == "__stack_pointer") // stack pointer
+                               || (module == "lind" && name == "epoch")
+                            // signal epoch
+                            {
+                                // NOTE: asyncify state is intentionally not copied
+                                let global_ty = global.ty(&store);
+                                let value = global.get(&mut store);
+                                globals.push((
+                                    module.to_string(),
+                                    name.to_string(),
+                                    global_ty.clone(),
+                                    value.clone(),
+                                ));
+                            }
+                        }
+                        Extern::Func(func) => {
+                            // no-np
+                            // Those are functions defined by library
+                            // Those has to be "cloned" by re-instantiating
+                            // the library and link the exported function again
+                        }
+                        Extern::Table(table) => {
+                            // no-op
+                            // indirect_table is handled explicitly by the fork logic
+                        }
+                        Extern::Memory(memory) => {
+                            // lind wasm instance shouldn't have any Memory
+                            // (They are all SharedMemory instead)
+                            unreachable!()
+                        }
+                        Extern::Tag(_) => {
+                            // no-op: tags are not used in lind-wasm
+                        }
+                        Extern::SharedMemory(shared_memory) => {
+                            if share_memory {
+                                // if memory should be shared between new linker
+                                // (e.g. in case of new thread creation)
+                                // collect the SharedMemory Instance as well
+                                memory = Some((
+                                    module.to_string(),
+                                    name.to_string(),
+                                    ClonedMemory::Thread(shared_memory.clone()),
+                                ));
+                            } else {
+                                // otherwise, collect memory type only
+                                // and have new instance creating a new one for itself
+                                memory = Some((
+                                    module.to_string(),
+                                    name.to_string(),
+                                    ClonedMemory::New(shared_memory.ty().clone()),
+                                ));
+                            }
+                        }
+                    }
+                }
+                Definition::HostFunc(host_func) => {
+                    funcs.push((module.to_string(), name.to_string(), host_func.clone()));
+                }
+            }
+        }
+
+        (globals, funcs, memory)
+    }
+
+    #[allow(missing_docs)]
+    pub fn new_child_linker(
+        mut store: impl AsContextMut<Data = T>,
+        engine: &Engine,
+        got_table: &mut Option<LindGOT>,
+        globals: &Vec<(String, String, GlobalType, Val)>,
+        hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
+        shared_memory: &Option<(String, String, ClonedMemory)>,
+    ) -> Result<(Self, HashMap<String, i32>, Option<*mut u64>, Option<u64>)>
+    where
+        T: 'static,
+    {
+        let mut new_linker = Self::new(&engine);
+
+        // a mapping of library name to its memory base value
+        let mut memory_base_table = HashMap::new();
+
+        let mut epoch_handler = None;
+        let mut memory_base = None;
+
+        // define globals to the new linker
+        for (module, name, ty, val) in globals {
+            let cloned_global = Global::new(&mut store, ty.clone(), val.clone())?;
+
+            if let Some(got) = got_table.as_mut() {
+                if module == "GOT.func" || module == "GOT.mem" {
+                    let handler = cloned_global.get_handler_as_u32(&mut store);
+                    got.new_entry(name.clone(), handler);
+                }
+            }
+
+            // collect library's memory base for quick look up when instantiate the child library
+            if module == "lib.memory_base" {
+                let memory_base = val.i32().unwrap();
+                memory_base_table.insert(name.clone(), memory_base);
+            }
+
+            if module == "lind" && name == "epoch" {
+                epoch_handler = Some(cloned_global.get_handler_as_u64(&mut store));
+            }
+
+            new_linker.define(&mut store, &module, &name, cloned_global)?;
+        }
+
+        // attach host functions to the new linker
+        for (module, name, hostfunc) in hostfuncs {
+            let key = new_linker.import_key(module, Some(name))?;
+            new_linker.insert(key, Definition::HostFunc(hostfunc.clone()))?;
+        }
+
+        // attach the SharedMemory if exist
+        if let Some((module, name, memory)) = shared_memory {
+            match memory {
+                ClonedMemory::Thread(shared_memory) => {
+                    memory_base = Some(shared_memory.get_memory_base());
+                    new_linker.define(&mut store, &module, &name, shared_memory.clone())?;
+                }
+                ClonedMemory::New(memory_type) => {
+                    let mem = SharedMemory::new(&engine, memory_type.clone())?;
+                    // Grow to the declared max (65536 pages = 4 GiB) so that
+                    // fork_vmmap can copy parent data at any user address and wasm
+                    // bounds checks pass in the child.
+                    let max_pages = memory_type.maximum().unwrap_or(65536);
+                    let cur_pages = memory_type.minimum();
+                    let delta = max_pages.saturating_sub(cur_pages);
+                    if delta > 0 {
+                        mem.grow(delta)?;
+                    }
+                    let base = mem.get_memory_base();
+                    memory_base = Some(base);
+                    // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
+                    // rawposix takes ownership via init_vmmap + fork_vmmap.
+                    unsafe {
+                        libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE);
+                    }
+                    new_linker.define(&mut store, &module, &name, mem)?;
+                }
+            }
+        }
+
+        // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp in the child.
+        // Each Store owns its tag objects, so the forked child needs its own instance of
+        // the tag even though it's functionally identical to the parent's.
+        #[cfg(not(feature = "asyncify-setjmp"))]
+        {
+            let tag_type = TagType::new(FuncType::new(engine, [ValType::I32], []));
+            let tag = Tag::new(&mut store, &tag_type)?;
+            new_linker.define(&mut store, "env", "__c_longjmp", tag)?;
+        }
+
+        Ok((new_linker, memory_base_table, epoch_handler, memory_base))
     }
 
     /// Implement any function imports of the [`Module`] with a function that
@@ -262,53 +631,42 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let module = Module::new(&engine, "(module (import \"unknown\" \"import\" (func)))")?;
     /// # let mut store = Store::new(&engine, ());
     /// let mut linker = Linker::new(&engine);
-    /// linker.define_unknown_imports_as_default_values(&module)?;
+    /// linker.define_unknown_imports_as_default_values(&mut store, &module)?;
     /// linker.instantiate(&mut store, &module)?;
     /// # Ok(())
     /// # }
     /// ```
     pub fn define_unknown_imports_as_default_values(
         &mut self,
+        mut store: impl AsContextMut<Data = T>,
         module: &Module,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()>
+    where
+        T: 'static,
+    {
+        let mut store = store.as_context_mut();
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
-                if let ExternType::Func(func_ty) = import_err.ty() {
-                    let result_tys: Vec<_> = func_ty.results().collect();
-
-                    for ty in &result_tys {
-                        if ty.as_ref().map_or(false, |r| !r.is_nullable()) {
-                            bail!("no default value exists for type `{ty}`")
-                        }
-                    }
-
-                    self.func_new(
-                        import.module(),
-                        import.name(),
-                        func_ty,
-                        move |_caller, _args, results| {
-                            for (result, ty) in results.iter_mut().zip(&result_tys) {
-                                *result = match ty {
-                                    ValType::I32 => Val::I32(0),
-                                    ValType::I64 => Val::I64(0),
-                                    ValType::F32 => Val::F32(0.0_f32.to_bits()),
-                                    ValType::F64 => Val::F64(0.0_f64.to_bits()),
-                                    ValType::V128 => Val::V128(0_u128.into()),
-                                    ValType::Ref(r) => {
-                                        debug_assert!(r.is_nullable());
-                                        Val::null_ref(r.heap_type())
-                                    }
-                                };
-                            }
-                            Ok(())
-                        },
-                    )?;
-                }
+                let default_extern =
+                    import_err.ty().default_value(&mut store).with_context(|| {
+                        format_err!(
+                            "no default value exists for `{}::{}` with type `{:?}`",
+                            import.module(),
+                            import.name(),
+                            import_err.ty(),
+                        )
+                    })?;
+                self.define(
+                    store.as_context(),
+                    import.module(),
+                    import.name(),
+                    default_extern,
+                )?;
             }
         }
         Ok(())
@@ -330,7 +688,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let mut store = Store::new(&engine, ());
     /// let mut linker = Linker::new(&engine);
@@ -356,13 +714,17 @@ impl<T> Linker<T> {
         module: &str,
         name: &str,
         item: impl Into<Extern>,
-    ) -> Result<&mut Self> {
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
         let store = store.as_context();
-        let key = self.import_key(module, Some(name));
+        let key = self.import_key(module, Some(name))?;
         self.insert(key, Definition::new(store.0, item.into()))?;
         Ok(self)
     }
 
+    #[allow(missing_docs)]
     pub fn define_with_inner(
         &mut self,
         store: &StoreOpaque,
@@ -370,7 +732,7 @@ impl<T> Linker<T> {
         name: &str,
         item: impl Into<Extern>,
     ) -> Result<&mut Self> {
-        let key = self.import_key(module, Some(name));
+        let key = self.import_key(module, Some(name))?;
         self.insert(key, Definition::new(store, item.into()))?;
         Ok(self)
     }
@@ -386,10 +748,22 @@ impl<T> Linker<T> {
         store: impl AsContext<Data = T>,
         name: &str,
         item: impl Into<Extern>,
-    ) -> Result<&mut Self> {
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
         let store = store.as_context();
-        let key = self.import_key(name, None);
+        let key = self.import_key(name, None)?;
         self.insert(key, Definition::new(store.0, item.into()))?;
+        Ok(self)
+    }
+
+    fn func_insert(&mut self, module: &str, name: &str, func: HostFunc) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        let key = self.import_key(module, Some(name))?;
+        self.insert(key, Definition::HostFunc(try_new(func)?))?;
         Ok(self)
     }
 
@@ -407,12 +781,11 @@ impl<T> Linker<T> {
         name: &str,
         ty: FuncType,
         func: impl Fn(Caller<'_, T>, &[Val], &mut [Val]) -> Result<()> + Send + Sync + 'static,
-    ) -> Result<&mut Self> {
-        assert!(ty.comes_from_same_engine(self.engine()));
-        let func = HostFunc::new(&self.engine, ty, func);
-        let key = self.import_key(module, Some(name));
-        self.insert(key, Definition::HostFunc(Arc::new(func)))?;
-        Ok(self)
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        self.func_insert(module, name, HostFunc::new(&self.engine, ty, func)?)
     }
 
     /// Creates a [`Func::new_unchecked`]-style function named in this linker.
@@ -423,18 +796,23 @@ impl<T> Linker<T> {
     ///
     /// Panics if the given function type is not associated with the same engine
     /// as this linker.
+    ///
+    /// # Safety
+    ///
+    /// See [`Func::new_unchecked`] for more safety information.
     pub unsafe fn func_new_unchecked(
         &mut self,
         module: &str,
         name: &str,
         ty: FuncType,
-        func: impl Fn(Caller<'_, T>, &mut [ValRaw]) -> Result<()> + Send + Sync + 'static,
-    ) -> Result<&mut Self> {
-        assert!(ty.comes_from_same_engine(self.engine()));
-        let func = HostFunc::new_unchecked(&self.engine, ty, func);
-        let key = self.import_key(module, Some(name));
-        self.insert(key, Definition::HostFunc(Arc::new(func)))?;
-        Ok(self)
+        func: impl Fn(Caller<'_, T>, &mut [MaybeUninit<ValRaw>]) -> Result<()> + Send + Sync + 'static,
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        // SAFETY: the contract of this function is the same as `new_unchecked`.
+        let func = unsafe { HostFunc::new_unchecked(&self.engine, ty, func)? };
+        self.func_insert(module, name, func)
     }
 
     /// Creates a [`Func::new_async`]-style function named in this linker.
@@ -445,12 +823,9 @@ impl<T> Linker<T> {
     ///
     /// This method panics in the following situations:
     ///
-    /// * This linker is not associated with an [async
-    ///   config](crate::Config::async_support).
-    ///
     /// * If the given function type is not associated with the same engine as
     ///   this linker.
-    #[cfg(all(feature = "async", feature = "cranelift"))]
+    #[cfg(feature = "async")]
     pub fn func_new_async<F>(
         &mut self,
         module: &str,
@@ -467,25 +842,9 @@ impl<T> Linker<T> {
             + Send
             + Sync
             + 'static,
+        T: Send + 'static,
     {
-        assert!(
-            self.engine.config().async_support,
-            "cannot use `func_new_async` without enabling async support in the config"
-        );
-        assert!(ty.comes_from_same_engine(self.engine()));
-        self.func_new(module, name, ty, move |mut caller, params, results| {
-            let async_cx = caller
-                .store
-                .as_context_mut()
-                .0
-                .async_cx()
-                .expect("Attempt to spawn new function on dying fiber");
-            let mut future = Pin::from(func(caller, params, results));
-            match unsafe { async_cx.block_on(future.as_mut()) } {
-                Ok(Ok(())) => Ok(()),
-                Ok(Err(trap)) | Err(trap) => Err(trap),
-            }
-        })
+        self.func_insert(module, name, HostFunc::new_async(&self.engine, ty, func)?)
     }
 
     /// Define a host function within this linker.
@@ -518,11 +877,11 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// let mut linker = Linker::new(&engine);
     /// linker.func_wrap("host", "double", |x: i32| x * 2)?;
-    /// linker.func_wrap("host", "log_i32", |x: i32| println!("{}", x))?;
+    /// linker.func_wrap("host", "log_i32", |x: i32| lind_log!(DYLINK, "{}", x))?;
     /// linker.func_wrap("host", "log_str", |caller: Caller<'_, ()>, ptr: i32, len: i32| {
     ///     // ...
     /// })?;
@@ -549,16 +908,16 @@ impl<T> Linker<T> {
         module: &str,
         name: &str,
         func: impl IntoFunc<T, Params, Args>,
-    ) -> Result<&mut Self> {
-        let func = HostFunc::wrap(&self.engine, func);
-        let key = self.import_key(module, Some(name));
-        self.insert(key, Definition::HostFunc(Arc::new(func)))?;
-        Ok(self)
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        self.func_insert(module, name, func.into_func(&self.engine)?)
     }
 
     /// Asynchronous analog of [`Linker::func_wrap`].
     #[cfg(feature = "async")]
-    pub fn func_wrap_async<F, Params: WasmTyList, Args: crate::WasmRet>(
+    pub fn func_wrap_async<F, Params: crate::WasmTyList, Args: crate::WasmRet>(
         &mut self,
         module: &str,
         name: &str,
@@ -569,30 +928,9 @@ impl<T> Linker<T> {
             + Send
             + Sync
             + 'static,
+        T: Send + 'static,
     {
-        assert!(
-            self.engine.config().async_support,
-            "cannot use `func_wrap_async` without enabling async support on the config",
-        );
-        let func = HostFunc::wrap_inner(
-            &self.engine,
-            move |mut caller: Caller<'_, T>, args: Params| {
-                let async_cx = caller
-                    .store
-                    .as_context_mut()
-                    .0
-                    .async_cx()
-                    .expect("Attempt to start async function on dying fiber");
-                let mut future = Pin::from(func(caller, args));
-                match unsafe { async_cx.block_on(future.as_mut()) } {
-                    Ok(ret) => ret.into_fallible(),
-                    Err(e) => Args::fallible_from_error(e),
-                }
-            },
-        );
-        let key = self.import_key(module, Some(name));
-        self.insert(key, Definition::HostFunc(Arc::new(func)))?;
-        Ok(self)
+        self.func_insert(module, name, HostFunc::wrap_async(&self.engine, func)?)
     }
 
     /// Convenience wrapper to define an entire [`Instance`] in this linker.
@@ -623,7 +961,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let mut store = Store::new(&engine, ());
     /// let mut linker = Linker::new(&engine);
@@ -656,18 +994,62 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module_name: &str,
         instance: Instance,
-    ) -> Result<&mut Self> {
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        let mut store = store.as_context_mut();
+        let exports: TryVec<_> = instance
+            .exports(&mut store)
+            .map(|e| {
+                Ok((
+                    self.import_key(module_name, Some(e.name()))?,
+                    e.into_extern(),
+                ))
+            })
+            .try_collect::<_, Error>()?;
+        for (key, export) in exports {
+            self.insert(key, Definition::new(store.0, export))?;
+        }
+        Ok(self)
+    }
+
+    /// same as instance, but with a few blacklist symbols for dynamic loading usage
+    pub fn instance_dylink(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        module_name: &str,
+        instance: Instance,
+        skiplist: Vec<&str>,
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
         let mut store = store.as_context_mut();
         let exports = instance
             .exports(&mut store)
-            .map(|e| {
-                (
-                    self.import_key(module_name, Some(e.name())),
-                    e.into_extern(),
-                )
+            .filter_map(|e| {
+                let name = e.name();
+                let should_skip = module_name == "env"
+                    && (skiplist.contains(&name)
+                        || is_dylink_internal_symbol(name)
+                        || name.starts_with(FPCAST_FUNC_SIGNATURE));
+
+                if should_skip {
+                    None
+                } else {
+                    self.import_key(module_name, Some(name))
+                        .ok()
+                        .map(|key| (key, e.into_extern(), name.to_string()))
+                }
             })
             .collect::<Vec<_>>();
-        for (key, export) in exports {
+        for (key, export, name) in exports {
+            // For dedup symbols, silently skip if already defined (first definition wins).
+            if module_name == "env" && is_dylink_dedup_symbol(&name) && self.map.get(&key).is_some()
+            {
+                continue;
+            }
             self.insert(key, Definition::new(store.0, export))?;
         }
         Ok(self)
@@ -711,7 +1093,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let mut store = Store::new(&engine, ());
     /// let mut linker = Linker::new(&engine);
@@ -741,7 +1123,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let mut store = Store::new(&engine, ());
     /// let mut linker = Linker::new(&engine);
@@ -845,7 +1227,7 @@ impl<T> Linker<T> {
                 if let Some(export) = instance.get_export(&mut store, "_initialize") {
                     if let Extern::Func(func) = export {
                         func.typed::<(), ()>(&store)
-                            .and_then(|f| f.call(&mut store, ()).map_err(Into::into))
+                            .and_then(|f| f.call(&mut store, ()))
                             .context("calling the Reactor initialization function")?;
                     }
                 }
@@ -855,10 +1237,435 @@ impl<T> Linker<T> {
         }
     }
 
+    #[allow(missing_docs)]
+    pub fn module_with_preload(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        cageid: u64,
+        module_name: &str,
+        module: &Module,
+        table: &mut Table,
+        table_base: i32,
+        got: &LindGOT,
+        path: String,
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        assert!(
+            Engine::same(&self.engine, store.as_context().engine()),
+            "different engines for this linker and the store provided"
+        );
+        match ModuleKind::categorize(module)? {
+            ModuleKind::Command => {
+                unreachable!()
+            }
+            ModuleKind::Reactor => {
+                // We clone the linker to instantiate the library with instance-specific globals.
+                // `__memory_base` and `__table_base` are specific to each library instance,
+                // so we create a cloned linker, override these two globals in the clone,
+                // and then instantiate the library using that cloned linker.
+                //
+                // `allow_shadowing(true)` permits redefining these globals in the cloned
+                // linker without affecting the original linker state.
+                let mut module_linker = self.clone();
+
+                module_linker.allow_shadowing(true);
+                // Create a placeholder for `__memory_base` for library instantiation.
+                //
+                // In Lind, the final linear-memory base address is only known after the
+                // main module's shared memory is created and `vmmap` is initialized.
+                // We therefore link a dummy `__memory_base` global (initialized to 0)
+                // and pass its backing slot (`handler`) into `InstantiateLib`, so
+                // `instantiate_with_lind` can patch the global once the real base is known.
+                let memory_base = module_linker.attach_memory_base(&mut store, 0)?;
+                // keep a recording of this memory base in main linker as well
+                self.define(
+                    &mut store,
+                    "lib.memory_base",
+                    &module.name().unwrap(),
+                    memory_base,
+                );
+                let handler = memory_base.get_handler_as_u32(&mut store);
+
+                // attach the table base for the library module
+                module_linker.attach_table_base(&mut store, table_base)?;
+
+                module_linker.allow_shadowing(false);
+
+                // Resolve any remaining unknown imports to trap stubs so the library can
+                // instantiate even when it has optional/unused imports.
+                // TODO: we probably want to remove this in the future
+                module_linker.define_unknown_imports_as_traps(module);
+
+                // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
+                // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
+                let (instance, _, instance_id) = module_linker.instantiate_with_lind(
+                    &mut store,
+                    &module,
+                    InstantiateType::InstantiateLib {
+                        cageid,
+                        memory_base: handler,
+                    },
+                )?;
+
+                // Register this instance under its intrinsic wasm name so
+                // get_global_snapshot can find it without scanning all INSTANCE_NUMBER slots.
+                // We use module.name() (the name embedded in the binary) because
+                // the snapshot lookup in child processes also uses module.name().
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
+
+                // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
+                let memory_base = unsafe { *handler };
+
+                let fpcast_enabled = self.engine.config().fpcast_enabled;
+                instance.apply_GOT_relocs(
+                    &mut store,
+                    Some(got),
+                    table,
+                    Some(memory_base),
+                    fpcast_enabled,
+                )?;
+
+                // If the module has a start function, run it (Wasm start semantics).
+                if let Some(start) = module.compiled_module().module().start_func {
+                    instance.start_raw(&mut store.as_context_mut(), start)?;
+                }
+
+                // run data relocation functions and constructor functions
+                instance.apply_relocs_func_and_constructor(&mut store)?;
+
+                self.instance_dylink(store, module_name, instance, vec![])
+            }
+        }
+    }
+
+    #[allow(missing_docs)]
+    pub fn module_with_child(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        cageid: u64,
+        module_name: &str,
+        module: &Module,
+        table: &mut Table,
+        table_base: i32,
+        memory_base: i32,
+        child_type: ChildLibraryType,
+        snapshots: &[(GlobalIndex, i64)],
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        assert!(
+            Engine::same(&self.engine, store.as_context().engine()),
+            "different engines for this linker and the store provided"
+        );
+        match ModuleKind::categorize(module)? {
+            ModuleKind::Command => {
+                unreachable!();
+            }
+            ModuleKind::Reactor => {
+                // We clone the linker to instantiate the library with instance-specific globals.
+                // `__memory_base` and `__table_base` are specific to each library instance,
+                // so we create a cloned linker, override these two globals in the clone,
+                // and then instantiate the library using that cloned linker.
+                //
+                // `allow_shadowing(true)` permits redefining these globals in the cloned
+                // linker without affecting the original linker state.
+                let mut module_linker = self.clone();
+
+                module_linker.allow_shadowing(true);
+                // Create a placeholder for `__memory_base` for library instantiation.
+                //
+                // In Lind, the final linear-memory base address is only known after the
+                // main module's shared memory is created and `vmmap` is initialized.
+                // We therefore link a dummy `__memory_base` global (initialized to 0)
+                // and pass its backing slot (`handler`) into `InstantiateLib`, so
+                // `instantiate_with_lind` can patch the global once the real base is known.
+                let memory_base = module_linker.attach_memory_base(&mut store, memory_base)?;
+                let handler = memory_base.get_handler_as_u32(&mut store);
+                // NOTE: we do not create a record in main linker like in `module_with_preload`
+                // because the recording is already copied into main linker when we clone it
+
+                // Provide `__table_base` for the library (used by indirect calls / table relocs).
+                module_linker.attach_table_base(&mut store, table_base)?;
+
+                module_linker.allow_shadowing(false);
+
+                // Resolve any remaining unknown imports to trap stubs so the library can
+                // instantiate even when it has optional/unused imports.
+                module_linker.define_unknown_imports_as_traps(module);
+                // Instantiate the library module. Do not need to do any initialization for the module
+                // since all the state are already copied from parent
+                let (instance, _stack_arena_size, instance_id) =
+                    module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
+
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
+
+                let fpcast_enabled = self.engine.config().fpcast_enabled;
+                // for child library, just append the library function into function table without doing GOT relocation
+                instance.apply_GOT_relocs(&mut store, None, table, None, fpcast_enabled)?;
+
+                // clone the wasm global for the child instance
+                instance.apply_global_snapshots(&mut store, snapshots);
+
+                if let ChildLibraryType::Thread(stack_addr) = child_type {
+                    // if the child library is a thread, we need to initialize the TLS for the library
+                    // on the thread's stack
+                    if let Ok(init_tls) = instance
+                        .get_typed_func::<i32, ()>(store.as_context_mut(), "__wasm_init_tls")
+                    {
+                        let get_tls_size = instance.get_typed_func::<(), i32>(
+                            store.as_context_mut(),
+                            "__get_aligned_tls_size",
+                        )?;
+
+                        let tls_size = get_tls_size.call(store.as_context_mut(), ()).unwrap();
+                        *stack_addr -= tls_size as u32;
+                        let _ = init_tls
+                            .call(store.as_context_mut(), *stack_addr as i32)
+                            .unwrap();
+                    }
+                }
+
+                self.instance_dylink(store, module_name, instance, vec![])
+            }
+        }
+    }
+
+    /// An alternative library instantiation path similar to `module`.
+    ///
+    /// This variant is used when instantiating a library module from a running
+    /// instance, rather than during the initial preload phase. As a result,
+    /// it takes slightly different arguments to accommodate the different
+    /// execution context and available state between module preloading and
+    /// runtime library loading.
+    pub fn module_with_caller(
+        &mut self,
+        mut store: &mut crate::Caller<T>,
+        cageid: u64,
+        module_name: &str,
+        module: &Module,
+        table_base: i32,
+        got: &LindGOT,
+        mut symbol_map: SymbolMap,
+        path: String,
+    ) -> Result<u64>
+    where
+        T: 'static,
+    {
+        assert!(
+            Engine::same(&self.engine, store.as_context().engine()),
+            "different engines for this linker and the store provided"
+        );
+        match ModuleKind::categorize(module)? {
+            ModuleKind::Command => {
+                unreachable!();
+            }
+            ModuleKind::Reactor => {
+                // We clone the linker to instantiate the library with instance-specific globals.
+                // `__memory_base` and `__table_base` are specific to each library instance,
+                // so we create a cloned linker, override these two globals in the clone,
+                // and then instantiate the library using that cloned linker.
+                //
+                // `allow_shadowing(true)` permits redefining these globals in the cloned
+                // linker without affecting the original linker state.
+                let mut module_linker = self.clone();
+
+                module_linker.allow_shadowing(true);
+                // Create a placeholder for `__memory_base` for library instantiation.
+                //
+                // In Lind, the final linear-memory base address is only known after the
+                // main module's shared memory is created and `vmmap` is initialized.
+                // We therefore link a dummy `__memory_base` global (initialized to 0)
+                // and pass its backing slot (`handler`) into `InstantiateLib`, so
+                // `instantiate_with_lind` can patch the global once the real base is known.
+                let memory_base = module_linker.attach_memory_base(&mut store, 0)?;
+                // keep a recording of this memory base in main linker as well
+                self.define(
+                    &mut store,
+                    "lib.memory_base",
+                    &module.name().unwrap(),
+                    memory_base,
+                );
+                let handler = memory_base.get_handler_as_u32(&mut store);
+
+                // attach the table base for the library module
+                module_linker.attach_table_base(&mut store, table_base)?;
+
+                module_linker.allow_shadowing(false);
+
+                // Resolve any remaining unknown imports to trap stubs so the library can
+                // instantiate even when it has optional/unused imports.
+                module_linker.define_unknown_imports_as_traps(module);
+
+                // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
+                // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
+                let (instance, _stack_arena_size, instance_id) = module_linker
+                    .instantiate_with_lind(
+                        &mut store,
+                        &module,
+                        InstantiateType::InstantiateLib {
+                            cageid,
+                            memory_base: handler,
+                        },
+                    )?;
+
+                if let Some(wasm_name) = module.name() {
+                    store
+                        .as_context_mut()
+                        .register_named_instance(wasm_name.to_string(), instance_id);
+                }
+
+                // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
+                let memory_base = unsafe { *handler };
+
+                let fpcast_enabled = self.engine.config().fpcast_enabled;
+
+                // Collect exports first to avoid mutating the store/linker while iterating exports.
+                // We split funcs and globals because they are relocated differently.
+                // TODO: probably want to unify this with apply_GOT_relocs in the future
+                let mut funcs = vec![];
+                let mut globals = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    if is_dylink_internal_symbol(&name) {
+                        continue;
+                    }
+                    match export.into_extern() {
+                        Extern::Func(func) => {
+                            funcs.push((name, func));
+                        }
+                        Extern::Global(global) => {
+                            globals.push((name, global));
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Get the shared function table from the linker.
+                // Cannot use store.grow_table_lib() because Instance::get_table only
+                // finds *exported* items; the main module imports __indirect_function_table
+                // but does not re-export it.
+                let shared_table = self
+                    .get(&mut *store, "env", "__indirect_function_table")
+                    .ok()
+                    .and_then(|e| {
+                        if let Extern::Table(t) = e {
+                            Some(t)
+                        } else {
+                            None
+                        }
+                    });
+
+                for (name, func) in funcs {
+                    // skip updating GOT only if fpcast is enabled
+                    // and the function is NOT a fpcast function
+                    let should_skip = if fpcast_enabled {
+                        !name.starts_with(FPCAST_FUNC_SIGNATURE)
+                    } else {
+                        false
+                    };
+
+                    if !should_skip {
+                        let index = match shared_table.as_ref() {
+                            Some(t) => {
+                                t.grow(store.as_context_mut(), 1, crate::Ref::Func(Some(func)))?
+                                    as u32
+                            }
+                            None => bail!("cannot grow table: no indirect function table"),
+                        };
+
+                        let final_name = {
+                            if fpcast_enabled {
+                                // restore to its original name
+                                name.strip_prefix(FPCAST_FUNC_SIGNATURE).unwrap()
+                            } else {
+                                &name
+                            }
+                        };
+
+                        // Cache the resolved table index; also updates the GOT cell if it exists.
+                        if got.cache_symbol(final_name, index) {
+                            lind_log!(
+                                DYLINK,
+                                "[debug] update GOT.func.{} to {}",
+                                final_name,
+                                index
+                            );
+                        }
+
+                        // append the symbol into mappings
+                        symbol_map.add(final_name.to_string(), index);
+                    }
+                }
+                for (name, global) in globals {
+                    let val = global.get(&mut store);
+                    // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
+                    let Some(raw) = val.i32() else {
+                        lind_log!(
+                            DYLINK,
+                            "Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
+                            name,
+                            val
+                        );
+                        continue;
+                    };
+                    // relocate the variable
+                    let val = match (raw as u32).checked_add(memory_base) {
+                        Some(val) => val,
+                        None => {
+                            lind_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
+                            continue;
+                        }
+                    };
+                    // Cache the resolved address; also updates the GOT cell if it already exists.
+                    if got.cache_symbol(&name, val) {
+                        lind_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
+                    }
+                    // Only expose as dlsym-resolvable if it's a known GOT data symbol.
+                    if got.has_entry(&name) {
+                        symbol_map.add(name.clone(), val);
+                    }
+                }
+
+                got.warning_undefined();
+
+                let is_local = symbol_map.is_local();
+
+                // append the symbol mapping of this library into the global lookup table
+                let handler = store.push_library_symbols(symbol_map).unwrap() as u64;
+
+                // If the module has a start function, run it (Wasm start semantics).
+                if let Some(start) = module.compiled_module().module().start_func {
+                    instance.start_raw(&mut store.as_context_mut(), start)?;
+                }
+
+                // run data relocation functions and constructor functions
+                instance.apply_relocs_func_and_constructor(&mut store)?;
+
+                if !is_local {
+                    // only attach library symbol to Linker if it is global scope
+                    self.instance_dylink(store, module_name, instance, vec![]);
+                }
+
+                Ok(handler)
+            }
+        }
+    }
+
     /// Define automatic instantiations of a [`Module`] in this linker.
     ///
     /// This is the same as [`Linker::module`], except for async `Store`s.
-    #[cfg(all(feature = "async", feature = "cranelift"))]
+    #[cfg(feature = "async")]
     pub async fn module_async(
         &mut self,
         mut store: impl AsContextMut<Data = T>,
@@ -938,7 +1745,7 @@ impl<T> Linker<T> {
                 let instance_pre = self.instantiate_pre(module)?;
                 let export_name = export.name().to_owned();
                 let func = mk_func(&mut store, func_ty, export_name, instance_pre);
-                let key = self.import_key(module_name, Some(export.name()));
+                let key = self.import_key(module_name, Some(export.name()))?;
                 self.insert(key, Definition::new(store.0, func.into()))?;
             } else if export.name() == "memory" && export.ty().memory().is_some() {
                 // Allow an exported "memory" memory for now.
@@ -965,7 +1772,9 @@ impl<T> Linker<T> {
             } else if export.name() == "__rtti_base" && export.ty().global().is_some() {
                 // Allow an exported "__rtti_base" memory for compatibility with
                 // AssemblyScript.
-                warn!("command module exporting '__rtti_base' is deprecated; pass `--runtime half` to the AssemblyScript compiler");
+                warn!(
+                    "command module exporting '__rtti_base' is deprecated; pass `--runtime half` to the AssemblyScript compiler"
+                );
             } else if !self.allow_unknown_exports {
                 bail!("command export '{}' is not a function", export.name());
             }
@@ -990,11 +1799,11 @@ impl<T> Linker<T> {
         as_module: &str,
         as_name: &str,
     ) -> Result<&mut Self> {
-        let src = self.import_key(module, Some(name));
-        let dst = self.import_key(as_module, Some(as_name));
+        let src = self.import_key(module, Some(name))?;
+        let dst = self.import_key(as_module, Some(as_name))?;
         match self.map.get(&src).cloned() {
             Some(item) => self.insert(dst, item)?,
-            None => bail!("no item named `{}::{}` defined", module, name),
+            None => bail!("no item named `{module}::{name}` defined"),
         }
         Ok(self)
     }
@@ -1009,14 +1818,14 @@ impl<T> Linker<T> {
     /// Returns an error if any shadowing violations happen while defining new
     /// items.
     pub fn alias_module(&mut self, module: &str, as_module: &str) -> Result<()> {
-        let module = self.intern_str(module);
-        let as_module = self.intern_str(as_module);
-        let items = self
+        let module = self.pool.insert(module)?;
+        let as_module = self.pool.insert(as_module)?;
+        let items: TryVec<_> = self
             .map
             .iter()
             .filter(|(key, _def)| key.module == module)
-            .map(|(key, def)| (key.name, def.clone()))
-            .collect::<Vec<_>>();
+            .map(|(key, def)| Ok((key.name, def.clone())))
+            .try_collect::<_, Error>()?;
         for (name, item) in items {
             self.insert(
                 ImportKey {
@@ -1030,43 +1839,32 @@ impl<T> Linker<T> {
     }
 
     fn insert(&mut self, key: ImportKey, item: Definition) -> Result<()> {
-        match self.map.entry(key) {
-            Entry::Occupied(_) if !self.allow_shadowing => {
-                let module = &self.strings[key.module];
-                let desc = match self.strings.get(key.name) {
-                    Some(name) => format!("{}::{}", module, name),
-                    None => module.to_string(),
-                };
-                bail!("import of `{}` defined twice", desc)
-            }
-            Entry::Occupied(mut o) => {
-                o.insert(item);
-            }
-            Entry::Vacant(v) => {
-                v.insert(item);
+        if !self.allow_shadowing && self.map.contains_key(&key) {
+            let module = &self.pool[key.module];
+            match key.name.and_then(|n| self.pool.get(n)) {
+                Some(name) => bail!("import of `{module}::{name}` defined twice"),
+                None => bail!("import of `{module}` defined twice"),
             }
         }
+        #[cfg(feature = "lind-logging")]
+        if self.map.contains_key(&key) {
+            let module = &self.pool[key.module];
+            let desc = match key.name.and_then(|n| self.pool.get(n)) {
+                Some(name) => format!("{}::{}", module, name),
+                None => module.to_string(),
+            };
+            sysdefs::lind_log!(DYLINK, "warning: {:?} definition overwrite", desc);
+        }
+
+        self.map.insert(key, item)?;
         Ok(())
     }
 
-    fn import_key(&mut self, module: &str, name: Option<&str>) -> ImportKey {
-        ImportKey {
-            module: self.intern_str(module),
-            name: name
-                .map(|name| self.intern_str(name))
-                .unwrap_or(usize::max_value()),
-        }
-    }
-
-    fn intern_str(&mut self, string: &str) -> usize {
-        if let Some(idx) = self.string2idx.get(string) {
-            return *idx;
-        }
-        let string: Arc<str> = string.into();
-        let idx = self.strings.len();
-        self.strings.push(string.clone());
-        self.string2idx.insert(string, idx);
-        idx
+    fn import_key(&mut self, module: &str, name: Option<&str>) -> Result<ImportKey, OutOfMemory> {
+        Ok(ImportKey {
+            module: self.pool.insert(module)?,
+            name: name.map(|name| self.pool.insert(name)).transpose()?,
+        })
     }
 
     /// Attempts to instantiate the `module` provided.
@@ -1103,7 +1901,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let mut store = Store::new(&engine, ());
     /// let mut linker = Linker::new(&engine);
@@ -1123,7 +1921,10 @@ impl<T> Linker<T> {
         &self,
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
-    ) -> Result<Instance> {
+    ) -> Result<Instance>
+    where
+        T: 'static,
+    {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate(store)
     }
@@ -1144,9 +1945,13 @@ impl<T> Linker<T> {
         &self,
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
-    ) -> Result<(Instance, InstanceId)> {
+        no_start: bool,
+    ) -> Result<(Instance, u32, InstanceId)>
+    where
+        T: 'static,
+    {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
-            .instantiate_with_lind_thread(store)
+            .instantiate_with_lind_thread(store, no_start)
     }
 
     /// Instantiates a Wasm module as a new lind-wasm cage and returns both the created instance and
@@ -1170,7 +1975,10 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
         instantiate_type: InstantiateType,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<(Instance, u32, InstanceId)>
+    where
+        T: 'static,
+    {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate_with_lind(store, instantiate_type)
     }
@@ -1184,7 +1992,7 @@ impl<T> Linker<T> {
         module: &Module,
     ) -> Result<Instance>
     where
-        T: Send,
+        T: Send + 'static,
     {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate_async(store)
@@ -1208,7 +2016,7 @@ impl<T> Linker<T> {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// # let engine = Engine::default();
     /// # let mut store = Store::new(&engine, ());
     /// let mut linker = Linker::new(&engine);
@@ -1238,7 +2046,10 @@ impl<T> Linker<T> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn instantiate_pre(&self, module: &Module) -> Result<InstancePre<T>> {
+    pub fn instantiate_pre(&self, module: &Module) -> Result<InstancePre<T>>
+    where
+        T: 'static,
+    {
         self._instantiate_pre(module, None)
     }
 
@@ -1257,12 +2068,14 @@ impl<T> Linker<T> {
         &self,
         module: &Module,
         store: Option<&StoreOpaque>,
-    ) -> Result<InstancePre<T>> {
-        let mut imports = module
+    ) -> Result<InstancePre<T>>
+    where
+        T: 'static,
+    {
+        let mut imports: TryVec<_> = module
             .imports()
-            .map(|import| self._get_by_import(&import))
-            .collect::<Result<Vec<_>, _>>()
-            .err2anyhow()?;
+            .map(|import| Ok(self._get_by_import(&import)?))
+            .try_collect::<_, Error>()?;
         if let Some(store) = store {
             for import in imports.iter_mut() {
                 import.update_size(store);
@@ -1288,14 +2101,17 @@ impl<T> Linker<T> {
     pub fn iter<'a: 'p, 'p>(
         &'a self,
         mut store: impl AsContextMut<Data = T> + 'p,
-    ) -> impl Iterator<Item = (&str, &str, Extern)> + 'p {
+    ) -> impl Iterator<Item = (&'a str, &'a str, Extern)> + 'p
+    where
+        T: 'static,
+    {
         self.map.iter().map(move |(key, item)| {
             let store = store.as_context_mut();
             (
-                &*self.strings[key.module],
-                &*self.strings[key.name],
+                &self.pool[key.module],
+                &self.pool[key.name.unwrap()],
                 // Should be safe since `T` is connecting the linker and store
-                unsafe { item.to_extern(store.0) },
+                unsafe { item.to_extern(store.0).panic_on_oom() },
             )
         })
     }
@@ -1303,7 +2119,7 @@ impl<T> Linker<T> {
     /// Looks up a previously defined value in this [`Linker`], identified by
     /// the names provided.
     ///
-    /// Returns `None` if this name was not previously defined in this
+    /// Returns an error if this name was not previously defined in this
     /// [`Linker`].
     ///
     /// # Panics
@@ -1315,16 +2131,22 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module: &str,
         name: &str,
-    ) -> Option<Extern> {
+    ) -> Result<Extern>
+    where
+        T: 'static,
+    {
         let store = store.as_context_mut().0;
-        // Should be safe since `T` is connecting the linker and store
-        Some(unsafe { self._get(module, name)?.to_extern(store) })
+        match self._get(module, name) {
+            // Safety: `T` is connecting the linker and store.
+            Some(def) => Ok(unsafe { def.to_extern(store)? }),
+            None => bail!("missing definition for `{module}::{name}`"),
+        }
     }
 
     fn _get(&self, module: &str, name: &str) -> Option<&Definition> {
         let key = ImportKey {
-            module: *self.string2idx.get(module)?,
-            name: *self.string2idx.get(name)?,
+            module: self.pool.get_atom(module)?,
+            name: Some(self.pool.get_atom(name)?),
         };
         self.map.get(&key)
     }
@@ -1340,12 +2162,32 @@ impl<T> Linker<T> {
     /// same [`Engine`] that this linker was created with.
     pub fn get_by_import(
         &self,
+        store: impl AsContextMut<Data = T>,
+        import: &ImportType,
+    ) -> Option<Extern>
+    where
+        T: 'static,
+    {
+        self.try_get_by_import(store, import)
+            .expect("out of memory")
+    }
+
+    /// Same as [`Linker::get_by_import`] but returns an error instead of
+    /// panicking on allocation failure.
+    pub fn try_get_by_import(
+        &self,
         mut store: impl AsContextMut<Data = T>,
         import: &ImportType,
-    ) -> Option<Extern> {
+    ) -> Result<Option<Extern>>
+    where
+        T: 'static,
+    {
         let store = store.as_context_mut().0;
-        // Should be safe since `T` is connecting the linker and store
-        Some(unsafe { self._get_by_import(import).ok()?.to_extern(store) })
+        match self._get_by_import(import) {
+            // Should be safe since `T` is connecting the linker and store
+            Ok(def) => Ok(Some(unsafe { def.to_extern(store)? })),
+            Err(_) => Ok(None),
+        }
     }
 
     fn _get_by_import(&self, import: &ImportType) -> Result<Definition, UnknownImportError> {
@@ -1365,24 +2207,39 @@ impl<T> Linker<T> {
     /// Panics if the default function found is not owned by `store`. This
     /// function will also panic if the `store` provided does not come from the
     /// same [`Engine`] that this linker was created with.
-    pub fn get_default(
-        &self,
-        mut store: impl AsContextMut<Data = T>,
-        module: &str,
-    ) -> Result<Func> {
-        if let Some(external) = self.get(&mut store, module, "") {
-            if let Extern::Func(func) = external {
-                return Ok(func.clone());
+    pub fn get_default(&self, mut store: impl AsContextMut<Data = T>, module: &str) -> Result<Func>
+    where
+        T: 'static,
+    {
+        if let Some(external) = self.get(&mut store, module, "").map(Some).or_else(|e| {
+            if e.is::<OutOfMemory>() {
+                Err(e)
+            } else {
+                Ok(None)
             }
-            bail!("default export in '{}' is not a function", module);
+        })? {
+            if let Extern::Func(func) = external {
+                return Ok(func);
+            }
+            bail!("default export in '{module}' is not a function");
         }
 
         // For compatibility, also recognize "_start".
-        if let Some(external) = self.get(&mut store, module, "_start") {
+        if let Some(external) = self
+            .get(&mut store, module, "_start")
+            .map(Some)
+            .or_else(|e| {
+                if e.is::<OutOfMemory>() {
+                    Err(e)
+                } else {
+                    Ok(None)
+                }
+            })?
+        {
             if let Extern::Func(func) = external {
-                return Ok(func.clone());
+                return Ok(func);
             }
-            bail!("`_start` in '{}' is not a function", module);
+            bail!("`_start` in '{module}' is not a function");
         }
 
         // Otherwise return a no-op function.
@@ -1390,7 +2247,121 @@ impl<T> Linker<T> {
     }
 }
 
-impl<T> Default for Linker<T> {
+/// Additional APIs for attaching common imports used by the Lind runtime and toolchain.
+#[allow(missing_docs)]
+impl<T: 'static> Linker<T> {
+    // attach the asyncify imports used by the asyncify transform.
+    pub fn attach_asyncify(&mut self, mut store: impl AsContextMut<Data = T>) -> Result<()> {
+        let __asyncify_state = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(0),
+        )?;
+        let __asyncify_data = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(0),
+        )?;
+        self.define(&mut store, "env", "__asyncify_state", __asyncify_state)?;
+        self.define(&mut store, "env", "__asyncify_data", __asyncify_data)?;
+        Ok(())
+    }
+
+    // attach the epoch global used by the Lind runtime for signal usage
+    pub fn attach_epoch(&mut self, mut store: impl AsContextMut<Data = T>) -> Result<u64> {
+        let lind_epoch = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I64, crate::Mutability::Var),
+            Val::I64(0),
+        )?;
+
+        self.define(&mut store, "lind", "epoch", lind_epoch)?;
+
+        Ok(lind_epoch.get_handler_as_u64(&mut store) as u64)
+    }
+
+    // attach the `__indirect_function_table` used by the Lind runtime for dynamic loading
+    pub fn attach_function_table(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        size: u32,
+    ) -> Result<Table> {
+        let ty = crate::TableType::new(crate::RefType::FUNCREF, size, None);
+        let table = Table::new(&mut store, ty, crate::Ref::Func(None))?;
+        self.define(&mut store, "env", "__indirect_function_table", table)?;
+
+        Ok(table)
+    }
+
+    // attach the `__stack_low`, `__stack_high`, and `__stack_pointer` globals used by the Lind runtime for stack management.
+    pub fn attach_stack_imports(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        stack_low: i32,
+        stack_high: i32,
+    ) -> Result<()> {
+        let stack_low_global = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(stack_low),
+        )?;
+
+        let stack_high_global = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(stack_high),
+        )?;
+
+        // stack grows downwards, so the initial stack pointer is set to the high address.
+        let stack_pointer = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Var),
+            Val::I32(stack_high),
+        )?;
+
+        self.define(&mut store, "GOT.mem", "__stack_low", stack_low_global)?;
+        self.define(&mut store, "GOT.mem", "__stack_high", stack_high_global)?;
+        self.define(&mut store, "env", "__stack_pointer", stack_pointer)?;
+
+        Ok(())
+    }
+
+    // attach the `__memory_base` global used by the Lind runtime for dynamic loading.
+    pub fn attach_memory_base(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        memory_base: i32,
+    ) -> Result<Global> {
+        let memory_base = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Const),
+            Val::I32(memory_base),
+        )?;
+
+        self.define(&mut store, "env", "__memory_base", memory_base)?;
+
+        Ok(memory_base)
+    }
+
+    // attach the `__table_base` global used by the Lind runtime for dynamic loading.
+    pub fn attach_table_base(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        table_base: i32,
+    ) -> Result<()> {
+        let table_base = Global::new(
+            &mut store,
+            GlobalType::new(ValType::I32, crate::Mutability::Const),
+            Val::I32(table_base),
+        )?;
+
+        self.define(&mut store, "env", "__table_base", table_base)?;
+
+        Ok(())
+    }
+}
+
+impl<T: 'static> Default for Linker<T> {
     fn default() -> Linker<T> {
         Linker::new(&Engine::default())
     }
@@ -1404,18 +2375,25 @@ impl Definition {
 
     pub(crate) fn ty(&self) -> DefinitionType {
         match self {
-            Definition::Extern(_, ty) => ty.clone(),
+            Definition::Extern(_, ty) => *ty,
             Definition::HostFunc(func) => DefinitionType::Func(func.sig_index()),
         }
     }
 
+    /// Inserts this definition into the `store` provided.
+    ///
+    /// # Safety
+    ///
     /// Note the unsafety here is due to calling `HostFunc::to_func`. The
     /// requirement here is that the `T` that was originally used to create the
     /// `HostFunc` matches the `T` on the store.
-    pub(crate) unsafe fn to_extern(&self, store: &mut StoreOpaque) -> Extern {
+    pub(crate) unsafe fn to_extern(&self, store: &mut StoreOpaque) -> Result<Extern, OutOfMemory> {
         match self {
-            Definition::Extern(e, _) => e.clone(),
-            Definition::HostFunc(func) => func.to_func(store).into(),
+            Definition::Extern(e, _) => Ok(e.clone()),
+            // SAFETY: the contract of this function is the same as what's
+            // required of `to_func`, that `T` of the store matches the `T` of
+            // this original definition.
+            Definition::HostFunc(func) => unsafe { Ok(func.to_func(store)?.into()) },
         }
     }
 
@@ -1435,7 +2413,7 @@ impl Definition {
                 *size = m.size();
             }
             Definition::Extern(Extern::Table(m), DefinitionType::Table(_, size)) => {
-                *size = m.internal_size(store);
+                *size = m._size(store);
             }
             _ => {}
         }
@@ -1444,15 +2422,15 @@ impl Definition {
 
 impl DefinitionType {
     pub(crate) fn from(store: &StoreOpaque, item: &Extern) -> DefinitionType {
-        let data = store.store_data();
         match item {
-            Extern::Func(f) => DefinitionType::Func(f.type_index(data)),
-            Extern::Table(t) => DefinitionType::Table(*t.wasmtime_ty(data), t.internal_size(store)),
-            Extern::Global(t) => DefinitionType::Global(*t.wasmtime_ty(data)),
+            Extern::Func(f) => DefinitionType::Func(f.type_index(store)),
+            Extern::Table(t) => DefinitionType::Table(*t.wasmtime_ty(store), t._size(store)),
+            Extern::Global(t) => DefinitionType::Global(*t.wasmtime_ty(store)),
             Extern::Memory(t) => {
-                DefinitionType::Memory(*t.wasmtime_ty(data), t.internal_size(store))
+                DefinitionType::Memory(*t.wasmtime_ty(store), t.internal_size(store))
             }
             Extern::SharedMemory(t) => DefinitionType::Memory(*t.ty().wasmtime_memory(), t.size()),
+            Extern::Tag(t) => DefinitionType::Tag(*t.wasmtime_ty(store)),
         }
     }
 
@@ -1462,6 +2440,7 @@ impl DefinitionType {
             DefinitionType::Table(..) => "table",
             DefinitionType::Memory(..) => "memory",
             DefinitionType::Global(_) => "global",
+            DefinitionType::Tag(_) => "tag",
         }
     }
 }
@@ -1512,8 +2491,9 @@ impl ModuleKind {
 
 /// Error for an unresolvable import.
 ///
-/// Returned - wrapped in an [`anyhow::Error`] - by [`Linker::instantiate`] and
-/// related methods for modules with unresolvable imports.
+/// Returned - wrapped in an [`Error`][crate::Error] - by
+/// [`Linker::instantiate`] and related methods for modules with unresolvable
+/// imports.
 #[derive(Clone, Debug)]
 pub struct UnknownImportError {
     module: String,
@@ -1556,5 +2536,4 @@ impl fmt::Display for UnknownImportError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for UnknownImportError {}
+impl core::error::Error for UnknownImportError {}

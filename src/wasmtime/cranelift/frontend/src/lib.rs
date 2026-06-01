@@ -61,16 +61,12 @@
 //! Here is how you build the corresponding Cranelift IR function using [`FunctionBuilderContext`]:
 //!
 //! ```rust
-//! extern crate cranelift_codegen;
-//! extern crate cranelift_frontend;
-//!
-//! use cranelift_codegen::entity::EntityRef;
 //! use cranelift_codegen::ir::types::*;
 //! use cranelift_codegen::ir::{AbiParam, UserFuncName, Function, InstBuilder, Signature};
 //! use cranelift_codegen::isa::CallConv;
 //! use cranelift_codegen::settings;
 //! use cranelift_codegen::verifier::verify_function;
-//! use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
+//! use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 //!
 //! let mut sig = Signature::new(CallConv::SystemV);
 //! sig.returns.push(AbiParam::new(I32));
@@ -84,12 +80,9 @@
 //!     let block1 = builder.create_block();
 //!     let block2 = builder.create_block();
 //!     let block3 = builder.create_block();
-//!     let x = Variable::new(0);
-//!     let y = Variable::new(1);
-//!     let z = Variable::new(2);
-//!     builder.declare_var(x, I32);
-//!     builder.declare_var(y, I32);
-//!     builder.declare_var(z, I32);
+//!     let x = builder.declare_var(I32);
+//!     let y = builder.declare_var(I32);
+//!     let z = builder.declare_var(I32);
 //!     builder.append_block_params_for_function_params(block0);
 //!
 //!     builder.switch_to_block(block0);
@@ -161,8 +154,6 @@
 #![deny(missing_docs)]
 #![no_std]
 
-#[allow(unused_imports)] // #[macro_use] is required for no_std
-#[macro_use]
 extern crate alloc;
 
 #[cfg(feature = "std")]
@@ -170,13 +161,41 @@ extern crate alloc;
 extern crate std;
 
 #[cfg(not(feature = "std"))]
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 #[cfg(feature = "std")]
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub use crate::frontend::{FuncInstBuilder, FunctionBuilder, FunctionBuilderContext};
 pub use crate::switch::Switch;
 pub use crate::variable::Variable;
+
+#[cfg(test)]
+macro_rules! assert_eq_output {
+    ( $left:expr, $right:expr $(,)? ) => {{
+        let left = $left;
+        let left = left.trim();
+
+        let right = $right;
+        let right = right.trim();
+
+        assert_eq!(
+            left,
+            right,
+            "assertion failed, output not equal:\n\
+             \n\
+             =========== Diff ===========\n\
+             {}\n\
+             =========== Left ===========\n\
+             {left}\n\
+             =========== Right ===========\n\
+             {right}\n\
+             ",
+            similar::TextDiff::from_lines(left, right)
+                .unified_diff()
+                .header("left", "right")
+        )
+    }};
+}
 
 mod frontend;
 mod ssa;

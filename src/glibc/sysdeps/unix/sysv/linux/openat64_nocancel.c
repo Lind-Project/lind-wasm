@@ -16,11 +16,14 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include <fcntl.h>
-#include <stdarg.h>
-
-#include <sysdep-cancel.h>
-#include <not-cancel.h>
+#include <fcntl.h>                                                                                                                                  
+#include <stdarg.h>       
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>                                                                                                                       
+   
+#include <sysdep-cancel.h>                                                                                                                          
+#include <not-cancel.h> 
 
 int
 __openat64_nocancel (int fd, const char *file, int oflag, ...)
@@ -34,8 +37,11 @@ __openat64_nocancel (int fd, const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  return INLINE_SYSCALL_CALL (openat, fd, file, oflag | O_LARGEFILE,
-			      mode);
+    uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);                                                                                      
+                            
+    return MAKE_LEGACY_SYSCALL (                                                                                                                      
+        OPENAT_SYSCALL, "syscall|openat", (uint64_t) fd, host_file,
+        (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON); 
 }
 hidden_def (__openat64_nocancel)
 

@@ -1,5 +1,6 @@
 use sysdefs::constants::{SIG_DFL, SIG_IGN};
-use wasmtime::{raise_trap, AsContext, AsContextMut, AsyncifyState, Caller, Trap};
+use sysdefs::{lind_debug_panic, lind_log};
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, ThrownException};
 
 use crate::LindHost;
 
@@ -8,10 +9,10 @@ use crate::LindHost;
 // this function could possibly be on the callstack of the Asyncify operation
 // therefore this function needs to be compatible with Asyncify as well
 // If it is not in Asyncify state, then we do the following to handle the epoch callback
-// 1. check if epoch is triggered due to `killed` action, if it is, perform a suicide
+// 1. check if epoch is triggered due to `killed` action, if so, clean up and exit via asyncify
 // 2. otherwise, retrieve the signal one by one and its handler
 // 3. if it is a default handler, we looked up the table and execute the default handler
-//    a. in case of termination, we signal all other threads in the cage to `killed` state and perform a suicide
+//    a. in case of termination, we signal all other threads in the cage to `killed` state and exit via asyncify
 //    b. in case of ignore, we simply ignore this signal and do not do anything
 //    c. in case of stop/continue, this is currently also ignored but would possibly be a TODO to implement in the future
 // 4. otherwise if it is a custom handler, just call into glibc's signal handler directly
@@ -20,30 +21,83 @@ pub fn signal_handler<
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     caller: &mut Caller<'_, T>,
-) -> i32 {
+) -> wasmtime::Result<i32> {
+    // Check the killed state FIRST, before looking up signal_callback.
+    // When exit_group or a fatal signal calls epoch_kill_all, it writes
+    // EPOCH_KILLED to each thread's epoch pointer.  The epoch interrupt
+    // fires and brings us here (signal_handler).  We must check
+    // thread_check_killed before attempting to deliver a normal signal,
+    // because the thread has no signal to deliver — it just needs to
+    // exit cleanly via asyncify unwind (exit_call).
+    let host = caller.data().clone();
+    let ctx = host.get_ctx();
+    let cageid = ctx.cageid as u64;
+
+    if cage::signal::thread_check_killed(cageid, ctx.tid as u64) {
+        // If asyncify is already unwinding (e.g. exit_call was already
+        // triggered by a prior thread-only exit via syscall 60), don't
+        // call exit_call again — a double asyncify_start_unwind corrupts
+        // the unwind state and causes OOB memory faults.
+        if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
+            return Ok(0);
+        }
+        // Don't call lind_thread_exit here — it's deferred to exit_call's
+        // OnCalledAction so the epoch_handler entry stays until asyncify
+        // unwind completes and any grate dispatch has fully returned.
+        //
+        // Use the cage's recorded exit status so that exit_group(N) from any
+        // thread (e.g. faulthandler calling _exit(1)) propagates the right
+        // code to the OS-level process exit.  Default to 0 when the cage is
+        // already gone (late wakeup after cage_finalize).
+        let cage_opt = cage::get_cage(cageid);
+        let status_opt = cage_opt.as_ref().and_then(|c| *c.final_exit_status.read());
+        let exit_code = status_opt
+            .map(|st| match st {
+                cage::ExitStatus::Exited(code) => code,
+                cage::ExitStatus::Signaled(_, _) => 1,
+            })
+            .unwrap_or(0);
+        ctx.exit_call(caller, exit_code, 0);
+        return Ok(0);
+    }
+
     // retrieve glibc's signal callback function, see line #87 in glibc/sysdeps/unix/sysv/linux/i386/libc_sigaction.c for more detail
     let signal_func = caller.get_signal_callback().unwrap();
 
     // if we are reaching here under Asyncify rewinding process, we need to resume its callstack instead of doing the normal execution
     if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
-        // retrieve the signal function entered last time with its parameters
-        let data = caller
-            .as_context_mut()
-            .get_current_signal_rewind_data()
-            .unwrap();
-        let _ = signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
-        return 0;
-    }
-    // otherwise, we are in normal execution and we should handle signals appropriately
-
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
-    let cageid = ctx.cageid as u64;
-
-    // first let's check if the epoch state is in "killed" state
-    if cage::signal::thread_check_killed(cageid, ctx.tid as u64) {
-        // if we are already killed, then perform a suicide
-        thread_suicide();
+        // Retrieve the signal function entered last time with its parameters.
+        // None is expected here: exit_call and syscall-level asyncify also
+        // trigger epoch rewind, but they don't push signal rewind data.
+        // In that case we just return 0 and let the non-signal rewind complete.
+        let data = match caller.as_context_mut().get_current_signal_rewind_data() {
+            Some(d) => d,
+            None => return Ok(0),
+        };
+        let rewind_res =
+            signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
+        if let Err(err) = rewind_res {
+            if err.is::<ThrownException>() {
+                // Wasm exception (longjmp/siglongjmp in EH mode) — propagate back
+                // through the host boundary so the calling wasm context handles it.
+                return Err(err);
+            }
+            // Signal handler crashed during rewind — run cage-termination routine.
+            lind_log!(
+                Default,
+                "Error: signal handler crashed during rewind: {:?}",
+                err
+            );
+            cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+            if let Some(c) = cage::get_cage(cageid) {
+                c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+            }
+            threei::EXITING_TABLE.insert(cageid);
+            cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
+            threei::handler_table::_rm_grate_from_handler(cageid);
+            ctx.exit_call(caller, 1, 0);
+        }
+        return Ok(0);
     }
     // all non-main thread of the cage should not be able to reach the below routine
     // as only main thread is responsible for handling the signals, and the only situation for
@@ -70,10 +124,19 @@ pub fn signal_handler<
                     // Set the exit status of the cage to signaled with the signal number and core dump flag
                     // (currently set to false)
                     cage::cage_record_exit_status(cageid, cage::ExitStatus::Signaled(signo, false));
-                    // if we are supposed to be terminated, switch the epoch state of all other threads
-                    // to "killed" state and perform a suicide
-                    cage::signal::epoch_kill_all(cageid);
-                    thread_suicide();
+                    // Mark cage as dead so grate-forwarded calls return -ESRCH.
+                    if let Some(c) = cage::get_cage(cageid) {
+                        c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                    }
+                    threei::EXITING_TABLE.insert(cageid);
+                    // Mark all other threads for death
+                    cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
+                    // Prevent new grate dispatches to this cage.
+                    threei::handler_table::_rm_grate_from_handler(cageid);
+                    // Asyncify unwind; OnCalledAction handles cage_finalize
+                    // when the actual last thread finishes.
+                    ctx.exit_call(caller, 128 + signo, 0);
+                    return Ok(0);
                 }
                 sysdefs::constants::SignalDefaultHandler::Ignore => {
                     // NOTE: normally this should not be reached since
@@ -83,16 +146,23 @@ pub fn signal_handler<
                 }
                 sysdefs::constants::SignalDefaultHandler::Stop => {
                     // TODO: support STOP signals
-                    eprintln!("Warning: STOP signal received but currently not supported!");
+                    lind_log!(
+                        Default,
+                        "Warning: STOP signal received but currently not supported!"
+                    );
                     continue;
                 }
                 sysdefs::constants::SignalDefaultHandler::Continue => {
                     // TODO: support CONTINUE signals
-                    eprintln!("Warning: CONTINUE signal received but currently not supported!");
+                    lind_log!(
+                        Default,
+                        "Warning: CONTINUE signal received but currently not supported!"
+                    );
                     continue;
                 }
                 sysdefs::constants::SignalDefaultHandler::NONEXIST => {
-                    panic!("signal_handler: NONEXIST signal received!");
+                    lind_debug_panic!("signal_handler: NONEXIST signal received!");
+                    continue;
                 }
             }
         } else if signal_handler == SIG_IGN as u32 {
@@ -100,34 +170,45 @@ pub fn signal_handler<
             continue;
         } else {
             // we should invoke user's custom signal handler
-
-            // before invoke the function, let's record the signal callstack information in case user performed
-            // any Asyncify-related operation in signal handler
+            // Always push signal asyncify data: fork() always uses asyncify even in
+            // EH mode, so the signal frame must be saved for the rewind path.
             caller
                 .as_context_mut()
                 .append_signal_asyncify_data(signal_handler as i32, signo);
-            // invoke the
             let invoke_res =
                 signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
-            // print errors if any when running the signal handler
             if let Err(err) = invoke_res {
-                let e = wasi_common::maybe_exit_on_error(err);
-                eprintln!("Error: {:?}", e);
-                // if we encountered any error when executing the signal handler, we should terminate the cage
-                cage::signal::epoch_kill_all(cageid);
-                thread_suicide();
+                if err.is::<ThrownException>() {
+                    // Wasm exception throw (longjmp/siglongjmp in EH mode) — pop the
+                    // asyncify frame (the rewind path will not run) and propagate back
+                    // through the epoch host boundary so wasmtime re-throws the pending
+                    // exception in the calling wasm context where the setjmp catch block
+                    // can handle it.
+                    caller
+                        .as_context_mut()
+                        .pop_signal_asyncify_data(signal_handler as i32, signo);
+                    return Err(err);
+                }
+                // Any other error means the signal handler itself crashed (trap, OOB,
+                // divide-by-zero, etc.).  Run the original cage-termination routine.
+                lind_log!(Default, "Error: signal handler crashed: {:?}", err);
+                cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
+                if let Some(c) = cage::get_cage(cageid) {
+                    c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                }
+                threei::EXITING_TABLE.insert(cageid);
+                cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
+                threei::handler_table::_rm_grate_from_handler(cageid);
+                ctx.exit_call(caller, 1, 0);
+                return Ok(0);
             }
 
-            // first let's check if the signal handler returns due to Asyncify Unwind operation
             if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
-                // if it is, then return immediately
-                return 0;
+                // asyncify unwind in progress (e.g. fork inside signal handler).
+                // Leave the frame on the stack — the rewind path will consume it.
+                return Ok(0);
             } else {
-                // otherwise, the signal handler returns normally
-
-                // restore signal mask
                 restorer(cageid);
-                // clean up the signal callstack information for Asyncify
                 caller
                     .as_context_mut()
                     .pop_signal_asyncify_data(signal_handler as i32, signo);
@@ -135,19 +216,5 @@ pub fn signal_handler<
         }
     }
 
-    0
-}
-
-// raise a trap to the current thread
-// this is paired with catch_traps function in /crates/wasmtime/src/runtime/vm/traphandlers.rs
-// which will catch the trap raised here and perform the clean up
-pub fn thread_suicide() -> ! {
-    // we raise Trap::Interrupt instead of other trap type
-    // because this is the trap type used by wasmtime's built-in epoch
-    // and epoch is the only possible source of this type of trap
-    let err = Trap::Interrupt;
-    unsafe {
-        raise_trap(err.into());
-    }
-    unreachable!();
+    Ok(0)
 }

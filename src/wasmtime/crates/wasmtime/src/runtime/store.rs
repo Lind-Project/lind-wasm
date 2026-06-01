@@ -76,37 +76,57 @@
 //! contents of `StoreOpaque`. This is an invariant that we, as the authors of
 //! `wasmtime`, must uphold for the public interface to be safe.
 
-use crate::instance::InstanceData;
-use crate::linker::Definition;
-use crate::module::RegisteredModuleId;
+#[cfg(all(feature = "gc", feature = "debug"))]
+use crate::OwnedRooted;
+use crate::RootSet;
+#[cfg(feature = "gc")]
+use crate::ThrownException;
+use crate::error::OutOfMemory;
+#[cfg(feature = "async")]
+use crate::fiber;
+use crate::module::{RegisterBreakpointState, RegisteredModuleId};
 use crate::prelude::*;
-use crate::runtime::vm::mpk::{self, ProtectionKey, ProtectionMask};
+#[cfg(feature = "gc")]
+use crate::runtime::vm::GcRootsList;
+#[cfg(feature = "stack-switching")]
+use crate::runtime::vm::VMContRef;
+use crate::runtime::vm::mpk::ProtectionKey;
 use crate::runtime::vm::{
-    Backtrace, ExportGlobal, GcHeapAllocationIndex, GcRootsList, GcStore,
-    InstanceAllocationRequest, InstanceAllocator, InstanceHandle, ModuleRuntimeInfo,
-    OnDemandInstanceAllocator, SignalHandler, StoreBox, StorePtr, VMContext, VMFuncRef, VMGcRef,
-    VMRuntimeLimits, WasmFault,
+    self, ExportMemory, GcStore, Imports, InstanceAllocationRequest, InstanceAllocator,
+    InstanceHandle, Interpreter, InterpreterRef, ModuleRuntimeInfo, OnDemandInstanceAllocator,
+    SendSyncPtr, SignalHandler, StoreBox, Unwind, VMContext, VMFuncRef, VMGcRef, VMStore,
+    VMStoreContext,
 };
 use crate::trampoline::VMHostGlobalContext;
-use crate::RootSet;
-use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
-use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
+#[cfg(feature = "debug")]
+use crate::{BreakpointState, DebugHandler, FrameDataCache};
+use crate::{Engine, Module, Val, ValRaw, module::ModuleRegistry};
+#[cfg(feature = "gc")]
+use crate::{ExnRef, Rooted};
+use crate::{Global, Instance, Table};
 use alloc::sync::Arc;
+use cage::DashMap;
 use core::cell::UnsafeCell;
+use core::convert::Infallible;
 use core::fmt;
 use core::future::Future;
 use core::hash::Hash;
 use core::hash::Hasher;
 use core::marker;
-use core::mem::{self, ManuallyDrop};
+use core::mem::{self, ManuallyDrop, MaybeUninit};
 use core::num::NonZeroU64;
 use core::ops::{Deref, DerefMut};
 use core::pin::Pin;
 use core::ptr;
+use core::ptr::NonNull;
 use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
+use sysdefs::lind_debug_panic;
+use wasmtime_environ::GlobalIndex;
+use wasmtime_environ::{DefinedGlobalIndex, DefinedTableIndex, EntityRef, TripleExt};
+use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 mod context;
 pub use self::context::*;
@@ -114,6 +134,19 @@ mod data;
 pub use self::data::*;
 mod func_refs;
 use func_refs::FuncRefs;
+#[cfg(feature = "component-model-async")]
+mod token;
+#[cfg(feature = "component-model-async")]
+pub(crate) use token::StoreToken;
+#[cfg(feature = "async")]
+mod async_;
+#[cfg(all(feature = "async", feature = "call-hook"))]
+pub use self::async_::CallHookHandler;
+
+#[cfg(feature = "gc")]
+use super::vm::VMExnRef;
+#[cfg(feature = "gc")]
+mod gc;
 
 use super::{AsyncifyState, OnCalledAction, SignalAsyncifyData};
 
@@ -179,7 +212,9 @@ use super::{AsyncifyState, OnCalledAction, SignalAsyncifyData};
 /// operations is incorrect. In other words it's considered a programmer error
 /// rather than a recoverable error for the wrong [`Store`] to be used when
 /// calling APIs.
-pub struct Store<T> {
+///
+/// [`Memory`]: crate::Memory
+pub struct Store<T: 'static> {
     // for comments about `ManuallyDrop`, see `Store::into_data`
     inner: ManuallyDrop<Box<StoreInner<T>>>,
 }
@@ -220,59 +255,189 @@ impl CallHook {
 /// The members of this struct are those that need to be generic over `T`, the
 /// store's internal type storage. Otherwise all things that don't rely on `T`
 /// should go into `StoreOpaque`.
-pub struct StoreInner<T> {
+pub struct StoreInner<T: 'static> {
     /// Generic metadata about the store that doesn't need access to `T`.
     inner: StoreOpaque,
 
     limiter: Option<ResourceLimiterInner<T>>,
     call_hook: Option<CallHookInner<T>>,
+    #[cfg(target_has_atomic = "64")]
     epoch_deadline_behavior:
         Option<Box<dyn FnMut(StoreContextMut<T>) -> Result<UpdateDeadline> + Send + Sync>>,
 
     pub(crate) on_called: Option<OnCalledHandler<T>>,
     is_thread: bool,
 
-    // for comments about `ManuallyDrop`, see `Store::into_data`
-    data: ManuallyDrop<T>,
+    /// The user's `T` data.
+    ///
+    /// Don't actually access it via this field, however! Use the
+    /// `Store{,Inner,Context,ContextMut}::data[_mut]` methods instead, to
+    /// preserve stacked borrows and provenance in the face of potential
+    /// direct-access of `T` from Wasm code (via unsafe intrinsics).
+    ///
+    /// The only exception to the above is when taking ownership of the value,
+    /// e.g. in `Store::into_data`, after which nothing can access this field
+    /// via raw pointers anymore so there is no more provenance to preserve.
+    ///
+    /// For comments about `ManuallyDrop`, see `Store::into_data`.
+    data_no_provenance: ManuallyDrop<T>,
+
+    /// The user's debug handler, if any. See [`crate::DebugHandler`]
+    /// for more documentation.
+    ///
+    /// We need this to be an `Arc` because the handler itself takes
+    /// `&self` and also the whole Store mutably (via
+    /// `StoreContextMut`); so we need to hold a separate reference to
+    /// it while invoking it.
+    #[cfg(feature = "debug")]
+    debug_handler: Option<Box<dyn StoreDebugHandler<T>>>,
+}
+
+/// Adapter around `DebugHandler` that gets monomorphized into an
+/// object-safe dyn trait to place in `store.debug_handler`.
+#[cfg(feature = "debug")]
+trait StoreDebugHandler<T: 'static>: Send + Sync {
+    fn handle<'a>(
+        self: Box<Self>,
+        store: StoreContextMut<'a, T>,
+        event: crate::DebugEvent<'a>,
+    ) -> Box<dyn Future<Output = ()> + Send + 'a>;
+}
+
+#[cfg(feature = "debug")]
+impl<D> StoreDebugHandler<D::Data> for D
+where
+    D: DebugHandler,
+    D::Data: Send,
+{
+    fn handle<'a>(
+        self: Box<Self>,
+        store: StoreContextMut<'a, D::Data>,
+        event: crate::DebugEvent<'a>,
+    ) -> Box<dyn Future<Output = ()> + Send + 'a> {
+        // Clone the underlying `DebugHandler` (the trait requires
+        // Clone as a supertrait), not the Box. The clone happens here
+        // rather than at the callsite because `Clone::clone` is not
+        // object-safe so needs to be in a monomorphized context.
+        let handler: D = (*self).clone();
+        // Since we temporarily took `self` off the store at the
+        // callsite, put it back now that we've cloned it.
+        store.0.debug_handler = Some(self);
+        Box::new(async move { handler.handle(store, event).await })
+    }
 }
 
 enum ResourceLimiterInner<T> {
-    Sync(Box<dyn FnMut(&mut T) -> &mut (dyn crate::ResourceLimiter) + Send + Sync>),
+    Sync(Box<dyn (FnMut(&mut T) -> &mut dyn crate::ResourceLimiter) + Send + Sync>),
     #[cfg(feature = "async")]
-    Async(Box<dyn FnMut(&mut T) -> &mut (dyn crate::ResourceLimiterAsync) + Send + Sync>),
+    Async(Box<dyn (FnMut(&mut T) -> &mut dyn crate::ResourceLimiterAsync) + Send + Sync>),
 }
 
-/// An object that can take callbacks when the runtime enters or exits hostcalls.
-#[cfg(all(feature = "async", feature = "call-hook"))]
-#[async_trait::async_trait]
-pub trait CallHookHandler<T>: Send {
-    /// A callback to run when wasmtime is about to enter a host call, or when about to
-    /// exit the hostcall.
-    async fn handle_call_event(&self, t: StoreContextMut<'_, T>, ch: CallHook) -> Result<()>;
+/// Representation of a configured resource limiter for a store.
+///
+/// This is acquired with `resource_limiter_and_store_opaque` for example and is
+/// threaded through to growth operations on tables/memories. Note that this is
+/// passed around as `Option<&mut StoreResourceLimiter<'_>>` to make it
+/// efficient to pass around (nullable pointer) and it's also notably passed
+/// around as an `Option` to represent how this is optionally specified within a
+/// store.
+pub enum StoreResourceLimiter<'a> {
+    Sync(&'a mut dyn crate::ResourceLimiter),
+    #[cfg(feature = "async")]
+    Async(&'a mut dyn crate::ResourceLimiterAsync),
 }
 
-enum CallHookInner<T> {
+impl StoreResourceLimiter<'_> {
+    pub(crate) async fn memory_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> Result<bool, Error> {
+        match self {
+            Self::Sync(s) => s.memory_growing(current, desired, maximum),
+            #[cfg(feature = "async")]
+            Self::Async(s) => s.memory_growing(current, desired, maximum).await,
+        }
+    }
+
+    pub(crate) fn memory_grow_failed(&mut self, error: crate::Error) -> Result<()> {
+        match self {
+            Self::Sync(s) => s.memory_grow_failed(error),
+            #[cfg(feature = "async")]
+            Self::Async(s) => s.memory_grow_failed(error),
+        }
+    }
+
+    pub(crate) async fn table_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> Result<bool, Error> {
+        match self {
+            Self::Sync(s) => s.table_growing(current, desired, maximum),
+            #[cfg(feature = "async")]
+            Self::Async(s) => s.table_growing(current, desired, maximum).await,
+        }
+    }
+
+    pub(crate) fn table_grow_failed(&mut self, error: crate::Error) -> Result<()> {
+        match self {
+            Self::Sync(s) => s.table_grow_failed(error),
+            #[cfg(feature = "async")]
+            Self::Async(s) => s.table_grow_failed(error),
+        }
+    }
+}
+
+enum CallHookInner<T: 'static> {
     #[cfg(feature = "call-hook")]
     Sync(Box<dyn FnMut(StoreContextMut<'_, T>, CallHook) -> Result<()> + Send + Sync>),
     #[cfg(all(feature = "async", feature = "call-hook"))]
     Async(Box<dyn CallHookHandler<T> + Send + Sync>),
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "forcing, regardless of cfg, the type param to be used"
+    )]
     ForceTypeParameterToBeUsed {
-        uninhabited: Uninhabited,
+        uninhabited: Infallible,
         _marker: marker::PhantomData<T>,
     },
 }
 
 /// What to do after returning from a callback when the engine epoch reaches
 /// the deadline for a Store during execution of a function using that store.
+#[non_exhaustive]
 pub enum UpdateDeadline {
+    /// Halt execution of WebAssembly, don't update the epoch deadline, and
+    /// raise a trap.
+    Interrupt,
     /// Extend the deadline by the specified number of ticks.
     Continue(u64),
     /// Extend the deadline by the specified number of ticks after yielding to
-    /// the async executor loop. This can only be used with an async [`Store`]
-    /// configured via [`Config::async_support`](crate::Config::async_support).
+    /// the async executor loop.
+    ///
+    /// This can only be used when WebAssembly is invoked with `*_async`
+    /// methods. If WebAssembly was invoked with a synchronous method then
+    /// returning this variant will raise a trap.
     #[cfg(feature = "async")]
     Yield(u64),
+    /// Extend the deadline by the specified number of ticks after yielding to
+    /// the async executor loop.
+    ///
+    /// This can only be used when WebAssembly is invoked with `*_async`
+    /// methods. If WebAssembly was invoked with a synchronous method then
+    /// returning this variant will raise a trap.
+    ///
+    /// The yield will be performed by the future provided; when using `tokio`
+    /// it is recommended to provide [`tokio::task::yield_now`](https://docs.rs/tokio/latest/tokio/task/fn.yield_now.html)
+    /// here.
+    #[cfg(feature = "async")]
+    YieldCustom(
+        u64,
+        ::core::pin::Pin<Box<dyn ::core::future::Future<Output = ()> + Send>>,
+    ),
 }
 
 // Forward methods on `StoreOpaque` to also being on `StoreInner<T>`
@@ -328,14 +493,19 @@ pub struct StoreOpaque {
     _marker: marker::PhantomPinned,
 
     engine: Engine,
-    runtime_limits: VMRuntimeLimits,
-    instances: Vec<StoreInstance>,
-    #[cfg(feature = "component-model")]
-    num_component_instances: usize,
-    signal_handler: Option<Box<SignalHandler<'static>>>,
+    vm_store_context: VMStoreContext,
+
+    // Contains all continuations ever allocated throughout the lifetime of this
+    // store.
+    #[cfg(feature = "stack-switching")]
+    continuations: Vec<Box<VMContRef>>,
+
+    instances: TryPrimaryMap<InstanceId, StoreInstance>,
+
+    signal_handler: Option<SignalHandler>,
     modules: ModuleRegistry,
     func_refs: FuncRefs,
-    host_globals: Vec<StoreBox<VMHostGlobalContext>>,
+    host_globals: TryPrimaryMap<DefinedGlobalIndex, StoreBox<VMHostGlobalContext>>,
 
     asyncify_state: AsyncifyState,
     // signal asyncify data, holds the sequence of the parameters for signal handler
@@ -351,6 +521,13 @@ pub struct StoreOpaque {
     stack_top: u64,
     // stack bottom
     stack_base: u64,
+    // libraries symbol mapping
+    library_symbols: SymbolTable,
+
+    // Tracks the InstanceId of every named module instance created in this store:
+    // preloaded libraries, the main module, and dlopen'd libraries. Used by
+    // get_global_snapshot to avoid iterating all INSTANCE_NUMBER slots.
+    named_module_instances: Vec<(String, InstanceId)>,
 
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
@@ -359,7 +536,22 @@ pub struct StoreOpaque {
     // GC-related fields.
     gc_store: Option<GcStore>,
     gc_roots: RootSet,
+    #[cfg(feature = "gc")]
     gc_roots_list: GcRootsList,
+    // Types for which the embedder has created an allocator for.
+    #[cfg(feature = "gc")]
+    gc_host_alloc_types: crate::hash_set::HashSet<crate::type_registry::RegisteredType>,
+    /// Pending exception, if any. This is also a GC root, because it
+    /// needs to be rooted somewhere between the time that a pending
+    /// exception is set and the time that the handling code takes the
+    /// exception object. We use this rooting strategy rather than a
+    /// root in an `Err` branch of a `Result` on the host side because
+    /// it is less error-prone with respect to rooting behavior. See
+    /// `throw()`, `take_pending_exception()`,
+    /// `peek_pending_exception()`, `has_pending_exception()`, and
+    /// `catch()`.
+    #[cfg(feature = "gc")]
+    pending_exception: Option<VMExnRef>,
 
     // Numbers of resources instantiated in this store, and their limits
     instance_count: usize,
@@ -369,72 +561,116 @@ pub struct StoreOpaque {
     table_count: usize,
     table_limit: usize,
     #[cfg(feature = "async")]
-    async_state: AsyncState,
+    async_state: fiber::AsyncState,
+
     // If fuel_yield_interval is enabled, then we store the remaining fuel (that isn't in
     // runtime_limits) here. The total amount of fuel is the runtime limits and reserve added
     // together. Then when we run out of gas, we inject the yield amount from the reserve
     // until the reserve is empty.
     fuel_reserve: u64,
-    fuel_yield_interval: Option<NonZeroU64>,
+    pub(crate) fuel_yield_interval: Option<NonZeroU64>,
     /// Indexed data within this `Store`, used to store information about
     /// globals, functions, memories, etc.
-    ///
-    /// Note that this is `ManuallyDrop` because it needs to be dropped before
-    /// `rooted_host_funcs` below. This structure contains pointers which are
-    /// otherwise kept alive by the `Arc` references in `rooted_host_funcs`.
-    store_data: ManuallyDrop<StoreData>,
-    default_caller: InstanceHandle,
+    store_data: StoreData,
+    traitobj: StorePtr,
+    default_caller_vmctx: SendSyncPtr<VMContext>,
 
-    /// Used to optimzed wasm->host calls when the host function is defined with
+    /// Used to optimized wasm->host calls when the host function is defined with
     /// `Func::new` to avoid allocating a new vector each time a function is
     /// called.
     hostcall_val_storage: Vec<Val>,
     /// Same as `hostcall_val_storage`, but for the direction of the host
     /// calling wasm.
-    wasm_val_raw_storage: Vec<ValRaw>,
-
-    /// A list of lists of definitions which have been used to instantiate
-    /// within this `Store`.
-    ///
-    /// Note that not all instantiations end up pushing to this list. At the
-    /// time of this writing only the `InstancePre<T>` type will push to this
-    /// list. Pushes to this list are typically accompanied with
-    /// `HostFunc::to_func_store_rooted` to clone an `Arc` here once which
-    /// preserves a strong reference to the `Arc` for each `HostFunc` stored
-    /// within the list of `Definition`s.
-    ///
-    /// Note that this is `ManuallyDrop` as it must be dropped after
-    /// `store_data` above, where the function pointers are stored.
-    rooted_host_funcs: ManuallyDrop<Vec<Arc<[Definition]>>>,
+    wasm_val_raw_storage: TryVec<ValRaw>,
 
     /// Keep track of what protection key is being used during allocation so
     /// that the right memory pages can be enabled when entering WebAssembly
     /// guest code.
     pkey: Option<ProtectionKey>,
 
-    /// Runtime state for components used in the handling of resources, borrow,
-    /// and calls. These also interact with the `ResourceAny` type and its
-    /// internal representation.
-    #[cfg(feature = "component-model")]
-    component_host_table: crate::runtime::vm::component::ResourceTable,
-    #[cfg(feature = "component-model")]
-    component_calls: crate::runtime::vm::component::CallContexts,
-    #[cfg(feature = "component-model")]
-    host_resource_data: crate::component::HostResourceData,
+    /// State related to the executor of wasm code.
+    ///
+    /// For example if Pulley is enabled and configured then this will store a
+    /// Pulley interpreter.
+    executor: Executor,
+
+    /// The debug breakpoint state for this store.
+    ///
+    /// When guest debugging is enabled, a given store may have a set
+    /// of breakpoints defined, denoted by module and Wasm PC within
+    /// that module. Or alternately, it may be in "single-step" mode,
+    /// where every possible breakpoint is logically enabled.
+    ///
+    /// When execution of any instance in this store hits any defined
+    /// breakpoint, a `Breakpoint` debug event is emitted and the
+    /// handler defined above, if any, has a chance to perform some
+    /// logic before returning to allow execution to resume.
+    #[cfg(feature = "debug")]
+    breakpoints: BreakpointState,
+
+    /// The debug PC-to-FrameData cache for this store.
+    ///
+    /// When guest debugging is enabled, we parse compiler metadata
+    /// and pass out `FrameHandle`s that represent Wasm guest
+    /// frames. These handles represent a specific frame within a
+    /// frozen stack and are invalidated upon further execution. In
+    /// order to keep these handles lightweight, and to avoid
+    /// redundant work when passing out *new* handles after further
+    /// execution, we cache the mapping from store-specific PCs to
+    /// parsed frame data. (This cache needs to be store-specific
+    /// rather than e.g. engine-specific because each store has its
+    /// own privately mapped copy of guest code when debugging is
+    /// enabled, so the key-space is unique for each store.)
+    #[cfg(feature = "debug")]
+    frame_data_cache: FrameDataCache,
 }
 
-#[cfg(feature = "async")]
-struct AsyncState {
-    current_suspend: UnsafeCell<*mut wasmtime_fiber::Suspend<Result<()>, (), Result<()>>>,
-    current_poll_cx: UnsafeCell<*mut Context<'static>>,
+/// Self-pointer to `StoreInner<T>` from within a `StoreOpaque` which is chiefly
+/// used to copy into instances during instantiation.
+///
+/// FIXME: ideally this type would get deleted and Wasmtime's reliance on it
+/// would go away.
+struct StorePtr(Option<NonNull<dyn VMStore>>);
+
+// We can't make `VMStore: Send + Sync` because that requires making all of
+// Wastime's internals generic over the `Store`'s `T`. So instead, we take care
+// in the whole VM layer to only use the `VMStore` in ways that are `Send`- and
+// `Sync`-safe and we have to have these unsafe impls.
+unsafe impl Send for StorePtr {}
+unsafe impl Sync for StorePtr {}
+
+/// Executor state within `StoreOpaque`.
+///
+/// Effectively stores Pulley interpreter state and handles conditional support
+/// for Cranelift at compile time.
+pub(crate) enum Executor {
+    Interpreter(Interpreter),
+    #[cfg(has_host_compiler_backend)]
+    Native,
 }
 
-// Lots of pesky unsafe cells and pointers in this structure. This means we need
-// to declare explicitly that we use this in a threadsafe fashion.
-#[cfg(feature = "async")]
-unsafe impl Send for AsyncState {}
-#[cfg(feature = "async")]
-unsafe impl Sync for AsyncState {}
+impl Executor {
+    pub(crate) fn new(engine: &Engine) -> Result<Self, OutOfMemory> {
+        #[cfg(has_host_compiler_backend)]
+        if cfg!(feature = "pulley") && engine.target().is_pulley() {
+            Ok(Executor::Interpreter(Interpreter::new(engine)?))
+        } else {
+            Ok(Executor::Native)
+        }
+        #[cfg(not(has_host_compiler_backend))]
+        {
+            debug_assert!(engine.target().is_pulley());
+            Ok(Executor::Interpreter(Interpreter::new(engine)?))
+        }
+    }
+}
+
+/// A borrowed reference to `Executor` above.
+pub(crate) enum ExecutorRef<'a> {
+    Interpreter(InterpreterRef<'a>),
+    #[cfg(has_host_compiler_backend)]
+    Native,
+}
 
 /// An RAII type to automatically mark a region of code as unsafe for GC.
 #[doc(hidden)]
@@ -544,145 +780,47 @@ impl<T> Store<T> {
     /// tables created to 10,000. This can be overridden with the
     /// [`Store::limiter`] configuration method.
     pub fn new(engine: &Engine, data: T) -> Self {
-        let pkey = engine.allocator().next_available_pkey();
-
-        let mut inner = Box::new(StoreInner {
-            inner: StoreOpaque {
-                _marker: marker::PhantomPinned,
-                engine: engine.clone(),
-                runtime_limits: Default::default(),
-                instances: Vec::new(),
-                asyncify_state: super::AsyncifyState::Normal,
-                signal_asyncify_data: Vec::new(),
-                signal_asyncify_counter: 0,
-                syscall_asyncify_data: Vec::new(),
-                syscall_asyncify_counter: 0,
-                #[cfg(feature = "component-model")]
-                num_component_instances: 0,
-                signal_handler: None,
-                stack_top: 0,
-                stack_base: 0,
-                stack_snapshots: HashMap::new(),
-                gc_store: None,
-                gc_roots: RootSet::default(),
-                gc_roots_list: GcRootsList::default(),
-                modules: ModuleRegistry::default(),
-                func_refs: FuncRefs::default(),
-                host_globals: Vec::new(),
-                instance_count: 0,
-                instance_limit: crate::DEFAULT_INSTANCE_LIMIT,
-                memory_count: 0,
-                memory_limit: crate::DEFAULT_MEMORY_LIMIT,
-                table_count: 0,
-                table_limit: crate::DEFAULT_TABLE_LIMIT,
-                #[cfg(feature = "async")]
-                async_state: AsyncState {
-                    current_suspend: UnsafeCell::new(ptr::null_mut()),
-                    current_poll_cx: UnsafeCell::new(ptr::null_mut()),
-                },
-                fuel_reserve: 0,
-                fuel_yield_interval: None,
-                store_data: ManuallyDrop::new(StoreData::new()),
-                default_caller: InstanceHandle::null(),
-                hostcall_val_storage: Vec::new(),
-                wasm_val_raw_storage: Vec::new(),
-                rooted_host_funcs: ManuallyDrop::new(Vec::new()),
-                pkey,
-                #[cfg(feature = "component-model")]
-                component_host_table: Default::default(),
-                #[cfg(feature = "component-model")]
-                component_calls: Default::default(),
-                #[cfg(feature = "component-model")]
-                host_resource_data: Default::default(),
-            },
-            limiter: None,
-            call_hook: None,
-            on_called: None,
-            is_thread: false,
-            epoch_deadline_behavior: None,
-            data: ManuallyDrop::new(data),
-        });
-
-        // Wasmtime uses the callee argument to host functions to learn about
-        // the original pointer to the `Store` itself, allowing it to
-        // reconstruct a `StoreContextMut<T>`. When we initially call a `Func`,
-        // however, there's no "callee" to provide. To fix this we allocate a
-        // single "default callee" for the entire `Store`. This is then used as
-        // part of `Func::call` to guarantee that the `callee: *mut VMContext`
-        // is never null.
-        inner.default_caller = {
-            let module = Arc::new(wasmtime_environ::Module::default());
-            let shim = ModuleRuntimeInfo::bare(module);
-            let allocator = OnDemandInstanceAllocator::default();
-            allocator
-                .validate_module(shim.module(), shim.offsets())
-                .unwrap();
-            let mut instance = unsafe {
-                allocator
-                    .allocate_module(InstanceAllocationRequest {
-                        host_state: Box::new(()),
-                        imports: Default::default(),
-                        store: StorePtr::empty(),
-                        runtime_info: &shim,
-                        wmemcheck: engine.config().wmemcheck,
-                        pkey: None,
-                    })
-                    .expect("failed to allocate default callee")
-            };
-
-            // Note the erasure of the lifetime here into `'static`, so in
-            // general usage of this trait object must be strictly bounded to
-            // the `Store` itself, and is a variant that we have to maintain
-            // throughout Wasmtime.
-            unsafe {
-                let traitobj = mem::transmute::<
-                    *mut (dyn crate::runtime::vm::Store + '_),
-                    *mut (dyn crate::runtime::vm::Store + 'static),
-                >(&mut *inner);
-                instance.set_store(traitobj);
-            }
-            instance
-        };
-
-        Self {
-            inner: ManuallyDrop::new(inner),
-        }
+        Self::try_new(engine, data).expect(
+            "allocation failure during `Store::new` (use `Store::try_new` to handle such errors)",
+        )
     }
 
-    /// Creates a new [`Store`] to be associated with the given [`Engine`] and
-    /// `data` provided.
-    ///
-    /// The created [`Store`] will place no additional limits on the size of
-    /// linear memories or tables at runtime. Linear memories and tables will
-    /// be allowed to grow to any upper limit specified in their definitions.
-    /// The store will limit the number of instances, linear memories, and
-    /// tables created to 10,000. This can be overridden with the
-    /// [`Store::limiter`] configuration method.
-    pub fn new_inner(engine: &Engine) -> StoreOpaque {
+    /// Like `Store::new` but returns an error on allocation failure.
+    pub fn try_new(engine: &Engine, data: T) -> Result<Self> {
+        let store_data = StoreData::new(engine);
+        log::trace!("creating new store {:?}", store_data.id());
+
         let pkey = engine.allocator().next_available_pkey();
 
-        StoreOpaque {
+        let inner = StoreOpaque {
             _marker: marker::PhantomPinned,
             engine: engine.clone(),
-            runtime_limits: Default::default(),
-            instances: Vec::new(),
+            vm_store_context: Default::default(),
+            #[cfg(feature = "stack-switching")]
+            continuations: Vec::new(),
+            instances: TryPrimaryMap::new(),
+            signal_handler: None,
             asyncify_state: super::AsyncifyState::Normal,
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
+            library_symbols: SymbolTable::new(),
+            named_module_instances: Vec::new(),
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
-            #[cfg(feature = "component-model")]
-            num_component_instances: 0,
-            signal_handler: None,
             stack_top: 0,
             stack_base: 0,
             stack_snapshots: HashMap::new(),
             gc_store: None,
             gc_roots: RootSet::default(),
+            #[cfg(feature = "gc")]
             gc_roots_list: GcRootsList::default(),
+            #[cfg(feature = "gc")]
+            gc_host_alloc_types: Default::default(),
+            #[cfg(feature = "gc")]
+            pending_exception: None,
             modules: ModuleRegistry::default(),
             func_refs: FuncRefs::default(),
-            host_globals: Vec::new(),
+            host_globals: TryPrimaryMap::new(),
             instance_count: 0,
             instance_limit: crate::DEFAULT_INSTANCE_LIMIT,
             memory_count: 0,
@@ -690,46 +828,39 @@ impl<T> Store<T> {
             table_count: 0,
             table_limit: crate::DEFAULT_TABLE_LIMIT,
             #[cfg(feature = "async")]
-            async_state: AsyncState {
-                current_suspend: UnsafeCell::new(ptr::null_mut()),
-                current_poll_cx: UnsafeCell::new(ptr::null_mut()),
-            },
+            async_state: Default::default(),
             fuel_reserve: 0,
             fuel_yield_interval: None,
-            store_data: ManuallyDrop::new(StoreData::new()),
-            default_caller: InstanceHandle::null(),
+            store_data,
+            traitobj: StorePtr(None),
+            default_caller_vmctx: SendSyncPtr::new(NonNull::dangling()),
             hostcall_val_storage: Vec::new(),
-            wasm_val_raw_storage: Vec::new(),
-            rooted_host_funcs: ManuallyDrop::new(Vec::new()),
+            wasm_val_raw_storage: TryVec::new(),
             pkey,
-            #[cfg(feature = "component-model")]
-            component_host_table: Default::default(),
-            #[cfg(feature = "component-model")]
-            component_calls: Default::default(),
-            #[cfg(feature = "component-model")]
-            host_resource_data: Default::default(),
-        }
-    }
-
-    /// Creates a new [`Store`] to be associated with the given [`Engine`] and
-    /// `data` provided.
-    ///
-    /// The created [`Store`] will place no additional limits on the size of
-    /// linear memories or tables at runtime. Linear memories and tables will
-    /// be allowed to grow to any upper limit specified in their definitions.
-    /// The store will limit the number of instances, linear memories, and
-    /// tables created to 10,000. This can be overridden with the
-    /// [`Store::limiter`] configuration method.
-    pub fn new_with_inner(engine: &Engine, data: T, store_inner: StoreOpaque) -> Self {
-        let mut inner = Box::new(StoreInner {
-            inner: store_inner,
+            executor: Executor::new(engine)?,
+            #[cfg(feature = "debug")]
+            breakpoints: Default::default(),
+            #[cfg(feature = "debug")]
+            frame_data_cache: FrameDataCache::new(),
+        };
+        let mut inner = try_new::<Box<_>>(StoreInner {
+            inner,
             limiter: None,
             call_hook: None,
             on_called: None,
             is_thread: false,
+            #[cfg(target_has_atomic = "64")]
             epoch_deadline_behavior: None,
-            data: ManuallyDrop::new(data),
-        });
+            data_no_provenance: ManuallyDrop::new(data),
+            #[cfg(feature = "debug")]
+            debug_handler: None,
+        })?;
+
+        let store_data =
+            <NonNull<ManuallyDrop<T>>>::from(&mut inner.data_no_provenance).cast::<()>();
+        inner.inner.vm_store_context.store_data = store_data.into();
+
+        inner.traitobj = StorePtr(Some(NonNull::from(&mut *inner)));
 
         // Wasmtime uses the callee argument to host functions to learn about
         // the original pointer to the `Store` itself, allowing it to
@@ -738,52 +869,143 @@ impl<T> Store<T> {
         // single "default callee" for the entire `Store`. This is then used as
         // part of `Func::call` to guarantee that the `callee: *mut VMContext`
         // is never null.
-        inner.default_caller = {
-            let module = Arc::new(wasmtime_environ::Module::default());
-            let shim = ModuleRuntimeInfo::bare(module);
-            let allocator = OnDemandInstanceAllocator::default();
-            allocator
-                .validate_module(shim.module(), shim.offsets())
-                .unwrap();
-            let mut instance = unsafe {
-                allocator
-                    .allocate_module(InstanceAllocationRequest {
-                        host_state: Box::new(()),
-                        imports: Default::default(),
-                        store: StorePtr::empty(),
-                        runtime_info: &shim,
-                        wmemcheck: engine.config().wmemcheck,
-                        pkey: None,
-                    })
-                    .expect("failed to allocate default callee")
+        let allocator = OnDemandInstanceAllocator::default();
+        let info = engine.empty_module_runtime_info();
+        allocator
+            .validate_module(info.env_module(), info.offsets())
+            .unwrap();
+
+        unsafe {
+            // Note that this dummy instance doesn't allocate tables or memories
+            // (also no limiter is passed in) so it won't have an async await
+            // point meaning that it should be ok to assert the future is
+            // always ready.
+            let result = vm::assert_ready(inner.allocate_instance(
+                None,
+                AllocateInstanceKind::Dummy {
+                    allocator: &allocator,
+                },
+                info,
+                Default::default(),
+            ));
+            let id = match result {
+                Ok(id) => id,
+                Err(e) => {
+                    if e.is::<OutOfMemory>() {
+                        return Err(e);
+                    }
+                    panic!("instance allocator failed to allocate default callee")
+                }
             };
-
-            // Note the erasure of the lifetime here into `'static`, so in
-            // general usage of this trait object must be strictly bounded to
-            // the `Store` itself, and is a variant that we have to maintain
-            // throughout Wasmtime.
-            unsafe {
-                let traitobj = mem::transmute::<
-                    *mut (dyn crate::runtime::vm::Store + '_),
-                    *mut (dyn crate::runtime::vm::Store + 'static),
-                >(&mut *inner);
-                instance.set_store(traitobj);
-            }
-            instance
-        };
-
-        Self {
-            inner: ManuallyDrop::new(inner),
+            let default_caller_vmctx = inner.instance(id).vmctx();
+            inner.default_caller_vmctx = default_caller_vmctx.into();
         }
+
+        Ok(Self {
+            inner: ManuallyDrop::new(inner),
+        })
     }
 
-    /// Access the underlying data owned by this `Store`.
+    /// Creates a new [`StoreOpaque`] to be associated with the given [`Engine`],
+    /// accepting an explicit [`SymbolTable`] for preloaded library symbols.
+    ///
+    /// This is a lind-specific constructor used when a cage already has a
+    /// symbol table that should be shared with the store (e.g., after fork or
+    /// when creating a thread store).
+    pub fn new_inner(engine: &Engine, symbol_table: SymbolTable) -> Result<StoreOpaque> {
+        let store_data = StoreData::new(engine);
+        let pkey = engine.allocator().next_available_pkey();
+
+        Ok(StoreOpaque {
+            _marker: marker::PhantomPinned,
+            engine: engine.clone(),
+            vm_store_context: Default::default(),
+            #[cfg(feature = "stack-switching")]
+            continuations: Vec::new(),
+            instances: TryPrimaryMap::new(),
+            signal_handler: None,
+            asyncify_state: super::AsyncifyState::Normal,
+            signal_asyncify_data: Vec::new(),
+            signal_asyncify_counter: 0,
+            library_symbols: symbol_table,
+            named_module_instances: Vec::new(),
+            syscall_asyncify_data: Vec::new(),
+            syscall_asyncify_counter: 0,
+            stack_top: 0,
+            stack_base: 0,
+            stack_snapshots: HashMap::new(),
+            gc_store: None,
+            gc_roots: RootSet::default(),
+            #[cfg(feature = "gc")]
+            gc_roots_list: GcRootsList::default(),
+            #[cfg(feature = "gc")]
+            gc_host_alloc_types: Default::default(),
+            #[cfg(feature = "gc")]
+            pending_exception: None,
+            modules: ModuleRegistry::default(),
+            func_refs: FuncRefs::default(),
+            host_globals: TryPrimaryMap::new(),
+            instance_count: 0,
+            instance_limit: crate::DEFAULT_INSTANCE_LIMIT,
+            memory_count: 0,
+            memory_limit: crate::DEFAULT_MEMORY_LIMIT,
+            table_count: 0,
+            table_limit: crate::DEFAULT_TABLE_LIMIT,
+            #[cfg(feature = "async")]
+            async_state: Default::default(),
+            fuel_reserve: 0,
+            fuel_yield_interval: None,
+            store_data,
+            traitobj: StorePtr(None),
+            default_caller_vmctx: SendSyncPtr::new(NonNull::dangling()),
+            hostcall_val_storage: Vec::new(),
+            wasm_val_raw_storage: TryVec::new(),
+            pkey,
+            executor: Executor::new(engine)?,
+            #[cfg(feature = "debug")]
+            breakpoints: Default::default(),
+            #[cfg(feature = "debug")]
+            frame_data_cache: FrameDataCache::new(),
+        })
+    }
+
+    /// Creates a new [`Store`] to be associated with the given [`Engine`] and
+    /// `data` provided, using a pre-built [`StoreOpaque`].
+    ///
+    /// This is used by lind after `new_inner` to wrap the opaque store with
+    /// the user's `T` data.
+    pub fn new_with_inner(engine: &Engine, data: T, store_inner: StoreOpaque) -> Result<Self> {
+        let mut inner = try_new::<Box<_>>(StoreInner {
+            inner: store_inner,
+            limiter: None,
+            call_hook: None,
+            on_called: None,
+            is_thread: false,
+            #[cfg(target_has_atomic = "64")]
+            epoch_deadline_behavior: None,
+            data_no_provenance: ManuallyDrop::new(data),
+            #[cfg(feature = "debug")]
+            debug_handler: None,
+        })?;
+
+        let store_data =
+            <NonNull<ManuallyDrop<T>>>::from(&mut inner.data_no_provenance).cast::<()>();
+        inner.inner.vm_store_context.store_data = store_data.into();
+
+        inner.traitobj = StorePtr(Some(NonNull::from(&mut *inner)));
+
+        Ok(Self {
+            inner: ManuallyDrop::new(inner),
+        })
+    }
+
+    /// Access the underlying `T` data owned by this `Store`.
     #[inline]
     pub fn data(&self) -> &T {
         self.inner.data()
     }
 
-    /// Access the underlying data owned by this `Store`.
+    /// Access the underlying `T` data owned by this `Store`.
     #[inline]
     pub fn inner(&self) -> &StoreOpaque {
         &self.inner.inner
@@ -801,16 +1023,28 @@ impl<T> Store<T> {
         self.inner.data_mut()
     }
 
+    #[allow(missing_docs)]
     pub fn is_thread(&self) -> bool {
         self.inner.is_thread
     }
 
+    #[allow(missing_docs)]
     pub fn set_is_thread(&mut self, status: bool) {
         self.inner.is_thread = status;
     }
 
+    fn run_manual_drop_routines(&mut self) {
+        StoreData::run_manual_drop_routines(StoreContextMut(&mut self.inner));
+
+        // Ensure all fiber stacks, even cached ones, are all flushed out to the
+        // instance allocator.
+        self.inner.flush_fiber_stack();
+    }
+
     /// Consumes this [`Store`], destroying it, and returns the underlying data.
     pub fn into_data(mut self) -> T {
+        self.run_manual_drop_routines();
+
         // This is an unsafe operation because we want to avoid having a runtime
         // check or boolean for whether the data is actually contained within a
         // `Store`. The data itself is stored as `ManuallyDrop` since we're
@@ -838,7 +1072,7 @@ impl<T> Store<T> {
         unsafe {
             let mut inner = ManuallyDrop::take(&mut self.inner);
             core::mem::forget(self);
-            ManuallyDrop::take(&mut inner.data)
+            ManuallyDrop::take(&mut inner.data_no_provenance)
         }
     }
 
@@ -895,12 +1129,12 @@ impl<T> Store<T> {
     /// [`ResourceLimiter`]: crate::ResourceLimiter
     pub fn limiter(
         &mut self,
-        mut limiter: impl FnMut(&mut T) -> &mut (dyn crate::ResourceLimiter) + Send + Sync + 'static,
+        mut limiter: impl (FnMut(&mut T) -> &mut dyn crate::ResourceLimiter) + Send + Sync + 'static,
     ) {
         // Apply the limits on instances, tables, and memory given by the limiter:
         let inner = &mut self.inner;
         let (instance_limit, table_limit, memory_limit) = {
-            let l = limiter(&mut inner.data);
+            let l = limiter(inner.data_mut());
             (l.instances(), l.tables(), l.memories())
         };
         let innermost = &mut inner.inner;
@@ -910,73 +1144,6 @@ impl<T> Store<T> {
 
         // Save the limiter accessor function:
         inner.limiter = Some(ResourceLimiterInner::Sync(Box::new(limiter)));
-    }
-
-    /// Configures the [`ResourceLimiterAsync`](crate::ResourceLimiterAsync)
-    /// used to limit resource creation within this [`Store`].
-    ///
-    /// This method is an asynchronous variant of the [`Store::limiter`] method
-    /// where the embedder can block the wasm request for more resources with
-    /// host `async` execution of futures.
-    ///
-    /// By using a [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`)
-    /// with a [`Store`], you can no longer use
-    /// [`Memory::new`](`crate::Memory::new`),
-    /// [`Memory::grow`](`crate::Memory::grow`),
-    /// [`Table::new`](`crate::Table::new`), and
-    /// [`Table::grow`](`crate::Table::grow`). Instead, you must use their
-    /// `async` variants: [`Memory::new_async`](`crate::Memory::new_async`),
-    /// [`Memory::grow_async`](`crate::Memory::grow_async`),
-    /// [`Table::new_async`](`crate::Table::new_async`), and
-    /// [`Table::grow_async`](`crate::Table::grow_async`).
-    ///
-    /// Note that this limiter is only used to limit the creation/growth of
-    /// resources in the future, this does not retroactively attempt to apply
-    /// limits to the [`Store`]. Additionally this must be used with an async
-    /// [`Store`] configured via
-    /// [`Config::async_support`](crate::Config::async_support).
-    #[cfg(feature = "async")]
-    pub fn limiter_async(
-        &mut self,
-        mut limiter: impl FnMut(&mut T) -> &mut (dyn crate::ResourceLimiterAsync)
-            + Send
-            + Sync
-            + 'static,
-    ) {
-        debug_assert!(self.inner.async_support());
-        // Apply the limits on instances, tables, and memory given by the limiter:
-        let inner = &mut self.inner;
-        let (instance_limit, table_limit, memory_limit) = {
-            let l = limiter(&mut inner.data);
-            (l.instances(), l.tables(), l.memories())
-        };
-        let innermost = &mut inner.inner;
-        innermost.instance_limit = instance_limit;
-        innermost.table_limit = table_limit;
-        innermost.memory_limit = memory_limit;
-
-        // Save the limiter accessor function:
-        inner.limiter = Some(ResourceLimiterInner::Async(Box::new(limiter)));
-    }
-
-    /// Configures an async function that runs on calls and returns between
-    /// WebAssembly and host code. For the non-async equivalent of this method,
-    /// see [`Store::call_hook`].
-    ///
-    /// The function is passed a [`CallHook`] argument, which indicates which
-    /// state transition the VM is making.
-    ///
-    /// This function's future may return a [`Trap`]. If a trap is returned
-    /// when an import was called, it is immediately raised as-if the host
-    /// import had returned the trap. If a trap is returned after wasm returns
-    /// to the host then the wasm function's result is ignored and this trap is
-    /// returned instead.
-    ///
-    /// After this function returns a trap, it may be called for subsequent
-    /// returns to host or wasm code as the trap propagates to the root call.
-    #[cfg(all(feature = "async", feature = "call-hook"))]
-    pub fn call_hook_async(&mut self, hook: impl CallHookHandler<T> + Send + Sync + 'static) {
-        self.inner.call_hook = Some(CallHookInner::Async(Box::new(hook)));
     }
 
     /// Configure a function that runs on calls and returns between WebAssembly
@@ -993,6 +1160,8 @@ impl<T> Store<T> {
     ///
     /// After this function returns a trap, it may be called for subsequent returns
     /// to host or wasm code as the trap propagates to the root call.
+    ///
+    /// [`Trap`]: crate::Trap
     #[cfg(feature = "call-hook")]
     pub fn call_hook(
         &mut self,
@@ -1012,25 +1181,20 @@ impl<T> Store<T> {
     /// automatically happen according to various internal heuristics. This is
     /// provided if fine-grained control over the GC is desired.
     ///
-    /// This method is only available when the `gc` Cargo feature is enabled.
+    /// If you are calling this method after an attempted allocation failed, you
+    /// may pass in the [`GcHeapOutOfMemory`][crate::GcHeapOutOfMemory] error.
+    /// When you do so, this method will attempt to create enough space in the
+    /// GC heap for that allocation, so that it will succeed on the next
+    /// attempt.
+    ///
+    /// # Errors
+    ///
+    /// This method will fail if an [async limiter is
+    /// configured](Store::limiter_async) in which case [`Store::gc_async`] must
+    /// be used instead.
     #[cfg(feature = "gc")]
-    pub fn gc(&mut self) {
-        self.inner.gc()
-    }
-
-    /// Perform garbage collection asynchronously.
-    ///
-    /// Note that it is not required to actively call this function. GC will
-    /// automatically happen according to various internal heuristics. This is
-    /// provided if fine-grained control over the GC is desired.
-    ///
-    /// This method is only available when the `gc` Cargo feature is enabled.
-    #[cfg(all(feature = "async", feature = "gc"))]
-    pub async fn gc_async(&mut self)
-    where
-        T: Send,
-    {
-        self.inner.gc_async().await;
+    pub fn gc(&mut self, why: Option<&crate::GcHeapOutOfMemory<()>>) -> Result<()> {
+        StoreContextMut(&mut self.inner).gc(why)
     }
 
     /// Returns the amount fuel in this [`Store`]. When fuel is enabled, it must
@@ -1072,10 +1236,10 @@ impl<T> Store<T> {
     ///
     /// When a [`Store`] is configured to consume fuel with
     /// [`Config::consume_fuel`](crate::Config::consume_fuel) this method will
-    /// configure WebAssembly to be suspended and control will be yielded back to the
-    /// caller every `interval` units of fuel consumed. This is only suitable with use of
-    /// a store associated with an [async config](crate::Config::async_support) because
-    /// only then are futures used and yields are possible.
+    /// configure WebAssembly to be suspended and control will be yielded back
+    /// to the caller every `interval` units of fuel consumed. When using this
+    /// method it requires further invocations of WebAssembly to use `*_async`
+    /// entrypoints.
     ///
     /// The purpose of this behavior is to ensure that futures which represent
     /// execution of WebAssembly do not execute too long inside their
@@ -1093,8 +1257,9 @@ impl<T> Store<T> {
     ///
     /// # Error
     ///
-    /// This method will error if it is not called on a store associated with an [async
-    /// config](crate::Config::async_support).
+    /// This method will error if fuel is not enabled or `interval` is
+    /// `Some(0)`.
+    #[cfg(feature = "async")]
     pub fn fuel_async_yield_interval(&mut self, interval: Option<u64>) -> Result<()> {
         self.inner.fuel_async_yield_interval(interval)
     }
@@ -1110,7 +1275,7 @@ impl<T> Store<T> {
     /// yield and then continue.
     ///
     /// This deadline is always set relative to the current epoch:
-    /// `delta_beyond_current` ticks in the future. The deadline can
+    /// `ticks_beyond_current` ticks in the future. The deadline can
     /// be set explicitly via this method, or refilled automatically
     /// on a yield if configured via
     /// [`epoch_deadline_async_yield_and_update()`](Store::epoch_deadline_async_yield_and_update). After
@@ -1125,12 +1290,14 @@ impl<T> Store<T> {
     /// See documentation on
     /// [`Config::epoch_interruption()`](crate::Config::epoch_interruption)
     /// for an introduction to epoch-based interruption.
+    #[cfg(target_has_atomic = "64")]
     pub fn set_epoch_deadline(&mut self, ticks_beyond_current: u64) {
         self.inner.set_epoch_deadline(ticks_beyond_current);
     }
 
     // set the stack snapshots
     // used by fork to copy stack snapshots information to child
+    #[allow(missing_docs)]
     pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
         self.inner.stack_snapshots = stack_snapshots;
     }
@@ -1161,6 +1328,7 @@ impl<T> Store<T> {
     /// See documentation on
     /// [`Config::epoch_interruption()`](crate::Config::epoch_interruption)
     /// for an introduction to epoch-based interruption.
+    #[cfg(target_has_atomic = "64")]
     pub fn epoch_deadline_trap(&mut self) {
         self.inner.epoch_deadline_trap();
     }
@@ -1179,10 +1347,10 @@ impl<T> Store<T> {
     /// add to the epoch deadline, as well as indicating what
     /// to do after the callback returns. If the [`Store`] is
     /// configured with async support, then the callback may return
-    /// [`UpdateDeadline::Yield`] to yield to the async executor before
-    /// updating the epoch deadline. Alternatively, the callback may
-    /// return [`UpdateDeadline::Continue`] to update the epoch deadline
-    /// immediately.
+    /// [`UpdateDeadline::Yield`] or [`UpdateDeadline::YieldCustom`]
+    /// to yield to the async executor before updating the epoch deadline.
+    /// Alternatively, the callback may return [`UpdateDeadline::Continue`] to
+    /// update the epoch deadline immediately.
     ///
     /// This setting is intended to allow for coarse-grained
     /// interruption, but not a deterministic deadline of a fixed,
@@ -1192,6 +1360,7 @@ impl<T> Store<T> {
     /// See documentation on
     /// [`Config::epoch_interruption()`](crate::Config::epoch_interruption)
     /// for an introduction to epoch-based interruption.
+    #[cfg(target_has_atomic = "64")]
     pub fn epoch_deadline_callback(
         &mut self,
         callback: impl FnMut(StoreContextMut<T>) -> Result<UpdateDeadline> + Send + Sync + 'static,
@@ -1199,40 +1368,164 @@ impl<T> Store<T> {
         self.inner.epoch_deadline_callback(Box::new(callback));
     }
 
-    /// Configures epoch-deadline expiration to yield to the async
-    /// caller and the update the deadline.
+    /// Set an exception as the currently pending exception, and
+    /// return an error that propagates the throw.
     ///
-    /// When epoch-interruption-instrumented code is executed on this
-    /// store and the epoch deadline is reached before completion,
-    /// with the store configured in this way, execution will yield
-    /// (the future will return `Pending` but re-awake itself for
-    /// later execution) and, upon resuming, the store will be
-    /// configured with an epoch deadline equal to the current epoch
-    /// plus `delta` ticks.
+    /// This method takes an exception object and stores it in the
+    /// `Store` as the currently pending exception. This is a special
+    /// rooted slot that holds the exception as long as it is
+    /// propagating. This method then returns a `ThrownException`
+    /// error, which is a special type that indicates a pending
+    /// exception exists. When this type propagates as an error
+    /// returned from a Wasm-to-host call, the pending exception is
+    /// thrown within the Wasm context, and either caught or
+    /// propagated further to the host-to-Wasm call boundary. If an
+    /// exception is thrown out of Wasm (or across Wasm from a
+    /// hostcall) back to the host-to-Wasm call boundary, *that*
+    /// invocation returns a `ThrownException`, and the pending
+    /// exception slot is again set. In other words, the
+    /// `ThrownException` error type should propagate upward exactly
+    /// and only when a pending exception is set.
     ///
-    /// This setting is intended to allow for cooperative timeslicing
-    /// of multiple CPU-bound Wasm guests in different stores, all
-    /// executing under the control of an async executor. To drive
-    /// this, stores should be configured to "yield and update"
-    /// automatically with this function, and some external driver (a
-    /// thread that wakes up periodically, or a timer
-    /// signal/interrupt) should call
-    /// [`Engine::increment_epoch()`](crate::Engine::increment_epoch).
+    /// To take the pending exception, use [`Self::take_pending_exception`].
     ///
-    /// See documentation on
-    /// [`Config::epoch_interruption()`](crate::Config::epoch_interruption)
-    /// for an introduction to epoch-based interruption.
-    #[cfg(feature = "async")]
-    pub fn epoch_deadline_async_yield_and_update(&mut self, delta: u64) {
-        self.inner.epoch_deadline_async_yield_and_update(delta);
+    /// This method is parameterized over `R` for convenience, but
+    /// will always return an `Err`.
+    ///
+    /// # Panics
+    ///
+    /// - Will panic if `exception` has been unrooted.
+    /// - Will panic if `exception` is a null reference.
+    /// - Will panic if a pending exception has already been set.
+    #[cfg(feature = "gc")]
+    pub fn throw<R>(&mut self, exception: Rooted<ExnRef>) -> Result<R, ThrownException> {
+        self.inner.throw_impl(exception);
+        Err(ThrownException)
+    }
+
+    /// Take the currently pending exception, if any, and return it,
+    /// removing it from the "pending exception" slot.
+    ///
+    /// If there is no pending exception, returns `None`.
+    ///
+    /// Note: the returned exception is a LIFO root (see
+    /// [`crate::Rooted`]), rooted in the current handle scope. Take
+    /// care to ensure that it is re-rooted or otherwise does not
+    /// escape this scope! It is usually best to allow an exception
+    /// object to be rooted in the store's "pending exception" slot
+    /// until the final consumer has taken it, rather than root it and
+    /// pass it up the callstack in some other way.
+    ///
+    /// This method is useful to implement ad-hoc exception plumbing
+    /// in various ways, but for the most idiomatic handling, see
+    /// [`StoreContextMut::throw`].
+    #[cfg(feature = "gc")]
+    pub fn take_pending_exception(&mut self) -> Option<Rooted<ExnRef>> {
+        self.inner.take_pending_exception_rooted()
+    }
+
+    /// Tests whether there is a pending exception.
+    ///
+    /// Ordinarily, a pending exception will be set on a store if and
+    /// only if a host-side callstack is propagating a
+    /// [`crate::ThrownException`] error. The final consumer that
+    /// catches the exception takes it; it may re-place it to re-throw
+    /// (using [`Self::throw`]) if it chooses not to actually handle the
+    /// exception.
+    ///
+    /// This method is useful to tell whether a store is in this
+    /// state, but should not be used as part of the ordinary
+    /// exception-handling flow. For the most idiomatic handling, see
+    /// [`StoreContextMut::throw`].
+    #[cfg(feature = "gc")]
+    pub fn has_pending_exception(&self) -> bool {
+        self.inner.pending_exception.is_some()
+    }
+
+    /// Return all breakpoints.
+    #[cfg(feature = "debug")]
+    pub fn breakpoints(&self) -> Option<impl Iterator<Item = crate::Breakpoint> + '_> {
+        self.as_context().breakpoints()
+    }
+
+    /// Indicate whether single-step mode is enabled.
+    #[cfg(feature = "debug")]
+    pub fn is_single_step(&self) -> bool {
+        self.as_context().is_single_step()
+    }
+
+    /// Set the debug callback on this store.
+    ///
+    /// See [`crate::DebugHandler`] for more documentation.
+    ///
+    /// # Panics
+    ///
+    /// - Will panic if guest-debug support was not enabled via
+    ///   [`crate::Config::guest_debug`].
+    #[cfg(feature = "debug")]
+    pub fn set_debug_handler(&mut self, handler: impl DebugHandler<Data = T>)
+    where
+        // We require `Send` here because the debug handler becomes
+        // referenced from a future: when `DebugHandler::handle` is
+        // invoked, its `self` references the `handler` with the
+        // user's state. Note that we are careful to keep this bound
+        // constrained to debug-handler-related code only and not
+        // propagate it outward to the store in general. The presence
+        // of the trait implementation serves as a witness that `T:
+        // Send`. This is required in particular because we will have
+        // a `&mut dyn VMStore` on the stack when we pause a fiber
+        // with `block_on` to run a debugger hook; that `VMStore` must
+        // be a `Store<T> where T: Send`.
+        T: Send,
+    {
+        // Debug hooks rely on async support, so async entrypoints are required.
+        self.inner.set_async_required(Asyncness::Yes);
+
+        assert!(
+            self.engine().tunables().debug_guest,
+            "debug hooks require guest debugging to be enabled"
+        );
+        self.inner.debug_handler = Some(Box::new(handler));
+    }
+
+    /// Clear the debug handler on this store. If any existed, it will
+    /// be dropped.
+    #[cfg(feature = "debug")]
+    pub fn clear_debug_handler(&mut self) {
+        self.inner.debug_handler = None;
+    }
+
+    /// Register a [`Module`] with this store's module registry for
+    /// debugging, without instantiating it.
+    ///
+    /// This makes the module visible to debuggers (via
+    /// `debug_all_modules`) before the module is actually
+    /// instantiated. This is useful for guest-debug workflows where
+    /// the debugger needs to see modules to set breakpoints before
+    /// the first Wasm instruction executes.
+    #[cfg(feature = "debug")]
+    pub fn debug_register_module(&mut self, module: &crate::Module) -> crate::Result<()> {
+        let (modules, engine, breakpoints) = self.inner.modules_and_engine_and_breakpoints_mut();
+        modules.register_module(module, engine, breakpoints)?;
+        Ok(())
+    }
+
+    /// Register all inner modules of a [`Component`](crate::component::Component)
+    /// with this store's module registry for debugging, without instantiating
+    /// the component.
+    #[cfg(all(feature = "debug", feature = "component-model"))]
+    pub fn debug_register_component(
+        &mut self,
+        component: &crate::component::Component,
+    ) -> crate::Result<()> {
+        for module in component.static_modules() {
+            self.debug_register_module(module)?;
+        }
+        Ok(())
     }
 }
 
 impl<'a, T> StoreContext<'a, T> {
-    pub(crate) fn async_support(&self) -> bool {
-        self.0.async_support()
-    }
-
     /// Returns the underlying [`Engine`] this store is connected to.
     pub fn engine(&self) -> &Engine {
         self.0.engine()
@@ -1291,24 +1584,16 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// Perform garbage collection of `ExternRef`s.
     ///
     /// Same as [`Store::gc`].
-    ///
-    /// This method is only available when the `gc` Cargo feature is enabled.
     #[cfg(feature = "gc")]
-    pub fn gc(&mut self) {
-        self.0.gc()
-    }
-
-    /// Perform garbage collection of `ExternRef`s.
-    ///
-    /// Same as [`Store::gc`].
-    ///
-    /// This method is only available when the `gc` Cargo feature is enabled.
-    #[cfg(all(feature = "async", feature = "gc"))]
-    pub async fn gc_async(&mut self)
-    where
-        T: Send,
-    {
-        self.0.gc_async().await;
+    pub fn gc(&mut self, why: Option<&crate::GcHeapOutOfMemory<()>>) -> Result<()> {
+        let (mut limiter, store) = self.0.validate_sync_resource_limiter_and_store_opaque()?;
+        vm::assert_ready(store.gc(
+            limiter.as_mut(),
+            None,
+            why.map(|e| e.bytes_needed()),
+            Asyncness::No,
+        ));
+        Ok(())
     }
 
     /// Returns remaining fuel in this store.
@@ -1328,6 +1613,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// Configures this `Store` to periodically yield while executing futures.
     ///
     /// For more information see [`Store::fuel_async_yield_interval`]
+    #[cfg(feature = "async")]
     pub fn fuel_async_yield_interval(&mut self, interval: Option<u64>) -> Result<()> {
         self.0.fuel_async_yield_interval(interval)
     }
@@ -1335,6 +1621,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// Sets the epoch deadline to a certain number of ticks in the future.
     ///
     /// For more information see [`Store::set_epoch_deadline`].
+    #[cfg(target_has_atomic = "64")]
     pub fn set_epoch_deadline(&mut self, ticks_beyond_current: u64) {
         self.0.set_epoch_deadline(ticks_beyond_current);
     }
@@ -1342,6 +1629,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// Configures epoch-deadline expiration to trap.
     ///
     /// For more information see [`Store::epoch_deadline_trap`].
+    #[cfg(target_has_atomic = "64")]
     pub fn epoch_deadline_trap(&mut self) {
         self.0.epoch_deadline_trap();
     }
@@ -1360,6 +1648,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     // * ptr: start address of the unwind data. This is basically going to be
     //        base_address of wasm linear memory adding some potential offsets
     // * len: length of the unwind data
+    #[allow(missing_docs)]
     pub fn store_unwind_data(&mut self, ptr: *const u8, len: usize) -> u64 {
         // Allocate a vector with enough capacity to hold the data.
         let mut data: Vec<u8> = Vec::with_capacity(len);
@@ -1382,18 +1671,21 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // get the stack snapshots information
+    #[allow(missing_docs)]
     pub fn get_stack_snapshots(&self) -> HashMap<u64, Vec<u8>> {
         self.0.stack_snapshots.clone()
     }
 
     // set the stack snapshots
     // used by fork to copy stack snapshots information to child
+    #[allow(missing_docs)]
     pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
         self.0.stack_snapshots = stack_snapshots;
     }
 
     // retrieve the unwind data, given the hash. The entry would be perserved
     // * hash: data stored in jmp_buf. Essentially the return value of `store_unwind_data`
+    #[allow(missing_docs)]
     pub fn retrieve_unwind_data(&mut self, hash: u64) -> Option<Vec<u8>> {
         // Try to retrieve an entry
         if let Some(value) = self.0.stack_snapshots.get(&hash) {
@@ -1404,6 +1696,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // append the signal callstack information
+    #[allow(missing_docs)]
     pub fn append_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
         self.0.signal_asyncify_data.push(SignalAsyncifyData {
             signal_handler,
@@ -1412,18 +1705,23 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // pop the signal callstack information
-    pub fn pop_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+    #[allow(missing_docs)]
+    pub fn pop_signal_asyncify_data(&mut self, _signal_handler: i32, _signo: i32) {
         self.0.signal_asyncify_data.pop();
     }
 
     // get the current signal callstack information
+    #[allow(missing_docs)]
     pub fn get_current_signal_rewind_data(&mut self) -> Option<SignalAsyncifyData> {
+        let length = self.0.signal_asyncify_data.len();
+        if length == 0 {
+            return None;
+        }
         let data = self
             .0
             .signal_asyncify_data
             .get(self.0.signal_asyncify_counter as usize)
             .cloned();
-        let length = self.0.signal_asyncify_data.len();
         if self.0.signal_asyncify_counter == (length - 1) as u64 {
             self.0.signal_asyncify_counter = 0;
         } else {
@@ -1434,22 +1732,86 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     // set the signal asyncify information
     // used by fork to copy asyncify information
+    #[allow(missing_docs)]
     pub fn set_signal_asyncify_data(&mut self, data: Vec<SignalAsyncifyData>) {
         self.0.signal_asyncify_data = data;
         self.0.signal_asyncify_counter = 0;
     }
 
+    // push new library instance
+    #[allow(missing_docs)]
+    pub fn push_library_symbols(&mut self, symbol_map: SymbolMap) -> Result<i32> {
+        Ok(self.0.library_symbols.add(symbol_map))
+    }
+
+    // Register a named module instance so get_global_snapshot can find it
+    // without scanning all INSTANCE_NUMBER slots.
+    #[allow(missing_docs)]
+    pub fn register_named_instance(&mut self, name: String, id: InstanceId) {
+        if let Some((_, existing_id)) = self
+            .0
+            .named_module_instances
+            .iter()
+            .find(|(n, _)| n == &name)
+        {
+            lind_debug_panic!(
+                "[register_named_instance] wasm module with same name \"{}\" detected, currently not supported",
+                name
+            );
+        }
+        self.0.named_module_instances.push((name, id));
+    }
+
+    // get and set library symbol table, used for cloning symbol table across fork/thread
+    #[allow(missing_docs)]
+    pub fn get_library_symbol_table(&self) -> &SymbolTable {
+        &self.0.library_symbols
+    }
+
+    #[allow(missing_docs)]
+    pub fn set_library_symbol_table(&mut self, symbol_table: SymbolTable) {
+        self.0.library_symbols = symbol_table;
+    }
+
+    // find library symbol from local scope
+    #[allow(missing_docs)]
+    pub fn find_library_symbol_from_local(&self, handler: i32, name: &str) -> Option<u32> {
+        self.0
+            .library_symbols
+            .find_symbol_from_handler(handler, name)
+    }
+
+    // find library symbol from global scope
+    #[allow(missing_docs)]
+    pub fn find_library_symbol_from_global(&self, name: &str) -> Option<u32> {
+        self.0.library_symbols.find_symbol_from_global_scope(name)
+    }
+
+    // detach the library
+    #[allow(missing_docs)]
+    pub fn detach_library(&mut self, handler: i32) {
+        self.0.library_symbols.delete_by_handler(handler);
+    }
+
+    /// check if the library is already loaded
+    pub fn check_library_loaded(&self, inode: u64) -> Option<i32> {
+        self.0.library_symbols.check_library_loaded(inode)
+    }
+
     // append the syscall retval information
+    #[allow(missing_docs)]
     pub fn append_syscall_asyncify_data(&mut self, retval: i32) {
         self.0.syscall_asyncify_data.push(retval);
     }
 
     // pop the syscall retval information
+    #[allow(missing_docs)]
     pub fn pop_syscall_asyncify_data(&mut self) {
         self.0.syscall_asyncify_data.pop();
     }
 
     // get the current syscall retval information
+    #[allow(missing_docs)]
     pub fn get_current_syscall_rewind_data(&mut self) -> Option<i32> {
         let data = self
             .0
@@ -1467,6 +1829,7 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     // set the syscall retval information
     // used by fork to copy asyncify information
+    #[allow(missing_docs)]
     pub fn set_syscall_asyncify_data(&mut self, data: Vec<i32>) {
         self.0.syscall_asyncify_data = data;
         self.0.syscall_asyncify_counter = 0;
@@ -1492,28 +1855,113 @@ impl<'a, T> StoreContextMut<'a, T> {
         self.0.stack_base = stack_base;
     }
 
+    #[allow(missing_docs)]
+    pub fn get_global_snapshot(&mut self) -> HashMap<String, Vec<(GlobalIndex, i64)>> {
+        let mut map = HashMap::new();
+        // Iterate only the explicitly registered named instances (preloaded libs,
+        // main module, dlopen'd libs) rather than all INSTANCE_NUMBER slots.
+        // Backup instances are never registered, so they are excluded automatically.
+        for i in 0..self.0.named_module_instances.len() {
+            // Clone name and copy id to release the immutable borrow on
+            // named_module_instances before the mutable instance_mut call below.
+            let name = self.0.named_module_instances[i].0.clone();
+            let id = self.0.named_module_instances[i].1;
+            let store_id = self.0.id();
+            let instance = self.0.instance(id);
+            let globals: Vec<(GlobalIndex, i64)> = instance
+                .all_globals(store_id)
+                .map(|(index, global)| {
+                    let def = global.definition(&self.0);
+                    (index, unsafe { *def.as_ref().as_i64() })
+                })
+                .collect();
+            if !globals.is_empty() {
+                map.insert(name, globals);
+            }
+        }
+        map
+    }
+
     /// Configures epoch-deadline expiration to yield to the async
     /// caller and the update the deadline.
+
+    /// Set an exception as the currently pending exception, and
+    /// return an error that propagates the throw.
     ///
-    /// For more information see
-    /// [`Store::epoch_deadline_async_yield_and_update`].
-    #[cfg(feature = "async")]
-    pub fn epoch_deadline_async_yield_and_update(&mut self, delta: u64) {
-        self.0.epoch_deadline_async_yield_and_update(delta);
+    /// See [`Store::throw`] for more details.
+    #[cfg(feature = "gc")]
+    pub fn throw<R>(&mut self, exception: Rooted<ExnRef>) -> Result<R, ThrownException> {
+        self.0.inner.throw_impl(exception);
+        Err(ThrownException)
+    }
+
+    /// Take the currently pending exception, if any, and return it,
+    /// removing it from the "pending exception" slot.
+    ///
+    /// See [`Store::take_pending_exception`] for more details.
+    #[cfg(feature = "gc")]
+    pub fn take_pending_exception(&mut self) -> Option<Rooted<ExnRef>> {
+        self.0.inner.take_pending_exception_rooted()
+    }
+
+    /// Tests whether there is a pending exception.
+    ///
+    /// See [`Store::has_pending_exception`] for more details.
+    #[cfg(feature = "gc")]
+    pub fn has_pending_exception(&self) -> bool {
+        self.0.inner.pending_exception.is_some()
     }
 }
 
 impl<T> StoreInner<T> {
     #[inline]
     fn data(&self) -> &T {
-        &self.data
+        // We are actually just accessing `&self.data_no_provenance` but we must
+        // do so with the `VMStoreContext::store_data` pointer's provenance. If
+        // we did otherwise, i.e. directly accessed the field, we would
+        // invalidate that pointer, which would in turn invalidate any direct
+        // `T` accesses that Wasm code makes via unsafe intrinsics.
+        let data: *const ManuallyDrop<T> = &raw const self.data_no_provenance;
+        let provenance = self.inner.vm_store_context.store_data.as_ptr().cast::<T>();
+        let ptr = provenance.with_addr(data.addr());
+
+        // SAFETY: The pointer is non-null, points to our `T` data, and is valid
+        // to access because of our `&self` borrow.
+        debug_assert_ne!(ptr, core::ptr::null_mut());
+        debug_assert_eq!(ptr.addr(), (&raw const self.data_no_provenance).addr());
+        unsafe { &*ptr }
+    }
+
+    #[inline]
+    fn data_limiter_and_opaque(
+        &mut self,
+    ) -> (
+        &mut T,
+        Option<&mut ResourceLimiterInner<T>>,
+        &mut StoreOpaque,
+    ) {
+        // See the comments about provenance in `StoreInner::data` above.
+        let data: *mut ManuallyDrop<T> = &raw mut self.data_no_provenance;
+        let provenance = self.inner.vm_store_context.store_data.as_ptr().cast::<T>();
+        let ptr = provenance.with_addr(data.addr());
+
+        // SAFETY: The pointer is non-null, points to our `T` data, and is valid
+        // to access because of our `&mut self` borrow.
+        debug_assert_ne!(ptr, core::ptr::null_mut());
+        debug_assert_eq!(ptr.addr(), (&raw const self.data_no_provenance).addr());
+        let data = unsafe { &mut *ptr };
+
+        let limiter = self.limiter.as_mut();
+
+        (data, limiter, &mut self.inner)
     }
 
     #[inline]
     fn data_mut(&mut self) -> &mut T {
-        &mut self.data
+        self.data_limiter_and_opaque().0
     }
 
+    #[allow(missing_docs)]
     #[inline]
     pub fn call_hook(&mut self, s: CallHook) -> Result<()> {
         if self.inner.pkey.is_none() && self.call_hook.is_none() {
@@ -1539,10 +1987,10 @@ impl<T> StoreInner<T> {
         if let Some(mut call_hook) = self.call_hook.take() {
             let result = self.invoke_call_hook(&mut call_hook, s);
             self.call_hook = Some(call_hook);
-            result
-        } else {
-            Ok(())
+            return result;
         }
+
+        Ok(())
     }
 
     fn invoke_call_hook(&mut self, call_hook: &mut CallHookInner<T>, s: CallHook) -> Result<()> {
@@ -1551,22 +1999,43 @@ impl<T> StoreInner<T> {
             CallHookInner::Sync(hook) => hook((&mut *self).as_context_mut(), s),
 
             #[cfg(all(feature = "async", feature = "call-hook"))]
-            CallHookInner::Async(handler) => unsafe {
-                self.inner
-                    .async_cx()
-                    .ok_or_else(|| anyhow!("couldn't grab async_cx for call hook"))?
-                    .block_on(
-                        handler
-                            .handle_call_event((&mut *self).as_context_mut(), s)
-                            .as_mut(),
-                    )?
-            },
+            CallHookInner::Async(handler) => {
+                if !self.can_block() {
+                    bail!("couldn't grab async_cx for call hook")
+                }
+                return (&mut *self)
+                    .as_context_mut()
+                    .with_blocking(|store, cx| cx.block_on(handler.handle_call_event(store, s)))?;
+            }
 
             CallHookInner::ForceTypeParameterToBeUsed { uninhabited, .. } => {
                 let _ = s;
                 match *uninhabited {}
             }
         }
+    }
+
+    #[cfg(not(feature = "async"))]
+    fn flush_fiber_stack(&mut self) {
+        // noop shim so code can assume this always exists.
+    }
+
+    /// Splits this `StoreInner<T>` into a `limiter`/`StoreOpaque` borrow while
+    /// validating that an async limiter is not configured.
+    ///
+    /// This is used for sync entrypoints which need to fail if an async limiter
+    /// is configured as otherwise the async entrypoint must be used instead.
+    pub(crate) fn validate_sync_resource_limiter_and_store_opaque(
+        &mut self,
+    ) -> Result<(Option<StoreResourceLimiter<'_>>, &mut StoreOpaque)> {
+        let (limiter, store) = self.resource_limiter_and_store_opaque();
+        if !matches!(limiter, None | Some(StoreResourceLimiter::Sync(_))) {
+            bail!(
+                "when using an async resource limiter `*_async` functions must \
+             be used instead"
+            );
+        }
+        Ok((limiter, store))
     }
 }
 
@@ -1619,19 +2088,15 @@ impl StoreOpaque {
         fn bump(slot: &mut usize, max: usize, amt: usize, desc: &str) -> Result<()> {
             let new = slot.saturating_add(amt);
             if new > max {
-                bail!(
-                    "resource limit exceeded: {} count too high at {}",
-                    desc,
-                    new
-                );
+                bail!("resource limit exceeded: {desc} count too high at {new}");
             }
             *slot = new;
             Ok(())
         }
 
         let module = module.env_module();
-        let memories = module.memory_plans.len() - module.num_imported_memories;
-        let tables = module.table_plans.len() - module.num_imported_tables;
+        let memories = module.num_defined_memories();
+        let tables = module.num_defined_tables();
 
         bump(&mut self.instance_count, self.instance_limit, 1, "instance")?;
         bump(
@@ -1643,11 +2108,6 @@ impl StoreOpaque {
         bump(&mut self.table_count, self.table_limit, tables, "table")?;
 
         Ok(())
-    }
-
-    #[inline]
-    pub fn async_support(&self) -> bool {
-        cfg!(feature = "async") && self.engine().config().async_support
     }
 
     #[inline]
@@ -1665,76 +2125,155 @@ impl StoreOpaque {
         &mut self.store_data
     }
 
+    pub fn store_data_mut_and_registry(&mut self) -> (&mut StoreData, &ModuleRegistry) {
+        (&mut self.store_data, &self.modules)
+    }
+
+    #[cfg(feature = "debug")]
+    pub(crate) fn breakpoints_and_registry_mut(
+        &mut self,
+    ) -> (&mut BreakpointState, &mut ModuleRegistry) {
+        (&mut self.breakpoints, &mut self.modules)
+    }
+
+    #[cfg(feature = "debug")]
+    pub(crate) fn breakpoints_and_registry(&self) -> (&BreakpointState, &ModuleRegistry) {
+        (&self.breakpoints, &self.modules)
+    }
+
+    #[cfg(feature = "debug")]
+    pub(crate) fn frame_data_cache_mut_and_registry(
+        &mut self,
+    ) -> (&mut FrameDataCache, &ModuleRegistry) {
+        (&mut self.frame_data_cache, &self.modules)
+    }
+
     #[inline]
     pub(crate) fn modules(&self) -> &ModuleRegistry {
         &self.modules
     }
 
     #[inline]
-    pub(crate) fn modules_mut(&mut self) -> &mut ModuleRegistry {
-        &mut self.modules
+    pub(crate) fn modules_and_engine_and_breakpoints_mut(
+        &mut self,
+    ) -> (&mut ModuleRegistry, &Engine, RegisterBreakpointState<'_>) {
+        #[cfg(feature = "debug")]
+        let breakpoints = RegisterBreakpointState(&self.breakpoints);
+        #[cfg(not(feature = "debug"))]
+        let breakpoints = RegisterBreakpointState(core::marker::PhantomData);
+
+        (&mut self.modules, &self.engine, breakpoints)
     }
 
-    pub(crate) fn func_refs(&mut self) -> &mut FuncRefs {
-        &mut self.func_refs
+    pub(crate) fn func_refs_and_modules(&mut self) -> (&mut FuncRefs, &ModuleRegistry) {
+        (&mut self.func_refs, &self.modules)
     }
 
-    pub(crate) fn fill_func_refs(&mut self) {
-        self.func_refs.fill(&mut self.modules);
+    pub(crate) fn host_globals(
+        &self,
+    ) -> &TryPrimaryMap<DefinedGlobalIndex, StoreBox<VMHostGlobalContext>> {
+        &self.host_globals
     }
 
-    pub(crate) fn push_instance_pre_func_refs(&mut self, func_refs: Arc<[VMFuncRef]>) {
-        self.func_refs.push_instance_pre_func_refs(func_refs);
-    }
-
-    pub(crate) fn host_globals(&mut self) -> &mut Vec<StoreBox<VMHostGlobalContext>> {
+    pub(crate) fn host_globals_mut(
+        &mut self,
+    ) -> &mut TryPrimaryMap<DefinedGlobalIndex, StoreBox<VMHostGlobalContext>> {
         &mut self.host_globals
     }
 
-    pub fn module_for_instance(&self, instance: InstanceId) -> Option<&'_ Module> {
-        match self.instances[instance.0].kind {
+    pub fn module_for_instance(&self, instance: StoreInstanceId) -> Option<&'_ Module> {
+        instance.store_id().assert_belongs_to(self.id());
+        match self.instances[instance.instance()].kind {
             StoreInstanceKind::Dummy => None,
             StoreInstanceKind::Real { module_id } => {
                 let module = self
                     .modules()
-                    .lookup_module_by_id(module_id)
+                    .module_by_id(module_id)
                     .expect("should always have a registered module for real instances");
                 Some(module)
             }
         }
     }
 
-    pub unsafe fn add_instance(
-        &mut self,
-        handle: InstanceHandle,
-        module_id: RegisteredModuleId,
-    ) -> InstanceId {
-        self.instances.push(StoreInstance {
-            handle: handle.clone(),
-            kind: StoreInstanceKind::Real { module_id },
-        });
-        InstanceId(self.instances.len() - 1)
-    }
-
-    /// Add a dummy instance that to the store.
+    /// Accessor from `InstanceId` to `&vm::Instance`.
     ///
-    /// These are instances that are just implementation details of something
-    /// else (e.g. host-created memories that are not actually defined in any
-    /// Wasm module) and therefore shouldn't show up in things like core dumps.
-    pub unsafe fn add_dummy_instance(&mut self, handle: InstanceHandle) -> InstanceId {
-        self.instances.push(StoreInstance {
-            handle: handle.clone(),
-            kind: StoreInstanceKind::Dummy,
-        });
-        InstanceId(self.instances.len() - 1)
+    /// Note that if you have a `StoreInstanceId` you should use
+    /// `StoreInstanceId::get` instead. This assumes that `id` has been
+    /// validated to already belong to this store.
+    #[inline]
+    pub fn instance(&self, id: InstanceId) -> &vm::Instance {
+        self.instances[id].handle.get()
     }
 
-    pub fn instance(&self, id: InstanceId) -> &InstanceHandle {
-        &self.instances[id.0].handle
+    /// Accessor from `InstanceId` to `Pin<&mut vm::Instance>`.
+    ///
+    /// Note that if you have a `StoreInstanceId` you should use
+    /// `StoreInstanceId::get_mut` instead. This assumes that `id` has been
+    /// validated to already belong to this store.
+    #[inline]
+    pub fn instance_mut(&mut self, id: InstanceId) -> Pin<&mut vm::Instance> {
+        self.instances[id].handle.get_mut()
     }
 
-    pub fn instance_mut(&mut self, id: InstanceId) -> &mut InstanceHandle {
-        &mut self.instances[id.0].handle
+    /// Accessor from `InstanceId` to both `Pin<&mut vm::Instance>`
+    /// and `&ModuleRegistry`.
+    #[inline]
+    pub fn instance_and_module_registry_mut(
+        &mut self,
+        id: InstanceId,
+    ) -> (Pin<&mut vm::Instance>, &ModuleRegistry) {
+        (self.instances[id].handle.get_mut(), &self.modules)
+    }
+
+    /// Access multiple instances specified via `ids`.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if any indices in `ids` overlap.
+    ///
+    /// # Safety
+    ///
+    /// This method is not safe if the returned instances are used to traverse
+    /// "laterally" between other instances. For example accessing imported
+    /// items in an instance may traverse laterally to a sibling instance thus
+    /// aliasing a returned value here. The caller must ensure that only defined
+    /// items within the instances themselves are accessed.
+    #[inline]
+    pub unsafe fn optional_gc_store_and_instances_mut<const N: usize>(
+        &mut self,
+        ids: [InstanceId; N],
+    ) -> (Option<&mut GcStore>, [Pin<&mut vm::Instance>; N]) {
+        let instances = self
+            .instances
+            .get_disjoint_mut(ids)
+            .unwrap()
+            .map(|h| h.handle.get_mut());
+        (self.gc_store.as_mut(), instances)
+    }
+
+    /// Pair of `Self::optional_gc_store_mut` and `Self::instance_mut`
+    pub fn optional_gc_store_and_instance_mut(
+        &mut self,
+        id: InstanceId,
+    ) -> (Option<&mut GcStore>, Pin<&mut vm::Instance>) {
+        (self.gc_store.as_mut(), self.instances[id].handle.get_mut())
+    }
+
+    /// Tuple of `Self::optional_gc_store_mut`, `Self::modules`, and
+    /// `Self::instance_mut`.
+    pub fn optional_gc_store_and_registry_and_instance_mut(
+        &mut self,
+        id: InstanceId,
+    ) -> (
+        Option<&mut GcStore>,
+        &ModuleRegistry,
+        Pin<&mut vm::Instance>,
+    ) {
+        (
+            self.gc_store.as_mut(),
+            &self.modules,
+            self.instances[id].handle.get_mut(),
+        )
     }
 
     /// Get all instances (ignoring dummy instances) within this store.
@@ -1742,13 +2281,11 @@ impl StoreOpaque {
         let instances = self
             .instances
             .iter()
-            .enumerate()
-            .filter_map(|(idx, inst)| {
-                let id = InstanceId::from_index(idx);
+            .filter_map(|(id, inst)| {
                 if let StoreInstanceKind::Dummy = inst.kind {
                     None
                 } else {
-                    Some(InstanceData::from_id(id))
+                    Some(id)
                 }
             })
             .collect::<Vec<_>>();
@@ -1758,176 +2295,216 @@ impl StoreOpaque {
     }
 
     /// Get all memories (host- or Wasm-defined) within this store.
-    pub fn all_memories<'a>(&'a mut self) -> impl Iterator<Item = Memory> + 'a {
+    pub fn all_memories<'a>(&'a self) -> impl Iterator<Item = ExportMemory> + 'a {
         // NB: Host-created memories have dummy instances. Therefore, we can get
         // all memories in the store by iterating over all instances (including
         // dummy instances) and getting each of their defined memories.
-        let mems = self
-            .instances
-            .iter_mut()
-            .flat_map(|instance| instance.handle.defined_memories())
-            .collect::<Vec<_>>();
-        mems.into_iter()
-            .map(|memory| unsafe { Memory::from_wasmtime_memory(memory, self) })
+        let id = self.id();
+        self.instances
+            .iter()
+            .flat_map(move |(_, instance)| instance.handle.get().defined_memories(id))
     }
 
     /// Iterate over all tables (host- or Wasm-defined) within this store.
     pub fn for_each_table(&mut self, mut f: impl FnMut(&mut Self, Table)) {
         // NB: Host-created tables have dummy instances. Therefore, we can get
-        // all memories in the store by iterating over all instances (including
+        // all tables in the store by iterating over all instances (including
         // dummy instances) and getting each of their defined memories.
-
-        struct TempTakeInstances<'a> {
-            instances: Vec<StoreInstance>,
-            store: &'a mut StoreOpaque,
-        }
-
-        impl<'a> TempTakeInstances<'a> {
-            fn new(store: &'a mut StoreOpaque) -> Self {
-                let instances = mem::take(&mut store.instances);
-                Self { instances, store }
-            }
-        }
-
-        impl Drop for TempTakeInstances<'_> {
-            fn drop(&mut self) {
-                assert!(self.store.instances.is_empty());
-                self.store.instances = mem::take(&mut self.instances);
-            }
-        }
-
-        let mut temp = TempTakeInstances::new(self);
-        for instance in temp.instances.iter_mut() {
-            for table in instance.handle.defined_tables() {
-                let table = unsafe { Table::from_wasmtime_table(table, temp.store) };
-                f(temp.store, table);
+        for id in self.instances.keys() {
+            let instance = StoreInstanceId::new(self.id(), id);
+            for table in 0..self.instance(id).env_module().num_defined_tables() {
+                let table = DefinedTableIndex::new(table);
+                f(self, Table::from_raw(instance, table));
             }
         }
     }
 
     /// Iterate over all globals (host- or Wasm-defined) within this store.
     pub fn for_each_global(&mut self, mut f: impl FnMut(&mut Self, Global)) {
-        struct TempTakeHostGlobalsAndInstances<'a> {
-            host_globals: Vec<StoreBox<VMHostGlobalContext>>,
-            instances: Vec<StoreInstance>,
-            store: &'a mut StoreOpaque,
+        // First enumerate all the host-created globals.
+        for global in self.host_globals.keys() {
+            let global = Global::new_host(self, global);
+            f(self, global);
         }
 
-        impl<'a> TempTakeHostGlobalsAndInstances<'a> {
-            fn new(store: &'a mut StoreOpaque) -> Self {
-                let host_globals = mem::take(&mut store.host_globals);
-                let instances = mem::take(&mut store.instances);
-                Self {
-                    host_globals,
-                    instances,
-                    store,
-                }
-            }
-        }
-
-        impl Drop for TempTakeHostGlobalsAndInstances<'_> {
-            fn drop(&mut self) {
-                assert!(self.store.host_globals.is_empty());
-                self.store.host_globals = mem::take(&mut self.host_globals);
-                assert!(self.store.instances.is_empty());
-                self.store.instances = mem::take(&mut self.instances);
-            }
-        }
-
-        let mut temp = TempTakeHostGlobalsAndInstances::new(self);
-        unsafe {
-            // First enumerate all the host-created globals.
-            for global in temp.host_globals.iter() {
-                let export = ExportGlobal {
-                    definition: &mut (*global.get()).global as *mut _,
-                    vmctx: core::ptr::null_mut(),
-                    global: (*global.get()).ty.to_wasm_type(),
-                };
-                let global = Global::from_wasmtime_global(export, temp.store);
-                f(temp.store, global);
-            }
-
-            // Then enumerate all instances' defined globals.
-            for instance in temp.instances.iter_mut() {
-                for (_, export) in instance.handle.defined_globals() {
-                    let global = Global::from_wasmtime_global(export, temp.store);
-                    f(temp.store, global);
-                }
+        // Then enumerate all instances' defined globals.
+        for id in self.instances.keys() {
+            for index in 0..self.instance(id).env_module().num_defined_globals() {
+                let index = DefinedGlobalIndex::new(index);
+                let global = Global::new_instance(self, id, index);
+                f(self, global);
             }
         }
     }
 
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))] // not used on all platforms
-    pub fn set_signal_handler(&mut self, handler: Option<Box<SignalHandler<'static>>>) {
+    #[cfg(all(feature = "std", any(unix, windows)))]
+    pub fn set_signal_handler(&mut self, handler: Option<SignalHandler>) {
         self.signal_handler = handler;
     }
 
     #[inline]
-    pub fn runtime_limits(&self) -> &VMRuntimeLimits {
-        &self.runtime_limits
+    pub fn vm_store_context(&self) -> &VMStoreContext {
+        &self.vm_store_context
+    }
+
+    #[inline]
+    pub fn vm_store_context_mut(&mut self) -> &mut VMStoreContext {
+        &mut self.vm_store_context
+    }
+
+    /// Performs a lazy allocation of the `GcStore` within this store, returning
+    /// the previous allocation if it's already present.
+    ///
+    /// This method will, if necessary, allocate a new `GcStore` -- linear
+    /// memory and all. This is a blocking operation due to
+    /// `ResourceLimiterAsync` which means that this should only be executed
+    /// in a fiber context at this time.
+    #[inline]
+    pub(crate) async fn ensure_gc_store(
+        &mut self,
+        limiter: Option<&mut StoreResourceLimiter<'_>>,
+    ) -> Result<&mut GcStore> {
+        if self.gc_store.is_some() {
+            return Ok(self.gc_store.as_mut().unwrap());
+        }
+        self.allocate_gc_store(limiter).await
     }
 
     #[inline(never)]
-    pub(crate) fn allocate_gc_heap(&mut self) -> Result<()> {
+    async fn allocate_gc_store(
+        &mut self,
+        limiter: Option<&mut StoreResourceLimiter<'_>>,
+    ) -> Result<&mut GcStore> {
+        log::trace!("allocating GC heap for store {:?}", self.id());
+
         assert!(self.gc_store.is_none());
-        let gc_store = allocate_gc_store(self.engine())?;
-        self.gc_store = Some(gc_store);
-        return Ok(());
+        assert_eq!(
+            self.vm_store_context.gc_heap.base.as_non_null(),
+            NonNull::dangling(),
+        );
+        assert_eq!(self.vm_store_context.gc_heap.current_length(), 0);
+
+        let gc_store = allocate_gc_store(self, limiter).await?;
+        self.vm_store_context.gc_heap = gc_store.vmmemory_definition();
+        return Ok(self.gc_store.insert(gc_store));
 
         #[cfg(feature = "gc")]
-        fn allocate_gc_store(engine: &Engine) -> Result<GcStore> {
-            let (index, heap) = if engine
-                .config()
-                .features
-                .contains(wasmparser::WasmFeatures::REFERENCE_TYPES)
-            {
+        async fn allocate_gc_store(
+            store: &mut StoreOpaque,
+            limiter: Option<&mut StoreResourceLimiter<'_>>,
+        ) -> Result<GcStore> {
+            use wasmtime_environ::packed_option::ReservedValue;
+
+            let engine = store.engine();
+            let mem_ty = engine.tunables().gc_heap_memory_type();
+            ensure!(
+                engine.features().gc_types(),
+                "cannot allocate a GC store when GC is disabled at configuration time"
+            );
+
+            // First, allocate the memory that will be our GC heap's storage.
+            let mut request = InstanceAllocationRequest {
+                id: InstanceId::reserved_value(),
+                runtime_info: engine.empty_module_runtime_info(),
+                imports: vm::Imports::default(),
+                store,
+                limiter,
+            };
+
+            let (mem_alloc_index, mem) = engine
+                .allocator()
+                .allocate_memory(&mut request, &mem_ty, None)
+                .await?;
+            // Then, allocate the actual GC heap, passing in that memory
+            // storage.
+            let gc_runtime = engine.gc_runtime().ok_or_else(|| {
+                format_err!("no GC runtime: GC disabled at compile time or configuration time")
+            })?;
+            let (index, heap) =
                 engine
                     .allocator()
-                    .allocate_gc_heap(&**engine.gc_runtime())?
-            } else {
-                (
-                    GcHeapAllocationIndex::default(),
-                    crate::runtime::vm::disabled_gc_heap(),
-                )
-            };
+                    .allocate_gc_heap(engine, &**gc_runtime, mem_alloc_index, mem)?;
+
             Ok(GcStore::new(index, heap))
         }
 
         #[cfg(not(feature = "gc"))]
-        fn allocate_gc_store(_engine: &Engine) -> Result<GcStore> {
-            Ok(GcStore::new(
-                GcHeapAllocationIndex::default(),
-                crate::runtime::vm::disabled_gc_heap(),
-            ))
+        async fn allocate_gc_store(
+            _: &mut StoreOpaque,
+            _: Option<&mut StoreResourceLimiter<'_>>,
+        ) -> Result<GcStore> {
+            bail!("cannot allocate a GC store: the `gc` feature was disabled at compile time")
         }
     }
 
+    /// Helper method to require that a `GcStore` was previously allocated for
+    /// this store, failing if it has not yet been allocated.
+    ///
+    /// Note that this should only be used in a context where allocation of a
+    /// `GcStore` is sure to have already happened prior, otherwise this may
+    /// return a confusing error to embedders which is a bug in Wasmtime.
+    ///
+    /// Some situations where it's safe to call this method:
+    ///
+    /// * There's already a non-null and non-i31 `VMGcRef` in scope. By existing
+    ///   this shows proof that the `GcStore` was previously allocated.
+    /// * During instantiation and instance's `needs_gc_heap` flag will be
+    ///   handled and instantiation will automatically create a GC store.
     #[inline]
     #[cfg(feature = "gc")]
-    pub(crate) fn gc_store(&self) -> Result<&GcStore> {
+    pub(crate) fn require_gc_store(&self) -> Result<&GcStore> {
         match &self.gc_store {
             Some(gc_store) => Ok(gc_store),
             None => bail!("GC heap not initialized yet"),
         }
     }
 
-    #[inline]
-    pub(crate) fn gc_store_mut(&mut self) -> Result<&mut GcStore> {
-        if self.gc_store.is_none() {
-            self.allocate_gc_heap()?;
-        }
-        Ok(self.unwrap_gc_store_mut())
-    }
-
+    /// Same as [`Self::require_gc_store`], but mutable.
     #[inline]
     #[cfg(feature = "gc")]
+    pub(crate) fn require_gc_store_mut(&mut self) -> Result<&mut GcStore> {
+        match &mut self.gc_store {
+            Some(gc_store) => Ok(gc_store),
+            None => bail!("GC heap not initialized yet"),
+        }
+    }
+
+    /// Attempts to access the GC store that has been previously allocated.
+    ///
+    /// This method will return `Some` if the GC store was previously allocated.
+    /// A `None` return value means either that the GC heap hasn't yet been
+    /// allocated or that it does not need to be allocated for this store. Note
+    /// that to require a GC store in a particular situation it's recommended to
+    /// use [`Self::require_gc_store_mut`] instead.
+    #[inline]
+    pub(crate) fn optional_gc_store_mut(&mut self) -> Option<&mut GcStore> {
+        if cfg!(not(feature = "gc")) || !self.engine.features().gc_types() {
+            debug_assert!(self.gc_store.is_none());
+            None
+        } else {
+            self.gc_store.as_mut()
+        }
+    }
+
+    /// Helper to assert that a GC store was previously allocated and is
+    /// present.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the GC store has not yet been allocated. This
+    /// should only be used in a context where there's an existing GC reference,
+    /// for example, or if `ensure_gc_store` has already been called.
+    #[inline]
+    #[track_caller]
     pub(crate) fn unwrap_gc_store(&self) -> &GcStore {
         self.gc_store
             .as_ref()
             .expect("attempted to access the store's GC heap before it has been allocated")
     }
 
+    /// Same as [`Self::unwrap_gc_store`], but mutable.
     #[inline]
+    #[track_caller]
     pub(crate) fn unwrap_gc_store_mut(&mut self) -> &mut GcStore {
         self.gc_store
             .as_mut()
@@ -1940,182 +2517,183 @@ impl StoreOpaque {
     }
 
     #[inline]
+    #[cfg(feature = "gc")]
     pub(crate) fn gc_roots_mut(&mut self) -> &mut RootSet {
         &mut self.gc_roots
     }
 
     #[inline]
     pub(crate) fn exit_gc_lifo_scope(&mut self, scope: usize) {
-        if let Some(gc_store) = self.gc_store.as_mut() {
-            self.gc_roots.exit_lifo_scope(gc_store, scope);
-        }
+        self.gc_roots.exit_lifo_scope(self.gc_store.as_mut(), scope);
     }
 
     #[cfg(feature = "gc")]
-    pub fn gc(&mut self) {
+    async fn do_gc(&mut self, asyncness: Asyncness) {
         // If the GC heap hasn't been initialized, there is nothing to collect.
         if self.gc_store.is_none() {
             return;
         }
+
+        log::trace!("============ Begin GC ===========");
 
         // Take the GC roots out of `self` so we can borrow it mutably but still
         // call mutable methods on `self`.
         let mut roots = core::mem::take(&mut self.gc_roots_list);
 
-        self.trace_roots(&mut roots);
-        self.unwrap_gc_store_mut().gc(unsafe { roots.iter() });
-
-        // Restore the GC roots for the next GC.
-        roots.clear();
-        self.gc_roots_list = roots;
-    }
-
-    #[inline]
-    #[cfg(not(feature = "gc"))]
-    pub fn gc(&mut self) {
-        // Nothing to collect.
-        //
-        // Note that this is *not* a public method, this is just defined for the
-        // crate-internal `StoreOpaque` type. This is a convenience so that we
-        // don't have to `cfg` every call site.
-    }
-
-    #[cfg(feature = "gc")]
-    fn trace_roots(&mut self, gc_roots_list: &mut GcRootsList) {
-        log::trace!("Begin trace GC roots");
-
-        // We shouldn't have any leftover, stale GC roots.
-        assert!(gc_roots_list.is_empty());
-
-        self.trace_wasm_stack_roots(gc_roots_list);
-        self.trace_vmctx_roots(gc_roots_list);
-        self.trace_user_roots(gc_roots_list);
-
-        log::trace!("End trace GC roots")
-    }
-
-    #[cfg(all(feature = "async", feature = "gc"))]
-    pub async fn gc_async(&mut self) {
-        assert!(
-            self.async_support(),
-            "cannot use `gc_async` without enabling async support in the config",
-        );
-
-        // If the GC heap hasn't been initialized, there is nothing to collect.
-        if self.gc_store.is_none() {
-            return;
-        }
-
-        // Take the GC roots out of `self` so we can borrow it mutably but still
-        // call mutable methods on `self`.
-        let mut roots = std::mem::take(&mut self.gc_roots_list);
-
-        self.trace_roots_async(&mut roots).await;
+        self.trace_roots(&mut roots, asyncness).await;
         self.unwrap_gc_store_mut()
-            .gc_async(unsafe { roots.iter() })
+            .gc(asyncness, unsafe { roots.iter() })
             .await;
 
         // Restore the GC roots for the next GC.
         roots.clear();
         self.gc_roots_list = roots;
+
+        log::trace!("============ End GC ===========");
     }
 
-    #[inline]
-    #[cfg(all(feature = "async", not(feature = "gc")))]
-    pub async fn gc_async(&mut self) {
-        // Nothing to collect.
-        //
-        // Note that this is *not* a public method, this is just defined for the
-        // crate-internal `StoreOpaque` type. This is a convenience so that we
-        // don't have to `cfg` every call site.
-    }
-
-    #[cfg(all(feature = "async", feature = "gc"))]
-    async fn trace_roots_async(&mut self, gc_roots_list: &mut GcRootsList) {
-        use crate::runtime::vm::Yield;
-
+    #[cfg(feature = "gc")]
+    async fn trace_roots(&mut self, gc_roots_list: &mut GcRootsList, asyncness: Asyncness) {
         log::trace!("Begin trace GC roots");
 
         // We shouldn't have any leftover, stale GC roots.
         assert!(gc_roots_list.is_empty());
 
         self.trace_wasm_stack_roots(gc_roots_list);
-        Yield::new().await;
+        if asyncness != Asyncness::No {
+            vm::Yield::new().await;
+        }
+        #[cfg(feature = "stack-switching")]
+        {
+            self.trace_wasm_continuation_roots(gc_roots_list);
+            if asyncness != Asyncness::No {
+                vm::Yield::new().await;
+            }
+        }
         self.trace_vmctx_roots(gc_roots_list);
-        Yield::new().await;
+        if asyncness != Asyncness::No {
+            vm::Yield::new().await;
+        }
         self.trace_user_roots(gc_roots_list);
+        self.trace_pending_exception_roots(gc_roots_list);
 
         log::trace!("End trace GC roots")
     }
 
     #[cfg(feature = "gc")]
-    fn trace_wasm_stack_roots(&mut self, gc_roots_list: &mut GcRootsList) {
-        use core::ptr::NonNull;
+    fn trace_wasm_stack_frame(
+        &self,
+        gc_roots_list: &mut GcRootsList,
+        frame: crate::runtime::vm::Frame,
+    ) {
+        let pc = frame.pc();
+        debug_assert!(pc != 0, "we should always get a valid PC for Wasm frames");
 
-        use crate::runtime::vm::{ModuleInfoLookup, SendSyncPtr};
+        let fp = frame.fp() as *mut usize;
+        debug_assert!(
+            !fp.is_null(),
+            "we should always get a valid frame pointer for Wasm frames"
+        );
 
-        log::trace!("Begin trace GC roots :: Wasm stack");
+        let (module_with_code, _offset) = self
+            .modules()
+            .module_and_code_by_pc(pc)
+            .expect("should have module info for Wasm frame");
 
-        Backtrace::trace(self.vmruntime_limits().cast_const(), |frame| {
-            let pc = frame.pc();
-            debug_assert!(pc != 0, "we should always get a valid PC for Wasm frames");
-
-            let fp = frame.fp();
-            debug_assert!(
-                fp != 0,
-                "we should always get a valid frame pointer for Wasm frames"
-            );
-            let module_info = self
-                .modules()
-                .lookup(pc)
-                .expect("should have module info for Wasm frame");
-
-            let stack_map = match module_info.lookup_stack_map(pc) {
-                Some(sm) => sm,
-                None => {
-                    log::trace!("No stack map for this Wasm frame");
-                    return core::ops::ControlFlow::Continue(());
-                }
-            };
+        if let Some(stack_map) = module_with_code.lookup_stack_map(pc) {
             log::trace!(
-                "We have a stack map that maps {} words in this Wasm frame",
-                stack_map.mapped_words()
+                "We have a stack map that maps {} bytes in this Wasm frame",
+                stack_map.frame_size()
             );
 
-            let sp = fp - stack_map.mapped_words() as usize * mem::size_of::<usize>();
-
-            for i in 0..(stack_map.mapped_words() as usize) {
-                // Stack maps have one bit per word in the frame, and the
-                // zero^th bit is the *lowest* addressed word in the frame,
-                // i.e. the closest to the SP. So to get the `i`^th word in
-                // this frame, we add `i * sizeof(word)` to the SP.
-                let stack_slot = sp + i * mem::size_of::<usize>();
-                let stack_slot = stack_slot as *mut u64;
-
-                if !stack_map.get_bit(i) {
-                    log::trace!("Stack slot @ {stack_slot:p} does not contain gc_refs");
-                    continue;
-                }
-
-                let gc_ref = unsafe { core::ptr::read(stack_slot) };
-                log::trace!("Stack slot @ {stack_slot:p} = {gc_ref:#x}");
-
-                let gc_ref = VMGcRef::from_r64(gc_ref)
-                    .expect("we should never use the high 32 bits of an r64");
-
-                if gc_ref.is_some() {
-                    unsafe {
-                        gc_roots_list.add_wasm_stack_root(SendSyncPtr::new(
-                            NonNull::new(stack_slot).unwrap(),
-                        ));
-                    }
+            let sp = unsafe { stack_map.sp(fp) };
+            for stack_slot in unsafe { stack_map.live_gc_refs(sp) } {
+                unsafe {
+                    self.trace_wasm_stack_slot(gc_roots_list, stack_slot);
                 }
             }
+        }
 
+        #[cfg(feature = "debug")]
+        if let Some(frame_table) = module_with_code.module().frame_table() {
+            let relpc = module_with_code
+                .text_offset(pc)
+                .expect("PC should be within module");
+            for stack_slot in super::debug::gc_refs_in_frame(frame_table, relpc, fp) {
+                unsafe {
+                    self.trace_wasm_stack_slot(gc_roots_list, stack_slot);
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "gc")]
+    unsafe fn trace_wasm_stack_slot(&self, gc_roots_list: &mut GcRootsList, stack_slot: *mut u32) {
+        use crate::runtime::vm::SendSyncPtr;
+        use core::ptr::NonNull;
+
+        let raw: u32 = unsafe { core::ptr::read(stack_slot) };
+        log::trace!("Stack slot @ {stack_slot:p} = {raw:#x}");
+
+        let gc_ref = vm::VMGcRef::from_raw_u32(raw);
+        if gc_ref.is_some() {
+            unsafe {
+                gc_roots_list
+                    .add_wasm_stack_root(SendSyncPtr::new(NonNull::new(stack_slot).unwrap()));
+            }
+        }
+    }
+
+    #[cfg(feature = "gc")]
+    fn trace_wasm_stack_roots(&mut self, gc_roots_list: &mut GcRootsList) {
+        use crate::runtime::vm::Backtrace;
+        log::trace!("Begin trace GC roots :: Wasm stack");
+
+        Backtrace::trace(self, |frame| {
+            self.trace_wasm_stack_frame(gc_roots_list, frame);
             core::ops::ControlFlow::Continue(())
         });
 
         log::trace!("End trace GC roots :: Wasm stack");
+    }
+
+    #[cfg(all(feature = "gc", feature = "stack-switching"))]
+    fn trace_wasm_continuation_roots(&mut self, gc_roots_list: &mut GcRootsList) {
+        use crate::{runtime::vm::Backtrace, vm::VMStackState};
+        log::trace!("Begin trace GC roots :: continuations");
+
+        for continuation in &self.continuations {
+            let state = continuation.common_stack_information.state;
+
+            // FIXME(frank-emrich) In general, it is not enough to just trace
+            // through the stacks of continuations; we also need to look through
+            // their `cont.bind` arguments. However, we don't currently have
+            // enough RTTI information to check if any of the values in the
+            // buffers used by `cont.bind` are GC values. As a workaround, note
+            // that we currently disallow cont.bind-ing GC values altogether.
+            // This way, it is okay not to check them here.
+            match state {
+                VMStackState::Suspended => {
+                    Backtrace::trace_suspended_continuation(self, continuation.deref(), |frame| {
+                        self.trace_wasm_stack_frame(gc_roots_list, frame);
+                        core::ops::ControlFlow::Continue(())
+                    });
+                }
+                VMStackState::Running => {
+                    // Handled by `trace_wasm_stack_roots`.
+                }
+                VMStackState::Parent => {
+                    // We don't know whether our child is suspended or running, but in
+                    // either case things should be handled correctly when traversing
+                    // further along in the chain, nothing required at this point.
+                }
+                VMStackState::Fresh | VMStackState::Returned => {
+                    // Fresh/Returned continuations have no gc values on their stack.
+                }
+            }
+        }
+
+        log::trace!("End trace GC roots :: continuations");
     }
 
     #[cfg(feature = "gc")]
@@ -2133,43 +2711,72 @@ impl StoreOpaque {
         log::trace!("End trace GC roots :: user");
     }
 
-    /// Yields the async context, assuming that we are executing on a fiber and
-    /// that fiber is not in the process of dying. This function will return
-    /// None in the latter case (the fiber is dying), and panic if
-    /// `async_support()` is false.
-    #[cfg(feature = "async")]
-    #[inline]
-    pub fn async_cx(&self) -> Option<AsyncCx> {
-        assert!(self.async_support());
-
-        let poll_cx_box_ptr = self.async_state.current_poll_cx.get();
-        if poll_cx_box_ptr.is_null() {
-            return None;
+    #[cfg(feature = "gc")]
+    fn trace_pending_exception_roots(&mut self, gc_roots_list: &mut GcRootsList) {
+        log::trace!("Begin trace GC roots :: pending exception");
+        if let Some(pending_exception) = self.pending_exception.as_mut() {
+            unsafe {
+                let root = pending_exception.as_gc_ref_mut();
+                gc_roots_list.add_root(root.into(), "Pending exception");
+            }
         }
+        log::trace!("End trace GC roots :: pending exception");
+    }
 
-        let poll_cx_inner_ptr = unsafe { *poll_cx_box_ptr };
-        if poll_cx_inner_ptr.is_null() {
-            return None;
+    /// Insert a host-allocated GC type into this store.
+    ///
+    /// This makes it suitable for the embedder to allocate instances of this
+    /// type in this store, and we don't have to worry about the type being
+    /// reclaimed (since it is possible that none of the Wasm modules in this
+    /// store are holding it alive).
+    #[cfg(feature = "gc")]
+    pub(crate) fn insert_gc_host_alloc_type(&mut self, ty: crate::type_registry::RegisteredType) {
+        self.gc_host_alloc_types.insert(ty);
+    }
+
+    /// Helper function execute a `init_gc_ref` when placing `gc_ref` in `dest`.
+    ///
+    /// This avoids allocating `GcStore` where possible.
+    pub(crate) fn init_gc_ref(
+        &mut self,
+        dest: &mut MaybeUninit<Option<VMGcRef>>,
+        gc_ref: Option<&VMGcRef>,
+    ) {
+        if GcStore::needs_init_barrier(gc_ref) {
+            self.unwrap_gc_store_mut().init_gc_ref(dest, gc_ref)
+        } else {
+            dest.write(gc_ref.map(|r| r.copy_i31()));
         }
+    }
 
-        Some(AsyncCx {
-            current_suspend: self.async_state.current_suspend.get(),
-            current_poll_cx: poll_cx_box_ptr,
-            track_pkey_context_switch: self.pkey.is_some(),
-        })
+    /// Helper function execute a write barrier when placing `gc_ref` in `dest`.
+    ///
+    /// This avoids allocating `GcStore` where possible.
+    pub(crate) fn write_gc_ref(&mut self, dest: &mut Option<VMGcRef>, gc_ref: Option<&VMGcRef>) {
+        GcStore::write_gc_ref_optional_store(self.optional_gc_store_mut(), dest, gc_ref)
+    }
+
+    /// Helper function to clone `gc_ref` notably avoiding allocating a
+    /// `GcStore` where possible.
+    pub(crate) fn clone_gc_ref(&mut self, gc_ref: &VMGcRef) -> VMGcRef {
+        if gc_ref.is_i31() {
+            gc_ref.copy_i31()
+        } else {
+            self.unwrap_gc_store_mut().clone_gc_ref(gc_ref)
+        }
     }
 
     pub fn get_fuel(&self) -> Result<u64> {
-        anyhow::ensure!(
+        crate::ensure!(
             self.engine().tunables().consume_fuel,
             "fuel is not configured in this store"
         );
-        let injected_fuel = unsafe { *self.runtime_limits.fuel_consumed.get() };
+        let injected_fuel = unsafe { *self.vm_store_context.fuel_consumed.get() };
         Ok(get_fuel(injected_fuel, self.fuel_reserve))
     }
 
-    fn refuel(&mut self) -> bool {
-        let injected_fuel = unsafe { &mut *self.runtime_limits.fuel_consumed.get() };
+    pub(crate) fn refuel(&mut self) -> bool {
+        let injected_fuel = unsafe { &mut *self.vm_store_context.fuel_consumed.get() };
         refuel(
             injected_fuel,
             &mut self.fuel_reserve,
@@ -2178,11 +2785,11 @@ impl StoreOpaque {
     }
 
     pub fn set_fuel(&mut self, fuel: u64) -> Result<()> {
-        anyhow::ensure!(
+        crate::ensure!(
             self.engine().tunables().consume_fuel,
             "fuel is not configured in this store"
         );
-        let injected_fuel = unsafe { &mut *self.runtime_limits.fuel_consumed.get() };
+        let injected_fuel = unsafe { &mut *self.vm_store_context.fuel_consumed.get() };
         set_fuel(
             injected_fuel,
             &mut self.fuel_reserve,
@@ -2192,66 +2799,45 @@ impl StoreOpaque {
         Ok(())
     }
 
+    #[cfg(feature = "async")]
     pub fn fuel_async_yield_interval(&mut self, interval: Option<u64>) -> Result<()> {
-        anyhow::ensure!(
+        crate::ensure!(
             self.engine().tunables().consume_fuel,
             "fuel is not configured in this store"
         );
-        anyhow::ensure!(
-            self.engine().config().async_support,
-            "async support is not configured in this store"
-        );
-        anyhow::ensure!(
+        crate::ensure!(
             interval != Some(0),
             "fuel_async_yield_interval must not be 0"
         );
+
+        // All future entrypoints must be async to handle the case that fuel
+        // runs out and an async yield is needed.
+        self.set_async_required(Asyncness::Yes);
+
         self.fuel_yield_interval = interval.and_then(|i| NonZeroU64::new(i));
         // Reset the fuel active + reserve states by resetting the amount.
         self.set_fuel(self.get_fuel()?)
     }
 
-    /// Yields execution to the caller on out-of-gas or epoch interruption.
-    ///
-    /// This only works on async futures and stores, and assumes that we're
-    /// executing on a fiber. This will yield execution back to the caller once.
-    #[cfg(feature = "async")]
-    fn async_yield_impl(&mut self) -> Result<()> {
-        use crate::runtime::vm::Yield;
-
-        let mut future = Yield::new();
-
-        // When control returns, we have a `Result<()>` passed
-        // in from the host fiber. If this finished successfully then
-        // we were resumed normally via a `poll`, so keep going.  If
-        // the future was dropped while we were yielded, then we need
-        // to clean up this fiber. Do so by raising a trap which will
-        // abort all wasm and get caught on the other side to clean
-        // things up.
-        unsafe {
-            self.async_cx()
-                .expect("attempted to pull async context during shutdown")
-                .block_on(Pin::new_unchecked(&mut future))
-        }
-    }
-
     #[inline]
-    pub fn signal_handler(&self) -> Option<*const SignalHandler<'static>> {
+    pub fn signal_handler(&self) -> Option<*const SignalHandler> {
         let handler = self.signal_handler.as_ref()?;
-        Some(&**handler as *const _)
+        Some(handler)
     }
 
     #[inline]
-    pub fn vmruntime_limits(&self) -> *mut VMRuntimeLimits {
-        &self.runtime_limits as *const VMRuntimeLimits as *mut VMRuntimeLimits
+    pub fn vm_store_context_ptr(&self) -> NonNull<VMStoreContext> {
+        NonNull::from(&self.vm_store_context)
     }
 
     #[inline]
-    pub fn default_caller(&self) -> *mut VMContext {
-        self.default_caller.vmctx()
+    pub fn default_caller(&self) -> NonNull<VMContext> {
+        self.default_caller_vmctx.as_non_null()
     }
 
-    pub fn traitobj(&self) -> *mut dyn crate::runtime::vm::Store {
-        self.default_caller.store()
+    #[inline]
+    pub fn traitobj(&self) -> NonNull<dyn VMStore> {
+        self.traitobj.0.unwrap()
     }
 
     /// Takes the cached `Vec<Val>` stored internally across hostcalls to get
@@ -2274,21 +2860,17 @@ impl StoreOpaque {
     /// Same as `take_hostcall_val_storage`, but for the direction of the host
     /// calling wasm.
     #[inline]
-    pub fn take_wasm_val_raw_storage(&mut self) -> Vec<ValRaw> {
+    pub fn take_wasm_val_raw_storage(&mut self) -> TryVec<ValRaw> {
         mem::take(&mut self.wasm_val_raw_storage)
     }
 
     /// Same as `save_hostcall_val_storage`, but for the direction of the host
     /// calling wasm.
     #[inline]
-    pub fn save_wasm_val_raw_storage(&mut self, storage: Vec<ValRaw>) {
+    pub fn save_wasm_val_raw_storage(&mut self, storage: TryVec<ValRaw>) {
         if storage.capacity() > self.wasm_val_raw_storage.capacity() {
             self.wasm_val_raw_storage = storage;
         }
-    }
-
-    pub(crate) fn push_rooted_funcs(&mut self, funcs: Arc<[Definition]>) {
-        self.rooted_host_funcs.push(funcs);
     }
 
     /// Translates a WebAssembly fault at the native `pc` and native `addr` to a
@@ -2303,7 +2885,7 @@ impl StoreOpaque {
     /// with spectre mitigations enabled since the hardware fault address is
     /// always zero in these situations which means that the trapping context
     /// doesn't have enough information to report the fault address.
-    pub(crate) fn wasm_fault(&self, pc: usize, addr: usize) -> Option<WasmFault> {
+    pub(crate) fn wasm_fault(&self, pc: usize, addr: usize) -> Option<vm::WasmFault> {
         // There are a few instances where a "close to zero" pointer is loaded
         // and we expect that to happen:
         //
@@ -2336,8 +2918,8 @@ impl StoreOpaque {
         // possible to precompute maps about linear memories in a store and have
         // a quicker lookup.
         let mut fault = None;
-        for instance in self.instances.iter() {
-            if let Some(f) = instance.handle.wasm_fault(addr) {
+        for (_, instance) in self.instances.iter() {
+            if let Some(f) = instance.handle.get().wasm_fault(addr) {
                 // Multiple instances may share the same linear memory (e.g.,
                 // backup VMContext pool instances import the same shared memory).
                 // Return the first match — all shared instances report identical
@@ -2353,7 +2935,7 @@ impl StoreOpaque {
         }
 
         cfg_if::cfg_if! {
-            if #[cfg(any(feature = "std", unix, windows))] {
+            if #[cfg(feature = "std")] {
                 // With the standard library a rich error can be printed here
                 // to stderr and the native abort path is used.
                 eprintln!(
@@ -2385,615 +2967,342 @@ at https://bytecodealliance.org/security.
                 let _ = pc;
                 panic!("invalid fault");
             } else {
-                // Without `std` and with `panic = "unwind"` there's no way to
-                // abort the process portably, so flag a compile time error.
-                //
-                // NB: if this becomes a problem in the future one option would
-                // be to extend the `capi.rs` module for no_std platforms, but
-                // it remains yet to be seen at this time if this is hit much.
-                compile_error!("either `std` or `panic=abort` must be enabled");
-                None
+                // Without `std` and with `panic = "unwind"` there's no
+                // dedicated API to abort the process portably, so manufacture
+                // this with a double-panic.
+                let _ = pc;
+
+                struct PanicAgainOnDrop;
+
+                impl Drop for PanicAgainOnDrop {
+                    fn drop(&mut self) {
+                        panic!("panicking again to trigger a process abort");
+                    }
+
+                }
+
+                let _bomb = PanicAgainOnDrop;
+
+                panic!("invalid fault");
             }
         }
     }
 
     /// Retrieve the store's protection key.
     #[inline]
+    #[cfg(feature = "pooling-allocator")]
     pub(crate) fn get_pkey(&self) -> Option<ProtectionKey> {
-        self.pkey.clone()
+        self.pkey
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) fn fiber_async_state_mut(&mut self) -> &mut fiber::AsyncState {
+        &mut self.async_state
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) fn has_pkey(&self) -> bool {
+        self.pkey.is_some()
+    }
+
+    pub(crate) fn executor(&mut self) -> ExecutorRef<'_> {
+        match &mut self.executor {
+            Executor::Interpreter(i) => ExecutorRef::Interpreter(i.as_interpreter_ref()),
+            #[cfg(has_host_compiler_backend)]
+            Executor::Native => ExecutorRef::Native,
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) fn swap_executor(&mut self, executor: &mut Executor) {
+        mem::swap(&mut self.executor, executor);
+    }
+
+    pub(crate) fn unwinder(&self) -> &'static dyn Unwind {
+        match &self.executor {
+            Executor::Interpreter(i) => i.unwinder(),
+            #[cfg(has_host_compiler_backend)]
+            Executor::Native => &vm::UnwindHost,
+        }
+    }
+
+    /// Allocates a new continuation. Note that we currently don't support
+    /// deallocating them. Instead, all continuations remain allocated
+    /// throughout the store's lifetime.
+    #[cfg(feature = "stack-switching")]
+    pub fn allocate_continuation(&mut self) -> Result<*mut VMContRef> {
+        // FIXME(frank-emrich) Do we need to pin this?
+        let mut continuation = Box::new(VMContRef::empty());
+        let stack_size = self.engine.config().async_stack_size;
+        let stack = crate::vm::VMContinuationStack::new(stack_size)?;
+        continuation.stack = stack;
+        let ptr = continuation.deref_mut() as *mut VMContRef;
+        self.continuations.push(continuation);
+        Ok(ptr)
+    }
+
+    /// Constructs and executes an `InstanceAllocationRequest` and pushes the
+    /// returned instance into the store.
+    ///
+    /// This is a helper method for invoking
+    /// `InstanceAllocator::allocate_module` with the appropriate parameters
+    /// from this store's own configuration. The `kind` provided is used to
+    /// distinguish between "real" modules and dummy ones that are synthesized
+    /// for embedder-created memories, globals, tables, etc. The `kind` will
+    /// also use a different instance allocator by default, the one passed in,
+    /// rather than the engine's default allocator.
+    ///
+    /// This method will push the instance within `StoreOpaque` onto the
+    /// `instances` array and return the `InstanceId` which can be use to look
+    /// it up within the store.
+    ///
+    /// # Safety
+    ///
+    /// The `imports` provided must be correctly sized/typed for the module
+    /// being allocated.
+    pub(crate) async unsafe fn allocate_instance(
+        &mut self,
+        limiter: Option<&mut StoreResourceLimiter<'_>>,
+        kind: AllocateInstanceKind<'_>,
+        runtime_info: &ModuleRuntimeInfo,
+        imports: Imports<'_>,
+    ) -> Result<InstanceId> {
+        let id = self.instances.next_key();
+
+        let allocator = match kind {
+            AllocateInstanceKind::Module(_) => self.engine().allocator(),
+            AllocateInstanceKind::Dummy { allocator } => allocator,
+        };
+        // SAFETY: this function's own contract is the same as
+        // `allocate_module`, namely the imports provided are valid.
+        let handle = unsafe {
+            allocator
+                .allocate_module(InstanceAllocationRequest {
+                    id,
+                    runtime_info,
+                    imports,
+                    store: self,
+                    limiter,
+                })
+                .await?
+        };
+
+        let actual = match kind {
+            AllocateInstanceKind::Module(module_id) => {
+                log::trace!(
+                    "Adding instance to store: store={:?}, module={module_id:?}, instance={id:?}",
+                    self.id()
+                );
+                self.instances.push(StoreInstance {
+                    handle,
+                    kind: StoreInstanceKind::Real { module_id },
+                })?
+            }
+            AllocateInstanceKind::Dummy { .. } => {
+                log::trace!(
+                    "Adding dummy instance to store: store={:?}, instance={id:?}",
+                    self.id()
+                );
+                self.instances.push(StoreInstance {
+                    handle,
+                    kind: StoreInstanceKind::Dummy,
+                })?
+            }
+        };
+
+        // double-check we didn't accidentally allocate two instances and our
+        // prediction of what the id would be is indeed the id it should be.
+        assert_eq!(id, actual);
+
+        Ok(id)
+    }
+
+    /// Set a pending exception. The `exnref` is taken and held on
+    /// this store to be fetched later by an unwind. This method does
+    /// *not* set up an unwind request on the TLS call state; that
+    /// must be done separately.
+    #[cfg(feature = "gc")]
+    pub(crate) fn set_pending_exception(&mut self, exnref: VMExnRef) {
+        self.pending_exception = Some(exnref);
+    }
+
+    /// Take a pending exception, if any.
+    #[cfg(feature = "gc")]
+    pub(crate) fn take_pending_exception(&mut self) -> Option<VMExnRef> {
+        self.pending_exception.take()
+    }
+
+    /// Tests whether there is a pending exception.
+    #[cfg(feature = "gc")]
+    pub fn has_pending_exception(&self) -> bool {
+        self.pending_exception.is_some()
+    }
+
+    #[cfg(feature = "gc")]
+    fn take_pending_exception_rooted(&mut self) -> Option<Rooted<ExnRef>> {
+        let vmexnref = self.take_pending_exception()?;
+        let mut nogc = AutoAssertNoGc::new(self);
+        Some(Rooted::new(&mut nogc, vmexnref.into()))
+    }
+
+    /// Get an owned rooted reference to the pending exception,
+    /// without taking it off the store.
+    #[cfg(all(feature = "gc", feature = "debug"))]
+    pub(crate) fn pending_exception_owned_rooted(
+        &mut self,
+    ) -> Result<Option<OwnedRooted<ExnRef>>, crate::error::OutOfMemory> {
+        let mut nogc = AutoAssertNoGc::new(self);
+        nogc.pending_exception
+            .take()
+            .map(|vmexnref| {
+                let cloned = nogc.clone_gc_ref(vmexnref.as_gc_ref());
+                nogc.pending_exception = Some(cloned.into_exnref_unchecked());
+                OwnedRooted::new(&mut nogc, vmexnref.into())
+            })
+            .transpose()
+    }
+
+    #[cfg(feature = "gc")]
+    fn throw_impl(&mut self, exception: Rooted<ExnRef>) {
+        let mut nogc = AutoAssertNoGc::new(self);
+        let exnref = exception._to_raw(&mut nogc).unwrap();
+        let exnref = VMGcRef::from_raw_u32(exnref)
+            .expect("exception cannot be null")
+            .into_exnref_unchecked();
+        nogc.set_pending_exception(exnref);
+    }
+
+    #[cfg(target_has_atomic = "64")]
+    pub(crate) fn set_epoch_deadline(&mut self, delta: u64) {
+        // Set a new deadline based on the "epoch deadline delta".
+        //
+        // Also, note that when this update is performed while Wasm is
+        // on the stack, the Wasm will reload the new value once we
+        // return into it.
+        let current_epoch = self.engine().current_epoch();
+        let epoch_deadline = self.vm_store_context.epoch_deadline.get_mut();
+        *epoch_deadline = current_epoch + delta;
+    }
+
+    pub(crate) fn get_epoch_deadline(&mut self) -> u64 {
+        *self.vm_store_context.epoch_deadline.get_mut()
     }
 
     #[inline]
-    #[cfg(feature = "component-model")]
-    pub(crate) fn component_resource_state(
-        &mut self,
-    ) -> (
-        &mut crate::runtime::vm::component::CallContexts,
-        &mut crate::runtime::vm::component::ResourceTable,
-        &mut crate::component::HostResourceData,
-    ) {
-        (
-            &mut self.component_calls,
-            &mut self.component_host_table,
-            &mut self.host_resource_data,
-        )
-    }
-
-    #[cfg(feature = "component-model")]
-    pub(crate) fn push_component_instance(&mut self, instance: crate::component::Instance) {
-        // We don't actually need the instance itself right now, but it seems
-        // like something we will almost certainly eventually want to keep
-        // around, so force callers to provide it.
-        let _ = instance;
-
-        self.num_component_instances += 1;
-    }
-}
-
-impl<T> StoreContextMut<'_, T> {
-    /// Executes a synchronous computation `func` asynchronously on a new fiber.
-    ///
-    /// This function will convert the synchronous `func` into an asynchronous
-    /// future. This is done by running `func` in a fiber on a separate native
-    /// stack which can be suspended and resumed from.
-    ///
-    /// Most of the nitty-gritty here is how we juggle the various contexts
-    /// necessary to suspend the fiber later on and poll sub-futures. It's hoped
-    /// that the various comments are illuminating as to what's going on here.
-    #[cfg(feature = "async")]
-    pub(crate) async fn on_fiber<R>(
-        &mut self,
-        func: impl FnOnce(&mut StoreContextMut<'_, T>) -> R + Send,
-    ) -> Result<R>
-    where
-        T: Send,
-    {
-        let config = self.engine().config();
-        debug_assert!(self.0.async_support());
-        debug_assert!(config.async_stack_size > 0);
-
-        let mut slot = None;
-        let future = {
-            let current_poll_cx = self.0.async_state.current_poll_cx.get();
-            let current_suspend = self.0.async_state.current_suspend.get();
-            let stack = self.engine().allocator().allocate_fiber_stack()?;
-
-            let engine = self.engine().clone();
-            let slot = &mut slot;
-            let fiber = wasmtime_fiber::Fiber::new(stack, move |keep_going, suspend| {
-                // First check and see if we were interrupted/dropped, and only
-                // continue if we haven't been.
-                keep_going?;
-
-                // Configure our store's suspension context for the rest of the
-                // execution of this fiber. Note that a raw pointer is stored here
-                // which is only valid for the duration of this closure.
-                // Consequently we at least replace it with the previous value when
-                // we're done. This reset is also required for correctness because
-                // otherwise our value will overwrite another active fiber's value.
-                // There should be a test that segfaults in `async_functions.rs` if
-                // this `Replace` is removed.
-                unsafe {
-                    let _reset = Reset(current_suspend, *current_suspend);
-                    *current_suspend = suspend;
-
-                    *slot = Some(func(self));
-                    Ok(())
-                }
-            })?;
-
-            // Once we have the fiber representing our synchronous computation, we
-            // wrap that in a custom future implementation which does the
-            // translation from the future protocol to our fiber API.
-            FiberFuture {
-                fiber: Some(fiber),
-                current_poll_cx,
-                engine,
-                state: Some(crate::runtime::vm::AsyncWasmCallState::new()),
-            }
-        };
-        future.await?;
-
-        return Ok(slot.unwrap());
-
-        struct FiberFuture<'a> {
-            fiber: Option<wasmtime_fiber::Fiber<'a, Result<()>, (), Result<()>>>,
-            current_poll_cx: *mut *mut Context<'static>,
-            engine: Engine,
-            // See comments in `FiberFuture::resume` for this
-            state: Option<crate::runtime::vm::AsyncWasmCallState>,
-        }
-
-        // This is surely the most dangerous `unsafe impl Send` in the entire
-        // crate. There are two members in `FiberFuture` which cause it to not
-        // be `Send`. One is `current_poll_cx` and is entirely uninteresting.
-        // This is just used to manage `Context` pointers across `await` points
-        // in the future, and requires raw pointers to get it to happen easily.
-        // Nothing too weird about the `Send`-ness, values aren't actually
-        // crossing threads.
-        //
-        // The really interesting piece is `fiber`. Now the "fiber" here is
-        // actual honest-to-god Rust code which we're moving around. What we're
-        // doing is the equivalent of moving our thread's stack to another OS
-        // thread. Turns out we, in general, have no idea what's on the stack
-        // and would generally have no way to verify that this is actually safe
-        // to do!
-        //
-        // Thankfully, though, Wasmtime has the power. Without being glib it's
-        // actually worth examining what's on the stack. It's unfortunately not
-        // super-local to this function itself. Our closure to `Fiber::new` runs
-        // `func`, which is given to us from the outside. Thankfully, though, we
-        // have tight control over this. Usage of `on_fiber` is typically done
-        // *just* before entering WebAssembly itself, so we'll have a few stack
-        // frames of Rust code (all in Wasmtime itself) before we enter wasm.
-        //
-        // Once we've entered wasm, well then we have a whole bunch of wasm
-        // frames on the stack. We've got this nifty thing called Cranelift,
-        // though, which allows us to also have complete control over everything
-        // on the stack!
-        //
-        // Finally, when wasm switches back to the fiber's starting pointer
-        // (this future we're returning) then it means wasm has reentered Rust.
-        // Suspension can only happen via the `block_on` function of an
-        // `AsyncCx`. This, conveniently, also happens entirely in Wasmtime
-        // controlled code!
-        //
-        // There's an extremely important point that should be called out here.
-        // User-provided futures **are not on the stack** during suspension
-        // points. This is extremely crucial because we in general cannot reason
-        // about Send/Sync for stack-local variables since rustc doesn't analyze
-        // them at all. With our construction, though, we are guaranteed that
-        // Wasmtime owns all stack frames between the stack of a fiber and when
-        // the fiber suspends (and it could move across threads). At this time
-        // the only user-provided piece of data on the stack is the future
-        // itself given to us. Lo-and-behold as you might notice the future is
-        // required to be `Send`!
-        //
-        // What this all boils down to is that we, as the authors of Wasmtime,
-        // need to be extremely careful that on the async fiber stack we only
-        // store Send things. For example we can't start using `Rc` willy nilly
-        // by accident and leave a copy in TLS somewhere. (similarly we have to
-        // be ready for TLS to change while we're executing wasm code between
-        // suspension points).
-        //
-        // While somewhat onerous it shouldn't be too too hard (the TLS bit is
-        // the hardest bit so far). This does mean, though, that no user should
-        // ever have to worry about the `Send`-ness of Wasmtime. If rustc says
-        // it's ok, then it's ok.
-        //
-        // With all that in mind we unsafely assert here that wasmtime is
-        // correct. We declare the fiber as only containing Send data on its
-        // stack, despite not knowing for sure at compile time that this is
-        // correct. That's what `unsafe` in Rust is all about, though, right?
-        unsafe impl Send for FiberFuture<'_> {}
-
-        impl FiberFuture<'_> {
-            fn fiber(&self) -> &wasmtime_fiber::Fiber<'_, Result<()>, (), Result<()>> {
-                self.fiber.as_ref().unwrap()
-            }
-
-            /// This is a helper function to call `resume` on the underlying
-            /// fiber while correctly managing Wasmtime's thread-local data.
-            ///
-            /// Wasmtime's implementation of traps leverages thread-local data
-            /// to get access to metadata during a signal. This thread-local
-            /// data is a linked list of "activations" where the nodes of the
-            /// linked list are stored on the stack. It would be invalid as a
-            /// result to suspend a computation with the head of the linked list
-            /// on this stack then move the stack to another thread and resume
-            /// it. That means that a different thread would point to our stack
-            /// and our thread doesn't point to our stack at all!
-            ///
-            /// Basically management of TLS is required here one way or another.
-            /// The strategy currently settled on is to manage the list of
-            /// activations created by this fiber as a unit. When a fiber
-            /// resumes the linked list is prepended to the current thread's
-            /// list. When the fiber is suspended then the fiber's list of
-            /// activations are all removed en-masse and saved within the fiber.
-            fn resume(&mut self, val: Result<()>) -> Result<Result<()>, ()> {
-                unsafe {
-                    let prev = self.state.take().unwrap().push();
-                    let restore = Restore {
-                        fiber: self,
-                        state: Some(prev),
-                    };
-                    return restore.fiber.fiber().resume(val);
-                }
-
-                struct Restore<'a, 'b> {
-                    fiber: &'a mut FiberFuture<'b>,
-                    state: Option<crate::runtime::vm::PreviousAsyncWasmCallState>,
-                }
-
-                impl Drop for Restore<'_, '_> {
-                    fn drop(&mut self) {
-                        unsafe {
-                            self.fiber.state = Some(self.state.take().unwrap().restore());
-                        }
-                    }
-                }
-            }
-        }
-
-        impl Future for FiberFuture<'_> {
-            type Output = Result<()>;
-
-            fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-                // We need to carry over this `cx` into our fiber's runtime
-                // for when it tries to poll sub-futures that are created. Doing
-                // this must be done unsafely, however, since `cx` is only alive
-                // for this one singular function call. Here we do a `transmute`
-                // to extend the lifetime of `Context` so it can be stored in
-                // our `Store`, and then we replace the current polling context
-                // with this one.
-                //
-                // Note that the replace is done for weird situations where
-                // futures might be switching contexts and there's multiple
-                // wasmtime futures in a chain of futures.
-                //
-                // On exit from this function, though, we reset the polling
-                // context back to what it was to signify that `Store` no longer
-                // has access to this pointer.
-                unsafe {
-                    let _reset = Reset(self.current_poll_cx, *self.current_poll_cx);
-                    *self.current_poll_cx =
-                        core::mem::transmute::<&mut Context<'_>, *mut Context<'static>>(cx);
-
-                    // After that's set up we resume execution of the fiber, which
-                    // may also start the fiber for the first time. This either
-                    // returns `Ok` saying the fiber finished (yay!) or it
-                    // returns `Err` with the payload passed to `suspend`, which
-                    // in our case is `()`.
-                    match self.resume(Ok(())) {
-                        Ok(result) => Poll::Ready(result),
-
-                        // If `Err` is returned that means the fiber polled a
-                        // future but it said "Pending", so we propagate that
-                        // here.
-                        //
-                        // An additional safety check is performed when leaving
-                        // this function to help bolster the guarantees of
-                        // `unsafe impl Send` above. Notably this future may get
-                        // re-polled on a different thread. Wasmtime's
-                        // thread-local state points to the stack, however,
-                        // meaning that it would be incorrect to leave a pointer
-                        // in TLS when this function returns. This function
-                        // performs a runtime assert to verify that this is the
-                        // case, notably that the one TLS pointer Wasmtime uses
-                        // is not pointing anywhere within the stack. If it is
-                        // then that's a bug indicating that TLS management in
-                        // Wasmtime is incorrect.
-                        Err(()) => {
-                            if let Some(range) = self.fiber().stack().range() {
-                                crate::runtime::vm::AsyncWasmCallState::assert_current_state_not_in_range(range);
-                            }
-                            Poll::Pending
-                        }
-                    }
-                }
-            }
-        }
-
-        // Dropping futures is pretty special in that it means the future has
-        // been requested to be cancelled. Here we run the risk of dropping an
-        // in-progress fiber, and if we were to do nothing then the fiber would
-        // leak all its owned stack resources.
-        //
-        // To handle this we implement `Drop` here and, if the fiber isn't done,
-        // resume execution of the fiber saying "hey please stop you're
-        // interrupted". Our `Trap` created here (which has the stack trace
-        // of whomever dropped us) will then get propagated in whatever called
-        // `block_on`, and the idea is that the trap propagates all the way back
-        // up to the original fiber start, finishing execution.
-        //
-        // We don't actually care about the fiber's return value here (no one's
-        // around to look at it), we just assert the fiber finished to
-        // completion.
-        impl Drop for FiberFuture<'_> {
-            fn drop(&mut self) {
-                if !self.fiber().done() {
-                    let result = self.resume(Err(anyhow!("future dropped")));
-                    // This resumption with an error should always complete the
-                    // fiber. While it's technically possible for host code to catch
-                    // the trap and re-resume, we'd ideally like to signal that to
-                    // callers that they shouldn't be doing that.
-                    debug_assert!(result.is_ok());
-                }
-
-                self.state.take().unwrap().assert_null();
-
-                unsafe {
-                    self.engine
-                        .allocator()
-                        .deallocate_fiber_stack(self.fiber.take().unwrap().into_stack());
-                }
-            }
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-pub struct AsyncCx {
-    current_suspend: *mut *mut wasmtime_fiber::Suspend<Result<()>, (), Result<()>>,
-    current_poll_cx: *mut *mut Context<'static>,
-    track_pkey_context_switch: bool,
-}
-
-#[cfg(feature = "async")]
-impl AsyncCx {
-    /// Blocks on the asynchronous computation represented by `future` and
-    /// produces the result here, in-line.
-    ///
-    /// This function is designed to only work when it's currently executing on
-    /// a native fiber. This fiber provides the ability for us to handle the
-    /// future's `Pending` state as "jump back to whomever called the fiber in
-    /// an asynchronous fashion and propagate `Pending`". This tight coupling
-    /// with `on_fiber` below is what powers the asynchronicity of calling wasm.
-    /// Note that the asynchronous part only applies to host functions, wasm
-    /// itself never really does anything asynchronous at this time.
-    ///
-    /// This function takes a `future` and will (appear to) synchronously wait
-    /// on the result. While this function is executing it will fiber switch
-    /// to-and-from the original frame calling `on_fiber` which should be a
-    /// guarantee due to how async stores are configured.
-    ///
-    /// The return value here is either the output of the future `T`, or a trap
-    /// which represents that the asynchronous computation was cancelled. It is
-    /// not recommended to catch the trap and try to keep executing wasm, so
-    /// we've tried to liberally document this.
-    pub unsafe fn block_on<U>(
-        &self,
-        mut future: Pin<&mut (dyn Future<Output = U> + Send)>,
-    ) -> Result<U> {
-        // Take our current `Suspend` context which was configured as soon as
-        // our fiber started. Note that we must load it at the front here and
-        // save it on our stack frame. While we're polling the future other
-        // fibers may be started for recursive computations, and the current
-        // suspend context is only preserved at the edges of the fiber, not
-        // during the fiber itself.
-        //
-        // For a little bit of extra safety we also replace the current value
-        // with null to try to catch any accidental bugs on our part early.
-        // This is all pretty unsafe so we're trying to be careful...
-        //
-        // Note that there should be a segfaulting test  in `async_functions.rs`
-        // if this `Reset` is removed.
-        let suspend = *self.current_suspend;
-        let _reset = Reset(self.current_suspend, suspend);
-        *self.current_suspend = ptr::null_mut();
-        assert!(!suspend.is_null());
-
-        loop {
-            let future_result = {
-                let poll_cx = *self.current_poll_cx;
-                let _reset = Reset(self.current_poll_cx, poll_cx);
-                *self.current_poll_cx = ptr::null_mut();
-                assert!(!poll_cx.is_null());
-                future.as_mut().poll(&mut *poll_cx)
-            };
-
-            match future_result {
-                Poll::Ready(t) => break Ok(t),
-                Poll::Pending => {}
-            }
-
-            // In order to prevent this fiber's MPK state from being munged by
-            // other fibers while it is suspended, we save and restore it once
-            // once execution resumes. Note that when MPK is not supported,
-            // these are noops.
-            let previous_mask = if self.track_pkey_context_switch {
-                let previous_mask = mpk::current_mask();
-                mpk::allow(ProtectionMask::all());
-                previous_mask
-            } else {
-                ProtectionMask::all()
-            };
-            (*suspend).suspend(())?;
-            if self.track_pkey_context_switch {
-                mpk::allow(previous_mask);
-            }
-        }
-    }
-}
-
-unsafe impl<T> crate::runtime::vm::Store for StoreInner<T> {
-    fn vmruntime_limits(&self) -> *mut VMRuntimeLimits {
-        <StoreOpaque>::vmruntime_limits(self)
-    }
-
-    fn epoch_ptr(&self) -> *const AtomicU64 {
-        self.engine.epoch_counter() as *const _
-    }
-
-    fn maybe_gc_store(&mut self) -> Option<&mut GcStore> {
-        self.gc_store.as_mut()
-    }
-
-    fn memory_growing(
-        &mut self,
-        current: usize,
-        desired: usize,
-        maximum: Option<usize>,
-    ) -> Result<bool, anyhow::Error> {
-        match self.limiter {
-            Some(ResourceLimiterInner::Sync(ref mut limiter)) => {
-                limiter(&mut self.data).memory_growing(current, desired, maximum)
-            }
-            #[cfg(feature = "async")]
-            Some(ResourceLimiterInner::Async(ref mut limiter)) => unsafe {
-                self.inner
-                    .async_cx()
-                    .expect("ResourceLimiterAsync requires async Store")
-                    .block_on(
-                        limiter(&mut self.data)
-                            .memory_growing(current, desired, maximum)
-                            .as_mut(),
-                    )?
-            },
-            None => Ok(true),
-        }
-    }
-
-    fn memory_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
-        match self.limiter {
-            Some(ResourceLimiterInner::Sync(ref mut limiter)) => {
-                limiter(&mut self.data).memory_grow_failed(error)
-            }
-            #[cfg(feature = "async")]
-            Some(ResourceLimiterInner::Async(ref mut limiter)) => {
-                limiter(&mut self.data).memory_grow_failed(error)
-            }
-            None => {
-                log::debug!("ignoring memory growth failure error: {error:?}");
-                Ok(())
-            }
-        }
-    }
-
-    fn table_growing(
-        &mut self,
-        current: u32,
-        desired: u32,
-        maximum: Option<u32>,
-    ) -> Result<bool, anyhow::Error> {
-        // Need to borrow async_cx before the mut borrow of the limiter.
-        // self.async_cx() panicks when used with a non-async store, so
-        // wrap this in an option.
+    pub(crate) fn validate_sync_call(&self) -> Result<()> {
         #[cfg(feature = "async")]
-        let async_cx = if self.async_support()
-            && matches!(self.limiter, Some(ResourceLimiterInner::Async(_)))
-        {
-            Some(self.async_cx().unwrap())
-        } else {
-            None
-        };
-
-        match self.limiter {
-            Some(ResourceLimiterInner::Sync(ref mut limiter)) => {
-                limiter(&mut self.data).table_growing(current, desired, maximum)
-            }
-            #[cfg(feature = "async")]
-            Some(ResourceLimiterInner::Async(ref mut limiter)) => unsafe {
-                async_cx
-                    .expect("ResourceLimiterAsync requires async Store")
-                    .block_on(
-                        limiter(&mut self.data)
-                            .table_growing(current, desired, maximum)
-                            .as_mut(),
-                    )?
-            },
-            None => Ok(true),
-        }
-    }
-
-    fn table_grow_failed(&mut self, error: anyhow::Error) -> Result<()> {
-        match self.limiter {
-            Some(ResourceLimiterInner::Sync(ref mut limiter)) => {
-                limiter(&mut self.data).table_grow_failed(error)
-            }
-            #[cfg(feature = "async")]
-            Some(ResourceLimiterInner::Async(ref mut limiter)) => {
-                limiter(&mut self.data).table_grow_failed(error)
-            }
-            None => {
-                log::debug!("ignoring table growth failure: {error:?}");
-                Ok(())
-            }
-        }
-    }
-
-    fn out_of_gas(&mut self) -> Result<()> {
-        if !self.refuel() {
-            return Err(Trap::OutOfFuel).err2anyhow();
-        }
-        #[cfg(feature = "async")]
-        if self.fuel_yield_interval.is_some() {
-            self.async_yield_impl()?;
+        if self.async_state.async_required {
+            bail!("store configuration requires that `*_async` functions are used instead");
         }
         Ok(())
     }
 
-    fn new_epoch(&mut self) -> Result<u64, anyhow::Error> {
+    /// Returns whether this store is presently on a fiber and is allowed to
+    /// block via `block_on` with fibers.
+    pub(crate) fn can_block(&mut self) -> bool {
+        #[cfg(feature = "async")]
+        if true {
+            return self.fiber_async_state_mut().can_block();
+        }
+
+        false
+    }
+
+    #[cfg(not(feature = "async"))]
+    pub(crate) fn set_async_required(&mut self, asyncness: Asyncness) {
+        match asyncness {
+            Asyncness::No => {}
+        }
+    }
+}
+
+/// Helper parameter to [`StoreOpaque::allocate_instance`].
+pub(crate) enum AllocateInstanceKind<'a> {
+    /// An embedder-provided module is being allocated meaning that the default
+    /// engine's allocator will be used.
+    Module(RegisteredModuleId),
+
+    /// Add a dummy instance that to the store.
+    ///
+    /// These are instances that are just implementation details of something
+    /// else (e.g. host-created memories that are not actually defined in any
+    /// Wasm module) and therefore shouldn't show up in things like core dumps.
+    ///
+    /// A custom, typically OnDemand-flavored, allocator is provided to execute
+    /// the allocation.
+    Dummy {
+        allocator: &'a dyn InstanceAllocator,
+    },
+}
+
+unsafe impl<T> VMStore for StoreInner<T> {
+    #[cfg(feature = "component-model-async")]
+    fn component_async_store(
+        &mut self,
+    ) -> &mut dyn crate::runtime::component::VMComponentAsyncStore {
+        self
+    }
+
+    #[cfg(feature = "component-model")]
+    fn component_task_state_mut(&mut self) -> &mut crate::component::store::ComponentTaskState {
+        StoreOpaque::component_task_state_mut(self)
+    }
+
+    fn store_opaque(&self) -> &StoreOpaque {
+        &self.inner
+    }
+
+    fn store_opaque_mut(&mut self) -> &mut StoreOpaque {
+        &mut self.inner
+    }
+
+    fn resource_limiter_and_store_opaque(
+        &mut self,
+    ) -> (Option<StoreResourceLimiter<'_>>, &mut StoreOpaque) {
+        let (data, limiter, opaque) = self.data_limiter_and_opaque();
+
+        let limiter = limiter.map(|l| match l {
+            ResourceLimiterInner::Sync(s) => StoreResourceLimiter::Sync(s(data)),
+            #[cfg(feature = "async")]
+            ResourceLimiterInner::Async(s) => StoreResourceLimiter::Async(s(data)),
+        });
+
+        (limiter, opaque)
+    }
+
+    #[cfg(target_has_atomic = "64")]
+    fn new_epoch_updated_deadline(&mut self) -> Result<UpdateDeadline> {
         // Temporarily take the configured behavior to avoid mutably borrowing
         // multiple times.
         let mut behavior = self.epoch_deadline_behavior.take();
-        let delta_result = match &mut behavior {
-            None => Err(Trap::Interrupt).err2anyhow(),
-            Some(callback) => callback((&mut *self).as_context_mut()).and_then(|update| {
-                let delta = match update {
-                    UpdateDeadline::Continue(delta) => delta,
-
-                    #[cfg(feature = "async")]
-                    UpdateDeadline::Yield(delta) => {
-                        assert!(
-                            self.async_support(),
-                            "cannot use `UpdateDeadline::Yield` without enabling async support in the config"
-                        );
-                        // Do the async yield. May return a trap if future was
-                        // canceled while we're yielded.
-                        self.async_yield_impl()?;
-                        delta
-                    }
-                };
-
-                // Set a new deadline and return the new epoch deadline so
-                // the Wasm code doesn't have to reload it.
-                self.set_epoch_deadline(delta);
-                Ok(self.get_epoch_deadline())
-            })
+        let update = match &mut behavior {
+            Some(callback) => callback((&mut *self).as_context_mut()),
+            None => Ok(UpdateDeadline::Interrupt),
         };
 
         // Put back the original behavior which was replaced by `take`.
         self.epoch_deadline_behavior = behavior;
-        delta_result
+        update
     }
 
-    #[cfg(feature = "gc")]
-    fn gc(&mut self, root: Option<VMGcRef>) -> Result<Option<VMGcRef>> {
-        let mut scope = RootScope::new(self);
-        let store = scope.as_context_mut().0;
-        let store_id = store.id();
-        let root = root.map(|r| store.gc_roots_mut().push_lifo_root(store_id, r));
-
-        if store.async_support() {
-            #[cfg(feature = "async")]
-            unsafe {
-                let async_cx = store.async_cx();
-                let mut future = store.gc_async();
-                async_cx
-                    .expect("attempted to pull async context during shutdown")
-                    .block_on(Pin::new_unchecked(&mut future))?;
+    #[cfg(feature = "debug")]
+    fn block_on_debug_handler(&mut self, event: crate::DebugEvent<'_>) -> crate::Result<()> {
+        if let Some(handler) = self.debug_handler.take() {
+            if !self.can_block() {
+                bail!("could not invoke debug handler without async context");
             }
+            log::trace!("about to raise debug event {event:?}");
+            StoreContextMut(self).with_blocking(|store, cx| {
+                cx.block_on(Pin::from(handler.handle(store, event)).as_mut())
+            })
         } else {
-            (**store).gc();
+            Ok(())
         }
-
-        let root = match root {
-            None => None,
-            Some(r) => {
-                let r = r
-                    .unchecked_get_gc_ref(store)
-                    .expect("still in scope")
-                    .unchecked_copy();
-                Some(store.gc_store_mut()?.clone_gc_ref(&r))
-            }
-        };
-
-        Ok(root)
-    }
-
-    #[cfg(not(feature = "gc"))]
-    fn gc(&mut self, root: Option<VMGcRef>) -> Result<Option<VMGcRef>> {
-        Ok(root)
-    }
-
-    #[cfg(feature = "component-model")]
-    fn component_calls(&mut self) -> &mut crate::runtime::vm::component::CallContexts {
-        &mut self.component_calls
     }
 }
 
 impl<T> StoreInner<T> {
+    #[cfg(target_has_atomic = "64")]
     pub(crate) fn set_epoch_deadline(&mut self, delta: u64) {
         // Set a new deadline based on the "epoch deadline delta".
         //
@@ -3004,10 +3313,12 @@ impl<T> StoreInner<T> {
         // Also, note that when this update is performed while Wasm is
         // on the stack, the Wasm will reload the new value once we
         // return into it.
-        let epoch_deadline = unsafe { (*self.vmruntime_limits()).epoch_deadline.get_mut() };
-        *epoch_deadline = self.engine().current_epoch() + delta;
+        let current_epoch = self.engine().current_epoch();
+        let epoch_deadline = self.vm_store_context.epoch_deadline.get_mut();
+        *epoch_deadline = current_epoch + delta;
     }
 
+    #[allow(missing_docs)]
     pub fn set_on_called(
         &mut self,
         callback: Box<
@@ -3027,49 +3338,32 @@ impl<T> StoreInner<T> {
         self.asyncify_state = state;
     }
 
-    // get the signal asyncify information
+    #[allow(missing_docs)]
     pub fn get_signal_asyncify_data(&mut self) -> Vec<SignalAsyncifyData> {
         self.signal_asyncify_data.clone()
     }
 
+    #[allow(missing_docs)]
     pub fn get_syscall_asyncify_data(&mut self) -> Vec<i32> {
         self.syscall_asyncify_data.clone()
     }
 
+    #[allow(missing_docs)]
     pub fn is_thread(&self) -> bool {
         self.is_thread
     }
 
+    #[cfg(target_has_atomic = "64")]
     fn epoch_deadline_trap(&mut self) {
         self.epoch_deadline_behavior = None;
     }
 
+    #[cfg(target_has_atomic = "64")]
     fn epoch_deadline_callback(
         &mut self,
         callback: Box<dyn FnMut(StoreContextMut<T>) -> Result<UpdateDeadline> + Send + Sync>,
     ) {
         self.epoch_deadline_behavior = Some(callback);
-    }
-
-    fn epoch_deadline_async_yield_and_update(&mut self, delta: u64) {
-        assert!(
-            self.async_support(),
-            "cannot use `epoch_deadline_async_yield_and_update` without enabling async support in the config"
-        );
-        #[cfg(feature = "async")]
-        {
-            self.epoch_deadline_behavior =
-                Some(Box::new(move |_store| Ok(UpdateDeadline::Yield(delta))));
-        }
-        let _ = delta; // suppress warning in non-async build
-    }
-
-    fn get_epoch_deadline(&self) -> u64 {
-        // Safety: this is safe because, as above, it is only invoked
-        // from within `new_epoch` which is called from guest Wasm
-        // code, which will have an exclusive borrow on the Store.
-        let epoch_deadline = unsafe { (*self.vmruntime_limits()).epoch_deadline.get_mut() };
-        *epoch_deadline
     }
 }
 
@@ -3084,16 +3378,18 @@ impl<T: fmt::Debug> fmt::Debug for Store<T> {
         let inner = &**self.inner as *const StoreInner<T>;
         f.debug_struct("Store")
             .field("inner", &inner)
-            .field("data", &self.inner.data)
+            .field("data", self.inner.data())
             .finish()
     }
 }
 
 impl<T> Drop for Store<T> {
     fn drop(&mut self) {
-        // for documentation on this `unsafe`, see `into_data`.
+        self.run_manual_drop_routines();
+
+        // For documentation on this `unsafe`, see `into_data`.
         unsafe {
-            ManuallyDrop::drop(&mut self.inner.data);
+            ManuallyDrop::drop(&mut self.inner.data_no_provenance);
             ManuallyDrop::drop(&mut self.inner);
         }
     }
@@ -3107,55 +3403,115 @@ impl Drop for StoreOpaque {
         unsafe {
             let allocator = self.engine.allocator();
             let ondemand = OnDemandInstanceAllocator::default();
-            for instance in self.instances.iter_mut() {
-                if let StoreInstanceKind::Dummy = instance.kind {
-                    ondemand.deallocate_module(&mut instance.handle);
-                } else {
-                    allocator.deallocate_module(&mut instance.handle);
-                }
-            }
-            ondemand.deallocate_module(&mut self.default_caller);
+            let store_id = self.id();
 
             #[cfg(feature = "gc")]
             if let Some(gc_store) = self.gc_store.take() {
-                allocator.deallocate_gc_heap(gc_store.allocation_index, gc_store.gc_heap);
+                let gc_alloc_index = gc_store.allocation_index;
+                log::trace!("store {store_id:?} is deallocating GC heap {gc_alloc_index:?}");
+                debug_assert!(self.engine.features().gc_types());
+                let (mem_alloc_index, mem) =
+                    allocator.deallocate_gc_heap(gc_alloc_index, gc_store.gc_heap);
+                allocator.deallocate_memory(None, mem_alloc_index, mem);
             }
 
-            #[cfg(feature = "component-model")]
-            {
-                for _ in 0..self.num_component_instances {
-                    allocator.decrement_component_instance_count();
-                }
+            for (id, instance) in self.instances.iter_mut() {
+                log::trace!("store {store_id:?} is deallocating {id:?}");
+                let allocator = match instance.kind {
+                    StoreInstanceKind::Dummy => &ondemand,
+                    _ => allocator,
+                };
+                allocator.deallocate_module(&mut instance.handle);
             }
 
-            // See documentation for these fields on `StoreOpaque` for why they
-            // must be dropped in this order.
-            ManuallyDrop::drop(&mut self.store_data);
-            ManuallyDrop::drop(&mut self.rooted_host_funcs);
+            self.store_data.decrement_allocator_resources(allocator);
         }
     }
 }
 
-impl crate::runtime::vm::ModuleInfoLookup for ModuleRegistry {
-    fn lookup(&self, pc: usize) -> Option<&dyn crate::runtime::vm::ModuleInfo> {
-        self.lookup_module_info(pc)
+#[cfg_attr(
+    not(any(feature = "gc", feature = "async")),
+    // NB: Rust 1.89, current stable, does not fire this lint. Rust 1.90,
+    // however, does, so use #[allow] until our MSRV is 1.90.
+    allow(dead_code, reason = "don't want to put #[cfg] on all impls below too")
+)]
+pub(crate) trait AsStoreOpaque {
+    fn as_store_opaque(&mut self) -> &mut StoreOpaque;
+}
+
+impl AsStoreOpaque for StoreOpaque {
+    fn as_store_opaque(&mut self) -> &mut StoreOpaque {
+        self
     }
 }
 
-struct Reset<T: Copy>(*mut T, T);
+impl AsStoreOpaque for dyn VMStore {
+    fn as_store_opaque(&mut self) -> &mut StoreOpaque {
+        self
+    }
+}
 
-impl<T: Copy> Drop for Reset<T> {
-    fn drop(&mut self) {
-        unsafe {
-            *self.0 = self.1;
+impl<T: 'static> AsStoreOpaque for Store<T> {
+    fn as_store_opaque(&mut self) -> &mut StoreOpaque {
+        &mut self.inner.inner
+    }
+}
+
+impl<T: 'static> AsStoreOpaque for StoreInner<T> {
+    fn as_store_opaque(&mut self) -> &mut StoreOpaque {
+        self
+    }
+}
+
+impl<T: AsStoreOpaque + ?Sized> AsStoreOpaque for &mut T {
+    fn as_store_opaque(&mut self) -> &mut StoreOpaque {
+        T::as_store_opaque(self)
+    }
+}
+
+/// Helper enum to indicate, in some function contexts, whether `async` should
+/// be taken advantage of or not.
+///
+/// This is used throughout Wasmtime where internal functions are all `async`
+/// but external functions might be either sync or `async`. If the external
+/// function is sync, then internally Wasmtime shouldn't yield as it won't do
+/// anything. If the external function is `async`, however, yields are fine.
+///
+/// An example of this is GC. Right now GC will cooperatively yield after phases
+/// of GC have passed, but this cooperative yielding is only enabled with
+/// `Asyncness::Yes`.
+///
+/// This enum is additionally conditionally defined such that `Yes` is only
+/// present in `async`-enabled builds. That ensures that this compiles down to a
+/// zero-sized type in `async`-disabled builds in case that interests embedders.
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub enum Asyncness {
+    /// Don't do async things, don't yield, etc. It's ok to execute an `async`
+    /// function, but it should be validated ahead of time that when doing so a
+    /// yield isn't possible (e.g. `validate_sync_*` methods on Store.
+    No,
+
+    /// Async things is OK. This should only be used when the API entrypoint is
+    /// itself `async`.
+    #[cfg(feature = "async")]
+    Yes,
+}
+
+impl core::ops::BitOr for Asyncness {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Asyncness::No, Asyncness::No) => Asyncness::No,
+            #[cfg(feature = "async")]
+            (Asyncness::Yes, _) | (_, Asyncness::Yes) => Asyncness::Yes,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{get_fuel, refuel, set_fuel};
-    use std::num::NonZeroU64;
+    use super::*;
 
     struct FuelTank {
         pub consumed_fuel: i64,
@@ -3271,5 +3627,36 @@ mod tests {
         assert_eq!(tank.reserve_fuel, 3);
         assert_eq!(tank.consumed_fuel, 4);
         assert_eq!(tank.get_fuel(), 0);
+    }
+
+    #[test]
+    fn store_data_provenance() {
+        // Test that we juggle pointer provenance and all that correctly, and
+        // miri is happy with everything, while allowing both Rust code and
+        // "Wasm" to access and modify the store's `T` data. Note that this is
+        // not actually Wasm mutating the store data here because compiling Wasm
+        // under miri is way too slow.
+
+        unsafe fn run_wasm(store: &mut Store<u32>) {
+            let ptr = store
+                .inner
+                .inner
+                .vm_store_context
+                .store_data
+                .as_ptr()
+                .cast::<u32>();
+            unsafe { *ptr += 1 }
+        }
+
+        let engine = Engine::default();
+        let mut store = Store::new(&engine, 0_u32);
+
+        assert_eq!(*store.data(), 0);
+        *store.data_mut() += 1;
+        assert_eq!(*store.data(), 1);
+        unsafe { run_wasm(&mut store) }
+        assert_eq!(*store.data(), 2);
+        *store.data_mut() += 1;
+        assert_eq!(*store.data(), 3);
     }
 }

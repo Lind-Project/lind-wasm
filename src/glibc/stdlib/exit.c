@@ -34,8 +34,10 @@ _exit (int status)
 {
   while (1)
     {
-      // exit without doing any cleanup
-      __lind_exit(status);
+      /* lind-wasm: use exit_group (syscall 231) to match Linux _exit()
+         semantics — terminates all threads in the process.  Thread-only
+         exit (syscall 60) is done via __lind_exit() in start_thread. */
+      MAKE_LEGACY_SYSCALL(EXIT_GROUP_SYSCALL, "syscall|exit_group", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 
 #ifdef ABORT_INSTRUCTION
       ABORT_INSTRUCTION;

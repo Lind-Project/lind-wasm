@@ -5,8 +5,8 @@ use std::io::{self, IsTerminal, Read, Write};
 use system_interface::io::ReadReady;
 
 use crate::{
-    file::{FdFlags, FileType, WasiFile},
     Error, ErrorExt,
+    file::{FdFlags, FileType, WasiFile},
 };
 #[cfg(windows)]
 use io_extras::os::windows::{AsRawHandleOrSocket, RawHandleOrSocket};
@@ -21,14 +21,14 @@ pub fn stdin() -> Stdin {
     Stdin(std::io::stdin())
 }
 
-#[wiggle::async_trait]
+#[async_trait::async_trait]
 impl WasiFile for Stdin {
     fn as_any(&self) -> &dyn Any {
         self
     }
 
     #[cfg(unix)]
-    fn pollable(&self) -> Option<rustix::fd::BorrowedFd> {
+    fn pollable(&self) -> Option<rustix::fd::BorrowedFd<'_>> {
         Some(self.0.as_fd())
     }
 
@@ -102,13 +102,13 @@ impl AsFd for Stdin {
 
 macro_rules! wasi_file_write_impl {
     ($ty:ty, $ident:ident) => {
-        #[wiggle::async_trait]
+        #[async_trait::async_trait]
         impl WasiFile for $ty {
             fn as_any(&self) -> &dyn Any {
                 self
             }
             #[cfg(unix)]
-            fn pollable(&self) -> Option<rustix::fd::BorrowedFd> {
+            fn pollable(&self) -> Option<rustix::fd::BorrowedFd<'_>> {
                 Some(self.0.as_fd())
             }
             #[cfg(windows)]

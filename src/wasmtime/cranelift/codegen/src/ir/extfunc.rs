@@ -108,9 +108,9 @@ fn write_list(f: &mut fmt::Formatter, args: &[AbiParam]) -> fmt::Result {
     match args.split_first() {
         None => {}
         Some((first, rest)) => {
-            write!(f, "{}", first)?;
+            write!(f, "{first}")?;
             for arg in rest {
-                write!(f, ", {}", arg)?;
+                write!(f, ", {arg}")?;
             }
         }
     }
@@ -233,7 +233,13 @@ pub enum ArgumentPurpose {
     Normal,
 
     /// A C struct passed as argument.
-    StructArgument(u32),
+    ///
+    /// Note that this should only be used when interacting with code following
+    /// a C ABI which is expecting a struct passed *by value*.
+    StructArgument(
+        /// The size, in bytes, of the struct.
+        u32,
+    ),
 
     /// Struct return pointer.
     ///
@@ -256,7 +262,7 @@ impl fmt::Display for ArgumentPurpose {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(match self {
             Self::Normal => "normal",
-            Self::StructArgument(size) => return write!(f, "sarg({})", size),
+            Self::StructArgument(size) => return write!(f, "sarg({size})"),
             Self::StructReturn => "sret",
             Self::VMContext => "vmctx",
         })
@@ -307,6 +313,14 @@ pub struct ExtFuncData {
     /// See the documentation for `RelocDistance` for more details. A `colocated` flag value of
     /// `true` implies `RelocDistance::Near`.
     pub colocated: bool,
+    /// Is this function "patchable"? If so, calls to this function will
+    /// emit additional metadata indicating how to patch them in or out.
+    ///
+    /// Calls to functions of any calling convention may be patchable,
+    /// *but* only calls with no return values are patchable. This is
+    /// because every SSA value must always be defined, and return
+    /// values would not be if the call were patched out.
+    pub patchable: bool,
 }
 
 impl ExtFuncData {
@@ -334,6 +348,9 @@ impl<'a> fmt::Display for DisplayableExtFuncData<'a> {
         if self.ext_func.colocated {
             write!(f, "colocated ")?;
         }
+        if self.ext_func.patchable {
+            write!(f, "patchable ")?;
+        }
         write!(
             f,
             "{} {}",
@@ -346,7 +363,7 @@ impl<'a> fmt::Display for DisplayableExtFuncData<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::types::{F32, I32, I8};
+    use crate::ir::types::{F32, I8, I32};
     use alloc::string::ToString;
 
     #[test]
@@ -378,7 +395,8 @@ mod tests {
     fn call_conv() {
         for &cc in &[
             CallConv::Fast,
-            CallConv::Cold,
+            CallConv::PreserveAll,
+            CallConv::Tail,
             CallConv::SystemV,
             CallConv::WindowsFastcall,
         ] {

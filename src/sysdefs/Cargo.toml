@@ -3,5 +3,8 @@ name = "sysdefs"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+lind-logging = []
+
 [dependencies]
 libc = "0.2"

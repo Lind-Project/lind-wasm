@@ -20,6 +20,9 @@
 #include <sys/types.h>
 #include <sysdep.h>
 #include <shlib-compat.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Add this redirection so the strong_alias for __RLIM_T_MATCHES_RLIM64_T
    linking getrlimit64 to {__}getrlimit does not throw a type error.  */
@@ -36,7 +39,11 @@
 int
 __getrlimit64 (enum __rlimit_resource resource, struct rlimit64 *rlimits)
 {
-  return INLINE_SYSCALL_CALL (prlimit64, 0, resource, NULL, rlimits);
+ uint64_t pold = rlimits ? TRANSLATE_GUEST_POINTER_TO_HOST(rlimits) : 0;
+  return MAKE_LEGACY_SYSCALL(PRLIMIT64_SYSCALL, "syscall|prlimit64",
+      0, (uint64_t) resource,
+      0, pold,
+      NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__getrlimit64)
 

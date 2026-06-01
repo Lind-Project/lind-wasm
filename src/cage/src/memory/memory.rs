@@ -5,11 +5,11 @@
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
 use crate::memory::VmmapOps;
-use sysdefs::constants::err_const::Errno;
+use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::{lind_debug_panic, lind_log};
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -56,10 +56,11 @@ pub fn is_mmap_error(ret: usize) -> bool {
     }
 
     // Unaligned but not in errno range - this should never happen
-    lind_debug_panic(&format!(
+    lind_debug_panic!(
         "mmap returned unaligned address outside errno range: 0x{:x}",
         ret
-    ));
+    );
+    true // treat as error in LogOnly/NoAction mode
 }
 
 /// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.
@@ -75,8 +76,8 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// 2. **Shared memory regions**:
 ///    - The function uses the `mremap` syscall to replicate shared memory efficiently. Refer to `man 2 mremap` for details.
 /// 3. **Private memory regions**:
-///    - The function uses `std::ptr::copy_nonoverlapping` to copy the memory contents directly.
-///    - **TODO**: Investigate whether using `writev` could improve performance for this case.
+///    - The function uses `process_vm_writev` to copy memory contents from the parent into
+///      the child's address space.
 ///
 /// # Arguments
 /// * `parent_cageid` - cageid of parent
@@ -126,12 +127,30 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 );
 
                 // write parent data
-                // TODO: replace copy_nonoverlapping with writev for potential performance boost
-                std::ptr::copy_nonoverlapping(
-                    parent_st as *const u8,
-                    child_st as *mut u8,
-                    addr_len,
-                );
+                let local_iov = libc::iovec {
+                    iov_base: parent_st as *mut libc::c_void,
+                    iov_len: addr_len,
+                };
+                let remote_iov = libc::iovec {
+                    iov_base: child_st as *mut libc::c_void,
+                    iov_len: addr_len,
+                };
+                let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
+                if ret < 0 {
+                    lind_log!(
+                        Default,
+                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={}), falling back to copy_nonoverlapping",
+                        get_errno(),
+                        parent_st,
+                        child_st,
+                        addr_len,
+                    );
+                    std::ptr::copy_nonoverlapping(
+                        parent_st as *const u8,
+                        child_st as *mut u8,
+                        addr_len,
+                    );
+                }
 
                 // revert child's memory region prot
                 libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
@@ -142,16 +161,16 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     // update program break for child
     drop(child_vmmap);
     let mut child_vmmap = child_cage.vmmap.write();
-    child_vmmap.set_program_break(parent_vmmap.program_break);
+    child_vmmap.set_heap_start(parent_vmmap.heap_start);
 }
 
 // set the wasm linear memory base address to vmmap
-pub fn init_vmmap(cageid: u64, base_address: usize, program_break: Option<u32>) {
+pub fn init_vmmap(cageid: u64, base_address: usize, heap_start: Option<u32>) {
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
-    if program_break.is_some() {
-        vmmap.set_program_break(program_break.unwrap());
+    if heap_start.is_some() {
+        vmmap.set_heap_start(heap_start.unwrap());
     }
 }
 

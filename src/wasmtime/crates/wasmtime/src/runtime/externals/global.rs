@@ -1,14 +1,14 @@
 use crate::prelude::*;
-use crate::runtime::vm::{GcRootsList, SendSyncPtr};
+use crate::runtime::vm::{self, VMGlobalDefinition, VMGlobalKind, VMOpaqueContext};
 use crate::{
-    store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored},
+    AnyRef, AsContext, AsContextMut, ExnRef, ExternRef, Func, GlobalType, HeapType, Mutability,
+    Ref, RootedGcRefImpl, Val, ValType,
+    store::{AutoAssertNoGc, InstanceId, StoreId, StoreInstanceId, StoreOpaque},
     trampoline::generate_global_export,
-    AnyRef, AsContext, AsContextMut, ExternRef, Func, GlobalType, HeapType, Mutability, Ref,
-    RootedGcRefImpl, Val, ValType,
 };
 use core::ptr;
 use core::ptr::NonNull;
-use wasmtime_environ::TypeTrace;
+use wasmtime_environ::DefinedGlobalIndex;
 
 /// A WebAssembly `global` value which can be read and written to.
 ///
@@ -23,8 +23,26 @@ use wasmtime_environ::TypeTrace;
 /// store it belongs to, and if another store is passed in by accident then
 /// methods will panic.
 #[derive(Copy, Clone, Debug)]
-#[repr(transparent)] // here for the C API
-pub struct Global(pub(super) Stored<crate::runtime::vm::ExportGlobal>);
+#[repr(C)] // here for the C API
+pub struct Global {
+    /// The store that this global belongs to.
+    store: StoreId,
+    /// Either `InstanceId` or `ComponentInstanceId` internals depending on
+    /// `kind` below.
+    instance: u32,
+    /// Which method of definition was used when creating this global.
+    kind: VMGlobalKind,
+}
+
+// Double-check that the C representation in `extern.h` matches our in-Rust
+// representation here in terms of size/alignment/etc.
+const _: () = {
+    #[repr(C)]
+    struct C(u64, u32, u32, u32);
+    assert!(core::mem::size_of::<C>() == core::mem::size_of::<Global>());
+    assert!(core::mem::align_of::<C>() == core::mem::align_of::<Global>());
+    assert!(core::mem::offset_of!(Global, store) == 0);
+};
 
 impl Global {
     /// Creates a new WebAssembly `global` value with the provide type `ty` and
@@ -45,7 +63,7 @@ impl Global {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// let engine = Engine::default();
     /// let mut store = Store::new(&engine, ());
     ///
@@ -79,9 +97,26 @@ impl Global {
         val.ensure_matches_ty(store, ty.content()).context(
             "type mismatch: initial value provided does not match the type of this global",
         )?;
-        unsafe {
-            let wasmtime_export = generate_global_export(store, ty, val)?;
-            Ok(Global::from_wasmtime_global(wasmtime_export, store))
+        generate_global_export(store, ty, val)
+    }
+
+    pub(crate) fn new_host(store: &StoreOpaque, index: DefinedGlobalIndex) -> Global {
+        Global {
+            store: store.id(),
+            instance: 0,
+            kind: VMGlobalKind::Host(index),
+        }
+    }
+
+    pub(crate) fn new_instance(
+        store: &StoreOpaque,
+        instance: InstanceId,
+        index: DefinedGlobalIndex,
+    ) -> Global {
+        Global {
+            store: store.id(),
+            instance: instance.as_u32(),
+            kind: VMGlobalKind::Instance(index),
         }
     }
 
@@ -95,8 +130,7 @@ impl Global {
     }
 
     pub(crate) fn _ty(&self, store: &StoreOpaque) -> GlobalType {
-        let ty = &store[self.0].global;
-        GlobalType::from_wasmtime_global(store.engine(), &ty)
+        GlobalType::from_wasmtime_global(store.engine(), self.wasmtime_ty(store))
     }
 
     /// Returns the current [`Val`] of this global.
@@ -105,35 +139,46 @@ impl Global {
     ///
     /// Panics if `store` does not own this global.
     pub fn get(&self, mut store: impl AsContextMut) -> Val {
+        let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
+        self._get(&mut store)
+    }
+
+    pub(crate) fn _get(&self, store: &mut AutoAssertNoGc<'_>) -> Val {
         unsafe {
-            let store = store.as_context_mut();
-            let mut store = AutoAssertNoGc::new(store.0);
-            let definition = &*store[self.0].definition;
+            let definition = self.definition(store).as_ref();
             match self._ty(&store).content() {
                 ValType::I32 => Val::from(*definition.as_i32()),
                 ValType::I64 => Val::from(*definition.as_i64()),
                 ValType::F32 => Val::F32(*definition.as_u32()),
                 ValType::F64 => Val::F64(*definition.as_u64()),
-                ValType::V128 => Val::V128((*definition.as_u128()).into()),
+                ValType::V128 => Val::V128(definition.get_u128().into()),
                 ValType::Ref(ref_ty) => {
                     let reference: Ref = match ref_ty.heap_type() {
                         HeapType::Func | HeapType::ConcreteFunc(_) => {
-                            Func::_from_raw(&mut store, definition.as_func_ref().cast()).into()
+                            Func::_from_raw(store, definition.as_func_ref().cast()).into()
                         }
 
                         HeapType::NoFunc => Ref::Func(None),
 
-                        HeapType::Extern => Ref::Extern(
-                            definition
-                                .as_gc_ref()
-                                .map(|r| {
-                                    let r = store.unwrap_gc_store_mut().clone_gc_ref(r);
-                                    ExternRef::from_cloned_gc_ref(&mut store, r)
-                                })
-                                .into(),
-                        ),
+                        HeapType::Extern => Ref::Extern(definition.as_gc_ref().map(|r| {
+                            let r = store.clone_gc_ref(r);
+                            ExternRef::from_cloned_gc_ref(store, r)
+                        })),
+
+                        HeapType::NoCont | HeapType::ConcreteCont(_) | HeapType::Cont => {
+                            // TODO(#10248) Required to support stack switching in the embedder API.
+                            unimplemented!()
+                        }
 
                         HeapType::NoExtern => Ref::Extern(None),
+
+                        HeapType::Exn | HeapType::ConcreteExn(_) => definition
+                            .as_gc_ref()
+                            .map(|r| {
+                                let r = store.clone_gc_ref(r);
+                                ExnRef::from_cloned_gc_ref(store, r)
+                            })
+                            .into(),
 
                         HeapType::Any
                         | HeapType::Eq
@@ -144,10 +189,12 @@ impl Global {
                         | HeapType::ConcreteArray(_) => definition
                             .as_gc_ref()
                             .map(|r| {
-                                let r = store.unwrap_gc_store_mut().clone_gc_ref(r);
-                                AnyRef::from_cloned_gc_ref(&mut store, r)
+                                let r = store.clone_gc_ref(r);
+                                AnyRef::from_cloned_gc_ref(store, r)
                             })
                             .into(),
+
+                        HeapType::NoExn => Ref::Exn(None),
 
                         HeapType::None => Ref::Any(None),
                     };
@@ -173,96 +220,198 @@ impl Global {
     ///
     /// Panics if `store` does not own this global.
     pub fn set(&self, mut store: impl AsContextMut, val: Val) -> Result<()> {
-        let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
+        self._set(store.as_context_mut().0, val)
+    }
+
+    pub(crate) fn _set(&self, store: &mut StoreOpaque, val: Val) -> Result<()> {
         let global_ty = self._ty(&store);
         if global_ty.mutability() != Mutability::Var {
             bail!("immutable global cannot be set");
         }
         val.ensure_matches_ty(&store, global_ty.content())
             .context("type mismatch: attempt to set global to value of wrong type")?;
+
+        // SAFETY: mutability and a type-check above makes this safe to perform.
+        unsafe { self.set_unchecked(store, &val) }
+    }
+
+    /// Sets this global to `val`.
+    ///
+    /// # Safety
+    ///
+    /// This function requires that `val` is of the correct type for this
+    /// global. Furthermore this requires that the global is mutable or this is
+    /// the first time the global is initialized.
+    pub(crate) unsafe fn set_unchecked(&self, store: &mut StoreOpaque, val: &Val) -> Result<()> {
+        let mut store = AutoAssertNoGc::new(store);
         unsafe {
-            let definition = &mut *store[self.0].definition;
+            let definition = self.definition(&store).as_mut();
             match val {
-                Val::I32(i) => *definition.as_i32_mut() = i,
-                Val::I64(i) => *definition.as_i64_mut() = i,
-                Val::F32(f) => *definition.as_u32_mut() = f,
-                Val::F64(f) => *definition.as_u64_mut() = f,
-                Val::V128(i) => *definition.as_u128_mut() = i.into(),
+                Val::I32(i) => *definition.as_i32_mut() = *i,
+                Val::I64(i) => *definition.as_i64_mut() = *i,
+                Val::F32(f) => *definition.as_u32_mut() = *f,
+                Val::F64(f) => *definition.as_u64_mut() = *f,
+                Val::V128(i) => definition.set_u128((*i).into()),
                 Val::FuncRef(f) => {
-                    *definition.as_func_ref_mut() = f.map_or(ptr::null_mut(), |f| {
-                        f.vm_func_ref(&mut store).as_ptr().cast()
-                    });
+                    *definition.as_func_ref_mut() =
+                        f.map_or(ptr::null_mut(), |f| f.vm_func_ref(&store).as_ptr().cast());
                 }
                 Val::ExternRef(e) => {
                     let new = match e {
                         None => None,
-                        Some(e) => Some(e.try_gc_ref(&mut store)?.unchecked_copy()),
+                        Some(e) => Some(e.try_gc_ref(&store)?.unchecked_copy()),
                     };
                     let new = new.as_ref();
-                    definition.write_gc_ref(store.unwrap_gc_store_mut(), new);
+                    definition.write_gc_ref(&mut store, new);
                 }
                 Val::AnyRef(a) => {
                     let new = match a {
                         None => None,
-                        Some(a) => Some(a.try_gc_ref(&mut store)?.unchecked_copy()),
+                        Some(a) => Some(a.try_gc_ref(&store)?.unchecked_copy()),
                     };
                     let new = new.as_ref();
-                    definition.write_gc_ref(store.unwrap_gc_store_mut(), new);
+                    definition.write_gc_ref(&mut store, new);
+                }
+                Val::ExnRef(e) => {
+                    let new = match e {
+                        None => None,
+                        Some(e) => Some(e.try_gc_ref(&store)?.unchecked_copy()),
+                    };
+                    let new = new.as_ref();
+                    definition.write_gc_ref(&mut store, new);
+                }
+                Val::ContRef(None) => {
+                    // Allow null continuation references for globals - these are just placeholders
+                    definition.write_gc_ref(&mut store, None);
+                }
+                Val::ContRef(Some(_)) => {
+                    // TODO(#10248): Implement non-null global continuation reference handling
+                    return Err(crate::format_err!(
+                        "setting non-null continuation references in globals not yet supported"
+                    ));
                 }
             }
         }
         Ok(())
     }
 
-    // retrieve the underlying pointer of the wasm Global
-    pub fn get_handler(&self, mut store: impl AsContextMut) -> *mut u64 {
-        let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
-        let global_ty = self._ty(&store);
-        unsafe {
-            let definition = &mut *store[self.0].definition;
-            definition.as_u64_mut()
-        }
-    }
-
-    pub(crate) fn trace_root(&self, store: &mut StoreOpaque, gc_roots_list: &mut GcRootsList) {
+    #[cfg(feature = "gc")]
+    pub(crate) fn trace_root(&self, store: &mut StoreOpaque, gc_roots_list: &mut vm::GcRootsList) {
         if let Some(ref_ty) = self._ty(store).content().as_ref() {
             if !ref_ty.is_vmgcref_type_and_points_to_object() {
                 return;
             }
 
-            if let Some(gc_ref) = unsafe { (*store[self.0].definition).as_gc_ref() } {
-                let gc_ref = NonNull::from(gc_ref);
-                let gc_ref = SendSyncPtr::new(gc_ref);
+            if let Some(gc_ref) = unsafe { self.definition(store).as_ref().as_gc_ref() } {
                 unsafe {
-                    gc_roots_list.add_root(gc_ref);
+                    gc_roots_list.add_root(gc_ref.into(), "Wasm global");
                 }
             }
         }
     }
 
-    pub(crate) unsafe fn from_wasmtime_global(
-        mut wasmtime_export: crate::runtime::vm::ExportGlobal,
-        store: &mut StoreOpaque,
+    pub(crate) fn from_host(store: StoreId, index: DefinedGlobalIndex) -> Global {
+        Global {
+            store,
+            instance: 0,
+            kind: VMGlobalKind::Host(index),
+        }
+    }
+
+    pub(crate) fn from_core(instance: StoreInstanceId, index: DefinedGlobalIndex) -> Global {
+        Global {
+            store: instance.store_id(),
+            instance: instance.instance().as_u32(),
+            kind: VMGlobalKind::Instance(index),
+        }
+    }
+
+    #[cfg(feature = "component-model")]
+    pub(crate) fn from_component_flags(
+        instance: crate::component::store::StoreComponentInstanceId,
+        index: wasmtime_environ::component::RuntimeComponentInstanceIndex,
     ) -> Global {
-        wasmtime_export
-            .global
-            .wasm_ty
-            .canonicalize_for_runtime_usage(&mut |module_index| {
-                crate::runtime::vm::Instance::from_vmctx(wasmtime_export.vmctx, |instance| {
-                    instance.engine_type_index(module_index)
-                })
-            });
-
-        Global(store.store_data_mut().insert(wasmtime_export))
+        Global {
+            store: instance.store_id(),
+            instance: instance.instance().as_u32(),
+            kind: VMGlobalKind::ComponentFlags(index),
+        }
     }
 
-    pub(crate) fn wasmtime_ty<'a>(&self, data: &'a StoreData) -> &'a wasmtime_environ::Global {
-        &data[self.0].global
+    #[cfg(feature = "component-model")]
+    pub(crate) fn from_task_may_block(
+        instance: crate::component::store::StoreComponentInstanceId,
+    ) -> Global {
+        Global {
+            store: instance.store_id(),
+            instance: instance.instance().as_u32(),
+            kind: VMGlobalKind::TaskMayBlock,
+        }
     }
 
-    pub(crate) fn vmimport(&self, store: &StoreOpaque) -> crate::runtime::vm::VMGlobalImport {
-        crate::runtime::vm::VMGlobalImport {
-            from: store[self.0].definition,
+    pub(crate) fn wasmtime_ty<'a>(&self, store: &'a StoreOpaque) -> &'a wasmtime_environ::Global {
+        self.store.assert_belongs_to(store.id());
+        match self.kind {
+            VMGlobalKind::Instance(index) => {
+                let instance = InstanceId::from_u32(self.instance);
+                let module = store.instance(instance).env_module();
+                let index = module.global_index(index);
+                &module.globals[index]
+            }
+            VMGlobalKind::Host(index) => unsafe { &store.host_globals()[index].get().as_ref().ty },
+            #[cfg(feature = "component-model")]
+            VMGlobalKind::ComponentFlags(_) | VMGlobalKind::TaskMayBlock => {
+                const TY: wasmtime_environ::Global = wasmtime_environ::Global {
+                    mutability: true,
+                    wasm_ty: wasmtime_environ::WasmValType::I32,
+                };
+                &TY
+            }
+        }
+    }
+
+    pub(crate) fn vmimport(&self, store: &StoreOpaque) -> vm::VMGlobalImport {
+        let vmctx = match self.kind {
+            VMGlobalKind::Instance(_) => {
+                let instance = InstanceId::from_u32(self.instance);
+                Some(VMOpaqueContext::from_vmcontext(store.instance(instance).vmctx()).into())
+            }
+            VMGlobalKind::Host(_) => None,
+            #[cfg(feature = "component-model")]
+            VMGlobalKind::ComponentFlags(_) | VMGlobalKind::TaskMayBlock => {
+                let instance = crate::component::ComponentInstanceId::from_u32(self.instance);
+                Some(
+                    VMOpaqueContext::from_vmcomponent(store.component_instance(instance).vmctx())
+                        .into(),
+                )
+            }
+        };
+        vm::VMGlobalImport {
+            from: self.definition(store).into(),
+            vmctx,
+            kind: self.kind,
+        }
+    }
+
+    pub(crate) fn comes_from_same_store(&self, store: &StoreOpaque) -> bool {
+        store.id() == self.store
+    }
+
+    /// Returns a stable identifier for this global within its store.
+    ///
+    /// This allows distinguishing globals when introspecting them
+    /// e.g. via debug APIs.
+    #[cfg(feature = "debug")]
+    pub fn debug_index_in_store(&self) -> u64 {
+        match self.kind {
+            VMGlobalKind::Instance(idx) => u64::from(self.instance) << 32 | u64::from(idx.as_u32()),
+            VMGlobalKind::Host(idx) => u64::from(u32::MAX) << 32 | u64::from(idx.as_u32()),
+            #[cfg(feature = "component-model")]
+            VMGlobalKind::ComponentFlags(idx) => {
+                u64::from(self.instance) << 32 | u64::from(idx.as_u32())
+            }
+            #[cfg(feature = "component-model")]
+            VMGlobalKind::TaskMayBlock => u64::from(self.instance) << 32 | u64::from(u32::MAX),
         }
     }
 
@@ -271,8 +420,50 @@ impl Global {
     /// Even if the same underlying global definition is added to the
     /// `StoreData` multiple times and becomes multiple `wasmtime::Global`s,
     /// this hash key will be consistent across all of these globals.
-    pub(crate) fn hash_key(&self, store: &StoreOpaque) -> impl core::hash::Hash + Eq {
-        store[self.0].definition as usize
+    #[cfg(feature = "coredump")]
+    pub(crate) fn hash_key(&self, store: &StoreOpaque) -> impl core::hash::Hash + Eq + use<> {
+        self.definition(store).as_ptr().addr()
+    }
+
+    /// lind-wasm: retrieve a raw mutable pointer to this global's storage as u64.
+    pub fn get_handler_as_u64(&self, mut store: impl AsContextMut) -> *mut u64 {
+        let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
+        let mut def = self.definition(&store);
+        unsafe { def.as_mut().as_u64_mut() as *mut u64 }
+    }
+
+    /// lind-wasm: retrieve a raw mutable pointer to this global's storage as u32.
+    pub fn get_handler_as_u32(&self, mut store: impl AsContextMut) -> *mut u32 {
+        let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
+        let mut def = self.definition(&store);
+        unsafe { def.as_mut().as_u32_mut() as *mut u32 }
+    }
+
+    pub(crate) fn definition(&self, store: &StoreOpaque) -> NonNull<VMGlobalDefinition> {
+        self.store.assert_belongs_to(store.id());
+        match self.kind {
+            VMGlobalKind::Instance(index) => {
+                let instance = InstanceId::from_u32(self.instance);
+                store.instance(instance).global_ptr(index)
+            }
+            VMGlobalKind::Host(index) => unsafe {
+                NonNull::from(&mut store.host_globals()[index].get().as_mut().global)
+            },
+            #[cfg(feature = "component-model")]
+            VMGlobalKind::ComponentFlags(index) => {
+                let instance = crate::component::ComponentInstanceId::from_u32(self.instance);
+                store
+                    .component_instance(instance)
+                    .instance_flags(index)
+                    .as_raw()
+            }
+            #[cfg(feature = "component-model")]
+            VMGlobalKind::TaskMayBlock => store
+                .component_instance(crate::component::ComponentInstanceId::from_u32(
+                    self.instance,
+                ))
+                .task_may_block(),
+        }
     }
 }
 

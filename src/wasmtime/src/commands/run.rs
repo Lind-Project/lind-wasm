@@ -9,26 +9,25 @@ use cfg_if::cfg_if;
 
 use crate::common::{Profile, RunCommon, RunTarget};
 
-use anyhow::{anyhow, bail, Context as _, Error, Result};
+use anyhow::{Context as _, Error, Result, anyhow, bail};
 use clap::Parser;
 pub use once_cell::sync::Lazy;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
+use wasi_common::sync::{Dir, TcpListener, WasiCtxBuilder, ambient_authority};
 use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
 };
 
 use wasmtime::{Caller, Instance};
 
-use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
+use sysdefs::constants::syscall_const::EXIT_SYSCALL;
+use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, LindHost, THREAD_START_ID};
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i::{get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx, VmCtxWrapper};
+use wasmtime_lind_3i::{VmCtxWrapper, get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx};
 use wasmtime_lind_utils::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
@@ -663,9 +662,11 @@ impl RunCommand {
 
         store.set_epoch_deadline(1);
         let engine = store.engine().clone();
-        thread::spawn(move || loop {
-            thread::sleep(interval);
-            engine.increment_epoch();
+        thread::spawn(move || {
+            loop {
+                thread::sleep(interval);
+                engine.increment_epoch();
+            }
         });
 
         let path = path.to_string();

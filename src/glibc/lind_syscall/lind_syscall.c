@@ -81,12 +81,13 @@ int make_threei_call (unsigned int callnumber,
     int ret = __lind_make_syscall_trampoline(callnumber, 
         callname, 
         self_cageid, target_cageid,
-        arg1, arg1cageid,
-        arg2, arg2cageid,
-        arg3, arg3cageid,
-        arg4, arg4cageid,
-        arg5, arg5cageid,
-        arg6, arg6cageid);
+        TRANSLATE_ARG_TO_HOST(arg1, arg1cageid),
+        TRANSLATE_ARG_TO_HOST(arg2, arg2cageid),
+        TRANSLATE_ARG_TO_HOST(arg3, arg3cageid),
+        TRANSLATE_ARG_TO_HOST(arg4, arg4cageid),
+        TRANSLATE_ARG_TO_HOST(arg5, arg5cageid),
+        TRANSLATE_ARG_TO_HOST(arg6, arg6cageid));
+
     // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
     if(translate_errno == TRANSLATE_ERRNO_OFF) return ret;
     // handle the errno
@@ -97,15 +98,14 @@ int make_threei_call (unsigned int callnumber,
     // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
     // the errno and mmap result by simply checking if the return value is
     // within the valid errno range
+    //
+    // errno should only be 'set' and never 'unset'. i.e. successful calls should not set this to 0.
     if(ret < 0 && ret > -MAX_ERRNO)
     {
         errno = -ret;
         return -1;
     }
-    else
-    {
-        errno = 0;
-    }
+
     return ret;
 }
 
@@ -122,11 +122,14 @@ int register_handler (int64_t targetcage,
     uint64_t this_grate_id,
     uint64_t in_grate_fn_ptr_u64)
 {
+    // register_handler is treated as a syscall called by `this_grate_id`.
+    // This approach allows us to interpose on register_handler calls based on which cage
+    // this syscall was meant to be redirected to. 
     return make_threei_call(
         REGISTER_HANDLER_SYSCALL, 
         NOTUSED, // callname is not used in the trampoline
-        targetcage, // pass targetcage as self_cageid
-        targetcage, // pass targetcage as target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        this_grate_id, // pass grate calling register handler as self_cageid
+        this_grate_id, // self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
         targetcage, 
         targetcallnum, 
         NOTUSED, // runtime_id currently not used
@@ -155,8 +158,8 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t src
         NOTUSED, // callname is not used in the trampoline
         thiscage, // self_cageid
         thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
-        TRANSLATE_UADDR_TO_HOST(srcaddr, srccage), srccage,
-        TRANSLATE_UADDR_TO_HOST(destaddr, destcage), destcage,
+        TRANSLATE_UADDR_TO_HOST(srcaddr, srccage),
+        TRANSLATE_UADDR_TO_HOST(destaddr, destcage),
         len, NOTUSED,
         copytype, NOTUSED,
         NOTUSED, NOTUSED, NOTUSED, NOTUSED,

@@ -32,9 +32,10 @@
 
 struct timespec
 {
-  __time64_t tv_sec;		/* Seconds.  */
-  long int tv_nsec;  /* Nanoseconds.  */
+  time_t tv_sec;		/* Seconds.  */
   __int32_t __padding;           /* Padding.  */
+  long int tv_nsec;  /* Nanoseconds.  */
+  __int32_t __padding2;           /* Padding.  */
 };
 
 #endif

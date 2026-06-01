@@ -17,6 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <dirent.h>
+#include <stddef.h>
+#include <string.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
 #include <dirstream.h>
@@ -25,37 +27,66 @@
 struct dirent *
 __readdir_unlocked (DIR *dirp)
 {
-  struct dirent *dp;
+  struct dirent64 *src;
+  struct dirent *dst;
   int saved_errno = errno;
 
   if (dirp->offset >= dirp->size)
     {
-      /* We've emptied out our buffer.  Refill it.  */
+      /* We have exhausted the current buffer. Refill it.  */
 
       size_t maxread = dirp->allocation;
       ssize_t bytes;
+
       bytes = __getdents (dirp->fd, dirp->data, maxread);
+
       if (bytes <= 0)
-	{
-	  /* Linux may fail with ENOENT on some file systems if the
-	     directory inode is marked as dead (deleted).  POSIX
-	     treats this as a regular end-of-directory condition, so
-	     do not set errno in that case, to indicate success.  */
-	  if (bytes == 0 || errno == ENOENT)
-	    __set_errno (saved_errno);
-	  return NULL;
-	}
+        {
+          /* Linux may fail with ENOENT on some file systems if the
+             directory inode is marked as dead (deleted). POSIX treats
+             this as a regular end-of-directory condition, so do not
+             set errno in that case, to indicate success.  */
+          if (bytes == 0 || errno == ENOENT)
+            __set_errno (saved_errno);
+          return NULL;
+        }
       dirp->size = (size_t) bytes;
 
       /* Reset the offset into the buffer.  */
       dirp->offset = 0;
     }
 
-  dp = (struct dirent *) &dirp->data[dirp->offset];
-  dirp->offset += dp->d_reclen;
-  dirp->filepos = dp->d_off;
 
-  return dp;
+  src = (struct dirent64 *) &dirp->data[dirp->offset];
+  dst = (struct dirent *) &dirp->data[dirp->offset];
+
+  /* Copy source fields into local variables first, so that in-place
+     rewriting does not interfere with reading the original record.  */
+  /*TODO: directing casting 64bit field to 32bit field is not safe and could cause potential problems. 
+     It is rare to have d_ino and d_off to be large enough to cause the problem but should still might need to be fixed in the future*/
+  __ino64_t src_ino = src->d_ino;
+  __off64_t src_off = src->d_off;
+  unsigned short src_reclen = src->d_reclen;
+  unsigned char src_type = src->d_type;
+
+  size_t name_len = strnlen (src->d_name, sizeof (src->d_name)) + 1;
+  size_t dst_reclen = offsetof (struct dirent, d_name) + name_len;
+
+  /* Align the resulting record length.  */
+  dst_reclen = (dst_reclen + sizeof (long) - 1) & ~(sizeof (long) - 1);
+
+  /* Convert the dirent64 record into a plain dirent record.  */
+  dst->d_ino = (__ino_t) src_ino;
+  dst->d_off = (__off_t) src_off;
+  dst->d_reclen = (unsigned short) dst_reclen;
+  dst->d_type = src_type;
+
+  memmove (dst->d_name, src->d_name, name_len);
+
+  dirp->offset += src_reclen;
+  dirp->filepos = src_off;
+
+  return dst;
 }
 
 struct dirent *

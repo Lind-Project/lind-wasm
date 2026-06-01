@@ -20,6 +20,12 @@
 #include <ldsodefs.h>
 #include <shlib-compat.h>
 #include <stddef.h>
+#include <dlerror.h>
+
+int __lind_dlsym(void* handle, char* symbol) __attribute__((
+    __import_module__("lind"),
+    __import_name__("dlsym")
+));
 
 struct dlsym_args
 {
@@ -47,13 +53,12 @@ dlsym_implementation (void *handle, const char *name, void *dl_caller)
   args.who = dl_caller;
   args.handle = handle;
   args.name = name;
-
-  /* Protect against concurrent loads and unloads.  */
-  __rtld_lock_lock_recursive (GL(dl_load_lock));
-
-  void *result = (_dlerror_run (dlsym_doit, &args) ? NULL : args.sym);
-
-  __rtld_lock_unlock_recursive (GL(dl_load_lock));
+  
+  int result = __lind_dlsym(handle, name);
+  if (result < 0) {
+    __lind_dlerror_result = -result;
+    return NULL;
+  }
 
   return result;
 }

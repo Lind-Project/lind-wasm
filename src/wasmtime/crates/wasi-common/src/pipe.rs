@@ -1,5 +1,3 @@
-// This is mostly stubs
-#![allow(unused_variables, dead_code)]
 //! Virtual pipes.
 //!
 //! These types provide easy implementations of `WasiFile` that mimic much of the behavior of Unix
@@ -9,8 +7,8 @@
 //! Some convenience constructors are included for common backing types like `Vec<u8>` and `String`,
 //! but the virtual pipes can be instantiated with any `Read` or `Write` type.
 //!
-use crate::file::{FdFlags, FileType, WasiFile};
 use crate::Error;
+use crate::file::{FdFlags, FileType, WasiFile};
 use std::any::Any;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, RwLock};
@@ -19,13 +17,14 @@ use std::sync::{Arc, RwLock};
 ///
 /// A variety of `From` impls are provided so that common pipe types are easy to create. For example:
 ///
-/// ```no_run
+/// ```rust
 /// use wasi_common::{pipe::ReadPipe, WasiCtx, Table};
 /// let stdin = ReadPipe::from("hello from stdin!");
-/// // Brint these instances from elsewhere (e.g. wasi-cap-std-sync):
-/// let random = todo!();
-/// let clocks = todo!();
-/// let sched = todo!();
+/// // Bring these instances from elsewhere (e.g. wasi-cap-std-sync or wasi-cap-std-tokio):
+/// use wasi_common::sync::{random_ctx, clocks_ctx, sched_ctx};
+/// let random = random_ctx();
+/// let clocks = clocks_ctx();
+/// let sched = sched_ctx();
 /// let table = Table::new();
 /// let mut ctx = WasiCtx::new(random, clocks, sched, table);
 /// ctx.set_stdin(Box::new(stdin.clone()));
@@ -70,7 +69,7 @@ impl<R: Read> ReadPipe<R> {
             }
         }
     }
-    fn borrow(&self) -> std::sync::RwLockWriteGuard<R> {
+    fn borrow(&self) -> std::sync::RwLockWriteGuard<'_, R> {
         RwLock::write(&self.reader).unwrap()
     }
 }
@@ -99,7 +98,7 @@ impl From<&str> for ReadPipe<io::Cursor<String>> {
     }
 }
 
-#[wiggle::async_trait]
+#[async_trait::async_trait]
 impl<R: Read + Any + Send + Sync> WasiFile for ReadPipe<R> {
     fn as_any(&self) -> &dyn Any {
         self
@@ -115,13 +114,14 @@ impl<R: Read + Any + Send + Sync> WasiFile for ReadPipe<R> {
 
 /// A virtual pipe write end.
 ///
-/// ```no_run
+/// ```rust
 /// use wasi_common::{pipe::WritePipe, WasiCtx, Table};
 /// let stdout = WritePipe::new_in_memory();
-/// // Brint these instances from elsewhere (e.g. wasi-cap-std-sync):
-/// let random = todo!();
-/// let clocks = todo!();
-/// let sched = todo!();
+/// // Bring these instances from elsewhere (e.g. wasi-cap-std-sync or wasi-cap-std-tokio):
+/// use wasi_common::sync::{random_ctx, clocks_ctx, sched_ctx};
+/// let random = random_ctx();
+/// let clocks = clocks_ctx();
+/// let sched = sched_ctx();
 /// let table = Table::new();
 /// let mut ctx = WasiCtx::new(random, clocks, sched, table);
 /// ctx.set_stdout(Box::new(stdout.clone()));
@@ -171,7 +171,7 @@ impl<W: Write> WritePipe<W> {
         }
     }
 
-    fn borrow(&self) -> std::sync::RwLockWriteGuard<W> {
+    fn borrow(&self) -> std::sync::RwLockWriteGuard<'_, W> {
         RwLock::write(&self.writer).unwrap()
     }
 }
@@ -183,7 +183,7 @@ impl WritePipe<io::Cursor<Vec<u8>>> {
     }
 }
 
-#[wiggle::async_trait]
+#[async_trait::async_trait]
 impl<W: Write + Any + Send + Sync> WasiFile for WritePipe<W> {
     fn as_any(&self) -> &dyn Any {
         self

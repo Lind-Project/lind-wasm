@@ -46,7 +46,9 @@ pub struct FDTableEntry {
 #[allow(non_snake_case)]
 /// A function used when registering close handlers which does nothing...
 /// It is the default if no close handlers are defined
-pub const fn NULL_FUNC(_: FDTableEntry, _: u64) {}
+pub const fn NULL_FUNC(_: FDTableEntry, _: u64) -> Result<(), i32> {
+    Ok(())
+}
 
 // BUG / TODO: Use this in some sane way...
 #[allow(dead_code)]

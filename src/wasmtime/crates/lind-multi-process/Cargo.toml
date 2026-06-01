@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+libc = { workspace = true }
 log = { workspace = true }
 rand = "0.8"
 wasi-common = { workspace = true, features = ["exit", "sync"]}
@@ -18,6 +19,7 @@ wasmtime-environ = { workspace = true }
 wasmtime-lind-utils = { path = "../lind-utils" }
 wasmtime-lind-3i = { path = "../lind-3i" }
 rawposix = { path = "../rawposix" }
+typemap = { path = "../typemap" }
 sysdefs = { path = "../sysdefs" }
 threei = { path = "../threei" }
 cage = { path = "../cage" }
@@ -26,3 +28,5 @@ cfg-if = { workspace = true }
 [features]
 default = []
 disable_signals = []
+asyncify-setjmp = []
+lind-logging = ["sysdefs/lind-logging"]

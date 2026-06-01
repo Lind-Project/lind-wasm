@@ -1,12 +1,13 @@
 [package]
-name = "wasmtime-wit-bindgen"
+name = "wasmtime-internal-wit-bindgen"
 version.workspace = true
 authors.workspace = true
-description = "Internal `*.wit` support for the `wasmtime` crate's macros"
+description = "INTERNAL: `*.wit` support for the `wasmtime` crate's macros"
 license = "Apache-2.0 WITH LLVM-exception"
 repository = "https://github.com/bytecodealliance/wasmtime"
 documentation = "https://docs.rs/wasmtime-wit-bindgen/"
 edition.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -15,7 +16,9 @@ workspace = true
 anyhow = { workspace = true }
 heck = { workspace = true }
 wit-parser = { workspace = true }
-indexmap = { workspace = true }
+indexmap = { workspace = true, features = ['std'] }
+bitflags = { workspace = true }
 
 [features]
-std = []
+async = []
+component-model-async = []

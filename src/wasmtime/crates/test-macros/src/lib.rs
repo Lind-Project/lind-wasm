@@ -30,12 +30,12 @@
 //! tests will be generated for such strategy.
 use proc_macro::TokenStream;
 use proc_macro2::Span;
-use quote::{quote, ToTokens, TokenStreamExt};
+use quote::{ToTokens, TokenStreamExt, quote};
 use syn::{
-    braced,
+    Attribute, Ident, Result, ReturnType, Signature, Visibility, braced,
     meta::ParseNestedMeta,
     parse::{Parse, ParseStream},
-    parse_macro_input, token, Attribute, Ident, Result, ReturnType, Signature, Visibility,
+    parse_macro_input, token,
 };
 
 /// Test configuration.

@@ -169,36 +169,7 @@ __libc_setup_tls (void)
   tlsblock = (void *) (((uintptr_t) tlsblock + max_align - 1)
 		       & ~(max_align - 1));
 
-  /* Initialize the dtv.  [0] is the length, [1] the generation counter.  */
-  _dl_static_dtv[0].counter = (sizeof (_dl_static_dtv) / sizeof (_dl_static_dtv[0])) - 2;
-  // _dl_static_dtv[1].counter = 0;		would be needed if not already done
-
-  /* Initialize the TLS block.  */
-#if TLS_TCB_AT_TP
-  _dl_static_dtv[2].pointer.val = ((char *) tlsblock + tcb_offset
-			       - roundup (memsz, align ?: 1));
-  main_map->l_tls_offset = roundup (memsz, align ?: 1);
-#elif TLS_DTV_AT_TP
-  _dl_static_dtv[2].pointer.val = (char *) tlsblock + tcb_offset;
-  main_map->l_tls_offset = tcb_offset;
-#else
-# error "Either TLS_TCB_AT_TP or TLS_DTV_AT_TP must be defined"
-#endif
-  _dl_static_dtv[2].pointer.to_free = NULL;
-  /* sbrk gives us zero'd memory, so we don't need to clear the remainder.  */
-  memcpy (_dl_static_dtv[2].pointer.val, initimage, filesz);
-
-  /* Install the pointer to the dtv.  */
-
-  /* Initialize the thread pointer.  */
-#if TLS_TCB_AT_TP
-  INSTALL_DTV ((char *) tlsblock + tcb_offset, _dl_static_dtv);
-
-  // call_tls_init_tp ((char *) tlsblock + tcb_offset);
-#elif TLS_DTV_AT_TP
-  INSTALL_DTV (tlsblock, _dl_static_dtv);
-  // call_tls_init_tp (tlsblock);
-#endif
+  // lind-wasm: remove DTV related logic since lind do not use DTV
 
   /* Update the executable's link map with enough information to make
      the TLS routines happy.  */

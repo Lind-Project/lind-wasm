@@ -1,23 +1,123 @@
-use anyhow::Context;
-use bstr::ByteSlice;
 use libtest_mimic::{Arguments, FormatSetting, Trial};
-use once_cell::sync::Lazy;
-use std::path::Path;
-use std::sync::{Condvar, Mutex};
+use std::sync::{Condvar, LazyLock, Mutex};
 use wasmtime::{
-    Config, Engine, InstanceAllocationStrategy, MpkEnabled, PoolingAllocationConfig, Store,
-    Strategy,
+    Config, Enabled, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, bail,
+    error::Context as _,
 };
-use wasmtime_environ::Memory;
-use wasmtime_wast::{SpectestConfig, WastContext};
+use wasmtime_test_util::wast::{Collector, Compiler, WastConfig, WastTest, limits};
+use wasmtime_wast::{Async, SpectestConfig, WastContext};
 
 fn main() {
     env_logger::init();
 
+    let tests = if cfg!(miri) {
+        Vec::new()
+    } else {
+        wasmtime_test_util::wast::find_tests(env!("CARGO_MANIFEST_DIR").as_ref()).unwrap()
+    };
+
     let mut trials = Vec::new();
-    if !cfg!(miri) {
-        add_tests(&mut trials, "tests/spec_testsuite".as_ref());
-        add_tests(&mut trials, "tests/misc_testsuite".as_ref());
+
+    // Check for if we are only running GC-related tests.
+    let gc_keywords = std::env::var("WASMTIME_TEST_GC_KEYWORDS")
+        .ok()
+        .map(|s| s.split(" ").map(|s| s.to_string()).collect::<Vec<_>>());
+
+    let mut add_trial = |test: &WastTest, config: WastConfig| {
+        let name = format!(
+            "{:?}/{}{}{}",
+            config.compiler,
+            if config.pooling { "pooling/" } else { "" },
+            if config.collector != Collector::Auto {
+                format!("{:?}/", config.collector)
+            } else {
+                String::new()
+            },
+            test.path.to_str().unwrap()
+        );
+
+        // Don't add this trial if we are only running GC-related tests and it
+        // doesn't look like a GC-related test.
+        if let Some(ks) = &gc_keywords {
+            if config.collector == Collector::Auto && !ks.iter().any(|kw| name.contains(kw)) {
+                return;
+            }
+        }
+
+        let trial = Trial::test(name, {
+            let test = test.clone();
+            move || run_wast(&test, config).map_err(|e| format!("{e:?}").into())
+        });
+
+        trials.push(trial);
+    };
+
+    // List of supported compilers, filtered by what our current host supports.
+    let mut compilers = vec![
+        Compiler::CraneliftNative,
+        Compiler::Winch,
+        Compiler::CraneliftPulley,
+    ];
+    compilers.retain(|c| c.supports_host());
+
+    // Only test one compiler in ASAN since we're mostly interested in testing
+    // runtime code, not compiler-generated code.
+    if cfg!(asan) {
+        compilers.truncate(1);
+    }
+
+    // Run each wast test in a few interesting configuration combinations, but
+    // leave the full combinatorial matrix and such to fuzz testing which
+    // configures many more settings than those configured here.
+    for test in tests {
+        let collector = if test.test_uses_gc_types() {
+            Collector::DeferredReferenceCounting
+        } else {
+            Collector::Auto
+        };
+
+        // Run this test in all supported compilers.
+        for compiler in compilers.iter().copied() {
+            add_trial(
+                &test,
+                WastConfig {
+                    compiler,
+                    pooling: false,
+                    collector,
+                },
+            );
+        }
+
+        // Don't do extra tests in ASAN as it takes awhile and is unlikely to
+        // reap much benefit.
+        if cfg!(asan) {
+            continue;
+        }
+
+        let compiler = compilers[0];
+
+        // Run this test with the pooling allocator under the default compiler.
+        add_trial(
+            &test,
+            WastConfig {
+                compiler,
+                pooling: true,
+                collector,
+            },
+        );
+
+        // If applicable, also run with the null collector in addition to the
+        // default collector.
+        if test.test_uses_gc_types() {
+            add_trial(
+                &test,
+                WastConfig {
+                    compiler,
+                    pooling: false,
+                    collector: Collector::Null,
+                },
+            );
+        }
     }
 
     // There's a lot of tests so print only a `.` to keep the output a
@@ -29,237 +129,39 @@ fn main() {
     libtest_mimic::run(&args, trials).exit()
 }
 
-fn add_tests(trials: &mut Vec<Trial>, path: &Path) {
-    for entry in path.read_dir().unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if entry.file_type().unwrap().is_dir() {
-            add_tests(trials, &path);
-            continue;
-        }
-
-        if path.extension().and_then(|s| s.to_str()) != Some("wast") {
-            continue;
-        }
-
-        for strategy in [Strategy::Cranelift, Strategy::Winch] {
-            for pooling in [true, false] {
-                let trial = Trial::test(
-                    format!(
-                        "{strategy:?}/{}{}",
-                        if pooling { "pooling/" } else { "" },
-                        path.to_str().unwrap()
-                    ),
-                    {
-                        let path = path.clone();
-                        move || {
-                            run_wast(&path, strategy, pooling).map_err(|e| format!("{e:?}").into())
-                        }
-                    },
-                );
-                trials.push(trial.with_ignored_flag(ignore(&path, strategy)));
-            }
-        }
-    }
-}
-
-fn ignore(test: &Path, strategy: Strategy) -> bool {
-    // Winch only supports x86_64 at this time.
-    if strategy == Strategy::Winch && !cfg!(target_arch = "x86_64") {
-        return true;
-    }
-
-    for part in test.iter() {
-        // Not implemented in Wasmtime yet
-        if part == "exception-handling" {
-            return true;
-        }
-        // Not implemented in Wasmtime yet
-        if part == "extended-const" {
-            return true;
-        }
-        // Wasmtime doesn't implement the table64 extension yet.
-        if part == "memory64" {
-            if [
-                "call_indirect.wast",
-                "table_copy.wast",
-                "table_get.wast",
-                "table_set.wast",
-                "table_fill.wast",
-                "table.wast",
-                "table_init.wast",
-                "table_copy_mixed.wast",
-                "table_grow.wast",
-                "table_size.wast",
-            ]
-            .iter()
-            .any(|i| test.ends_with(i))
-            {
-                return true;
-            }
-        }
-
-        // TODO(#6530): These tests require tail calls, but s390x doesn't
-        // support them yet.
-        if cfg!(target_arch = "s390x") {
-            if part == "function-references" || part == "tail-call" {
-                return true;
-            }
-        }
-
-        // Disable spec tests for proposals that Winch does not implement yet.
-        if strategy == Strategy::Winch {
-            let part = part.to_str().unwrap();
-            let unsupported = [
-                // wasm proposals that Winch doesn't support,
-                "references",
-                "tail-call",
-                "gc",
-                "threads",
-                "multi-memory",
-                "relaxed-simd",
-                "function-references",
-                // tests in misc_testsuite that Winch doesn't support
-                "no-panic.wast",
-                "externref-id-function.wast",
-                "int-to-float-splat.wast",
-                "issue6562.wast",
-                "many_table_gets_lead_to_gc.wast",
-                "mutable_externref_globals.wast",
-                "no-mixup-stack-maps.wast",
-                "simple_ref_is_null.wast",
-                "table_grow_with_funcref.wast",
-                // Tests in the spec test suite Winch doesn't support
-                "threads.wast",
-                "br_table.wast",
-                "global.wast",
-                "table_fill.wast",
-                "table_get.wast",
-                "table_set.wast",
-                "table_grow.wast",
-                "table_size.wast",
-                "elem.wast",
-                "select.wast",
-                "unreached-invalid.wast",
-                "linking.wast",
-            ];
-
-            if unsupported.contains(&part) || part.starts_with("simd") || part.starts_with("ref_") {
-                return true;
-            }
-        }
-
-        // Implementation of the GC proposal is a work-in-progress, this is
-        // a list of all currently known-to-fail tests.
-        if part == "gc" {
-            return [
-                "array_copy.wast",
-                "array_fill.wast",
-                "array_init_data.wast",
-                "array_init_elem.wast",
-                "array.wast",
-                "binary_gc.wast",
-                "binary.wast",
-                "br_on_cast_fail.wast",
-                "br_on_cast.wast",
-                "br_on_non_null.wast",
-                "br_on_null.wast",
-                "br_table.wast",
-                "call_ref.wast",
-                "data.wast",
-                "elem.wast",
-                "extern.wast",
-                "func.wast",
-                "global.wast",
-                "if.wast",
-                "linking.wast",
-                "local_get.wast",
-                "local_init.wast",
-                "ref_as_non_null.wast",
-                "ref_cast.wast",
-                "ref_eq.wast",
-                "ref_is_null.wast",
-                "ref_null.wast",
-                "ref_test.wast",
-                "ref.wast",
-                "return_call_indirect.wast",
-                "return_call_ref.wast",
-                "return_call.wast",
-                "select.wast",
-                "struct.wast",
-                "table_sub.wast",
-                "table.wast",
-                "type_canon.wast",
-                "type_equivalence.wast",
-                "type-rec.wast",
-                "type-subtyping.wast",
-                "unreached-invalid.wast",
-                "unreached_valid.wast",
-                "i31.wast",
-            ]
-            .iter()
-            .any(|i| test.ends_with(i));
-        }
-    }
-
-    false
-}
-
 // Each of the tests included from `wast_testsuite_tests` will call this
 // function which actually executes the `wast` test suite given the `strategy`
 // to compile it.
-fn run_wast(wast: &Path, strategy: Strategy, pooling: bool) -> anyhow::Result<()> {
-    let wast_bytes =
-        std::fs::read(wast).with_context(|| format!("failed to read `{}`", wast.display()))?;
+fn run_wast(test: &WastTest, config: WastConfig) -> wasmtime::Result<()> {
+    let test_config = test.config.clone();
 
-    let wast = Path::new(wast);
+    // Determine whether this test is expected to fail or pass. Regardless the
+    // test is executed and the result of the execution is asserted to match
+    // this expectation. Note that this means that the test can't, for example,
+    // panic or segfault as a result.
+    //
+    // Updates to whether a test should pass or fail should be done in the
+    // `crates/wast-util/src/lib.rs` file.
+    let should_fail = test.should_fail(&config);
 
-    let memory64 = feature_found(wast, "memory64");
-    let custom_page_sizes = feature_found(wast, "custom-page-sizes");
-    let multi_memory = feature_found(wast, "multi-memory")
-        || feature_found(wast, "component-model")
-        || custom_page_sizes;
-    let threads = feature_found(wast, "threads");
-    let gc = feature_found(wast, "gc");
-    let function_references = gc || feature_found(wast, "function-references");
-    let reference_types = !(threads && feature_found(wast, "proposals"));
-    let relaxed_simd = feature_found(wast, "relaxed-simd");
-    let tail_call = feature_found(wast, "tail-call") || feature_found(wast, "function-references");
-    let use_shared_memory = feature_found_src(&wast_bytes, "shared_memory")
-        || feature_found_src(&wast_bytes, "shared)");
+    let multi_memory = test_config.multi_memory();
+    let test_hogs_memory = test_config.hogs_memory();
+    let relaxed_simd = test_config.relaxed_simd();
 
-    if pooling && use_shared_memory {
-        log::warn!("skipping pooling test with shared memory");
-        return Ok(());
-    }
-
-    let is_cranelift = match strategy {
-        Strategy::Cranelift => true,
+    let is_cranelift = match config.compiler {
+        Compiler::CraneliftNative | Compiler::CraneliftPulley => true,
         _ => false,
     };
 
     let mut cfg = Config::new();
-    cfg.wasm_multi_memory(multi_memory)
-        .wasm_threads(threads)
-        .wasm_memory64(memory64)
-        .wasm_function_references(function_references)
-        .wasm_gc(gc)
-        .wasm_reference_types(reference_types)
-        .wasm_relaxed_simd(relaxed_simd)
-        .wasm_tail_call(tail_call)
-        .wasm_custom_page_sizes(custom_page_sizes)
-        .strategy(strategy);
+    cfg.shared_memory(true);
+    wasmtime_test_util::wasmtime_wast::apply_test_config(&mut cfg, &test_config);
+    wasmtime_test_util::wasmtime_wast::apply_wast_config(&mut cfg, &config);
 
     if is_cranelift {
         cfg.cranelift_debug_verifier(true);
+        cfg.cranelift_wasmtime_debug_checks(true);
     }
-
-    cfg.wasm_component_model(feature_found(wast, "component-model"));
-
-    if feature_found(wast, "canonicalize-nan") && is_cranelift {
-        cfg.cranelift_nan_canonicalization(true);
-    }
-    let test_allocates_lots_of_memory = wast.ends_with("more-than-4gb.wast");
 
     // By default we'll allocate huge chunks (6gb) of the address space for each
     // linear memory. This is typically fine but when we emulate tests with QEMU
@@ -270,37 +172,38 @@ fn run_wast(wast: &Path, strategy: Strategy, pooling: bool) -> anyhow::Result<()
     // Locally testing this out this drops QEMU's memory usage running this
     // tests suite from 10GiB to 600MiB. Previously we saw that crossing the
     // 10GiB threshold caused our processes to get OOM killed on CI.
-    if std::env::var("WASMTIME_TEST_NO_HOG_MEMORY").is_ok() {
+    //
+    // Note that this branch is also taken for 32-bit platforms which generally
+    // can't test much of the pooling allocator as the virtual address space is
+    // so limited.
+    if cfg!(target_pointer_width = "32") || std::env::var("WASMTIME_TEST_NO_HOG_MEMORY").is_ok() {
         // The pooling allocator hogs ~6TB of virtual address space for each
         // store, so if we don't to hog memory then ignore pooling tests.
-        if pooling {
+        if config.pooling {
             return Ok(());
         }
 
         // If the test allocates a lot of memory, that's considered "hogging"
         // memory, so skip it.
-        if test_allocates_lots_of_memory {
+        if test_hogs_memory {
             return Ok(());
         }
 
         // Don't use 4gb address space reservations when not hogging memory, and
         // also don't reserve lots of memory after dynamic memories for growth
         // (makes growth slower).
-        if use_shared_memory {
-            cfg.static_memory_maximum_size(2 * u64::from(Memory::DEFAULT_PAGE_SIZE));
-        } else {
-            cfg.static_memory_maximum_size(0);
-        }
-        cfg.dynamic_memory_reserved_for_growth(0);
-        cfg.static_memory_guard_size(0);
-        cfg.dynamic_memory_guard_size(0);
+        cfg.memory_reservation(2 * u64::from(wasmtime_environ::Memory::DEFAULT_PAGE_SIZE));
+        cfg.memory_reservation_for_growth(0);
+
+        let small_guard = 64 * 1024;
+        cfg.memory_guard_size(small_guard);
     }
 
-    let _pooling_lock = if pooling {
+    let _pooling_lock = if config.pooling {
         // Some memory64 tests take more than 4gb of resident memory to test,
         // but we don't want to configure the pooling allocator to allow that
         // (that's a ton of memory to reserve), so we skip those tests.
-        if test_allocates_lots_of_memory {
+        if test_hogs_memory {
             return Ok(());
         }
 
@@ -314,30 +217,28 @@ fn run_wast(wast: &Path, strategy: Strategy, pooling: bool) -> anyhow::Result<()
         // When multiple memories are used and are configured in the pool then
         // force the usage of static memories without guards to reduce the VM
         // impact.
-        let max_memory_size = 805 << 16;
+        let max_memory_size = limits::MEMORY_SIZE;
         if multi_memory {
-            cfg.static_memory_maximum_size(max_memory_size as u64);
-            cfg.dynamic_memory_reserved_for_growth(0);
-            cfg.static_memory_guard_size(0);
-            cfg.dynamic_memory_guard_size(0);
+            cfg.memory_reservation(max_memory_size as u64);
+            cfg.memory_reservation_for_growth(0);
+            cfg.memory_guard_size(0);
         }
 
-        // The limits here are crafted such that the wast tests should pass.
-        // However, these limits may become insufficient in the future as the
-        // wast tests change. If a wast test fails because of a limit being
-        // "exceeded" or if memory/table fails to grow, the values here will
-        // need to be adjusted.
         let mut pool = PoolingAllocationConfig::default();
-        pool.total_memories(450 * 2)
+        pool.total_memories(limits::MEMORIES * 2)
             .max_memory_protection_keys(2)
             .max_memory_size(max_memory_size)
-            .max_memories_per_module(if multi_memory { 9 } else { 1 })
-            .max_tables_per_module(5);
+            .max_memories_per_module(if multi_memory {
+                limits::MEMORIES_PER_MODULE
+            } else {
+                1
+            })
+            .max_tables_per_module(limits::TABLES_PER_MODULE);
 
         // When testing, we may choose to start with MPK force-enabled to ensure
         // we use that functionality.
         if std::env::var("WASMTIME_TEST_FORCE_MPK").is_ok() {
-            pool.memory_protection_keys(MpkEnabled::Enable);
+            pool.memory_protection_keys(Enabled::Yes);
         }
 
         cfg.allocation_strategy(InstanceAllocationStrategy::Pooling(pool));
@@ -346,42 +247,48 @@ fn run_wast(wast: &Path, strategy: Strategy, pooling: bool) -> anyhow::Result<()
         None
     };
 
-    let mut engines = vec![(Engine::new(&cfg)?, "default")];
+    let mut engines = vec![(Engine::new(&cfg), "default")];
 
     // For tests that use relaxed-simd test both the default engine and the
     // guaranteed-deterministic engine to ensure that both the 'native'
     // semantics of the instructions plus the canonical semantics work.
     if relaxed_simd {
         engines.push((
-            Engine::new(cfg.relaxed_simd_deterministic(true))?,
+            Engine::new(cfg.relaxed_simd_deterministic(true)),
             "deterministic",
         ));
     }
 
     for (engine, desc) in engines {
-        let store = Store::new(&engine, ());
-        let mut wast_context = WastContext::new(store);
-        wast_context.register_spectest(&SpectestConfig {
-            use_shared_memory,
-            suppress_prints: true,
-        })?;
-        wast_context
-            .run_buffer(wast.to_str().unwrap(), &wast_bytes)
-            .with_context(|| format!("failed to run spec test with {desc} engine"))?;
+        let result = engine.and_then(|engine| {
+            let mut wast_context = WastContext::new(&engine, Async::Yes, |_store| {});
+            wast_context.generate_dwarf(true);
+            wast_context.register_spectest(&SpectestConfig {
+                use_shared_memory: true,
+                suppress_prints: true,
+            })?;
+            if test
+                .path
+                .to_str()
+                .is_some_and(|s| s.contains("misc_testsuite"))
+            {
+                wast_context.register_wasmtime()?;
+            }
+            wast_context
+                .run_wast(test.path.to_str().unwrap(), test.contents.as_bytes())
+                .with_context(|| format!("failed to run spec test with {desc} engine"))
+        });
+
+        if should_fail {
+            if result.is_ok() {
+                bail!("this test is flagged as should-fail but it succeeded")
+            }
+        } else {
+            result?;
+        }
     }
 
     Ok(())
-}
-
-fn feature_found(path: &Path, name: &str) -> bool {
-    path.iter().any(|part| match part.to_str() {
-        Some(s) => s.contains(name),
-        None => false,
-    })
-}
-
-fn feature_found_src(bytes: &[u8], name: &str) -> bool {
-    bytes.contains_str(name)
 }
 
 // The pooling tests make about 6TB of address space reservation which means
@@ -394,7 +301,7 @@ fn feature_found_src(bytes: &[u8], name: &str) -> bool {
 fn lock_pooling() -> impl Drop {
     const MAX_CONCURRENT_POOLING: u32 = 4;
 
-    static ACTIVE: Lazy<MyState> = Lazy::new(MyState::default);
+    static ACTIVE: LazyLock<MyState> = LazyLock::new(MyState::default);
 
     #[derive(Default)]
     struct MyState {

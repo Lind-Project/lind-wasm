@@ -22,6 +22,12 @@
 #include <unistd.h>
 #include <ldsodefs.h>
 #include <shlib-compat.h>
+#include <dlerror.h>
+
+int __lind_dlopen(char* filename, int mode) __attribute__((
+    __import_module__("lind"),
+    __import_name__("dlopen")
+));
 
 struct dlopen_args
 {
@@ -68,7 +74,13 @@ dlopen_implementation (const char *file, int mode, void *dl_caller)
   args.mode = mode;
   args.caller = dl_caller;
 
-  return _dlerror_run (dlopen_doit, &args) ? NULL : args.new;
+  int result = __lind_dlopen(file, mode);
+  if (result < 0) {
+    __lind_dlerror_result = -result;
+    return NULL;
+  }
+
+  return result;
 }
 
 #ifdef SHARED

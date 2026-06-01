@@ -36,23 +36,40 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     --opt-only          : .wasm -> .wasm  (in-place optimization)
     --precompile-only   : .wasm -> .cwasm (AOT compile via lind-boot)
 
+  Compilation backend (applies to full and --compile-only modes):
+    (no backend flag)   : dynamic build — PIE executable with dlopen support (default)
+    -s, --static        : static build — traditional WASM binary without dynamic linking
+    --compile-library   : library build — shared WASM library (.wasm) to be loaded via dlopen
+                          Note: --compile-library takes precedence over -s/--static if both are given.
+
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
     --print-args, --debug-args  print parsed arguments after option handling
-    --compile-grate             add grate-specific clang flags automatically
+    --compile-grate             add grate-specific clang flags (exports pass_fptr_to_wt);
+                                compatible with dynamic and static backends
+    --fpcast-emu                enable function-pointer-cast emulation via wasm-opt
+                                (applies to full and --opt-only modes; for dynamic/library
+                                builds also passes --pass-arg=relocatable-fpcast)
+    -rdynamic                   export all symbols from the main module so dynamically loaded
+                                libraries can resolve them at runtime; adds -fvisibility=default
+                                and -Wl,--export-dynamic (dynamic build only)
     --no-default-clang-flags    do not add lind_compile's optional clang flags
-    -h, --help              show this help
+    -h, --help                  show this help
 
   Additional clang args:
     Any extra arguments after the source file are passed through to clang.
     Use -- to separate lind_compile flags from clang flags if needed.
 
   Examples:
-    $(basename "$0") hello.c
+    $(basename "$0") hello.c                              # dynamic build (default)
+    $(basename "$0") -s hello.c                           # static build
+    $(basename "$0") --compile-library mylib.c            # shared library for dlopen
     $(basename "$0") --compile-only hello.c
     $(basename "$0") --compile-grate hello.c
+    $(basename "$0") --fpcast-emu hello.c
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --precompile-only build/hello.wasm
+    $(basename "$0") --output-dir tmp hello.c                # copy output to lindfs/tmp/
     $(basename "$0") --print-cmd hello.c
     $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
     $(basename "$0") hello.c -- -lm
@@ -62,9 +79,14 @@ EOF
 
 MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
+SHARED_BUILD="true"
+WITH_FPCAST="false"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
+COMPILE_LIBRARY="false"
+RDYNAMIC="false"
+TARGET_DIR=""
 ORIGINAL_ARGS=("$@")
 
 set_mode() {
@@ -102,14 +124,30 @@ while [[ "$#" -gt 0 ]]; do
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
+    -s|--static)
+      SHARED_BUILD="false"
+      ;;
+    --fpcast-emu)
+      WITH_FPCAST="true"
+      ;;
     --print-args|--debug-args)
       PRINT_ARGS="true"
       ;;
     --no-default-clang-flags)
       NO_DEFAULT_CLANG_FLAGS="true"
       ;;
+    --compile-library)
+      COMPILE_LIBRARY="true"
+      ;;
+    -rdynamic|--rdynamic)
+      RDYNAMIC="true"
+      ;;
     --compile-grate)
       COMPILE_GRATE="true"
+      ;;
+    --output-dir)
+      shift
+      TARGET_DIR="$1"
       ;;
     -h|--help)
       usage
@@ -230,9 +268,12 @@ esac
 
 # --- tool paths & quick checks (anchored to repo) ---
 CLANG_BIN="clang"  # must be on PATH
-WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
+LIND_WASM_OPT_BIN="${REPO_ROOT}/scripts/lind-wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
 LINDFS_ROOT="${REPO_ROOT}/lindfs/"
+if [[ -n "${TARGET_DIR}" ]]; then
+  LINDFS_ROOT="${REPO_ROOT}/lindfs/${TARGET_DIR}/"
+fi
 if [[ ! -x "${LINDBOOT_BIN}" ]]; then
   echo "ERROR: lind-boot missing: ${LINDBOOT_BIN}" >&2
   exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
@@ -249,7 +290,7 @@ if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" ]]; then
 fi
 
 if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
-  [[ -x "${WASM_OPT_BIN}" ]] || { echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2; exit 2; }
+  [[ -x "${LIND_WASM_OPT_BIN}" ]] || { echo "error: lind-wasm-opt not found at ${LIND_WASM_OPT_BIN}" >&2; exit 2; }
 fi
 
 if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
@@ -266,7 +307,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -295,7 +336,7 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
   debug_default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
     debug_default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
@@ -315,16 +356,21 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
 fi
 
 # --- individual steps ---
-do_compile() {
+do_static_compile() {
   local -a mandatory_clang_flags=(
     "--sysroot=${SYSROOT}"
     --target=wasm32-unknown-wasi
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base
+  )
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    mandatory_clang_flags+=(-fwasm-exceptions -mllvm -wasm-enable-sjlj)
+  fi
+  mandatory_clang_flags+=(
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low,--export=__tls_base,--export=__wasm_init_tls
   )
   local -a default_clang_flags=(
     -pthread
     -g
-    -O0
+    -O2
   )
 
   if [[ "${COMPILE_GRATE}" == "true" ]]; then
@@ -336,11 +382,114 @@ do_compile() {
   fi
 
   run_cmd "${CLANG_BIN}" "${mandatory_clang_flags[@]}" "${default_clang_flags[@]}" \
-    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
+}
+
+do_dynamic_compile() {
+  local -a mandatory_clang_flags=(
+    --target=wasm32-unknown-wasi
+    "--sysroot=${SYSROOT}"
+  )
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    mandatory_clang_flags+=(-fwasm-exceptions -mllvm -wasm-enable-sjlj)
+  fi
+  mandatory_clang_flags+=(
+    "-nostartfiles" # we manually enforce the crt1 file for dynamic build
+    -Wl,-pie # required flag for compiling into shared wasm binary
+    -Wl,--import-table # table needs to be shared across module in dynamic build
+    -Wl,--import-memory # memory needs to be shared across module for threading support
+    -Wl,--export-memory
+    -Wl,--max-memory=67108864
+    -Wl,--allow-undefined # treat undefined symbol as external library symbol
+    -Wl,--unresolved-symbols=import-dynamic
+    -Wl,--export=__wasm_call_ctors
+    -Wl,--export-if-defined=__wasm_init_tls
+    -Wl,--export=__tls_base
+  )
+  local -a default_clang_flags=(
+    -pthread
+    -g
+    -O2
+    -fPIC
+  )
+
+  # -rdynamic: export all symbols so dynamically loaded libraries can resolve them at runtime
+  if [[ "${RDYNAMIC}" == "true" ]]; then
+    mandatory_clang_flags+=("-fvisibility=default" "-Wl,--export-dynamic")
+  fi
+
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    default_clang_flags+=(-Wl,--export=pass_fptr_to_wt)
+  fi
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" "$SYSROOT/lib/wasm32-wasi/lind_debug.o" -o "${OUT_WASM}"
+  
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer
+}
+
+do_library_compile() {
+  local -a mandatory_clang_flags=(
+    --target=wasm32-unknown-wasi
+    "--sysroot=${SYSROOT}"
+    "-fvisibility=default"
+    "-Wl,--import-memory"
+    "-Wl,--shared-memory"
+    "-Wl,--export-dynamic"
+    "-Wl,--experimental-pic"
+    "-Wl,--unresolved-symbols=import-dynamic"
+    "-Wl,-shared"
+    -Wl,--export=__wasm_call_ctors
+    -Wl,--export-if-defined=__wasm_init_tls
+    -Wl,--export=__tls_base
+  )
+  local -a default_clang_flags=(
+    -g
+    -O2
+    -fPIC
+  )
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" "${mandatory_clang_flags[@]}"\
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" "$SYSROOT/lib/wasm32-wasi/lind_utils.o" -o "${OUT_WASM}"
+  
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_tls_relocs func __wasm_apply_tls_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __wasm_apply_global_relocs func __wasm_apply_global_relocs optional
+  run_cmd $REPO_ROOT/tools/add-export-tool/add-export-tool "${OUT_WASM}" "${OUT_WASM}" __stack_pointer global __stack_pointer optional
+}
+
+do_compile() {
+  if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+    do_library_compile
+  else
+    if [[ "${SHARED_BUILD}" == "true" ]]; then
+      do_dynamic_compile
+    else
+      do_static_compile
+    fi
+  fi
 }
 
 do_optimize() {
-  run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+  local fpcast_flag=()
+  [[ "${WITH_FPCAST}" == "true" ]] && fpcast_flag=(--fpcast-emu)
+
+  if [[ "${SHARED_BUILD}" == "true" ]]; then
+    run_cmd "${LIND_WASM_OPT_BIN}" --target=main "${fpcast_flag[@]}" "${OUT_WASM}" -o "${OUT_WASM}"
+  elif [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+    run_cmd "${LIND_WASM_OPT_BIN}" --target=library "${fpcast_flag[@]}" "${OUT_WASM}" -o "${OUT_WASM}"
+  else
+    run_cmd "${LIND_WASM_OPT_BIN}" --static "${fpcast_flag[@]}" "${OUT_WASM}" -o "${OUT_WASM}"
+  fi
 }
 
 do_precompile() {
@@ -362,6 +511,10 @@ case "${MODE}" in
     do_compile
     do_optimize
     do_precompile
+    if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
+      mv "${OUT_CWASM}" "${SRC%.c}.so"
+      OUT_CWASM="${SRC%.c}.so"
+    fi
     cp_to_lindfs
     ;;
   "compile-only")
@@ -373,6 +526,7 @@ case "${MODE}" in
     ;;
   "precompile-only")
     do_precompile
+    cp_to_lindfs
     ;;
 esac
 

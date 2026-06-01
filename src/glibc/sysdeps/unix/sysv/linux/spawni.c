@@ -23,7 +23,7 @@
 #include <paths.h>
 #include <shlib-compat.h>
 #include <spawn.h>
-#include <spawn_int.h>
+#include <posix/spawn_int.h>
 #include <sysdep.h>
 #include <sys/resource.h>
 #include <clone_internal.h>
@@ -348,8 +348,8 @@ __spawnix (int *pid, const char *file,
 	return errno;
       }
 
-  int prot = (PROT_READ | PROT_WRITE
-	     | ((GL (dl_stack_flags) & PF_X) ? PROT_EXEC : 0));
+  // lind-wasm: removed PROT_EXEC — WASM linear memory cannot be executable.
+  int prot = (PROT_READ | PROT_WRITE);
 
   /* Add a slack area for child's stack.  */
   size_t argv_size = (argc * sizeof (void *)) + 512;
@@ -361,8 +361,9 @@ __spawnix (int *pid, const char *file,
      where it might use about 1k extra stack space).  */
   argv_size += (32 * 1024);
   size_t stack_size = ALIGN_UP (argv_size, GLRO(dl_pagesize));
+  // lind-wasm: removed MAP_STACK — unsupported by RawPOSIX mmap (no-op on Linux).
   void *stack = __mmap (NULL, stack_size, prot,
-			MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (__glibc_unlikely (stack == MAP_FAILED))
     return errno;
 
@@ -401,7 +402,8 @@ __spawnix (int *pid, const char *file,
       .flags = (set_cgroup ? CLONE_INTO_CGROUP : 0)
 	       | (use_pidfd ? CLONE_PIDFD : 0)
 	       | CLONE_CLEAR_SIGHAND
-	       | CLONE_VM
+	       // lind-wasm: removed CLONE_VM — fork needs separate memory for
+	       // parent and child (shared WASM linear memory would corrupt parent).
 	       | CLONE_VFORK,
       .exit_signal = SIGCHLD,
       .stack = (uintptr_t) stack,
