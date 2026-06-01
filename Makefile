@@ -110,6 +110,13 @@ build_glibc:
 build-dir:
 	mkdir -p $(BUILD_DIR)
 
+.PHONY: lind-boot-perf
+lind-boot-perf: build-dir
+	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
+	    --no-default-features --features "$(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES) lind_perf"
+	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
+
 # After copying src/glibc/sysroot → $(SYSROOT_DIR), optionally merge libc++ from
 # $(ARTIFACTS_DIR) when that tree is present (same layout as Docker E2E).
 # Remove any existing c++ tree first: it may be a symlink into src/glibc/sysroot
