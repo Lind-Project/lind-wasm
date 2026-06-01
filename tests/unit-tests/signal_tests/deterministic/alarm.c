@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int signal_counter = 3;
+volatile int signal_counter = 3;
 
 void alarm_handler(int sig) {
     signal_counter -= 1;

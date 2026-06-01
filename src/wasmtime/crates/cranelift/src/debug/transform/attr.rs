@@ -1,20 +1,25 @@
+use crate::debug::Reader;
+use crate::debug::transform::utils::resolve_die_ref;
+
 use super::address_transform::AddressTransform;
-use super::expression::{compile_expression, CompiledExpression, FunctionFrameInfo};
+use super::dbi_log;
+use super::expression::{CompiledExpression, FunctionFrameInfo, compile_expression};
 use super::range_info_builder::RangeInfoBuilder;
-use super::refs::{PendingDebugInfoRefs, PendingUnitRefs};
-use super::{DebugInputContext, Reader, TransformError};
-use anyhow::{bail, Error};
+use super::unit::InheritedAttr;
 use cranelift_codegen::isa::TargetIsa;
-use gimli::{write, AttributeValue, DebugLineOffset, DebuggingInformationEntry, Unit};
+use gimli::{AttributeValue, UnitOffset, write};
+use wasmtime_environ::error::Error;
 
 #[derive(Debug)]
-pub(crate) enum FileAttributeContext<'a> {
-    Root(Option<DebugLineOffset>),
-    Children {
-        file_map: &'a [write::FileId],
-        file_index_base: u64,
-        frame_base: Option<&'a CompiledExpression>,
-    },
+pub(crate) struct EntryAttributesContext<'a> {
+    pub subprograms: &'a mut InheritedAttr<SubprogramContext>,
+    pub frame_base: Option<&'a CompiledExpression>,
+}
+
+#[derive(Debug)]
+pub struct SubprogramContext {
+    pub obj_ptr: UnitOffset,
+    pub param_num: isize,
 }
 
 fn is_exprloc_to_loclist_allowed(attr_name: gimli::constants::DwAt) -> bool {
@@ -32,27 +37,18 @@ fn is_exprloc_to_loclist_allowed(attr_name: gimli::constants::DwAt) -> bool {
     }
 }
 
-pub(crate) fn clone_die_attributes<'a, R>(
-    dwarf: &gimli::Dwarf<R>,
-    unit: &Unit<R, R::Offset>,
-    entry: &DebuggingInformationEntry<R>,
-    context: &DebugInputContext<R>,
-    addr_tr: &'a AddressTransform,
+pub(crate) fn clone_die_attributes<'a>(
+    convert_unit: &mut gimli::write::ConvertUnit<Reader<'a>>,
+    entry: &gimli::write::ConvertUnitEntry<Reader<'a>>,
+    addr_tr: &AddressTransform,
     frame_info: Option<&FunctionFrameInfo>,
-    out_unit: &mut write::Unit,
-    current_scope_id: write::UnitEntryId,
+    out_entry_id: write::UnitEntryId,
     subprogram_range_builder: Option<RangeInfoBuilder>,
     scope_ranges: Option<&Vec<(u64, u64)>>,
-    cu_low_pc: u64,
-    out_strings: &mut write::StringTable,
-    pending_die_refs: &mut PendingUnitRefs,
-    pending_di_refs: &mut PendingDebugInfoRefs,
-    file_context: FileAttributeContext<'a>,
+    mut attr_context: EntryAttributesContext,
     isa: &dyn TargetIsa,
-) -> Result<(), Error>
-where
-    R: Reader,
-{
+) -> Result<(), Error> {
+    let unit = entry.read_unit;
     let unit_encoding = unit.encoding();
 
     let range_info = if let Some(subprogram_range_builder) = subprogram_range_builder {
@@ -61,94 +57,89 @@ where
         // FIXME for CU: currently address_transform operate on a single
         // function range, and when CU spans multiple ranges the
         // transformation may be incomplete.
-        RangeInfoBuilder::from(dwarf, unit, entry, context, cu_low_pc)?
+        RangeInfoBuilder::from(entry)?
     };
-    range_info.build(addr_tr, out_unit, current_scope_id);
+    range_info.build(addr_tr, convert_unit.unit, out_entry_id);
 
-    let mut attrs = entry.attrs();
-    while let Some(attr) = attrs.next()? {
-        let attr_value = match attr.value() {
-            AttributeValue::Addr(_) | AttributeValue::DebugAddrIndex(_)
-                if attr.name() == gimli::DW_AT_low_pc =>
-            {
-                continue;
-            }
-            AttributeValue::Udata(_) if attr.name() == gimli::DW_AT_high_pc => {
-                continue;
-            }
-            AttributeValue::RangeListsRef(_) if attr.name() == gimli::DW_AT_ranges => {
-                continue;
-            }
-            AttributeValue::DebugAddrBase(_) | AttributeValue::DebugStrOffsetsBase(_) => {
-                continue;
-            }
+    let mut is_obj_ptr = false;
+    prepare_die_context(entry, &mut attr_context, &mut is_obj_ptr)?;
 
+    for attr in &entry.attrs {
+        match attr.name() {
+            gimli::DW_AT_low_pc | gimli::DW_AT_high_pc | gimli::DW_AT_ranges => {
+                // Handled by RangeInfoBuilder.
+                continue;
+            }
+            gimli::DW_AT_object_pointer => {
+                // Our consumers cannot handle 'this' typed as a non-pointer (recall
+                // we translate all pointers to wrapper types), making it unusable.
+                // To remedy this, we 'strip' instance-ness off of methods by removing
+                // DW_AT_object_pointer and renaming 'this' to '__this'.
+                if let Some(ref mut subprogram) =
+                    attr_context.subprograms.top_with_depth_mut(entry.depth)
+                {
+                    // We expect this to reference a child entry in the same unit.
+                    if let Some(unit_offs) = match attr.value() {
+                        AttributeValue::DebugInfoRef(di_ref) => di_ref.to_unit_offset(&unit.header),
+                        AttributeValue::UnitRef(unit_ref) => Some(unit_ref),
+                        _ => None,
+                    } {
+                        subprogram.obj_ptr = unit_offs;
+                        dbi_log!("Stripped DW_AT_object_pointer");
+                        continue;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        if is_obj_ptr {
+            match attr.name() {
+                gimli::DW_AT_artificial => {
+                    dbi_log!("Object pointer: stripped DW_AT_artificial");
+                    continue;
+                }
+                gimli::DW_AT_name => {
+                    let old_name: &str = &unit.attr_string(attr.value())?.to_string_lossy();
+                    let new_name = format!("__{old_name}");
+                    dbi_log!(
+                        "Object pointer: renamed '{}' -> '{}'",
+                        old_name,
+                        new_name.as_str()
+                    );
+
+                    let attr_value =
+                        write::AttributeValue::StringRef(convert_unit.strings.add(new_name));
+                    convert_unit
+                        .unit
+                        .get_mut(out_entry_id)
+                        .set(gimli::DW_AT_name, attr_value);
+                    continue;
+                }
+                _ => {}
+            }
+        }
+
+        let attr_value = attr.value();
+        let out_attr_value = match attr_value {
             AttributeValue::Addr(u) => {
                 let addr = addr_tr.translate(u).unwrap_or(write::Address::Constant(0));
                 write::AttributeValue::Address(addr)
             }
             AttributeValue::DebugAddrIndex(i) => {
-                let u = context.debug_addr.get_address(4, unit.addr_base, i)?;
+                let u = unit.address(i)?;
                 let addr = addr_tr.translate(u).unwrap_or(write::Address::Constant(0));
                 write::AttributeValue::Address(addr)
             }
-            AttributeValue::Block(d) => write::AttributeValue::Block(d.to_slice()?.into_owned()),
-            AttributeValue::Udata(u) => write::AttributeValue::Udata(u),
-            AttributeValue::Data1(d) => write::AttributeValue::Data1(d),
-            AttributeValue::Data2(d) => write::AttributeValue::Data2(d),
-            AttributeValue::Data4(d) => write::AttributeValue::Data4(d),
-            AttributeValue::Sdata(d) => write::AttributeValue::Sdata(d),
-            AttributeValue::Flag(f) => write::AttributeValue::Flag(f),
-            AttributeValue::DebugLineRef(line_program_offset) => {
-                if let FileAttributeContext::Root(o) = file_context {
-                    if o != Some(line_program_offset) {
-                        return Err(TransformError("invalid debug_line offset").into());
-                    }
-                    write::AttributeValue::LineProgramRef
-                } else {
-                    return Err(TransformError("unexpected debug_line index attribute").into());
-                }
-            }
-            AttributeValue::FileIndex(i) => {
-                if let FileAttributeContext::Children {
-                    file_map,
-                    file_index_base,
-                    ..
-                } = file_context
-                {
-                    write::AttributeValue::FileIndex(Some(file_map[(i - file_index_base) as usize]))
-                } else {
-                    return Err(TransformError("unexpected file index attribute").into());
-                }
-            }
-            AttributeValue::DebugStrRef(_) | AttributeValue::DebugStrOffsetsIndex(_) => {
-                let s = dwarf
-                    .attr_string(unit, attr.value().clone())?
-                    .to_string_lossy()?
-                    .into_owned();
-                write::AttributeValue::StringRef(out_strings.add(s))
-            }
-            AttributeValue::RangeListsRef(r) => {
-                let r = dwarf.ranges_offset_from_raw(unit, r);
-                let range_info = RangeInfoBuilder::from_ranges_ref(unit, r, context, cu_low_pc)?;
-                let range_list_id = range_info.build_ranges(addr_tr, &mut out_unit.ranges);
+            AttributeValue::RangeListsRef(_) | AttributeValue::DebugRngListsIndex(_) => {
+                let r = unit.attr_ranges_offset(attr_value)?.unwrap();
+                let range_info = RangeInfoBuilder::from_ranges_ref(unit, r)?;
+                let range_list_id = range_info.build_ranges(addr_tr, &mut convert_unit.unit.ranges);
                 write::AttributeValue::RangeListRef(range_list_id)
             }
-            AttributeValue::LocationListsRef(r) => {
-                let low_pc = 0;
-                let mut locs = context.loclists.locations(
-                    r,
-                    unit_encoding,
-                    low_pc,
-                    &context.debug_addr,
-                    unit.addr_base,
-                )?;
-                let frame_base =
-                    if let FileAttributeContext::Children { frame_base, .. } = file_context {
-                        frame_base
-                    } else {
-                        None
-                    };
+            AttributeValue::LocationListsRef(_) | AttributeValue::DebugLocListsIndex(_) => {
+                let mut locs = unit.attr_locations(attr_value)?.unwrap();
+                let frame_base = attr_context.frame_base;
 
                 let mut result: Option<Vec<_>> = None;
                 while let Some(loc) = locs.next()? {
@@ -160,13 +151,10 @@ where
                                 frame_info,
                                 isa,
                             )
+                            .expressions
                             .filter(|i| {
                                 // Ignore empty range
-                                if let Ok((_, 0, _)) = i {
-                                    false
-                                } else {
-                                    true
-                                }
+                                if let Ok((_, 0, _)) = i { false } else { true }
                             })
                             .map(|i| {
                                 i.map(|(start, len, expr)| write::Location::StartLength {
@@ -188,7 +176,10 @@ where
                 if result.is_none() {
                     continue; // no valid locations
                 }
-                let list_id = out_unit.locations.add(write::LocationList(result.unwrap()));
+                let list_id = convert_unit
+                    .unit
+                    .locations
+                    .add(write::LocationList(result.unwrap()));
                 write::AttributeValue::LocationListRef(list_id)
             }
             AttributeValue::Exprloc(_) if attr.name() == gimli::DW_AT_frame_base => {
@@ -199,12 +190,7 @@ where
                 write::AttributeValue::Exprloc(cfa)
             }
             AttributeValue::Exprloc(ref expr) => {
-                let frame_base =
-                    if let FileAttributeContext::Children { frame_base, .. } = file_context {
-                        frame_base
-                    } else {
-                        None
-                    };
+                let frame_base = attr_context.frame_base;
                 if let Some(expr) = compile_expression(expr, unit_encoding, frame_base)? {
                     if expr.is_simple() {
                         if let Some(expr) = expr.build() {
@@ -215,28 +201,29 @@ where
                     } else {
                         // Conversion to loclist is required.
                         if let Some(scope_ranges) = scope_ranges {
-                            let exprs = expr
-                                .build_with_locals(scope_ranges, addr_tr, frame_info, isa)
+                            let built_expression =
+                                expr.build_with_locals(scope_ranges, addr_tr, frame_info, isa);
+                            let exprs = built_expression
+                                .expressions
                                 .collect::<Result<Vec<_>, _>>()?;
                             if exprs.is_empty() {
                                 continue;
                             }
-                            let found_single_expr = {
-                                // Micro-optimization all expressions alike, use one exprloc.
-                                let mut found_expr: Option<write::Expression> = None;
+                            // Micro-optimization all expressions alike, use one exprloc.
+                            let mut single_expr: Option<write::Expression> = None;
+                            if built_expression.covers_entire_scope {
                                 for (_, _, expr) in &exprs {
-                                    if let Some(ref prev_expr) = found_expr {
+                                    if let Some(ref prev_expr) = single_expr {
                                         if expr == prev_expr {
                                             continue; // the same expression
                                         }
-                                        found_expr = None;
+                                        single_expr = None;
                                         break;
                                     }
-                                    found_expr = Some(expr.clone())
+                                    single_expr = Some(expr.clone())
                                 }
-                                found_expr
-                            };
-                            if let Some(expr) = found_single_expr {
+                            }
+                            if let Some(expr) = single_expr {
                                 write::AttributeValue::Exprloc(expr)
                             } else if is_exprloc_to_loclist_allowed(attr.name()) {
                                 // Converting exprloc to loclist.
@@ -252,7 +239,8 @@ where
                                         data,
                                     });
                                 }
-                                let list_id = out_unit.locations.add(write::LocationList(locs));
+                                let list_id =
+                                    convert_unit.unit.locations.add(write::LocationList(locs));
                                 write::AttributeValue::LocationListRef(list_id)
                             } else {
                                 continue;
@@ -266,55 +254,93 @@ where
                     continue; // ignore attribute
                 }
             }
-            AttributeValue::Encoding(e) => write::AttributeValue::Encoding(e),
-            AttributeValue::DecimalSign(e) => write::AttributeValue::DecimalSign(e),
-            AttributeValue::Endianity(e) => write::AttributeValue::Endianity(e),
-            AttributeValue::Accessibility(e) => write::AttributeValue::Accessibility(e),
-            AttributeValue::Visibility(e) => write::AttributeValue::Visibility(e),
-            AttributeValue::Virtuality(e) => write::AttributeValue::Virtuality(e),
-            AttributeValue::Language(e) => write::AttributeValue::Language(e),
-            AttributeValue::AddressClass(e) => write::AttributeValue::AddressClass(e),
-            AttributeValue::IdentifierCase(e) => write::AttributeValue::IdentifierCase(e),
-            AttributeValue::CallingConvention(e) => write::AttributeValue::CallingConvention(e),
-            AttributeValue::Inline(e) => write::AttributeValue::Inline(e),
-            AttributeValue::Ordering(e) => write::AttributeValue::Ordering(e),
-            AttributeValue::UnitRef(offset) => {
-                pending_die_refs.insert(current_scope_id, attr.name(), offset);
-                continue;
-            }
-            AttributeValue::DebugInfoRef(offset) => {
-                pending_di_refs.insert(current_scope_id, attr.name(), offset);
-                continue;
-            }
-            AttributeValue::String(d) => write::AttributeValue::String(d.to_slice()?.into_owned()),
-            a => bail!("Unexpected attribute: {:?}", a),
+            // No other attributes contain addresses or address offsets.
+            _ => match convert_unit.convert_attribute_value(unit, attr, &|_| None) {
+                Ok(value) => value,
+                Err(e) => {
+                    // Invalid `FileIndex` was seen in #8884 and #8904. In general it's
+                    // better to ignore invalid or unknown DWARF rather then failing outright.
+                    dbi_log!(
+                        "Ignoring entry {:x?} attribute {} = {:x?}: {e}",
+                        entry.offset.to_unit_section_offset(&convert_unit.read_unit),
+                        attr.name(),
+                        attr_value,
+                    );
+                    continue;
+                }
+            },
         };
-        let current_scope = out_unit.get_mut(current_scope_id);
-        current_scope.set(attr.name(), attr_value);
+        let out_entry = convert_unit.unit.get_mut(out_entry_id);
+        out_entry.set(attr.name(), out_attr_value);
     }
     Ok(())
 }
 
-pub(crate) fn clone_attr_string<R>(
-    attr_value: &AttributeValue<R>,
-    form: gimli::DwForm,
-    unit: &Unit<R, R::Offset>,
-    dwarf: &gimli::Dwarf<R>,
-    out_strings: &mut write::StringTable,
-) -> Result<write::LineString, Error>
-where
-    R: Reader,
-{
-    let content = dwarf
-        .attr_string(unit, attr_value.clone())?
-        .to_string_lossy()?
-        .into_owned();
-    Ok(match form {
-        gimli::DW_FORM_strp => {
-            let id = out_strings.add(content);
-            write::LineString::StringRef(id)
+fn prepare_die_context<'a>(
+    entry: &gimli::write::ConvertUnitEntry<Reader<'a>>,
+    attr_context: &mut EntryAttributesContext,
+    is_obj_ptr: &mut bool,
+) -> Result<(), Error> {
+    let subprograms = &mut attr_context.subprograms;
+
+    // Update the current context based on what kind of entry this is.
+    match entry.tag {
+        gimli::DW_TAG_subprogram | gimli::DW_TAG_inlined_subroutine | gimli::DW_TAG_entry_point => {
+            // Push the 'context' of there being no parameters (yet).
+            subprograms.push(
+                entry.depth,
+                SubprogramContext {
+                    obj_ptr: UnitOffset { 0: 0 },
+                    param_num: -1,
+                },
+            );
         }
-        gimli::DW_FORM_string => write::LineString::String(content.into()),
-        _ => bail!("DW_FORM_line_strp or other not supported"),
-    })
+        gimli::DW_TAG_formal_parameter => {
+            // Formal parameter tags can be parented by catch blocks
+            // and such - not just subprogram DIEs. So we need to check
+            // that this DIE is indeed a direct child of a subprogram.
+            if let Some(subprogram) = subprograms.top_with_depth_mut(entry.depth - 1) {
+                subprogram.param_num += 1;
+
+                if subprogram.obj_ptr == entry.offset
+                    || is_obj_ptr_param(entry, subprogram.param_num)?
+                {
+                    *is_obj_ptr = true;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn is_obj_ptr_param(
+    entry: &gimli::write::ConvertUnitEntry<Reader<'_>>,
+    param_num: isize,
+) -> Result<bool, Error> {
+    debug_assert_eq!(entry.tag, gimli::DW_TAG_formal_parameter);
+    let unit = entry.read_unit;
+
+    // This logic was taken loosely from LLDB. It is known
+    // that it is not fully correct (doesn't handle 'deduced
+    // this', for example).
+    // Q: DWARF includes DW_AT_object_pointer as we use it,
+    // why do we need this heuristic as well?
+    // A: Declarations do not include DW_AT_object_pointer.
+    if param_num == 0
+        && entry.attr_value(gimli::DW_AT_artificial) == Some(AttributeValue::Flag(true))
+    {
+        // Either this has no name (declarations omit them), or its explicitly "this".
+        let name = entry.attr_value(gimli::DW_AT_name);
+        if name.is_none() || unit.attr_string(name.unwrap())?.slice().eq(b"this") {
+            // Finally, a type check. We expect a pointer.
+            if let Some(type_attr) = entry.attr_value(gimli::DW_AT_type) {
+                if let Some(type_die) = resolve_die_ref(unit, &type_attr)? {
+                    return Ok(type_die.tag == gimli::DW_TAG_pointer_type);
+                }
+            }
+        }
+    };
+
+    return Ok(false);
 }

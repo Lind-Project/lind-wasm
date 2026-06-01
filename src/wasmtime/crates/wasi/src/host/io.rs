@@ -1,8 +1,8 @@
 use crate::{
+    Pollable, StreamError, StreamResult, WasiImpl, WasiView,
     bindings::io::error,
     bindings::io::streams::{self, InputStream, OutputStream},
     poll::subscribe,
-    Pollable, StreamError, StreamResult, WasiImpl, WasiView,
 };
 use wasmtime::component::Resource;
 
@@ -241,6 +241,7 @@ where
 
 pub mod sync {
     use crate::{
+        StreamError, StreamResult, WasiImpl, WasiView,
         bindings::io::streams::{
             self as async_streams, Host as AsyncHost, HostInputStream as AsyncHostInputStream,
             HostOutputStream as AsyncHostOutputStream,
@@ -248,7 +249,6 @@ pub mod sync {
         bindings::sync::io::poll::Pollable,
         bindings::sync::io::streams::{self, InputStream, OutputStream},
         runtime::in_tokio,
-        StreamError, StreamResult, WasiImpl, WasiView,
     };
     use wasmtime::component::Resource;
 

@@ -1,5 +1,5 @@
 use crate::cdsl::isa::TargetIsa;
-use crate::cdsl::settings::{PredicateNode, SettingGroupBuilder};
+use crate::cdsl::settings::SettingGroupBuilder;
 
 pub(crate) fn define() -> TargetIsa {
     let mut settings = SettingGroupBuilder::new("x86");
@@ -15,6 +15,12 @@ pub(crate) fn define() -> TargetIsa {
         "has_ssse3",
         "Has support for SSSE3.",
         "SSSE3: CPUID.01H:ECX.SSSE3[bit 9]",
+        false,
+    );
+    let has_cmpxchg16b = settings.add_bool(
+        "has_cmpxchg16b",
+        "Has support for CMPXCHG16b.",
+        "CMPXCHG16b: CPUID.01H:ECX.CMPXCHG16B[bit 13]",
         false,
     );
     let has_sse41 = settings.add_bool(
@@ -106,24 +112,6 @@ pub(crate) fn define() -> TargetIsa {
         false,
     );
 
-    settings.add_predicate("use_ssse3", predicate!(has_ssse3));
-    settings.add_predicate("use_sse41", predicate!(has_sse41));
-    settings.add_predicate("use_sse42", predicate!(has_sse41 && has_sse42));
-    settings.add_predicate("use_fma", predicate!(has_avx && has_fma));
-
-    settings.add_predicate("use_avx", predicate!(has_avx));
-    settings.add_predicate("use_avx2", predicate!(has_avx && has_avx2));
-    settings.add_predicate("use_avx512bitalg", predicate!(has_avx512bitalg));
-    settings.add_predicate("use_avx512dq", predicate!(has_avx512dq));
-    settings.add_predicate("use_avx512vl", predicate!(has_avx512vl));
-    settings.add_predicate("use_avx512vbmi", predicate!(has_avx512vbmi));
-    settings.add_predicate("use_avx512f", predicate!(has_avx512f));
-
-    settings.add_predicate("use_popcnt", predicate!(has_popcnt && has_sse42));
-    settings.add_predicate("use_bmi1", predicate!(has_bmi1));
-    settings.add_predicate("use_bmi2", predicate!(has_bmi2));
-    settings.add_predicate("use_lzcnt", predicate!(has_lzcnt));
-
     let sse3 = settings.add_preset("sse3", "SSE3 and earlier.", preset!(has_sse3));
     let ssse3 = settings.add_preset("ssse3", "SSSE3 and earlier.", preset!(sse3 && has_ssse3));
     let sse41 = settings.add_preset("sse41", "SSE4.1 and earlier.", preset!(ssse3 && has_sse41));
@@ -141,14 +129,30 @@ pub(crate) fn define() -> TargetIsa {
     // Intel CPUs
 
     // Netburst
-    settings.add_preset("nocona", "Nocona microarchitecture.", preset!(sse3));
+    settings.add_preset(
+        "nocona",
+        "Nocona microarchitecture.",
+        preset!(sse3 && has_cmpxchg16b),
+    );
 
     // Intel Core 2 Solo/Duo
-    settings.add_preset("core2", "Core 2 microarchitecture.", preset!(sse3));
-    settings.add_preset("penryn", "Penryn microarchitecture.", preset!(sse41));
+    settings.add_preset(
+        "core2",
+        "Core 2 microarchitecture.",
+        preset!(sse3 && has_cmpxchg16b),
+    );
+    settings.add_preset(
+        "penryn",
+        "Penryn microarchitecture.",
+        preset!(sse41 && has_cmpxchg16b),
+    );
 
     // Intel Atom CPUs
-    let atom = settings.add_preset("atom", "Atom microarchitecture.", preset!(ssse3));
+    let atom = settings.add_preset(
+        "atom",
+        "Atom microarchitecture.",
+        preset!(ssse3 && has_cmpxchg16b),
+    );
     settings.add_preset("bonnell", "Bonnell microarchitecture.", preset!(atom));
     let silvermont = settings.add_preset(
         "silvermont",
@@ -186,7 +190,7 @@ pub(crate) fn define() -> TargetIsa {
     let nehalem = settings.add_preset(
         "nehalem",
         "Nehalem microarchitecture.",
-        preset!(sse42 && has_popcnt),
+        preset!(sse42 && has_popcnt && has_cmpxchg16b),
     );
     settings.add_preset("corei7", "Core i7 microarchitecture.", preset!(nehalem));
     let westmere = settings.add_preset("westmere", "Westmere microarchitecture.", preset!(nehalem));
@@ -229,7 +233,15 @@ pub(crate) fn define() -> TargetIsa {
     let knights_landing = settings.add_preset(
         "knl",
         "Knights Landing microarchitecture.",
-        preset!(has_popcnt && has_avx512f && has_fma && has_bmi1 && has_bmi2 && has_lzcnt),
+        preset!(
+            has_popcnt
+                && has_avx512f
+                && has_fma
+                && has_bmi1
+                && has_bmi2
+                && has_lzcnt
+                && has_cmpxchg16b
+        ),
     );
     settings.add_preset(
         "knm",
@@ -284,7 +296,7 @@ pub(crate) fn define() -> TargetIsa {
     );
     let sapphire_rapids = settings.add_preset(
         "sapphirerapids",
-        "Saphire Rapids microarchitecture.",
+        "Sapphire Rapids microarchitecture.",
         preset!(icelake_server),
     );
     settings.add_preset(
@@ -312,22 +324,22 @@ pub(crate) fn define() -> TargetIsa {
     settings.add_preset(
         "opteron-sse3",
         "Opteron microarchitecture with support for SSE3 instructions.",
-        preset!(sse3),
+        preset!(sse3 && has_cmpxchg16b),
     );
     settings.add_preset(
         "k8-sse3",
         "K8 Hammer microarchitecture with support for SSE3 instructions.",
-        preset!(sse3),
+        preset!(sse3 && has_cmpxchg16b),
     );
     settings.add_preset(
         "athlon64-sse3",
         "Athlon 64 microarchitecture with support for SSE3 instructions.",
-        preset!(sse3),
+        preset!(sse3 && has_cmpxchg16b),
     );
     let barcelona = settings.add_preset(
         "barcelona",
         "Barcelona microarchitecture.",
-        preset!(has_popcnt && has_lzcnt),
+        preset!(has_popcnt && has_lzcnt && has_cmpxchg16b),
     );
     settings.add_preset(
         "amdfam10",
@@ -338,7 +350,7 @@ pub(crate) fn define() -> TargetIsa {
     let btver1 = settings.add_preset(
         "btver1",
         "Bobcat microarchitecture.",
-        preset!(ssse3 && has_lzcnt && has_popcnt),
+        preset!(ssse3 && has_lzcnt && has_popcnt && has_cmpxchg16b),
     );
     settings.add_preset(
         "btver2",
@@ -349,7 +361,7 @@ pub(crate) fn define() -> TargetIsa {
     let bdver1 = settings.add_preset(
         "bdver1",
         "Bulldozer microarchitecture",
-        preset!(has_lzcnt && has_popcnt && ssse3),
+        preset!(has_lzcnt && has_popcnt && ssse3 && has_cmpxchg16b),
     );
     let bdver2 = settings.add_preset(
         "bdver2",
@@ -366,7 +378,9 @@ pub(crate) fn define() -> TargetIsa {
     let znver1 = settings.add_preset(
         "znver1",
         "Zen (first generation) microarchitecture.",
-        preset!(sse42 && has_popcnt && has_bmi1 && has_bmi2 && has_lzcnt && has_fma),
+        preset!(
+            sse42 && has_popcnt && has_bmi1 && has_bmi2 && has_lzcnt && has_fma && has_cmpxchg16b
+        ),
     );
     let znver2 = settings.add_preset(
         "znver2",
@@ -397,16 +411,16 @@ pub(crate) fn define() -> TargetIsa {
     let x86_64_v2 = settings.add_preset(
         "x86-64-v2",
         "Generic x86-64 (V2) microarchitecture.",
-        preset!(sse42 && has_popcnt),
+        preset!(sse42 && has_popcnt && has_cmpxchg16b),
     );
     let x86_64_v3 = settings.add_preset(
-        "x84_64_v3",
-        "Generic x86_64 (V3) microarchitecture.",
+        "x86-64-v3",
+        "Generic x86-64 (V3) microarchitecture.",
         preset!(x86_64_v2 && has_bmi1 && has_bmi2 && has_fma && has_lzcnt && has_avx2),
     );
     settings.add_preset(
-        "x86_64_v4",
-        "Generic x86_64 (V4) microarchitecture.",
+        "x86-64-v4",
+        "Generic x86-64 (V4) microarchitecture.",
         preset!(x86_64_v3 && has_avx512dq && has_avx512vl),
     );
 

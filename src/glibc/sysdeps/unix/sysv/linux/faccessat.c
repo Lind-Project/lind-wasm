@@ -16,61 +16,31 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sysdep.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
-
+/* Lind: route faccessat through 3i to RawPOSIX's faccessat_syscall.
+   The kernel faccessat doesn't accept any flags except 0; the userspace
+   AT_EACCESS / AT_SYMLINK_NOFOLLOW emulation done in upstream glibc via
+   stat+euid is left to the host's libc::faccessat.  */
 int
 __faccessat (int fd, const char *file, int mode, int flag)
 {
-  int ret = INLINE_SYSCALL_CALL (faccessat2, fd, file, mode, flag);
-#if __ASSUME_FACCESSAT2
-  return ret;
-#else
-  if (ret == 0 || errno != ENOSYS)
-    return ret;
-
   if (flag & ~(AT_SYMLINK_NOFOLLOW | AT_EACCESS))
     return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);
 
-  if ((flag == 0 || ((flag & ~AT_EACCESS) == 0 && ! __libc_enable_secure)))
-    return INLINE_SYSCALL (faccessat, 3, fd, file, mode);
-
-  struct __stat64_t64 stats;
-  if (__fstatat64_time64 (fd, file, &stats, flag & AT_SYMLINK_NOFOLLOW))
-    return -1;
-
-  mode &= (X_OK | W_OK | R_OK);	/* Clear any bogus bits. */
-# if R_OK != S_IROTH || W_OK != S_IWOTH || X_OK != S_IXOTH
-#  error Oops, portability assumptions incorrect.
-# endif
-
-  if (mode == F_OK)
-    return 0;			/* The file exists. */
-
-  uid_t uid = (flag & AT_EACCESS) ? __geteuid () : __getuid ();
-
-  /* The super-user can read and write any file, and execute any file
-     that anyone can execute. */
-  if (uid == 0 && ((mode & X_OK) == 0
-		   || (stats.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))))
-    return 0;
-
-  int granted = (uid == stats.st_uid
-		 ? (unsigned int) (stats.st_mode & (mode << 6)) >> 6
-		 : (stats.st_gid == ((flag & AT_EACCESS)
-				     ? __getegid () : __getgid ())
-		    || __group_member (stats.st_gid))
-		 ? (unsigned int) (stats.st_mode & (mode << 3)) >> 3
-		 : (stats.st_mode & mode));
-
-  if (granted == mode)
-    return 0;
-
-  return INLINE_SYSCALL_ERROR_RETURN_VALUE (EACCES);
-#endif /* !__ASSUME_FACCESSAT2 */
+  return MAKE_LEGACY_SYSCALL (FACCESSAT_SYSCALL, "syscall|faccessat",
+			      (uint64_t) fd,
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
+			      (uint64_t) mode,
+			      (uint64_t) flag,
+			      NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__faccessat, faccessat)

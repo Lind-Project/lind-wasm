@@ -1,14 +1,8 @@
-#![cfg_attr(
-    not(any(target_arch = "x86_64", target_arch = "aarch64")),
-    allow(unused_imports)
-)]
-
-use crate::runtime::vm::V128Abi;
 use crate::store::{AutoAssertNoGc, StoreOpaque};
 use crate::{Result, ValRaw, ValType, WasmTy};
 use core::cmp::Ordering;
-use core::fmt;
 use core::mem::MaybeUninit;
+use core::{fmt, mem};
 
 /// Representation of a 128-bit vector type, `v128`, for WebAssembly.
 ///
@@ -27,24 +21,24 @@ use core::mem::MaybeUninit;
 /// [`TypedFunc`]: crate::TypedFunc
 #[derive(Copy, Clone)]
 #[repr(transparent)]
-pub struct V128(V128Abi);
-
-union Reinterpret {
-    abi: V128Abi,
-    u128: u128,
-}
+pub struct V128(
+    // NB: represent this internally with a `u8` array so that `V128` does not
+    // have 16-byte alignment and force `Val`'s discriminant to be 16-bytes
+    // larger. These bytes are always in native-endian order.
+    [u8; mem::size_of::<u128>()],
+);
 
 impl V128 {
     /// Returns the representation of this `v128` as a 128-bit integer in Rust.
     pub fn as_u128(&self) -> u128 {
-        unsafe { Reinterpret { abi: self.0 }.u128 }
+        u128::from_ne_bytes(self.0)
     }
 }
 
 /// Primary constructor of a `V128` type.
 impl From<u128> for V128 {
     fn from(val: u128) -> V128 {
-        unsafe { V128(Reinterpret { u128: val }.abi) }
+        Self(val.to_ne_bytes())
     }
 }
 
@@ -82,7 +76,6 @@ impl Ord for V128 {
 
 // Note that this trait is conditionally implemented which is intentional. See
 // the documentation above in the `cfg_if!` for why this is conditional.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 unsafe impl WasmTy for V128 {
     #[inline]
     fn valtype() -> ValType {
@@ -99,7 +92,7 @@ unsafe impl WasmTy for V128 {
         _: &StoreOpaque,
         _: bool,
         _: &crate::HeapType,
-    ) -> anyhow::Result<()> {
+    ) -> crate::Result<()> {
         unreachable!()
     }
 

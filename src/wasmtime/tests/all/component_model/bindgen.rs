@@ -4,8 +4,8 @@
 use super::engine;
 use anyhow::Result;
 use wasmtime::{
-    component::{Component, Linker},
     Store,
+    component::{Component, Linker},
 };
 
 mod ownership;

@@ -1,19 +1,21 @@
 //! Densely numbered entity references as mapping keys.
 
+use crate::EntityRef;
 use crate::iter::{Iter, IterMut};
 use crate::keys::Keys;
-use crate::EntityRef;
 use alloc::vec::Vec;
 use core::cmp::min;
+use core::fmt;
 use core::marker::PhantomData;
 use core::ops::{Index, IndexMut};
 use core::slice;
 #[cfg(feature = "enable-serde")]
 use serde::{
+    Deserialize, Serialize,
     de::{Deserializer, SeqAccess, Visitor},
     ser::{SerializeSeq, Serializer},
-    Deserialize, Serialize,
 };
+use wasmtime_core::{alloc::PanicOnOom as _, error::OutOfMemory};
 
 /// A mapping `K -> V` for densely indexed entity references.
 ///
@@ -23,7 +25,7 @@ use serde::{
 ///
 /// The map does not track if an entry for a key has been inserted or not. Instead it behaves as if
 /// all keys have a default entry from the beginning.
-#[derive(Debug, Clone, Hash)]
+#[derive(Clone, Hash)]
 pub struct SecondaryMap<K, V>
 where
     K: EntityRef,
@@ -66,6 +68,22 @@ where
         }
     }
 
+    /// Like `with_capacity` but returns an error on allocation failure.
+    pub fn try_with_capacity(capacity: usize) -> Result<Self, OutOfMemory>
+    where
+        V: Default,
+    {
+        let mut elems = Vec::new();
+        elems
+            .try_reserve(capacity)
+            .map_err(|_| OutOfMemory::new(core::mem::size_of::<V>().saturating_mul(capacity)))?;
+        Ok(Self {
+            elems,
+            default: Default::default(),
+            unused: PhantomData,
+        })
+    }
+
     /// Create a new empty map with a specified default value.
     ///
     /// This constructor does not require V to implement Default.
@@ -88,6 +106,40 @@ where
         self.elems.get(k.index())
     }
 
+    /// Get the element at `k` mutably, if it exists.
+    pub fn get_mut(&mut self, k: K) -> Option<&mut V> {
+        self.elems.get_mut(k.index())
+    }
+
+    /// Insert the given key-value pair, returning the old value if it exists.
+    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+        self.try_insert(k, v).panic_on_oom()
+    }
+
+    /// Like `insert` but returns an error on allocation failure.
+    pub fn try_insert(&mut self, k: K, v: V) -> Result<Option<V>, OutOfMemory> {
+        let i = k.index();
+        if i < self.elems.len() {
+            Ok(Some(core::mem::replace(&mut self.elems[i], v)))
+        } else {
+            self.try_resize(i + 1)?;
+            self.elems[i] = v;
+            Ok(None)
+        }
+    }
+
+    /// Remove the element at `k`, if it exists, replacing it with the default
+    /// value.
+    pub fn remove(&mut self, k: K) -> Option<V> {
+        let i = k.index();
+        if i < self.elems.len() {
+            let default = self.default.clone();
+            Some(core::mem::replace(&mut self.elems[i], default))
+        } else {
+            None
+        }
+    }
+
     /// Is this map completely empty?
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
@@ -101,12 +153,12 @@ where
     }
 
     /// Iterate over all the keys and values in this map.
-    pub fn iter(&self) -> Iter<K, V> {
+    pub fn iter(&self) -> Iter<'_, K, V> {
         Iter::new(self.elems.iter())
     }
 
     /// Iterate over all the keys and values in this map, mutable edition.
-    pub fn iter_mut(&mut self) -> IterMut<K, V> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
         IterMut::new(self.elems.iter_mut())
     }
 
@@ -116,18 +168,40 @@ where
     }
 
     /// Iterate over all the values in this map.
-    pub fn values(&self) -> slice::Iter<V> {
+    pub fn values(&self) -> slice::Iter<'_, V> {
         self.elems.iter()
     }
 
     /// Iterate over all the values in this map, mutable edition.
-    pub fn values_mut(&mut self) -> slice::IterMut<V> {
+    pub fn values_mut(&mut self) -> slice::IterMut<'_, V> {
         self.elems.iter_mut()
     }
 
     /// Resize the map to have `n` entries by adding default entries as needed.
     pub fn resize(&mut self, n: usize) {
         self.elems.resize(n, self.default.clone());
+    }
+
+    /// Like `resize` but returns an error on allocation failure.
+    pub fn try_resize(&mut self, n: usize) -> Result<(), OutOfMemory> {
+        if self.elems.capacity() < n {
+            self.elems
+                .try_reserve(n - self.elems.len())
+                .map_err(|_| OutOfMemory::new(core::mem::size_of::<V>().saturating_mul(n)))?;
+        }
+        debug_assert!(self.elems.capacity() >= n);
+        self.elems.resize(n, self.default.clone());
+        Ok(())
+    }
+
+    /// Get this map's underlying values as a slice.
+    pub fn as_values_slice(&self) -> &[V] {
+        &self.elems
+    }
+
+    /// Get this map's default value.
+    pub fn default_value(&self) -> &V {
+        &self.default
     }
 
     /// Slow path for `index_mut` which resizes the vector.
@@ -145,6 +219,38 @@ where
 {
     fn default() -> SecondaryMap<K, V> {
         SecondaryMap::new()
+    }
+}
+
+impl<K, V> From<Vec<V>> for SecondaryMap<K, V>
+where
+    K: EntityRef,
+    V: Clone + Default,
+{
+    fn from(elems: Vec<V>) -> Self {
+        let default = Default::default();
+        Self {
+            elems,
+            default,
+            unused: PhantomData,
+        }
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for SecondaryMap<K, V>
+where
+    K: EntityRef,
+    V: Clone + Default,
+{
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        let iter = iter.into_iter();
+        let (min, max) = iter.size_hint();
+        let cap = max.unwrap_or_else(|| 2 * min);
+        let mut map = Self::with_capacity(cap);
+        for (k, v) in iter {
+            map[k] = v;
+        }
+        map
     }
 }
 
@@ -282,6 +388,15 @@ where
     }
 }
 
+impl<K: EntityRef + fmt::Debug, V: fmt::Debug + Clone> fmt::Debug for SecondaryMap<K, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SecondaryMap")
+            .field("elems", &self.elems)
+            .field("default", &self.default)
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,6 +419,7 @@ mod tests {
         let r0 = E(0);
         let r1 = E(1);
         let r2 = E(2);
+        let r3 = E(3);
         let mut m = SecondaryMap::new();
 
         let v: Vec<E> = m.keys().collect();
@@ -314,6 +430,32 @@ mod tests {
 
         assert_eq!(m[r1], 5);
         assert_eq!(m[r2], 3);
+
+        assert!(m.get(r3).is_none());
+        assert!(m.get_mut(r3).is_none());
+
+        let old = m.insert(r3, 99);
+        assert!(old.is_none());
+        assert_eq!(m.get(r3), Some(&99));
+        assert_eq!(m[r3], 99);
+
+        *m.get_mut(r3).unwrap() += 1;
+        assert_eq!(m.get(r3), Some(&100));
+        assert_eq!(m[r3], 100);
+
+        let old = m.insert(r3, 42);
+        assert_eq!(old, Some(100));
+        assert_eq!(m.get(r3), Some(&42));
+        assert_eq!(m[r3], 42);
+
+        let old = m.remove(r3);
+        assert_eq!(old, Some(42));
+        assert_eq!(m[r3], 0);
+        let old = m.remove(r3);
+        assert_eq!(old, Some(0));
+        m.resize(3);
+        let old = m.remove(r3);
+        assert_eq!(old, None);
 
         let v: Vec<E> = m.keys().collect();
         assert_eq!(v, [r0, r1, r2]);

@@ -1,9 +1,8 @@
-use std::rc::Rc;
-
 use crate::cdsl::formats::InstructionFormat;
 use crate::cdsl::instructions::AllInstructions;
 use crate::error;
-use crate::srcgen::Formatter;
+use cranelift_srcgen::{Formatter, Language, fmtln};
+use std::{borrow::Cow, cmp::Ordering, rc::Rc};
 
 /// Which ISLE target are we generating code for?
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -143,6 +142,10 @@ fn gen_common_isle(
         fmt.empty_line();
     }
 
+    // Raw block entities.
+    fmtln!(fmt, "(type Block extern (enum))");
+    fmt.empty_line();
+
     // Generate the extern type declaration for `Opcode`.
     fmt.line(";;;; `Opcode` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;");
     fmt.empty_line();
@@ -182,7 +185,13 @@ fn gen_common_isle(
                 match format.num_block_operands {
                     0 => (),
                     1 => write!(&mut s, " (destination BlockCall)").unwrap(),
-                    n => write!(&mut s, " (blocks BlockArray{})", n).unwrap(),
+                    n => write!(&mut s, " (blocks BlockArray{n})").unwrap(),
+                }
+
+                match format.num_raw_block_operands {
+                    0 => (),
+                    1 => write!(&mut s, "(block Block)").unwrap(),
+                    _ => panic!("Too many raw block arguments"),
                 }
 
                 for field in &format.imm_fields {
@@ -209,25 +218,29 @@ fn gen_common_isle(
         ";;;; Extracting Opcode, Operands, and Immediates from `InstructionData` ;;;;;;;;",
     );
     fmt.empty_line();
-    let ret_ty = match isle_target {
-        IsleTarget::Lower => "Inst",
-        IsleTarget::Opt => "Value",
-    };
     for inst in instructions {
-        if isle_target == IsleTarget::Opt
-            && (inst.format.has_value_list || inst.value_results.len() != 1)
-        {
-            continue;
-        }
+        let results_len = inst.value_results.len();
+        let is_var_args = inst.format.has_value_list;
+        let has_side_effects = inst.can_trap || inst.other_side_effects;
+
+        let (ret_ty, ty_in_decl, make_inst_ctor, inst_data_etor) =
+            match (isle_target, is_var_args, results_len, has_side_effects) {
+                // The mid-end does not deal with instructions that have var-args right now.
+                (IsleTarget::Opt, true, _, _) => continue,
+
+                (IsleTarget::Opt, _, 1, false) => ("Value", true, "make_inst", "inst_data_value"),
+                (IsleTarget::Opt, _, _, _) => ("Inst", false, "make_skeleton_inst", "inst_data"),
+                (IsleTarget::Lower, false, r, _) if r >= 1 => {
+                    ("Inst", true, "make_inst", "inst_data_value")
+                }
+                (IsleTarget::Lower, _, _, _) => ("Inst", false, "make_inst", "inst_data_value"),
+            };
 
         fmtln!(
             fmt,
             "(decl {} ({}{}) {})",
             inst.name,
-            match isle_target {
-                IsleTarget::Lower => "",
-                IsleTarget::Opt => "Type ",
-            },
+            if ty_in_decl { "Type " } else { "" },
             inst.operands_in
                 .iter()
                 .map(|o| {
@@ -248,10 +261,7 @@ fn gen_common_isle(
                 fmt,
                 "({} {}{})",
                 inst.name,
-                match isle_target {
-                    IsleTarget::Lower => "",
-                    IsleTarget::Opt => "ty ",
-                },
+                if ty_in_decl { "ty " } else { "" },
                 inst.operands_in
                     .iter()
                     .map(|o| { o.name })
@@ -260,10 +270,13 @@ fn gen_common_isle(
             );
 
             let mut s = format!(
-                "(inst_data{} (InstructionData.{} (Opcode.{})",
-                match isle_target {
-                    IsleTarget::Lower => "",
-                    IsleTarget::Opt => " ty",
+                "({inst_data_etor} {}(InstructionData.{} (Opcode.{})",
+                if ty_in_decl {
+                    "ty "
+                } else if isle_target == IsleTarget::Lower {
+                    "_ "
+                } else {
+                    ""
                 },
                 inst.format.name,
                 inst.camel_name
@@ -289,7 +302,7 @@ fn gen_common_isle(
                     .unwrap()
                     .name;
                 if values.is_empty() {
-                    write!(&mut s, " (value_list_slice {})", varargs).unwrap();
+                    write!(&mut s, " (value_list_slice {varargs})").unwrap();
                 } else {
                     write!(
                         &mut s,
@@ -328,7 +341,9 @@ fn gen_common_isle(
             let imm_operands: Vec<_> = inst
                 .operands_in
                 .iter()
-                .filter(|o| !o.is_value() && !o.is_varargs() && !o.kind.is_block())
+                .filter(|o| {
+                    !o.is_value() && !o.is_varargs() && !o.kind.is_block() && !o.kind.is_raw_block()
+                })
                 .collect();
             assert_eq!(imm_operands.len(), inst.format.imm_fields.len(),);
             for op in imm_operands {
@@ -359,6 +374,15 @@ fn gen_common_isle(
                 }
             }
 
+            // Raw blocks.
+            match inst.format.num_raw_block_operands {
+                0 => {}
+                1 => {
+                    write!(&mut s, " block").unwrap();
+                }
+                _ => panic!("Too many raw block arguments"),
+            }
+
             s.push_str("))");
             fmt.line(&s);
         });
@@ -368,8 +392,9 @@ fn gen_common_isle(
         if isle_target == IsleTarget::Opt {
             fmtln!(
                 fmt,
-                "(rule ({} ty {})",
+                "(rule ({}{} {})",
                 inst.name,
+                if ty_in_decl { " ty" } else { "" },
                 inst.operands_in
                     .iter()
                     .map(|o| o.name)
@@ -378,8 +403,10 @@ fn gen_common_isle(
             );
             fmt.indent(|fmt| {
                 let mut s = format!(
-                    "(make_inst ty (InstructionData.{} (Opcode.{})",
-                    inst.format.name, inst.camel_name
+                    "({make_inst_ctor}{} (InstructionData.{} (Opcode.{})",
+                    if ty_in_decl { " ty" } else { "" },
+                    inst.format.name,
+                    inst.camel_name
                 );
 
                 // Handle values. Note that we skip generating
@@ -444,12 +471,18 @@ fn gen_common_isle(
                     }
                 }
 
+                match inst.format.num_raw_block_operands {
+                    0 => {}
+                    1 => {
+                        write!(&mut s, " block").unwrap();
+                    }
+                    _ => panic!("Too many raw block arguments"),
+                }
+
                 // Immediates (non-value args).
-                for o in inst
-                    .operands_in
-                    .iter()
-                    .filter(|o| !o.is_value() && !o.is_varargs() && !o.kind.is_block())
-                {
+                for o in inst.operands_in.iter().filter(|o| {
+                    !o.is_value() && !o.is_varargs() && !o.kind.is_block() && !o.kind.is_raw_block()
+                }) {
                     write!(&mut s, " {}", o.name).unwrap();
                 }
                 s.push_str("))");
@@ -481,7 +514,7 @@ fn gen_lower_isle(
 /// Generate an `enum` immediate in ISLE.
 fn gen_isle_enum(name: &str, mut variants: Vec<&str>, fmt: &mut Formatter) {
     variants.sort();
-    let prefix = format!(";;;; Enumerated Immediate: {} ", name);
+    let prefix = format!(";;;; Enumerated Immediate: {name} ");
     fmtln!(fmt, "{:;<80}", prefix);
     fmt.empty_line();
     fmtln!(fmt, "(type {} extern", name);
@@ -498,22 +531,715 @@ fn gen_isle_enum(name: &str, mut variants: Vec<&str>, fmt: &mut Formatter) {
     fmt.empty_line();
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct NumericType {
+    signed: bool,
+    byte_width: u8,
+}
+
+impl NumericType {
+    fn all() -> impl Iterator<Item = NumericType> {
+        [1, 2, 4, 8, 16].into_iter().flat_map(|byte_width| {
+            [true, false]
+                .into_iter()
+                .map(move |signed| NumericType { signed, byte_width })
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        let idx = self.byte_width.ilog2();
+        let idx = usize::try_from(idx).unwrap();
+        if self.signed {
+            ["i8", "i16", "i32", "i64", "i128"][idx]
+        } else {
+            ["u8", "u16", "u32", "u64", "u128"][idx]
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Eq)]
+struct NumericOp<'a> {
+    /// The name of this operation.
+    name: &'a str,
+    /// The return type of this operation.
+    ret: &'a str,
+    /// Whether this operation is partial.
+    partial: bool,
+    /// (name, type) pairs of arguments.
+    args: Rc<[(&'a str, &'a str)]>,
+    /// The source text for the constructor's body.
+    body: &'a str,
+    /// Whether extractors should be generated for this op.
+    ///
+    /// Must have `arity == 1`, `ret == bool`, and `name.starts_with("is_")`.
+    etors: bool,
+}
+
+impl NumericOp<'_> {
+    fn ops_for_type(ty: &NumericType) -> impl Iterator<Item = NumericOp<'_>> {
+        let arity1 = NumericOp {
+            args: [("a", ty.name())].into(),
+            ..NumericOp::default()
+        };
+
+        let arity2 = NumericOp {
+            args: [("a", ty.name()), ("b", ty.name())].into(),
+            ..NumericOp::default()
+        };
+
+        let comparison = NumericOp {
+            ret: "bool",
+            ..arity2.clone()
+        };
+
+        let predicate = NumericOp {
+            ret: "bool",
+            etors: true,
+            ..arity1.clone()
+        };
+
+        let binop = NumericOp {
+            ret: ty.name(),
+            ..arity2.clone()
+        };
+
+        let partial_binop = NumericOp {
+            ret: ty.name(),
+            partial: true,
+            ..binop.clone()
+        };
+
+        let unop = NumericOp {
+            ret: ty.name(),
+            ..arity1.clone()
+        };
+
+        let partial_unop = NumericOp {
+            ret: ty.name(),
+            partial: true,
+            ..unop.clone()
+        };
+
+        let shift = NumericOp {
+            args: [("a", ty.name()), ("b", "u32")].into(),
+            ..binop.clone()
+        };
+
+        let partial_shift = NumericOp {
+            args: [("a", ty.name()), ("b", "u32")].into(),
+            ..partial_binop.clone()
+        };
+
+        // Operations that apply to both signed and unsigned numbers.
+        let ops = [
+            // Comparisons.
+            NumericOp {
+                name: "eq",
+                body: "a == b",
+                ..comparison.clone()
+            },
+            NumericOp {
+                name: "ne",
+                body: "a != b",
+                ..comparison.clone()
+            },
+            NumericOp {
+                name: "lt",
+                body: "a < b",
+                ..comparison.clone()
+            },
+            NumericOp {
+                name: "lt_eq",
+                body: "a <= b",
+                ..comparison.clone()
+            },
+            NumericOp {
+                name: "gt",
+                body: "a > b",
+                ..comparison.clone()
+            },
+            NumericOp {
+                name: "gt_eq",
+                body: "a >= b",
+                ..comparison.clone()
+            },
+            // Arithmetic operations.
+            //
+            // For each operation (e.g. addition) we have three variants:
+            //
+            // * partial ctor `checked_add`: no return value on overflow
+            // * ctor `wrapping_add`: wraps on overflow
+            // * ctor `add`: non-partial but panics at runtime on overflow
+            NumericOp {
+                name: "checked_add",
+                body: "a.checked_add(b)",
+                ..partial_binop.clone()
+            },
+            NumericOp {
+                name: "wrapping_add",
+                body: "a.wrapping_add(b)",
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "add",
+                body: r#"a.checked_add(b).unwrap_or_else(|| panic!("addition overflow: {a} + {b}"))"#,
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "checked_sub",
+                body: "a.checked_sub(b)",
+                ..partial_binop.clone()
+            },
+            NumericOp {
+                name: "wrapping_sub",
+                body: "a.wrapping_sub(b)",
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "sub",
+                body: r#"a.checked_sub(b).unwrap_or_else(|| panic!("subtraction overflow: {a} - {b}"))"#,
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "checked_mul",
+                body: "a.checked_mul(b)",
+                ..partial_binop.clone()
+            },
+            NumericOp {
+                name: "wrapping_mul",
+                body: "a.wrapping_mul(b)",
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "mul",
+                body: r#"a.checked_mul(b).unwrap_or_else(|| panic!("multiplication overflow: {a} * {b}"))"#,
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "checked_div",
+                body: "a.checked_div(b)",
+                ..partial_binop.clone()
+            },
+            NumericOp {
+                name: "wrapping_div",
+                body: "a.wrapping_div(b)",
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "div",
+                body: r#"a.checked_div(b).unwrap_or_else(|| panic!("div failure: {a} / {b}"))"#,
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "checked_rem",
+                body: "a.checked_rem(b)",
+                ..partial_binop.clone()
+            },
+            NumericOp {
+                name: "rem",
+                body: r#"a.checked_rem(b).unwrap_or_else(|| panic!("rem failure: {a} % {b}"))"#,
+                ..binop.clone()
+            },
+            // Bitwise operations.
+            //
+            // When applicable (e.g. shifts) we have checked, wrapping, and
+            // unwrapping variants, similar to arithmetic operations.
+            NumericOp {
+                name: "and",
+                body: "a & b",
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "or",
+                body: "a | b",
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "xor",
+                body: "a ^ b",
+                ..binop.clone()
+            },
+            NumericOp {
+                name: "not",
+                body: "!a",
+                ..unop.clone()
+            },
+            NumericOp {
+                name: "checked_shl",
+                body: "a.checked_shl(b)",
+                ..partial_shift.clone()
+            },
+            NumericOp {
+                name: "wrapping_shl",
+                body: "a.wrapping_shl(b)",
+                ..shift.clone()
+            },
+            NumericOp {
+                name: "shl",
+                body: r#"a.checked_shl(b).unwrap_or_else(|| panic!("shl overflow: {a} << {b}"))"#,
+                ..shift.clone()
+            },
+            NumericOp {
+                name: "checked_shr",
+                body: "a.checked_shr(b)",
+                ..partial_shift.clone()
+            },
+            NumericOp {
+                name: "wrapping_shr",
+                body: "a.wrapping_shr(b)",
+                ..shift.clone()
+            },
+            NumericOp {
+                name: "shr",
+                body: r#"a.checked_shr(b).unwrap_or_else(|| panic!("shr overflow: {a} >> {b}"))"#,
+                ..shift.clone()
+            },
+            NumericOp {
+                name: "rotl",
+                body: "a.rotate_left(b)",
+                ..shift.clone()
+            },
+            NumericOp {
+                name: "rotr",
+                body: "a.rotate_right(b)",
+                ..shift.clone()
+            },
+            // Predicates.
+            //
+            // We generate both pure constructors and a variety of extractors
+            // for these. See the relevant comments in `gen_numerics_isle` about
+            // the extractors.
+            NumericOp {
+                name: "is_zero",
+                body: "a == 0",
+                ..predicate.clone()
+            },
+            NumericOp {
+                name: "is_non_zero",
+                body: "a != 0",
+                ..predicate.clone()
+            },
+            NumericOp {
+                name: "is_odd",
+                body: "a & 1 == 1",
+                ..predicate.clone()
+            },
+            NumericOp {
+                name: "is_even",
+                body: "a & 1 == 0",
+                ..predicate.clone()
+            },
+            // Miscellaneous unary operations.
+            NumericOp {
+                name: "checked_ilog2",
+                body: "a.checked_ilog2()",
+                ret: "u32",
+                ..partial_unop.clone()
+            },
+            NumericOp {
+                name: "ilog2",
+                body: r#"a.checked_ilog2().unwrap_or_else(|| panic!("ilog2 overflow: {a}"))"#,
+                ret: "u32",
+                ..unop.clone()
+            },
+            NumericOp {
+                name: "trailing_zeros",
+                body: "a.trailing_zeros()",
+                ret: "u32",
+                ..unop.clone()
+            },
+            NumericOp {
+                name: "trailing_ones",
+                body: "a.trailing_ones()",
+                ret: "u32",
+                ..unop.clone()
+            },
+            NumericOp {
+                name: "leading_zeros",
+                body: "a.leading_zeros()",
+                ret: "u32",
+                ..unop.clone()
+            },
+            NumericOp {
+                name: "leading_ones",
+                body: "a.leading_ones()",
+                ret: "u32",
+                ..unop.clone()
+            },
+        ];
+
+        // Operations that apply only to signed numbers.
+        let signed_ops = [
+            NumericOp {
+                name: "checked_neg",
+                body: "a.checked_neg()",
+                ..partial_unop.clone()
+            },
+            NumericOp {
+                name: "wrapping_neg",
+                body: "a.wrapping_neg()",
+                ..unop.clone()
+            },
+            NumericOp {
+                name: "neg",
+                body: r#"a.checked_neg().unwrap_or_else(|| panic!("negation overflow: {a}"))"#,
+                ..unop.clone()
+            },
+        ];
+
+        // Operations that apply only to unsigned numbers.
+        let unsigned_ops = [NumericOp {
+            name: "is_power_of_two",
+            body: "a.is_power_of_two()",
+            ..predicate.clone()
+        }];
+
+        struct IterIf<I> {
+            condition: bool,
+            iter: I,
+        }
+
+        impl<I: Iterator> Iterator for IterIf<I> {
+            type Item = I::Item;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.condition {
+                    self.iter.next()
+                } else {
+                    None
+                }
+            }
+        }
+
+        ops.into_iter()
+            .chain(IterIf {
+                condition: ty.signed,
+                iter: signed_ops.into_iter(),
+            })
+            .chain(IterIf {
+                condition: !ty.signed,
+                iter: unsigned_ops.into_iter(),
+            })
+    }
+}
+
+fn gen_numerics_isle(isle: &mut Formatter, rust: &mut Formatter) {
+    fmtln!(rust, "#[macro_export]");
+    fmtln!(rust, "#[doc(hidden)]");
+    fmtln!(rust, "macro_rules! isle_numerics_methods {{");
+    rust.indent_push();
+    fmtln!(rust, "() => {{");
+    rust.indent_push();
+
+    for ty in NumericType::all() {
+        for op in NumericOp::ops_for_type(&ty) {
+            let ty = ty.name();
+            let op_name = format!("{ty}_{}", op.name);
+            let partial = if op.partial { " partial" } else { "" };
+            let ret = op.ret;
+            fmtln!(isle, "(decl pure{partial} {op_name} (");
+            isle.indent(|isle| {
+                for (_arg_name, arg_ty) in op.args.iter() {
+                    fmtln!(isle, "{arg_ty}");
+                }
+            });
+            fmtln!(isle, ") {ret})");
+            fmtln!(isle, "(extern constructor {op_name} {op_name})");
+
+            let ret = if op.partial {
+                Cow::from(format!("Option<{ret}>"))
+            } else {
+                Cow::from(ret)
+            };
+            let body = op.body;
+            fmtln!(rust, "#[inline]");
+            fmtln!(rust, "fn {op_name}(");
+            rust.indent(|rust| {
+                fmtln!(rust, "&mut self,");
+                for (arg_name, arg_ty) in op.args.iter() {
+                    fmtln!(rust, "{arg_name}: {arg_ty},");
+                }
+            });
+            fmtln!(rust, ") -> {ret} {{");
+            rust.indent(|rust| {
+                fmtln!(rust, "{body}");
+            });
+            fmtln!(rust, "}}");
+
+            // When generating extractors for a `{ty}_is_foo` predicate,
+            // we generate the following:
+            //
+            // * bool <- ty etor: `{ty}_matches_foo`
+            // * ty <- ty etor: `{ty}_extract_foo`
+            // * () <- ty etor: `{ty}_when_foo`
+            // * () <- ty etor: `{ty}_when_not_foo`
+            //
+            // The last three are defined as local extractors that are
+            // implemented in terms of the first. This gives the ISLE compiler
+            // visibility into the extractors' overlapping-ness.
+            if op.etors {
+                debug_assert_eq!(op.args.len(), 1);
+                debug_assert_eq!(op.args[0].1, ty);
+                debug_assert_eq!(op.ret, "bool");
+                debug_assert!(op.name.starts_with("is_"));
+
+                // Cut of the `is_` prefix.
+                let base_name = &op.name[3..];
+                debug_assert!(base_name.len() > 0);
+
+                fmtln!(isle, "(decl pure {ty}_matches_{base_name} (bool) {ty})");
+                fmtln!(
+                    isle,
+                    "(extern extractor {ty}_matches_{base_name} {ty}_matches_{base_name})"
+                );
+                fmtln!(rust, "#[inline]");
+                fmtln!(
+                    rust,
+                    "fn {ty}_matches_{base_name}(&mut self, a: {ty}) -> Option<bool> {{"
+                );
+                rust.indent(|rust| {
+                    fmtln!(rust, "Some({body})");
+                });
+                fmtln!(rust, "}}");
+
+                fmtln!(isle, "(decl pure {ty}_extract_{base_name} ({ty}) {ty})");
+                fmtln!(
+                    isle,
+                    "(extractor ({ty}_extract_{base_name} x) (and ({ty}_matches_{base_name} true) x))"
+                );
+
+                fmtln!(isle, "(decl pure {ty}_when_{base_name} () {ty})");
+                fmtln!(
+                    isle,
+                    "(extractor ({ty}_when_{base_name}) ({ty}_matches_{base_name} true))"
+                );
+
+                fmtln!(isle, "(decl pure {ty}_when_not_{base_name} () {ty})");
+                fmtln!(
+                    isle,
+                    "(extractor ({ty}_when_not_{base_name}) ({ty}_matches_{base_name} false))"
+                );
+            }
+
+            isle.empty_line();
+            rust.empty_line();
+        }
+    }
+
+    // Numeric type conversions.
+    //
+    // Naming and conventions:
+    //
+    // * Constructors:
+    //   * "<from>_into_<to>" for lossless, infallible conversion
+    //   * "<from>_try_into_<to>" for lossless, fallible conversions (exposed as
+    //     partial constructors)
+    //   * "<from>_unwrap_into_<to>" for lossless, fallible conversions that will
+    //     panic at runtime if the conversion would be lossy
+    //   * "<from>_truncate_into_<to>" for lossy, infallible conversions that
+    //     ignore upper bits
+    //   * "<from>_cast_[un]signed" for signed-to-unsigned (and vice versa)
+    //     reinterpretation
+    // * Extractors:
+    //   * "<to>_from_<from>" for both fallible and infallible extractors
+    //   * No unwrapping extractors
+    //   * No truncating extractors
+    //   * No signed-to-unsigned reinterpreting extractors
+    for from in NumericType::all() {
+        for to in NumericType::all() {
+            if from == to {
+                continue;
+            }
+
+            let from_name = from.name();
+            let to_name = to.name();
+
+            let lossy = match (from.byte_width.cmp(&to.byte_width), from.signed, to.signed) {
+                // Widening with the same signedness is lossless.
+                (Ordering::Less, true, true) | (Ordering::Less, false, false) => false,
+                // Widening from unsigned to signed is lossless.
+                (Ordering::Less, false, true) => false,
+                // Widening from signed to unsigned is lossy.
+                (Ordering::Less, true, false) => true,
+                // Same width means we must be changing sign, since we skip
+                // `from == to`, and this is lossy.
+                (Ordering::Equal, _, _) => {
+                    debug_assert_ne!(from.signed, to.signed);
+                    true
+                }
+                // Narrowing is always lossy.
+                (Ordering::Greater, _, _) => true,
+            };
+
+            let (ctor, partial, rust_ret) = if lossy {
+                (
+                    "try_into",
+                    " partial",
+                    Cow::from(format!("Option<{to_name}>")),
+                )
+            } else {
+                ("into", "", Cow::from(to_name))
+            };
+
+            // Constructor.
+            fmtln!(
+                isle,
+                "(decl pure{partial} {from_name}_{ctor}_{to_name} ({from_name}) {to_name})"
+            );
+            fmtln!(
+                isle,
+                "(extern constructor {from_name}_{ctor}_{to_name} {from_name}_{ctor}_{to_name})"
+            );
+            if !lossy {
+                fmtln!(
+                    isle,
+                    "(convert {from_name} {to_name} {from_name}_{ctor}_{to_name})"
+                );
+            }
+            fmtln!(rust, "#[inline]");
+            fmtln!(
+                rust,
+                "fn {from_name}_{ctor}_{to_name}(&mut self, x: {from_name}) -> {rust_ret} {{"
+            );
+            rust.indent(|rust| {
+                if lossy {
+                    fmtln!(rust, "{to_name}::try_from(x).ok()");
+                } else {
+                    fmtln!(rust, "{to_name}::from(x)");
+                }
+            });
+            fmtln!(rust, "}}");
+
+            // Unwrapping constructor.
+            if lossy {
+                fmtln!(
+                    isle,
+                    "(decl pure {from_name}_unwrap_into_{to_name} ({from_name}) {to_name})"
+                );
+                fmtln!(
+                    isle,
+                    "(extern constructor {from_name}_unwrap_into_{to_name} {from_name}_unwrap_into_{to_name})"
+                );
+                fmtln!(rust, "#[inline]");
+                fmtln!(
+                    rust,
+                    "fn {from_name}_unwrap_into_{to_name}(&mut self, x: {from_name}) -> {to_name} {{"
+                );
+                rust.indent(|rust| {
+                    fmtln!(rust, "{to_name}::try_from(x).unwrap()");
+                });
+                fmtln!(rust, "}}");
+            }
+
+            // Truncating constructor.
+            if lossy && from.signed == to.signed {
+                fmtln!(
+                    isle,
+                    "(decl pure {from_name}_truncate_into_{to_name} ({from_name}) {to_name})"
+                );
+                fmtln!(
+                    isle,
+                    "(extern constructor {from_name}_truncate_into_{to_name} {from_name}_truncate_into_{to_name})"
+                );
+                fmtln!(rust, "#[inline]");
+                fmtln!(
+                    rust,
+                    "fn {from_name}_truncate_into_{to_name}(&mut self, x: {from_name}) -> {to_name} {{"
+                );
+                rust.indent(|rust| {
+                    fmtln!(rust, "x as {to_name}");
+                });
+                fmtln!(rust, "}}");
+            }
+
+            // Signed-to-unsigned reinterpreting constructor.
+            if from.byte_width == to.byte_width {
+                debug_assert_ne!(from.signed, to.signed);
+                let cast_name = if to.signed {
+                    "cast_signed"
+                } else {
+                    "cast_unsigned"
+                };
+                fmtln!(
+                    isle,
+                    "(decl pure {from_name}_{cast_name} ({from_name}) {to_name})"
+                );
+                fmtln!(
+                    isle,
+                    "(extern constructor {from_name}_{cast_name} {from_name}_{cast_name})"
+                );
+                fmtln!(rust, "#[inline]");
+                fmtln!(
+                    rust,
+                    "fn {from_name}_{cast_name}(&mut self, x: {from_name}) -> {to_name} {{"
+                );
+                rust.indent(|rust| {
+                    // TODO: Once our MSRV is >= 1.87, we should use
+                    // `x.cast_[un]signed()` here.
+                    fmtln!(rust, "x as {to_name}");
+                });
+                fmtln!(rust, "}}");
+            }
+
+            // Extractor.
+            fmtln!(
+                isle,
+                "(decl pure {to_name}_from_{from_name} ({to_name}) {from_name})"
+            );
+            fmtln!(
+                isle,
+                "(extern extractor {to_name}_from_{from_name} {from_name}_from_{to_name})"
+            );
+            fmtln!(rust, "#[inline]");
+            fmtln!(
+                rust,
+                "fn {from_name}_from_{to_name}(&mut self, x: {from_name}) -> Option<{to_name}> {{"
+            );
+            rust.indent(|rust| {
+                if lossy {
+                    fmtln!(rust, "x.try_into().ok()");
+                } else {
+                    fmtln!(rust, "Some(x.into())");
+                }
+            });
+            fmtln!(rust, "}}");
+
+            isle.empty_line();
+            rust.empty_line();
+        }
+    }
+
+    rust.indent_pop();
+    fmtln!(rust, "}}");
+    rust.indent_pop();
+    fmtln!(rust, "}}");
+}
+
 pub(crate) fn generate(
     formats: &[Rc<InstructionFormat>],
     all_inst: &AllInstructions,
+    isle_numerics_filename: &str,
+    rust_numerics_filename: &str,
     isle_opt_filename: &str,
     isle_lower_filename: &str,
     isle_dir: &std::path::Path,
 ) -> Result<(), error::Error> {
+    // Numerics
+    let mut isle_fmt = Formatter::new(Language::Isle);
+    let mut rust_fmt = Formatter::new(Language::Rust);
+    gen_numerics_isle(&mut isle_fmt, &mut rust_fmt);
+    isle_fmt.write(isle_numerics_filename, isle_dir)?;
+    rust_fmt.write(rust_numerics_filename, isle_dir)?;
+
     // ISLE DSL: mid-end ("opt") generated bindings.
-    let mut fmt = Formatter::new();
+    let mut fmt = Formatter::new(Language::Isle);
     gen_opt_isle(&formats, all_inst, &mut fmt);
-    fmt.update_file(isle_opt_filename, isle_dir)?;
+    fmt.write(isle_opt_filename, isle_dir)?;
 
     // ISLE DSL: lowering generated bindings.
-    let mut fmt = Formatter::new();
+    let mut fmt = Formatter::new(Language::Isle);
     gen_lower_isle(&formats, all_inst, &mut fmt);
-    fmt.update_file(isle_lower_filename, isle_dir)?;
+    fmt.write(isle_lower_filename, isle_dir)?;
 
     Ok(())
 }

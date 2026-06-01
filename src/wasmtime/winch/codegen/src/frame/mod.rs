@@ -1,5 +1,5 @@
 use crate::{
-    abi::{align_to, ABIOperand, ABISig, LocalSlot, ABI},
+    abi::{ABI, ABIOperand, ABISig, LocalSlot, align_to},
     masm::MacroAssembler,
 };
 use anyhow::Result;

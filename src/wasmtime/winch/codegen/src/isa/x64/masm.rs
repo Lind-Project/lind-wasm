@@ -7,15 +7,15 @@ use super::{
 
 use crate::masm::{
     DivKind, ExtendKind, FloatCmpKind, Imm as I, IntCmpKind, MacroAssembler as Masm, OperandSize,
-    RegImm, RemKind, RoundingMode, ShiftKind, TrapCode, TruncKind, TRUSTED_FLAGS, UNTRUSTED_FLAGS,
+    RegImm, RemKind, RoundingMode, ShiftKind, TRUSTED_FLAGS, TrapCode, TruncKind, UNTRUSTED_FLAGS,
 };
 use crate::{
-    abi::{self, align_to, calculate_frame_adjustment, LocalSlot},
-    codegen::{ptr_type_from_ptr_size, CodeGenContext, FuncEnv},
+    abi::{self, LocalSlot, align_to, calculate_frame_adjustment},
+    codegen::{CodeGenContext, FuncEnv, ptr_type_from_ptr_size},
     stack::Val,
 };
 use crate::{
-    abi::{vmctx, ABI},
+    abi::{ABI, vmctx},
     masm::{SPOffset, StackSlot},
 };
 use crate::{
@@ -23,14 +23,15 @@ use crate::{
     masm::CalleeKind,
 };
 use cranelift_codegen::{
+    Final, MachBufferFinalized, MachLabel,
     binemit::CodeOffset,
     ir::{MemFlags, RelSourceLoc, SourceLoc},
     isa::unwind::UnwindInst,
     isa::x64::{
-        args::{ExtMode, CC},
+        args::{CC, ExtMode},
         settings as x64_settings,
     },
-    settings, Final, MachBufferFinalized, MachLabel,
+    settings,
 };
 
 use wasmtime_environ::{PtrSize, WasmValType};

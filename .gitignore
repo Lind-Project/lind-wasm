@@ -20,3 +20,9 @@ report.html
 
 #Ignore python cache
 __pycache__/
+
+#Ignore lockfile
+Cargo.lock
+
+#Ignore Lind runtime log file
+LIND.log

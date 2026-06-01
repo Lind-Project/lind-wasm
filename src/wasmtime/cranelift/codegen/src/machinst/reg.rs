@@ -10,22 +10,23 @@ use regalloc2::{Operand, OperandConstraint, OperandKind, OperandPos, PReg, PRegS
 use serde_derive::{Deserialize, Serialize};
 
 /// The first 192 vregs (64 int, 64 float, 64 vec) are "pinned" to
-/// physical registers: this means that they are always constrained to
-/// the corresponding register at all use/mod/def sites.
-///
-/// Arbitrary vregs can also be constrained to physical registers at
-/// particular use/def/mod sites, and this is preferable; but pinned
-/// vregs allow us to migrate code that has been written using
-/// RealRegs directly.
+/// physical registers. These must not be passed into the regalloc,
+/// but they are used to represent physical registers in the same
+/// `Reg` type post-regalloc.
 const PINNED_VREGS: usize = 192;
 
 /// Convert a `VReg` to its pinned `PReg`, if any.
-pub fn pinned_vreg_to_preg(vreg: VReg) -> Option<PReg> {
+pub const fn pinned_vreg_to_preg(vreg: VReg) -> Option<PReg> {
     if vreg.vreg() < PINNED_VREGS {
         Some(PReg::from_index(vreg.vreg()))
     } else {
         None
     }
+}
+
+/// Convert a `PReg` to its pinned `VReg`.
+pub const fn preg_to_pinned_vreg(preg: PReg) -> VReg {
+    VReg::new(preg.index(), preg.class())
 }
 
 /// Give the first available vreg for generated code (i.e., after all
@@ -38,27 +39,71 @@ pub fn first_user_vreg_index() -> usize {
     PINNED_VREGS
 }
 
-/// A register named in an instruction. This register can be either a
-/// virtual register or a fixed physical register. It does not have
-/// any constraints applied to it: those can be added later in
-/// `MachInst::get_operands()` when the `Reg`s are converted to
-/// `Operand`s.
+/// A register named in an instruction. This register can be a virtual
+/// register, a fixed physical register, or a named spillslot (after
+/// regalloc). It does not have any constraints applied to it: those
+/// can be added later in `MachInst::get_operands()` when the `Reg`s
+/// are converted to `Operand`s.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-pub struct Reg(VReg);
+pub struct Reg(u32);
+
+const REG_SPILLSLOT_BIT: u32 = 0x8000_0000;
+const REG_SPILLSLOT_MASK: u32 = !REG_SPILLSLOT_BIT;
 
 impl Reg {
+    /// Const constructor: create a new Reg from a regalloc2 VReg.
+    pub const fn from_virtual_reg(vreg: regalloc2::VReg) -> Reg {
+        let bits = vreg.bits() as u32;
+        debug_assert!(bits <= REG_SPILLSLOT_MASK);
+        Reg(bits)
+    }
+
+    /// Const constructor: create a new Reg from a regalloc2 PReg.
+    pub const fn from_real_reg(preg: regalloc2::PReg) -> Reg {
+        let vreg = preg_to_pinned_vreg(preg);
+        let bits = vreg.bits() as u32;
+        debug_assert!(bits <= REG_SPILLSLOT_MASK);
+        Reg(bits)
+    }
+
+    /// Maybe construct from a `regalloc2::VReg`, checking if the
+    /// index is in-range for our bit-packing.
+    pub fn from_virtual_reg_checked(vreg: regalloc2::VReg) -> Option<Reg> {
+        let bits = vreg.bits() as u32;
+        if bits <= REG_SPILLSLOT_MASK {
+            Some(Reg(bits))
+        } else {
+            None
+        }
+    }
+
     /// Get the physical register (`RealReg`), if this register is
     /// one.
-    pub fn to_real_reg(self) -> Option<RealReg> {
-        pinned_vreg_to_preg(self.0).map(RealReg)
+    pub const fn to_real_reg(self) -> Option<RealReg> {
+        // We can't use `map` or `?` in a const fn.
+        match pinned_vreg_to_preg(VReg::from_bits(self.0)) {
+            Some(preg) => Some(RealReg(preg)),
+            None => None,
+        }
     }
 
     /// Get the virtual (non-physical) register, if this register is
     /// one.
     pub fn to_virtual_reg(self) -> Option<VirtualReg> {
-        if pinned_vreg_to_preg(self.0).is_none() {
-            Some(VirtualReg(self.0))
+        if self.to_spillslot().is_some() {
+            None
+        } else if pinned_vreg_to_preg(self.0.into()).is_none() {
+            Some(VirtualReg(self.0.into()))
+        } else {
+            None
+        }
+    }
+
+    /// Get the spillslot, if this register is one.
+    pub fn to_spillslot(self) -> Option<SpillSlot> {
+        if (self.0 & REG_SPILLSLOT_BIT) != 0 {
+            Some(SpillSlot::new((self.0 & REG_SPILLSLOT_MASK) as usize))
         } else {
             None
         }
@@ -66,7 +111,8 @@ impl Reg {
 
     /// Get the class of this register.
     pub fn class(self) -> RegClass {
-        self.0.class()
+        assert!(!self.to_spillslot().is_some());
+        VReg::from(self.0).class()
     }
 
     /// Is this a real (physical) reg?
@@ -78,16 +124,25 @@ impl Reg {
     pub fn is_virtual(self) -> bool {
         self.to_virtual_reg().is_some()
     }
+
+    /// Is this a spillslot?
+    pub fn is_spillslot(self) -> bool {
+        self.to_spillslot().is_some()
+    }
 }
 
-impl std::fmt::Debug for Reg {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(rreg) = self.to_real_reg() {
+impl core::fmt::Debug for Reg {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if VReg::from(self.0) == VReg::invalid() {
+            write!(f, "<invalid>")
+        } else if let Some(spillslot) = self.to_spillslot() {
+            write!(f, "{spillslot}")
+        } else if let Some(rreg) = self.to_real_reg() {
             let preg: PReg = rreg.into();
-            write!(f, "{}", preg)
+            write!(f, "{preg}")
         } else if let Some(vreg) = self.to_virtual_reg() {
             let vreg: VReg = vreg.into();
-            write!(f, "{}", vreg)
+            write!(f, "{vreg}")
         } else {
             unreachable!()
         }
@@ -116,10 +171,15 @@ impl RealReg {
     pub fn hw_enc(self) -> u8 {
         self.0.hw_enc() as u8
     }
+
+    /// The underlying PReg.
+    pub const fn preg(self) -> PReg {
+        self.0
+    }
 }
 
-impl std::fmt::Debug for RealReg {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Debug for RealReg {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         Reg::from(*self).fmt(f)
     }
 }
@@ -144,8 +204,8 @@ impl VirtualReg {
     }
 }
 
-impl std::fmt::Debug for VirtualReg {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Debug for VirtualReg {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         Reg::from(*self).fmt(f)
     }
 }
@@ -170,7 +230,7 @@ impl<T> Writable<T> {
     /// the documentation for `Writable`, this is not hidden or
     /// disallowed from the outside; anyone can perform the "cast";
     /// but it is explicit so that we can audit the use sites.
-    pub fn from_reg(reg: T) -> Writable<T> {
+    pub const fn from_reg(reg: T) -> Writable<T> {
         Writable { reg }
     }
 
@@ -179,49 +239,69 @@ impl<T> Writable<T> {
         self.reg
     }
 
+    /// Get a mutable borrow of the underlying register.
+    pub fn reg_mut(&mut self) -> &mut T {
+        &mut self.reg
+    }
+
     /// Map the underlying register to another value or type.
     pub fn map<U>(self, f: impl Fn(T) -> U) -> Writable<U> {
         Writable { reg: f(self.reg) }
     }
 }
 
-// Conversions between regalloc2 types (VReg, PReg) and our types
-// (VirtualReg, RealReg, Reg).
+// Proxy on assembler trait to the underlying register type.
+impl<R: cranelift_assembler_x64::AsReg> cranelift_assembler_x64::AsReg for Writable<R> {
+    fn enc(&self) -> u8 {
+        self.reg.enc()
+    }
 
-impl std::convert::From<regalloc2::VReg> for Reg {
-    fn from(vreg: regalloc2::VReg) -> Reg {
-        Reg(vreg)
+    fn to_string(&self, size: Option<cranelift_assembler_x64::gpr::Size>) -> String {
+        self.reg.to_string(size)
+    }
+
+    fn new(_: u8) -> Self {
+        panic!("disallow creation of new assembler registers")
     }
 }
 
-impl std::convert::From<regalloc2::VReg> for VirtualReg {
+// Conversions between regalloc2 types (VReg, PReg) and our types
+// (VirtualReg, RealReg, Reg).
+
+impl core::convert::From<regalloc2::VReg> for Reg {
+    fn from(vreg: regalloc2::VReg) -> Reg {
+        Reg(vreg.bits() as u32)
+    }
+}
+
+impl core::convert::From<regalloc2::VReg> for VirtualReg {
     fn from(vreg: regalloc2::VReg) -> VirtualReg {
         debug_assert!(pinned_vreg_to_preg(vreg).is_none());
         VirtualReg(vreg)
     }
 }
 
-impl std::convert::From<Reg> for regalloc2::VReg {
+impl core::convert::From<Reg> for regalloc2::VReg {
     /// Extract the underlying `regalloc2::VReg`. Note that physical
     /// registers also map to particular (special) VRegs, so this
     /// method can be used either on virtual or physical `Reg`s.
     fn from(reg: Reg) -> regalloc2::VReg {
-        reg.0
+        reg.0.into()
     }
 }
-impl std::convert::From<&Reg> for regalloc2::VReg {
+impl core::convert::From<&Reg> for regalloc2::VReg {
     fn from(reg: &Reg) -> regalloc2::VReg {
-        reg.0
+        reg.0.into()
     }
 }
 
-impl std::convert::From<VirtualReg> for regalloc2::VReg {
+impl core::convert::From<VirtualReg> for regalloc2::VReg {
     fn from(reg: VirtualReg) -> regalloc2::VReg {
         reg.0
     }
 }
 
-impl std::convert::From<RealReg> for regalloc2::VReg {
+impl core::convert::From<RealReg> for regalloc2::VReg {
     fn from(reg: RealReg) -> regalloc2::VReg {
         // This representation is redundant: the class is implied in the vreg
         // index as well as being in the vreg class field.
@@ -229,38 +309,44 @@ impl std::convert::From<RealReg> for regalloc2::VReg {
     }
 }
 
-impl std::convert::From<RealReg> for regalloc2::PReg {
+impl core::convert::From<RealReg> for regalloc2::PReg {
     fn from(reg: RealReg) -> regalloc2::PReg {
         reg.0
     }
 }
 
-impl std::convert::From<regalloc2::PReg> for RealReg {
+impl core::convert::From<regalloc2::PReg> for RealReg {
     fn from(preg: regalloc2::PReg) -> RealReg {
         RealReg(preg)
     }
 }
 
-impl std::convert::From<regalloc2::PReg> for Reg {
+impl core::convert::From<regalloc2::PReg> for Reg {
     fn from(preg: regalloc2::PReg) -> Reg {
         RealReg(preg).into()
     }
 }
 
-impl std::convert::From<RealReg> for Reg {
+impl core::convert::From<RealReg> for Reg {
     fn from(reg: RealReg) -> Reg {
-        Reg(reg.into())
+        Reg(VReg::from(reg).bits() as u32)
     }
 }
 
-impl std::convert::From<VirtualReg> for Reg {
+impl core::convert::From<VirtualReg> for Reg {
     fn from(reg: VirtualReg) -> Reg {
-        Reg(reg.0)
+        Reg(reg.0.bits() as u32)
     }
 }
 
 /// A spill slot.
 pub type SpillSlot = regalloc2::SpillSlot;
+
+impl core::convert::From<regalloc2::SpillSlot> for Reg {
+    fn from(spillslot: regalloc2::SpillSlot) -> Reg {
+        Reg(REG_SPILLSLOT_BIT | spillslot.index() as u32)
+    }
+}
 
 /// A register class. Each register in the ISA has one class, and the
 /// classes are disjoint. Most modern ISAs will have just two classes:
@@ -422,6 +508,30 @@ pub trait OperandVisitorImpl: OperandVisitor {
             self.add_operand(reg, constraint, OperandKind::Def, OperandPos::Late);
         }
     }
+
+    /// Add a def that can be allocated to either a register or a
+    /// spillslot, at the end of the instruction (`After`
+    /// position). Use only when this def will be written after all
+    /// uses are read.
+    fn any_def(&mut self, reg: &mut Writable<impl AsMut<Reg>>) {
+        self.add_operand(
+            reg.reg.as_mut(),
+            OperandConstraint::Any,
+            OperandKind::Def,
+            OperandPos::Late,
+        );
+    }
+
+    /// Add a use that can be allocated to either a register or a
+    /// spillslot, at the end of the instruction (`After` position).
+    fn any_late_use(&mut self, reg: &mut impl AsMut<Reg>) {
+        self.add_operand(
+            reg.as_mut(),
+            OperandConstraint::Any,
+            OperandKind::Use,
+            OperandPos::Late,
+        );
+    }
 }
 
 impl<T: OperandVisitor> OperandVisitorImpl for T {}
@@ -434,9 +544,10 @@ impl<'a, F: Fn(VReg) -> VReg> OperandVisitor for OperandCollector<'a, F> {
         kind: OperandKind,
         pos: OperandPos,
     ) {
-        reg.0 = (self.renamer)(reg.0);
+        debug_assert!(!reg.is_spillslot());
+        reg.0 = (self.renamer)(VReg::from(reg.0)).bits() as u32;
         self.operands
-            .push(Operand::new(reg.0, constraint, kind, pos));
+            .push(Operand::new(VReg::from(reg.0), constraint, kind, pos));
     }
 
     fn debug_assert_is_allocatable_preg(&self, reg: PReg, expected: bool) {

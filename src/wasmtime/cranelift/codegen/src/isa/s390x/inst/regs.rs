@@ -10,8 +10,8 @@ use crate::machinst::*;
 // Registers, the Universe thereof, and printing
 
 /// Get a reference to a GPR (integer register).
-pub fn gpr(num: u8) -> Reg {
-    Reg::from(gpr_preg(num))
+pub const fn gpr(num: u8) -> Reg {
+    Reg::from_real_reg(gpr_preg(num))
 }
 
 pub(crate) const fn gpr_preg(num: u8) -> PReg {
@@ -25,8 +25,8 @@ pub fn writable_gpr(num: u8) -> Writable<Reg> {
 }
 
 /// Get a reference to a VR (vector register).
-pub fn vr(num: u8) -> Reg {
-    Reg::from(vr_preg(num))
+pub const fn vr(num: u8) -> Reg {
+    Reg::from_real_reg(vr_preg(num))
 }
 
 pub(crate) const fn vr_preg(num: u8) -> PReg {
@@ -35,7 +35,6 @@ pub(crate) const fn vr_preg(num: u8) -> PReg {
 }
 
 /// Get a writable reference to a VR.
-#[allow(dead_code)] // used by tests.
 pub fn writable_vr(num: u8) -> Writable<Reg> {
     Writable::from_reg(vr(num))
 }
@@ -86,7 +85,7 @@ pub fn show_reg(reg: Reg) -> String {
             RegClass::Vector => unreachable!(),
         }
     } else {
-        format!("%{:?}", reg)
+        format!("%{reg:?}")
     }
 }
 
@@ -115,6 +114,24 @@ pub fn pretty_print_regpair(pair: RegPair) -> String {
                 show_reg(lo)
             );
             return show_reg(hi);
+        }
+    }
+
+    format!("{}/{}", show_reg(hi), show_reg(lo))
+}
+
+pub fn pretty_print_fp_regpair(pair: RegPair) -> String {
+    let hi = pair.hi;
+    let lo = pair.lo;
+    if let Some(hi_reg) = hi.to_real_reg() {
+        if let Some(lo_reg) = lo.to_real_reg() {
+            assert!(
+                hi_reg.hw_enc() + 2 == lo_reg.hw_enc(),
+                "Invalid regpair: {} {}",
+                show_reg(hi),
+                show_reg(lo)
+            );
+            return maybe_show_fpr(hi).unwrap();
         }
     }
 

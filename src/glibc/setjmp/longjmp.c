@@ -37,7 +37,9 @@ __libc_siglongjmp (sigjmp_buf env, int val)
 			  (sigset_t *) &env[0].__saved_mask,
 			  (sigset_t *) NULL);
 
-  /* Call the machine-dependent function to restore machine state.  */
+  /* In EH mode __longjmp calls __wasm_longjmp which throws __c_longjmp.
+     pause() delivers the signal via a direct wasm call (no Rust boundary),
+     so the exception propagates cleanly to the sigsetjmp call-site handler. */
   __longjmp (env[0].__jmpbuf, val ?: 1);
 }
 

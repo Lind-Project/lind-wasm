@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+default = ["fdtables-dashmaparray"]
 disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_signals"]
 secure = ["typemap/secure"]
-lind_debug = ["wasmtime-lind-common/lind_debug"]
 lind_perf = [
     "lind-perf/enabled",
     "threei/lind_perf",
@@ -14,7 +14,27 @@ lind_perf = [
     "wasmtime-lind-common/lind_perf",
 ]
 debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
+lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug" ]
+lind-logging = [
+    "cage/lind-logging",
+    "rawposix/lind-logging",
+    "wasmtime-lind-common/lind-logging",
+    "wasmtime-lind-multi-process/lind-logging",
+    "wasmtime-lind-dylink/lind-logging",
+    "wasmtime-lind-utils/lind-logging",
+    "threei/lind-logging",
+    "wasmtime/lind-logging",
+]
 debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
+# Use the old asyncify-unwind/rewind based setjmp/longjmp instead of the default wasm-EH
+# based one. Requires glibc and user programs compiled without -fwasm-exceptions
+# (set LIND_ASYNCIFY_SETJMP=1 when running the build scripts).
+asyncify-setjmp = ["wasmtime/asyncify-setjmp", "wasmtime-lind-common/asyncify-setjmp"]
+# Pass-through selectors for the fdtables backend. Pick exactly one.
+fdtables-dashmaparray = ["rawposix/fdtables-dashmaparray"]
+fdtables-dashmapvec = ["rawposix/fdtables-dashmapvec"]
+fdtables-muthashmax = ["rawposix/fdtables-muthashmax"]
+fdtables-vanilla = ["rawposix/fdtables-vanilla"]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
@@ -27,7 +47,7 @@ threei = { path = "../wasmtime/crates/threei" }
 sysdefs = { path = "../wasmtime/crates/sysdefs" }
 typemap = { path = "../wasmtime/crates/typemap" }
 wasmtime-lind-3i = { path = "../wasmtime/crates/lind-3i" }
-wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads", "demangle", "addr2line", "cache"], default-features = false }
+wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc-null", "threads", "demangle", "addr2line", "cache", "anyhow"], default-features = false }
 wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
 lind-perf = { path = "../wasmtime/crates/lind-perf" }
 

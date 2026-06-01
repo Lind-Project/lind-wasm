@@ -948,10 +948,23 @@ pub extern "C" fn epoll_wait_syscall(
 
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
     // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
-    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg)
-        .unwrap()
-        .get(&FDKIND_KERNEL)
-        .unwrap();
+    let fd_map = match fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg) {
+        Ok(map) => map,
+        Err(_) => {
+            return syscall_error(Errno::EBADF, "epoll_wait_syscall", "invalid epoll fd");
+        }
+    };
+
+    let epfd = match fd_map.get(&FDKIND_KERNEL) {
+        Some(fd) => *fd,
+        None => {
+            return syscall_error(
+                Errno::EBADF,
+                "epoll_wait_syscall",
+                "missing kernel epoll fd",
+            );
+        }
+    };
 
     // Convert arguments
     let maxevents = sc_convert_sysarg_to_i32(maxevents_arg, maxevents_cageid, cageid);
@@ -1030,13 +1043,24 @@ pub extern "C" fn epoll_wait_syscall(
         // Loop over virtual epollfd to find corresponding mapping relationship between kernel fd and virtual fd
         for i in 0..ret as usize {
             let ret_kernelfd = kernel_events[i].u64;
-            let epollmapping = REAL_EPOLL_MAP.lock();
-            let ret_virtualfd = epollmapping
-                .get(&(epfd))
-                .and_then(|kernel_map| kernel_map.get(&(ret_kernelfd as i32)).copied());
 
-            // Write back to user's buffer: store virtual fd in the u64 data field
-            events[i].u64 = ret_virtualfd.unwrap() as u64;
+            let epollmapping = REAL_EPOLL_MAP.lock();
+
+            let ret_virtualfd = match epollmapping
+                .get(&epfd)
+                .and_then(|kernel_map| kernel_map.get(&(ret_kernelfd as i32)).copied())
+            {
+                Some(vfd) => vfd,
+                None => {
+                    return syscall_error(
+                        Errno::EBADF,
+                        "epoll",
+                        "could not translate kernel fd to virtual fd",
+                    );
+                }
+            };
+
+            events[i].u64 = ret_virtualfd as u64;
             events[i].events = kernel_events[i].events;
         }
         return ret;
@@ -1945,17 +1969,21 @@ pub extern "C" fn getsockopt_syscall(
     optname_arg: u64,
     optname_cageid: u64,
     optval_arg: u64,
-    optval_cageid: u64,
+    _optval_cageid: u64,
     optlen_arg: u64,
-    optlen_cageid: u64,
+    _optlen_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_uaddr_to_host(optval_arg, optval_cageid, cageid) as *mut c_void;
-    let optlen = sc_convert_uaddr_to_host(optlen_arg, optlen_cageid, cageid) as *mut socklen_t;
+    // optval/optlen arrive as already-translated host pointers from glibc's
+    // getsockopt.c (matches setsockopt/sendto/recvfrom).  Re-translating here
+    // would break the grate forwarding path, where the grate has no way to
+    // translate cage offsets and relies on glibc having done so.
+    let optval = optval_arg as *mut c_void;
+    let optlen = optlen_arg as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default

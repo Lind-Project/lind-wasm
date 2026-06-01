@@ -1,15 +1,16 @@
-use crate::prelude::*;
-use crate::runtime::vm::{RuntimeLinearMemory, VMMemoryImport};
-use crate::store::{StoreData, StoreOpaque, Stored};
-use crate::trampoline::generate_memory_export;
 use crate::Trap;
+use crate::prelude::*;
+use crate::runtime::vm::{self, ExportMemory};
+use crate::store::{StoreInstanceId, StoreOpaque, StoreResourceLimiter};
+use crate::trampoline::generate_memory_export;
+#[cfg(feature = "async")]
+use crate::vm::VMStore;
 use crate::{AsContext, AsContextMut, Engine, MemoryType, StoreContext, StoreContextMut};
 use core::cell::UnsafeCell;
 use core::fmt;
-use core::ops::Range;
 use core::slice;
 use core::time::Duration;
-use wasmtime_environ::MemoryPlan;
+use wasmtime_environ::DefinedMemoryIndex;
 
 pub use crate::runtime::vm::WaitResult;
 
@@ -27,8 +28,7 @@ impl fmt::Display for MemoryAccessError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for MemoryAccessError {}
+impl core::error::Error for MemoryAccessError {}
 
 /// A WebAssembly linear memory.
 ///
@@ -108,8 +108,7 @@ impl std::error::Error for MemoryAccessError {}
 /// **unsafe** usages of `Memory`. Do not do these things!
 ///
 /// ```rust
-/// # use anyhow::Result;
-/// use wasmtime::{Memory, Store};
+/// use wasmtime::{Memory, Result, Store};
 ///
 /// // NOTE: All code in this function is not safe to execute and may cause
 /// // segfaults/undefined behavior at runtime. Do not copy/paste these examples
@@ -118,35 +117,43 @@ impl std::error::Error for MemoryAccessError {}
 ///     // First and foremost, any borrow can be invalidated at any time via the
 ///     // `Memory::grow` function. This can relocate memory which causes any
 ///     // previous pointer to be possibly invalid now.
-///     let pointer: &u8 = &*mem.data_ptr(&store);
-///     mem.grow(&mut *store, 1)?; // invalidates `pointer`!
-///     // println!("{}", *pointer); // FATAL: use-after-free
+///     unsafe {
+///         let pointer: &u8 = &*mem.data_ptr(&store);
+///         mem.grow(&mut *store, 1)?; // invalidates `pointer`!
+///         // println!("{}", *pointer); // FATAL: use-after-free
+///     }
 ///
 ///     // Note that the use-after-free also applies to slices, whether they're
 ///     // slices of bytes or strings.
-///     let mem_slice = std::slice::from_raw_parts(
-///         mem.data_ptr(&store),
-///         mem.data_size(&store),
-///     );
-///     let slice: &[u8] = &mem_slice[0x100..0x102];
-///     mem.grow(&mut *store, 1)?; // invalidates `slice`!
-///     // println!("{:?}", slice); // FATAL: use-after-free
+///     unsafe {
+///         let mem_slice = std::slice::from_raw_parts(
+///             mem.data_ptr(&store),
+///             mem.data_size(&store),
+///         );
+///         let slice: &[u8] = &mem_slice[0x100..0x102];
+///         mem.grow(&mut *store, 1)?; // invalidates `slice`!
+///         // println!("{:?}", slice); // FATAL: use-after-free
+///     }
 ///
 ///     // The `Memory` type may be stored in other locations, so if you hand
 ///     // off access to the `Store` then those locations may also call
 ///     // `Memory::grow` or similar, so it's not enough to just audit code for
 ///     // calls to `Memory::grow`.
-///     let pointer: &u8 = &*mem.data_ptr(&store);
-///     some_other_function(store); // may invalidate `pointer` through use of `store`
-///     // println!("{:?}", pointer); // FATAL: maybe a use-after-free
+///     unsafe {
+///         let pointer: &u8 = &*mem.data_ptr(&store);
+///         some_other_function(store); // may invalidate `pointer` through use of `store`
+///         // println!("{:?}", pointer); // FATAL: maybe a use-after-free
+///     }
 ///
 ///     // An especially subtle aspect of accessing a wasm instance's memory is
 ///     // that you need to be extremely careful about aliasing. Anyone at any
 ///     // time can call `data_unchecked()` or `data_unchecked_mut()`, which
 ///     // means you can easily have aliasing mutable references:
-///     let ref1: &u8 = &*mem.data_ptr(&store).add(0x100);
-///     let ref2: &mut u8 = &mut *mem.data_ptr(&store).add(0x100);
-///     // *ref2 = *ref1; // FATAL: violates Rust's aliasing rules
+///     unsafe {
+///         let ref1: &u8 = &*mem.data_ptr(&store).add(0x100);
+///         let ref2: &mut u8 = &mut *mem.data_ptr(&store).add(0x100);
+///         // *ref2 = *ref1; // FATAL: violates Rust's aliasing rules
+///     }
 ///
 ///     Ok(())
 /// }
@@ -202,8 +209,26 @@ impl std::error::Error for MemoryAccessError {}
 /// recommended to use [`Memory::read`] and [`Memory::write`] which will still
 /// be provided.
 #[derive(Copy, Clone, Debug)]
-#[repr(transparent)] // here for the C API
-pub struct Memory(Stored<crate::runtime::vm::ExportMemory>);
+#[repr(C)] // here for the C API
+pub struct Memory {
+    /// The internal store instance that this memory belongs to.
+    instance: StoreInstanceId,
+    /// The index of the memory, within `instance` above, that this memory
+    /// refers to.
+    index: DefinedMemoryIndex,
+}
+
+// Double-check that the C representation in `extern.h` matches our in-Rust
+// representation here in terms of size/alignment/etc.
+const _: () = {
+    #[repr(C)]
+    struct Tmp(u64, u32);
+    #[repr(C)]
+    struct C(Tmp, u32);
+    assert!(core::mem::size_of::<C>() == core::mem::size_of::<Memory>());
+    assert!(core::mem::align_of::<C>() == core::mem::align_of::<Memory>());
+    assert!(core::mem::offset_of!(Memory, instance) == 0);
+};
 
 impl Memory {
     /// Creates a new WebAssembly memory given the configuration of `ty`.
@@ -222,7 +247,7 @@ impl Memory {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// let engine = Engine::default();
     /// let mut store = Store::new(&engine, ());
     ///
@@ -236,7 +261,11 @@ impl Memory {
     /// # }
     /// ```
     pub fn new(mut store: impl AsContextMut, ty: MemoryType) -> Result<Memory> {
-        Self::_new(store.as_context_mut().0, ty)
+        let (mut limiter, store) = store
+            .as_context_mut()
+            .0
+            .validate_sync_resource_limiter_and_store_opaque()?;
+        vm::assert_ready(Self::_new(store, limiter.as_mut(), ty))
     }
 
     /// Async variant of [`Memory::new`]. You must use this variant with
@@ -248,27 +277,24 @@ impl Memory {
     /// This function will panic when used with a non-async
     /// [`Store`](`crate::Store`).
     #[cfg(feature = "async")]
-    pub async fn new_async<T>(
-        mut store: impl AsContextMut<Data = T>,
-        ty: MemoryType,
-    ) -> Result<Memory>
-    where
-        T: Send,
-    {
-        let mut store = store.as_context_mut();
-        assert!(
-            store.0.async_support(),
-            "cannot use `new_async` without enabling async support on the config"
-        );
-        store.on_fiber(|store| Self::_new(store.0, ty)).await?
+    pub async fn new_async(mut store: impl AsContextMut, ty: MemoryType) -> Result<Memory> {
+        let (mut limiter, store) = store.as_context_mut().0.resource_limiter_and_store_opaque();
+        Self::_new(store, limiter.as_mut(), ty).await
     }
 
     /// Helper function for attaching the memory to a "frankenstein" instance
-    fn _new(store: &mut StoreOpaque, ty: MemoryType) -> Result<Memory> {
-        unsafe {
-            let export = generate_memory_export(store, &ty, None)?;
-            Ok(Memory::from_wasmtime_memory(export, store))
+    async fn _new(
+        store: &mut StoreOpaque,
+        limiter: Option<&mut StoreResourceLimiter<'_>>,
+        ty: MemoryType,
+    ) -> Result<Memory> {
+        if ty.is_shared() {
+            bail!("shared memories must be created through `SharedMemory`")
         }
+        Ok(generate_memory_export(store, limiter, &ty, None)
+            .await?
+            .unshared()
+            .unwrap())
     }
 
     /// Returns the underlying type of this memory.
@@ -281,7 +307,7 @@ impl Memory {
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// let engine = Engine::default();
     /// let mut store = Store::new(&engine, ());
     /// let module = Module::new(&engine, "(module (memory (export \"mem\") 1))")?;
@@ -294,8 +320,7 @@ impl Memory {
     /// ```
     pub fn ty(&self, store: impl AsContext) -> MemoryType {
         let store = store.as_context();
-        let ty = &store[self.0].memory.memory;
-        MemoryType::from_wasmtime_memory(&ty)
+        MemoryType::from_wasmtime_memory(self.wasmtime_ty(store.0))
     }
 
     /// Safely reads memory contents at the given offset into a buffer.
@@ -356,12 +381,12 @@ impl Memory {
     /// # Panics
     ///
     /// Panics if this memory doesn't belong to `store`.
-    pub fn data<'a, T: 'a>(&self, store: impl Into<StoreContext<'a, T>>) -> &'a [u8] {
+    pub fn data<'a, T: 'static>(&self, store: impl Into<StoreContext<'a, T>>) -> &'a [u8] {
         unsafe {
             let store = store.into();
-            let definition = &*store[self.0].definition;
+            let definition = store[self.instance].memory(self.index);
             debug_assert!(!self.ty(store).is_shared());
-            slice::from_raw_parts(definition.base, definition.current_length())
+            slice::from_raw_parts(definition.base.as_ptr(), definition.current_length())
         }
     }
 
@@ -373,12 +398,15 @@ impl Memory {
     /// # Panics
     ///
     /// Panics if this memory doesn't belong to `store`.
-    pub fn data_mut<'a, T: 'a>(&self, store: impl Into<StoreContextMut<'a, T>>) -> &'a mut [u8] {
+    pub fn data_mut<'a, T: 'static>(
+        &self,
+        store: impl Into<StoreContextMut<'a, T>>,
+    ) -> &'a mut [u8] {
         unsafe {
             let store = store.into();
-            let definition = &*store[self.0].definition;
+            let definition = store[self.instance].memory(self.index);
             debug_assert!(!self.ty(store).is_shared());
-            slice::from_raw_parts_mut(definition.base, definition.current_length())
+            slice::from_raw_parts_mut(definition.base.as_ptr(), definition.current_length())
         }
     }
 
@@ -394,7 +422,7 @@ impl Memory {
     /// # Panics
     ///
     /// Panics if this memory doesn't belong to `store`.
-    pub fn data_and_store_mut<'a, T: 'a>(
+    pub fn data_and_store_mut<'a, T: 'static>(
         &self,
         store: impl Into<StoreContextMut<'a, T>>,
     ) -> (&'a mut [u8], &'a mut T) {
@@ -425,7 +453,10 @@ impl Memory {
     ///
     /// Panics if this memory doesn't belong to `store`.
     pub fn data_ptr(&self, store: impl AsContext) -> *mut u8 {
-        unsafe { (*store.as_context()[self.0].definition).base }
+        store.as_context()[self.instance]
+            .memory(self.index)
+            .base
+            .as_ptr()
     }
 
     /// Returns the byte length of this memory.
@@ -453,7 +484,7 @@ impl Memory {
     }
 
     pub(crate) fn internal_data_size(&self, store: &StoreOpaque) -> usize {
-        unsafe { (*store[self.0].definition).current_length() }
+        store[self.instance].memory(self.index).current_length()
     }
 
     /// Returns the size, in units of pages, of this Wasm memory.
@@ -499,7 +530,7 @@ impl Memory {
     }
 
     pub(crate) fn _page_size(&self, store: &StoreOpaque) -> u64 {
-        store[self.0].memory.memory.page_size()
+        self.wasmtime_ty(store).page_size()
     }
 
     /// Returns the log2 of this memory's page size, in bytes.
@@ -519,7 +550,7 @@ impl Memory {
     }
 
     pub(crate) fn _page_size_log2(&self, store: &StoreOpaque) -> u8 {
-        store[self.0].memory.memory.page_size_log2
+        self.wasmtime_ty(store).page_size_log2
     }
 
     /// Grows this WebAssembly memory by `delta` pages.
@@ -546,20 +577,20 @@ impl Memory {
     /// [`ResourceLimiter`](crate::ResourceLimiter) is another example of
     /// preventing a memory to grow.
     ///
+    /// This function will return an error if the [`Store`](`crate::Store`) has
+    /// a [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`) (see also:
+    /// [`Store::limiter_async`](`crate::Store::limiter_async`). When using an
+    /// async resource limiter, use [`Memory::grow_async`] instead.
+    ///
     /// # Panics
     ///
     /// Panics if this memory doesn't belong to `store`.
-    ///
-    /// This function will panic if the [`Store`](`crate::Store`) has a
-    /// [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`) (see also:
-    /// [`Store::limiter_async`](`crate::Store::limiter_async`). When using an
-    /// async resource limiter, use [`Memory::grow_async`] instead.
     ///
     /// # Examples
     ///
     /// ```
     /// # use wasmtime::*;
-    /// # fn main() -> anyhow::Result<()> {
+    /// # fn main() -> Result<()> {
     /// let engine = Engine::default();
     /// let mut store = Store::new(&engine, ());
     /// let module = Module::new(&engine, "(module (memory (export \"mem\") 1 2))")?;
@@ -577,18 +608,8 @@ impl Memory {
     /// ```
     pub fn grow(&self, mut store: impl AsContextMut, delta: u64) -> Result<u64> {
         let store = store.as_context_mut().0;
-        let mem = self.wasmtime_memory(store);
-        unsafe {
-            match (*mem).grow(delta, Some(store))? {
-                Some(size) => {
-                    let vm = (*mem).vmmemory();
-                    *store[self.0].definition = vm;
-                    let page_size = (*mem).page_size();
-                    Ok(u64::try_from(size).unwrap() / page_size)
-                }
-                None => bail!("failed to grow memory by `{}`", delta),
-            }
-        }
+        let (mut limiter, store) = store.validate_sync_resource_limiter_and_store_opaque()?;
+        vm::assert_ready(self._grow(store, limiter.as_mut(), delta))
     }
 
     /// Async variant of [`Memory::grow`]. Required when using a
@@ -599,53 +620,64 @@ impl Memory {
     /// This function will panic when used with a non-async
     /// [`Store`](`crate::Store`).
     #[cfg(feature = "async")]
-    pub async fn grow_async<T>(
-        &self,
-        mut store: impl AsContextMut<Data = T>,
-        delta: u64,
-    ) -> Result<u64>
-    where
-        T: Send,
-    {
-        let mut store = store.as_context_mut();
-        assert!(
-            store.0.async_support(),
-            "cannot use `grow_async` without enabling async support on the config"
-        );
-        store.on_fiber(|store| self.grow(store, delta)).await?
+    pub async fn grow_async(&self, mut store: impl AsContextMut, delta: u64) -> Result<u64> {
+        let store = store.as_context_mut();
+        let (mut limiter, store) = store.0.resource_limiter_and_store_opaque();
+        self._grow(store, limiter.as_mut(), delta).await
     }
 
-    fn wasmtime_memory(&self, store: &mut StoreOpaque) -> *mut crate::runtime::vm::Memory {
-        unsafe {
-            let export = &store[self.0];
-            crate::runtime::vm::Instance::from_vmctx(export.vmctx, |handle| {
-                handle.get_defined_memory(export.index)
-            })
+    async fn _grow(
+        &self,
+        store: &mut StoreOpaque,
+        limiter: Option<&mut StoreResourceLimiter<'_>>,
+        delta: u64,
+    ) -> Result<u64> {
+        let result = self
+            .instance
+            .get_mut(store)
+            .memory_grow(limiter, self.index, delta)
+            .await?;
+        match result {
+            Some(size) => {
+                let page_size = self.wasmtime_ty(store).page_size();
+                Ok(u64::try_from(size).unwrap() / page_size)
+            }
+            None => bail!("failed to grow memory by `{delta}`"),
         }
     }
 
-    pub(crate) unsafe fn from_wasmtime_memory(
-        wasmtime_export: crate::runtime::vm::ExportMemory,
-        store: &mut StoreOpaque,
-    ) -> Memory {
-        Memory(store.store_data_mut().insert(wasmtime_export))
+    /// Creates a new memory from its raw component parts.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the memory pointed to by `instance` and
+    /// `index` is not a shared memory. For that `SharedMemory` must be used
+    /// instead.
+    pub(crate) unsafe fn from_raw(instance: StoreInstanceId, index: DefinedMemoryIndex) -> Memory {
+        Memory { instance, index }
     }
 
-    pub(crate) fn wasmtime_ty<'a>(&self, store: &'a StoreData) -> &'a wasmtime_environ::Memory {
-        &store[self.0].memory.memory
+    pub(crate) fn wasmtime_ty<'a>(&self, store: &'a StoreOpaque) -> &'a wasmtime_environ::Memory {
+        let module = store[self.instance].env_module();
+        let index = module.memory_index(self.index);
+        &module.memories[index]
     }
 
     pub(crate) fn vmimport(&self, store: &StoreOpaque) -> crate::runtime::vm::VMMemoryImport {
-        let export = &store[self.0];
-        crate::runtime::vm::VMMemoryImport {
-            from: export.definition,
-            vmctx: export.vmctx,
-            index: export.index,
-        }
+        store[self.instance].get_defined_memory_vmimport(self.index)
     }
 
     pub(crate) fn comes_from_same_store(&self, store: &StoreOpaque) -> bool {
-        store.store_data().contains(self.0)
+        store.id() == self.instance.store_id()
+    }
+
+    /// Returns a stable identifier for this memory within its store.
+    ///
+    /// This allows distinguishing memories when introspecting them
+    /// e.g. via debug APIs.
+    #[cfg(feature = "debug")]
+    pub fn debug_index_in_store(&self) -> u64 {
+        u64::from(self.instance.instance().as_u32()) << 32 | u64::from(self.index.as_u32())
     }
 
     /// Get a stable hash key for this memory.
@@ -653,8 +685,9 @@ impl Memory {
     /// Even if the same underlying memory definition is added to the
     /// `StoreData` multiple times and becomes multiple `wasmtime::Memory`s,
     /// this hash key will be consistent across all of these memories.
-    pub(crate) fn hash_key(&self, store: &StoreOpaque) -> impl core::hash::Hash + Eq {
-        store[self.0].definition as usize
+    #[cfg(feature = "coredump")]
+    pub(crate) fn hash_key(&self, store: &StoreOpaque) -> impl core::hash::Hash + Eq + use<> {
+        store[self.instance].memory_ptr(self.index).as_ptr().addr()
     }
 }
 
@@ -671,17 +704,17 @@ impl Memory {
 /// guard page.  Additionally the safety concerns explained in ['Memory'], for
 /// accessing the memory apply here as well.
 ///
-/// Note that this is a relatively new and experimental feature and it is
-/// recommended to be familiar with wasmtime runtime code to use it.
+/// Note that this is a relatively advanced feature and it is recommended to be
+/// familiar with wasmtime runtime code to use it.
 pub unsafe trait LinearMemory: Send + Sync + 'static {
     /// Returns the number of allocated bytes which are accessible at this time.
     fn byte_size(&self) -> usize;
 
-    /// Returns the maximum number of bytes the memory can grow to.
+    /// Returns byte capacity of this linear memory's current allocation.
     ///
-    /// Returns `None` if the memory is unbounded, or `Some` if memory cannot
-    /// grow beyond a specified limit.
-    fn maximum_byte_size(&self) -> Option<usize>;
+    /// Growth up to this value should not relocate the linear memory base
+    /// pointer.
+    fn byte_capacity(&self) -> usize;
 
     /// Grows this memory to have the `new_size`, in bytes, specified.
     ///
@@ -692,10 +725,6 @@ pub unsafe trait LinearMemory: Send + Sync + 'static {
 
     /// Return the allocated memory as a mutable pointer to u8.
     fn as_ptr(&self) -> *mut u8;
-
-    /// Returns the range of native addresses that WebAssembly can natively
-    /// access from this linear memory, including guard pages.
-    fn wasm_accessible(&self) -> Range<usize>;
 }
 
 /// A memory creator. Can be used to provide a memory creator
@@ -708,8 +737,8 @@ pub unsafe trait LinearMemory: Send + Sync + 'static {
 /// treated as owned by wasmtime instance, and any modification of them outside
 /// of wasmtime invoked routines is unsafe and may lead to corruption.
 ///
-/// Note that this is a relatively new and experimental feature and it is
-/// recommended to be familiar with wasmtime runtime code to use it.
+/// Note that this is a relatively advanced feature and it is recommended to be
+/// familiar with Wasmtime runtime code to use it.
 pub unsafe trait MemoryCreator: Send + Sync {
     /// Create a new `LinearMemory` object from the specified parameters.
     ///
@@ -759,8 +788,9 @@ pub unsafe trait MemoryCreator: Send + Sync {
 /// used concurrently by multiple agents. Because these agents may execute in
 /// different threads, [`SharedMemory`] must be thread-safe.
 ///
-/// When the threads proposal is enabled, there are multiple ways to construct
-/// shared memory:
+/// When the [threads proposal is enabled](crate::Config::wasm_threads) and the
+/// [the creation of shared memories is enabled](crate::Config::shared_memory),
+/// there are multiple ways to construct shared memory:
 ///  1. for imported shared memory, e.g., `(import "env" "memory" (memory 1 1
 ///     shared))`, the user must supply a [`SharedMemory`] with the
 ///     externally-created memory as an import to the instance--e.g.,
@@ -776,9 +806,11 @@ pub unsafe trait MemoryCreator: Send + Sync {
 ///
 /// ```
 /// # use wasmtime::*;
-/// # fn main() -> anyhow::Result<()> {
+/// # fn main() -> Result<()> {
 /// let mut config = Config::new();
 /// config.wasm_threads(true);
+/// config.shared_memory(true);
+/// # if Engine::new(&config).is_err() { return Ok(()); }
 /// let engine = Engine::new(&config)?;
 /// let mut store = Store::new(&engine, ());
 ///
@@ -793,7 +825,6 @@ pub unsafe trait MemoryCreator: Send + Sync {
 pub struct SharedMemory {
     vm: crate::runtime::vm::SharedMemory,
     engine: Engine,
-    page_size_log2: u8,
 }
 
 impl SharedMemory {
@@ -807,15 +838,12 @@ impl SharedMemory {
         }
         debug_assert!(ty.maximum().is_some());
 
-        let tunables = engine.tunables();
-        let plan = MemoryPlan::for_memory(ty.wasmtime_memory().clone(), tunables);
-        let page_size_log2 = plan.memory.page_size_log2;
-        let memory = crate::runtime::vm::SharedMemory::new(plan)?;
+        let ty = ty.wasmtime_memory();
+        let memory = crate::runtime::vm::SharedMemory::new(engine, ty)?;
 
         Ok(Self {
             vm: memory,
             engine: engine.clone(),
-            page_size_log2,
         })
     }
 
@@ -827,7 +855,7 @@ impl SharedMemory {
     /// Returns the size, in WebAssembly pages, of this wasm memory.
     pub fn size(&self) -> u64 {
         let byte_size = u64::try_from(self.data_size()).unwrap();
-        let page_size = u64::from(self.page_size());
+        let page_size = self.page_size();
         byte_size / page_size
     }
 
@@ -838,9 +866,8 @@ impl SharedMemory {
     /// `1`. Future extensions might allow any power of two as a page size.
     ///
     /// [the custom-page-sizes proposal]: https://github.com/WebAssembly/custom-page-sizes
-    pub fn page_size(&self) -> u32 {
-        debug_assert!(self.page_size_log2 == 0 || self.page_size_log2 == 16);
-        1 << self.page_size_log2
+    pub fn page_size(&self) -> u64 {
+        self.ty().page_size()
     }
 
     /// Returns the byte length of this memory.
@@ -875,8 +902,8 @@ impl SharedMemory {
     /// currently be done unsafely.
     pub fn data(&self) -> &[UnsafeCell<u8>] {
         unsafe {
-            let definition = &*self.vm.vmmemory_ptr();
-            slice::from_raw_parts(definition.base.cast(), definition.current_length())
+            let definition = self.vm.vmmemory_ptr().as_ref();
+            slice::from_raw_parts(definition.base.as_ptr().cast(), definition.current_length())
         }
     }
 
@@ -897,13 +924,13 @@ impl SharedMemory {
     /// [`ResourceLimiter`](crate::ResourceLimiter) is another example of
     /// preventing a memory to grow.
     pub fn grow(&self, delta: u64) -> Result<u64> {
-        match self.vm.grow(delta, None)? {
+        match self.vm.grow(delta)? {
             Some((old_size, _new_size)) => {
                 // For shared memory, the `VMMemoryDefinition` is updated inside
                 // the locked region.
-                Ok(u64::try_from(old_size).unwrap() / u64::from(self.page_size()))
+                Ok(u64::try_from(old_size).unwrap() / self.page_size())
             }
-            None => bail!("failed to grow memory by `{}`", delta),
+            None => bail!("failed to grow memory by `{delta}`"),
         }
     }
 
@@ -996,46 +1023,32 @@ impl SharedMemory {
     /// Construct a single-memory instance to provide a way to import
     /// [`SharedMemory`] into other modules.
     pub(crate) fn vmimport(&self, store: &mut StoreOpaque) -> crate::runtime::vm::VMMemoryImport {
-        let export_memory = generate_memory_export(store, &self.ty(), Some(&self.vm)).unwrap();
-        VMMemoryImport {
-            from: export_memory.definition,
-            vmctx: export_memory.vmctx,
-            index: export_memory.index,
+        // Note `vm::assert_ready` shouldn't panic here because this isn't
+        // actually allocating any new memory (also no limiter), so resource
+        // limiting shouldn't kick in.
+        let memory = vm::assert_ready(generate_memory_export(
+            store,
+            None,
+            &self.ty(),
+            Some(&self.vm),
+        ))
+        .unwrap();
+        match memory {
+            ExportMemory::Unshared(_) => unreachable!(),
+            ExportMemory::Shared(_shared, vmimport) => vmimport,
         }
     }
 
-    /// Create a [`SharedMemory`] from an [`ExportMemory`] definition. This
-    /// function is available to handle the case in which a Wasm module exports
-    /// shared memory and the user wants host-side access to it.
-    pub(crate) unsafe fn from_wasmtime_memory(
-        wasmtime_export: crate::runtime::vm::ExportMemory,
-        store: &mut StoreOpaque,
-    ) -> Self {
-        #[cfg_attr(not(feature = "threads"), allow(unused_variables, unreachable_code))]
-        crate::runtime::vm::Instance::from_vmctx(wasmtime_export.vmctx, |handle| {
-            let memory_index = handle.module().memory_index(wasmtime_export.index);
-            let page_size = handle.memory_page_size(memory_index);
-            debug_assert!(page_size.is_power_of_two());
-            let page_size_log2 = u8::try_from(page_size.ilog2()).unwrap();
-
-            let memory = handle
-                .get_defined_memory(wasmtime_export.index)
-                .as_mut()
-                .unwrap();
-            match memory.as_shared_memory() {
-                Some(mem) => Self {
-                    vm: mem.clone(),
-                    engine: store.engine().clone(),
-                    page_size_log2,
-                },
-                None => panic!("unable to convert from a shared memory"),
-            }
-        })
+    /// Creates a [`SharedMemory`] from its constituent parts.
+    pub(crate) fn from_raw(vm: crate::runtime::vm::SharedMemory, engine: Engine) -> Self {
+        SharedMemory { vm, engine }
     }
 
-    /// get the base address of this VM linear memory as a raw `u64`.
+    /// lind-wasm: get the base address of this VM linear memory as a raw `u64`.
     pub fn get_memory_base(&self) -> u64 {
-        self.vm.vmmemory_base()
+        let ptr = self.vm.vmmemory_ptr();
+        // SAFETY: ptr is a valid VMMemoryDefinition pointer owned by this SharedMemory
+        unsafe { (*ptr.as_ptr()).base.as_ptr() as u64 }
     }
 }
 
@@ -1054,17 +1067,17 @@ mod tests {
     #[test]
     fn respect_tunables() {
         let mut cfg = Config::new();
-        cfg.static_memory_maximum_size(0)
-            .dynamic_memory_guard_size(0);
+        cfg.memory_reservation(0).memory_guard_size(0);
         let mut store = Store::new(&Engine::new(&cfg).unwrap(), ());
         let ty = MemoryType::new(1, None);
         let mem = Memory::new(&mut store, ty).unwrap();
         let store = store.as_context();
-        assert_eq!(store[mem.0].memory.offset_guard_size, 0);
-        match &store[mem.0].memory.style {
-            wasmtime_environ::MemoryStyle::Dynamic { .. } => {}
-            other => panic!("unexpected style {:?}", other),
-        }
+        let tunables = store.engine().tunables();
+        assert_eq!(tunables.memory_guard_size, 0);
+        assert!(
+            !mem.wasmtime_ty(store.0)
+                .can_elide_bounds_check(tunables, 12)
+        );
     }
 
     #[test]

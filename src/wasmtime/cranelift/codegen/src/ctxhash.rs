@@ -4,8 +4,8 @@
 //! node-internal data references some other storage (e.g., offsets into
 //! an array or pool of shared data).
 
-use hashbrown::raw::RawTable;
-use std::hash::{Hash, Hasher};
+use core::hash::{Hash, Hasher};
+use hashbrown::hash_table::HashTable;
 
 /// Trait that allows for equality comparison given some external
 /// context.
@@ -59,7 +59,7 @@ struct BucketData<K, V> {
 
 /// A HashMap that takes external context for all operations.
 pub struct CtxHashMap<K, V> {
-    raw: RawTable<BucketData<K, V>>,
+    raw: HashTable<BucketData<K, V>>,
 }
 
 impl<K, V> CtxHashMap<K, V> {
@@ -67,7 +67,7 @@ impl<K, V> CtxHashMap<K, V> {
     /// capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            raw: RawTable::with_capacity(capacity),
+            raw: HashTable::with_capacity(capacity),
         }
     }
 }
@@ -89,17 +89,14 @@ impl<K, V> CtxHashMap<K, V> {
         Ctx: CtxEq<K, K> + CtxHash<K>,
     {
         let hash = compute_hash(ctx, &k);
-        match self.raw.find(hash as u64, |bucket| {
+        match self.raw.find_mut(hash as u64, |bucket| {
             hash == bucket.hash && ctx.ctx_eq(&bucket.k, &k)
         }) {
-            Some(bucket) => {
-                let data = unsafe { bucket.as_mut() };
-                Some(std::mem::replace(&mut data.v, v))
-            }
+            Some(bucket) => Some(core::mem::replace(&mut bucket.v, v)),
             None => {
                 let data = BucketData { hash, k, v };
                 self.raw
-                    .insert_entry(hash as u64, data, |bucket| bucket.hash as u64);
+                    .insert_unique(hash as u64, data, |bucket| bucket.hash as u64);
                 None
             }
         }
@@ -115,10 +112,70 @@ impl<K, V> CtxHashMap<K, V> {
             .find(hash as u64, |bucket| {
                 hash == bucket.hash && ctx.ctx_eq(&bucket.k, k)
             })
-            .map(|bucket| {
-                let data = unsafe { bucket.as_ref() };
-                &data.v
-            })
+            .map(|bucket| &bucket.v)
+    }
+
+    /// Look up a key, returning an `Entry` that refers to an existing
+    /// value or allows inserting a new one.
+    pub fn entry<'a, Ctx>(&'a mut self, k: K, ctx: &Ctx) -> Entry<'a, K, V>
+    where
+        Ctx: CtxEq<K, K> + CtxHash<K>,
+    {
+        let hash = compute_hash(ctx, &k);
+        let raw = self.raw.entry(
+            hash as u64,
+            |bucket| hash == bucket.hash && ctx.ctx_eq(&bucket.k, &k),
+            |bucket| compute_hash(ctx, &bucket.k) as u64,
+        );
+        match raw {
+            hashbrown::hash_table::Entry::Occupied(o) => Entry::Occupied(OccupiedEntry { raw: o }),
+            hashbrown::hash_table::Entry::Vacant(v) => Entry::Vacant(VacantEntry {
+                hash,
+                key: k,
+                raw: v,
+            }),
+        }
+    }
+}
+
+/// A reference to an existing or vacant entry in the hash table.
+pub enum Entry<'a, K, V> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+/// A reference to an occupied entry in the hash table.
+pub struct OccupiedEntry<'a, K, V> {
+    raw: hashbrown::hash_table::OccupiedEntry<'a, BucketData<K, V>>,
+}
+
+/// A reference to a vacant entry in the hash table.
+pub struct VacantEntry<'a, K, V> {
+    hash: u32,
+    key: K,
+    raw: hashbrown::hash_table::VacantEntry<'a, BucketData<K, V>>,
+}
+
+impl<'a, K, V> OccupiedEntry<'a, K, V> {
+    /// Get the existing value.
+    pub fn get(&self) -> &V {
+        &self.raw.get().v
+    }
+
+    /// Get the existing value, mutably.
+    pub fn get_mut(&mut self) -> &mut V {
+        &mut self.raw.get_mut().v
+    }
+}
+
+impl<'a, K, V> VacantEntry<'a, K, V> {
+    /// Insert a new value.
+    pub fn insert(self, v: V) {
+        self.raw.insert(BucketData {
+            hash: self.hash,
+            k: self.key,
+            v,
+        });
     }
 }
 

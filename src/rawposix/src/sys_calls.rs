@@ -29,7 +29,7 @@ use sysdefs::constants::sys_const::{
 };
 use sysdefs::constants::syscall_const;
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
@@ -163,9 +163,9 @@ pub extern "C" fn fork_syscall(
         // syscall implementation
         threei::copy_handler_table_to_cage(
             UNUSED_ARG,
-            child_cageid,
+            UNUSED_ARG,
             parent_cageid,
-            UNUSED_ID,
+            child_cageid,
             UNUSED_ARG,
             UNUSED_ID,
             UNUSED_ARG,
@@ -340,11 +340,15 @@ pub extern "C" fn exit_syscall(
         );
     }
 
-    let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
+    let _status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
 
-    // Thread-only exit: just record status and trigger asyncify unwind.
-    // No CAS, no epoch_kill_all — the cage stays alive for other threads.
-    cage::cage_record_exit_status(cageid, ExitStatus::Exited(status));
+    // Thread-only exit: trigger asyncify unwind for this thread only.
+    // Do NOT call cage_record_exit_status here — SYS_exit is only called by
+    // non-main threads when their thread function returns (glibc start_thread),
+    // and a thread's individual exit code does not determine the cage's
+    // process-level exit status.  Calling it here would race with and
+    // overwrite the exit_group(1) recorded by e.g. the faulthandler thread,
+    // causing the cage to exit with code 0 instead of 1.
 
     // Call wasmtime to trigger asyncify unwind for this thread.
     // OnCalledAction handles lind_thread_exit + cage_finalize if last.
@@ -429,6 +433,18 @@ pub extern "C" fn exit_group_syscall(
         threei::handler_table::_rm_grate_from_handler(cageid);
     }
 
+    // Use the cage's authoritative recorded exit status so that whichever
+    // thread wins the CAS (e.g. faulthandler calling _exit(1)) determines
+    // the OS-level exit code.  Late threads calling exit_group(0) after
+    // the cage has already been marked Exited(1) will use code=1.
+    let canonical_status_arg = cage::get_cage(cageid)
+        .and_then(|c| *c.final_exit_status.read())
+        .map(|st| match st {
+            cage::ExitStatus::Exited(code) => code as u64,
+            cage::ExitStatus::Signaled(_, _) => 1u64,
+        })
+        .unwrap_or(status_arg as u64);
+
     // Call wasmtime to trigger asyncify unwind.
     // OnCalledAction handles lind_thread_exit + cage_finalize if last.
     threei::make_syscall(
@@ -436,7 +452,7 @@ pub extern "C" fn exit_group_syscall(
         60, // reuse exit trampoline in wasmtime
         UNUSED_NAME,
         WASMTIME_CAGEID,
-        status_arg,
+        canonical_status_arg,
         cageid,
         tid,
         UNUSED_ARG, // is_last_thread: determined dynamically in OnCalledAction
@@ -1217,7 +1233,7 @@ pub extern "C" fn prlimit64_syscall(
     //pid has to be zero
     let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
     if pid != 0 {
-        lind_debug_panic(&format!("prlimit64: unsupported pid {}", pid));
+        lind_debug_panic!("prlimit64: unsupported pid {}", pid);
         return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
     }
 
@@ -1232,7 +1248,7 @@ pub extern "C" fn prlimit64_syscall(
 
     // setrlimit unsupported
     if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
-        lind_debug_panic("prlimit64: setrlimit not supported");
+        lind_debug_panic!("prlimit64: setrlimit not supported");
         return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
     }
 
@@ -1265,7 +1281,7 @@ pub extern "C" fn prlimit64_syscall(
                 old_limit.rlim_max = 0;
             }
             _ => {
-                lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
+                lind_debug_panic!("prlimit64: unsupported resource {}", resource);
                 old_limit.rlim_cur = 0;
                 old_limit.rlim_max = 0;
             }
@@ -1312,6 +1328,74 @@ pub extern "C" fn sched_yield_syscall(
     }
 
     (unsafe { sched_yield() }) as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/rt_sigsuspend.2.html
+///
+/// Atomically saves the current signal mask into `oldset`, replaces it with
+/// `set`, and suspends the cage until a signal arrives.  Always returns -1
+/// with errno EINTR.
+///
+/// Saving the old mask here (rather than in a separate sigprocmask call in
+/// glibc) removes the last wasm round-trip before the mask swap: the entire
+/// sequence — save old mask, install new mask, check pending signals, spin —
+/// happens inside a single host call with no epoch injection points in between.
+pub extern "C" fn sigsuspend_syscall(
+    cageid: u64,
+    set_arg: u64,
+    set_cageid: u64,
+    oldset_arg: u64,
+    oldset_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let set = sc_convert_sigset(set_arg, set_cageid, cageid);
+    let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sigsuspend_syscall"
+        );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let curr_sigset = cage.sigset.load(Relaxed);
+
+    if let Some(some_oldset) = oldset {
+        *some_oldset = curr_sigset;
+    }
+
+    if let Some(some_set) = set {
+        // Signals that transition from blocked to unblocked
+        let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+        {
+            let pending_signals = cage.pending_signals.read();
+            if pending_signals
+                .iter()
+                .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
+            {
+                cage::signal_epoch_trigger(cage.cageid);
+            }
+        }
+        cage.sigset.store(*some_set, Relaxed);
+    }
+
+    loop {
+        if signal_check_trigger(cageid) {
+            return syscall_error(Errno::EINTR, "sigsuspend", "interrupted by signal");
+        }
+        unsafe { sched_yield() };
+    }
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html

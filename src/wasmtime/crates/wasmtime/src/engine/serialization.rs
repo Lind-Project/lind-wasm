@@ -23,14 +23,18 @@
 
 use crate::prelude::*;
 use crate::{Engine, ModuleVersionStrategy, Precompiled};
+use core::fmt;
 use core::str::FromStr;
-use object::endian::NativeEndian;
+use object::endian::Endianness;
 #[cfg(any(feature = "cranelift", feature = "winch"))]
 use object::write::{Object, StandardSegment};
-use object::{read::elf::ElfFile64, FileFlags, Object as _, ObjectSection, SectionKind};
+use object::{
+    FileFlags, Object as _,
+    elf::FileHeader64,
+    read::elf::{ElfFile64, FileHeader, SectionHeader},
+};
 use serde_derive::{Deserialize, Serialize};
-use wasmtime_environ::obj;
-use wasmtime_environ::{FlagValue, ObjectKind, Tunables};
+use wasmtime_environ::{FlagValue, ObjectKind, OperatorCostStrategy, Tunables, obj};
 
 const VERSION: u8 = 0;
 
@@ -56,36 +60,54 @@ pub fn check_compatible(engine: &Engine, mmap: &[u8], expected: ObjectKind) -> R
     // structured well enough to make this easy and additionally it's not really
     // a perf issue right now so doing that is left for another day's
     // refactoring.
-    let obj = ElfFile64::<NativeEndian>::parse(mmap)
-        .err2anyhow()
+    let header = FileHeader64::<Endianness>::parse(mmap)
+        .map_err(obj::ObjectCrateErrorWrapper)
         .context("failed to parse precompiled artifact as an ELF")?;
+    let endian = header
+        .endian()
+        .context("failed to parse header endianness")?;
+
     let expected_e_flags = match expected {
         ObjectKind::Module => obj::EF_WASMTIME_MODULE,
         ObjectKind::Component => obj::EF_WASMTIME_COMPONENT,
     };
-    match obj.flags() {
-        FileFlags::Elf {
-            os_abi: obj::ELFOSABI_WASMTIME,
-            abi_version: 0,
-            e_flags,
-        } if e_flags == expected_e_flags => {}
-        _ => bail!("incompatible object file format"),
-    }
+    ensure!(
+        (header.e_flags(endian) & expected_e_flags) == expected_e_flags,
+        "incompatible object file format"
+    );
 
-    let data = obj
-        .section_by_name(obj::ELF_WASM_ENGINE)
-        .ok_or_else(|| anyhow!("failed to find section `{}`", obj::ELF_WASM_ENGINE))?
-        .data()
-        .err2anyhow()?;
+    let section_headers = header
+        .section_headers(endian, mmap)
+        .context("failed to parse section headers")?;
+    let strings = header
+        .section_strings(endian, mmap, section_headers)
+        .context("failed to parse strings table")?;
+    let sections = header
+        .sections(endian, mmap)
+        .context("failed to parse sections table")?;
+
+    let mut section_header = None;
+    for s in sections.iter() {
+        let name = s.name(endian, strings)?;
+        if name == obj::ELF_WASM_ENGINE.as_bytes() {
+            section_header = Some(s);
+        }
+    }
+    let Some(section_header) = section_header else {
+        bail!("failed to find section `{}`", obj::ELF_WASM_ENGINE)
+    };
+    let data = section_header
+        .data(endian, mmap)
+        .map_err(obj::ObjectCrateErrorWrapper)?;
     let (first, data) = data
         .split_first()
-        .ok_or_else(|| anyhow!("invalid engine section"))?;
+        .ok_or_else(|| format_err!("invalid engine section"))?;
     if *first != VERSION {
         bail!("mismatched version in engine section");
     }
     let (len, data) = data
         .split_first()
-        .ok_or_else(|| anyhow!("invalid engine section"))?;
+        .ok_or_else(|| format_err!("invalid engine section"))?;
     let len = usize::from(*len);
     let (version, data) = if data.len() < len + 1 {
         bail!("engine section too small")
@@ -94,29 +116,15 @@ pub fn check_compatible(engine: &Engine, mmap: &[u8], expected: ObjectKind) -> R
     };
 
     match &engine.config().module_version {
-        ModuleVersionStrategy::WasmtimeVersion => {
-            let version = core::str::from_utf8(version).err2anyhow()?;
-            if version != env!("CARGO_PKG_VERSION") {
-                bail!(
-                    "Module was compiled with incompatible Wasmtime version '{}'",
-                    version
-                );
-            }
-        }
-        ModuleVersionStrategy::Custom(v) => {
-            let version = core::str::from_utf8(&version).err2anyhow()?;
-            if version != v {
-                bail!(
-                    "Module was compiled with incompatible version '{}'",
-                    version
-                );
-            }
-        }
         ModuleVersionStrategy::None => { /* ignore the version info, accept all */ }
+        _ => {
+            let version = core::str::from_utf8(&version)?;
+            if version != engine.config().module_version.as_str() {
+                bail!("Module was compiled with incompatible version '{version}'");
+            }
+        }
     }
-    postcard::from_bytes::<Metadata<'_>>(data)
-        .err2anyhow()?
-        .check_compatible(engine)
+    postcard::from_bytes::<Metadata<'_>>(data)?.check_compatible(engine)
 }
 
 #[cfg(any(feature = "cranelift", feature = "winch"))]
@@ -124,15 +132,11 @@ pub fn append_compiler_info(engine: &Engine, obj: &mut Object<'_>, metadata: &Me
     let section = obj.add_section(
         obj.segment_name(StandardSegment::Data).to_vec(),
         obj::ELF_WASM_ENGINE.as_bytes().to_vec(),
-        SectionKind::ReadOnlyData,
+        object::SectionKind::ReadOnlyData,
     );
     let mut data = Vec::new();
     data.push(VERSION);
-    let version = match &engine.config().module_version {
-        ModuleVersionStrategy::WasmtimeVersion => env!("CARGO_PKG_VERSION"),
-        ModuleVersionStrategy::Custom(c) => c,
-        ModuleVersionStrategy::None => "",
-    };
+    let version = engine.config().module_version.as_str();
     // This precondition is checked in Config::module_version:
     assert!(
         version.len() < 256,
@@ -145,19 +149,19 @@ pub fn append_compiler_info(engine: &Engine, obj: &mut Object<'_>, metadata: &Me
 }
 
 fn detect_precompiled<'data, R: object::ReadRef<'data>>(
-    obj: ElfFile64<'data, NativeEndian, R>,
+    obj: ElfFile64<'data, Endianness, R>,
 ) -> Option<Precompiled> {
     match obj.flags() {
         FileFlags::Elf {
             os_abi: obj::ELFOSABI_WASMTIME,
             abi_version: 0,
-            e_flags: obj::EF_WASMTIME_MODULE,
-        } => Some(Precompiled::Module),
+            e_flags,
+        } if e_flags & obj::EF_WASMTIME_MODULE != 0 => Some(Precompiled::Module),
         FileFlags::Elf {
             os_abi: obj::ELFOSABI_WASMTIME,
             abi_version: 0,
-            e_flags: obj::EF_WASMTIME_COMPONENT,
-        } => Some(Precompiled::Component),
+            e_flags,
+        } if e_flags & obj::EF_WASMTIME_COMPONENT != 0 => Some(Precompiled::Component),
         _ => None,
     }
 }
@@ -175,97 +179,26 @@ pub fn detect_precompiled_file(path: impl AsRef<std::path::Path>) -> Result<Opti
 
 #[derive(Serialize, Deserialize)]
 pub struct Metadata<'a> {
-    target: String,
+    target: TryString,
     #[serde(borrow)]
-    shared_flags: Vec<(&'a str, FlagValue<'a>)>,
+    shared_flags: TryVec<(&'a str, FlagValue<'a>)>,
     #[serde(borrow)]
-    isa_flags: Vec<(&'a str, FlagValue<'a>)>,
+    isa_flags: TryVec<(&'a str, FlagValue<'a>)>,
     tunables: Tunables,
-    features: WasmFeatures,
-}
-
-// This exists because `wasmparser::WasmFeatures` isn't serializable
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-struct WasmFeatures {
-    reference_types: bool,
-    multi_value: bool,
-    bulk_memory: bool,
-    component_model: bool,
-    simd: bool,
-    tail_call: bool,
-    threads: bool,
-    multi_memory: bool,
-    exceptions: bool,
-    memory64: bool,
-    relaxed_simd: bool,
-    extended_const: bool,
-    function_references: bool,
-    gc: bool,
-    custom_page_sizes: bool,
+    features: u64,
 }
 
 impl Metadata<'_> {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
-    pub fn new(engine: &Engine) -> Metadata<'static> {
-        let wasmparser::WasmFeaturesInflated {
-            reference_types,
-            multi_value,
-            bulk_memory,
-            component_model,
-            simd,
-            threads,
-            tail_call,
-            multi_memory,
-            exceptions,
-            memory64,
-            relaxed_simd,
-            extended_const,
-            memory_control,
-            function_references,
-            gc,
-            custom_page_sizes,
-            shared_everything_threads,
-            component_model_values,
-            component_model_nested_names,
-
-            // Always on; we don't currently have knobs for these.
-            mutable_global: _,
-            saturating_float_to_int: _,
-            sign_extension: _,
-            floats: _,
-        } = engine.config().features.inflate();
-
-        // These features are not implemented in Wasmtime yet. We match on them
-        // above so that once we do implement support for them, we won't
-        // silently ignore them during serialization.
-        assert!(!memory_control);
-        assert!(!component_model_values);
-        assert!(!component_model_nested_names);
-        assert!(!shared_everything_threads);
-
-        Metadata {
-            target: engine.compiler().triple().to_string(),
-            shared_flags: engine.compiler().flags(),
-            isa_flags: engine.compiler().isa_flags(),
+    pub fn new(engine: &Engine) -> Result<Metadata<'static>> {
+        let compiler = engine.try_compiler()?;
+        Ok(Metadata {
+            target: compiler.triple().to_string().into(),
+            shared_flags: compiler.flags().into(),
+            isa_flags: compiler.isa_flags().into(),
             tunables: engine.tunables().clone(),
-            features: WasmFeatures {
-                reference_types,
-                multi_value,
-                bulk_memory,
-                component_model,
-                simd,
-                threads,
-                tail_call,
-                multi_memory,
-                exceptions,
-                memory64,
-                relaxed_simd,
-                extended_const,
-                function_references,
-                gc,
-                custom_page_sizes,
-            },
-        }
+            features: engine.features().bits(),
+        })
     }
 
     fn check_compatible(mut self, engine: &Engine) -> Result<()> {
@@ -273,14 +206,14 @@ impl Metadata<'_> {
         self.check_shared_flags(engine)?;
         self.check_isa_flags(engine)?;
         self.check_tunables(&engine.tunables())?;
-        self.check_features(&engine.config().features)?;
+        self.check_features(&engine.features())?;
         Ok(())
     }
 
     fn check_triple(&self, engine: &Engine) -> Result<()> {
         let engine_target = engine.target();
         let module_target =
-            target_lexicon::Triple::from_str(&self.target).map_err(|e| anyhow!(e))?;
+            target_lexicon::Triple::from_str(&self.target).map_err(|e| format_err!(e))?;
 
         if module_target.architecture != engine_target.architecture {
             bail!(
@@ -303,7 +236,7 @@ impl Metadata<'_> {
         for (name, val) in self.shared_flags.iter() {
             engine
                 .check_compatible_with_shared_flag(name, val)
-                .map_err(|s| anyhow::Error::msg(s))
+                .map_err(|s| crate::Error::msg(s))
                 .context("compilation settings of module incompatible with native host")?;
         }
         Ok(())
@@ -313,26 +246,23 @@ impl Metadata<'_> {
         for (name, val) in self.isa_flags.iter() {
             engine
                 .check_compatible_with_isa_flag(name, val)
-                .map_err(|s| anyhow::Error::msg(s))
+                .map_err(|s| crate::Error::msg(s))
                 .context("compilation settings of module incompatible with native host")?;
         }
         Ok(())
     }
 
-    fn check_int<T: Eq + core::fmt::Display>(found: T, expected: T, feature: &str) -> Result<()> {
+    fn check_int<T: Eq + fmt::Display>(found: T, expected: T, feature: &str) -> Result<()> {
         if found == expected {
             return Ok(());
         }
 
         bail!(
-            "Module was compiled with a {} of '{}' but '{}' is expected for the host",
-            feature,
-            found,
-            expected
+            "Module was compiled with a {feature} of '{found}' but '{expected}' is expected for the host"
         );
     }
 
-    fn check_bool(found: bool, expected: bool, feature: &str) -> Result<()> {
+    fn check_bool(found: bool, expected: bool, feature: impl fmt::Display) -> Result<()> {
         if found == expected {
             return Ok(());
         }
@@ -345,26 +275,49 @@ impl Metadata<'_> {
         );
     }
 
+    fn check_cost(
+        consume_fuel: bool,
+        found: &OperatorCostStrategy,
+        expected: &OperatorCostStrategy,
+    ) -> Result<()> {
+        if !consume_fuel {
+            return Ok(());
+        }
+
+        if found != expected {
+            bail!("Module costs are incompatible");
+        }
+
+        Ok(())
+    }
+
     fn check_tunables(&mut self, other: &Tunables) -> Result<()> {
         let Tunables {
-            static_memory_reservation,
-            static_memory_offset_guard_size,
-            dynamic_memory_offset_guard_size,
-            generate_native_debuginfo,
+            collector,
+            memory_reservation,
+            memory_guard_size,
+            debug_native,
+            debug_guest,
             parse_wasm_debuginfo,
             consume_fuel,
+            ref operator_cost,
             epoch_interruption,
-            static_memory_bound_is_maximum,
+            memory_may_move,
             guard_before_linear_memory,
             table_lazy_init,
             relaxed_simd_deterministic,
-            tail_callable,
             winch_callable,
-            cache_call_indirects,
-            max_call_indirect_cache_slots,
+            signals_based_traps,
+            memory_init_cow,
+            inlining,
+            inlining_intra_module,
+            inlining_small_callee_size,
+            inlining_sum_size_threshold,
+            concurrency_support,
+            recording,
 
             // This doesn't affect compilation, it's just a runtime setting.
-            dynamic_memory_growth_reserve: _,
+            memory_reservation_for_growth: _,
 
             // This does technically affect compilation but modules with/without
             // trap information can be loaded into engines with the opposite
@@ -374,44 +327,42 @@ impl Metadata<'_> {
 
             // Just a debugging aid, doesn't affect functionality at all.
             debug_adapter_modules: _,
+
+            // Call-indirect caching: runtime optimization, doesn't affect ABI.
+            cache_call_indirects: _,
+            max_call_indirect_cache_slots: _,
         } = self.tunables;
 
+        Self::check_collector(collector, other.collector)?;
         Self::check_int(
-            static_memory_reservation,
-            other.static_memory_reservation,
-            "static memory reservation",
+            memory_reservation,
+            other.memory_reservation,
+            "memory reservation",
         )?;
         Self::check_int(
-            static_memory_offset_guard_size,
-            other.static_memory_offset_guard_size,
-            "static memory guard size",
-        )?;
-        Self::check_int(
-            dynamic_memory_offset_guard_size,
-            other.dynamic_memory_offset_guard_size,
-            "dynamic memory guard size",
+            memory_guard_size,
+            other.memory_guard_size,
+            "memory guard size",
         )?;
         Self::check_bool(
-            generate_native_debuginfo,
-            other.generate_native_debuginfo,
-            "debug information support",
+            debug_native,
+            other.debug_native,
+            "native debug information support",
         )?;
+        Self::check_bool(debug_guest, other.debug_guest, "guest debug")?;
         Self::check_bool(
             parse_wasm_debuginfo,
             other.parse_wasm_debuginfo,
             "WebAssembly backtrace support",
         )?;
         Self::check_bool(consume_fuel, other.consume_fuel, "fuel support")?;
+        Self::check_cost(consume_fuel, operator_cost, &other.operator_cost)?;
         Self::check_bool(
             epoch_interruption,
             other.epoch_interruption,
             "epoch interruption",
         )?;
-        Self::check_bool(
-            static_memory_bound_is_maximum,
-            other.static_memory_bound_is_maximum,
-            "pooling allocation support",
-        )?;
+        Self::check_bool(memory_may_move, other.memory_may_move, "memory may move")?;
         Self::check_bool(
             guard_before_linear_memory,
             other.guard_before_linear_memory,
@@ -423,154 +374,106 @@ impl Metadata<'_> {
             other.relaxed_simd_deterministic,
             "relaxed simd deterministic semantics",
         )?;
-        Self::check_bool(tail_callable, other.tail_callable, "WebAssembly tail calls")?;
         Self::check_bool(
             winch_callable,
             other.winch_callable,
             "Winch calling convention",
         )?;
         Self::check_bool(
-            cache_call_indirects,
-            other.cache_call_indirects,
-            "caching of call-indirect targets",
+            signals_based_traps,
+            other.signals_based_traps,
+            "Signals-based traps",
+        )?;
+        Self::check_bool(
+            memory_init_cow,
+            other.memory_init_cow,
+            "memory initialization with CoW",
+        )?;
+        Self::check_bool(inlining, other.inlining, "function inlining")?;
+        Self::check_int(
+            inlining_small_callee_size,
+            other.inlining_small_callee_size,
+            "function inlining small-callee size",
         )?;
         Self::check_int(
-            max_call_indirect_cache_slots,
-            other.max_call_indirect_cache_slots,
-            "maximum slot count for caching of call-indirect targets",
+            inlining_sum_size_threshold,
+            other.inlining_sum_size_threshold,
+            "function inlining sum-size threshold",
         )?;
+        Self::check_bool(
+            concurrency_support,
+            other.concurrency_support,
+            "concurrency support",
+        )?;
+        Self::check_bool(recording, other.recording, "RR recording support")?;
+        Self::check_intra_module_inlining(inlining_intra_module, other.inlining_intra_module)?;
 
         Ok(())
-    }
-
-    fn check_cfg_bool(
-        cfg: bool,
-        cfg_str: &str,
-        found: bool,
-        expected: bool,
-        feature: &str,
-    ) -> Result<()> {
-        if cfg {
-            Self::check_bool(found, expected, feature)
-        } else {
-            assert!(!expected);
-            ensure!(
-                !found,
-                "Module was compiled with {feature} but support in the host \
-                 was disabled at compile time because the `{cfg_str}` Cargo \
-                 feature was not enabled",
-            );
-            Ok(())
-        }
     }
 
     fn check_features(&mut self, other: &wasmparser::WasmFeatures) -> Result<()> {
-        let WasmFeatures {
-            reference_types,
-            multi_value,
-            bulk_memory,
-            component_model,
-            simd,
-            tail_call,
-            threads,
-            multi_memory,
-            exceptions,
-            memory64,
-            relaxed_simd,
-            extended_const,
-            function_references,
-            gc,
-            custom_page_sizes,
-        } = self.features;
-
-        use wasmparser::WasmFeatures as F;
-        Self::check_cfg_bool(
-            cfg!(feature = "gc"),
-            "gc",
-            reference_types,
-            other.contains(F::REFERENCE_TYPES),
-            "WebAssembly reference types support",
-        )?;
-        Self::check_cfg_bool(
-            cfg!(feature = "gc"),
-            "gc",
-            function_references,
-            other.contains(F::FUNCTION_REFERENCES),
-            "WebAssembly function-references support",
-        )?;
-        Self::check_cfg_bool(
-            cfg!(feature = "gc"),
-            "gc",
-            gc,
-            other.contains(F::GC),
-            "WebAssembly garbage collection support",
-        )?;
-
-        Self::check_bool(
-            multi_value,
-            other.contains(F::MULTI_VALUE),
-            "WebAssembly multi-value support",
-        )?;
-        Self::check_bool(
-            bulk_memory,
-            other.contains(F::BULK_MEMORY),
-            "WebAssembly bulk memory support",
-        )?;
-        Self::check_bool(
-            component_model,
-            other.contains(F::COMPONENT_MODEL),
-            "WebAssembly component model support",
-        )?;
-        Self::check_bool(simd, other.contains(F::SIMD), "WebAssembly SIMD support")?;
-        Self::check_bool(
-            tail_call,
-            other.contains(F::TAIL_CALL),
-            "WebAssembly tail calls support",
-        )?;
-        Self::check_bool(
-            threads,
-            other.contains(F::THREADS),
-            "WebAssembly threads support",
-        )?;
-        Self::check_bool(
-            multi_memory,
-            other.contains(F::MULTI_MEMORY),
-            "WebAssembly multi-memory support",
-        )?;
-        Self::check_bool(
-            exceptions,
-            other.contains(F::EXCEPTIONS),
-            "WebAssembly exceptions support",
-        )?;
-        Self::check_bool(
-            memory64,
-            other.contains(F::MEMORY64),
-            "WebAssembly 64-bit memory support",
-        )?;
-        Self::check_bool(
-            extended_const,
-            other.contains(F::EXTENDED_CONST),
-            "WebAssembly extended-const support",
-        )?;
-        Self::check_bool(
-            relaxed_simd,
-            other.contains(F::RELAXED_SIMD),
-            "WebAssembly relaxed-simd support",
-        )?;
-        Self::check_bool(
-            custom_page_sizes,
-            other.contains(F::CUSTOM_PAGE_SIZES),
-            "WebAssembly custom-page-sizes support",
-        )?;
-
+        let module_features = wasmparser::WasmFeatures::from_bits_truncate(self.features);
+        let missing_features = (*other & module_features) ^ module_features;
+        for (name, _) in missing_features.iter_names() {
+            let name = name.to_ascii_lowercase();
+            bail!(
+                "Module was compiled with support for WebAssembly feature \
+                `{name}` but it is not enabled for the host",
+            );
+        }
         Ok(())
+    }
+
+    fn check_collector(
+        module: Option<wasmtime_environ::Collector>,
+        host: Option<wasmtime_environ::Collector>,
+    ) -> Result<()> {
+        match (module, host) {
+            // If the module doesn't require GC support it doesn't matter
+            // whether the host has GC support enabled or not.
+            (None, _) => Ok(()),
+            (Some(module), Some(host)) if module == host => Ok(()),
+
+            (Some(_), None) => {
+                bail!("module was compiled with GC however GC is disabled in the host")
+            }
+
+            (Some(module), Some(host)) => {
+                bail!(
+                    "module was compiled for the {module} collector but \
+                     the host is configured to use the {host} collector",
+                )
+            }
+        }
+    }
+
+    fn check_intra_module_inlining(
+        module: wasmtime_environ::IntraModuleInlining,
+        host: wasmtime_environ::IntraModuleInlining,
+    ) -> Result<()> {
+        if module == host {
+            return Ok(());
+        }
+
+        let desc = |cfg| match cfg {
+            wasmtime_environ::IntraModuleInlining::No => "without intra-module inlining",
+            wasmtime_environ::IntraModuleInlining::Yes => "with intra-module inlining",
+            wasmtime_environ::IntraModuleInlining::WhenUsingGc => {
+                "with intra-module inlining only when using GC"
+            }
+        };
+
+        let module = desc(module);
+        let host = desc(host);
+
+        bail!("module was compiled {module} however the host is configured {host}")
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Config, Module, OptLevel};
+    use crate::{Cache, Config, Module, OptLevel};
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -580,8 +483,8 @@ mod test {
     #[test]
     fn test_architecture_mismatch() -> Result<()> {
         let engine = Engine::default();
-        let mut metadata = Metadata::new(&engine);
-        metadata.target = "unknown-generic-linux".to_string();
+        let mut metadata = Metadata::new(&engine)?;
+        metadata.target = "unknown-generic-linux".to_string().into();
 
         match metadata.check_compatible(&engine) {
             Ok(_) => unreachable!(),
@@ -594,15 +497,18 @@ mod test {
         Ok(())
     }
 
+    // Note that this test runs on a platform that is known to use Cranelift
     #[test]
+    #[cfg(all(target_arch = "x86_64", not(miri)))]
     fn test_os_mismatch() -> Result<()> {
         let engine = Engine::default();
-        let mut metadata = Metadata::new(&engine);
+        let mut metadata = Metadata::new(&engine)?;
 
         metadata.target = format!(
             "{}-generic-unknown",
             target_lexicon::Triple::host().architecture
-        );
+        )
+        .into();
 
         match metadata.check_compatible(&engine) {
             Ok(_) => unreachable!(),
@@ -615,24 +521,36 @@ mod test {
         Ok(())
     }
 
+    fn assert_contains(error: &Error, msg: &str) {
+        let msg = msg.trim();
+        if error.chain().any(|e| e.to_string().contains(msg)) {
+            return;
+        }
+
+        panic!("failed to find:\n\n'''{msg}\n'''\n\nwithin error message:\n\n'''{error:?}'''")
+    }
+
     #[test]
     fn test_cranelift_flags_mismatch() -> Result<()> {
         let engine = Engine::default();
-        let mut metadata = Metadata::new(&engine);
+        let mut metadata = Metadata::new(&engine)?;
 
         metadata
             .shared_flags
-            .push(("preserve_frame_pointers", FlagValue::Bool(false)));
+            .push(("preserve_frame_pointers", FlagValue::Bool(false)))?;
 
         match metadata.check_compatible(&engine) {
             Ok(_) => unreachable!(),
-            Err(e) => assert!(format!("{:?}", e).starts_with(
-                "\
-compilation settings of module incompatible with native host
-
-Caused by:
-    setting \"preserve_frame_pointers\" is configured to Bool(false) which is not supported"
-            )),
+            Err(e) => {
+                assert_contains(
+                    &e,
+                    "compilation settings of module incompatible with native host",
+                );
+                assert_contains(
+                    &e,
+                    "setting \"preserve_frame_pointers\" is configured to Bool(false) which is not supported",
+                );
+            }
         }
 
         Ok(())
@@ -641,24 +559,24 @@ Caused by:
     #[test]
     fn test_isa_flags_mismatch() -> Result<()> {
         let engine = Engine::default();
-        let mut metadata = Metadata::new(&engine);
+        let mut metadata = Metadata::new(&engine)?;
 
         metadata
             .isa_flags
-            .push(("not_a_flag", FlagValue::Bool(true)));
+            .push(("not_a_flag", FlagValue::Bool(true)))?;
 
         match metadata.check_compatible(&engine) {
             Ok(_) => unreachable!(),
-            Err(e) => assert!(
-                format!("{e:?}").starts_with(
-                    "\
-compilation settings of module incompatible with native host
-
-Caused by:
-    don't know how to test for target-specific flag \"not_a_flag\" at runtime",
-                ),
-                "bad error {e:?}",
-            ),
+            Err(e) => {
+                assert_contains(
+                    &e,
+                    "compilation settings of module incompatible with native host",
+                );
+                assert_contains(
+                    &e,
+                    "don't know how to test for target-specific flag \"not_a_flag\" at runtime",
+                );
+            }
         }
 
         Ok(())
@@ -666,15 +584,19 @@ Caused by:
 
     #[test]
     #[cfg_attr(miri, ignore)]
+    #[cfg(target_pointer_width = "64")] // different defaults on 32-bit platforms
     fn test_tunables_int_mismatch() -> Result<()> {
         let engine = Engine::default();
-        let mut metadata = Metadata::new(&engine);
+        let mut metadata = Metadata::new(&engine)?;
 
-        metadata.tunables.static_memory_offset_guard_size = 0;
+        metadata.tunables.memory_guard_size = 0;
 
         match metadata.check_compatible(&engine) {
             Ok(_) => unreachable!(),
-            Err(e) => assert_eq!(e.to_string(), "Module was compiled with a static memory guard size of '0' but '2147483648' is expected for the host"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Module was compiled with a memory guard size of '0' but '33554432' is expected for the host"
+            ),
         }
 
         Ok(())
@@ -686,7 +608,7 @@ Caused by:
         config.epoch_interruption(true);
 
         let engine = Engine::new(&config)?;
-        let mut metadata = Metadata::new(&engine);
+        let mut metadata = Metadata::new(&engine)?;
         metadata.tunables.epoch_interruption = false;
 
         match metadata.check_compatible(&engine) {
@@ -701,7 +623,7 @@ Caused by:
         config.epoch_interruption(false);
 
         let engine = Engine::new(&config)?;
-        let mut metadata = Metadata::new(&engine);
+        let mut metadata = Metadata::new(&engine)?;
         metadata.tunables.epoch_interruption = true;
 
         match metadata.check_compatible(&engine) {
@@ -715,30 +637,35 @@ Caused by:
         Ok(())
     }
 
+    /// This test is only run a platform that is known to implement threads
     #[test]
+    #[cfg(all(target_arch = "x86_64", not(miri)))]
     fn test_feature_mismatch() -> Result<()> {
         let mut config = Config::new();
         config.wasm_threads(true);
 
         let engine = Engine::new(&config)?;
-        let mut metadata = Metadata::new(&engine);
-        metadata.features.threads = false;
+        let mut metadata = Metadata::new(&engine)?;
+        metadata.features &= !wasmparser::WasmFeatures::THREADS.bits();
 
-        match metadata.check_compatible(&engine) {
-            Ok(_) => unreachable!(),
-            Err(e) => assert_eq!(e.to_string(), "Module was compiled without WebAssembly threads support but it is enabled for the host"),
-        }
+        // If a feature is disabled in the module and enabled in the host,
+        // that's always ok.
+        metadata.check_compatible(&engine)?;
 
         let mut config = Config::new();
         config.wasm_threads(false);
 
         let engine = Engine::new(&config)?;
-        let mut metadata = Metadata::new(&engine);
-        metadata.features.threads = true;
+        let mut metadata = Metadata::new(&engine)?;
+        metadata.features |= wasmparser::WasmFeatures::THREADS.bits();
 
         match metadata.check_compatible(&engine) {
             Ok(_) => unreachable!(),
-            Err(e) => assert_eq!(e.to_string(), "Module was compiled with WebAssembly threads support but it is not enabled for the host"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Module was compiled with support for WebAssembly feature \
+                `threads` but it is not enabled for the host"
+            ),
         }
 
         Ok(())
@@ -760,6 +687,8 @@ Caused by:
     #[test]
     #[cfg_attr(miri, ignore)]
     fn cache_accounts_for_opt_level() -> Result<()> {
+        let _ = env_logger::try_init();
+
         let td = TempDir::new()?;
         let config_path = td.path().join("config.toml");
         std::fs::write(
@@ -767,7 +696,6 @@ Caused by:
             &format!(
                 "
                     [cache]
-                    enabled = true
                     directory = '{}'
                 ",
                 td.path().join("cache").display()
@@ -775,46 +703,67 @@ Caused by:
         )?;
         let mut cfg = Config::new();
         cfg.cranelift_opt_level(OptLevel::None)
-            .cache_config_load(&config_path)?;
+            .cache(Some(Cache::from_file(Some(&config_path))?));
         let engine = Engine::new(&cfg)?;
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 0);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        let cache_config = engine
+            .config()
+            .cache
+            .as_ref()
+            .expect("Missing cache config");
+        assert_eq!(cache_config.cache_hits(), 0);
+        assert_eq!(cache_config.cache_misses(), 1);
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 1);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 1);
+        assert_eq!(cache_config.cache_misses(), 1);
 
         let mut cfg = Config::new();
         cfg.cranelift_opt_level(OptLevel::Speed)
-            .cache_config_load(&config_path)?;
+            .cache(Some(Cache::from_file(Some(&config_path))?));
         let engine = Engine::new(&cfg)?;
+        let cache_config = engine
+            .config()
+            .cache
+            .as_ref()
+            .expect("Missing cache config");
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 0);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 0);
+        assert_eq!(cache_config.cache_misses(), 1);
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 1);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 1);
+        assert_eq!(cache_config.cache_misses(), 1);
 
         let mut cfg = Config::new();
         cfg.cranelift_opt_level(OptLevel::SpeedAndSize)
-            .cache_config_load(&config_path)?;
+            .cache(Some(Cache::from_file(Some(&config_path))?));
         let engine = Engine::new(&cfg)?;
+        let cache_config = engine
+            .config()
+            .cache
+            .as_ref()
+            .expect("Missing cache config");
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 0);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 0);
+        assert_eq!(cache_config.cache_misses(), 1);
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 1);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 1);
+        assert_eq!(cache_config.cache_misses(), 1);
 
         let mut cfg = Config::new();
-        cfg.debug_info(true).cache_config_load(&config_path)?;
+        cfg.debug_info(true)
+            .cache(Some(Cache::from_file(Some(&config_path))?));
         let engine = Engine::new(&cfg)?;
+        let cache_config = engine
+            .config()
+            .cache
+            .as_ref()
+            .expect("Missing cache config");
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 0);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 0);
+        assert_eq!(cache_config.cache_misses(), 1);
         Module::new(&engine, "(module (func))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 1);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 1);
+        assert_eq!(cache_config.cache_misses(), 1);
 
         Ok(())
     }
@@ -875,21 +824,25 @@ Caused by:
             &format!(
                 "
                     [cache]
-                    enabled = true
                     directory = '{}'
                 ",
                 td.path().join("cache").display()
             ),
         )?;
         let mut cfg = Config::new();
-        cfg.cache_config_load(&config_path)?;
+        cfg.cache(Some(Cache::from_file(Some(&config_path))?));
         let engine = Engine::new(&cfg)?;
+        let cache_config = engine
+            .config()
+            .cache
+            .as_ref()
+            .expect("Missing cache config");
         Component::new(&engine, "(component (core module (func)))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 0);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 0);
+        assert_eq!(cache_config.cache_misses(), 1);
         Component::new(&engine, "(component (core module (func)))")?;
-        assert_eq!(engine.config().cache_config.cache_hits(), 1);
-        assert_eq!(engine.config().cache_config.cache_misses(), 1);
+        assert_eq!(cache_config.cache_hits(), 1);
+        assert_eq!(cache_config.cache_misses(), 1);
 
         Ok(())
     }

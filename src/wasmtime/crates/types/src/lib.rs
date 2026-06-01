@@ -1655,15 +1655,18 @@ pub trait TypeConvert {
     }
 
     fn convert_composite_type(&self, ty: &wasmparser::CompositeType) -> WasmCompositeType {
-        match ty {
-            wasmparser::CompositeType::Func(f) => {
+        match &ty.inner {
+            wasmparser::CompositeInnerType::Func(f) => {
                 WasmCompositeType::Func(self.convert_func_type(f))
             }
-            wasmparser::CompositeType::Array(a) => {
+            wasmparser::CompositeInnerType::Array(a) => {
                 WasmCompositeType::Array(self.convert_array_type(a))
             }
-            wasmparser::CompositeType::Struct(s) => {
+            wasmparser::CompositeInnerType::Struct(s) => {
                 WasmCompositeType::Struct(self.convert_struct_type(s))
+            }
+            wasmparser::CompositeInnerType::Cont(_) => {
+                unimplemented!("cont types not supported")
             }
         }
     }
@@ -1748,7 +1751,10 @@ pub trait TypeConvert {
                 wasmparser::AbstractHeapType::Struct => WasmHeapType::Struct,
                 wasmparser::AbstractHeapType::None => WasmHeapType::None,
 
-                wasmparser::AbstractHeapType::Exn | wasmparser::AbstractHeapType::NoExn => {
+                wasmparser::AbstractHeapType::Exn
+                | wasmparser::AbstractHeapType::NoExn
+                | wasmparser::AbstractHeapType::Cont
+                | wasmparser::AbstractHeapType::NoCont => {
                     unimplemented!("unsupported heap type {ty:?}");
                 }
             },

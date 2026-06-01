@@ -1,10 +1,10 @@
 #![no_main]
 
+use cranelift_codegen::Context;
 use cranelift_codegen::ir::Function;
 use cranelift_codegen::ir::Signature;
 use cranelift_codegen::ir::UserExternalName;
 use cranelift_codegen::ir::UserFuncName;
-use cranelift_codegen::Context;
 use cranelift_control::ControlPlane;
 use libfuzzer_sys::arbitrary;
 use libfuzzer_sys::arbitrary::Arbitrary;
@@ -180,23 +180,25 @@ impl<'a> Arbitrary<'a> for TestCase {
 
 impl TestCase {
     pub fn generate(u: &mut Unstructured) -> anyhow::Result<Self> {
-        let mut gen = FuzzGen::new(u);
+        let mut fuzz_gen = FuzzGen::new(u);
 
-        let compare_against_host = gen.u.arbitrary()?;
+        let compare_against_host = fuzz_gen.u.arbitrary()?;
 
         // TestCase is meant to be consumed by a runner, so we make the assumption here that we're
         // generating a TargetIsa for the host.
         let mut builder =
             builder_with_options(true).expect("Unable to build a TargetIsa for the current host");
-        let flags = gen.generate_flags(builder.triple().architecture)?;
-        gen.set_isa_flags(&mut builder, IsaFlagGen::Host)?;
+        let flags = fuzz_gen.generate_flags(builder.triple().architecture)?;
+        fuzz_gen.set_isa_flags(&mut builder, IsaFlagGen::Host)?;
         let isa = builder.finish(flags)?;
 
         // When generating functions, we allow each function to call any function that has
         // already been generated. This guarantees that we never have loops in the call graph.
         // We generate these backwards, and then reverse them so that the main function is at
         // the start.
-        let func_count = gen.u.int_in_range(gen.config.testcase_funcs.clone())?;
+        let func_count = fuzz_gen
+            .u
+            .int_in_range(fuzz_gen.config.testcase_funcs.clone())?;
         let mut functions: Vec<Function> = Vec::with_capacity(func_count);
         let mut ctrl_planes: Vec<ControlPlane> = Vec::with_capacity(func_count);
         for i in (0..func_count).rev() {
@@ -214,16 +216,16 @@ impl TestCase {
                 .collect();
 
             let func =
-                gen.generate_func(fname, isa.clone(), usercalls, ALLOWED_LIBCALLS.to_vec())?;
+                fuzz_gen.generate_func(fname, isa.clone(), usercalls, ALLOWED_LIBCALLS.to_vec())?;
             functions.push(func);
 
-            ctrl_planes.push(ControlPlane::arbitrary(gen.u)?);
+            ctrl_planes.push(ControlPlane::arbitrary(fuzz_gen.u)?);
         }
         // Now reverse the functions so that the main function is at the start.
         functions.reverse();
 
         let main = &functions[0];
-        let inputs = gen.generate_test_inputs(&main.signature)?;
+        let inputs = fuzz_gen.generate_test_inputs(&main.signature)?;
 
         Ok(TestCase {
             isa,

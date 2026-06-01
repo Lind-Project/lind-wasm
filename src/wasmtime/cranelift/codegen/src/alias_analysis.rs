@@ -61,17 +61,17 @@
 //! must be correct likely reduce the potential benefit, we don't yet
 //! do this.
 
+use crate::{FxHashMap, FxHashSet};
 use crate::{
     cursor::{Cursor, FuncCursor},
     dominator_tree::DominatorTree,
     inst_predicates::{
         has_memory_fence_semantics, inst_addr_offset_type, inst_store_data, visit_block_succs,
     },
-    ir::{immediates::Offset32, AliasRegion, Block, Function, Inst, Opcode, Type, Value},
+    ir::{AliasRegion, Block, Function, Inst, Opcode, Type, Value, immediates::Offset32},
     trace,
 };
-use cranelift_entity::{packed_option::PackedOption, EntityRef};
-use rustc_hash::{FxHashMap, FxHashSet};
+use cranelift_entity::{EntityRef, packed_option::PackedOption};
 
 /// For a given program point, the vector of last-store instruction
 /// indices for each disjoint category of abstract state.
@@ -212,11 +212,10 @@ impl<'a> AliasAnalysis<'a> {
 
         while let Some(block) = queue.pop() {
             queue_set.remove(&block);
-            let mut state = self
+            let mut state = *self
                 .block_input
                 .entry(block)
-                .or_insert_with(|| LastStores::default())
-                .clone();
+                .or_insert_with(|| LastStores::default());
 
             trace!(
                 "alias analysis: input to block{} is {:?}",
@@ -230,15 +229,15 @@ impl<'a> AliasAnalysis<'a> {
             }
 
             visit_block_succs(func, block, |_inst, succ, _from_table| {
-                let succ_first_inst = func.layout.block_insts(succ).into_iter().next().unwrap();
+                let succ_first_inst = func.layout.block_insts(succ).next().unwrap();
                 let updated = match self.block_input.get_mut(&succ) {
                     Some(succ_state) => {
-                        let old = succ_state.clone();
+                        let old = *succ_state;
                         succ_state.meet_from(&state, succ_first_inst);
                         *succ_state != old
                     }
                     None => {
-                        self.block_input.insert(succ, state.clone());
+                        self.block_input.insert(succ, state);
                         true
                     }
                 };

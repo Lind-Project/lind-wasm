@@ -1,19 +1,19 @@
 //! This module defines aarch64-specific machine instruction types.
 
 use crate::binemit::{Addend, CodeOffset, Reloc};
-use crate::ir::types::{F32, F64, I128, I16, I32, I64, I8, I8X16, R32, R64};
-use crate::ir::{types, ExternalName, MemFlags, Opcode, Type};
+use crate::ir::types::{F16, F32, F64, F128, I8, I8X16, I16, I32, I64, I128};
+use crate::ir::{MemFlags, Type, types};
 use crate::isa::{CallConv, FunctionAlignment};
 use crate::machinst::*;
-use crate::{settings, CodegenError, CodegenResult};
+use crate::{CodegenError, CodegenResult, settings};
 
 use crate::machinst::{PrettyPrint, Reg, RegClass, Writable};
 
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use regalloc2::PRegSet;
-use smallvec::{smallvec, SmallVec};
-use std::fmt::Write;
-use std::string::{String, ToString};
+use core::fmt::Write;
+use core::slice;
+use smallvec::{SmallVec, smallvec};
 
 pub(crate) mod regs;
 pub(crate) use self::regs::*;
@@ -74,62 +74,14 @@ impl BitOp {
     }
 }
 
-/// Additional information for (direct) Call instructions, left out of line to lower the size of
-/// the Inst enum.
-#[derive(Clone, Debug)]
-pub struct CallInfo {
-    /// Call destination.
-    pub dest: ExternalName,
-    /// Arguments to the call instruction.
-    pub uses: CallArgList,
-    /// Return values from the call instruction.
-    pub defs: CallRetList,
-    /// Clobbers register set.
-    pub clobbers: PRegSet,
-    /// Instruction opcode.
-    pub opcode: Opcode,
-    /// Caller calling convention.
-    pub caller_callconv: CallConv,
-    /// Callee calling convention.
-    pub callee_callconv: CallConv,
-    /// The number of bytes that the callee will pop from the stack for the
-    /// caller, if any. (Used for popping stack arguments with the `tail`
-    /// calling convention.)
-    pub callee_pop_size: u32,
-}
-
-/// Additional information for CallInd instructions, left out of line to lower the size of the Inst
-/// enum.
-#[derive(Clone, Debug)]
-pub struct CallIndInfo {
-    /// Function pointer for indirect call.
-    pub rn: Reg,
-    /// Arguments to the call instruction.
-    pub uses: SmallVec<[CallArgPair; 8]>,
-    /// Return values from the call instruction.
-    pub defs: SmallVec<[CallRetPair; 8]>,
-    /// Clobbers register set.
-    pub clobbers: PRegSet,
-    /// Instruction opcode.
-    pub opcode: Opcode,
-    /// Caller calling convention.
-    pub caller_callconv: CallConv,
-    /// Callee calling convention.
-    pub callee_callconv: CallConv,
-    /// The number of bytes that the callee will pop from the stack for the
-    /// caller, if any. (Used for popping stack arguments with the `tail`
-    /// calling convention.)
-    pub callee_pop_size: u32,
-}
-
 /// Additional information for `return_call[_ind]` instructions, left out of
 /// line to lower the size of the `Inst` enum.
 #[derive(Clone, Debug)]
-pub struct ReturnCallInfo {
+pub struct ReturnCallInfo<T> {
+    /// Where this call is going to
+    pub dest: T,
     /// Arguments to the call instruction.
     pub uses: CallArgList,
-    /// Instruction opcode.
-    pub opcode: Opcode,
     /// The size of the new stack frame's stack arguments. This is necessary
     /// for copying the frame over our current frame. It must already be
     /// allocated on the stack.
@@ -150,21 +102,10 @@ fn count_zero_half_words(mut value: u64, num_half_words: u8) -> usize {
     count
 }
 
-#[test]
-fn inst_size_test() {
-    // This test will help with unintentionally growing the size
-    // of the Inst enum.
-    assert_eq!(32, std::mem::size_of::<Inst>());
-}
-
 impl Inst {
     /// Create an instruction that loads a constant, using one of several options (MOVZ, MOVN,
     /// logical immediate, or constant pool).
-    pub fn load_constant<F: FnMut(Type) -> Writable<Reg>>(
-        rd: Writable<Reg>,
-        value: u64,
-        alloc_tmp: &mut F,
-    ) -> SmallVec<[Inst; 4]> {
+    pub fn load_constant(rd: Writable<Reg>, value: u64) -> SmallVec<[Inst; 4]> {
         // NB: this is duplicated in `lower/isle.rs` and `inst.isle` right now,
         // if modifications are made here before this is deleted after moving to
         // ISLE then those locations should be updated as well.
@@ -225,10 +166,8 @@ impl Inst {
                 .collect();
 
             let mut prev_result = None;
-            let last_index = halfwords.last().unwrap().0;
             for (i, imm16) in halfwords {
                 let shift = i * 16;
-                let rd = if i == last_index { rd } else { alloc_tmp(I16) };
 
                 if let Some(rn) = prev_result {
                     let imm = MoveWideConst::maybe_with_shift(imm16 as u16, shift).unwrap();
@@ -277,36 +216,27 @@ impl Inst {
                 mem,
                 flags,
             },
-            I32 | R32 => Inst::ULoad32 {
+            I32 => Inst::ULoad32 {
                 rd: into_reg,
                 mem,
                 flags,
             },
-            I64 | R64 => Inst::ULoad64 {
-                rd: into_reg,
-                mem,
-                flags,
-            },
-            F32 => Inst::FpuLoad32 {
-                rd: into_reg,
-                mem,
-                flags,
-            },
-            F64 => Inst::FpuLoad64 {
+            I64 => Inst::ULoad64 {
                 rd: into_reg,
                 mem,
                 flags,
             },
             _ => {
-                if ty.is_vector() {
+                if ty.is_vector() || ty.is_float() {
                     let bits = ty_bits(ty);
                     let rd = into_reg;
 
-                    if bits == 128 {
-                        Inst::FpuLoad128 { rd, mem, flags }
-                    } else {
-                        assert_eq!(bits, 64);
-                        Inst::FpuLoad64 { rd, mem, flags }
+                    match bits {
+                        128 => Inst::FpuLoad128 { rd, mem, flags },
+                        64 => Inst::FpuLoad64 { rd, mem, flags },
+                        32 => Inst::FpuLoad32 { rd, mem, flags },
+                        16 => Inst::FpuLoad16 { rd, mem, flags },
+                        _ => unimplemented!("gen_load({})", ty),
                     }
                 } else {
                     unimplemented!("gen_load({})", ty);
@@ -328,36 +258,27 @@ impl Inst {
                 mem,
                 flags,
             },
-            I32 | R32 => Inst::Store32 {
+            I32 => Inst::Store32 {
                 rd: from_reg,
                 mem,
                 flags,
             },
-            I64 | R64 => Inst::Store64 {
-                rd: from_reg,
-                mem,
-                flags,
-            },
-            F32 => Inst::FpuStore32 {
-                rd: from_reg,
-                mem,
-                flags,
-            },
-            F64 => Inst::FpuStore64 {
+            I64 => Inst::Store64 {
                 rd: from_reg,
                 mem,
                 flags,
             },
             _ => {
-                if ty.is_vector() {
+                if ty.is_vector() || ty.is_float() {
                     let bits = ty_bits(ty);
                     let rd = from_reg;
 
-                    if bits == 128 {
-                        Inst::FpuStore128 { rd, mem, flags }
-                    } else {
-                        assert_eq!(bits, 64);
-                        Inst::FpuStore64 { rd, mem, flags }
+                    match bits {
+                        128 => Inst::FpuStore128 { rd, mem, flags },
+                        64 => Inst::FpuStore64 { rd, mem, flags },
+                        32 => Inst::FpuStore32 { rd, mem, flags },
+                        16 => Inst::FpuStore16 { rd, mem, flags },
+                        _ => unimplemented!("gen_store({})", ty),
                     }
                 } else {
                     unimplemented!("gen_store({})", ty);
@@ -378,6 +299,7 @@ impl Inst {
             Inst::ULoad32 { .. } => Some(I32),
             Inst::SLoad32 { .. } => Some(I32),
             Inst::ULoad64 { .. } => Some(I64),
+            Inst::FpuLoad16 { .. } => Some(F16),
             Inst::FpuLoad32 { .. } => Some(F32),
             Inst::FpuLoad64 { .. } => Some(F64),
             Inst::FpuLoad128 { .. } => Some(I8X16),
@@ -385,6 +307,7 @@ impl Inst {
             Inst::Store16 { .. } => Some(I16),
             Inst::Store32 { .. } => Some(I32),
             Inst::Store64 { .. } => Some(I64),
+            Inst::FpuStore16 { .. } => Some(F16),
             Inst::FpuStore32 { .. } => Some(F32),
             Inst::FpuStore64 { .. } => Some(F64),
             Inst::FpuStore128 { .. } => Some(I8X16),
@@ -703,6 +626,10 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
             collector.reg_use(rn);
             collector.reg_use(rm);
         }
+        Inst::FpuLoad16 { rd, mem, .. } => {
+            collector.reg_def(rd);
+            memarg_operands(mem, collector);
+        }
         Inst::FpuLoad32 { rd, mem, .. } => {
             collector.reg_def(rd);
             memarg_operands(mem, collector);
@@ -713,6 +640,10 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
         }
         Inst::FpuLoad128 { rd, mem, .. } => {
             collector.reg_def(rd);
+            memarg_operands(mem, collector);
+        }
+        Inst::FpuStore16 { rd, mem, .. } => {
+            collector.reg_use(rd);
             memarg_operands(mem, collector);
         }
         Inst::FpuStore32 { rd, mem, .. } => {
@@ -755,7 +686,9 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
             collector.reg_def(rd);
             collector.reg_use(rn);
         }
-        Inst::FpuCSel32 { rd, rn, rm, .. } | Inst::FpuCSel64 { rd, rn, rm, .. } => {
+        Inst::FpuCSel16 { rd, rn, rm, .. }
+        | Inst::FpuCSel32 { rd, rn, rm, .. }
+        | Inst::FpuCSel64 { rd, rn, rm, .. } => {
             collector.reg_def(rd);
             collector.reg_use(rn);
             collector.reg_use(rm);
@@ -873,39 +806,53 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
             for CallArgPair { vreg, preg } in uses {
                 collector.reg_fixed_use(vreg, *preg);
             }
-            for CallRetPair { vreg, preg } in defs {
-                collector.reg_fixed_def(vreg, *preg);
+            for CallRetPair { vreg, location } in defs {
+                match location {
+                    RetLocation::Reg(preg, ..) => collector.reg_fixed_def(vreg, *preg),
+                    RetLocation::Stack(..) => collector.any_def(vreg),
+                }
             }
             collector.reg_clobbers(info.clobbers);
+            if let Some(try_call_info) = &mut info.try_call_info {
+                try_call_info.collect_operands(collector);
+            }
         }
         Inst::CallInd { info, .. } => {
-            let CallIndInfo { rn, uses, defs, .. } = &mut **info;
-            collector.reg_use(rn);
+            let CallInfo {
+                dest, uses, defs, ..
+            } = &mut **info;
+            collector.reg_use(dest);
             for CallArgPair { vreg, preg } in uses {
                 collector.reg_fixed_use(vreg, *preg);
             }
-            for CallRetPair { vreg, preg } in defs {
-                collector.reg_fixed_def(vreg, *preg);
+            for CallRetPair { vreg, location } in defs {
+                match location {
+                    RetLocation::Reg(preg, ..) => collector.reg_fixed_def(vreg, *preg),
+                    RetLocation::Stack(..) => collector.any_def(vreg),
+                }
             }
             collector.reg_clobbers(info.clobbers);
+            if let Some(try_call_info) = &mut info.try_call_info {
+                try_call_info.collect_operands(collector);
+            }
         }
-        Inst::ReturnCall { info, callee: _ } => {
+        Inst::ReturnCall { info } => {
             for CallArgPair { vreg, preg } in &mut info.uses {
                 collector.reg_fixed_use(vreg, *preg);
             }
         }
-        Inst::ReturnCallInd { info, callee } => {
+        Inst::ReturnCallInd { info } => {
             // TODO(https://github.com/bytecodealliance/regalloc2/issues/145):
             // This shouldn't be a fixed register constraint, but it's not clear how to pick a
             // register that won't be clobbered by the callee-save restore code emitted with a
             // return_call_indirect.
-            collector.reg_fixed_use(callee, xreg(1));
+            collector.reg_fixed_use(&mut info.dest, xreg(1));
             for CallArgPair { vreg, preg } in &mut info.uses {
                 collector.reg_fixed_use(vreg, *preg);
             }
         }
         Inst::CondBr { kind, .. } => match kind {
-            CondBrKind::Zero(rt) | CondBrKind::NotZero(rt) => collector.reg_use(rt),
+            CondBrKind::Zero(rt, _) | CondBrKind::NotZero(rt, _) => collector.reg_use(rt),
             CondBrKind::Cond(_) => {}
         },
         Inst::TestBitAndBranch { rn, .. } => {
@@ -918,7 +865,7 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
         Inst::Brk => {}
         Inst::Udf { .. } => {}
         Inst::TrapIf { kind, .. } => match kind {
-            CondBrKind::Zero(rt) | CondBrKind::NotZero(rt) => collector.reg_use(rt),
+            CondBrKind::Zero(rt, _) | CondBrKind::NotZero(rt, _) => collector.reg_use(rt),
             CondBrKind::Cond(_) => {}
         },
         Inst::Adr { rd, .. } | Inst::Adrp { rd, .. } => {
@@ -932,7 +879,9 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
             collector.reg_early_def(rtmp1);
             collector.reg_early_def(rtmp2);
         }
-        Inst::LoadExtName { rd, .. } => {
+        Inst::LoadExtNameGot { rd, .. }
+        | Inst::LoadExtNameNear { rd, .. }
+        | Inst::LoadExtNameFar { rd, .. } => {
             collector.reg_def(rd);
         }
         Inst::LoadAddr { rd, mem } => {
@@ -958,7 +907,7 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
         Inst::MachOTlsGetAddr { rd, .. } => {
             collector.reg_fixed_def(rd, regs::xreg(0));
             let mut clobbers =
-                AArch64MachineDeps::get_regs_clobbered_by_call(CallConv::AppleAarch64);
+                AArch64MachineDeps::get_regs_clobbered_by_call(CallConv::AppleAarch64, false);
             clobbers.remove(regs::xreg_preg(0));
             collector.reg_clobbers(clobbers);
         }
@@ -967,6 +916,10 @@ fn aarch64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
         Inst::DummyUse { reg } => {
             collector.reg_use(reg);
         }
+        Inst::LabelAddress { dst, .. } => {
+            collector.reg_def(dst);
+        }
+        Inst::SequencePoint { .. } => {}
         Inst::StackProbeLoop { start, end, .. } => {
             collector.reg_early_def(start);
             collector.reg_use(end);
@@ -1003,10 +956,18 @@ impl MachInst for Inst {
     }
 
     fn is_included_in_clobbers(&self) -> bool {
-        let (caller_callconv, callee_callconv) = match self {
+        let (caller, callee, is_exception) = match self {
             Inst::Args { .. } => return false,
-            Inst::Call { info } => (info.caller_callconv, info.callee_callconv),
-            Inst::CallInd { info } => (info.caller_callconv, info.callee_callconv),
+            Inst::Call { info } => (
+                info.caller_conv,
+                info.callee_conv,
+                info.try_call_info.is_some(),
+            ),
+            Inst::CallInd { info } => (
+                info.caller_conv,
+                info.callee_conv,
+                info.try_call_info.is_some(),
+            ),
             _ => return true,
         };
 
@@ -1021,8 +982,8 @@ impl MachInst for Inst {
         //
         // See the note in [crate::isa::aarch64::abi::is_caller_save_reg] for
         // more information on this ABI-implementation hack.
-        let caller_clobbers = AArch64MachineDeps::get_regs_clobbered_by_call(caller_callconv);
-        let callee_clobbers = AArch64MachineDeps::get_regs_clobbered_by_call(callee_callconv);
+        let caller_clobbers = AArch64MachineDeps::get_regs_clobbered_by_call(caller, false);
+        let callee_clobbers = AArch64MachineDeps::get_regs_clobbered_by_call(callee, is_exception);
 
         let mut all_clobbers = caller_clobbers;
         all_clobbers.union_from(callee_clobbers);
@@ -1043,15 +1004,30 @@ impl MachInst for Inst {
         }
     }
 
+    fn call_type(&self) -> CallType {
+        match self {
+            Inst::Call { .. }
+            | Inst::CallInd { .. }
+            | Inst::ElfTlsGetAddr { .. }
+            | Inst::MachOTlsGetAddr { .. } => CallType::Regular,
+
+            Inst::ReturnCall { .. } | Inst::ReturnCallInd { .. } => CallType::TailCall,
+
+            _ => CallType::None,
+        }
+    }
+
     fn is_term(&self) -> MachTerminator {
         match self {
             &Inst::Rets { .. } => MachTerminator::Ret,
             &Inst::ReturnCall { .. } | &Inst::ReturnCallInd { .. } => MachTerminator::RetCall,
-            &Inst::Jump { .. } => MachTerminator::Uncond,
-            &Inst::CondBr { .. } => MachTerminator::Cond,
-            &Inst::TestBitAndBranch { .. } => MachTerminator::Cond,
-            &Inst::IndirectBr { .. } => MachTerminator::Indirect,
-            &Inst::JTSequence { .. } => MachTerminator::Indirect,
+            &Inst::Jump { .. } => MachTerminator::Branch,
+            &Inst::CondBr { .. } => MachTerminator::Branch,
+            &Inst::TestBitAndBranch { .. } => MachTerminator::Branch,
+            &Inst::IndirectBr { .. } => MachTerminator::Branch,
+            &Inst::JTSequence { .. } => MachTerminator::Branch,
+            &Inst::Call { ref info } if info.try_call_info.is_some() => MachTerminator::Branch,
+            &Inst::CallInd { ref info } if info.try_call_info.is_some() => MachTerminator::Branch,
             _ => MachTerminator::None,
         }
     }
@@ -1066,6 +1042,7 @@ impl MachInst for Inst {
             | &Inst::SLoad32 { .. }
             | &Inst::ULoad64 { .. }
             | &Inst::LoadP64 { .. }
+            | &Inst::FpuLoad16 { .. }
             | &Inst::FpuLoad32 { .. }
             | &Inst::FpuLoad64 { .. }
             | &Inst::FpuLoad128 { .. }
@@ -1076,6 +1053,7 @@ impl MachInst for Inst {
             | &Inst::Store32 { .. }
             | &Inst::Store64 { .. }
             | &Inst::StoreP64 { .. }
+            | &Inst::FpuStore16 { .. }
             | &Inst::FpuStore32 { .. }
             | &Inst::FpuStore64 { .. }
             | &Inst::FpuStore128 { .. } => true,
@@ -1132,25 +1110,31 @@ impl MachInst for Inst {
         Inst::Nop4
     }
 
+    fn gen_nop_units() -> Vec<Vec<u8>> {
+        vec![vec![0x1f, 0x20, 0x03, 0xd5]]
+    }
+
     fn rc_for_type(ty: Type) -> CodegenResult<(&'static [RegClass], &'static [Type])> {
         match ty {
             I8 => Ok((&[RegClass::Int], &[I8])),
             I16 => Ok((&[RegClass::Int], &[I16])),
             I32 => Ok((&[RegClass::Int], &[I32])),
             I64 => Ok((&[RegClass::Int], &[I64])),
-            R32 => panic!("32-bit reftype pointer should never be seen on AArch64"),
-            R64 => Ok((&[RegClass::Int], &[R64])),
+            F16 => Ok((&[RegClass::Float], &[F16])),
             F32 => Ok((&[RegClass::Float], &[F32])),
             F64 => Ok((&[RegClass::Float], &[F64])),
+            F128 => Ok((&[RegClass::Float], &[F128])),
             I128 => Ok((&[RegClass::Int, RegClass::Int], &[I64, I64])),
-            _ if ty.is_vector() => {
-                assert!(ty.bits() <= 128);
-                Ok((&[RegClass::Float], &[I8X16]))
+            _ if ty.is_vector() && ty.bits() <= 128 => {
+                let types = &[types::I8X2, types::I8X4, types::I8X8, types::I8X16];
+                Ok((
+                    &[RegClass::Float],
+                    slice::from_ref(&types[ty.bytes().ilog2() as usize - 1]),
+                ))
             }
             _ if ty.is_dynamic_vector() => Ok((&[RegClass::Float], &[I8X16])),
             _ => Err(CodegenError::Unsupported(format!(
-                "Unexpected SSA-value type: {}",
-                ty
+                "Unexpected SSA-value type: {ty}"
             ))),
         }
     }
@@ -1225,6 +1209,14 @@ fn mem_finalize_for_show(mem: &AMode, access_ty: Type, state: &EmitState) -> (St
     (mem_str, mem)
 }
 
+fn pretty_print_try_call(info: &TryCallInfo) -> String {
+    format!(
+        "; b {:?}; catch [{}]",
+        info.continuation,
+        info.pretty_print_dests()
+    )
+}
+
 impl Inst {
     fn print_with_state(&self, state: &mut EmitState) -> String {
         fn op_name(alu_op: ALUOp) -> &'static str {
@@ -1244,7 +1236,7 @@ impl Inst {
                 ALUOp::AndNot => "bic",
                 ALUOp::OrrNot => "orn",
                 ALUOp::EorNot => "eon",
-                ALUOp::RotR => "ror",
+                ALUOp::Extr => "extr",
                 ALUOp::Lsr => "lsr",
                 ALUOp::Asr => "asr",
                 ALUOp::Lsl => "lsl",
@@ -1269,7 +1261,7 @@ impl Inst {
                 let rd = pretty_print_ireg(rd.to_reg(), size);
                 let rn = pretty_print_ireg(rn, size);
                 let rm = pretty_print_ireg(rm, size);
-                format!("{} {}, {}, {}", op, rd, rn, rm)
+                format!("{op} {rd}, {rn}, {rm}")
             }
             &Inst::AluRRRR {
                 alu_op,
@@ -1290,7 +1282,7 @@ impl Inst {
                 let rm = pretty_print_ireg(rm, size);
                 let ra = pretty_print_ireg(ra, da_size);
 
-                format!("{} {}, {}, {}, {}", op, rd, rn, rm, ra)
+                format!("{op} {rd}, {rn}, {rm}, {ra}")
             }
             &Inst::AluRRImm12 {
                 alu_op,
@@ -1305,10 +1297,10 @@ impl Inst {
 
                 if imm12.bits == 0 && alu_op == ALUOp::Add && size.is64() {
                     // special-case MOV (used for moving into SP).
-                    format!("mov {}, {}", rd, rn)
+                    format!("mov {rd}, {rn}")
                 } else {
                     let imm12 = imm12.pretty_print(0);
-                    format!("{} {}, {}, {}", op, rd, rn, imm12)
+                    format!("{op} {rd}, {rn}, {imm12}")
                 }
             }
             &Inst::AluRRImmLogic {
@@ -1322,7 +1314,7 @@ impl Inst {
                 let rd = pretty_print_ireg(rd.to_reg(), size);
                 let rn = pretty_print_ireg(rn, size);
                 let imml = imml.pretty_print(0);
-                format!("{} {}, {}, {}", op, rd, rn, imml)
+                format!("{op} {rd}, {rn}, {imml}")
             }
             &Inst::AluRRImmShift {
                 alu_op,
@@ -1335,7 +1327,7 @@ impl Inst {
                 let rd = pretty_print_ireg(rd.to_reg(), size);
                 let rn = pretty_print_ireg(rn, size);
                 let immshift = immshift.pretty_print(0);
-                format!("{} {}, {}, {}", op, rd, rn, immshift)
+                format!("{op} {rd}, {rn}, {immshift}")
             }
             &Inst::AluRRRShift {
                 alu_op,
@@ -1350,7 +1342,7 @@ impl Inst {
                 let rn = pretty_print_ireg(rn, size);
                 let rm = pretty_print_ireg(rm, size);
                 let shiftop = shiftop.pretty_print(0);
-                format!("{} {}, {}, {}, {}", op, rd, rn, rm, shiftop)
+                format!("{op} {rd}, {rn}, {rm}, {shiftop}")
             }
             &Inst::AluRRRExtend {
                 alu_op,
@@ -1365,13 +1357,13 @@ impl Inst {
                 let rn = pretty_print_ireg(rn, size);
                 let rm = pretty_print_ireg(rm, size);
                 let extendop = extendop.pretty_print(0);
-                format!("{} {}, {}, {}, {}", op, rd, rn, rm, extendop)
+                format!("{op} {rd}, {rn}, {rm}, {extendop}")
             }
             &Inst::BitRR { op, size, rd, rn } => {
                 let op = op.op_str();
                 let rd = pretty_print_ireg(rd.to_reg(), size);
                 let rn = pretty_print_ireg(rn, size);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::ULoad8 { rd, ref mem, .. }
             | &Inst::SLoad8 { rd, ref mem, .. }
@@ -1407,7 +1399,7 @@ impl Inst {
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
 
-                format!("{}{} {}, {}", mem_str, op, rd, mem)
+                format!("{mem_str}{op} {rd}, {mem}")
             }
             &Inst::Store8 { rd, ref mem, .. }
             | &Inst::Store16 { rd, ref mem, .. }
@@ -1434,7 +1426,7 @@ impl Inst {
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
 
-                format!("{}{} {}, {}", mem_str, op, rd, mem)
+                format!("{mem_str}{op} {rd}, {mem}")
             }
             &Inst::StoreP64 {
                 rt, rt2, ref mem, ..
@@ -1443,7 +1435,7 @@ impl Inst {
                 let rt2 = pretty_print_ireg(rt2, OperandSize::Size64);
                 let mem = mem.clone();
                 let mem = mem.pretty_print_default();
-                format!("stp {}, {}, {}", rt, rt2, mem)
+                format!("stp {rt}, {rt2}, {mem}")
             }
             &Inst::LoadP64 {
                 rt, rt2, ref mem, ..
@@ -1452,22 +1444,22 @@ impl Inst {
                 let rt2 = pretty_print_ireg(rt2.to_reg(), OperandSize::Size64);
                 let mem = mem.clone();
                 let mem = mem.pretty_print_default();
-                format!("ldp {}, {}, {}", rt, rt2, mem)
+                format!("ldp {rt}, {rt2}, {mem}")
             }
             &Inst::Mov { size, rd, rm } => {
                 let rd = pretty_print_ireg(rd.to_reg(), size);
                 let rm = pretty_print_ireg(rm, size);
-                format!("mov {}, {}", rd, rm)
+                format!("mov {rd}, {rm}")
             }
             &Inst::MovFromPReg { rd, rm } => {
                 let rd = pretty_print_ireg(rd.to_reg(), OperandSize::Size64);
                 let rm = show_ireg_sized(rm.into(), OperandSize::Size64);
-                format!("mov {}, {}", rd, rm)
+                format!("mov {rd}, {rm}")
             }
             &Inst::MovToPReg { rd, rm } => {
                 let rd = show_ireg_sized(rd.into(), OperandSize::Size64);
                 let rm = pretty_print_ireg(rm, OperandSize::Size64);
-                format!("mov {}, {}", rd, rm)
+                format!("mov {rd}, {rm}")
             }
             &Inst::MovWide {
                 op,
@@ -1481,7 +1473,7 @@ impl Inst {
                 };
                 let rd = pretty_print_ireg(rd.to_reg(), size);
                 let imm = imm.pretty_print(0);
-                format!("{} {}, {}", op_str, rd, imm)
+                format!("{op_str} {rd}, {imm}")
             }
             &Inst::MovK {
                 rd,
@@ -1492,31 +1484,31 @@ impl Inst {
                 let rn = pretty_print_ireg(rn, size);
                 let rd = pretty_print_ireg(rd.to_reg(), size);
                 let imm = imm.pretty_print(0);
-                format!("movk {}, {}, {}", rd, rn, imm)
+                format!("movk {rd}, {rn}, {imm}")
             }
             &Inst::CSel { rd, rn, rm, cond } => {
                 let rd = pretty_print_ireg(rd.to_reg(), OperandSize::Size64);
                 let rn = pretty_print_ireg(rn, OperandSize::Size64);
                 let rm = pretty_print_ireg(rm, OperandSize::Size64);
                 let cond = cond.pretty_print(0);
-                format!("csel {}, {}, {}, {}", rd, rn, rm, cond)
+                format!("csel {rd}, {rn}, {rm}, {cond}")
             }
             &Inst::CSNeg { rd, rn, rm, cond } => {
                 let rd = pretty_print_ireg(rd.to_reg(), OperandSize::Size64);
                 let rn = pretty_print_ireg(rn, OperandSize::Size64);
                 let rm = pretty_print_ireg(rm, OperandSize::Size64);
                 let cond = cond.pretty_print(0);
-                format!("csneg {}, {}, {}, {}", rd, rn, rm, cond)
+                format!("csneg {rd}, {rn}, {rm}, {cond}")
             }
             &Inst::CSet { rd, cond } => {
                 let rd = pretty_print_ireg(rd.to_reg(), OperandSize::Size64);
                 let cond = cond.pretty_print(0);
-                format!("cset {}, {}", rd, cond)
+                format!("cset {rd}, {cond}")
             }
             &Inst::CSetm { rd, cond } => {
                 let rd = pretty_print_ireg(rd.to_reg(), OperandSize::Size64);
                 let cond = cond.pretty_print(0);
-                format!("csetm {}, {}", rd, cond)
+                format!("csetm {rd}, {cond}")
             }
             &Inst::CCmp {
                 size,
@@ -1529,7 +1521,7 @@ impl Inst {
                 let rm = pretty_print_ireg(rm, size);
                 let nzcv = nzcv.pretty_print(0);
                 let cond = cond.pretty_print(0);
-                format!("ccmp {}, {}, {}, {}", rn, rm, nzcv, cond)
+                format!("ccmp {rn}, {rm}, {nzcv}, {cond}")
             }
             &Inst::CCmpImm {
                 size,
@@ -1542,7 +1534,7 @@ impl Inst {
                 let imm = imm.pretty_print(0);
                 let nzcv = nzcv.pretty_print(0);
                 let cond = cond.pretty_print(0);
-                format!("ccmp {}, {}, {}, {}", rn, imm, nzcv, cond)
+                format!("ccmp {rn}, {imm}, {nzcv}, {cond}")
             }
             &Inst::AtomicRMW {
                 rs, rt, rn, ty, op, ..
@@ -1569,7 +1561,7 @@ impl Inst {
                     I16 => "h",
                     _ => "",
                 };
-                format!("{}{} {}, {}, [{}]", op, ty_suffix, rs, rt, rn)
+                format!("{op}{ty_suffix} {rs}, {rt}, [{rn}]")
             }
             &Inst::AtomicRMWLoop {
                 ty,
@@ -1617,7 +1609,7 @@ impl Inst {
                     I8 => "casalb",
                     I16 => "casalh",
                     I32 | I64 => "casal",
-                    _ => panic!("Unsupported type: {}", ty),
+                    _ => panic!("Unsupported type: {ty}"),
                 };
                 let size = OperandSize::from_ty(ty);
                 let rd = pretty_print_ireg(rd.to_reg(), size);
@@ -1625,7 +1617,7 @@ impl Inst {
                 let rt = pretty_print_ireg(rt, size);
                 let rn = pretty_print_ireg(rn, OperandSize::Size64);
 
-                format!("{} {}, {}, {}, [{}]", op, rd, rs, rt, rn)
+                format!("{op} {rd}, {rs}, {rt}, [{rn}]")
             }
             &Inst::AtomicCASLoop {
                 ty,
@@ -1659,12 +1651,12 @@ impl Inst {
                     I16 => ("ldarh", I32),
                     I32 => ("ldar", I32),
                     I64 => ("ldar", I64),
-                    _ => panic!("Unsupported type: {}", access_ty),
+                    _ => panic!("Unsupported type: {access_ty}"),
                 };
                 let size = OperandSize::from_ty(ty);
                 let rn = pretty_print_ireg(rn, OperandSize::Size64);
                 let rt = pretty_print_ireg(rt.to_reg(), size);
-                format!("{} {}, [{}]", op, rt, rn)
+                format!("{op} {rt}, [{rn}]")
             }
             &Inst::StoreRelease {
                 access_ty, rt, rn, ..
@@ -1674,12 +1666,12 @@ impl Inst {
                     I16 => ("stlrh", I32),
                     I32 => ("stlr", I32),
                     I64 => ("stlr", I64),
-                    _ => panic!("Unsupported type: {}", access_ty),
+                    _ => panic!("Unsupported type: {access_ty}"),
                 };
                 let size = OperandSize::from_ty(ty);
                 let rn = pretty_print_ireg(rn, OperandSize::Size64);
                 let rt = pretty_print_ireg(rt, size);
-                format!("{} {}, [{}]", op, rt, rn)
+                format!("{op} {rt}, [{rn}]")
             }
             &Inst::Fence {} => {
                 format!("dmb ish")
@@ -1690,27 +1682,27 @@ impl Inst {
             &Inst::FpuMove32 { rd, rn } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size32);
                 let rn = pretty_print_vreg_scalar(rn, ScalarSize::Size32);
-                format!("fmov {}, {}", rd, rn)
+                format!("fmov {rd}, {rn}")
             }
             &Inst::FpuMove64 { rd, rn } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size64);
                 let rn = pretty_print_vreg_scalar(rn, ScalarSize::Size64);
-                format!("fmov {}, {}", rd, rn)
+                format!("fmov {rd}, {rn}")
             }
             &Inst::FpuMove128 { rd, rn } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
-                format!("mov {}.16b, {}.16b", rd, rn)
+                format!("mov {rd}.16b, {rn}.16b")
             }
             &Inst::FpuMoveFromVec { rd, rn, idx, size } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size.lane_size());
                 let rn = pretty_print_vreg_element(rn, idx as usize, size.lane_size());
-                format!("mov {}, {}", rd, rn)
+                format!("mov {rd}, {rn}")
             }
             &Inst::FpuExtend { rd, rn, size } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size);
                 let rn = pretty_print_vreg_scalar(rn, size);
-                format!("fmov {}, {}", rd, rn)
+                format!("fmov {rd}, {rn}")
             }
             &Inst::FpuRR {
                 fpu_op,
@@ -1731,7 +1723,7 @@ impl Inst {
                 };
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), dst_size);
                 let rn = pretty_print_vreg_scalar(rn, size);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::FpuRRR {
                 fpu_op,
@@ -1751,7 +1743,7 @@ impl Inst {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size);
                 let rn = pretty_print_vreg_scalar(rn, size);
                 let rm = pretty_print_vreg_scalar(rm, size);
-                format!("{} {}, {}, {}", op, rd, rn, rm)
+                format!("{op} {rd}, {rn}, {rm}")
             }
             &Inst::FpuRRI { fpu_op, rd, rn } => {
                 let (op, imm, vector) = match fpu_op {
@@ -1770,7 +1762,7 @@ impl Inst {
                         pretty_print_vreg_scalar(rn, ScalarSize::Size64),
                     )
                 };
-                format!("{} {}, {}, {}", op, rd, rn, imm)
+                format!("{op} {rd}, {rn}, {imm}")
             }
             &Inst::FpuRRIMod { fpu_op, rd, ri, rn } => {
                 let (op, imm, vector) = match fpu_op {
@@ -1791,7 +1783,7 @@ impl Inst {
                         pretty_print_vreg_scalar(rn, ScalarSize::Size64),
                     )
                 };
-                format!("{} {}, {}, {}, {}", op, rd, ri, rn, imm)
+                format!("{op} {rd}, {ri}, {rn}, {imm}")
             }
             &Inst::FpuRRRR {
                 fpu_op,
@@ -1803,31 +1795,41 @@ impl Inst {
             } => {
                 let op = match fpu_op {
                     FPUOp3::MAdd => "fmadd",
+                    FPUOp3::MSub => "fmsub",
+                    FPUOp3::NMAdd => "fnmadd",
+                    FPUOp3::NMSub => "fnmsub",
                 };
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size);
                 let rn = pretty_print_vreg_scalar(rn, size);
                 let rm = pretty_print_vreg_scalar(rm, size);
                 let ra = pretty_print_vreg_scalar(ra, size);
-                format!("{} {}, {}, {}, {}", op, rd, rn, rm, ra)
+                format!("{op} {rd}, {rn}, {rm}, {ra}")
             }
             &Inst::FpuCmp { size, rn, rm } => {
                 let rn = pretty_print_vreg_scalar(rn, size);
                 let rm = pretty_print_vreg_scalar(rm, size);
-                format!("fcmp {}, {}", rn, rm)
+                format!("fcmp {rn}, {rm}")
+            }
+            &Inst::FpuLoad16 { rd, ref mem, .. } => {
+                let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size16);
+                let mem = mem.clone();
+                let access_ty = self.mem_type().unwrap();
+                let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
+                format!("{mem_str}ldr {rd}, {mem}")
             }
             &Inst::FpuLoad32 { rd, ref mem, .. } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size32);
                 let mem = mem.clone();
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
-                format!("{}ldr {}, {}", mem_str, rd, mem)
+                format!("{mem_str}ldr {rd}, {mem}")
             }
             &Inst::FpuLoad64 { rd, ref mem, .. } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size64);
                 let mem = mem.clone();
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
-                format!("{}ldr {}, {}", mem_str, rd, mem)
+                format!("{mem_str}ldr {rd}, {mem}")
             }
             &Inst::FpuLoad128 { rd, ref mem, .. } => {
                 let rd = pretty_print_reg(rd.to_reg());
@@ -1835,21 +1837,28 @@ impl Inst {
                 let mem = mem.clone();
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
-                format!("{}ldr {}, {}", mem_str, rd, mem)
+                format!("{mem_str}ldr {rd}, {mem}")
+            }
+            &Inst::FpuStore16 { rd, ref mem, .. } => {
+                let rd = pretty_print_vreg_scalar(rd, ScalarSize::Size16);
+                let mem = mem.clone();
+                let access_ty = self.mem_type().unwrap();
+                let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
+                format!("{mem_str}str {rd}, {mem}")
             }
             &Inst::FpuStore32 { rd, ref mem, .. } => {
                 let rd = pretty_print_vreg_scalar(rd, ScalarSize::Size32);
                 let mem = mem.clone();
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
-                format!("{}str {}, {}", mem_str, rd, mem)
+                format!("{mem_str}str {rd}, {mem}")
             }
             &Inst::FpuStore64 { rd, ref mem, .. } => {
                 let rd = pretty_print_vreg_scalar(rd, ScalarSize::Size64);
                 let mem = mem.clone();
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
-                format!("{}str {}, {}", mem_str, rd, mem)
+                format!("{mem_str}str {rd}, {mem}")
             }
             &Inst::FpuStore128 { rd, ref mem, .. } => {
                 let rd = pretty_print_reg(rd);
@@ -1857,7 +1866,7 @@ impl Inst {
                 let mem = mem.clone();
                 let access_ty = self.mem_type().unwrap();
                 let (mem_str, mem) = mem_finalize_for_show(&mem, access_ty, state);
-                format!("{}str {}, {}", mem_str, rd, mem)
+                format!("{mem_str}str {rd}, {mem}")
             }
             &Inst::FpuLoadP64 {
                 rt, rt2, ref mem, ..
@@ -1867,7 +1876,7 @@ impl Inst {
                 let mem = mem.clone();
                 let mem = mem.pretty_print_default();
 
-                format!("ldp {}, {}, {}", rt, rt2, mem)
+                format!("ldp {rt}, {rt2}, {mem}")
             }
             &Inst::FpuStoreP64 {
                 rt, rt2, ref mem, ..
@@ -1877,7 +1886,7 @@ impl Inst {
                 let mem = mem.clone();
                 let mem = mem.pretty_print_default();
 
-                format!("stp {}, {}, {}", rt, rt2, mem)
+                format!("stp {rt}, {rt2}, {mem}")
             }
             &Inst::FpuLoadP128 {
                 rt, rt2, ref mem, ..
@@ -1887,7 +1896,7 @@ impl Inst {
                 let mem = mem.clone();
                 let mem = mem.pretty_print_default();
 
-                format!("ldp {}, {}, {}", rt, rt2, mem)
+                format!("ldp {rt}, {rt2}, {mem}")
             }
             &Inst::FpuStoreP128 {
                 rt, rt2, ref mem, ..
@@ -1897,7 +1906,7 @@ impl Inst {
                 let mem = mem.clone();
                 let mem = mem.pretty_print_default();
 
-                format!("stp {}, {}, {}", rt, rt2, mem)
+                format!("stp {rt}, {rt2}, {mem}")
             }
             &Inst::FpuToInt { op, rd, rn } => {
                 let (op, sizesrc, sizedest) = match op {
@@ -1912,7 +1921,7 @@ impl Inst {
                 };
                 let rd = pretty_print_ireg(rd.to_reg(), sizedest);
                 let rn = pretty_print_vreg_scalar(rn, sizesrc);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::IntToFpu { op, rd, rn } => {
                 let (op, sizesrc, sizedest) = match op {
@@ -1927,21 +1936,28 @@ impl Inst {
                 };
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), sizedest);
                 let rn = pretty_print_ireg(rn, sizesrc);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
+            }
+            &Inst::FpuCSel16 { rd, rn, rm, cond } => {
+                let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size16);
+                let rn = pretty_print_vreg_scalar(rn, ScalarSize::Size16);
+                let rm = pretty_print_vreg_scalar(rm, ScalarSize::Size16);
+                let cond = cond.pretty_print(0);
+                format!("fcsel {rd}, {rn}, {rm}, {cond}")
             }
             &Inst::FpuCSel32 { rd, rn, rm, cond } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size32);
                 let rn = pretty_print_vreg_scalar(rn, ScalarSize::Size32);
                 let rm = pretty_print_vreg_scalar(rm, ScalarSize::Size32);
                 let cond = cond.pretty_print(0);
-                format!("fcsel {}, {}, {}, {}", rd, rn, rm, cond)
+                format!("fcsel {rd}, {rn}, {rm}, {cond}")
             }
             &Inst::FpuCSel64 { rd, rn, rm, cond } => {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size64);
                 let rn = pretty_print_vreg_scalar(rn, ScalarSize::Size64);
                 let rm = pretty_print_vreg_scalar(rm, ScalarSize::Size64);
                 let cond = cond.pretty_print(0);
-                format!("fcsel {}, {}, {}, {}", rd, rn, rm, cond)
+                format!("fcsel {rd}, {rn}, {rm}, {cond}")
             }
             &Inst::FpuRound { op, rd, rn } => {
                 let (inst, size) = match op {
@@ -1956,19 +1972,19 @@ impl Inst {
                 };
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size);
                 let rn = pretty_print_vreg_scalar(rn, size);
-                format!("{} {}, {}", inst, rd, rn)
+                format!("{inst} {rd}, {rn}")
             }
             &Inst::MovToFpu { rd, rn, size } => {
                 let operand_size = size.operand_size();
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size);
                 let rn = pretty_print_ireg(rn, operand_size);
-                format!("fmov {}, {}", rd, rn)
+                format!("fmov {rd}, {rn}")
             }
             &Inst::FpuMoveFPImm { rd, imm, size } => {
                 let imm = imm.pretty_print(0);
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size);
 
-                format!("fmov {}, {}", rd, imm)
+                format!("fmov {rd}, {imm}")
             }
             &Inst::MovToVec {
                 rd,
@@ -1980,7 +1996,7 @@ impl Inst {
                 let rd = pretty_print_vreg_element(rd.to_reg(), idx as usize, size.lane_size());
                 let ri = pretty_print_vreg_element(ri, idx as usize, size.lane_size());
                 let rn = pretty_print_ireg(rn, size.operand_size());
-                format!("mov {}, {}, {}", rd, ri, rn)
+                format!("mov {rd}, {ri}, {rn}")
             }
             &Inst::MovFromVec { rd, rn, idx, size } => {
                 let op = match size {
@@ -1992,7 +2008,7 @@ impl Inst {
                 };
                 let rd = pretty_print_ireg(rd.to_reg(), size.operand_size());
                 let rn = pretty_print_vreg_element(rn, idx as usize, size);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::MovFromVecSigned {
                 rd,
@@ -2003,23 +2019,23 @@ impl Inst {
             } => {
                 let rd = pretty_print_ireg(rd.to_reg(), scalar_size);
                 let rn = pretty_print_vreg_element(rn, idx as usize, size.lane_size());
-                format!("smov {}, {}", rd, rn)
+                format!("smov {rd}, {rn}")
             }
             &Inst::VecDup { rd, rn, size } => {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
                 let rn = pretty_print_ireg(rn, size.operand_size());
-                format!("dup {}, {}", rd, rn)
+                format!("dup {rd}, {rn}")
             }
             &Inst::VecDupFromFpu { rd, rn, size, lane } => {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
                 let rn = pretty_print_vreg_element(rn, lane.into(), size.lane_size());
-                format!("dup {}, {}", rd, rn)
+                format!("dup {rd}, {rn}")
             }
             &Inst::VecDupFPImm { rd, imm, size } => {
                 let imm = imm.pretty_print(0);
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
 
-                format!("fmov {}, {}", rd, imm)
+                format!("fmov {rd}, {imm}")
             }
             &Inst::VecDupImm {
                 rd,
@@ -2031,7 +2047,7 @@ impl Inst {
                 let op = if invert { "mvni" } else { "movi" };
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
 
-                format!("{} {}, {}", op, rd, imm)
+                format!("{op} {rd}, {imm}")
             }
             &Inst::VecExtend {
                 t,
@@ -2051,7 +2067,7 @@ impl Inst {
                 };
                 let rd = pretty_print_vreg_vector(rd.to_reg(), rd_size);
                 let rn = pretty_print_vreg_vector(rn, rn_size);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::VecMovElement {
                 rd,
@@ -2065,7 +2081,7 @@ impl Inst {
                     pretty_print_vreg_element(rd.to_reg(), dest_idx as usize, size.lane_size());
                 let ri = pretty_print_vreg_element(ri, dest_idx as usize, size.lane_size());
                 let rn = pretty_print_vreg_element(rn, src_idx as usize, size.lane_size());
-                format!("mov {}, {}, {}", rd, ri, rn)
+                format!("mov {rd}, {ri}, {rn}")
             }
             &Inst::VecRRLong {
                 op,
@@ -2108,7 +2124,7 @@ impl Inst {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), rd_size);
                 let rn = pretty_print_vreg_vector(rn, size);
 
-                format!("{} {}, {}{}", op, rd, rn, suffix)
+                format!("{op} {rd}, {rn}{suffix}")
             }
             &Inst::VecRRNarrowLow {
                 op,
@@ -2154,7 +2170,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
 
-                format!("{} {}, {}{}", op, rd, ri, rn)
+                format!("{op} {rd}, {ri}{rn}")
             }
             &Inst::VecRRPair { op, rd, rn } => {
                 let op = match op {
@@ -2163,7 +2179,7 @@ impl Inst {
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), ScalarSize::Size64);
                 let rn = pretty_print_vreg_vector(rn, VectorSize::Size64x2);
 
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::VecRRPairLong { op, rd, rn } => {
                 let (op, dest, src) = match op {
@@ -2183,7 +2199,7 @@ impl Inst {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), dest);
                 let rn = pretty_print_vreg_vector(rn, src);
 
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::VecRRR {
                 rd,
@@ -2205,10 +2221,6 @@ impl Inst {
                     VecALUOp::Fcmeq => ("fcmeq", size),
                     VecALUOp::Fcmgt => ("fcmgt", size),
                     VecALUOp::Fcmge => ("fcmge", size),
-                    VecALUOp::And => ("and", VectorSize::Size8x16),
-                    VecALUOp::Bic => ("bic", VectorSize::Size8x16),
-                    VecALUOp::Orr => ("orr", VectorSize::Size8x16),
-                    VecALUOp::Eor => ("eor", VectorSize::Size8x16),
                     VecALUOp::Umaxp => ("umaxp", size),
                     VecALUOp::Add => ("add", size),
                     VecALUOp::Sub => ("sub", size),
@@ -2234,11 +2246,19 @@ impl Inst {
                     VecALUOp::Uzp2 => ("uzp2", size),
                     VecALUOp::Trn1 => ("trn1", size),
                     VecALUOp::Trn2 => ("trn2", size),
+
+                    // Lane division does not affect bitwise operations.
+                    // However, when printing, use 8-bit lane division to conform to ARM formatting.
+                    VecALUOp::And => ("and", size.as_scalar8_vector()),
+                    VecALUOp::Bic => ("bic", size.as_scalar8_vector()),
+                    VecALUOp::Orr => ("orr", size.as_scalar8_vector()),
+                    VecALUOp::Orn => ("orn", size.as_scalar8_vector()),
+                    VecALUOp::Eor => ("eor", size.as_scalar8_vector()),
                 };
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
                 let rn = pretty_print_vreg_vector(rn, size);
                 let rm = pretty_print_vreg_vector(rm, size);
-                format!("{} {}, {}, {}", op, rd, rn, rm)
+                format!("{op} {rd}, {rn}, {rm}")
             }
             &Inst::VecRRRMod {
                 rd,
@@ -2257,7 +2277,7 @@ impl Inst {
                 let ri = pretty_print_vreg_vector(ri, size);
                 let rn = pretty_print_vreg_vector(rn, size);
                 let rm = pretty_print_vreg_vector(rm, size);
-                format!("{} {}, {}, {}, {}", op, rd, ri, rn, rm)
+                format!("{op} {rd}, {ri}, {rn}, {rm}")
             }
             &Inst::VecFmlaElem {
                 rd,
@@ -2277,7 +2297,7 @@ impl Inst {
                 let ri = pretty_print_vreg_vector(ri, size);
                 let rn = pretty_print_vreg_vector(rn, size);
                 let rm = pretty_print_vreg_element(rm, idx.into(), size.lane_size());
-                format!("{} {}, {}, {}, {}", op, rd, ri, rn, rm)
+                format!("{op} {rd}, {ri}, {rn}, {rm}")
             }
             &Inst::VecRRRLong {
                 rd,
@@ -2327,7 +2347,7 @@ impl Inst {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), dest_size);
                 let rn = pretty_print_vreg_vector(rn, src_size);
                 let rm = pretty_print_vreg_vector(rm, src_size);
-                format!("{} {}, {}, {}", op, rd, rn, rm)
+                format!("{op} {rd}, {rn}, {rm}")
             }
             &Inst::VecRRRLongMod {
                 rd,
@@ -2361,19 +2381,10 @@ impl Inst {
                 let ri = pretty_print_vreg_vector(ri, dest_size);
                 let rn = pretty_print_vreg_vector(rn, src_size);
                 let rm = pretty_print_vreg_vector(rm, src_size);
-                format!("{} {}, {}, {}, {}", op, rd, ri, rn, rm)
+                format!("{op} {rd}, {ri}, {rn}, {rm}")
             }
             &Inst::VecMisc { op, rd, rn, size } => {
                 let (op, size, suffix) = match op {
-                    VecMisc2::Not => (
-                        "mvn",
-                        if size.is_128bits() {
-                            VectorSize::Size8x16
-                        } else {
-                            VectorSize::Size8x8
-                        },
-                        "",
-                    ),
                     VecMisc2::Neg => ("neg", size, ""),
                     VecMisc2::Abs => ("abs", size, ""),
                     VecMisc2::Fabs => ("fabs", size, ""),
@@ -2401,10 +2412,14 @@ impl Inst {
                     VecMisc2::Fcmgt0 => ("fcmgt", size, ", #0.0"),
                     VecMisc2::Fcmle0 => ("fcmle", size, ", #0.0"),
                     VecMisc2::Fcmlt0 => ("fcmlt", size, ", #0.0"),
+
+                    // Lane division does not affect bitwise operations.
+                    // However, when printing, use 8-bit lane division to conform to ARM formatting.
+                    VecMisc2::Not => ("mvn", size.as_scalar8_vector(), ""),
                 };
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
                 let rn = pretty_print_vreg_vector(rn, size);
-                format!("{} {}, {}{}", op, rd, rn, suffix)
+                format!("{op} {rd}, {rn}{suffix}")
             }
             &Inst::VecLanes { op, rd, rn, size } => {
                 let op = match op {
@@ -2413,7 +2428,7 @@ impl Inst {
                 };
                 let rd = pretty_print_vreg_scalar(rd.to_reg(), size.lane_size());
                 let rn = pretty_print_vreg_vector(rn, size);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::VecShiftImm {
                 op,
@@ -2429,7 +2444,7 @@ impl Inst {
                 };
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
                 let rn = pretty_print_vreg_vector(rn, size);
-                format!("{} {}, {}, #{}", op, rd, rn, imm)
+                format!("{op} {rd}, {rn}, #{imm}")
             }
             &Inst::VecShiftImmMod {
                 op,
@@ -2445,33 +2460,33 @@ impl Inst {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
                 let ri = pretty_print_vreg_vector(ri, size);
                 let rn = pretty_print_vreg_vector(rn, size);
-                format!("{} {}, {}, {}, #{}", op, rd, ri, rn, imm)
+                format!("{op} {rd}, {ri}, {rn}, #{imm}")
             }
             &Inst::VecExtract { rd, rn, rm, imm4 } => {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), VectorSize::Size8x16);
                 let rn = pretty_print_vreg_vector(rn, VectorSize::Size8x16);
                 let rm = pretty_print_vreg_vector(rm, VectorSize::Size8x16);
-                format!("ext {}, {}, {}, #{}", rd, rn, rm, imm4)
+                format!("ext {rd}, {rn}, {rm}, #{imm4}")
             }
             &Inst::VecTbl { rd, rn, rm } => {
                 let rn = pretty_print_vreg_vector(rn, VectorSize::Size8x16);
                 let rm = pretty_print_vreg_vector(rm, VectorSize::Size8x16);
                 let rd = pretty_print_vreg_vector(rd.to_reg(), VectorSize::Size8x16);
-                format!("tbl {}, {{ {} }}, {}", rd, rn, rm)
+                format!("tbl {rd}, {{ {rn} }}, {rm}")
             }
             &Inst::VecTblExt { rd, ri, rn, rm } => {
                 let rn = pretty_print_vreg_vector(rn, VectorSize::Size8x16);
                 let rm = pretty_print_vreg_vector(rm, VectorSize::Size8x16);
                 let rd = pretty_print_vreg_vector(rd.to_reg(), VectorSize::Size8x16);
                 let ri = pretty_print_vreg_vector(ri, VectorSize::Size8x16);
-                format!("tbx {}, {}, {{ {} }}, {}", rd, ri, rn, rm)
+                format!("tbx {rd}, {ri}, {{ {rn} }}, {rm}")
             }
             &Inst::VecTbl2 { rd, rn, rn2, rm } => {
                 let rn = pretty_print_vreg_vector(rn, VectorSize::Size8x16);
                 let rn2 = pretty_print_vreg_vector(rn2, VectorSize::Size8x16);
                 let rm = pretty_print_vreg_vector(rm, VectorSize::Size8x16);
                 let rd = pretty_print_vreg_vector(rd.to_reg(), VectorSize::Size8x16);
-                format!("tbl {}, {{ {}, {} }}, {}", rd, rn, rn2, rm)
+                format!("tbl {rd}, {{ {rn}, {rn2} }}, {rm}")
             }
             &Inst::VecTbl2Ext {
                 rd,
@@ -2485,31 +2500,28 @@ impl Inst {
                 let rm = pretty_print_vreg_vector(rm, VectorSize::Size8x16);
                 let rd = pretty_print_vreg_vector(rd.to_reg(), VectorSize::Size8x16);
                 let ri = pretty_print_vreg_vector(ri, VectorSize::Size8x16);
-                format!("tbx {}, {}, {{ {}, {} }}, {}", rd, ri, rn, rn2, rm)
+                format!("tbx {rd}, {ri}, {{ {rn}, {rn2} }}, {rm}")
             }
             &Inst::VecLoadReplicate { rd, rn, size, .. } => {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), size);
                 let rn = pretty_print_reg(rn);
 
-                format!("ld1r {{ {} }}, [{}]", rd, rn)
+                format!("ld1r {{ {rd} }}, [{rn}]")
             }
             &Inst::VecCSel { rd, rn, rm, cond } => {
                 let rd = pretty_print_vreg_vector(rd.to_reg(), VectorSize::Size8x16);
                 let rn = pretty_print_vreg_vector(rn, VectorSize::Size8x16);
                 let rm = pretty_print_vreg_vector(rm, VectorSize::Size8x16);
                 let cond = cond.pretty_print(0);
-                format!(
-                    "vcsel {}, {}, {}, {} (if-then-else diamond)",
-                    rd, rn, rm, cond
-                )
+                format!("vcsel {rd}, {rn}, {rm}, {cond} (if-then-else diamond)")
             }
             &Inst::MovToNZCV { rn } => {
                 let rn = pretty_print_reg(rn);
-                format!("msr nzcv, {}", rn)
+                format!("msr nzcv, {rn}")
             }
             &Inst::MovFromNZCV { rd } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("mrs {}, nzcv", rd)
+                format!("mrs {rd}, nzcv")
             }
             &Inst::Extend {
                 rd,
@@ -2520,7 +2532,7 @@ impl Inst {
             } => {
                 let rd = pretty_print_ireg(rd.to_reg(), OperandSize::Size32);
                 let rn = pretty_print_ireg(rn, OperandSize::Size32);
-                format!("and {}, {}, #1", rd, rn)
+                format!("and {rd}, {rn}, #1")
             }
             &Inst::Extend {
                 rd,
@@ -2534,7 +2546,7 @@ impl Inst {
                 // the top 32 bits.
                 let rd = pretty_print_ireg(rd.to_reg(), OperandSize::Size32);
                 let rn = pretty_print_ireg(rn, OperandSize::Size32);
-                format!("mov {}, {}", rd, rn)
+                format!("mov {rd}, {rn}")
             }
             &Inst::Extend {
                 rd,
@@ -2557,7 +2569,7 @@ impl Inst {
                     let dest_size = OperandSize::from_bits(to_bits);
                     let rd = pretty_print_ireg(rd.to_reg(), dest_size);
                     let rn = pretty_print_ireg(rn, dest_size);
-                    format!("{} {}, {}, #0, #{}", op, rd, rn, from_bits)
+                    format!("{op} {rd}, {rn}, #0, #{from_bits}")
                 } else {
                     let dest_size = if signed {
                         OperandSize::from_bits(to_bits)
@@ -2566,21 +2578,30 @@ impl Inst {
                     };
                     let rd = pretty_print_ireg(rd.to_reg(), dest_size);
                     let rn = pretty_print_ireg(rn, OperandSize::from_bits(from_bits));
-                    format!("{} {}, {}", op, rd, rn)
+                    format!("{op} {rd}, {rn}")
                 }
             }
-            &Inst::Call { .. } => format!("bl 0"),
-            &Inst::CallInd { ref info, .. } => {
-                let rn = pretty_print_reg(info.rn);
-                format!("blr {}", rn)
+            &Inst::Call { ref info } => {
+                let try_call = info
+                    .try_call_info
+                    .as_ref()
+                    .map(|tci| pretty_print_try_call(tci))
+                    .unwrap_or_default();
+                format!("bl 0{try_call}")
             }
-            &Inst::ReturnCall {
-                ref callee,
-                ref info,
-            } => {
+            &Inst::CallInd { ref info } => {
+                let rn = pretty_print_reg(info.dest);
+                let try_call = info
+                    .try_call_info
+                    .as_ref()
+                    .map(|tci| pretty_print_try_call(tci))
+                    .unwrap_or_default();
+                format!("blr {rn}{try_call}")
+            }
+            &Inst::ReturnCall { ref info } => {
                 let mut s = format!(
-                    "return_call {callee:?} new_stack_arg_size:{}",
-                    info.new_stack_arg_size
+                    "return_call {:?} new_stack_arg_size:{}",
+                    info.dest, info.new_stack_arg_size
                 );
                 for ret in &info.uses {
                     let preg = pretty_print_reg(ret.preg);
@@ -2589,8 +2610,8 @@ impl Inst {
                 }
                 s
             }
-            &Inst::ReturnCallInd { callee, ref info } => {
-                let callee = pretty_print_reg(callee);
+            &Inst::ReturnCallInd { ref info } => {
+                let callee = pretty_print_reg(info.dest);
                 let mut s = format!(
                     "return_call_ind {callee} new_stack_arg_size:{}",
                     info.new_stack_arg_size
@@ -2607,7 +2628,7 @@ impl Inst {
                 for arg in args {
                     let preg = pretty_print_reg(arg.preg);
                     let def = pretty_print_reg(arg.vreg.to_reg());
-                    write!(&mut s, " {}={}", def, preg).unwrap();
+                    write!(&mut s, " {def}={preg}").unwrap();
                 }
                 s
             }
@@ -2635,7 +2656,7 @@ impl Inst {
             }
             &Inst::Jump { ref dest } => {
                 let dest = dest.pretty_print(0);
-                format!("b {}", dest)
+                format!("b {dest}")
             }
             &Inst::CondBr {
                 ref taken,
@@ -2645,17 +2666,17 @@ impl Inst {
                 let taken = taken.pretty_print(0);
                 let not_taken = not_taken.pretty_print(0);
                 match kind {
-                    &CondBrKind::Zero(reg) => {
-                        let reg = pretty_print_reg(reg);
-                        format!("cbz {}, {} ; b {}", reg, taken, not_taken)
+                    &CondBrKind::Zero(reg, size) => {
+                        let reg = pretty_print_reg_sized(reg, size);
+                        format!("cbz {reg}, {taken} ; b {not_taken}")
                     }
-                    &CondBrKind::NotZero(reg) => {
-                        let reg = pretty_print_reg(reg);
-                        format!("cbnz {}, {} ; b {}", reg, taken, not_taken)
+                    &CondBrKind::NotZero(reg, size) => {
+                        let reg = pretty_print_reg_sized(reg, size);
+                        format!("cbnz {reg}, {taken} ; b {not_taken}")
                     }
                     &CondBrKind::Cond(c) => {
                         let c = c.pretty_print(0);
-                        format!("b.{} {} ; b {}", c, taken, not_taken)
+                        format!("b.{c} {taken} ; b {not_taken}")
                     }
                 }
             }
@@ -2677,20 +2698,20 @@ impl Inst {
             }
             &Inst::IndirectBr { rn, .. } => {
                 let rn = pretty_print_reg(rn);
-                format!("br {}", rn)
+                format!("br {rn}")
             }
-            &Inst::Brk => "brk #0".to_string(),
+            &Inst::Brk => "brk #0xf000".to_string(),
             &Inst::Udf { .. } => "udf #0xc11f".to_string(),
             &Inst::TrapIf {
                 ref kind,
                 trap_code,
             } => match kind {
-                &CondBrKind::Zero(reg) => {
-                    let reg = pretty_print_reg(reg);
+                &CondBrKind::Zero(reg, size) => {
+                    let reg = pretty_print_reg_sized(reg, size);
                     format!("cbz {reg}, #trap={trap_code}")
                 }
-                &CondBrKind::NotZero(reg) => {
-                    let reg = pretty_print_reg(reg);
+                &CondBrKind::NotZero(reg, size) => {
+                    let reg = pretty_print_reg_sized(reg, size);
                     format!("cbnz {reg}, #trap={trap_code}")
                 }
                 &CondBrKind::Cond(c) => {
@@ -2700,16 +2721,16 @@ impl Inst {
             },
             &Inst::Adr { rd, off } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("adr {}, pc+{}", rd, off)
+                format!("adr {rd}, pc+{off}")
             }
             &Inst::Adrp { rd, off } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 // This instruction addresses 4KiB pages, so multiply it by the page size.
                 let byte_offset = off * 4096;
-                format!("adrp {}, pc+{}", rd, byte_offset)
+                format!("adrp {rd}, pc+{byte_offset}")
             }
-            &Inst::Word4 { data } => format!("data.i32 {}", data),
-            &Inst::Word8 { data } => format!("data.i64 {}", data),
+            &Inst::Word4 { data } => format!("data.i32 {data}"),
+            &Inst::Word8 { data } => format!("data.i64 {data}"),
             &Inst::JTSequence {
                 default,
                 ref targets,
@@ -2747,13 +2768,25 @@ impl Inst {
                     targets
                 )
             }
-            &Inst::LoadExtName {
+            &Inst::LoadExtNameGot { rd, ref name } => {
+                let rd = pretty_print_reg(rd.to_reg());
+                format!("load_ext_name_got {rd}, {name:?}")
+            }
+            &Inst::LoadExtNameNear {
                 rd,
                 ref name,
                 offset,
             } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("load_ext_name {rd}, {name:?}+{offset}")
+                format!("load_ext_name_near {rd}, {name:?}+{offset}")
+            }
+            &Inst::LoadExtNameFar {
+                rd,
+                ref name,
+                offset,
+            } => {
+                let rd = pretty_print_reg(rd.to_reg());
+                format!("load_ext_name_far {rd}, {name:?}+{offset}")
             }
             &Inst::LoadAddr { rd, ref mem } => {
                 // TODO: we really should find a better way to avoid duplication of
@@ -2770,7 +2803,7 @@ impl Inst {
                     AMode::RegExtended { rn, rm, extendop } => (rn, Some((rm, extendop)), 0),
                     AMode::Unscaled { rn, simm9 } => (rn, None, simm9.value()),
                     AMode::UnsignedOffset { rn, uimm12 } => (rn, None, uimm12.value() as i32),
-                    _ => panic!("Unsupported case for LoadAddr: {:?}", mem),
+                    _ => panic!("Unsupported case for LoadAddr: {mem:?}"),
                 };
                 let abs_offset = if offset < 0 {
                     -offset as u64
@@ -2804,7 +2837,7 @@ impl Inst {
                     ret.push_str(&add.print_with_state(&mut EmitState::default()));
                 } else {
                     let tmp = writable_spilltmp_reg();
-                    for inst in Inst::load_constant(tmp, abs_offset, &mut |_| tmp).into_iter() {
+                    for inst in Inst::load_constant(tmp, abs_offset).into_iter() {
                         ret.push_str(&inst.print_with_state(&mut EmitState::default()));
                     }
                     let add = Inst::AluRRR {
@@ -2839,7 +2872,7 @@ impl Inst {
 
                 "bti".to_string() + targets
             }
-            &Inst::EmitIsland { needed_space } => format!("emit_island {}", needed_space),
+            &Inst::EmitIsland { needed_space } => format!("emit_island {needed_space}"),
 
             &Inst::ElfTlsGetAddr {
                 ref symbol,
@@ -2855,11 +2888,18 @@ impl Inst {
                 format!("macho_tls_get_addr {}, {}", rd, symbol.display(None))
             }
             &Inst::Unwind { ref inst } => {
-                format!("unwind {:?}", inst)
+                format!("unwind {inst:?}")
             }
             &Inst::DummyUse { reg } => {
                 let reg = pretty_print_reg(reg);
-                format!("dummy_use {}", reg)
+                format!("dummy_use {reg}")
+            }
+            &Inst::LabelAddress { dst, label } => {
+                let dst = pretty_print_reg(dst.to_reg());
+                format!("label_address {dst}, {label:?}")
+            }
+            &Inst::SequencePoint {} => {
+                format!("sequence_point")
             }
             &Inst::StackProbeLoop { start, end, step } => {
                 let start = pretty_print_reg(start.to_reg());
@@ -2886,11 +2926,9 @@ pub enum LabelUse {
     /// 26-bit branch offset (unconditional branches). PC-rel, offset is imm << 2. Immediate is 26
     /// signed bits, in bits 25:0. Used by b, bl.
     Branch26,
-    #[allow(dead_code)]
     /// 19-bit offset for LDR (load literal). PC-rel, offset is imm << 2. Immediate is 19 signed bits,
     /// in bits 23:5.
     Ldr19,
-    #[allow(dead_code)]
     /// 21-bit offset for ADR (get address of label). PC-rel, offset is not shifted. Immediate is
     /// 21 signed bits, with high 19 bits in bits 23:5 and low 2 bits in bits 30:29.
     Adr21,
@@ -2959,7 +2997,9 @@ impl MachInstLabelUse for LabelUse {
             LabelUse::Branch14 => (pc_rel_shifted & 0x3fff) << 5,
             LabelUse::Branch19 | LabelUse::Ldr19 => (pc_rel_shifted & 0x7ffff) << 5,
             LabelUse::Branch26 => pc_rel_shifted & 0x3ffffff,
-            LabelUse::Adr21 => (pc_rel_shifted & 0x7ffff) << 5 | (pc_rel_shifted & 0x180000) << 10,
+            // Note: the *low* two bits of offset are put in the
+            // *high* bits (30, 29).
+            LabelUse::Adr21 => (pc_rel_shifted & 0x1ffffc) << 3 | (pc_rel_shifted & 3) << 29,
             LabelUse::PCRel32 => pc_rel_shifted,
         };
         let is_add = match self {
@@ -3053,5 +3093,22 @@ impl MachInstLabelUse for LabelUse {
             (Reloc::Arm64Call, 0) => Some(LabelUse::Branch26),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inst_size_test() {
+        // This test will help with unintentionally growing the size
+        // of the Inst enum.
+        let expected = if cfg!(target_pointer_width = "32") && !cfg!(target_arch = "arm") {
+            28
+        } else {
+            32
+        };
+        assert_eq!(expected, core::mem::size_of::<Inst>());
     }
 }

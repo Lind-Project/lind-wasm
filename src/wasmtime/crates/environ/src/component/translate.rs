@@ -1,23 +1,24 @@
+use crate::Abi;
+use crate::component::dfg::AbstractInstantiations;
 use crate::component::*;
 use crate::prelude::*;
-use crate::Module;
-use crate::ScopeVec;
 use crate::{
-    EntityIndex, ModuleEnvironment, ModuleTranslation, ModuleTypesBuilder, PrimaryMap, Tunables,
-    TypeConvert, WasmHeapType, WasmValType,
+    EngineOrModuleTypeIndex, EntityIndex, FuncKey, ModuleEnvironment, ModuleInternedTypeIndex,
+    ModuleTranslation, ModuleTypesBuilder, PrimaryMap, ScopeVec, TagIndex, Tunables, TypeConvert,
+    WasmHeapType, WasmResult, WasmValType,
 };
-use anyhow::anyhow;
-use anyhow::{bail, Result};
+use core::str::FromStr;
+use cranelift_entity::SecondaryMap;
+use cranelift_entity::packed_option::PackedOption;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::mem;
-use wasmparser::types::{
-    AliasableResourceId, ComponentCoreModuleTypeId, ComponentEntityType, ComponentFuncTypeId,
-    ComponentInstanceTypeId, Types,
+use wasmparser::component_types::{
+    AliasableResourceId, ComponentCoreModuleTypeId, ComponentDefinedTypeId, ComponentEntityType,
+    ComponentFuncTypeId, ComponentInstanceTypeId, ComponentValType,
 };
+use wasmparser::types::Types;
 use wasmparser::{Chunk, ComponentImportName, Encoding, Parser, Payload, Validator};
-use wasmtime_types::ModuleInternedTypeIndex;
-use wasmtime_types::WasmResult;
 
 mod adapt;
 pub use self::adapt::*;
@@ -71,6 +72,9 @@ pub struct Translator<'a, 'data> {
     /// As frames are popped from `lexical_scopes` their completed component
     /// will be pushed onto this list.
     static_components: PrimaryMap<StaticComponentIndex, Translation<'data>>,
+
+    /// The top-level import name for Wasmtime's unsafe intrinsics, if any.
+    unsafe_intrinsics_import: Option<&'a str>,
 }
 
 /// Representation of the syntactic scope of a component meaning where it is
@@ -170,16 +174,17 @@ struct Translation<'data> {
 // fully determined due to resources until instantiations are known which is
 // tracked during the inlining phase. This means that all type information below
 // is straight from `wasmparser`'s passes.
-#[allow(missing_docs)]
 enum LocalInitializer<'data> {
     // imports
     Import(ComponentImportName<'data>, ComponentEntityType),
+
+    // An import of an intrinsic for compile-time builtins.
+    IntrinsicsImport,
 
     // canonical function sections
     Lower {
         func: ComponentFuncIndex,
         lower_ty: ComponentFuncTypeId,
-        canonical_abi: ModuleInternedTypeIndex,
         options: LocalCanonicalOptions,
     },
     Lift(ComponentFuncTypeId, FuncIndex, LocalCanonicalOptions),
@@ -189,6 +194,150 @@ enum LocalInitializer<'data> {
     ResourceNew(AliasableResourceId, ModuleInternedTypeIndex),
     ResourceRep(AliasableResourceId, ModuleInternedTypeIndex),
     ResourceDrop(AliasableResourceId, ModuleInternedTypeIndex),
+
+    BackpressureInc {
+        func: ModuleInternedTypeIndex,
+    },
+    BackpressureDec {
+        func: ModuleInternedTypeIndex,
+    },
+    TaskReturn {
+        result: Option<ComponentValType>,
+        options: LocalCanonicalOptions,
+    },
+    TaskCancel {
+        func: ModuleInternedTypeIndex,
+    },
+    WaitableSetNew {
+        func: ModuleInternedTypeIndex,
+    },
+    WaitableSetWait {
+        options: LocalCanonicalOptions,
+    },
+    WaitableSetPoll {
+        options: LocalCanonicalOptions,
+    },
+    WaitableSetDrop {
+        func: ModuleInternedTypeIndex,
+    },
+    WaitableJoin {
+        func: ModuleInternedTypeIndex,
+    },
+    ThreadYield {
+        func: ModuleInternedTypeIndex,
+        cancellable: bool,
+    },
+    SubtaskDrop {
+        func: ModuleInternedTypeIndex,
+    },
+    SubtaskCancel {
+        func: ModuleInternedTypeIndex,
+        async_: bool,
+    },
+    StreamNew {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
+    StreamRead {
+        ty: ComponentDefinedTypeId,
+        options: LocalCanonicalOptions,
+    },
+    StreamWrite {
+        ty: ComponentDefinedTypeId,
+        options: LocalCanonicalOptions,
+    },
+    StreamCancelRead {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+        async_: bool,
+    },
+    StreamCancelWrite {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+        async_: bool,
+    },
+    StreamDropReadable {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
+    StreamDropWritable {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
+    FutureNew {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
+    FutureRead {
+        ty: ComponentDefinedTypeId,
+        options: LocalCanonicalOptions,
+    },
+    FutureWrite {
+        ty: ComponentDefinedTypeId,
+        options: LocalCanonicalOptions,
+    },
+    FutureCancelRead {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+        async_: bool,
+    },
+    FutureCancelWrite {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+        async_: bool,
+    },
+    FutureDropReadable {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
+    FutureDropWritable {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
+    ErrorContextNew {
+        options: LocalCanonicalOptions,
+    },
+    ErrorContextDebugMessage {
+        options: LocalCanonicalOptions,
+    },
+    ErrorContextDrop {
+        func: ModuleInternedTypeIndex,
+    },
+    ContextGet {
+        func: ModuleInternedTypeIndex,
+        i: u32,
+    },
+    ContextSet {
+        func: ModuleInternedTypeIndex,
+        i: u32,
+    },
+    ThreadIndex {
+        func: ModuleInternedTypeIndex,
+    },
+    ThreadNewIndirect {
+        func: ModuleInternedTypeIndex,
+        start_func_ty: ComponentTypeIndex,
+        start_func_table_index: TableIndex,
+    },
+    ThreadSuspendToSuspended {
+        func: ModuleInternedTypeIndex,
+        cancellable: bool,
+    },
+    ThreadSuspend {
+        func: ModuleInternedTypeIndex,
+        cancellable: bool,
+    },
+    ThreadSuspendTo {
+        func: ModuleInternedTypeIndex,
+        cancellable: bool,
+    },
+    ThreadUnsuspend {
+        func: ModuleInternedTypeIndex,
+    },
+    ThreadYieldToSuspended {
+        func: ModuleInternedTypeIndex,
+        cancellable: bool,
+    },
 
     // core wasm modules
     ModuleStatic(StaticModuleIndex, ComponentCoreModuleTypeId),
@@ -213,6 +362,7 @@ enum LocalInitializer<'data> {
     AliasExportTable(ModuleInstanceIndex, &'data str),
     AliasExportGlobal(ModuleInstanceIndex, &'data str),
     AliasExportMemory(ModuleInstanceIndex, &'data str),
+    AliasExportTag(ModuleInstanceIndex, &'data str),
     AliasComponentExport(ComponentInstanceIndex, &'data str),
     AliasModule(ClosedOverModule),
     AliasComponent(ClosedOverComponent),
@@ -251,12 +401,31 @@ enum ClosedOverModule {
     Upvar(ModuleUpvarIndex),
 }
 
+/// The data model for objects that are not unboxed in locals.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum LocalDataModel {
+    /// Data is stored in GC objects.
+    Gc {},
+
+    /// Data is stored in a linear memory.
+    LinearMemory {
+        /// An optional memory definition supplied.
+        memory: Option<MemoryIndex>,
+        /// An optional definition of `realloc` to used.
+        realloc: Option<FuncIndex>,
+    },
+}
+
 /// Representation of canonical ABI options.
 struct LocalCanonicalOptions {
     string_encoding: StringEncoding,
-    memory: Option<MemoryIndex>,
-    realloc: Option<FuncIndex>,
     post_return: Option<FuncIndex>,
+    async_: bool,
+    cancellable: bool,
+    callback: Option<FuncIndex>,
+    /// The type index of the core GC types signature.
+    core_type: ModuleInternedTypeIndex,
+    data_model: LocalDataModel,
 }
 
 enum Action {
@@ -285,7 +454,16 @@ impl<'a, 'data> Translator<'a, 'data> {
             static_components: Default::default(),
             static_modules: Default::default(),
             scope_vec,
+            unsafe_intrinsics_import: None,
         }
+    }
+
+    /// Expose Wasmtime's unsafe intrinsics under the given top-level import
+    /// name.
+    pub fn expose_unsafe_intrinsics(&mut self, name: &'a str) -> &mut Self {
+        assert!(self.unsafe_intrinsics_import.is_none());
+        self.unsafe_intrinsics_import = Some(name);
+        self
     }
 
     /// Translates the binary `component`.
@@ -358,10 +536,138 @@ impl<'a, 'data> Translator<'a, 'data> {
             &self.static_modules,
             &self.static_components,
         )?;
+
         self.partition_adapter_modules(&mut component);
+
         let translation =
             component.finish(self.types.types_mut_for_inlining(), self.result.types_ref())?;
+
+        self.analyze_function_imports(&translation);
+
         Ok((translation, self.static_modules))
+    }
+
+    fn analyze_function_imports(&mut self, translation: &ComponentTranslation) {
+        // First, abstract interpret the initializers to create a map from each
+        // static module to its abstract set of instantiations.
+        let mut instantiations = SecondaryMap::<StaticModuleIndex, AbstractInstantiations>::new();
+        let mut instance_to_module =
+            PrimaryMap::<RuntimeInstanceIndex, PackedOption<StaticModuleIndex>>::new();
+        for init in &translation.component.initializers {
+            match init {
+                GlobalInitializer::InstantiateModule(instantiation, _) => match instantiation {
+                    InstantiateModule::Static(module, args) => {
+                        instantiations[*module].join(AbstractInstantiations::One(&*args));
+                        instance_to_module.push(Some(*module).into());
+                    }
+                    _ => {
+                        instance_to_module.push(None.into());
+                    }
+                },
+                _ => continue,
+            }
+        }
+
+        // Second, make sure to mark exported modules as instantiated many
+        // times, since they could be linked with who-knows-what at runtime.
+        for item in translation.component.export_items.values() {
+            if let Export::ModuleStatic { index, .. } = item {
+                instantiations[*index].join(AbstractInstantiations::Many)
+            }
+        }
+
+        // Finally, iterate over our instantiations and record statically-known
+        // function imports so that they can get translated into direct calls
+        // (and eventually get inlined) rather than indirect calls through the
+        // imports table.
+        for (module, instantiations) in instantiations.iter() {
+            let args = match instantiations {
+                dfg::AbstractInstantiations::Many | dfg::AbstractInstantiations::None => continue,
+                dfg::AbstractInstantiations::One(args) => args,
+            };
+
+            let mut imported_func_counter = 0_u32;
+            for (i, arg) in args.iter().enumerate() {
+                // Only consider function imports.
+                let (_, _, crate::types::EntityType::Function(_)) =
+                    self.static_modules[module].module.import(i).unwrap()
+                else {
+                    continue;
+                };
+
+                let imported_func = FuncIndex::from_u32(imported_func_counter);
+                imported_func_counter += 1;
+                debug_assert!(
+                    self.static_modules[module]
+                        .module
+                        .defined_func_index(imported_func)
+                        .is_none()
+                );
+
+                let known_func = match arg {
+                    CoreDef::InstanceFlags(_) => unreachable!("instance flags are not a function"),
+                    CoreDef::TaskMayBlock => unreachable!("task_may_block is not a function"),
+
+                    // We could in theory inline these trampolines, so it could
+                    // potentially make sense to record that we know this
+                    // imported function is this particular trampoline. However,
+                    // everything else is based around (module,
+                    // defined-function) pairs and these trampolines don't fit
+                    // that paradigm. Also, inlining trampolines gets really
+                    // tricky when we consider the stack pointer, frame pointer,
+                    // and return address note-taking that they do for the
+                    // purposes of stack walking. We could, with enough effort,
+                    // turn them into direct calls even though we probably
+                    // wouldn't ever inline them, but it just doesn't seem worth
+                    // the effort.
+                    CoreDef::Trampoline(_) => continue,
+
+                    // This import is a compile-time builtin intrinsic, we
+                    // should inline its implementation during function
+                    // translation.
+                    CoreDef::UnsafeIntrinsic(i) => FuncKey::UnsafeIntrinsic(Abi::Wasm, *i),
+
+                    // This imported function is an export from another
+                    // instance, a perfect candidate for becoming an inlinable
+                    // direct call!
+                    CoreDef::Export(export) => {
+                        let Some(arg_module) = &instance_to_module[export.instance].expand() else {
+                            // Instance of a dynamic module that is not part of
+                            // this component, not a statically-known module
+                            // inside this component. We have to do an indirect
+                            // call.
+                            continue;
+                        };
+
+                        let ExportItem::Index(EntityIndex::Function(arg_func)) = &export.item
+                        else {
+                            unreachable!("function imports must be functions")
+                        };
+
+                        let Some(arg_module_def_func) = self.static_modules[*arg_module]
+                            .module
+                            .defined_func_index(*arg_func)
+                        else {
+                            // TODO: we should ideally follow re-export chains
+                            // to bottom out the instantiation argument in
+                            // either a definition or an import at the root
+                            // component boundary. In practice, this pattern is
+                            // rare, so following these chains is left for the
+                            // Future.
+                            continue;
+                        };
+
+                        FuncKey::DefinedWasmFunction(*arg_module, arg_module_def_func)
+                    }
+                };
+
+                assert!(
+                    self.static_modules[module].known_imported_functions[imported_func].is_none()
+                );
+                self.static_modules[module].known_imported_functions[imported_func] =
+                    Some(known_func);
+            }
+        }
     }
 
     fn translate_payload(
@@ -429,7 +735,7 @@ impl<'a, 'data> Translator<'a, 'data> {
                 for ty in s {
                     match ty? {
                         wasmparser::ComponentType::Resource { rep, dtor } => {
-                            let rep = self.types.convert_valtype(rep);
+                            let rep = self.types.convert_valtype(rep)?;
                             let id = types
                                 .component_any_type_at(component_type_index)
                                 .unwrap_resource();
@@ -464,64 +770,414 @@ impl<'a, 'data> Translator<'a, 'data> {
                     let ty = types
                         .component_entity_type_of_import(import.name.0)
                         .unwrap();
-                    self.result
-                        .initializers
-                        .push(LocalInitializer::Import(import.name, ty));
+
+                    if self.is_unsafe_intrinsics_import(import.name.0) {
+                        self.check_unsafe_intrinsics_import(import.name.0, ty)?;
+                        self.result
+                            .initializers
+                            .push(LocalInitializer::IntrinsicsImport);
+                    } else {
+                        self.result
+                            .initializers
+                            .push(LocalInitializer::Import(import.name, ty));
+                    }
                 }
             }
 
             // Entries in the canonical section will get initializers recorded
             // with the listed options for lifting/lowering.
             Payload::ComponentCanonicalSection(s) => {
-                let mut core_func_index = self.validator.types(0).unwrap().function_count();
+                let types = self.validator.types(0).unwrap();
+                let mut core_func_index = types.function_count();
                 self.validator.component_canonical_section(&s)?;
                 for func in s {
-                    let types = self.validator.types(0).unwrap();
                     let init = match func? {
                         wasmparser::CanonicalFunction::Lift {
                             type_index,
                             core_func_index,
                             options,
                         } => {
-                            let ty = types.component_any_type_at(type_index).unwrap_func();
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_any_type_at(type_index)
+                                .unwrap_func();
+
                             let func = FuncIndex::from_u32(core_func_index);
-                            let options = self.canonical_options(&options);
+                            let options = self.canonical_options(&options, core_func_index)?;
                             LocalInitializer::Lift(ty, func, options)
                         }
                         wasmparser::CanonicalFunction::Lower {
                             func_index,
                             options,
                         } => {
-                            let lower_ty = types.component_function_at(func_index);
+                            let lower_ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_function_at(func_index);
                             let func = ComponentFuncIndex::from_u32(func_index);
-                            let options = self.canonical_options(&options);
-                            let canonical_abi = self.core_func_signature(core_func_index)?;
-
+                            let options = self.canonical_options(&options, core_func_index)?;
                             core_func_index += 1;
                             LocalInitializer::Lower {
                                 func,
                                 options,
-                                canonical_abi,
                                 lower_ty,
                             }
                         }
                         wasmparser::CanonicalFunction::ResourceNew { resource } => {
-                            let resource = types.component_any_type_at(resource).unwrap_resource();
+                            let resource = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_any_type_at(resource)
+                                .unwrap_resource();
                             let ty = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
                             LocalInitializer::ResourceNew(resource, ty)
                         }
                         wasmparser::CanonicalFunction::ResourceDrop { resource } => {
-                            let resource = types.component_any_type_at(resource).unwrap_resource();
+                            let resource = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_any_type_at(resource)
+                                .unwrap_resource();
                             let ty = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
                             LocalInitializer::ResourceDrop(resource, ty)
                         }
+                        wasmparser::CanonicalFunction::ResourceDropAsync { resource } => {
+                            let _ = resource;
+                            bail!("support for `resource.drop async` not implemented yet")
+                        }
                         wasmparser::CanonicalFunction::ResourceRep { resource } => {
-                            let resource = types.component_any_type_at(resource).unwrap_resource();
+                            let resource = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_any_type_at(resource)
+                                .unwrap_resource();
                             let ty = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
                             LocalInitializer::ResourceRep(resource, ty)
+                        }
+                        wasmparser::CanonicalFunction::ThreadSpawnRef { .. }
+                        | wasmparser::CanonicalFunction::ThreadSpawnIndirect { .. }
+                        | wasmparser::CanonicalFunction::ThreadAvailableParallelism => {
+                            bail!("unsupported intrinsic")
+                        }
+                        wasmparser::CanonicalFunction::BackpressureInc => {
+                            let core_type = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::BackpressureInc { func: core_type }
+                        }
+                        wasmparser::CanonicalFunction::BackpressureDec => {
+                            let core_type = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::BackpressureDec { func: core_type }
+                        }
+
+                        wasmparser::CanonicalFunction::TaskReturn { result, options } => {
+                            let result = result.map(|ty| match ty {
+                                wasmparser::ComponentValType::Primitive(ty) => {
+                                    ComponentValType::Primitive(ty)
+                                }
+                                wasmparser::ComponentValType::Type(ty) => ComponentValType::Type(
+                                    self.validator
+                                        .types(0)
+                                        .unwrap()
+                                        .component_defined_type_at(ty),
+                                ),
+                            });
+                            let options = self.canonical_options(&options, core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::TaskReturn { result, options }
+                        }
+                        wasmparser::CanonicalFunction::TaskCancel => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::TaskCancel { func }
+                        }
+                        wasmparser::CanonicalFunction::WaitableSetNew => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::WaitableSetNew { func }
+                        }
+                        wasmparser::CanonicalFunction::WaitableSetWait {
+                            cancellable,
+                            memory,
+                        } => {
+                            let core_type = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::WaitableSetWait {
+                                options: LocalCanonicalOptions {
+                                    core_type,
+                                    cancellable,
+                                    async_: false,
+                                    data_model: LocalDataModel::LinearMemory {
+                                        memory: Some(MemoryIndex::from_u32(memory)),
+                                        realloc: None,
+                                    },
+                                    post_return: None,
+                                    callback: None,
+                                    string_encoding: StringEncoding::Utf8,
+                                },
+                            }
+                        }
+                        wasmparser::CanonicalFunction::WaitableSetPoll {
+                            cancellable,
+                            memory,
+                        } => {
+                            let core_type = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::WaitableSetPoll {
+                                options: LocalCanonicalOptions {
+                                    core_type,
+                                    async_: false,
+                                    cancellable,
+                                    data_model: LocalDataModel::LinearMemory {
+                                        memory: Some(MemoryIndex::from_u32(memory)),
+                                        realloc: None,
+                                    },
+                                    post_return: None,
+                                    callback: None,
+                                    string_encoding: StringEncoding::Utf8,
+                                },
+                            }
+                        }
+                        wasmparser::CanonicalFunction::WaitableSetDrop => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::WaitableSetDrop { func }
+                        }
+                        wasmparser::CanonicalFunction::WaitableJoin => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::WaitableJoin { func }
+                        }
+                        wasmparser::CanonicalFunction::ThreadYield { cancellable } => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadYield { func, cancellable }
+                        }
+                        wasmparser::CanonicalFunction::SubtaskDrop => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::SubtaskDrop { func }
+                        }
+                        wasmparser::CanonicalFunction::SubtaskCancel { async_ } => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::SubtaskCancel { func, async_ }
+                        }
+                        wasmparser::CanonicalFunction::StreamNew { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamNew { ty, func }
+                        }
+                        wasmparser::CanonicalFunction::StreamRead { ty, options } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let options = self.canonical_options(&options, core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamRead { ty, options }
+                        }
+                        wasmparser::CanonicalFunction::StreamWrite { ty, options } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let options = self.canonical_options(&options, core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamWrite { ty, options }
+                        }
+                        wasmparser::CanonicalFunction::StreamCancelRead { ty, async_ } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamCancelRead { ty, func, async_ }
+                        }
+                        wasmparser::CanonicalFunction::StreamCancelWrite { ty, async_ } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamCancelWrite { ty, func, async_ }
+                        }
+                        wasmparser::CanonicalFunction::StreamDropReadable { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamDropReadable { ty, func }
+                        }
+                        wasmparser::CanonicalFunction::StreamDropWritable { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamDropWritable { ty, func }
+                        }
+                        wasmparser::CanonicalFunction::FutureNew { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureNew { ty, func }
+                        }
+                        wasmparser::CanonicalFunction::FutureRead { ty, options } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let options = self.canonical_options(&options, core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureRead { ty, options }
+                        }
+                        wasmparser::CanonicalFunction::FutureWrite { ty, options } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let options = self.canonical_options(&options, core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureWrite { ty, options }
+                        }
+                        wasmparser::CanonicalFunction::FutureCancelRead { ty, async_ } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureCancelRead { ty, func, async_ }
+                        }
+                        wasmparser::CanonicalFunction::FutureCancelWrite { ty, async_ } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureCancelWrite { ty, func, async_ }
+                        }
+                        wasmparser::CanonicalFunction::FutureDropReadable { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureDropReadable { ty, func }
+                        }
+                        wasmparser::CanonicalFunction::FutureDropWritable { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureDropWritable { ty, func }
+                        }
+                        wasmparser::CanonicalFunction::ErrorContextNew { options } => {
+                            let options = self.canonical_options(&options, core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ErrorContextNew { options }
+                        }
+                        wasmparser::CanonicalFunction::ErrorContextDebugMessage { options } => {
+                            let options = self.canonical_options(&options, core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ErrorContextDebugMessage { options }
+                        }
+                        wasmparser::CanonicalFunction::ErrorContextDrop => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ErrorContextDrop { func }
+                        }
+                        wasmparser::CanonicalFunction::ContextGet(i) => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ContextGet { i, func }
+                        }
+                        wasmparser::CanonicalFunction::ContextSet(i) => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ContextSet { i, func }
+                        }
+                        wasmparser::CanonicalFunction::ThreadIndex => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadIndex { func }
+                        }
+                        wasmparser::CanonicalFunction::ThreadNewIndirect {
+                            func_ty_index,
+                            table_index,
+                        } => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadNewIndirect {
+                                func,
+                                start_func_ty: ComponentTypeIndex::from_u32(func_ty_index),
+                                start_func_table_index: TableIndex::from_u32(table_index),
+                            }
+                        }
+                        wasmparser::CanonicalFunction::ThreadSuspendToSuspended { cancellable } => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadSuspendToSuspended { func, cancellable }
+                        }
+                        wasmparser::CanonicalFunction::ThreadSuspend { cancellable } => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadSuspend { func, cancellable }
+                        }
+                        wasmparser::CanonicalFunction::ThreadSuspendTo { cancellable } => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadSuspendTo { func, cancellable }
+                        }
+                        wasmparser::CanonicalFunction::ThreadUnsuspend => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadUnsuspend { func }
+                        }
+                        wasmparser::CanonicalFunction::ThreadYieldToSuspended { cancellable } => {
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::ThreadYieldToSuspended { func, cancellable }
                         }
                     };
                     self.result.initializers.push(init);
@@ -542,17 +1198,19 @@ impl<'a, 'data> Translator<'a, 'data> {
             } => {
                 let index = self.validator.types(0).unwrap().module_count();
                 self.validator.module_section(&unchecked_range)?;
-                let translation = ModuleEnvironment::new(
+                let static_module_index = self.static_modules.next_key();
+                let mut translation = ModuleEnvironment::new(
                     self.tunables,
                     self.validator,
                     self.types.module_types_builder(),
+                    static_module_index,
                 )
                 .translate(
                     parser,
                     component
                         .get(unchecked_range.start..unchecked_range.end)
                         .ok_or_else(|| {
-                            anyhow!(
+                            format_err!(
                                 "section range {}..{} is out of bounds (bound = {})",
                                 unchecked_range.start,
                                 unchecked_range.end,
@@ -561,12 +1219,15 @@ impl<'a, 'data> Translator<'a, 'data> {
                             .context("wasm component contains an invalid module section")
                         })?,
                 )?;
-                let static_idx = self.static_modules.push(translation);
+
+                translation.wasm_module_offset = u64::try_from(unchecked_range.start).unwrap();
+                let static_module_index2 = self.static_modules.push(translation);
+                assert_eq!(static_module_index, static_module_index2);
                 let types = self.validator.types(0).unwrap();
                 let ty = types.module_at(index);
                 self.result
                     .initializers
-                    .push(LocalInitializer::ModuleStatic(static_idx, ty));
+                    .push(LocalInitializer::ModuleStatic(static_module_index, ty));
                 return Ok(Action::Skip(unchecked_range.end - unchecked_range.start));
             }
 
@@ -733,7 +1394,7 @@ impl<'a, 'data> Translator<'a, 'data> {
         let mut map = HashMap::with_capacity(exports.len());
         for export in exports {
             let idx = match export.kind {
-                wasmparser::ExternalKind::Func => {
+                wasmparser::ExternalKind::Func | wasmparser::ExternalKind::FuncExact => {
                     let index = FuncIndex::from_u32(export.index);
                     EntityIndex::Function(index)
                 }
@@ -749,9 +1410,10 @@ impl<'a, 'data> Translator<'a, 'data> {
                     let index = GlobalIndex::from_u32(export.index);
                     EntityIndex::Global(index)
                 }
-
-                // doesn't get past validation
-                wasmparser::ExternalKind::Tag => unimplemented!("wasm exceptions"),
+                wasmparser::ExternalKind::Tag => {
+                    let index = TagIndex::from_u32(export.index);
+                    EntityIndex::Tag(index)
+                }
             };
             map.insert(export.name, idx);
         }
@@ -829,13 +1491,13 @@ impl<'a, 'data> Translator<'a, 'data> {
         name: &'data str,
     ) -> LocalInitializer<'data> {
         match kind {
-            wasmparser::ExternalKind::Func => LocalInitializer::AliasExportFunc(instance, name),
+            wasmparser::ExternalKind::Func | wasmparser::ExternalKind::FuncExact => {
+                LocalInitializer::AliasExportFunc(instance, name)
+            }
             wasmparser::ExternalKind::Memory => LocalInitializer::AliasExportMemory(instance, name),
             wasmparser::ExternalKind::Table => LocalInitializer::AliasExportTable(instance, name),
             wasmparser::ExternalKind::Global => LocalInitializer::AliasExportGlobal(instance, name),
-            wasmparser::ExternalKind::Tag => {
-                unimplemented!("wasm exceptions");
-            }
+            wasmparser::ExternalKind::Tag => LocalInitializer::AliasExportTag(instance, name),
         }
     }
 
@@ -887,49 +1549,185 @@ impl<'a, 'data> Translator<'a, 'data> {
         }
     }
 
-    fn canonical_options(&self, opts: &[wasmparser::CanonicalOption]) -> LocalCanonicalOptions {
-        let mut ret = LocalCanonicalOptions {
-            string_encoding: StringEncoding::Utf8,
-            memory: None,
-            realloc: None,
-            post_return: None,
-        };
+    fn canonical_options(
+        &mut self,
+        opts: &[wasmparser::CanonicalOption],
+        core_func_index: u32,
+    ) -> WasmResult<LocalCanonicalOptions> {
+        let core_type = self.core_func_signature(core_func_index)?;
+
+        let mut string_encoding = StringEncoding::Utf8;
+        let mut post_return = None;
+        let mut async_ = false;
+        let mut callback = None;
+        let mut memory = None;
+        let mut realloc = None;
+        let mut gc = false;
+
         for opt in opts {
             match opt {
                 wasmparser::CanonicalOption::UTF8 => {
-                    ret.string_encoding = StringEncoding::Utf8;
+                    string_encoding = StringEncoding::Utf8;
                 }
                 wasmparser::CanonicalOption::UTF16 => {
-                    ret.string_encoding = StringEncoding::Utf16;
+                    string_encoding = StringEncoding::Utf16;
                 }
                 wasmparser::CanonicalOption::CompactUTF16 => {
-                    ret.string_encoding = StringEncoding::CompactUtf16;
+                    string_encoding = StringEncoding::CompactUtf16;
                 }
                 wasmparser::CanonicalOption::Memory(idx) => {
                     let idx = MemoryIndex::from_u32(*idx);
-                    ret.memory = Some(idx);
+                    memory = Some(idx);
                 }
                 wasmparser::CanonicalOption::Realloc(idx) => {
                     let idx = FuncIndex::from_u32(*idx);
-                    ret.realloc = Some(idx);
+                    realloc = Some(idx);
                 }
                 wasmparser::CanonicalOption::PostReturn(idx) => {
                     let idx = FuncIndex::from_u32(*idx);
-                    ret.post_return = Some(idx);
+                    post_return = Some(idx);
+                }
+                wasmparser::CanonicalOption::Async => async_ = true,
+                wasmparser::CanonicalOption::Callback(idx) => {
+                    let idx = FuncIndex::from_u32(*idx);
+                    callback = Some(idx);
+                }
+                wasmparser::CanonicalOption::CoreType(idx) => {
+                    if cfg!(debug_assertions) {
+                        let types = self.validator.types(0).unwrap();
+                        let core_ty_id = types.core_type_at_in_component(*idx).unwrap_sub();
+                        let interned = self
+                            .types
+                            .module_types_builder()
+                            .intern_type(types, core_ty_id)?;
+                        debug_assert_eq!(interned, core_type);
+                    }
+                }
+                wasmparser::CanonicalOption::Gc => {
+                    gc = true;
                 }
             }
         }
-        return ret;
+
+        Ok(LocalCanonicalOptions {
+            string_encoding,
+            post_return,
+            cancellable: false,
+            async_,
+            callback,
+            core_type,
+            data_model: if gc {
+                LocalDataModel::Gc {}
+            } else {
+                LocalDataModel::LinearMemory { memory, realloc }
+            },
+        })
     }
 
     /// Get the interned type index for the `index`th core function.
     fn core_func_signature(&mut self, index: u32) -> WasmResult<ModuleInternedTypeIndex> {
         let types = self.validator.types(0).unwrap();
         let id = types.core_function_at(index);
-        let module = Module::default();
-        self.types
-            .module_types_builder()
-            .intern_type(&module, types, id)
+        self.types.module_types_builder().intern_type(types, id)
+    }
+
+    fn is_unsafe_intrinsics_import(&self, import: &str) -> bool {
+        self.lexical_scopes.is_empty()
+            && self
+                .unsafe_intrinsics_import
+                .is_some_and(|name| import == name)
+    }
+
+    fn check_unsafe_intrinsics_import(&self, import: &str, ty: ComponentEntityType) -> Result<()> {
+        let types = &self.validator.types(0).unwrap();
+
+        let ComponentEntityType::Instance(instance_ty) = ty else {
+            bail!("bad unsafe intrinsics import: import `{import}` must be an instance import")
+        };
+        let instance_ty = &types[instance_ty];
+
+        ensure!(
+            instance_ty.defined_resources.is_empty(),
+            "bad unsafe intrinsics import: import `{import}` cannot define any resources"
+        );
+        ensure!(
+            instance_ty.explicit_resources.is_empty(),
+            "bad unsafe intrinsics import: import `{import}` cannot export any resources"
+        );
+
+        for (name, ty) in &instance_ty.exports {
+            let ComponentEntityType::Func(func_ty) = ty else {
+                bail!(
+                    "bad unsafe intrinsics import: imported instance `{import}` must \
+                     only export functions"
+                )
+            };
+            let func_ty = &types[*func_ty];
+
+            fn ty_eq(a: &InterfaceType, b: &wasmparser::component_types::ComponentValType) -> bool {
+                use wasmparser::{PrimitiveValType as P, component_types::ComponentValType as C};
+                match (a, b) {
+                    (InterfaceType::U8, C::Primitive(P::U8)) => true,
+                    (InterfaceType::U8, _) => false,
+
+                    (InterfaceType::U16, C::Primitive(P::U16)) => true,
+                    (InterfaceType::U16, _) => false,
+
+                    (InterfaceType::U32, C::Primitive(P::U32)) => true,
+                    (InterfaceType::U32, _) => false,
+
+                    (InterfaceType::U64, C::Primitive(P::U64)) => true,
+                    (InterfaceType::U64, _) => false,
+
+                    (ty, _) => unreachable!("no unsafe intrinsics use {ty:?}"),
+                }
+            }
+
+            fn check_types<'a>(
+                expected: impl ExactSizeIterator<Item = &'a InterfaceType>,
+                actual: impl ExactSizeIterator<Item = &'a wasmparser::component_types::ComponentValType>,
+                kind: &str,
+                import: &str,
+                name: &str,
+            ) -> Result<()> {
+                let expected_len = expected.len();
+                let actual_len = actual.len();
+                ensure!(
+                    expected_len == actual_len,
+                    "bad unsafe intrinsics import at `{import}`: function `{name}` must have \
+                     {expected_len} {kind}, found {actual_len}"
+                );
+
+                for (i, (actual_ty, expected_ty)) in actual.zip(expected).enumerate() {
+                    ensure!(
+                        ty_eq(expected_ty, actual_ty),
+                        "bad unsafe intrinsics import at `{import}`: {kind}[{i}] for function \
+                         `{name}` must be `{expected_ty:?}`, found `{actual_ty:?}`"
+                    );
+                }
+                Ok(())
+            }
+
+            let intrinsic = UnsafeIntrinsic::from_str(name)
+                .with_context(|| format!("bad unsafe intrinsics import at `{import}`"))?;
+
+            check_types(
+                intrinsic.component_params().iter(),
+                func_ty.params.iter().map(|(_name, ty)| ty),
+                "parameters",
+                &import,
+                &name,
+            )?;
+            check_types(
+                intrinsic.component_results().iter(),
+                func_ty.result.iter(),
+                "results",
+                &import,
+                &name,
+            )?;
+        }
+
+        Ok(())
     }
 }
 
@@ -982,10 +1780,7 @@ mod pre_inlining {
             self.types.lookup_heap_type(index)
         }
 
-        fn lookup_type_index(
-            &self,
-            index: wasmparser::UnpackedIndex,
-        ) -> wasmtime_types::EngineOrModuleTypeIndex {
+        fn lookup_type_index(&self, index: wasmparser::UnpackedIndex) -> EngineOrModuleTypeIndex {
             self.types.lookup_type_index(index)
         }
     }
