@@ -17,16 +17,17 @@ BENCH_DIR = ROOT / "tests" / "benchmarks"
 LIND_FS = ROOT / "lindfs"
 
 GRATES_REPO_URL = "https://github.com/Lind-Project/lind-wasm-example-grates"
-GRATES_REPO_DIR = BENCH_DIR / "grates"
-GRATES_EXAMPLES_DIR = GRATES_REPO_DIR / "examples"
+GRATES_LOCAL_REPO_DIR = ROOT.parent / "lind-wasm-example-grates"
+GRATES_CACHE_REPO_DIR = BENCH_DIR / "grates"
+GRATE_KIND_DIRS = ("rust-grates", "c-grates")
 
 log = logging.getLogger(__name__)
 
 
-def run_cmd(cmd, timeout=180):
+def run_cmd(cmd, timeout=180, cwd=None):
     """Run a command and return CompletedProcess, return None on failure."""
     try:
-        status = subprocess.run(cmd, timeout=timeout, check=True,
+        status = subprocess.run(cmd, timeout=timeout, check=True, cwd=cwd,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except subprocess.TimeoutExpired as e:
         log.debug(f"Command timed out: {str(e)}")
@@ -102,8 +103,11 @@ def compile_native(c_file: Path) -> Path:
 
 
 def ensure_grates_repo():
-    """Ensure a sparse-checkout repo exists for grates."""
-    if not GRATES_REPO_DIR.exists():
+    """Return the local grates repo, cloning a sparse cache if needed."""
+    if GRATES_LOCAL_REPO_DIR.exists():
+        return GRATES_LOCAL_REPO_DIR
+
+    if not GRATES_CACHE_REPO_DIR.exists():
         run_cmd(
             [
                 "git",
@@ -111,17 +115,18 @@ def ensure_grates_repo():
                 "--filter=blob:none",
                 "--no-checkout",
                 GRATES_REPO_URL,
-                str(GRATES_REPO_DIR),
+                str(GRATES_CACHE_REPO_DIR),
             ]
         )
-    run_cmd(["git", "-C", str(GRATES_REPO_DIR),
+    run_cmd(["git", "-C", str(GRATES_CACHE_REPO_DIR),
             "sparse-checkout", "init", "--cone"])
+    return GRATES_CACHE_REPO_DIR
 
 
-def add_sparse_path(path: str):
+def add_sparse_path(repo_dir: Path, path: str):
     """Add a path to the sparse-checkout set if needed."""
     status = run_cmd(
-        ["git", "-C", str(GRATES_REPO_DIR), "sparse-checkout", "list"]
+        ["git", "-C", str(repo_dir), "sparse-checkout", "list"]
     )
     existing = []
     if status:
@@ -133,30 +138,50 @@ def add_sparse_path(path: str):
     if path not in existing:
         new_paths = existing + [path]
         status = run_cmd(
-            ["git", "-C", str(GRATES_REPO_DIR),
+            ["git", "-C", str(repo_dir),
                 "sparse-checkout", "set"] + new_paths
         )
     # Pull latest changes.
-    run_cmd(["git", "-C", str(GRATES_REPO_DIR), "checkout", "main"])
+    run_cmd(["git", "-C", str(repo_dir), "checkout", "main"])
 
 
 def resolve_grate_dir(grate_name: str) -> Path:
-    """Find a grate directory, preferring the external repo."""
-    ensure_grates_repo()
-    add_sparse_path(f"examples/{grate_name}")
-    repo_path = GRATES_EXAMPLES_DIR / grate_name
-    if repo_path.exists():
-        return repo_path
-    return BENCH_DIR / grate_name
+    """Find a grate directory, preferring Rust grates over C grates."""
+    repo_dir = ensure_grates_repo()
+    checked = []
+
+    for kind_dir in GRATE_KIND_DIRS:
+        if repo_dir == GRATES_CACHE_REPO_DIR:
+            add_sparse_path(repo_dir, f"{kind_dir}/{grate_name}")
+        grate_dir = repo_dir / kind_dir / grate_name
+        checked.append(grate_dir)
+        if grate_dir.exists():
+            return grate_dir
+
+    print(
+        f"Grate '{grate_name}' not found. Checked: "
+        + ", ".join(str(path) for path in checked)
+    )
+    return None
 
 
 def compile_grate(grate_dir: Path) -> str:
     """Compile a grate folder and return the output path inside lindfs."""
-    status = run_cmd(["bash", str(grate_dir / "compile_grate.sh"), "."])
+    compile_script = grate_dir / "compile_grate.sh"
+    if compile_script.exists():
+        status = run_cmd(["bash", "compile_grate.sh"], cwd=grate_dir)
+    elif (grate_dir / "Cargo.toml").exists():
+        status = run_cmd(
+            ["cargo", "lind_compile", "--release", "--output-dir", "grates"],
+            cwd=grate_dir,
+        )
+    else:
+        print(f"No compile_grate.sh or Cargo.toml found in {grate_dir}")
+        return None
+
     if not status:
         return None
-    rel = bench_relpath(grate_dir).with_suffix(".cwasm")
-    return rel.name
+    return f"grates/{grate_dir.name}.cwasm"
 
 
 def parse_output(res, output, platform, description=None):
@@ -208,10 +233,13 @@ def run_grate_test(grate_dir: Path, res, description=None):
 
     for part in grate_dir.name.split("."):
         if part.endswith("-grate"):
-            grate_bin = compile_grate(resolve_grate_dir(part))
+            resolved_grate_dir = resolve_grate_dir(part)
+            if not resolved_grate_dir:
+                return None
+            grate_bin = compile_grate(resolved_grate_dir)
             if not grate_bin:
                 return None
-            bins.append(grate_bin.replace("-", "_"))
+            bins.append(grate_bin)
         else:
             c_file = BENCH_DIR / f"{part}.c"
             bins.append(compile_lind(c_file))
