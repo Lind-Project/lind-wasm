@@ -1,5 +1,5 @@
 [package]
-name = "wasmtime-cache"
+name = "wasmtime-internal-cache"
 version.workspace = true
 authors.workspace = true
 description = "Support for automatic module caching with Wasmtime"
@@ -35,5 +35,5 @@ rustix = { workspace = true, features = ["process"] }
 [dev-dependencies]
 filetime = "0.2.7"
 once_cell = { workspace = true }
-pretty_env_logger = { workspace = true }
+env_logger = { workspace = true }
 tempfile = "3"

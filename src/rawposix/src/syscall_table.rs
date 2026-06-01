@@ -4,17 +4,20 @@
 //! https://filippo.io/linux-syscall-table/
 //! Keep these in sync with glibc's lind_syscall_num.h
 use super::fs_calls::{
-    access_syscall, brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall,
-    close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
-    fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
-    ftruncate_syscall, futex_syscall, getcwd_syscall, getdents_syscall, getrandom_syscall,
-    ioctl_syscall, link_syscall, lseek_syscall, lstat_syscall, mkdir_syscall, mknod_syscall,
-    mmap_syscall, mprotect_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall,
-    openat_syscall, pipe2_syscall, pipe_syscall, pread_syscall, preadv_syscall, pwrite_syscall,
-    pwritev_syscall, read_syscall, readlink_syscall, readlinkat_syscall, readv_syscall,
-    rename_syscall, rmdir_syscall, shmat_syscall, shmctl_syscall, shmdt_syscall, shmget_syscall,
-    stat_syscall, statfs_syscall, symlink_syscall, symlinkat_syscall, sync_file_range_syscall,
-    truncate_syscall, unlink_syscall, unlinkat_syscall, write_syscall, writev_syscall,
+    access_syscall, brk_syscall, chdir_syscall, chmod_syscall, chown_syscall,
+    clock_gettime_syscall, close_syscall, dup2_syscall, dup3_syscall, dup_syscall,
+    faccessat_syscall, fchdir_syscall, fchmod_syscall, fchmodat_syscall, fchownat_syscall,
+    fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatat_syscall,
+    fstatfs_syscall, fsync_syscall, ftruncate_syscall, futex_syscall, getcwd_syscall,
+    getdents_syscall, getrandom_syscall, ioctl_syscall, lchown_syscall, link_syscall,
+    listxattr_syscall, lseek_syscall, lstat_syscall, mkdir_syscall, mknod_syscall, mmap_syscall,
+    mprotect_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, openat_syscall,
+    pipe2_syscall, pipe_syscall, pread_syscall, preadv_syscall, pwrite_syscall, pwritev_syscall,
+    read_syscall, readlink_syscall, readlinkat_syscall, readv_syscall, rename_syscall,
+    renameat2_syscall, renameat_syscall, rmdir_syscall, setxattr_syscall, shmat_syscall,
+    shmctl_syscall, shmdt_syscall, shmget_syscall, stat_syscall, statfs_syscall, symlink_syscall,
+    symlinkat_syscall, sync_file_range_syscall, truncate_syscall, unlink_syscall, unlinkat_syscall,
+    utimensat_syscall, write_syscall, writev_syscall,
 };
 use super::init::RawCallFunc;
 use super::net_calls::{
@@ -28,7 +31,7 @@ use super::sys_calls::{
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
     getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall,
     prlimit64_syscall, sched_yield_syscall, setitimer_syscall, sigaction_syscall,
-    sigprocmask_syscall, waitpid_syscall,
+    sigprocmask_syscall, sigsuspend_syscall, waitpid_syscall,
 };
 use sysdefs::constants::syscall_const;
 
@@ -62,6 +65,10 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (
         syscall_const::SCHED_YIELD_SYSCALL as u64,
         sched_yield_syscall,
+    ),
+    (
+        syscall_const::RT_SIGSUSPEND_SYSCALL as u64,
+        sigsuspend_syscall,
     ),
     (syscall_const::SHMGET_SYSCALL as u64, shmget_syscall),
     (syscall_const::SHMAT_SYSCALL as u64, shmat_syscall),
@@ -120,6 +127,8 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::READLINK_SYSCALL as u64, readlink_syscall),
     (syscall_const::CHMOD_SYSCALL as u64, chmod_syscall),
     (syscall_const::FCHMOD_SYSCALL as u64, fchmod_syscall),
+    (syscall_const::CHOWN_SYSCALL as u64, chown_syscall),
+    (syscall_const::LCHOWN_SYSCALL as u64, lchown_syscall),
     (syscall_const::GETUID_SYSCALL as u64, getuid_syscall),
     (syscall_const::GETGID_SYSCALL as u64, getgid_syscall),
     (syscall_const::GETEUID_SYSCALL as u64, geteuid_syscall),
@@ -133,6 +142,8 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         syscall_const::GETHOSTNAME_SYSCALL as u64,
         gethostname_syscall,
     ),
+    (188 as u64, setxattr_syscall),
+    (194 as u64, listxattr_syscall),
     (syscall_const::FUTEX_SYSCALL as u64, futex_syscall),
     (
         syscall_const::EPOLL_CREATE_SYSCALL as u64,
@@ -146,14 +157,20 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::EPOLL_WAIT_SYSCALL as u64, epoll_wait_syscall),
     (syscall_const::EPOLL_CTL_SYSCALL as u64, epoll_ctl_syscall),
     (syscall_const::OPENAT_SYSCALL as u64, openat_syscall),
+    (syscall_const::FCHOWNAT_SYSCALL as u64, fchownat_syscall),
+    (syscall_const::NEWFSTATAT_SYSCALL as u64, fstatat_syscall),
     (syscall_const::UNLINKAT_SYSCALL as u64, unlinkat_syscall),
+    (syscall_const::RENAMEAT_SYSCALL as u64, renameat_syscall),
     (syscall_const::SYMLINKAT_SYSCALL as u64, symlinkat_syscall),
     (syscall_const::READLINKAT_SYSCALL as u64, readlinkat_syscall),
+    (syscall_const::FCHMODAT_SYSCALL as u64, fchmodat_syscall),
+    (syscall_const::FACCESSAT_SYSCALL as u64, faccessat_syscall),
     (syscall_const::PPOLL_SYSCALL as u64, ppoll_syscall),
     (
         syscall_const::SYNC_FILE_RANGE_SYSCALL as u64,
         sync_file_range_syscall,
     ),
+    (syscall_const::UTIMENSAT_SYSCALL as u64, utimensat_syscall),
     (syscall_const::ACCEPT4_SYSCALL as u64, accept4_syscall),
     (syscall_const::PREADV_SYSCALL as u64, preadv_syscall),
     (syscall_const::PWRITEV_SYSCALL as u64, pwritev_syscall),
@@ -164,5 +181,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::DUP3_SYSCALL as u64, dup3_syscall),
     (syscall_const::PIPE2_SYSCALL as u64, pipe2_syscall),
     (syscall_const::PRLIMIT64_SYSCALL as u64, prlimit64_syscall),
+    (syscall_const::RENAMEAT2_SYSCALL as u64, renameat2_syscall),
     (syscall_const::GETRANDOM_SYSCALL as u64, getrandom_syscall),
 ];

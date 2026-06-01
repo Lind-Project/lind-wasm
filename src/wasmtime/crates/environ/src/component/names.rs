@@ -1,5 +1,5 @@
+use crate::error::{Result, bail};
 use crate::prelude::*;
-use anyhow::{bail, Result};
 use core::hash::Hash;
 use semver::Version;
 use serde_derive::{Deserialize, Serialize};

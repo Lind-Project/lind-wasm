@@ -1,14 +1,13 @@
 use crate::component::{MAX_FLAT_PARAMS, MAX_FLAT_RESULTS};
-use crate::prelude::*;
-use crate::{EntityType, ModuleTypes, PrimaryMap};
+use crate::{EntityType, ModuleInternedTypeIndex, ModuleTypes, PrimaryMap};
+use crate::{TypeTrace, prelude::*};
 use core::hash::{Hash, Hasher};
 use core::ops::Index;
 use serde_derive::{Deserialize, Serialize};
-use wasmparser::types;
+use wasmparser::component_types::ComponentAnyTypeId;
 use wasmtime_component_util::{DiscriminantSize, FlagsSize};
-use wasmtime_types::ModuleInternedTypeIndex;
 
-pub use wasmtime_types::StaticModuleIndex;
+pub use crate::StaticModuleIndex;
 
 macro_rules! indices {
     ($(
@@ -90,6 +89,40 @@ indices! {
     pub struct TypeResultIndex(u32);
     /// Index pointing to a list type in the component model.
     pub struct TypeListIndex(u32);
+    /// Index pointing to a map type in the component model.
+    pub struct TypeMapIndex(u32);
+    /// Index pointing to a fixed size list type in the component model.
+    pub struct TypeFixedLengthListIndex(u32);
+    /// Index pointing to a future type in the component model.
+    pub struct TypeFutureIndex(u32);
+
+    /// Index pointing to a future table within a component.
+    ///
+    /// This is analogous to `TypeResourceTableIndex` in that it tracks
+    /// ownership of futures within each (sub)component instance.
+    pub struct TypeFutureTableIndex(u32);
+
+    /// Index pointing to a stream type in the component model.
+    pub struct TypeStreamIndex(u32);
+
+    /// Index pointing to a stream table within a component.
+    ///
+    /// This is analogous to `TypeResourceTableIndex` in that it tracks
+    /// ownership of stream within each (sub)component instance.
+    pub struct TypeStreamTableIndex(u32);
+
+    /// Index pointing to a error context table within a component.
+    ///
+    /// This is analogous to `TypeResourceTableIndex` in that it tracks
+    /// ownership of error contexts within each (sub)component instance.
+    pub struct TypeComponentLocalErrorContextTableIndex(u32);
+
+    /// Index pointing to a (component) globally tracked error context table entry
+    ///
+    /// Unlike [`TypeComponentLocalErrorContextTableIndex`], this index refers to
+    /// the global state table for error contexts at the level of the entire component,
+    /// not just a subcomponent.
+    pub struct TypeComponentGlobalErrorContextTableIndex(u32);
 
     /// Index pointing to a resource table within a component.
     ///
@@ -187,19 +220,41 @@ indices! {
     /// Same as `RuntimeMemoryIndex` except for the `realloc` function.
     pub struct RuntimeReallocIndex(u32);
 
+    /// Same as `RuntimeMemoryIndex` except for the `callback` function.
+    pub struct RuntimeCallbackIndex(u32);
+
     /// Same as `RuntimeMemoryIndex` except for the `post-return` function.
     pub struct RuntimePostReturnIndex(u32);
+
+    /// Index representing a table extracted from a wasm instance which is
+    /// stored in a `VMComponentContext`. This is used to deduplicate references
+    /// to the same table when it's only stored once in a `VMComponentContext`.
+    ///
+    /// This does not correspond to anything in the binary format for the
+    /// component model.
+    pub struct RuntimeTableIndex(u32);
 
     /// Index for all trampolines that are compiled in Cranelift for a
     /// component.
     ///
     /// This is used to point to various bits of metadata within a compiled
     /// component and is stored in the final compilation artifact. This does not
-    /// have a direct corresponance to any wasm definition.
+    /// have a direct correspondence to any wasm definition.
     pub struct TrampolineIndex(u32);
 
     /// An index into `Component::export_items` at the end of compilation.
     pub struct ExportIndex(u32);
+
+    /// An index into `Component::options` at the end of compilation.
+    pub struct OptionsIndex(u32);
+
+    /// An index that doesn't actually index into a list but instead represents
+    /// a unique counter.
+    ///
+    /// This is used for "abstract" resources which aren't actually instantiated
+    /// in the component model. For example this represents a resource in a
+    /// component or instance type, but not an actual concrete instance.
+    pub struct AbstractResourceIndex(u32);
 }
 
 // Reexport for convenience some core-wasm indices which are also used in the
@@ -209,13 +264,13 @@ pub use crate::{FuncIndex, GlobalIndex, MemoryIndex, TableIndex};
 /// Equivalent of `EntityIndex` but for the component model instead of core
 /// wasm.
 #[derive(Debug, Clone, Copy)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing variants")]
 pub enum ComponentItem {
     Func(ComponentFuncIndex),
     Module(ModuleIndex),
     Component(ComponentIndex),
     ComponentInstance(ComponentInstanceIndex),
-    Type(types::ComponentAnyTypeId),
+    Type(ComponentAnyTypeId),
 }
 
 /// Runtime information about the type information contained within a component.
@@ -230,6 +285,7 @@ pub struct ComponentTypes {
     pub(super) component_instances: PrimaryMap<TypeComponentInstanceIndex, TypeComponentInstance>,
     pub(super) functions: PrimaryMap<TypeFuncIndex, TypeFunc>,
     pub(super) lists: PrimaryMap<TypeListIndex, TypeList>,
+    pub(super) maps: PrimaryMap<TypeMapIndex, TypeMap>,
     pub(super) records: PrimaryMap<TypeRecordIndex, TypeRecord>,
     pub(super) variants: PrimaryMap<TypeVariantIndex, TypeVariant>,
     pub(super) tuples: PrimaryMap<TypeTupleIndex, TypeTuple>,
@@ -238,14 +294,53 @@ pub struct ComponentTypes {
     pub(super) options: PrimaryMap<TypeOptionIndex, TypeOption>,
     pub(super) results: PrimaryMap<TypeResultIndex, TypeResult>,
     pub(super) resource_tables: PrimaryMap<TypeResourceTableIndex, TypeResourceTable>,
-
     pub(super) module_types: Option<ModuleTypes>,
+    pub(super) futures: PrimaryMap<TypeFutureIndex, TypeFuture>,
+    pub(super) future_tables: PrimaryMap<TypeFutureTableIndex, TypeFutureTable>,
+    pub(super) streams: PrimaryMap<TypeStreamIndex, TypeStream>,
+    pub(super) stream_tables: PrimaryMap<TypeStreamTableIndex, TypeStreamTable>,
+    pub(super) error_context_tables:
+        PrimaryMap<TypeComponentLocalErrorContextTableIndex, TypeErrorContextTable>,
+    pub(super) fixed_length_lists: PrimaryMap<TypeFixedLengthListIndex, TypeFixedLengthList>,
+}
+
+impl TypeTrace for ComponentTypes {
+    fn trace<F, E>(&self, func: &mut F) -> Result<(), E>
+    where
+        F: FnMut(crate::EngineOrModuleTypeIndex) -> Result<(), E>,
+    {
+        for (_, m) in &self.modules {
+            m.trace(func)?;
+        }
+        if let Some(m) = self.module_types.as_ref() {
+            m.trace(func)?;
+        }
+        Ok(())
+    }
+
+    fn trace_mut<F, E>(&mut self, func: &mut F) -> Result<(), E>
+    where
+        F: FnMut(&mut crate::EngineOrModuleTypeIndex) -> Result<(), E>,
+    {
+        for (_, m) in &mut self.modules {
+            m.trace_mut(func)?;
+        }
+        if let Some(m) = self.module_types.as_mut() {
+            m.trace_mut(func)?;
+        }
+        Ok(())
+    }
 }
 
 impl ComponentTypes {
     /// Returns the core wasm module types known within this component.
     pub fn module_types(&self) -> &ModuleTypes {
         self.module_types.as_ref().unwrap()
+    }
+
+    /// Returns the core wasm module types known within this component.
+    pub fn module_types_mut(&mut self) -> &mut ModuleTypes {
+        self.module_types.as_mut().unwrap()
     }
 
     /// Returns the canonical ABI information about the specified type.
@@ -262,13 +357,18 @@ impl ComponentTypes {
             | InterfaceType::Float32
             | InterfaceType::Char
             | InterfaceType::Own(_)
-            | InterfaceType::Borrow(_) => &CanonicalAbiInfo::SCALAR4,
+            | InterfaceType::Borrow(_)
+            | InterfaceType::Future(_)
+            | InterfaceType::Stream(_)
+            | InterfaceType::ErrorContext(_) => &CanonicalAbiInfo::SCALAR4,
 
             InterfaceType::U64 | InterfaceType::S64 | InterfaceType::Float64 => {
                 &CanonicalAbiInfo::SCALAR8
             }
 
-            InterfaceType::String | InterfaceType::List(_) => &CanonicalAbiInfo::POINTER_PAIR,
+            InterfaceType::String | InterfaceType::List(_) | InterfaceType::Map(_) => {
+                &CanonicalAbiInfo::POINTER_PAIR
+            }
 
             InterfaceType::Record(i) => &self[*i].abi,
             InterfaceType::Variant(i) => &self[*i].abi,
@@ -277,6 +377,7 @@ impl ComponentTypes {
             InterfaceType::Enum(i) => &self[*i].abi,
             InterfaceType::Option(i) => &self[*i].abi,
             InterfaceType::Result(i) => &self[*i].abi,
+            InterfaceType::FixedLengthList(i) => &self[*i].abi,
         }
     }
 
@@ -320,7 +421,14 @@ impl_index! {
     impl Index<TypeOptionIndex> for ComponentTypes { TypeOption => options }
     impl Index<TypeResultIndex> for ComponentTypes { TypeResult => results }
     impl Index<TypeListIndex> for ComponentTypes { TypeList => lists }
+    impl Index<TypeMapIndex> for ComponentTypes { TypeMap => maps }
     impl Index<TypeResourceTableIndex> for ComponentTypes { TypeResourceTable => resource_tables }
+    impl Index<TypeFutureIndex> for ComponentTypes { TypeFuture => futures }
+    impl Index<TypeStreamIndex> for ComponentTypes { TypeStream => streams }
+    impl Index<TypeFutureTableIndex> for ComponentTypes { TypeFutureTable => future_tables }
+    impl Index<TypeStreamTableIndex> for ComponentTypes { TypeStreamTable => stream_tables }
+    impl Index<TypeComponentLocalErrorContextTableIndex> for ComponentTypes { TypeErrorContextTable => error_context_tables }
+    impl Index<TypeFixedLengthListIndex> for ComponentTypes { TypeFixedLengthList => fixed_length_lists }
 }
 
 // Additionally forward anything that can index `ModuleTypes` to `ModuleTypes`
@@ -403,6 +511,34 @@ pub struct TypeModule {
     pub exports: IndexMap<String, EntityType>,
 }
 
+impl TypeTrace for TypeModule {
+    fn trace<F, E>(&self, func: &mut F) -> Result<(), E>
+    where
+        F: FnMut(crate::EngineOrModuleTypeIndex) -> Result<(), E>,
+    {
+        for ty in self.imports.values() {
+            ty.trace(func)?;
+        }
+        for ty in self.exports.values() {
+            ty.trace(func)?;
+        }
+        Ok(())
+    }
+
+    fn trace_mut<F, E>(&mut self, func: &mut F) -> Result<(), E>
+    where
+        F: FnMut(&mut crate::EngineOrModuleTypeIndex) -> Result<(), E>,
+    {
+        for ty in self.imports.values_mut() {
+            ty.trace_mut(func)?;
+        }
+        for ty in self.exports.values_mut() {
+            ty.trace_mut(func)?;
+        }
+        Ok(())
+    }
+}
+
 /// The type of a component in the component model.
 #[derive(Serialize, Deserialize, Default)]
 pub struct TypeComponent {
@@ -425,6 +561,10 @@ pub struct TypeComponentInstance {
 /// A component function type in the component model.
 #[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct TypeFunc {
+    /// Whether or not this is an async function.
+    pub async_: bool,
+    /// Names of parameters.
+    pub param_names: Vec<String>,
     /// Parameters to the function represented as a tuple.
     pub params: TypeTupleIndex,
     /// Results of the function represented as a tuple.
@@ -438,7 +578,7 @@ pub struct TypeFunc {
 /// forms where for non-primitive types a `ComponentTypes` structure is used to
 /// lookup further information based on the index found here.
 #[derive(Serialize, Deserialize, Copy, Clone, Hash, Eq, PartialEq, Debug)]
-#[allow(missing_docs)]
+#[expect(missing_docs, reason = "self-describing variants")]
 pub enum InterfaceType {
     Bool,
     S8,
@@ -457,32 +597,17 @@ pub enum InterfaceType {
     Variant(TypeVariantIndex),
     List(TypeListIndex),
     Tuple(TypeTupleIndex),
+    Map(TypeMapIndex),
     Flags(TypeFlagsIndex),
     Enum(TypeEnumIndex),
     Option(TypeOptionIndex),
     Result(TypeResultIndex),
     Own(TypeResourceTableIndex),
     Borrow(TypeResourceTableIndex),
-}
-
-impl From<&wasmparser::PrimitiveValType> for InterfaceType {
-    fn from(ty: &wasmparser::PrimitiveValType) -> InterfaceType {
-        match ty {
-            wasmparser::PrimitiveValType::Bool => InterfaceType::Bool,
-            wasmparser::PrimitiveValType::S8 => InterfaceType::S8,
-            wasmparser::PrimitiveValType::U8 => InterfaceType::U8,
-            wasmparser::PrimitiveValType::S16 => InterfaceType::S16,
-            wasmparser::PrimitiveValType::U16 => InterfaceType::U16,
-            wasmparser::PrimitiveValType::S32 => InterfaceType::S32,
-            wasmparser::PrimitiveValType::U32 => InterfaceType::U32,
-            wasmparser::PrimitiveValType::S64 => InterfaceType::S64,
-            wasmparser::PrimitiveValType::U64 => InterfaceType::U64,
-            wasmparser::PrimitiveValType::F32 => InterfaceType::Float32,
-            wasmparser::PrimitiveValType::F64 => InterfaceType::Float64,
-            wasmparser::PrimitiveValType::Char => InterfaceType::Char,
-            wasmparser::PrimitiveValType::String => InterfaceType::String,
-        }
-    }
+    Future(TypeFutureTableIndex),
+    Stream(TypeStreamTableIndex),
+    ErrorContext(TypeComponentLocalErrorContextTableIndex),
+    FixedLengthList(TypeFixedLengthListIndex),
 }
 
 /// Bye information about a type in the canonical ABI, with metadata for both
@@ -524,16 +649,12 @@ const fn align_to(a: u32, b: u32) -> u32 {
 }
 
 const fn max(a: u32, b: u32) -> u32 {
-    if a > b {
-        a
-    } else {
-        b
-    }
+    if a > b { a } else { b }
 }
 
 impl CanonicalAbiInfo {
     /// ABI information for zero-sized types.
-    const ZERO: CanonicalAbiInfo = CanonicalAbiInfo {
+    pub const ZERO: CanonicalAbiInfo = CanonicalAbiInfo {
         size32: 0,
         align32: 1,
         size64: 0,
@@ -735,15 +856,29 @@ impl CanonicalAbiInfo {
         }
     }
 
+    /// Calculates ABI information for an enum with `cases` cases.
+    pub const fn enum_(cases: usize) -> CanonicalAbiInfo {
+        // NB: this is basically a duplicate definition of
+        // `CanonicalAbiInfo::variant`, these should be kept in sync.
+
+        let discrim_size = match DiscriminantSize::from_count(cases) {
+            Some(size) => size.byte_size(),
+            None => unreachable!(),
+        };
+        CanonicalAbiInfo {
+            size32: discrim_size,
+            align32: discrim_size,
+            size64: discrim_size,
+            align64: discrim_size,
+            flat_count: Some(1),
+        }
+    }
+
     /// Returns the flat count of this ABI information so long as the count
     /// doesn't exceed the `max` specified.
     pub fn flat_count(&self, max: usize) -> Option<usize> {
         let flat = usize::from(self.flat_count?);
-        if flat > max {
-            None
-        } else {
-            Some(flat)
-        }
+        if flat > max { None } else { Some(flat) }
     }
 }
 
@@ -798,7 +933,7 @@ impl VariantInfo {
 
 mod serde_discrim_size {
     use super::DiscriminantSize;
-    use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 
     pub fn serialize<S>(disc: &DiscriminantSize, ser: S) -> Result<S::Ok, S::Error>
     where
@@ -953,17 +1088,97 @@ pub struct TypeResult {
     pub info: VariantInfo,
 }
 
+/// Shape of a "future" interface type.
+#[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct TypeFuture {
+    /// The `T` in `future<T>`
+    pub payload: Option<InterfaceType>,
+}
+
+/// Metadata about a future table added to a component.
+#[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct TypeFutureTable {
+    /// The specific future type this table is used for.
+    pub ty: TypeFutureIndex,
+    /// The specific component instance this table is used for.
+    pub instance: RuntimeComponentInstanceIndex,
+}
+
+/// Shape of a "stream" interface type.
+#[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct TypeStream {
+    /// The `T` in `stream<T>`
+    pub payload: Option<InterfaceType>,
+}
+
+/// Metadata about a stream table added to a component.
+#[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct TypeStreamTable {
+    /// The specific stream type this table is used for.
+    pub ty: TypeStreamIndex,
+    /// The specific component instance this table is used for.
+    pub instance: RuntimeComponentInstanceIndex,
+}
+
+/// Metadata about a error context table added to a component.
+#[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct TypeErrorContextTable {
+    /// The specific component instance this table is used for.
+    pub instance: RuntimeComponentInstanceIndex,
+}
+
 /// Metadata about a resource table added to a component.
 #[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
-pub struct TypeResourceTable {
-    /// The original resource that this table contains.
+pub enum TypeResourceTable {
+    /// This resource is for an actual concrete resource which has runtime state
+    /// associated with it.
     ///
-    /// This is used when destroying resources within this table since this
-    /// original definition will know how to execute destructors.
-    pub ty: ResourceIndex,
+    /// This is used for any resource which might actually enter a component.
+    /// For example when a resource is either imported or defined in a component
+    /// it'll get this case.
+    Concrete {
+        /// The original resource that this table contains.
+        ///
+        /// This is used when destroying resources within this table since this
+        /// original definition will know how to execute destructors.
+        ty: ResourceIndex,
 
-    /// The component instance that contains this resource table.
-    pub instance: RuntimeComponentInstanceIndex,
+        /// The component instance that contains this resource table.
+        instance: RuntimeComponentInstanceIndex,
+    },
+
+    /// This table does not actually exist at runtime but instead represents
+    /// type information for an uninstantiable resource. This tracks, for
+    /// example, resources in component and instance types.
+    Abstract(AbstractResourceIndex),
+}
+
+impl TypeResourceTable {
+    /// Asserts that this is `TypeResourceTable::Concrete` and returns the `ty`
+    /// field.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this is `TypeResourceTable::Abstract`.
+    pub fn unwrap_concrete_ty(&self) -> ResourceIndex {
+        match self {
+            TypeResourceTable::Concrete { ty, .. } => *ty,
+            TypeResourceTable::Abstract(_) => panic!("not a concrete resource table"),
+        }
+    }
+
+    /// Asserts that this is `TypeResourceTable::Concrete` and returns the
+    /// `instance` field.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this is `TypeResourceTable::Abstract`.
+    pub fn unwrap_concrete_instance(&self) -> RuntimeComponentInstanceIndex {
+        match self {
+            TypeResourceTable::Concrete { instance, .. } => *instance,
+            TypeResourceTable::Abstract(_) => panic!("not a concrete resource table"),
+        }
+    }
 }
 
 /// Shape of a "list" interface type.
@@ -971,6 +1186,34 @@ pub struct TypeResourceTable {
 pub struct TypeList {
     /// The element type of the list.
     pub element: InterfaceType,
+}
+
+/// Shape of a "map" interface type.
+#[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct TypeMap {
+    /// The key type of the map.
+    pub key: InterfaceType,
+    /// The value type of the map.
+    pub value: InterfaceType,
+    /// Byte information for each map entry represented as `tuple<key, value>`.
+    pub entry_abi: CanonicalAbiInfo,
+    /// Offset in bytes from the start of the entry tuple to the value field in
+    /// memory32.
+    pub value_offset32: u32,
+    /// Offset in bytes from the start of the entry tuple to the value field in
+    /// memory64.
+    pub value_offset64: u32,
+}
+
+/// Shape of a "fixed size list" interface type.
+#[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct TypeFixedLengthList {
+    /// The element type of the list.
+    pub element: InterfaceType,
+    /// The fixed length of the list.
+    pub size: u32,
+    /// Byte information about this type in the canonical ABI.
+    pub abi: CanonicalAbiInfo,
 }
 
 /// Maximum number of flat types, for either params or results.
@@ -989,11 +1232,7 @@ const fn add_flat(a: Option<u8>, b: Option<u8>) -> Option<u8> {
         },
         _ => return None,
     };
-    if sum > MAX {
-        None
-    } else {
-        Some(sum)
-    }
+    if sum > MAX { None } else { Some(sum) }
 }
 
 const fn max_flat(a: Option<u8>, b: Option<u8>) -> Option<u8> {
@@ -1017,7 +1256,6 @@ pub struct FlatTypes<'a> {
     pub memory64: &'a [FlatType],
 }
 
-#[allow(missing_docs)]
 impl FlatTypes<'_> {
     /// Returns the number of flat types used to represent this type.
     ///
@@ -1031,8 +1269,8 @@ impl FlatTypes<'_> {
 // Note that this is intentionally duplicated here to keep the size to 1 byte
 // regardless to changes in the core wasm type system since this will only
 // ever use integers/floats for the foreseeable future.
-#[derive(PartialEq, Eq, Copy, Clone)]
-#[allow(missing_docs)]
+#[derive(Serialize, Deserialize, Hash, Debug, PartialEq, Eq, Copy, Clone)]
+#[expect(missing_docs, reason = "self-describing variants")]
 pub enum FlatType {
     I32,
     I64,

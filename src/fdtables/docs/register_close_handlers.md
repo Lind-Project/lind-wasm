@@ -20,8 +20,9 @@ will be called on the last entry (count = 0).
 # let fdkind: u32 = 0;
 # let underfd: u64 = 10;
 # const MYVIRTFD:u64 = 123;
-fn oh_no(_:FDTableEntry, _count:u64) {
+fn oh_no(_:FDTableEntry, _count:u64) -> Result<(), i32> {
     panic!("AAAARRRRGGGGHHHH!!!!");
+    Ok(())
 }
 
 // oh_no should be called when all references to the realfd are closed...

@@ -1,11 +1,11 @@
 //! X64 register definition.
 
 use crate::{
-    isa::{reg::Reg, CallingConvention},
+    isa::{CallingConvention, reg::Reg},
     masm::OperandSize,
 };
 use regalloc2::{PReg, RegClass};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
 const ENC_RAX: u8 = 0;
 const ENC_RCX: u8 = 1;
@@ -237,11 +237,7 @@ pub(crate) fn callee_saved(call_conv: &CallingConvention) -> SmallVec<[(Reg, Ope
             // The fastcall calling convention expects the entirety of the
             // floating point registers (xmm6-xmm15) to be saved.  See
             // https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170#callercallee-saved-registers
-            if r.is_int() {
-                (r, S64)
-            } else {
-                (r, S128)
-            }
+            if r.is_int() { (r, S64) } else { (r, S128) }
         })
         .collect()
 }

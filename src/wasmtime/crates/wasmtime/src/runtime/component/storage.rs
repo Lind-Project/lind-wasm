@@ -12,20 +12,24 @@ fn assert_raw_slice_compat<T>() {
 pub unsafe fn storage_as_slice<T>(storage: &T) -> &[ValRaw] {
     assert_raw_slice_compat::<T>();
 
-    slice::from_raw_parts(
-        (storage as *const T).cast(),
-        mem::size_of_val(storage) / mem::size_of::<ValRaw>(),
-    )
+    unsafe {
+        slice::from_raw_parts(
+            (storage as *const T).cast(),
+            mem::size_of_val(storage) / mem::size_of::<ValRaw>(),
+        )
+    }
 }
 
 /// Same as `storage_as_slice`, but mutable.
-pub unsafe fn storage_as_slice_mut<T>(storage: &mut T) -> &mut [ValRaw] {
+pub unsafe fn storage_as_slice_mut<T>(storage: &mut MaybeUninit<T>) -> &mut [MaybeUninit<ValRaw>] {
     assert_raw_slice_compat::<T>();
 
-    slice::from_raw_parts_mut(
-        (storage as *mut T).cast(),
-        mem::size_of_val(storage) / mem::size_of::<ValRaw>(),
-    )
+    unsafe {
+        slice::from_raw_parts_mut(
+            (storage as *mut MaybeUninit<T>).cast(),
+            mem::size_of_val(storage) / mem::size_of::<ValRaw>(),
+        )
+    }
 }
 
 /// Same as `storage_as_slice`, but in reverse and mutable.
@@ -37,7 +41,28 @@ pub unsafe fn slice_to_storage_mut<T>(slice: &mut [MaybeUninit<ValRaw>]) -> &mut
     // stay within the bounds of the number of actual values given rather than
     // reading past the end of an array. This shouldn't actually trip unless
     // there's a bug in Wasmtime though.
-    assert!(mem::size_of_val(slice) >= mem::size_of::<T>());
+    assert!(
+        mem::size_of_val(slice) >= mem::size_of::<T>(),
+        "needed {}; got {}",
+        mem::size_of::<T>(),
+        mem::size_of_val(slice)
+    );
 
-    &mut *slice.as_mut_ptr().cast()
+    unsafe { &mut *slice.as_mut_ptr().cast() }
+}
+
+/// Same as `storage_as_slice`, but in reverse
+pub unsafe fn slice_to_storage<T>(slice: &[ValRaw]) -> &T {
+    assert_raw_slice_compat::<T>();
+
+    // See notes above in `slice_to_storage_mut` about how this is an actual
+    // runtime assertion.
+    assert!(
+        mem::size_of_val(slice) >= mem::size_of::<T>(),
+        "needed {}; got {}",
+        mem::size_of::<T>(),
+        mem::size_of_val(slice)
+    );
+
+    unsafe { &*slice.as_ptr().cast() }
 }

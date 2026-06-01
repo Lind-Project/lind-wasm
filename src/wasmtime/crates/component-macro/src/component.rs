@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::fmt;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{braced, parse_quote, Data, DeriveInput, Error, Ident, Result, Token};
+use syn::{Data, DeriveInput, Error, Ident, Result, Token, braced, parse_quote};
 use wasmtime_component_util::{DiscriminantSize, FlagsSize};
 
 mod kw {
@@ -219,7 +219,10 @@ fn expand_variant(
     if body.variants.is_empty() {
         return Err(Error::new(
             name.span(),
-            format!("`{}` component types can only be derived for Rust `enum`s with at least one variant", style),
+            format!(
+                "`{}` component types can only be derived for Rust `enum`s with at least one variant",
+                style
+            ),
         ));
     }
 
@@ -260,7 +263,7 @@ fn expand_variant(
                                         VariantStyle::Enum => "no fields",
                                     }
                                 ),
-                            ))
+                            ));
                         }
                     },
                 })
@@ -805,7 +808,7 @@ impl Expander for ComponentTypeExpander {
                         return Err(Error::new(
                             ident.span(),
                             "payloads are not permitted for `enum` cases",
-                        ))
+                        ));
                     }
                 });
 

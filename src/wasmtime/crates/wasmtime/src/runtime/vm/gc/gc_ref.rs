@@ -3,6 +3,7 @@ use crate::runtime::vm::{GcHeap, GcStore, I31};
 use core::fmt;
 use core::marker;
 use core::num::NonZeroU32;
+use wasmtime_environ::packed_option::ReservedValue;
 use wasmtime_environ::{VMGcKind, VMSharedTypeIndex};
 
 /// The common header for all objects allocated in a GC heap.
@@ -15,20 +16,28 @@ use wasmtime_environ::{VMGcKind, VMSharedTypeIndex};
 ///
 /// ```ignore
 /// struct VMGcHeader {
-///     // Highest 2 bits.
+///     // Highest 5 bits.
 ///     kind: VMGcKind,
 ///
-///     // 30 bits available for the `GcRuntime` to make use of however it sees fit.
-///     reserved: u30,
+///     // 27 bits available for the `GcRuntime` to make use of however it sees fit.
+///     reserved: u27,
 ///
 ///     // The `VMSharedTypeIndex` for this GC object, if it isn't an
 ///     // `externref` (or an `externref` re-wrapped as an `anyref`). `None` is
-///     // represented with `VMSharedTypeIndex::default()`.
+///     // represented with `VMSharedTypeIndex::reserved_value()`.
 ///     ty: Option<VMSharedTypeIndex>,
 /// }
 /// ```
-#[repr(transparent)]
-pub struct VMGcHeader(u64);
+#[repr(C, align(8))]
+#[derive(Debug, Clone, Copy)]
+pub struct VMGcHeader {
+    /// The object's `VMGcKind` and 27 bits of space reserved for however the GC
+    /// sees fit to use it.
+    kind: u32,
+
+    /// The object's type index.
+    ty: VMSharedTypeIndex,
+}
 
 unsafe impl GcHeapObject for VMGcHeader {
     #[inline]
@@ -37,75 +46,74 @@ unsafe impl GcHeapObject for VMGcHeader {
     }
 }
 
+const _: () = {
+    use core::mem::offset_of;
+    use wasmtime_environ::*;
+    assert!((VM_GC_HEADER_SIZE as usize) == core::mem::size_of::<VMGcHeader>());
+    assert!((VM_GC_HEADER_ALIGN as usize) == core::mem::align_of::<VMGcHeader>());
+    assert!((VM_GC_HEADER_KIND_OFFSET as usize) == offset_of!(VMGcHeader, kind));
+    assert!((VM_GC_HEADER_TYPE_INDEX_OFFSET as usize) == offset_of!(VMGcHeader, ty));
+};
+
 impl VMGcHeader {
     /// Create the header for an `externref`.
     pub fn externref() -> Self {
-        let kind = VMGcKind::ExternRef as u32;
-        let upper = u64::from(kind) << 32;
-        let lower = u64::from(u32::MAX);
-        Self(upper | lower)
+        Self::from_kind_and_index(VMGcKind::ExternRef, VMSharedTypeIndex::reserved_value())
+    }
+
+    /// Create the header for the given kind and type index.
+    pub fn from_kind_and_index(kind: VMGcKind, ty: VMSharedTypeIndex) -> Self {
+        let kind = kind.as_u32();
+        Self { kind, ty }
     }
 
     /// Get the kind of GC object that this is.
     pub fn kind(&self) -> VMGcKind {
-        let upper = u32::try_from(self.0 >> 32).unwrap();
-        VMGcKind::from_u32(upper)
+        VMGcKind::from_high_bits_of_u32(self.kind)
     }
 
-    /// Get the reserved 30 bits in this header.
+    /// Get the reserved 26 bits in this header.
     ///
     /// These are bits are reserved for `GcRuntime` implementations to make use
     /// of however they see fit.
-    pub fn reserved_u30(&self) -> u32 {
-        let upper = u32::try_from(self.0 >> 32).unwrap();
-        upper & VMGcKind::UNUSED_MASK
+    pub fn reserved_u26(&self) -> u32 {
+        self.kind & VMGcKind::UNUSED_MASK
     }
 
-    /// Set the 30-bit reserved value.
+    /// Set the 26-bit reserved value.
     ///
     /// # Panics
     ///
-    /// Panics if the given `value` has any of the upper 2 bits set.
-    pub fn set_reserved_u30(&mut self, value: u32) {
-        assert_eq!(
-            value & VMGcKind::MASK,
-            0,
-            "VMGcHeader::set_reserved_u30 with value using more than 30 bits"
+    /// Panics if the given `value` has any of the upper 6 bits set.
+    pub fn set_reserved_u26(&mut self, value: u32) {
+        assert!(
+            VMGcKind::value_fits_in_unused_bits(value),
+            "VMGcHeader::set_reserved_u26 with value using more than 26 bits: \
+             {value:#034b} ({value}, {value:#010x})"
         );
-        self.0 |= u64::from(value) << 32;
+        self.kind &= VMGcKind::MASK;
+        self.kind |= value;
     }
 
-    /// Set the 30-bit reserved value.
+    /// Set the 26-bit reserved value.
     ///
     /// # Safety
     ///
-    /// The given `value` must only use the lower 30 bits; its upper 2 bits must
+    /// The given `value` must only use the lower 26 bits; its upper 6 bits must
     /// be unset.
-    pub unsafe fn unchecked_set_reserved_u30(&mut self, value: u32) {
-        self.0 |= u64::from(value) << 32;
+    pub unsafe fn unchecked_set_reserved_u26(&mut self, value: u32) {
+        debug_assert_eq!(value & VMGcKind::MASK, 0);
+        self.kind &= VMGcKind::MASK;
+        self.kind |= value;
     }
 
     /// Get this object's specific concrete type.
     pub fn ty(&self) -> Option<VMSharedTypeIndex> {
-        let lower_mask = u64::from(u32::MAX);
-        let lower = u32::try_from(self.0 & lower_mask).unwrap();
-        if lower == u32::MAX {
+        if self.ty.is_reserved_value() {
             None
         } else {
-            Some(VMSharedTypeIndex::new(lower))
+            Some(self.ty)
         }
-    }
-}
-
-#[cfg(test)]
-mod vm_gc_header_tests {
-    use super::*;
-    use std::mem;
-
-    #[test]
-    fn size_align() {
-        assert_eq!(mem::size_of::<VMGcHeader>(), 8);
-        assert_eq!(mem::align_of::<VMGcHeader>(), 8);
     }
 }
 
@@ -159,17 +167,11 @@ impl fmt::UpperHex for VMGcRef {
 
 impl fmt::Pointer for VMGcRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#x}", self)
+        write!(f, "{self:#x}")
     }
 }
 
 impl VMGcRef {
-    /// The only type of valid `VMGcRef` is currently `VMExternRef`.
-    ///
-    /// Assert on this anywhere you are making that assumption, so that we know
-    /// all the places to update when it no longer holds true.
-    pub const ONLY_EXTERN_REF_AND_I31: bool = true;
-
     /// If this bit is set on a GC reference, then the GC reference is actually an
     /// unboxed `i31`.
     ///
@@ -221,22 +223,6 @@ impl VMGcRef {
         VMGcRef::from_raw_non_zero_u32(non_zero)
     }
 
-    /// Create a new `VMGcRef` from a raw `r64` value from Cranelift.
-    ///
-    /// Returns an error if `raw` cannot be losslessly converted from a `u64`
-    /// into a `u32`.
-    ///
-    /// Returns `Ok(None)` if `raw` is zero (aka a "null" `VMGcRef`).
-    ///
-    /// This method only exists because we can't currently use Cranelift's `r32`
-    /// type on 64-bit platforms. We should instead have a `from_r32` method.
-    pub fn from_r64(raw: u64) -> Result<Option<Self>> {
-        let raw = u32::try_from(raw & (u32::MAX as u64))
-            .err2anyhow()
-            .with_context(|| format!("invalid r64: {raw:#x} cannot be converted into a u32"))?;
-        Ok(Self::from_raw_u32(raw))
-    }
-
     /// Copy this `VMGcRef` without running the GC's clone barriers.
     ///
     /// Prefer calling `clone(&mut GcStore)` instead! This is mostly an internal
@@ -249,39 +235,31 @@ impl VMGcRef {
         VMGcRef(self.0)
     }
 
+    /// Copy this `i31` GC reference, which never requires any GC barriers.
+    ///
+    /// Panics if this is not an `i31`.
+    pub fn copy_i31(&self) -> Self {
+        assert!(self.is_i31());
+        self.unchecked_copy()
+    }
+
     /// Get this GC reference as a u32 index into its GC heap.
     ///
     /// Returns `None` for `i31ref`s.
     pub fn as_heap_index(&self) -> Option<NonZeroU32> {
-        if self.is_i31() {
-            None
-        } else {
-            Some(self.0)
-        }
+        if self.is_i31() { None } else { Some(self.0) }
+    }
+
+    /// Get this GC reference as a raw, non-zero u32 value, regardless whether
+    /// it is actually a reference to a GC object or is an `i31ref`.
+    pub fn as_raw_non_zero_u32(&self) -> NonZeroU32 {
+        self.0
     }
 
     /// Get this GC reference as a raw u32 value, regardless whether it is
     /// actually a reference to a GC object or is an `i31ref`.
     pub fn as_raw_u32(&self) -> u32 {
         self.0.get()
-    }
-
-    /// Get this GC reference as a raw `r64` value for passing to Cranelift.
-    ///
-    /// This method only exists because we can't currently use Cranelift's `r32`
-    /// type on 64-bit platforms. We should instead be able to pass `VMGcRef`
-    /// into compiled code directly.
-    pub fn into_r64(self) -> u64 {
-        u64::from(self.0.get())
-    }
-
-    /// Get this GC reference as a raw `r64` value for passing to Cranelift.
-    ///
-    /// This method only exists because we can't currently use Cranelift's `r32`
-    /// type on 64-bit platforms. We should instead be able to pass `VMGcRef`
-    /// into compiled code directly.
-    pub fn as_r64(&self) -> u64 {
-        u64::from(self.0.get())
     }
 
     /// Creates a typed GC reference from `self`, checking that `self` actually
@@ -322,8 +300,20 @@ impl VMGcRef {
         }
     }
 
+    /// Is this GC reference pointing to a `T`?
+    pub fn is_typed<T>(&self, gc_heap: &impl GcHeap) -> bool
+    where
+        T: GcHeapObject,
+    {
+        if self.is_i31() {
+            return false;
+        }
+        T::is(gc_heap.header(&self))
+    }
+
     /// Borrow `self` as a typed GC reference, checking that `self` actually is
     /// a `T`.
+    #[inline]
     pub fn as_typed<T>(&self, gc_heap: &impl GcHeap) -> Option<&TypedGcRef<T>>
     where
         T: GcHeapObject,
@@ -374,7 +364,7 @@ impl VMGcRef {
     ///
     /// Returns `None` when this is an `i31ref` and doesn't actually point to a
     /// GC header.
-    pub fn gc_header<'a>(&self, gc_heap: &'a dyn GcHeap) -> Option<&'a VMGcHeader> {
+    pub fn gc_header<'a>(&self, gc_heap: &'a (impl GcHeap + ?Sized)) -> Option<&'a VMGcHeader> {
         if self.is_i31() {
             None
         } else {
@@ -409,9 +399,18 @@ impl VMGcRef {
 
     /// Is this `VMGcRef` a `VMExternRef`?
     #[inline]
-    pub fn is_extern_ref(&self) -> bool {
-        assert!(Self::ONLY_EXTERN_REF_AND_I31);
-        !self.is_i31()
+    pub fn is_extern_ref(&self, gc_heap: &(impl GcHeap + ?Sized)) -> bool {
+        self.gc_header(gc_heap)
+            .map_or(false, |h| h.kind().matches(VMGcKind::ExternRef))
+    }
+
+    /// Is this `VMGcRef` an `anyref`?
+    #[inline]
+    pub fn is_any_ref(&self, gc_heap: &(impl GcHeap + ?Sized)) -> bool {
+        self.is_i31()
+            || self
+                .gc_header(gc_heap)
+                .map_or(false, |h| h.kind().matches(VMGcKind::AnyRef))
     }
 }
 
@@ -486,5 +485,40 @@ impl<T> TypedGcRef<T> {
     /// Get the untyped version of this GC reference.
     pub fn as_untyped(&self) -> &VMGcRef {
         &self.gc_ref
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reserved_bits() {
+        let kind = VMGcKind::StructRef;
+        let ty = VMSharedTypeIndex::new(1234);
+        let mut header = VMGcHeader::from_kind_and_index(kind, ty);
+
+        assert_eq!(header.reserved_u26(), 0);
+        assert_eq!(header.kind(), kind);
+        assert_eq!(header.ty(), Some(ty));
+
+        header.set_reserved_u26(36);
+        assert_eq!(header.reserved_u26(), 36);
+        assert_eq!(header.kind(), kind);
+        assert_eq!(header.ty(), Some(ty));
+
+        let max = (1 << 26) - 1;
+        header.set_reserved_u26(max);
+        assert_eq!(header.reserved_u26(), max);
+        assert_eq!(header.kind(), kind);
+        assert_eq!(header.ty(), Some(ty));
+
+        header.set_reserved_u26(0);
+        assert_eq!(header.reserved_u26(), 0);
+        assert_eq!(header.kind(), kind);
+        assert_eq!(header.ty(), Some(ty));
+
+        let result = std::panic::catch_unwind(move || header.set_reserved_u26(max + 1));
+        assert!(result.is_err());
     }
 }

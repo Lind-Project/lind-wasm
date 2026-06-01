@@ -9,14 +9,13 @@ use cranelift_codegen::isa::aarch64::inst::{
     ScalarSize,
 };
 use cranelift_codegen::{
+    Final, MachBuffer, MachBufferFinalized, MachInstEmit, MachInstEmitState, MachLabel, Writable,
     ir::{MemFlags, SourceLoc},
     isa::aarch64::inst::{
-        self,
+        self, ALUOp, ALUOp3, AMode, ExtendOp, Imm12, Inst, PairAMode,
         emit::{EmitInfo, EmitState},
-        ALUOp, ALUOp3, AMode, ExtendOp, Imm12, Inst, PairAMode,
     },
-    settings, Final, MachBuffer, MachBufferFinalized, MachInstEmit, MachInstEmitState, MachLabel,
-    Writable,
+    settings,
 };
 
 impl From<OperandSize> for inst::OperandSize {

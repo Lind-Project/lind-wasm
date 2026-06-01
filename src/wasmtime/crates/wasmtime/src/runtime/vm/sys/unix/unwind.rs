@@ -2,18 +2,36 @@
 
 use crate::prelude::*;
 use crate::runtime::vm::SendSyncPtr;
-use core::ptr::{self, NonNull};
-use core::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use core::ptr::NonNull;
 
 /// Represents a registration of function unwind information for System V ABI.
 pub struct UnwindRegistration {
-    registrations: Vec<SendSyncPtr<u8>>,
+    registrations: TryVec<SendSyncPtr<u8>>,
 }
 
-extern "C" {
-    // libunwind import
-    fn __register_frame(fde: *const u8);
-    fn __deregister_frame(fde: *const u8);
+cfg_if::cfg_if! {
+    // FIXME: at least on the `gcc-arm-linux-gnueabihf` toolchain on Ubuntu
+    // these symbols are not provided by default like they are on other targets.
+    // I'm not ARM expert so I don't know why. For now though consider this an
+    // optional integration feature with the platform and stub out the functions
+    // to do nothing which won't break any tests it just means that
+    // runtime-generated backtraces won't have the same level of fidelity they
+    // do on other targets.
+    if #[cfg(target_arch = "arm")] {
+        unsafe extern "C" fn __register_frame(_: *const u8) {}
+        unsafe extern "C" fn __deregister_frame(_: *const u8) {}
+        unsafe extern "C" fn wasmtime_using_libunwind() -> bool {
+            false
+        }
+    } else {
+        unsafe extern "C" {
+            // libunwind import
+            fn __register_frame(fde: *const u8);
+            fn __deregister_frame(fde: *const u8);
+            #[wasmtime_versioned_export_macros::versioned_link]
+            fn wasmtime_using_libunwind() -> bool;
+        }
+    }
 }
 
 /// There are two primary unwinders on Unix platforms: libunwind and libgcc.
@@ -33,47 +51,13 @@ extern "C" {
 /// https://www.nongnu.org/libunwind/ but that doesn't appear to have
 /// `__register_frame` so I don't think that interacts with this.
 fn using_libunwind() -> bool {
-    static USING_LIBUNWIND: AtomicUsize = AtomicUsize::new(LIBUNWIND_UNKNOWN);
-
-    const LIBUNWIND_UNKNOWN: usize = 0;
-    const LIBUNWIND_YES: usize = 1;
-    const LIBUNWIND_NO: usize = 2;
-
     // On macOS the libgcc interface is never used so libunwind is always used.
-    if cfg!(target_os = "macos") {
-        return true;
-    }
-
-    // On other platforms the unwinder can vary. Sometimes the unwinder is
-    // selected at build time and sometimes it differs at build time and runtime
-    // (or at least I think that's possible). Fall back to a `libc::dlsym` to
-    // figure out what we're using and branch based on that.
-    //
-    // Note that the result of `libc::dlsym` is cached to only look this up
-    // once.
-    match USING_LIBUNWIND.load(Relaxed) {
-        LIBUNWIND_YES => true,
-        LIBUNWIND_NO => false,
-        LIBUNWIND_UNKNOWN => {
-            let looks_like_libunwind = unsafe {
-                !libc::dlsym(ptr::null_mut(), c"__unw_add_dynamic_fde".as_ptr()).is_null()
-            };
-            USING_LIBUNWIND.store(
-                if looks_like_libunwind {
-                    LIBUNWIND_YES
-                } else {
-                    LIBUNWIND_NO
-                },
-                Relaxed,
-            );
-            looks_like_libunwind
-        }
-        _ => unreachable!(),
-    }
+    // Otherwise delegate to `helpers.c` since weak symbols can't be used from
+    // Rust at this time.
+    cfg!(target_os = "macos") || unsafe { wasmtime_using_libunwind() }
 }
 
 impl UnwindRegistration {
-    #[allow(missing_docs)]
     pub const SECTION_NAME: &'static str = ".eh_frame";
 
     /// Registers precompiled unwinding information with the system.
@@ -87,43 +71,46 @@ impl UnwindRegistration {
         unwind_info: *const u8,
         unwind_len: usize,
     ) -> Result<UnwindRegistration> {
+        #[cfg(has_virtual_memory)]
         debug_assert_eq!(
             unwind_info as usize % crate::runtime::vm::host_page_size(),
             0,
             "The unwind info must always be aligned to a page"
         );
 
-        let mut registrations = Vec::new();
-        if using_libunwind() {
-            // For libunwind, `__register_frame` takes a pointer to a single
-            // FDE. Note that we subtract 4 from the length of unwind info since
-            // wasmtime-encode .eh_frame sections always have a trailing 32-bit
-            // zero for the platforms above.
-            let start = unwind_info;
-            let end = start.add(unwind_len - 4);
-            let mut current = start;
+        let mut registrations = TryVec::new();
+        unsafe {
+            if using_libunwind() {
+                // For libunwind, `__register_frame` takes a pointer to a single
+                // FDE. Note that we subtract 4 from the length of unwind info since
+                // wasmtime-encode .eh_frame sections always have a trailing 32-bit
+                // zero for the platforms above.
+                let start = unwind_info;
+                let end = start.add(unwind_len - 4);
+                let mut current = start;
 
-            // Walk all of the entries in the frame table and register them
-            while current < end {
-                let len = current.cast::<u32>().read_unaligned() as usize;
+                // Walk all of the entries in the frame table and register them
+                while current < end {
+                    let len = current.cast::<u32>().read_unaligned() as usize;
 
-                // Skip over the CIE
-                if current != start {
-                    __register_frame(current);
-                    let cur = NonNull::new(current.cast_mut()).unwrap();
-                    registrations.push(SendSyncPtr::new(cur));
+                    // Skip over the CIE
+                    if current != start {
+                        __register_frame(current);
+                        let cur = NonNull::new(current.cast_mut()).unwrap();
+                        registrations.push(SendSyncPtr::new(cur))?;
+                    }
+
+                    // Move to the next table entry (+4 because the length itself is
+                    // not inclusive)
+                    current = current.add(len + 4);
                 }
-
-                // Move to the next table entry (+4 because the length itself is
-                // not inclusive)
-                current = current.add(len + 4);
+            } else {
+                // On gnu (libgcc), `__register_frame` will walk the FDEs until an
+                // entry of length 0
+                __register_frame(unwind_info);
+                let info = NonNull::new(unwind_info.cast_mut()).unwrap();
+                registrations.push(SendSyncPtr::new(info))?;
             }
-        } else {
-            // On gnu (libgcc), `__register_frame` will walk the FDEs until an
-            // entry of length 0
-            __register_frame(unwind_info);
-            let info = NonNull::new(unwind_info.cast_mut()).unwrap();
-            registrations.push(SendSyncPtr::new(info));
         }
 
         Ok(UnwindRegistration { registrations })

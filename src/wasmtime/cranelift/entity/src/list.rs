@@ -1,6 +1,6 @@
 //! Small lists of entity references.
-use crate::packed_option::ReservedValue;
 use crate::EntityRef;
+use crate::packed_option::ReservedValue;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::mem;
@@ -45,7 +45,7 @@ use serde_derive::{Deserialize, Serialize};
 /// The `EntityList` itself is designed to have the smallest possible footprint. This is important
 /// because it is used inside very compact data structures like `InstructionData`. The list
 /// contains only a 32-bit index into the pool's memory vector, pointing to the first element of
-/// the list.
+/// the list. A zero value represents the empty list, which is returned by `EntityList::default`.
 ///
 /// The pool is just a single `Vec<T>` containing all of the allocated lists. Each list is
 /// represented as three contiguous parts:
@@ -64,6 +64,7 @@ use serde_derive::{Deserialize, Serialize};
 /// reserved for the empty list which isn't allocated in the vector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+#[repr(C)]
 pub struct EntityList<T: EntityRef + ReservedValue> {
     index: u32,
     unused: PhantomData<T>,
@@ -947,7 +948,9 @@ mod tests {
         list.copy_from(&list_again, .., 7, pool);
         assert_eq!(
             list.as_slice(pool),
-            &[i4, i3, i2, i1, i1, i2, i4, i3, i2, i1, i1, i2, i3, i4, i4, i3, i3, i4, i4, i3]
+            &[
+                i4, i3, i2, i1, i1, i2, i4, i3, i2, i1, i1, i2, i3, i4, i4, i3, i3, i4, i4, i3
+            ]
         )
     }
 }

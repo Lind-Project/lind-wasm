@@ -1,10 +1,16 @@
-use crate::{EntityRef, Module, ModuleTypes, TypeConvert};
-use std::{borrow::Cow, collections::HashMap, ops::Index};
-use wasmparser::{UnpackedIndex, Validator, ValidatorId};
-use wasmtime_types::{
-    EngineOrModuleTypeIndex, ModuleInternedRecGroupIndex, ModuleInternedTypeIndex, TypeIndex,
-    WasmCompositeType, WasmFuncType, WasmHeapType, WasmResult, WasmSubType,
+use crate::{
+    EngineOrModuleTypeIndex, EntityRef, ModuleInternedRecGroupIndex, ModuleInternedTypeIndex,
+    ModuleTypes, PanicOnOom as _, TypeConvert, TypeIndex, WasmArrayType, WasmCompositeInnerType,
+    WasmCompositeType, WasmExnType, WasmFieldType, WasmFuncType, WasmHeapType, WasmResult,
+    WasmStorageType, WasmStructType, WasmSubType,
+    collections::{TryClone as _, TryCow},
+    wasm_unsupported,
 };
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    ops::Index,
+};
+use wasmparser::{UnpackedIndex, Validator, ValidatorId};
 
 /// A type marking the start of a recursion group's definition.
 ///
@@ -37,6 +43,12 @@ pub struct ModuleTypesBuilder {
     /// trampoline type for a given function type if we've already interned one.
     trampoline_types: HashMap<WasmFuncType, ModuleInternedTypeIndex>,
 
+    /// An interning map for exception types corresponding to function
+    /// types used by tags. Tags are nominal, but the underlying
+    /// Wasmtime types describe only the object layout and so are
+    /// structural.
+    exception_types: HashMap<ModuleInternedTypeIndex, ModuleInternedTypeIndex>,
+
     /// A map from already-interned `wasmparser` types to their corresponding
     /// Wasmtime type.
     wasmparser_to_wasmtime: HashMap<wasmparser::types::CoreTypeId, ModuleInternedTypeIndex>,
@@ -56,6 +68,7 @@ impl ModuleTypesBuilder {
             validator_id: validator.id(),
             types: ModuleTypes::default(),
             trampoline_types: HashMap::default(),
+            exception_types: HashMap::default(),
             wasmparser_to_wasmtime: HashMap::default(),
             already_seen: HashMap::default(),
             defining_rec_group: None,
@@ -82,7 +95,6 @@ impl ModuleTypesBuilder {
     /// builder is associated with.
     pub fn intern_rec_group(
         &mut self,
-        module: &Module,
         validator_types: wasmparser::types::TypesRef<'_>,
         rec_group_id: wasmparser::types::RecGroupId,
     ) -> WasmResult<ModuleInternedRecGroupIndex> {
@@ -92,13 +104,12 @@ impl ModuleTypesBuilder {
             return Ok(*interned);
         }
 
-        self.define_new_rec_group(module, validator_types, rec_group_id)
+        self.define_new_rec_group(validator_types, rec_group_id)
     }
 
     /// Define a new recursion group that we haven't already interned.
     fn define_new_rec_group(
         &mut self,
-        module: &Module,
         validator_types: wasmparser::types::TypesRef<'_>,
         rec_group_id: wasmparser::types::RecGroupId,
     ) -> WasmResult<ModuleInternedRecGroupIndex> {
@@ -111,9 +122,11 @@ impl ModuleTypesBuilder {
 
         for id in validator_types.rec_group_elements(rec_group_id) {
             let ty = &validator_types[id];
-            let wasm_ty = WasmparserTypeConverter::new(self, module)
-                .with_rec_group(validator_types, rec_group_id)
-                .convert_sub_type(ty);
+            let wasm_ty = WasmparserTypeConverter::new(self, |_| {
+                unreachable!("no need to lookup indexes; we already have core type IDs")
+            })
+            .with_rec_group(validator_types, rec_group_id)
+            .convert_sub_type(ty)?;
             self.wasm_sub_type_in_rec_group(id, wasm_ty);
         }
 
@@ -140,7 +153,8 @@ impl ModuleTypesBuilder {
         &mut self,
         for_func_ty: ModuleInternedTypeIndex,
     ) -> ModuleInternedTypeIndex {
-        let trampoline = self.types[for_func_ty].unwrap_func().trampoline_type();
+        let sub_ty = &self.types[for_func_ty];
+        let trampoline = sub_ty.unwrap_func().trampoline_type().panic_on_oom();
 
         if let Some(idx) = self.trampoline_types.get(&trampoline) {
             // We've already interned this trampoline type; reuse it.
@@ -152,18 +166,22 @@ impl ModuleTypesBuilder {
                 // type. We can reuse the definition and its index, but still
                 // need to intern the type into our `trampoline_types` map so we
                 // can reuse it in the future.
-                Cow::Borrowed(f) => {
-                    self.trampoline_types.insert(f.clone(), for_func_ty);
+                TryCow::Borrowed(f) => {
+                    self.trampoline_types
+                        .insert(f.clone_panic_on_oom(), for_func_ty);
                     for_func_ty
                 }
                 // The trampoline type is different from the original function
                 // type. Define the trampoline type and then intern it in
                 // `trampoline_types` so we can reuse it in the future.
-                Cow::Owned(f) => {
+                TryCow::Owned(f) => {
                     let idx = self.types.push(WasmSubType {
                         is_final: true,
                         supertype: None,
-                        composite_type: WasmCompositeType::Func(f.clone()),
+                        composite_type: WasmCompositeType {
+                            inner: WasmCompositeInnerType::Func(f.clone_panic_on_oom()),
+                            shared: sub_ty.composite_type.shared,
+                        },
                     });
 
                     // The trampoline type is its own trampoline type.
@@ -252,7 +270,6 @@ impl ModuleTypesBuilder {
     /// and then look up the Wasmtime index for the original type themselves.
     pub fn intern_type(
         &mut self,
-        module: &Module,
         validator_types: wasmparser::types::TypesRef<'_>,
         id: wasmparser::types::CoreTypeId,
     ) -> WasmResult<ModuleInternedTypeIndex> {
@@ -260,16 +277,19 @@ impl ModuleTypesBuilder {
         assert_eq!(validator_types.id(), self.validator_id);
 
         let rec_group_id = validator_types.rec_group_id_of(id);
-        debug_assert!(validator_types
-            .rec_group_elements(rec_group_id)
-            .any(|e| e == id));
+        debug_assert!(
+            validator_types
+                .rec_group_elements(rec_group_id)
+                .any(|e| e == id)
+        );
 
-        let interned_rec_group = self.intern_rec_group(module, validator_types, rec_group_id)?;
+        let interned_rec_group = self.intern_rec_group(validator_types, rec_group_id)?;
 
         let interned_type = self.wasmparser_to_wasmtime[&id];
-        debug_assert!(self
-            .rec_group_elements(interned_rec_group)
-            .any(|e| e == interned_type));
+        debug_assert!(
+            self.rec_group_elements(interned_rec_group)
+                .any(|e| e == interned_type)
+        );
 
         Ok(interned_type)
     }
@@ -295,6 +315,50 @@ impl ModuleTypesBuilder {
         module_interned_index
     }
 
+    /// Define a new exception type when we see a function type used
+    /// in a tag.
+    ///
+    /// The returned `ModuleInternedTypeIndex` gives us a Wasmtime
+    /// type which corresponds to the exception object layout, but
+    /// note that these types do not exist in the Wasm spec: at the
+    /// Wasm level, only function types exist (and tags and exception
+    /// instructions reference them). For implementation reasons, we
+    /// need a separate type to describe the exception object layout,
+    /// and this registers and provides that type.
+    pub fn define_exception_type_for_tag(
+        &mut self,
+        for_func_ty: ModuleInternedTypeIndex,
+    ) -> ModuleInternedTypeIndex {
+        match self.exception_types.entry(for_func_ty) {
+            Entry::Occupied(o) => *o.get(),
+            Entry::Vacant(v) => {
+                let fields = self.types[for_func_ty]
+                    .unwrap_func()
+                    .params()
+                    .iter()
+                    .map(|valtype| WasmFieldType {
+                        element_type: WasmStorageType::Val(*valtype),
+                        mutable: false,
+                    })
+                    .collect();
+                let idx = self.types.push(WasmSubType {
+                    is_final: true,
+                    supertype: None,
+                    composite_type: WasmCompositeType {
+                        inner: WasmCompositeInnerType::Exn(WasmExnType {
+                            func_ty: EngineOrModuleTypeIndex::Module(for_func_ty),
+                            fields,
+                        }),
+                        shared: false,
+                    },
+                });
+                let next = self.types.next_ty();
+                self.types.push_rec_group(idx..next);
+                *v.insert(idx)
+            }
+        }
+    }
+
     /// Returns the result [`ModuleTypes`] of this builder.
     pub fn finish(self) -> ModuleTypes {
         self.types
@@ -304,7 +368,7 @@ impl ModuleTypesBuilder {
     pub fn rec_group_elements(
         &self,
         rec_group: ModuleInternedRecGroupIndex,
-    ) -> impl ExactSizeIterator<Item = ModuleInternedTypeIndex> {
+    ) -> impl ExactSizeIterator<Item = ModuleInternedTypeIndex> + use<> {
         self.types.rec_group_elements(rec_group)
     }
 
@@ -326,6 +390,78 @@ impl ModuleTypesBuilder {
     pub fn trampoline_type(&self, ty: ModuleInternedTypeIndex) -> ModuleInternedTypeIndex {
         self.types.trampoline_type(ty)
     }
+
+    /// Get and unwrap a [`WasmStructType`] for the given struct index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the unwrapped type is not a struct.
+    ///
+    /// # Errors
+    ///
+    /// For now, fails with an unsupported error if the type is shared.
+    pub fn unwrap_struct(&self, ty: ModuleInternedTypeIndex) -> WasmResult<&WasmStructType> {
+        let composite_type = &self.types[ty].composite_type;
+        if composite_type.shared {
+            return Err(wasm_unsupported!("shared structs are not yet implemented"));
+        }
+        Ok(composite_type.inner.unwrap_struct())
+    }
+
+    /// Get and unwrap a [`WasmArrayType`] for the given array index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the unwrapped type is not an array.
+    ///
+    /// # Errors
+    ///
+    /// For now, fails with an unsupported error if the type is shared.
+    pub fn unwrap_array(&self, interned_ty: ModuleInternedTypeIndex) -> WasmResult<&WasmArrayType> {
+        let composite_type = &self.types[interned_ty].composite_type;
+        if composite_type.shared {
+            return Err(wasm_unsupported!("shared arrays are not yet implemented"));
+        }
+        Ok(composite_type.inner.unwrap_array())
+    }
+
+    /// Get and unwrap a [`WasmExnType`] for the given exception-type index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the unwrapped type is not an exception type.
+    ///
+    /// # Errors
+    ///
+    /// For now, fails with an unsupported error if the type is shared.
+    pub fn unwrap_exn(&self, interned_ty: ModuleInternedTypeIndex) -> WasmResult<&WasmExnType> {
+        let composite_type = &self.types[interned_ty].composite_type;
+        if composite_type.shared {
+            return Err(wasm_unsupported!(
+                "shared exceptions are not yet implemented"
+            ));
+        }
+        Ok(composite_type.inner.unwrap_exn())
+    }
+
+    /// Get and unwrap a [`WasmFuncType`] for the given function-type index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the unwrapped type is not a function type.
+    ///
+    /// # Errors
+    ///
+    /// For now, fails with an unsupported error if the type is shared.
+    pub fn unwrap_func(&self, interned_ty: ModuleInternedTypeIndex) -> WasmResult<&WasmFuncType> {
+        let composite_type = &self.types[interned_ty].composite_type;
+        if composite_type.shared {
+            return Err(wasm_unsupported!(
+                "shared functions are not yet implemented"
+            ));
+        }
+        Ok(composite_type.inner.unwrap_func())
+    }
 }
 
 // Forward the indexing impl to the internal `ModuleTypes`
@@ -341,21 +477,21 @@ where
 }
 
 /// A convert from `wasmparser` types to Wasmtime types.
-pub struct WasmparserTypeConverter<'a> {
+pub struct WasmparserTypeConverter<'a, F> {
     types: &'a ModuleTypesBuilder,
-    module: &'a Module,
+    lookup_type_idx: F,
     rec_group_context: Option<(
         wasmparser::types::TypesRef<'a>,
         wasmparser::types::RecGroupId,
     )>,
 }
 
-impl<'a> WasmparserTypeConverter<'a> {
+impl<'a, F> WasmparserTypeConverter<'a, F> {
     /// Construct a new type converter from `wasmparser` types to Wasmtime types.
-    pub fn new(types: &'a ModuleTypesBuilder, module: &'a Module) -> Self {
+    pub fn new(types: &'a ModuleTypesBuilder, lookup_type_idx: F) -> Self {
         Self {
             types,
-            module,
+            lookup_type_idx,
             rec_group_context: None,
         }
     }
@@ -372,7 +508,10 @@ impl<'a> WasmparserTypeConverter<'a> {
     }
 }
 
-impl TypeConvert for WasmparserTypeConverter<'_> {
+impl<F> TypeConvert for WasmparserTypeConverter<'_, F>
+where
+    F: Fn(TypeIndex) -> ModuleInternedTypeIndex,
+{
     fn lookup_heap_type(&self, index: UnpackedIndex) -> WasmHeapType {
         match index {
             UnpackedIndex::Id(id) => {
@@ -386,16 +525,30 @@ impl TypeConvert for WasmparserTypeConverter<'_> {
                 // array vs struct vs func reference. In this case, we can use
                 // the validator's type context.
                 if let Some(ty) = self.types.types.get(interned) {
-                    match &ty.composite_type {
-                        WasmCompositeType::Array(_) => WasmHeapType::ConcreteArray(index),
-                        WasmCompositeType::Func(_) => WasmHeapType::ConcreteFunc(index),
-                        WasmCompositeType::Struct(_) => WasmHeapType::ConcreteStruct(index),
+                    assert!(!ty.composite_type.shared);
+                    match &ty.composite_type.inner {
+                        WasmCompositeInnerType::Array(_) => WasmHeapType::ConcreteArray(index),
+                        WasmCompositeInnerType::Func(_) => WasmHeapType::ConcreteFunc(index),
+                        WasmCompositeInnerType::Struct(_) => WasmHeapType::ConcreteStruct(index),
+                        WasmCompositeInnerType::Cont(_) => WasmHeapType::ConcreteCont(index),
+                        WasmCompositeInnerType::Exn(_) => WasmHeapType::ConcreteExn(index),
                     }
                 } else if let Some((wasmparser_types, _)) = self.rec_group_context.as_ref() {
-                    match &wasmparser_types[id].composite_type {
-                        wasmparser::CompositeType::Array(_) => WasmHeapType::ConcreteArray(index),
-                        wasmparser::CompositeType::Func(_) => WasmHeapType::ConcreteFunc(index),
-                        wasmparser::CompositeType::Struct(_) => WasmHeapType::ConcreteStruct(index),
+                    let wasmparser_ty = &wasmparser_types[id].composite_type;
+                    assert!(!wasmparser_ty.shared);
+                    match &wasmparser_ty.inner {
+                        wasmparser::CompositeInnerType::Array(_) => {
+                            WasmHeapType::ConcreteArray(index)
+                        }
+                        wasmparser::CompositeInnerType::Func(_) => {
+                            WasmHeapType::ConcreteFunc(index)
+                        }
+                        wasmparser::CompositeInnerType::Struct(_) => {
+                            WasmHeapType::ConcreteStruct(index)
+                        }
+                        wasmparser::CompositeInnerType::Cont(_) => {
+                            WasmHeapType::ConcreteCont(index)
+                        }
                     }
                 } else {
                     panic!("forward reference to type outside of rec group?")
@@ -404,7 +557,7 @@ impl TypeConvert for WasmparserTypeConverter<'_> {
 
             UnpackedIndex::Module(module_index) => {
                 let module_index = TypeIndex::from_u32(module_index);
-                let interned = self.module.types[module_index];
+                let interned = (self.lookup_type_idx)(module_index);
                 let index = EngineOrModuleTypeIndex::Module(interned);
 
                 // See comment above about `wasm_types` maybe not having the
@@ -413,10 +566,13 @@ impl TypeConvert for WasmparserTypeConverter<'_> {
                 // indirectly get one by looking it up inside the current rec
                 // group.
                 if let Some(ty) = self.types.types.get(interned) {
-                    match &ty.composite_type {
-                        WasmCompositeType::Array(_) => WasmHeapType::ConcreteArray(index),
-                        WasmCompositeType::Func(_) => WasmHeapType::ConcreteFunc(index),
-                        WasmCompositeType::Struct(_) => WasmHeapType::ConcreteStruct(index),
+                    assert!(!ty.composite_type.shared);
+                    match &ty.composite_type.inner {
+                        WasmCompositeInnerType::Array(_) => WasmHeapType::ConcreteArray(index),
+                        WasmCompositeInnerType::Func(_) => WasmHeapType::ConcreteFunc(index),
+                        WasmCompositeInnerType::Struct(_) => WasmHeapType::ConcreteStruct(index),
+                        WasmCompositeInnerType::Cont(_) => WasmHeapType::ConcreteCont(index),
+                        WasmCompositeInnerType::Exn(_) => WasmHeapType::ConcreteExn(index),
                     }
                 } else if let Some((parser_types, rec_group)) = self.rec_group_context.as_ref() {
                     let rec_group_index = interned.index() - self.types.types.len_types();
@@ -424,10 +580,21 @@ impl TypeConvert for WasmparserTypeConverter<'_> {
                         .rec_group_elements(*rec_group)
                         .nth(rec_group_index)
                         .unwrap();
-                    match &parser_types[id].composite_type {
-                        wasmparser::CompositeType::Array(_) => WasmHeapType::ConcreteArray(index),
-                        wasmparser::CompositeType::Func(_) => WasmHeapType::ConcreteFunc(index),
-                        wasmparser::CompositeType::Struct(_) => WasmHeapType::ConcreteStruct(index),
+                    let wasmparser_ty = &parser_types[id].composite_type;
+                    assert!(!wasmparser_ty.shared);
+                    match &wasmparser_ty.inner {
+                        wasmparser::CompositeInnerType::Array(_) => {
+                            WasmHeapType::ConcreteArray(index)
+                        }
+                        wasmparser::CompositeInnerType::Func(_) => {
+                            WasmHeapType::ConcreteFunc(index)
+                        }
+                        wasmparser::CompositeInnerType::Struct(_) => {
+                            WasmHeapType::ConcreteStruct(index)
+                        }
+                        wasmparser::CompositeInnerType::Cont(_) => {
+                            WasmHeapType::ConcreteCont(index)
+                        }
                     }
                 } else {
                     panic!("forward reference to type outside of rec group?")
@@ -446,7 +613,7 @@ impl TypeConvert for WasmparserTypeConverter<'_> {
             }
             UnpackedIndex::Module(module_index) => {
                 let module_index = TypeIndex::from_u32(module_index);
-                let interned = self.module.types[module_index];
+                let interned = (self.lookup_type_idx)(module_index);
                 EngineOrModuleTypeIndex::Module(interned)
             }
             UnpackedIndex::RecGroup(_) => unreachable!(),

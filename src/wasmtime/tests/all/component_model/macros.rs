@@ -1,10 +1,10 @@
 #![cfg(not(miri))]
 
-use super::{make_echo_component, TypedFuncExt};
-use anyhow::Result;
-use component_macro_test::{add_variants, flags_test};
+use super::make_echo_component;
+use wasmtime::Result;
 use wasmtime::component::{Component, ComponentType, Lift, Linker, Lower};
-use wasmtime::Store;
+use wasmtime::{Engine, Store};
+use wasmtime_test_macros::{add_variants, flags_test};
 
 #[test]
 fn record_derive() -> Result<()> {
@@ -30,7 +30,7 @@ fn record_derive() -> Result<()> {
     let input = Foo { a: -42, b: 73 };
     let output = instance
         .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")?
-        .call_and_post_return(&mut store, (input,))?;
+        .call(&mut store, (input,))?;
 
     assert_eq!((input,), output);
 
@@ -42,9 +42,11 @@ fn record_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: field count mismatch (too many)
 
@@ -57,9 +59,11 @@ fn record_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: field name mismatch
 
@@ -69,9 +73,11 @@ fn record_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: field type mismatch
 
@@ -81,9 +87,11 @@ fn record_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Happy path redux, with generics this time
 
@@ -108,7 +116,7 @@ fn record_derive() -> Result<()> {
 
     let output = instance
         .get_typed_func::<(Generic<i32, u32>,), (Generic<i32, u32>,)>(&mut store, "echo")?
-        .call_and_post_return(&mut store, (input,))?;
+        .call(&mut store, (input,))?;
 
     assert_eq!((input,), output);
 
@@ -142,7 +150,7 @@ fn variant_derive() -> Result<()> {
     let func = instance.get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")?;
 
     for &input in &[Foo::A(-42), Foo::B(73), Foo::C] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -155,9 +163,11 @@ fn variant_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: case count mismatch (too many)
 
@@ -170,9 +180,11 @@ fn variant_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: case name mismatch
 
@@ -182,9 +194,11 @@ fn variant_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: case type mismatch
 
@@ -197,9 +211,11 @@ fn variant_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Happy path redux, with generics this time
 
@@ -224,7 +240,7 @@ fn variant_derive() -> Result<()> {
         .get_typed_func::<(Generic<i32, u32>,), (Generic<i32, u32>,)>(&mut store, "echo")?;
 
     for &input in &[Generic::<i32, u32>::A(-42), Generic::B(73), Generic::C] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -236,6 +252,7 @@ fn variant_derive() -> Result<()> {
 fn enum_derive() -> Result<()> {
     #[derive(ComponentType, Lift, Lower, PartialEq, Eq, Debug, Copy, Clone)]
     #[component(enum)]
+    #[repr(u8)]
     enum Foo {
         #[component(name = "foo-bar-baz")]
         A,
@@ -256,7 +273,7 @@ fn enum_derive() -> Result<()> {
     let func = instance.get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")?;
 
     for &input in &[Foo::A, Foo::B, Foo::C] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -269,9 +286,11 @@ fn enum_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: case count mismatch (too many)
 
@@ -281,24 +300,29 @@ fn enum_derive() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: case name mismatch
 
     let component = Component::new(&engine, make_echo_component(r#"(enum "A" "B" "C")"#, 4))?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Happy path redux, with large enums (i.e. more than 2^8 cases)
 
     #[add_variants(257)]
     #[derive(ComponentType, Lift, Lower, PartialEq, Eq, Debug, Copy, Clone)]
     #[component(enum)]
+    #[repr(u16)]
     enum Many {}
 
     let component = Component::new(
@@ -307,7 +331,7 @@ fn enum_derive() -> Result<()> {
             &format!(
                 "(enum {})",
                 (0..257)
-                    .map(|index| format!(r#""V{}""#, index))
+                    .map(|index| format!(r#""V{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -318,7 +342,7 @@ fn enum_derive() -> Result<()> {
     let func = instance.get_typed_func::<(Many,), (Many,)>(&mut store, "echo")?;
 
     for &input in &[Many::V0, Many::V1, Many::V254, Many::V255, Many::V256] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -330,6 +354,7 @@ fn enum_derive() -> Result<()> {
     // #[add_variants(65537)]
     // #[derive(ComponentType, Lift, Lower, PartialEq, Eq, Debug, Copy, Clone)]
     // #[component(enum)]
+    // #[repr(u32)]
     // enum ManyMore {}
 
     Ok(())
@@ -337,7 +362,8 @@ fn enum_derive() -> Result<()> {
 
 #[test]
 fn flags() -> Result<()> {
-    let engine = super::engine();
+    let config = wasmtime_test_util::component::config();
+    let engine = Engine::new(&config)?;
     let mut store = Store::new(&engine, ());
 
     // Simple 8-bit flags
@@ -378,7 +404,7 @@ fn flags() -> Result<()> {
             input |= Foo::C;
         }
 
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -391,9 +417,11 @@ fn flags() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: flag count mismatch (too many)
 
@@ -403,18 +431,22 @@ fn flags() -> Result<()> {
     )?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Sad path: flag name mismatch
 
     let component = Component::new(&engine, make_echo_component(r#"(flags "A" "B" "C")"#, 4))?;
     let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
 
-    assert!(instance
-        .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
-        .is_err());
+    assert!(
+        instance
+            .get_typed_func::<(Foo,), (Foo,)>(&mut store, "echo")
+            .is_err()
+    );
 
     // Happy path redux, with large flag count (exactly 8)
 
@@ -451,7 +483,7 @@ fn flags() -> Result<()> {
             &format!(
                 r#"(flags {})"#,
                 (0..8)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -468,7 +500,7 @@ fn flags() -> Result<()> {
         Foo8Exact::F6,
         Foo8Exact::F7,
     ] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -500,7 +532,7 @@ fn flags() -> Result<()> {
             &format!(
                 "(flags {})",
                 (0..9)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -511,7 +543,7 @@ fn flags() -> Result<()> {
     let func = instance.get_typed_func::<(Foo16,), (Foo16,)>(&mut store, "echo")?;
 
     for &input in &[Foo16::F0, Foo16::F1, Foo16::F6, Foo16::F7, Foo16::F8] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -548,7 +580,7 @@ fn flags() -> Result<()> {
             &format!(
                 r#"(flags {})"#,
                 (0..16)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -565,7 +597,7 @@ fn flags() -> Result<()> {
         Foo16Exact::F14,
         Foo16Exact::F15,
     ] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -587,7 +619,7 @@ fn flags() -> Result<()> {
             &format!(
                 "(flags {})",
                 (0..17)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -598,7 +630,7 @@ fn flags() -> Result<()> {
     let func = instance.get_typed_func::<(Foo32,), (Foo32,)>(&mut store, "echo")?;
 
     for &input in &[Foo32::F0, Foo32::F1, Foo32::F14, Foo32::F15, Foo32::F16] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }
@@ -635,7 +667,7 @@ fn flags() -> Result<()> {
             &format!(
                 r#"(flags {})"#,
                 (0..32)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -652,73 +684,7 @@ fn flags() -> Result<()> {
         Foo32Exact::F30,
         Foo32Exact::F31,
     ] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
-
-        assert_eq!((input,), output);
-    }
-
-    // Happy path redux, with large flag count (more than 32)
-
-    flags_test!(Foo64, 33);
-
-    assert_eq!(Foo64::default(), (Foo64::F0 | Foo64::F31) & Foo64::F32);
-    assert_eq!(Foo64::F31, (Foo64::F0 | Foo64::F31) & Foo64::F31);
-    assert_eq!(Foo64::F0, (Foo64::F0 | Foo64::F31) & Foo64::F0);
-    assert_eq!(Foo64::F0 | Foo64::F31, Foo64::F0 ^ Foo64::F31);
-    assert_eq!(Foo64::default(), Foo64::F0 ^ Foo64::F0);
-    assert_eq!(Foo64::F0 | Foo64::F32, !((!Foo64::F0) & (!Foo64::F32)));
-
-    let component = Component::new(
-        &engine,
-        make_echo_component(
-            &format!(
-                "(flags {})",
-                (0..33)
-                    .map(|index| format!(r#""F{}""#, index))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
-            8,
-        ),
-    )?;
-    let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
-    let func = instance.get_typed_func::<(Foo64,), (Foo64,)>(&mut store, "echo")?;
-
-    for &input in &[Foo64::F0, Foo64::F1, Foo64::F30, Foo64::F31, Foo64::F32] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
-
-        assert_eq!((input,), output);
-    }
-
-    // Happy path redux, with large flag count (more than 64)
-
-    flags_test!(Foo96, 65);
-
-    assert_eq!(Foo96::default(), (Foo96::F0 | Foo96::F63) & Foo96::F64);
-    assert_eq!(Foo96::F63, (Foo96::F0 | Foo96::F63) & Foo96::F63);
-    assert_eq!(Foo96::F0, (Foo96::F0 | Foo96::F63) & Foo96::F0);
-    assert_eq!(Foo96::F0 | Foo96::F63, Foo96::F0 ^ Foo96::F63);
-    assert_eq!(Foo96::default(), Foo96::F0 ^ Foo96::F0);
-    assert_eq!(Foo96::F0 | Foo96::F64, !((!Foo96::F0) & (!Foo96::F64)));
-
-    let component = Component::new(
-        &engine,
-        make_echo_component(
-            &format!(
-                "(flags {})",
-                (0..65)
-                    .map(|index| format!(r#""F{}""#, index))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
-            12,
-        ),
-    )?;
-    let instance = Linker::new(&engine).instantiate(&mut store, &component)?;
-    let func = instance.get_typed_func::<(Foo96,), (Foo96,)>(&mut store, "echo")?;
-
-    for &input in &[Foo96::F0, Foo96::F1, Foo96::F62, Foo96::F63, Foo96::F64] {
-        let output = func.call_and_post_return(&mut store, (input,))?;
+        let output = func.call(&mut store, (input,))?;
 
         assert_eq!((input,), output);
     }

@@ -7,6 +7,7 @@ use cage::get_cage;
 pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};
+use std::os::unix::ffi::OsStrExt;
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
@@ -25,6 +26,30 @@ pub fn convpath(cpath: &str) -> PathBuf {
     PathBuf::from(cpath)
 }
 
+fn has_trailing_separator(path: &PathBuf) -> bool {
+    let bytes = path.as_os_str().as_bytes();
+    bytes.len() > 1 && bytes.ends_with(b"/")
+}
+
+fn preserve_trailing_separator(mut path: PathBuf, preserve: bool) -> PathBuf {
+    if preserve && !has_trailing_separator(&path) && path.as_os_str().as_bytes() != b"/" {
+        let mut os_path = path.into_os_string();
+        os_path.push("/");
+        path = PathBuf::from(os_path);
+    }
+
+    path
+}
+
+pub fn path_without_trailing_slashes(path: &str) -> &str {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() {
+        "/"
+    } else {
+        trimmed
+    }
+}
+
 /// Normalize receiving path arguments to eliminating `./..` and generate a canonicalized (but not
 /// symlink-resolved) path. This function will adding the cage's current working directory at the
 /// beginning, if given path argument is relative; or adding the virtual root `/` if given path
@@ -38,6 +63,8 @@ pub fn convpath(cpath: &str) -> PathBuf {
 /// A `PathBuf` representing the normalized absolute path.
 pub fn normpath(origp: PathBuf, cageid: u64) -> PathBuf {
     let cage = cage::get_cage(cageid).unwrap();
+    let preserve_trailing_slash = has_trailing_separator(&origp);
+
     //If path is relative, prefix it with the current working directory, otherwise populate it with rootdir
     let mut newp = if origp.is_relative() {
         (**cage.cwd.read()).clone()
@@ -61,7 +88,8 @@ pub fn normpath(origp: PathBuf, cageid: u64) -> PathBuf {
             _ => {}
         };
     }
-    newp
+
+    preserve_trailing_separator(newp, preserve_trailing_slash)
 }
 
 /// This function provides two operations: first, it translates path pointer address from WASM environment
@@ -96,6 +124,18 @@ pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
     }
 
     return Err(-1);
+}
+
+/// Like `get_cstr` but accepts non-UTF-8 data by using lossy conversion.
+/// Used in the execve path where argv/envp may contain arbitrary bytes
+/// (e.g. 8-bit delimiters in coreutils tests).
+pub fn get_cstr_lossy(arg: u64) -> Result<String, i32> {
+    let ptr = arg as *const std::ffi::c_char;
+    if !ptr.is_null() {
+        let cstr = unsafe { std::ffi::CStr::from_ptr(ptr) };
+        return Ok(cstr.to_string_lossy().into_owned());
+    }
+    Err(-1)
 }
 
 /// Convert received path pointer into a normalized `CString` path.
@@ -149,5 +189,40 @@ pub fn sc_convert_path_to_host(
     match CString::new(full_path) {
         Ok(c_path) => Ok(c_path),
         Err(_) => return Err(Errno::EINVAL),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserves_trailing_separator_on_normalized_non_root_path() {
+        let path = preserve_trailing_separator(PathBuf::from("/tmp/file"), true);
+        assert_eq!(path.to_str(), Some("/tmp/file/"));
+    }
+
+    #[test]
+    fn does_not_add_trailing_separator_without_original_separator() {
+        let path = preserve_trailing_separator(PathBuf::from("/tmp/file"), false);
+        assert_eq!(path.to_str(), Some("/tmp/file"));
+    }
+
+    #[test]
+    fn does_not_add_extra_separator_to_root() {
+        let path = preserve_trailing_separator(PathBuf::from("/"), true);
+        assert_eq!(path.to_str(), Some("/"));
+    }
+
+    #[test]
+    fn path_without_trailing_slashes_removes_extra_slashes() {
+        assert_eq!(path_without_trailing_slashes("/tmp/dir/"), "/tmp/dir");
+        assert_eq!(path_without_trailing_slashes("/tmp/dir///"), "/tmp/dir");
+    }
+
+    #[test]
+    fn path_without_trailing_slashes_preserves_root() {
+        assert_eq!(path_without_trailing_slashes("/"), "/");
+        assert_eq!(path_without_trailing_slashes("///"), "/");
     }
 }
