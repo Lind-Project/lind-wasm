@@ -480,7 +480,7 @@ pub fn make_syscall(
             }
             let func: RawCallFunc =
                 unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
-            return func(
+            let r = func(
                 target_cageid,
                 arg1,
                 arg1_cageid,
