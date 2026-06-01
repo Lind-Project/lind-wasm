@@ -13,7 +13,6 @@ lind_perf = [
     "rawposix/lind_perf",
     "wasmtime-lind-common/lind_perf",
 ]
-debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
 lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug" ]
 lind-logging = [
     "cage/lind-logging",
