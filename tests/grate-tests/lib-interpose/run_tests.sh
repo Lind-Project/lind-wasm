@@ -108,6 +108,41 @@ run_test "auto-strncpy" \
     "auto-strncpy.cwasm" \
     grates/auto-strncpy_grate.cwasm /auto-strncpy.cwasm
 
+# --- Stage-3 marshalling tests ---
+
+# auto-cstr: LIND_SIZE_CSTR; intercepts strlen, returns len*2
+run_test "auto-cstr" \
+    "$SCRIPT_DIR/auto-cstr/auto-cstr.cwasm" \
+    "auto-cstr.cwasm" \
+    grates/auto-cstr_grate.cwasm /auto-cstr.cwasm
+
+# auto-compress2: LIND_SIZE_FROM_ARG_POINTEE; intercepts compress2 from libz
+run_test "auto-compress2" \
+    "$SCRIPT_DIR/auto-compress2/auto-compress2.cwasm" \
+    "auto-compress2.cwasm" \
+    --preload env=/lib/libz.so \
+    grates/auto-compress2_grate.cwasm /auto-compress2.cwasm
+
+# auto-memchr: LIND_RET_PTR_INTO_ARG; intercepts memchr, translates shadow offset
+run_test "auto-memchr" \
+    "$SCRIPT_DIR/auto-memchr/auto-memchr.cwasm" \
+    "auto-memchr.cwasm" \
+    grates/auto-memchr_grate.cwasm /auto-memchr.cwasm
+
+# auto-handle: LIND_ARG_HANDLE + LIND_RET_HANDLE; opaque ctx create/get/close
+run_test "auto-handle" \
+    "$SCRIPT_DIR/auto-handle/auto-handle.cwasm" \
+    "auto-handle.cwasm" \
+    --preload env=/lib/libtoy.cwasm \
+    grates/auto-handle_grate.cwasm /auto-handle.cwasm
+
+# auto-nested: nested struct layout; toy_buf_checksum with char* field
+run_test "auto-nested" \
+    "$SCRIPT_DIR/auto-nested/auto-nested.cwasm" \
+    "auto-nested.cwasm" \
+    --preload env=/lib/libtoy.cwasm \
+    grates/auto-nested_grate.cwasm /auto-nested.cwasm
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 
