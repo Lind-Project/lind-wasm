@@ -2,12 +2,16 @@
 // Intercepts deflateInit2_, deflate, and deflateEnd so that Python's
 // zlib.compress() returns a fixed 4-byte output b"LIND" regardless of input.
 //
-// Uses lind_marshal.h for automated argument marshalling:
-//   deflateInit2_  → all args treated as scalars; handler returns Z_OK
-//   deflate        → z_stream* auto-marshalled INOUT (struct copy-in/copy-out);
-//                    one manual copy_data_between_cages to write FIXED_OUTPUT
-//                    into the source cage's next_out buffer (nested pointer)
-//   deflateEnd     → z_stream* treated as scalar; handler returns Z_OK
+// Uses lind_marshal.h for fully automated argument marshalling — no manual
+// copy_data_between_cages in any handler:
+//
+//   deflateInit2_  → all args SCALAR; handler returns Z_OK
+//   deflate        → z_stream* described as a nested struct (LIND_LO_STRUCT):
+//                    next_out field is PTR OUT sized by sibling avail_out;
+//                    handler writes FIXED_OUTPUT into the shadow buffer and
+//                    updates the shadow struct fields; the runtime copies the
+//                    output bytes back to the source cage and fixes up next_out.
+//   deflateEnd     → z_stream* treated as SCALAR; handler returns Z_OK
 //
 // Compile:
 //   lind-clang -s --compile-grate zlib-python_grate.c \
@@ -48,21 +52,56 @@ static const uint8_t FIXED_OUTPUT[] = { 'L', 'I', 'N', 'D' };
 static volatile int intercepted_deflate_count = 0;
 
 // ---------------------------------------------------------------------------
-// deflateInit2_: ignore all args, return Z_OK.
-// All 8 args treated as scalars — no pointer dereference needed.
+// deflate: z_stream struct layout for the nested-struct marshaller
+//
+// Field indices:
+//   0: next_in  (offset  0) — PTR IN, size=avail_in [field 1]; touched=0 (unused)
+//   1: avail_in (offset  4) — SCALAR;                          touched=0
+//   2: total_in (offset  8) — SCALAR;                          touched=0
+//   3: next_out (offset 12) — PTR OUT, size=avail_out [field 4]; touched=1
+//   4: avail_out(offset 16) — SCALAR;                          touched=1
+//   5: total_out(offset 20) — SCALAR;                          touched=1
+// ---------------------------------------------------------------------------
+
+static struct lind_arg_spec _scalar_fspec  = { .kind = LIND_ARG_SCALAR };
+static struct lind_arg_spec _next_out_fspec = {
+    .kind           = LIND_ARG_PTR,
+    .ptr_direction  = LIND_PTR_OUT,
+    .size_kind      = LIND_SIZE_FROM_ARG,
+    .size_arg_index = 4,   // sibling field index 4 = avail_out
+};
+
+static struct lind_field _zstream_fields[6] = {
+    { .offset = 0,  .spec = &_scalar_fspec,   .touched = 0 },  // next_in
+    { .offset = 4,  .spec = &_scalar_fspec,   .touched = 0 },  // avail_in
+    { .offset = 8,  .spec = &_scalar_fspec,   .touched = 0 },  // total_in
+    { .offset = 12, .spec = &_next_out_fspec, .touched = 1 },  // next_out
+    { .offset = 16, .spec = &_scalar_fspec,   .touched = 1 },  // avail_out
+    { .offset = 20, .spec = &_scalar_fspec,   .touched = 1 },  // total_out
+};
+
+static struct lind_layout _zstream_layout = {
+    .kind        = LIND_LO_STRUCT,
+    .nfields     = 6,
+    .fields      = _zstream_fields,
+    .struct_size = 24,
+};
+
+// ---------------------------------------------------------------------------
+// deflateInit2_: ignore all args, return Z_OK
 // ---------------------------------------------------------------------------
 
 static struct lind_marshal_spec deflate_init2_spec = {
     .nargs = 8,
-    .args = {
-        { .kind = LIND_ARG_SCALAR }, // z_stream* (unused)
-        { .kind = LIND_ARG_SCALAR }, // level
-        { .kind = LIND_ARG_SCALAR }, // method
-        { .kind = LIND_ARG_SCALAR }, // windowBits
-        { .kind = LIND_ARG_SCALAR }, // memLevel
-        { .kind = LIND_ARG_SCALAR }, // strategy
-        { .kind = LIND_ARG_SCALAR }, // version* (unused)
-        { .kind = LIND_ARG_SCALAR }, // stream_size
+    .args  = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -71,15 +110,13 @@ static uint64_t handler_deflate_init2(uint64_t a0, uint64_t a1, uint64_t a2,
                                        uint64_t a3, uint64_t a4, uint64_t a5) {
     (void)a0; (void)a1; (void)a2; (void)a3; (void)a4; (void)a5;
     printf("[Grate|zlib-python] deflateInit2_ intercepted — returning Z_OK\n");
-    return 0; // Z_OK
+    return 0;
 }
 
 LIND_DEFINE_MARSHAL_HANDLER(deflate_init2_, &deflate_init2_spec, handler_deflate_init2)
 
 // ---------------------------------------------------------------------------
-// deflate: auto-marshal z_stream* INOUT (struct copy-in/copy-out).
-// One manual cross-cage copy remains for writing FIXED_OUTPUT into next_out
-// (a nested pointer inside the struct — Stage 1 does not chase these).
+// deflate: fully automated via nested struct layout
 // ---------------------------------------------------------------------------
 
 static struct lind_marshal_spec deflate_spec = {
@@ -89,9 +126,10 @@ static struct lind_marshal_spec deflate_spec = {
             .kind          = LIND_ARG_PTR,
             .ptr_direction = LIND_PTR_INOUT,
             .size_kind     = LIND_SIZE_CONST,
-            .const_size    = sizeof(ZStreamWasm32),
+            .const_size    = 24,             // sizeof(ZStreamWasm32)
+            .layout        = &_zstream_layout,
         },
-        { .kind = LIND_ARG_SCALAR }, // flush flag
+        { .kind = LIND_ARG_SCALAR },         // flush
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -100,24 +138,19 @@ static uint64_t handler_deflate(uint64_t strm_u64, uint64_t flush,
                                  uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5) {
     (void)flush; (void)a2; (void)a3; (void)a4; (void)a5;
 
-    ZStreamWasm32 *zst = LIND_AS_PTR(strm_u64);
+    ZStreamWasm32 *zst = (ZStreamWasm32 *)(uintptr_t)strm_u64;
 
     if (zst->avail_out < FIXED_OUTPUT_LEN) {
-        fprintf(stderr, "[Grate|zlib-python] deflate: avail_out=%u < %d, aborting\n",
+        fprintf(stderr, "[Grate|zlib-python] deflate: avail_out=%u < %d\n",
                 zst->avail_out, FIXED_OUTPUT_LEN);
-        return (uint64_t)(uint32_t)(-4); // Z_MEM_ERROR as unsigned
+        return (uint64_t)(uint32_t)(-4);
     }
 
-    // Write FIXED_OUTPUT into the source cage's output buffer at next_out.
-    // next_out is a WASM virtual address in the source cage — this is a nested
-    // pointer that Stage 1 does not automatically chase, so one manual call remains.
-    copy_data_between_cages(
-        LIND_GRATE_CAGE(),  LIND_SOURCE_CAGE(),
-        (uint64_t)(uintptr_t)FIXED_OUTPUT, LIND_GRATE_CAGE(),
-        (uint64_t)zst->next_out,           LIND_SOURCE_CAGE(),
-        FIXED_OUTPUT_LEN, 0);
+    // zst->next_out is a valid local shadow pointer (grate memory).
+    // Write FIXED_OUTPUT directly — no cross-cage copy needed.
+    memcpy((void *)(uintptr_t)zst->next_out, FIXED_OUTPUT, FIXED_OUTPUT_LEN);
 
-    // Update the local z_stream shadow — auto-marshal copies it back on return.
+    // Advance stream fields; post-call copies the data back and fixes up next_out.
     zst->next_out  += FIXED_OUTPUT_LEN;
     zst->avail_out -= FIXED_OUTPUT_LEN;
     zst->total_out += FIXED_OUTPUT_LEN;
@@ -131,28 +164,26 @@ static uint64_t handler_deflate(uint64_t strm_u64, uint64_t flush,
 LIND_DEFINE_MARSHAL_HANDLER(deflate, &deflate_spec, handler_deflate)
 
 // ---------------------------------------------------------------------------
-// deflateEnd: ignore z_stream*, return Z_OK.
+// deflateEnd: ignore z_stream*, return Z_OK
 // ---------------------------------------------------------------------------
 
 static struct lind_marshal_spec deflate_end_spec = {
     .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR }, // z_stream* (unused)
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .args  = { { .kind = LIND_ARG_SCALAR } },
+    .ret   = { .kind = LIND_RET_SCALAR },
 };
 
 static uint64_t handler_deflate_end(uint64_t a0, uint64_t a1, uint64_t a2,
                                      uint64_t a3, uint64_t a4, uint64_t a5) {
     (void)a0; (void)a1; (void)a2; (void)a3; (void)a4; (void)a5;
     printf("[Grate|zlib-python] deflateEnd intercepted — returning Z_OK\n");
-    return 0; // Z_OK
+    return 0;
 }
 
 LIND_DEFINE_MARSHAL_HANDLER(deflateEnd, &deflate_end_spec, handler_deflate_end)
 
 // ---------------------------------------------------------------------------
-// Standard grate dispatcher (required export)
+// Standard grate dispatcher
 // ---------------------------------------------------------------------------
 
 int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid,

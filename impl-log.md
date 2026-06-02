@@ -83,6 +83,26 @@ Implementation order (rule.md: increment, log challenges):
 - Phase 3: Recursive nested struct marshalling + pointer fixup
 - Callbacks: explicitly deferred per design decision
 
+### 2026-05-30 — zlib-python fully automated (zero manual copy_data_between_cages)
+
+The last manual copy_data_between_cages in handler_deflate is eliminated by
+describing the z_stream's next_out field as a nested PTR OUT with
+size_arg_index=4 (sibling avail_out field):
+  field[3]: next_out  offset=12 PTR OUT size=FROM_ARG[4]  touched=1
+  field[4]: avail_out offset=16 SCALAR                    touched=1
+  field[5]: total_out offset=20 SCALAR                    touched=1
+
+The handler now:
+  - Receives shadow_zstream with zst->next_out pointing to a grate-local buffer
+  - Calls memcpy(zst->next_out, FIXED_OUTPUT, 4) directly
+  - Advances next_out, decrements avail_out, increments total_out
+  - Zero calls to copy_data_between_cages or LIND_SOURCE_CAGE()
+
+Post-call _post_struct:
+  - Copies shadow_next_out[0..delta=4] back to source cage's original next_out address
+  - Blits updated scalar fields (avail_out, total_out) back
+  - Fixes up source zstream.next_out = original_next_out + 4
+
 ### 2026-05-30 — Stage-3 implementation complete
 
 **Phase 1: Sizing variants** (CSTR, FROM_ARG_POINTEE, RET_PTR_INTO_ARG)
