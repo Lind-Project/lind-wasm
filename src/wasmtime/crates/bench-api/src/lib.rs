@@ -136,15 +136,14 @@
 mod unsafe_send_sync;
 
 use crate::unsafe_send_sync::UnsafeSendSync;
-use anyhow::{Context, Result};
 use clap::Parser;
 use std::os::raw::{c_int, c_void};
 use std::slice;
 use std::{env, path::PathBuf};
-use target_lexicon::Triple;
-use wasi_common::{sync::WasiCtxBuilder, I32Exit, WasiCtx};
-use wasmtime::{Engine, Instance, Linker, Module, Store};
+use wasmtime::{Engine, Instance, Linker, Module, Result, Store, error::Context as _};
 use wasmtime_cli_flags::CommonOptions;
+use wasmtime_wasi::cli::{InputFile, OutputFile};
+use wasmtime_wasi::{DirPerms, FilePerms, I32Exit, WasiCtx, p1::WasiP1Ctx};
 
 pub type ExitCode = c_int;
 pub const OK: ExitCode = 0;
@@ -266,22 +265,13 @@ impl WasmBenchConfig {
 /// that contains the engine's initialized state, and `0` is returned. On
 /// failure, a non-zero status code is returned and `out_bench_ptr` is left
 /// untouched.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_bench_create(
     config: WasmBenchConfig,
     out_bench_ptr: *mut *mut c_void,
 ) -> ExitCode {
     let result = (|| -> Result<_> {
         let working_dir = config.working_dir()?;
-        let working_dir =
-            cap_std::fs::Dir::open_ambient_dir(&working_dir, cap_std::ambient_authority())
-                .with_context(|| {
-                    format!(
-                        "failed to preopen the working directory: {}",
-                        working_dir.display(),
-                    )
-                })?;
-
         let stdout_path = config.stdout_path()?;
         let stderr_path = config.stderr_path()?;
         let stdin_path = config.stdin_path()?;
@@ -299,39 +289,33 @@ pub extern "C" fn wasm_bench_create(
             config.execution_start,
             config.execution_end,
             move || {
-                let mut cx = WasiCtxBuilder::new();
+                let mut cx = WasiCtx::builder();
 
                 let stdout = std::fs::File::create(&stdout_path)
                     .with_context(|| format!("failed to create {}", stdout_path.display()))?;
-                let stdout = cap_std::fs::File::from_std(stdout);
-                let stdout = wasi_common::sync::file::File::from_cap_std(stdout);
-                cx.stdout(Box::new(stdout));
+                cx.stdout(OutputFile::new(stdout));
 
                 let stderr = std::fs::File::create(&stderr_path)
                     .with_context(|| format!("failed to create {}", stderr_path.display()))?;
-                let stderr = cap_std::fs::File::from_std(stderr);
-                let stderr = wasi_common::sync::file::File::from_cap_std(stderr);
-                cx.stderr(Box::new(stderr));
+                cx.stderr(OutputFile::new(stderr));
 
                 if let Some(stdin_path) = &stdin_path {
                     let stdin = std::fs::File::open(stdin_path)
                         .with_context(|| format!("failed to open {}", stdin_path.display()))?;
-                    let stdin = cap_std::fs::File::from_std(stdin);
-                    let stdin = wasi_common::sync::file::File::from_cap_std(stdin);
-                    cx.stdin(Box::new(stdin));
+                    cx.stdin(InputFile::new(stdin));
                 }
 
                 // Allow access to the working directory so that the benchmark can read
                 // its input workload(s).
-                cx.preopened_dir(working_dir.try_clone()?, ".")?;
+                cx.preopened_dir(working_dir.clone(), ".", DirPerms::READ, FilePerms::READ)?;
 
                 // Pass this env var along so that the benchmark program can use smaller
                 // input workload(s) if it has them and that has been requested.
                 if let Ok(val) = env::var("WASM_BENCH_USE_SMALL_WORKLOAD") {
-                    cx.env("WASM_BENCH_USE_SMALL_WORKLOAD", &val)?;
+                    cx.env("WASM_BENCH_USE_SMALL_WORKLOAD", &val);
                 }
 
-                Ok(cx.build())
+                Ok(cx.build_p1())
             },
         )?);
         Ok(Box::into_raw(state) as _)
@@ -348,7 +332,7 @@ pub extern "C" fn wasm_bench_create(
 }
 
 /// Free the engine state allocated by this library.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_bench_free(state: *mut c_void) {
     assert!(!state.is_null());
     unsafe {
@@ -357,7 +341,7 @@ pub extern "C" fn wasm_bench_free(state: *mut c_void) {
 }
 
 /// Compile the Wasm benchmark module.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_bench_compile(
     state: *mut c_void,
     wasm_bytes: *const u8,
@@ -370,7 +354,7 @@ pub extern "C" fn wasm_bench_compile(
 }
 
 /// Instantiate the Wasm benchmark module.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_bench_instantiate(state: *mut c_void) -> ExitCode {
     let state = unsafe { (state as *mut BenchState).as_mut().unwrap() };
     let result = state.instantiate().context("failed to instantiate");
@@ -378,7 +362,7 @@ pub extern "C" fn wasm_bench_instantiate(state: *mut c_void) -> ExitCode {
 }
 
 /// Execute the Wasm benchmark module.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasm_bench_execute(state: *mut c_void) -> ExitCode {
     let state = unsafe { (state as *mut BenchState).as_mut().unwrap() };
     let result = state.execute().context("failed to execute");
@@ -392,7 +376,7 @@ fn to_exit_code<T>(result: impl Into<Result<T>>) -> ExitCode {
     match result.into() {
         Ok(_) => OK,
         Err(error) => {
-            eprintln!("{:?}", error);
+            eprintln!("{error:?}");
             ERR
         }
     }
@@ -408,7 +392,7 @@ struct BenchState {
     instantiation_timer: *mut u8,
     instantiation_start: extern "C" fn(*mut u8),
     instantiation_end: extern "C" fn(*mut u8),
-    make_wasi_cx: Box<dyn FnMut() -> Result<WasiCtx>>,
+    make_wasi_cx: Box<dyn FnMut() -> Result<WasiP1Ctx>>,
     module: Option<Module>,
     store_and_instance: Option<(Store<HostState>, Instance)>,
     epoch_interruption: bool,
@@ -416,9 +400,9 @@ struct BenchState {
 }
 
 struct HostState {
-    wasi: WasiCtx,
+    wasi: WasiP1Ctx,
     #[cfg(feature = "wasi-nn")]
-    wasi_nn: wasmtime_wasi_nn::WasiNnCtx,
+    wasi_nn: wasmtime_wasi_nn::witx::WasiNnCtx,
 }
 
 impl BenchState {
@@ -433,11 +417,11 @@ impl BenchState {
         execution_timer: *mut u8,
         execution_start: extern "C" fn(*mut u8),
         execution_end: extern "C" fn(*mut u8),
-        make_wasi_cx: impl FnMut() -> Result<WasiCtx> + 'static,
+        make_wasi_cx: impl FnMut() -> Result<WasiP1Ctx> + 'static,
     ) -> Result<Self> {
-        let mut config = options.config(Some(&Triple::host().to_string()), None)?;
+        let mut config = options.config(None)?;
         // NB: always disable the compilation cache.
-        config.disable_cache();
+        config.cache(None);
         let engine = Engine::new(&config)?;
         let mut linker = Linker::<HostState>::new(&engine);
 
@@ -460,7 +444,7 @@ impl BenchState {
         let fuel = options.wasm.fuel;
 
         if options.wasi.common != Some(false) {
-            wasi_common::sync::add_to_linker(&mut linker, |cx| &mut cx.wasi)?;
+            wasmtime_wasi::p1::add_to_linker_sync(&mut linker, |cx| &mut cx.wasi)?;
         }
 
         #[cfg(feature = "wasi-nn")]
@@ -485,10 +469,7 @@ impl BenchState {
     }
 
     fn compile(&mut self, bytes: &[u8]) -> Result<()> {
-        assert!(
-            self.module.is_none(),
-            "create a new engine to repeat compilation"
-        );
+        self.module = None;
 
         (self.compilation_start)(self.compilation_timer);
         let module = Module::from_binary(self.linker.engine(), bytes)?;
@@ -499,6 +480,8 @@ impl BenchState {
     }
 
     fn instantiate(&mut self) -> Result<()> {
+        self.store_and_instance = None;
+
         let module = self
             .module
             .as_ref()
@@ -509,7 +492,7 @@ impl BenchState {
             #[cfg(feature = "wasi-nn")]
             wasi_nn: {
                 let (backends, registry) = wasmtime_wasi_nn::preload(&[])?;
-                wasmtime_wasi_nn::WasiNnCtx::new(backends, registry)
+                wasmtime_wasi_nn::witx::WasiNnCtx::new(backends, registry)
             },
         };
 

@@ -5,25 +5,27 @@ use crate::{
     masm::{DivKind, ExtendKind, IntCmpKind, OperandSize, RemKind, RoundingMode, ShiftKind},
 };
 use cranelift_codegen::{
+    Final, MachBuffer, MachBufferFinalized, MachInstEmit, MachInstEmitState, MachLabel,
+    PatchRegion, RelocDistance, VCodeConstantData, VCodeConstants, Writable,
     ir::{
-        types, ConstantPool, ExternalName, LibCall, MemFlags, Opcode, SourceLoc, TrapCode,
-        UserExternalNameRef,
+        ConstantPool, ExternalName, LibCall, MemFlags, Opcode, SourceLoc, TrapCode,
+        UserExternalNameRef, types,
     },
     isa::{
         unwind::UnwindInst,
         x64::{
+            EmitInfo, EmitState, Inst,
             args::{
-                self, AluRmiROpcode, Amode, CmpOpcode, DivSignedness, ExtMode, FromWritableReg,
+                self, AluRmiROpcode, Amode, CC, CmpOpcode, DivSignedness, ExtMode, FromWritableReg,
                 Gpr, GprMem, GprMemImm, Imm8Gpr, Imm8Reg, RegMem, RegMemImm,
                 ShiftKind as CraneliftShiftKind, SseOpcode, SyntheticAmode, WritableGpr,
-                WritableXmm, Xmm, XmmMem, XmmMemAligned, CC,
+                WritableXmm, Xmm, XmmMem, XmmMemAligned,
             },
-            encoding::rex::{encode_modrm, RexFlags},
-            settings as x64_settings, EmitInfo, EmitState, Inst,
+            encoding::rex::{RexFlags, encode_modrm},
+            settings as x64_settings,
         },
     },
-    settings, Final, MachBuffer, MachBufferFinalized, MachInstEmit, MachInstEmitState, MachLabel,
-    PatchRegion, RelocDistance, VCodeConstantData, VCodeConstants, Writable,
+    settings,
 };
 
 use super::address::Address;

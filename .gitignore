@@ -20,3 +20,13 @@ report.html
 
 #Ignore python cache
 __pycache__/
+
+#Ignore local files
+.DS_Store
+target/
+=======
+#Ignore lockfile
+Cargo.lock
+
+#Ignore Lind runtime log file
+LIND.log

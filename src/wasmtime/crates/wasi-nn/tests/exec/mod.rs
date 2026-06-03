@@ -1,8 +1,8 @@
 use crate::check::artifacts_dir;
 use anyhow::Result;
 use std::path::Path;
-use wasi_common::sync::{Dir, WasiCtxBuilder};
 use wasi_common::WasiCtx;
+use wasi_common::sync::{Dir, WasiCtxBuilder};
 use wasmtime::{Config, Engine, Linker, Module, Store};
 use wasmtime_wasi_nn::{Backend, InMemoryRegistry, WasiNnCtx};
 

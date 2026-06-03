@@ -152,7 +152,7 @@
 //!   but is conservative.
 //!
 //! - The fixup list can interact with island emission to create
-//!   "quadratic island behvior". In a little more detail, one can hit
+//!   "quadratic island behavior". In a little more detail, one can hit
 //!   this behavior by having some pending fixups (forward label
 //!   references) with long-range label-use kinds, and some others
 //!   with shorter-range references that nonetheless still are pending
@@ -170,23 +170,25 @@
 //!   only process those which are required during island emission, deferring
 //!   all longer-range fixups to later.
 
-use crate::binemit::{Addend, CodeOffset, Reloc, StackMap};
+use crate::binemit::{Addend, CodeOffset, Reloc};
 use crate::ir::function::FunctionParameters;
-use crate::ir::{ExternalName, Opcode, RelSourceLoc, SourceLoc, TrapCode};
+use crate::ir::{DebugTag, ExceptionTag, ExternalName, RelSourceLoc, SourceLoc, TrapCode};
 use crate::isa::unwind::UnwindInst;
 use crate::machinst::{
     BlockIndex, MachInstLabelUse, TextSectionBuilder, VCodeConstant, VCodeConstants, VCodeInst,
 };
 use crate::trace;
-use crate::{timing, VCodeConstantData};
+use crate::{MachInstEmitState, ir};
+use crate::{VCodeConstantData, timing};
+use alloc::collections::BinaryHeap;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::cmp::Ordering;
+use core::mem;
+use core::ops::Range;
 use cranelift_control::ControlPlane;
-use cranelift_entity::{entity_impl, PrimaryMap};
+use cranelift_entity::{PrimaryMap, SecondaryMap, entity_impl};
 use smallvec::SmallVec;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::mem;
-use std::string::String;
-use std::vec::Vec;
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -238,6 +240,8 @@ enum ForceVeneers {
 pub struct MachBuffer<I: VCodeInst> {
     /// The buffer contents, as raw bytes.
     data: SmallVec<[u8; 1024]>,
+    /// The required alignment of this buffer.
+    min_alignment: u32,
     /// Any relocations referring to this code. Note that only *external*
     /// relocations are tracked here; references to labels within the buffer are
     /// resolved before emission.
@@ -246,10 +250,21 @@ pub struct MachBuffer<I: VCodeInst> {
     traps: SmallVec<[MachTrap; 16]>,
     /// Any call site records referring to this code.
     call_sites: SmallVec<[MachCallSite; 16]>,
+    /// Any patchable call site locations.
+    patchable_call_sites: SmallVec<[MachPatchableCallSite; 16]>,
+    /// Any exception-handler records referred to at call sites.
+    exception_handlers: SmallVec<[MachExceptionHandler; 16]>,
     /// Any source location mappings referring to this code.
     srclocs: SmallVec<[MachSrcLoc<Stencil>; 64]>,
-    /// Any stack maps referring to this code.
-    stack_maps: SmallVec<[MachStackMap; 8]>,
+    /// Any debug tags referring to this code.
+    debug_tags: Vec<MachDebugTags>,
+    /// Pool of debug tags referenced by `MachDebugTags` entries.
+    debug_tag_pool: Vec<DebugTag>,
+    /// Any user stack maps for this code.
+    ///
+    /// Each entry is an `(offset, span, stack_map)` triple. Entries are sorted
+    /// by code offset, and each stack map covers `span` bytes on the stack.
+    user_stack_maps: SmallVec<[(CodeOffset, u32, ir::UserStackMap); 8]>,
     /// Any unwind info at a given location.
     unwind_info: SmallVec<[(CodeOffset, UnwindInst); 8]>,
     /// The current source location in progress (after `start_srcloc()` and
@@ -313,6 +328,10 @@ pub struct MachBuffer<I: VCodeInst> {
     /// Indicates when a patchable region is currently open, to guard that it's
     /// not possible to nest patchable regions.
     open_patchable: bool,
+    /// Stack frame layout metadata. If provided for a MachBuffer
+    /// containing a function body, this allows interpretation of
+    /// runtime state given a view of an active stack frame.
+    frame_layout: Option<MachBufferFrameLayout>,
 }
 
 impl MachBufferFinalized<Stencil> {
@@ -323,14 +342,20 @@ impl MachBufferFinalized<Stencil> {
             relocs: self.relocs,
             traps: self.traps,
             call_sites: self.call_sites,
+            patchable_call_sites: self.patchable_call_sites,
+            exception_handlers: self.exception_handlers,
             srclocs: self
                 .srclocs
                 .into_iter()
                 .map(|srcloc| srcloc.apply_base_srcloc(base_srcloc))
                 .collect(),
-            stack_maps: self.stack_maps,
+            debug_tags: self.debug_tags,
+            debug_tag_pool: self.debug_tag_pool,
+            user_stack_maps: self.user_stack_maps,
             unwind_info: self.unwind_info,
             alignment: self.alignment,
+            frame_layout: self.frame_layout,
+            nop_units: self.nop_units,
         }
     }
 }
@@ -353,14 +378,38 @@ pub struct MachBufferFinalized<T: CompilePhase> {
     pub(crate) traps: SmallVec<[MachTrap; 16]>,
     /// Any call site records referring to this code.
     pub(crate) call_sites: SmallVec<[MachCallSite; 16]>,
+    /// Any patchable call site locations referring to this code.
+    pub(crate) patchable_call_sites: SmallVec<[MachPatchableCallSite; 16]>,
+    /// Any exception-handler records referred to at call sites.
+    pub(crate) exception_handlers: SmallVec<[FinalizedMachExceptionHandler; 16]>,
     /// Any source location mappings referring to this code.
     pub(crate) srclocs: SmallVec<[T::MachSrcLocType; 64]>,
-    /// Any stack maps referring to this code.
-    pub(crate) stack_maps: SmallVec<[MachStackMap; 8]>,
+    /// Any debug tags referring to this code.
+    pub(crate) debug_tags: Vec<MachDebugTags>,
+    /// Pool of debug tags referenced by `MachDebugTags` entries.
+    pub(crate) debug_tag_pool: Vec<DebugTag>,
+    /// Any user stack maps for this code.
+    ///
+    /// Each entry is an `(offset, span, stack_map)` triple. Entries are sorted
+    /// by code offset, and each stack map covers `span` bytes on the stack.
+    pub(crate) user_stack_maps: SmallVec<[(CodeOffset, u32, ir::UserStackMap); 8]>,
+    /// Stack frame layout metadata. If provided for a MachBuffer
+    /// containing a function body, this allows interpretation of
+    /// runtime state given a view of an active stack frame.
+    pub(crate) frame_layout: Option<MachBufferFrameLayout>,
     /// Any unwind info at a given location.
     pub unwind_info: SmallVec<[(CodeOffset, UnwindInst); 8]>,
-    /// The requireed alignment of this buffer
+    /// The required alignment of this buffer.
     pub alignment: u32,
+    /// The means by which to NOP out patchable call sites.
+    ///
+    /// This allows a consumer of a `MachBufferFinalized` to disable
+    /// patchable call sites (which are enabled by default) without
+    /// specific knowledge of the target ISA.
+    ///
+    /// Each entry is one form of nop, and these are required to be
+    /// sorted in ascending-size order.
+    pub nop_units: Vec<Vec<u8>>,
 }
 
 const UNKNOWN_LABEL_OFFSET: CodeOffset = 0xffff_ffff;
@@ -385,11 +434,6 @@ impl MachLabel {
         MachLabel(bindex.index() as u32)
     }
 
-    /// Get the numeric label index.
-    pub fn get(self) -> u32 {
-        self.0
-    }
-
     /// Creates a string representing this label, for convenience.
     pub fn to_string(&self) -> String {
         format!("label{}", self.0)
@@ -400,17 +444,6 @@ impl Default for MachLabel {
     fn default() -> Self {
         UNKNOWN_LABEL
     }
-}
-
-/// A stack map extent, when creating a stack map.
-pub enum StackMapExtent {
-    /// The stack map starts at this instruction, and ends after the number of upcoming bytes
-    /// (note: this is a code offset diff).
-    UpcomingBytes(CodeOffset),
-
-    /// The stack map started at the given offset and ends at the current one. This helps
-    /// architectures where the instruction size has not a fixed length.
-    StartedAtOffset(CodeOffset),
 }
 
 /// Represents the beginning of an editable region in the [`MachBuffer`], while code emission is
@@ -426,7 +459,7 @@ pub struct OpenPatchRegion(usize);
 /// the [`PatchRegion::patch`] function can be used to get a mutable buffer to the instruction
 /// bytes, and the constants uses can be updated directly.
 pub struct PatchRegion {
-    range: std::ops::Range<usize>,
+    range: Range<usize>,
 }
 
 impl PatchRegion {
@@ -442,11 +475,16 @@ impl<I: VCodeInst> MachBuffer<I> {
     pub fn new() -> MachBuffer<I> {
         MachBuffer {
             data: SmallVec::new(),
+            min_alignment: I::function_alignment().minimum,
             relocs: SmallVec::new(),
             traps: SmallVec::new(),
             call_sites: SmallVec::new(),
+            patchable_call_sites: SmallVec::new(),
+            exception_handlers: SmallVec::new(),
             srclocs: SmallVec::new(),
-            stack_maps: SmallVec::new(),
+            debug_tags: vec![],
+            debug_tag_pool: vec![],
+            user_stack_maps: SmallVec::new(),
             unwind_info: SmallVec::new(),
             cur_srcloc: None,
             label_offsets: SmallVec::new(),
@@ -463,6 +501,7 @@ impl<I: VCodeInst> MachBuffer<I> {
             constants: Default::default(),
             used_constants: Default::default(),
             open_patchable: false,
+            frame_layout: None,
         }
     }
 
@@ -531,8 +570,7 @@ impl<I: VCodeInst> MachBuffer<I> {
         trace!("MachBuffer: align to {}", align_to);
         assert!(
             align_to.is_power_of_two(),
-            "{} is not a power of two",
-            align_to
+            "{align_to} is not a power of two"
         );
         while self.cur_offset() & (align_to - 1) != 0 {
             self.put1(0);
@@ -617,7 +655,7 @@ impl<I: VCodeInst> MachBuffer<I> {
     /// at the ISA's minimum function alignment and can be increased due to
     /// constant requirements.
     fn finish_constants(&mut self, constants: &VCodeConstants) -> u32 {
-        let mut alignment = I::function_alignment().minimum;
+        let mut alignment = self.min_alignment;
         for (constant, offset) in mem::take(&mut self.used_constants) {
             let constant = constants.get(constant);
             let data = constant.as_slice();
@@ -723,9 +761,7 @@ impl<I: VCodeInst> MachBuffer<I> {
     pub fn use_label_at_offset(&mut self, offset: CodeOffset, label: MachLabel, kind: I::LabelUse) {
         trace!(
             "MachBuffer: use_label_at_offset: offset {} label {:?} kind {:?}",
-            offset,
-            label,
-            kind
+            offset, label, kind
         );
 
         // Add the fixup, and update the worst-case island size based on a
@@ -735,7 +771,12 @@ impl<I: VCodeInst> MachBuffer<I> {
             offset,
             kind,
         };
-        self.pending_fixup_deadline = self.pending_fixup_deadline.min(fixup.deadline());
+        self.pending_fixup_deadline = self
+            .pending_fixup_deadline
+            // Subtract one alignment here to the deadline to account for
+            // extra space taken by aligning an island.
+            .min(fixup.deadline() - I::LabelUse::ALIGN);
+        trace!("pending_fixup_deadline = {}", self.pending_fixup_deadline);
         self.pending_fixup_records.push(fixup);
 
         // Post-invariant: no mutations to branches/labels data structures.
@@ -798,7 +839,12 @@ impl<I: VCodeInst> MachBuffer<I> {
         assert!(self.cur_offset() == start);
         debug_assert!(end > start);
         assert!(!self.pending_fixup_records.is_empty());
-        debug_assert!(inverted.len() == (end - start) as usize);
+        debug_assert!(
+            inverted.len() == (end - start) as usize,
+            "branch length = {}, but inverted length = {}",
+            end - start,
+            inverted.len()
+        );
         let fixup = self.pending_fixup_records.len() - 1;
         let inverted = Some(SmallVec::from(inverted));
         self.lazily_clear_labels_at_tail();
@@ -835,6 +881,8 @@ impl<I: VCodeInst> MachBuffer<I> {
         //    (end of buffer)
         self.data.truncate(b.start as usize);
         self.pending_fixup_records.truncate(b.fixup);
+
+        // Trim srclocs and debug tags now past the end of the buffer.
         while let Some(last_srcloc) = self.srclocs.last_mut() {
             if last_srcloc.end <= b.start {
                 break;
@@ -845,6 +893,13 @@ impl<I: VCodeInst> MachBuffer<I> {
             }
             self.srclocs.pop();
         }
+        while let Some(last_debug_tag) = self.debug_tags.last() {
+            if last_debug_tag.offset <= b.start {
+                break;
+            }
+            self.debug_tags.pop();
+        }
+
         // State:
         //    [PRE CODE]
         //  cur_off, Offset b.start, b.labels_at_this_branch:
@@ -864,8 +919,7 @@ impl<I: VCodeInst> MachBuffer<I> {
 
         trace!(
             "truncate_last_branch: truncated {:?}; off now {}",
-            b,
-            cur_off
+            b, cur_off
         );
 
         // Fix up resolved label offsets for labels at tail.
@@ -873,8 +927,7 @@ impl<I: VCodeInst> MachBuffer<I> {
             self.label_offsets[l.0 as usize] = cur_off;
         }
         // Old labels_at_this_branch are now at cur_off.
-        self.labels_at_tail
-            .extend(b.labels_at_this_branch.into_iter());
+        self.labels_at_tail.extend(b.labels_at_this_branch);
 
         // Post-invariant: this operation is defined to truncate the buffer,
         // which moves cur_off backward, and to move labels at the end of the
@@ -925,9 +978,7 @@ impl<I: VCodeInst> MachBuffer<I> {
 
         trace!(
             "enter optimize_branches:\n b = {:?}\n l = {:?}\n f = {:?}",
-            self.latest_branches,
-            self.labels_at_tail,
-            self.pending_fixup_records
+            self.latest_branches, self.labels_at_tail, self.pending_fixup_records
         );
 
         // We continue to munch on branches at the tail of the buffer until no
@@ -1093,8 +1144,7 @@ impl<I: VCodeInst> MachBuffer<I> {
                     for &l in &b.labels_at_this_branch {
                         trace!(
                             " -> label at start of branch {:?} redirected to target {:?}",
-                            l,
-                            b.target
+                            l, b.target
                         );
                         self.label_aliases[l.0 as usize] = b.target;
                         // NOTE: we continue to ensure the invariant that labels
@@ -1145,7 +1195,9 @@ impl<I: VCodeInst> MachBuffer<I> {
                         && prev_b.end == b.start
                         && self.resolve_label_offset(prev_b.target) == cur_off
                     {
-                        trace!(" -> uncond follows a conditional, and conditional's target resolves to current offset");
+                        trace!(
+                            " -> uncond follows a conditional, and conditional's target resolves to current offset"
+                        );
                         // Save the target of the uncond (this becomes the
                         // target of the cond), and truncate the uncond.
                         let target = b.target;
@@ -1186,9 +1238,7 @@ impl<I: VCodeInst> MachBuffer<I> {
 
         trace!(
             "leave optimize_branches:\n b = {:?}\n l = {:?}\n f = {:?}",
-            self.latest_branches,
-            self.labels_at_tail,
-            self.pending_fixup_records
+            self.latest_branches, self.labels_at_tail, self.pending_fixup_records
         );
     }
 
@@ -1235,7 +1285,15 @@ impl<I: VCodeInst> MachBuffer<I> {
             Some(fixup) => fixup.deadline().min(self.pending_fixup_deadline),
             None => self.pending_fixup_deadline,
         };
-        deadline < u32::MAX && self.worst_case_end_of_island(distance) > deadline
+        trace!(
+            "checking island_needed: cur_offset = {} deadline = {} worst_case_end_of_island = {}",
+            self.cur_offset(),
+            deadline,
+            self.worst_case_end_of_island(distance)
+        );
+        let needed = deadline < u32::MAX && self.worst_case_end_of_island(distance) > deadline;
+        trace!(" -> needed = {needed}");
+        needed
     }
 
     /// Returns the maximal offset that islands can reach if `distance` more
@@ -1275,6 +1333,11 @@ impl<I: VCodeInst> MachBuffer<I> {
         distance: CodeOffset,
         ctrl_plane: &mut ControlPlane,
     ) {
+        trace!(
+            "emitting island at {}, distance = {distance}",
+            self.cur_offset()
+        );
+
         // We're going to purge fixups, so no latest-branch editing can happen
         // anymore.
         self.latest_branches.clear();
@@ -1291,13 +1354,63 @@ impl<I: VCodeInst> MachBuffer<I> {
         }
 
         let forced_threshold = self.worst_case_end_of_island(distance);
+        trace!("forced_threshold = {forced_threshold}");
 
-        // First flush out all traps/constants so we have more labels in case
-        // fixups are applied against these labels.
+        // Emit traps/constants after the island: with potentially
+        // unbounded pending constants/traps and potentially small
+        // deadlines, it would otherwise be possible to emit a
+        // small-range jump, have a nearby deadline *before* the end
+        // of pending constants/traps, and not be able to emit a
+        // veneer in time.
+        //
+        // Fixups whose labels aren't yet defined (e.g. references to
+        // pending constants/traps) are simply deferred here; they'll
+        // be resolved in the next island or in the final fixup pass
+        // at the end of emission.
+
+        // Either handle all pending fixups because they're ready or move them
+        // onto the `BinaryHeap` tracking all pending fixups if they aren't
+        // ready.
+        assert!(self.latest_branches.is_empty());
+        trace!(
+            "About to handle fixups at offset {}: {:?}",
+            self.cur_offset(),
+            self.pending_fixup_records
+        );
+        for fixup in mem::take(&mut self.pending_fixup_records) {
+            if self.should_apply_fixup(&fixup, forced_threshold) {
+                self.handle_fixup(fixup, force_veneers, forced_threshold);
+            } else {
+                self.fixup_records.push(fixup);
+            }
+        }
+        self.pending_fixup_deadline = u32::MAX;
+        while let Some(fixup) = self.fixup_records.peek() {
+            trace!(
+                "emit_island: fixup {:?} deadline {}",
+                fixup,
+                fixup.deadline()
+            );
+
+            // If this fixup shouldn't be applied, that means its label isn't
+            // defined yet and there'll be remaining space to apply a veneer if
+            // necessary in the future after this island. In that situation
+            // because `fixup_records` is sorted by deadline this loop can
+            // exit.
+            if !self.should_apply_fixup(fixup, forced_threshold) {
+                break;
+            }
+
+            let fixup = self.fixup_records.pop().unwrap();
+            self.handle_fixup(fixup, force_veneers, forced_threshold);
+        }
+
+        // Now emit pending traps and constants.
         //
         // Note that traps are placed first since this typically happens at the
         // end of the function and for disassemblers we try to keep all the code
         // contiguously together.
+        trace!("emitting pending traps: {:?}", self.pending_traps);
         for MachLabelTrap { label, code, loc } in mem::take(&mut self.pending_traps) {
             // If this trap has source information associated with it then
             // emit this information for the trap instruction going out now too.
@@ -1313,6 +1426,7 @@ impl<I: VCodeInst> MachBuffer<I> {
             }
         }
 
+        trace!("emitting pending constants: {:?}", self.pending_constants);
         for constant in mem::take(&mut self.pending_constants) {
             let MachBufferConstant { align, size, .. } = self.constants[constant];
             let label = self.constants[constant].upcoming_label.take().unwrap();
@@ -1322,34 +1436,6 @@ impl<I: VCodeInst> MachBuffer<I> {
             self.get_appended_space(size);
         }
 
-        // Either handle all pending fixups because they're ready or move them
-        // onto the `BinaryHeap` tracking all pending fixups if they aren't
-        // ready.
-        assert!(self.latest_branches.is_empty());
-        for fixup in mem::take(&mut self.pending_fixup_records) {
-            if self.should_apply_fixup(&fixup, forced_threshold) {
-                self.handle_fixup(fixup, force_veneers, forced_threshold);
-            } else {
-                self.fixup_records.push(fixup);
-            }
-        }
-        self.pending_fixup_deadline = u32::MAX;
-        while let Some(fixup) = self.fixup_records.peek() {
-            trace!("emit_island: fixup {:?}", fixup);
-
-            // If this fixup shouldn't be applied, that means its label isn't
-            // defined yet and there'll be remaining space to apply a veneer if
-            // necessary in the future after this island. In that situation
-            // because `fixup_records` is sorted by deadline this loop can
-            // exit.
-            if !self.should_apply_fixup(fixup, forced_threshold) {
-                break;
-            }
-
-            let fixup = self.fixup_records.pop().unwrap();
-            self.handle_fixup(fixup, force_veneers, forced_threshold);
-        }
-
         if let Some(loc) = cur_loc {
             self.start_srcloc(loc);
         }
@@ -1357,7 +1443,20 @@ impl<I: VCodeInst> MachBuffer<I> {
 
     fn should_apply_fixup(&self, fixup: &MachLabelFixup<I>, forced_threshold: CodeOffset) -> bool {
         let label_offset = self.resolve_label_offset(fixup.label);
-        label_offset != UNKNOWN_LABEL_OFFSET || fixup.deadline() < forced_threshold
+        trace!(
+            "should_apply_fixup: fixup {fixup:?} label_offset {label_offset} deadline {} forced_threshold {forced_threshold} supports_veneer {}",
+            fixup.deadline(),
+            fixup.kind.supports_veneer()
+        );
+        let result = (label_offset != UNKNOWN_LABEL_OFFSET)
+            || ((fixup.deadline() < forced_threshold) && fixup.kind.supports_veneer());
+        trace!(
+            " -> {}, {}, {} -> {result}",
+            label_offset != UNKNOWN_LABEL_OFFSET,
+            fixup.deadline() < forced_threshold,
+            fixup.kind.supports_veneer()
+        );
+        result
     }
 
     fn handle_fixup(
@@ -1411,7 +1510,9 @@ impl<I: VCodeInst> MachBuffer<I> {
                 self.emit_veneer(label, offset, kind);
             } else {
                 let slice = &mut self.data[start..end];
-                trace!("patching in-range!");
+                trace!(
+                    "patching in-range! slice = {slice:?}; offset = {offset:#x}; label_offset = {label_offset:#x}"
+                );
                 kind.patch(slice, offset, label_offset);
             }
         } else {
@@ -1434,8 +1535,7 @@ impl<I: VCodeInst> MachBuffer<I> {
         // backend because we need to implement support for such a veneer.
         assert!(
             kind.supports_veneer(),
-            "jump beyond the range of {:?} but a veneer isn't supported",
-            kind,
+            "jump beyond the range of {kind:?} but a veneer isn't supported",
         );
 
         // Allocate space for a veneer in the island.
@@ -1448,8 +1548,7 @@ impl<I: VCodeInst> MachBuffer<I> {
         // Patch the original label use to refer to the veneer.
         trace!(
             "patching original at offset {} to veneer offset {}",
-            offset,
-            veneer_offset
+            offset, veneer_offset
         );
         kind.patch(slice, offset, veneer_offset);
         // Generate the veneer.
@@ -1458,8 +1557,7 @@ impl<I: VCodeInst> MachBuffer<I> {
             kind.generate_veneer(veneer_slice, veneer_offset);
         trace!(
             "generated veneer; fixup offset {}, label_use {:?}",
-            veneer_fixup_off,
-            veneer_label_use
+            veneer_fixup_off, veneer_label_use
         );
         // Register a new use of `label` with our new veneer fixup and
         // offset. This'll recalculate deadlines accordingly and
@@ -1481,7 +1579,7 @@ impl<I: VCodeInst> MachBuffer<I> {
             // `emit_island()` will emit any pending veneers and constants, and
             // as a side-effect, will also take care of any fixups with resolved
             // labels eagerly.
-            self.emit_island_maybe_forced(force_veneers, u32::MAX, ctrl_plane);
+            self.emit_island_maybe_forced(force_veneers, 0, ctrl_plane);
         }
 
         // Ensure that all labels have been fixed up after the last island is emitted. This is a
@@ -1522,6 +1620,12 @@ impl<I: VCodeInst> MachBuffer<I> {
             })
             .collect();
 
+        let finalized_exception_handlers = self
+            .exception_handlers
+            .iter()
+            .map(|handler| handler.finalize(|label| self.resolve_label_offset(label)))
+            .collect();
+
         let mut srclocs = self.srclocs;
         srclocs.sort_by_key(|entry| entry.start);
 
@@ -1530,14 +1634,20 @@ impl<I: VCodeInst> MachBuffer<I> {
             relocs: finalized_relocs,
             traps: self.traps,
             call_sites: self.call_sites,
+            patchable_call_sites: self.patchable_call_sites,
+            exception_handlers: finalized_exception_handlers,
             srclocs,
-            stack_maps: self.stack_maps,
+            debug_tags: self.debug_tags,
+            debug_tag_pool: self.debug_tag_pool,
+            user_stack_maps: self.user_stack_maps,
             unwind_info: self.unwind_info,
             alignment,
+            frame_layout: self.frame_layout,
+            nop_units: I::gen_nop_units(),
         }
     }
 
-    /// Add an external relocation at the given offset from current offset.
+    /// Add an external relocation at the given offset.
     pub fn add_reloc_at_offset<T: Into<RelocTarget> + Clone>(
         &mut self,
         offset: CodeOffset,
@@ -1570,7 +1680,7 @@ impl<I: VCodeInst> MachBuffer<I> {
         // relocation or to the veneer inserted. Additionally
         // `MachBuffer` needs the concept of a label which will never be
         // resolved, so `emit_island` doesn't trip over not actually ever
-        // knowning what some labels are. Currently the loop in
+        // knowing what some labels are. Currently the loop in
         // `finish_emission_maybe_forcing_veneers` would otherwise infinitely
         // loop.
         //
@@ -1580,7 +1690,7 @@ impl<I: VCodeInst> MachBuffer<I> {
         // when a relocation can't otherwise be resolved later, so it shouldn't
         // actually result in any memory unsafety or anything like that.
         self.relocs.push(MachReloc {
-            offset: self.data.len() as CodeOffset + offset,
+            offset,
             kind,
             target,
             addend,
@@ -1594,7 +1704,7 @@ impl<I: VCodeInst> MachBuffer<I> {
         target: &T,
         addend: Addend,
     ) {
-        self.add_reloc_at_offset(0, kind, target, addend);
+        self.add_reloc_at_offset(self.data.len() as CodeOffset, kind, target, addend);
     }
 
     /// Add a trap record at the current offset.
@@ -1606,14 +1716,37 @@ impl<I: VCodeInst> MachBuffer<I> {
     }
 
     /// Add a call-site record at the current offset.
-    pub fn add_call_site(&mut self, opcode: Opcode) {
-        debug_assert!(
-            opcode.is_call(),
-            "adding call site info for a non-call instruction."
-        );
+    pub fn add_call_site(&mut self) {
+        self.add_try_call_site(None, core::iter::empty());
+    }
+
+    /// Add a call-site record at the current offset with exception
+    /// handlers.
+    pub fn add_try_call_site(
+        &mut self,
+        frame_offset: Option<u32>,
+        exception_handlers: impl Iterator<Item = MachExceptionHandler>,
+    ) {
+        let start = u32::try_from(self.exception_handlers.len()).unwrap();
+        self.exception_handlers.extend(exception_handlers);
+        let end = u32::try_from(self.exception_handlers.len()).unwrap();
+        let exception_handler_range = start..end;
+
         self.call_sites.push(MachCallSite {
             ret_addr: self.data.len() as CodeOffset,
-            opcode,
+            frame_offset,
+            exception_handler_range,
+        });
+    }
+
+    /// Add a patchable call record at the current offset The actual
+    /// call is expected to have been emitted; the VCodeInst trait
+    /// specifies how to NOP it out, and we carry that information to
+    /// the finalized Machbuffer.
+    pub fn add_patchable_call_site(&mut self, len: u32) {
+        self.patchable_call_sites.push(MachPatchableCallSite {
+            ret_addr: self.cur_offset(),
+            len,
         });
     }
 
@@ -1646,26 +1779,71 @@ impl<I: VCodeInst> MachBuffer<I> {
         }
     }
 
-    /// Add stack map metadata for this program point: a set of stack offsets
-    /// (from SP upward) that contain live references.
-    pub fn add_stack_map(&mut self, extent: StackMapExtent, stack_map: StackMap) {
-        let (start, end) = match extent {
-            StackMapExtent::UpcomingBytes(insn_len) => {
-                let start_offset = self.cur_offset();
-                (start_offset, start_offset + insn_len)
-            }
-            StackMapExtent::StartedAtOffset(start_offset) => {
-                let end_offset = self.cur_offset();
-                debug_assert!(end_offset >= start_offset);
-                (start_offset, end_offset)
-            }
-        };
-        trace!("Adding stack map for offsets {start:#x}..{end:#x}: {stack_map:?}");
-        self.stack_maps.push(MachStackMap {
-            offset: start,
-            offset_end: end,
-            stack_map,
+    /// Push a user stack map onto this buffer.
+    ///
+    /// The stack map is associated with the given `return_addr` code
+    /// offset. This must be the PC for the instruction just *after* this stack
+    /// map's associated instruction. For example in the sequence `call $foo;
+    /// add r8, rax`, the `return_addr` must be the offset of the start of the
+    /// `add` instruction.
+    ///
+    /// Stack maps must be pushed in sorted `return_addr` order.
+    pub fn push_user_stack_map(
+        &mut self,
+        emit_state: &I::State,
+        return_addr: CodeOffset,
+        mut stack_map: ir::UserStackMap,
+    ) {
+        let span = emit_state.frame_layout().active_size();
+        trace!("Adding user stack map @ {return_addr:#x} spanning {span} bytes: {stack_map:?}");
+
+        debug_assert!(
+            self.user_stack_maps
+                .last()
+                .map_or(true, |(prev_addr, _, _)| *prev_addr < return_addr),
+            "pushed stack maps out of order: {} is not less than {}",
+            self.user_stack_maps.last().unwrap().0,
+            return_addr,
+        );
+
+        stack_map.finalize(emit_state.frame_layout().sp_to_sized_stack_slots());
+        self.user_stack_maps.push((return_addr, span, stack_map));
+    }
+
+    /// Push a debug tag associated with the current buffer offset.
+    pub fn push_debug_tags(&mut self, pos: MachDebugTagPos, tags: &[DebugTag]) {
+        trace!("debug tags at offset {}: {tags:?}", self.cur_offset());
+        let start = u32::try_from(self.debug_tag_pool.len()).unwrap();
+        self.debug_tag_pool.extend(tags.iter().cloned());
+        let end = u32::try_from(self.debug_tag_pool.len()).unwrap();
+        self.debug_tags.push(MachDebugTags {
+            offset: self.cur_offset(),
+            pos,
+            range: start..end,
         });
+    }
+
+    /// Increase the alignment of the buffer to the given alignment if bigger
+    /// than the current alignment.
+    pub fn set_log2_min_function_alignment(&mut self, align_to: u8) {
+        self.min_alignment = self.min_alignment.max(
+            1u32.checked_shl(u32::from(align_to))
+                .expect("log2_min_function_alignment too large"),
+        );
+    }
+
+    /// Set the frame layout metadata.
+    pub fn set_frame_layout(&mut self, frame_layout: MachBufferFrameLayout) {
+        debug_assert!(self.frame_layout.is_none());
+        self.frame_layout = Some(frame_layout);
+    }
+}
+
+impl<I: VCodeInst> Extend<u8> for MachBuffer<I> {
+    fn extend<T: IntoIterator<Item = u8>>(&mut self, iter: T) {
+        for b in iter {
+            self.put1(b);
+        }
     }
 }
 
@@ -1673,6 +1851,19 @@ impl<T: CompilePhase> MachBufferFinalized<T> {
     /// Get a list of source location mapping tuples in sorted-by-start-offset order.
     pub fn get_srclocs_sorted(&self) -> &[T::MachSrcLocType] {
         &self.srclocs[..]
+    }
+
+    /// Get all debug tags, sorted by associated offset.
+    pub fn debug_tags(&self) -> impl Iterator<Item = MachBufferDebugTagList<'_>> {
+        self.debug_tags.iter().map(|tags| {
+            let start = usize::try_from(tags.range.start).unwrap();
+            let end = usize::try_from(tags.range.end).unwrap();
+            MachBufferDebugTagList {
+                offset: tags.offset,
+                pos: tags.pos,
+                tags: &self.debug_tag_pool[start..end],
+            }
+        })
     }
 
     /// Get the total required size for the code.
@@ -1683,10 +1874,10 @@ impl<T: CompilePhase> MachBufferFinalized<T> {
     /// Return the code in this mach buffer as a hex string for testing purposes.
     pub fn stringify_code_bytes(&self) -> String {
         // This is pretty lame, but whatever ..
-        use std::fmt::Write;
+        use core::fmt::Write;
         let mut s = String::with_capacity(self.data.len() * 2);
         for b in &self.data {
-            write!(&mut s, "{:02X}", b).unwrap();
+            write!(&mut s, "{b:02X}").unwrap();
         }
         s
     }
@@ -1707,6 +1898,12 @@ impl<T: CompilePhase> MachBufferFinalized<T> {
         &self.data[..]
     }
 
+    /// Get a mutable slice of the code bytes, allowing patching
+    /// post-passes.
+    pub fn data_mut(&mut self) -> &mut [u8] {
+        &mut self.data[..]
+    }
+
     /// Get the list of external relocations for this code.
     pub fn relocs(&self) -> &[FinalizedMachReloc] {
         &self.relocs[..]
@@ -1717,20 +1914,119 @@ impl<T: CompilePhase> MachBufferFinalized<T> {
         &self.traps[..]
     }
 
-    /// Get the stack map metadata for this code.
-    pub fn stack_maps(&self) -> &[MachStackMap] {
-        &self.stack_maps[..]
+    /// Get the user stack map metadata for this code.
+    pub fn user_stack_maps(&self) -> &[(CodeOffset, u32, ir::UserStackMap)] {
+        &self.user_stack_maps
     }
 
-    /// Take this buffer's stack map metadata.
-    pub fn take_stack_maps(&mut self) -> SmallVec<[MachStackMap; 8]> {
-        mem::take(&mut self.stack_maps)
+    /// Take this buffer's user stack map metadata.
+    pub fn take_user_stack_maps(&mut self) -> SmallVec<[(CodeOffset, u32, ir::UserStackMap); 8]> {
+        mem::take(&mut self.user_stack_maps)
     }
 
-    /// Get the list of call sites for this code.
-    pub fn call_sites(&self) -> &[MachCallSite] {
-        &self.call_sites[..]
+    /// Get the list of call sites for this code, along with
+    /// associated exception handlers.
+    ///
+    /// Each item yielded by the returned iterator is a struct with:
+    ///
+    /// - The call site metadata record, with a `ret_addr` field
+    ///   directly accessible and denoting the offset of the return
+    ///   address into this buffer's code.
+    /// - The slice of pairs of exception tags and code offsets
+    ///   denoting exception-handler entry points associated with this
+    ///   call site.
+    pub fn call_sites(&self) -> impl Iterator<Item = FinalizedMachCallSite<'_>> + '_ {
+        self.call_sites.iter().map(|call_site| {
+            let handler_range = call_site.exception_handler_range.clone();
+            let handler_range = usize::try_from(handler_range.start).unwrap()
+                ..usize::try_from(handler_range.end).unwrap();
+            FinalizedMachCallSite {
+                ret_addr: call_site.ret_addr,
+                frame_offset: call_site.frame_offset,
+                exception_handlers: &self.exception_handlers[handler_range],
+            }
+        })
     }
+
+    /// Get the frame layout, if known.
+    pub fn frame_layout(&self) -> Option<&MachBufferFrameLayout> {
+        self.frame_layout.as_ref()
+    }
+
+    /// Get the list of patchable call sites for this code.
+    ///
+    /// Each location in the buffer contains the bytes for a call
+    /// instruction to the specified target. If the call is to be
+    /// patched out, the bytes in the region should be replaced with
+    /// those given in the `MachBufferFinalized::nop` array, repeated
+    /// as many times as necessary. (The length of the patchable
+    /// region is guaranteed to be an integer multiple of that NOP
+    /// unit size.)
+    pub fn patchable_call_sites(&self) -> impl Iterator<Item = &MachPatchableCallSite> + '_ {
+        self.patchable_call_sites.iter()
+    }
+}
+
+/// An item in the exception-handler list for a callsite, with label
+/// references.  Items are interpreted in left-to-right order and the
+/// first match wins.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MachExceptionHandler {
+    /// A specific tag (in the current dynamic context) should be
+    /// handled by the code at the given offset.
+    Tag(ExceptionTag, MachLabel),
+    /// All exceptions should be handled by the code at the given
+    /// offset.
+    Default(MachLabel),
+    /// The dynamic context for interpreting tags is updated to the
+    /// value stored in the given machine location (in this frame's
+    /// context).
+    Context(ExceptionContextLoc),
+}
+
+impl MachExceptionHandler {
+    fn finalize<F: Fn(MachLabel) -> CodeOffset>(self, f: F) -> FinalizedMachExceptionHandler {
+        match self {
+            Self::Tag(tag, label) => FinalizedMachExceptionHandler::Tag(tag, f(label)),
+            Self::Default(label) => FinalizedMachExceptionHandler::Default(f(label)),
+            Self::Context(loc) => FinalizedMachExceptionHandler::Context(loc),
+        }
+    }
+}
+
+/// An item in the exception-handler list for a callsite, with final
+/// (lowered) code offsets. Items are interpreted in left-to-right
+/// order and the first match wins.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
+pub enum FinalizedMachExceptionHandler {
+    /// A specific tag (in the current dynamic context) should be
+    /// handled by the code at the given offset.
+    Tag(ExceptionTag, CodeOffset),
+    /// All exceptions should be handled by the code at the given
+    /// offset.
+    Default(CodeOffset),
+    /// The dynamic context for interpreting tags is updated to the
+    /// value stored in the given machine location (in this frame's
+    /// context).
+    Context(ExceptionContextLoc),
+}
+
+/// A location for a dynamic exception context value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
+pub enum ExceptionContextLoc {
+    /// An offset from SP at the callsite.
+    SPOffset(u32),
+    /// A GPR at the callsite. The physical register number for the
+    /// GPR register file on the target architecture is used.
+    GPR(u8),
 }
 
 /// Metadata about a constant.
@@ -1749,6 +2045,7 @@ struct MachBufferConstant {
 
 /// A trap that is deferred to the next time an island is emitted for either
 /// traps, constants, or fixups.
+#[derive(Debug)]
 struct MachLabelTrap {
     /// This label will refer to the trap's offset.
     label: MachLabel,
@@ -1893,10 +2190,67 @@ pub struct MachTrap {
     derive(serde_derive::Serialize, serde_derive::Deserialize)
 )]
 pub struct MachCallSite {
-    /// The offset of the call's return address, *relative to the containing section*.
+    /// The offset of the call's return address, *relative to the
+    /// start of the buffer*.
     pub ret_addr: CodeOffset,
-    /// The call's opcode.
-    pub opcode: Opcode,
+
+    /// The offset from the FP at this callsite down to the SP when
+    /// the call occurs, if known. In other words, the size of the
+    /// stack frame up to the saved FP slot. Useful to recover the
+    /// start of the stack frame and to look up dynamic contexts
+    /// stored in [`ExceptionContextLoc::SPOffset`].
+    ///
+    /// If `None`, the compiler backend did not specify a frame
+    /// offset. The runtime in use with the compiled code may require
+    /// the frame offset if exception handlers are present or dynamic
+    /// context is used, but that is not Cranelift's concern: the
+    /// frame offset is optional at this level.
+    pub frame_offset: Option<u32>,
+
+    /// Range in `exception_handlers` corresponding to the exception
+    /// handlers for this callsite.
+    exception_handler_range: Range<u32>,
+}
+
+/// A call site record resulting from a compilation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FinalizedMachCallSite<'a> {
+    /// The offset of the call's return address, *relative to the
+    /// start of the buffer*.
+    pub ret_addr: CodeOffset,
+
+    /// The offset from the FP at this callsite down to the SP when
+    /// the call occurs, if known. In other words, the size of the
+    /// stack frame up to the saved FP slot. Useful to recover the
+    /// start of the stack frame and to look up dynamic contexts
+    /// stored in [`ExceptionContextLoc::SPOffset`].
+    ///
+    /// If `None`, the compiler backend did not specify a frame
+    /// offset. The runtime in use with the compiled code may require
+    /// the frame offset if exception handlers are present or dynamic
+    /// context is used, but that is not Cranelift's concern: the
+    /// frame offset is optional at this level.
+    pub frame_offset: Option<u32>,
+
+    /// Exception handlers at this callsite, with target offsets
+    /// *relative to the start of the buffer*.
+    pub exception_handlers: &'a [FinalizedMachExceptionHandler],
+}
+
+/// A patchable call site record resulting from a compilation.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
+pub struct MachPatchableCallSite {
+    /// The offset of the call's return address (i.e., the address
+    /// after the end of the patchable region), *relative to the start
+    /// of the buffer*.
+    pub ret_addr: CodeOffset,
+
+    /// The length of the region to be patched by NOP bytes.
+    pub len: u32,
 }
 
 /// A source-location mapping resulting from a compilation.
@@ -1911,7 +2265,7 @@ pub struct MachSrcLoc<T: CompilePhase> {
     /// section.
     pub start: CodeOffset,
     /// The end of the region of code corresponding to a source location.
-    /// This is relative to the start of the section, not to the start of the
+    /// This is relative to the start of the function, not to the start of the
     /// section.
     pub end: CodeOffset,
     /// The source location.
@@ -1926,23 +2280,6 @@ impl MachSrcLoc<Stencil> {
             loc: self.loc.expand(base_srcloc),
         }
     }
-}
-
-/// Record of stack map metadata: stack offsets containing references.
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(
-    feature = "enable-serde",
-    derive(serde_derive::Serialize, serde_derive::Deserialize)
-)]
-pub struct MachStackMap {
-    /// The code offset at which this stack map applies.
-    pub offset: CodeOffset,
-    /// The code offset just past the "end" of the instruction: that is, the
-    /// offset of the first byte of the following instruction, or equivalently,
-    /// the start offset plus the instruction length.
-    pub offset_end: CodeOffset,
-    /// The stack map itself.
-    pub stack_map: StackMap,
 }
 
 /// Record of branch instruction in the buffer, to facilitate editing.
@@ -1968,6 +2305,118 @@ impl MachBranch {
     fn is_uncond(&self) -> bool {
         self.inverted.is_none()
     }
+}
+
+/// Stack-frame layout information carried through to machine
+/// code. This provides sufficient information to interpret an active
+/// stack frame from a running function, if provided.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
+pub struct MachBufferFrameLayout {
+    /// Offset from bottom of frame to FP (near top of frame). This
+    /// allows reading the frame given only FP.
+    pub frame_to_fp_offset: u32,
+    /// Offset from bottom of frame for each StackSlot,
+    pub stackslots: SecondaryMap<ir::StackSlot, MachBufferStackSlot>,
+}
+
+/// Descriptor for a single stack slot in the compiled function.
+#[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
+pub struct MachBufferStackSlot {
+    /// Offset from the bottom of the stack frame.
+    pub offset: u32,
+
+    /// User-provided key to describe this stack slot.
+    pub key: Option<ir::StackSlotKey>,
+}
+
+/// Debug tags: a sequence of references to a stack slot, or a
+/// user-defined value, at a particular PC.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
+pub(crate) struct MachDebugTags {
+    /// Offset at which this tag applies.
+    pub offset: CodeOffset,
+
+    /// Position on the attached instruction. This indicates whether
+    /// the tags attach to the prior instruction (i.e., as a return
+    /// point from a call) or the current instruction (i.e., as a PC
+    /// seen during a trap).
+    pub pos: MachDebugTagPos,
+
+    /// The range in the tag pool.
+    pub range: Range<u32>,
+}
+
+/// Debug tag position on an instruction.
+///
+/// We need to distinguish position on an instruction, and not just
+/// use offsets, because of the following case:
+///
+/// ```plain
+/// <tag1, tag2> call ...
+/// <tag3, tag4> trapping_store ...
+/// ```
+///
+/// If the stack is walked and interpreted with debug tags while
+/// within the call, the PC seen will be the return point, i.e. the
+/// address after the call. If the stack is walked and interpreted
+/// with debug tags upon a trap of the following instruction, it will
+/// be the PC of that instruction -- which is the same PC! Thus to
+/// disambiguate which tags we want, we attach a "pre/post" flag to
+/// every group of tags at an offset; and when we look up tags, we
+/// look them up for an offset and "position" at that offset.
+///
+/// Thus there are logically two positions at every offset -- so the
+/// above will be emitted as
+///
+/// ```plain
+/// 0: call ...
+///                          4, post: <tag1, tag2>
+///                          4, pre: <tag3, tag4>
+/// 4: trapping_store ...
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "enable-serde",
+    derive(serde_derive::Serialize, serde_derive::Deserialize)
+)]
+pub enum MachDebugTagPos {
+    /// Tags attached after the instruction that ends at this offset.
+    ///
+    /// This is used to attach tags to a call, because the PC we see
+    /// when walking the stack is the *return point*.
+    Post,
+    /// Tags attached before the instruction that starts at this offset.
+    ///
+    /// This is used to attach tags to every other kind of
+    /// instruction, because the PC we see when processing a trap of
+    /// that instruction is the PC of that instruction, not the
+    /// following one.
+    Pre,
+}
+
+/// Iterator item for visiting debug tags.
+pub struct MachBufferDebugTagList<'a> {
+    /// Offset at which this tag applies.
+    pub offset: CodeOffset,
+
+    /// Position at this offset ("post", attaching to prior
+    /// instruction, or "pre", attaching to next instruction).
+    pub pos: MachDebugTagPos,
+
+    /// The underlying tags.
+    pub tags: &'a [DebugTag],
 }
 
 /// Implementation of the `TextSectionBuilder` trait backed by `MachBuffer`.
@@ -2045,6 +2494,10 @@ impl<I: VCodeInst> TextSectionBuilder for MachTextSectionBuilder<I> {
         self.force_veneers = ForceVeneers::Yes;
     }
 
+    fn write(&mut self, offset: u64, data: &[u8]) {
+        self.buf.data[offset.try_into().unwrap()..][..data.len()].copy_from_slice(data);
+    }
+
     fn finish(&mut self, ctrl_plane: &mut ControlPlane) -> Vec<u8> {
         // Double-check all functions were pushed.
         assert_eq!(self.next_func, self.buf.label_offsets.len());
@@ -2065,8 +2518,9 @@ mod test {
 
     use super::*;
     use crate::ir::UserExternalNameRef;
-    use crate::isa::aarch64::inst::xreg;
+    use crate::isa::aarch64;
     use crate::isa::aarch64::inst::{BranchTarget, CondBrKind, EmitInfo, Inst};
+    use crate::isa::aarch64::inst::{OperandSize, xreg};
     use crate::machinst::{MachInstEmit, MachInstEmitState};
     use crate::settings;
 
@@ -2077,9 +2531,15 @@ mod test {
         BranchTarget::Label(label(n))
     }
 
+    fn emit_info() -> EmitInfo {
+        let flags = settings::Flags::new(settings::builder());
+        let isa_flags = aarch64::settings::Flags::new(&flags, &aarch64::settings::builder());
+        EmitInfo::new(flags, isa_flags)
+    }
+
     #[test]
     fn test_elide_jump_to_next() {
-        let info = EmitInfo::new(settings::Flags::new(settings::builder()));
+        let info = emit_info();
         let mut buf = MachBuffer::new();
         let mut state = <Inst as MachInstEmit>::State::default();
         let constants = Default::default();
@@ -2095,7 +2555,7 @@ mod test {
 
     #[test]
     fn test_elide_trivial_jump_blocks() {
-        let info = EmitInfo::new(settings::Flags::new(settings::builder()));
+        let info = emit_info();
         let mut buf = MachBuffer::new();
         let mut state = <Inst as MachInstEmit>::State::default();
         let constants = Default::default();
@@ -2104,7 +2564,7 @@ mod test {
 
         buf.bind_label(label(0), state.ctrl_plane_mut());
         let inst = Inst::CondBr {
-            kind: CondBrKind::NotZero(xreg(0)),
+            kind: CondBrKind::NotZero(xreg(0), OperandSize::Size64),
             taken: target(1),
             not_taken: target(2),
         };
@@ -2126,7 +2586,7 @@ mod test {
 
     #[test]
     fn test_flip_cond() {
-        let info = EmitInfo::new(settings::Flags::new(settings::builder()));
+        let info = emit_info();
         let mut buf = MachBuffer::new();
         let mut state = <Inst as MachInstEmit>::State::default();
         let constants = Default::default();
@@ -2135,7 +2595,7 @@ mod test {
 
         buf.bind_label(label(0), state.ctrl_plane_mut());
         let inst = Inst::CondBr {
-            kind: CondBrKind::Zero(xreg(0)),
+            kind: CondBrKind::Zero(xreg(0), OperandSize::Size64),
             taken: target(1),
             not_taken: target(2),
         };
@@ -2147,7 +2607,7 @@ mod test {
 
         buf.bind_label(label(2), state.ctrl_plane_mut());
         let inst = Inst::Udf {
-            trap_code: TrapCode::Interrupt,
+            trap_code: TrapCode::STACK_OVERFLOW,
         };
         inst.emit(&mut buf, &info, &mut state);
 
@@ -2158,8 +2618,8 @@ mod test {
         let mut buf2 = MachBuffer::new();
         let mut state = Default::default();
         let inst = Inst::TrapIf {
-            kind: CondBrKind::NotZero(xreg(0)),
-            trap_code: TrapCode::Interrupt,
+            kind: CondBrKind::NotZero(xreg(0), OperandSize::Size64),
+            trap_code: TrapCode::STACK_OVERFLOW,
         };
         inst.emit(&mut buf2, &info, &mut state);
         let inst = Inst::Nop4;
@@ -2172,7 +2632,7 @@ mod test {
 
     #[test]
     fn test_island() {
-        let info = EmitInfo::new(settings::Flags::new(settings::builder()));
+        let info = emit_info();
         let mut buf = MachBuffer::new();
         let mut state = <Inst as MachInstEmit>::State::default();
         let constants = Default::default();
@@ -2181,7 +2641,7 @@ mod test {
 
         buf.bind_label(label(0), state.ctrl_plane_mut());
         let inst = Inst::CondBr {
-            kind: CondBrKind::NotZero(xreg(0)),
+            kind: CondBrKind::NotZero(xreg(0), OperandSize::Size64),
             taken: target(2),
             not_taken: target(3),
         };
@@ -2211,7 +2671,7 @@ mod test {
         let mut buf2 = MachBuffer::new();
         let mut state = Default::default();
         let inst = Inst::CondBr {
-            kind: CondBrKind::NotZero(xreg(0)),
+            kind: CondBrKind::NotZero(xreg(0), OperandSize::Size64),
 
             // This conditionally taken branch has a 19-bit constant, shifted
             // to the left by two, giving us a 21-bit range in total. Half of
@@ -2241,7 +2701,7 @@ mod test {
 
     #[test]
     fn test_island_backward() {
-        let info = EmitInfo::new(settings::Flags::new(settings::builder()));
+        let info = emit_info();
         let mut buf = MachBuffer::new();
         let mut state = <Inst as MachInstEmit>::State::default();
         let constants = Default::default();
@@ -2264,7 +2724,7 @@ mod test {
 
         buf.bind_label(label(3), state.ctrl_plane_mut());
         let inst = Inst::CondBr {
-            kind: CondBrKind::NotZero(xreg(0)),
+            kind: CondBrKind::NotZero(xreg(0), OperandSize::Size64),
             taken: target(0),
             not_taken: target(1),
         };
@@ -2277,7 +2737,7 @@ mod test {
         let mut buf2 = MachBuffer::new();
         let mut state = Default::default();
         let inst = Inst::CondBr {
-            kind: CondBrKind::NotZero(xreg(0)),
+            kind: CondBrKind::NotZero(xreg(0), OperandSize::Size64),
             taken: BranchTarget::ResolvedOffset(8),
             not_taken: BranchTarget::ResolvedOffset(4 - (2000000 + 4)),
         };
@@ -2327,7 +2787,7 @@ mod test {
         // label7:
         //   ret
 
-        let info = EmitInfo::new(settings::Flags::new(settings::builder()));
+        let info = emit_info();
         let mut buf = MachBuffer::new();
         let mut state = <Inst as MachInstEmit>::State::default();
         let constants = Default::default();
@@ -2336,7 +2796,7 @@ mod test {
 
         buf.bind_label(label(0), state.ctrl_plane_mut());
         let inst = Inst::CondBr {
-            kind: CondBrKind::Zero(xreg(0)),
+            kind: CondBrKind::Zero(xreg(0), OperandSize::Size64),
             taken: target(1),
             not_taken: target(2),
         };
@@ -2404,7 +2864,7 @@ mod test {
         //
         // label0, label1, ..., label4:
         //   b label0
-        let info = EmitInfo::new(settings::Flags::new(settings::builder()));
+        let info = emit_info();
         let mut buf = MachBuffer::new();
         let mut state = <Inst as MachInstEmit>::State::default();
         let constants = Default::default();
@@ -2446,15 +2906,22 @@ mod test {
         let ctrl_plane = &mut Default::default();
         let constants = Default::default();
 
-        buf.reserve_labels_for_blocks(1);
+        buf.reserve_labels_for_blocks(3);
 
         buf.bind_label(label(0), ctrl_plane);
         buf.put1(1);
-        buf.add_trap(TrapCode::HeapOutOfBounds);
+        buf.add_trap(TrapCode::HEAP_OUT_OF_BOUNDS);
         buf.put1(2);
-        buf.add_trap(TrapCode::IntegerOverflow);
-        buf.add_trap(TrapCode::IntegerDivisionByZero);
-        buf.add_call_site(Opcode::Call);
+        buf.add_trap(TrapCode::INTEGER_OVERFLOW);
+        buf.add_trap(TrapCode::INTEGER_DIVISION_BY_ZERO);
+        buf.add_try_call_site(
+            Some(0x10),
+            [
+                MachExceptionHandler::Tag(ExceptionTag::new(42), label(2)),
+                MachExceptionHandler::Default(label(1)),
+            ]
+            .into_iter(),
+        );
         buf.add_reloc(
             Reloc::Abs4,
             &ExternalName::User(UserExternalNameRef::new(0)),
@@ -2467,27 +2934,34 @@ mod test {
             1,
         );
         buf.put1(4);
+        buf.bind_label(label(1), ctrl_plane);
+        buf.put1(0xff);
+        buf.bind_label(label(2), ctrl_plane);
+        buf.put1(0xff);
 
         let buf = buf.finish(&constants, ctrl_plane);
 
-        assert_eq!(buf.data(), &[1, 2, 3, 4]);
+        assert_eq!(buf.data(), &[1, 2, 3, 4, 0xff, 0xff]);
         assert_eq!(
             buf.traps()
                 .iter()
                 .map(|trap| (trap.offset, trap.code))
                 .collect::<Vec<_>>(),
             vec![
-                (1, TrapCode::HeapOutOfBounds),
-                (2, TrapCode::IntegerOverflow),
-                (2, TrapCode::IntegerDivisionByZero)
+                (1, TrapCode::HEAP_OUT_OF_BOUNDS),
+                (2, TrapCode::INTEGER_OVERFLOW),
+                (2, TrapCode::INTEGER_DIVISION_BY_ZERO)
             ]
         );
+        let call_sites: Vec<_> = buf.call_sites().collect();
+        assert_eq!(call_sites[0].ret_addr, 2);
+        assert_eq!(call_sites[0].frame_offset, Some(0x10));
         assert_eq!(
-            buf.call_sites()
-                .iter()
-                .map(|call_site| (call_site.ret_addr, call_site.opcode))
-                .collect::<Vec<_>>(),
-            vec![(2, Opcode::Call)]
+            call_sites[0].exception_handlers,
+            &[
+                FinalizedMachExceptionHandler::Tag(ExceptionTag::new(42), 5),
+                FinalizedMachExceptionHandler::Default(4)
+            ],
         );
         assert_eq!(
             buf.relocs()

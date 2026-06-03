@@ -8,14 +8,21 @@
 //! For more information about this see `./examples/min-platform` as well as
 //! `./docs/examples-minimal.md`.
 
+#![warn(dead_code, unused_imports)]
+
+#[cfg(has_virtual_memory)]
 use crate::prelude::*;
 
 pub mod capi;
+#[cfg(has_virtual_memory)]
 pub mod mmap;
 pub mod traphandlers;
+#[cfg(has_host_compiler_backend)]
 pub mod unwind;
+#[cfg(has_virtual_memory)]
 pub mod vm;
 
+#[cfg(has_virtual_memory)]
 fn cvt(rc: i32) -> Result<()> {
     match rc {
         0 => Ok(()),

@@ -1,15 +1,16 @@
 //! The [DataValueExt] trait is an extension trait for [DataValue]. It provides a lot of functions
 //! used by the rest of the interpreter.
 
-#![allow(trivial_numeric_casts)]
+#![expect(trivial_numeric_casts, reason = "macro-generated code")]
 
 use core::fmt::{self, Display, Formatter};
+use core::ops::Neg;
 use cranelift_codegen::data_value::{DataValue, DataValueCastFailure};
-use cranelift_codegen::ir::immediates::{Ieee32, Ieee64};
-use cranelift_codegen::ir::{types, Type};
+use cranelift_codegen::ir::immediates::{Ieee16, Ieee32, Ieee64, Ieee128};
+use cranelift_codegen::ir::{Type, types};
 use thiserror::Error;
 
-use crate::step::{extractlanes, SimdVec};
+use crate::step::{SimdVec, extractlanes};
 
 pub type ValueResult<T> = Result<T, ValueError>;
 
@@ -175,12 +176,6 @@ macro_rules! unary_match {
             _ => unimplemented!()
         }
     };
-    ( $op:tt($arg1:expr); [ $( $data_value_ty:ident ),* ] ) => {
-        match $arg1 {
-            $( DataValue::$data_value_ty(a) => { Ok(DataValue::$data_value_ty($op a)) } )*
-            _ => unimplemented!()
-        }
-    };
 }
 macro_rules! binary_match {
     ( $op:ident($arg1:expr, $arg2:expr); [ $( $data_value_ty:ident ),* ] ) => {
@@ -228,16 +223,6 @@ macro_rules! binary_match {
             _ => unimplemented!()
         }
     };
-    ( $op:ident($arg1:expr, $arg2:expr); unsigned integers ) => {
-        match ($arg1, $arg2) {
-            (DataValue::I8(a), DataValue::I8(b)) => { Ok(DataValue::I8((u8::try_from(*a)?.$op(u8::try_from(*b)?) as i8))) }
-            (DataValue::I16(a), DataValue::I16(b)) => { Ok(DataValue::I16((u16::try_from(*a)?.$op(u16::try_from(*b)?) as i16))) }
-            (DataValue::I32(a), DataValue::I32(b)) => { Ok(DataValue::I32((u32::try_from(*a)?.$op(u32::try_from(*b)?) as i32))) }
-            (DataValue::I64(a), DataValue::I64(b)) => { Ok(DataValue::I64((u64::try_from(*a)?.$op(u64::try_from(*b)?) as i64))) }
-            (DataValue::I128(a), DataValue::I128(b)) => { Ok(DataValue::I128((u128::try_from(*a)?.$op(u128::try_from(*b)?) as i64))) }
-            _ => { Err(ValueError::InvalidType(ValueTypeClass::Integer, if !($arg1).ty().is_int() { ($arg1).ty() } else { ($arg2).ty() })) }
-        }
-    };
 }
 
 macro_rules! bitop {
@@ -250,6 +235,13 @@ macro_rules! bitop {
             (DataValue::I128(a), DataValue::I128(b)) => DataValue::I128(a $op b),
             (DataValue::F32(a), DataValue::F32(b)) => DataValue::F32(a $op b),
             (DataValue::F64(a), DataValue::F64(b)) => DataValue::F64(a $op b),
+            (DataValue::V64(a), DataValue::V64(b)) => {
+                let mut a2 = a.clone();
+                for (a, b) in a2.iter_mut().zip(b.iter()) {
+                    *a = *a $op *b;
+                }
+                DataValue::V64(a2)
+            }
             (DataValue::V128(a), DataValue::V128(b)) => {
                 let mut a2 = a.clone();
                 for (a, b) in a2.iter_mut().zip(b.iter()) {
@@ -318,7 +310,7 @@ impl DataValueExt for DataValue {
 
     fn is_float(&self) -> bool {
         match self {
-            DataValue::F32(_) | DataValue::F64(_) => true,
+            DataValue::F16(_) | DataValue::F32(_) | DataValue::F64(_) | DataValue::F128(_) => true,
             _ => false,
         }
     }
@@ -336,11 +328,7 @@ impl DataValueExt for DataValue {
         macro_rules! make_bool {
             ($ty:ident) => {
                 Ok(DataValue::$ty(if b {
-                    if vec_elem {
-                        -1
-                    } else {
-                        1
-                    }
+                    if vec_elem { -1 } else { 1 }
                 } else {
                     0
                 }))
@@ -369,14 +357,13 @@ impl DataValueExt for DataValue {
     }
 
     fn vector(v: [u8; 16], ty: Type) -> ValueResult<Self> {
-        assert!(ty.is_vector() && [8, 16].contains(&ty.bytes()));
-        if ty.bytes() == 16 {
-            Ok(DataValue::V128(v))
-        } else if ty.bytes() == 8 {
-            let v64: [u8; 8] = v[..8].try_into().unwrap();
-            Ok(DataValue::V64(v64))
-        } else {
-            unimplemented!()
+        assert!(ty.is_vector() && [2, 4, 8, 16].contains(&ty.bytes()));
+        match ty.bytes() {
+            16 => Ok(DataValue::V128(v)),
+            8 => Ok(DataValue::V64(v[..8].try_into().unwrap())),
+            4 => Ok(DataValue::V32(v[..4].try_into().unwrap())),
+            2 => Ok(DataValue::V16(v[..2].try_into().unwrap())),
+            _ => unreachable!(),
         }
     }
 
@@ -386,6 +373,16 @@ impl DataValueExt for DataValue {
             DataValue::V64(v) => {
                 let mut v128 = [0; 16];
                 v128[..8].clone_from_slice(&v);
+                Ok(v128)
+            }
+            DataValue::V32(v) => {
+                let mut v128 = [0; 16];
+                v128[..4].clone_from_slice(&v);
+                Ok(v128)
+            }
+            DataValue::V16(v) => {
+                let mut v128 = [0; 16];
+                v128[..2].clone_from_slice(&v);
                 Ok(v128)
             }
             _ => Err(ValueError::InvalidType(ValueTypeClass::Vector, self.ty())),
@@ -399,10 +396,14 @@ impl DataValueExt for DataValue {
                 (val, ty) if val.ty().is_int() && ty.is_int() => {
                     DataValue::from_integer(val.into_int_signed()?, ty)?
                 }
+                (DataValue::I16(n), types::F16) => DataValue::F16(Ieee16::with_bits(n as u16)),
                 (DataValue::I32(n), types::F32) => DataValue::F32(f32::from_bits(n as u32).into()),
                 (DataValue::I64(n), types::F64) => DataValue::F64(f64::from_bits(n as u64).into()),
+                (DataValue::I128(n), types::F128) => DataValue::F128(Ieee128::with_bits(n as u128)),
+                (DataValue::F16(n), types::I16) => DataValue::I16(n.bits() as i16),
                 (DataValue::F32(n), types::I32) => DataValue::I32(n.bits() as i32),
                 (DataValue::F64(n), types::I64) => DataValue::I64(n.bits() as i64),
+                (DataValue::F128(n), types::I128) => DataValue::I128(n.bits() as i128),
                 (DataValue::F32(n), types::F64) => DataValue::F64((n.as_f32() as f64).into()),
                 (dv, t) if (t.is_int() || t.is_float()) && dv.ty() == t => dv,
                 (dv, _) => unimplemented!("conversion: {} -> {:?}", dv.ty(), kind),
@@ -502,9 +503,11 @@ impl DataValueExt for DataValue {
             DataValue::I32(f) => Ok(*f == 0),
             DataValue::I64(f) => Ok(*f == 0),
             DataValue::I128(f) => Ok(*f == 0),
+            DataValue::F16(f) => Ok(f.is_zero()),
             DataValue::F32(f) => Ok(f.is_zero()),
             DataValue::F64(f) => Ok(f.is_zero()),
-            DataValue::V64(_) | DataValue::V128(_) => {
+            DataValue::F128(f) => Ok(f.is_zero()),
+            DataValue::V16(_) | DataValue::V32(_) | DataValue::V64(_) | DataValue::V128(_) => {
                 Err(ValueError::InvalidType(ValueTypeClass::Float, self.ty()))
             }
         }
@@ -513,37 +516,21 @@ impl DataValueExt for DataValue {
     fn umax(self, other: Self) -> ValueResult<Self> {
         let lhs = self.clone().into_int_unsigned()?;
         let rhs = other.clone().into_int_unsigned()?;
-        if lhs > rhs {
-            Ok(self)
-        } else {
-            Ok(other)
-        }
+        if lhs > rhs { Ok(self) } else { Ok(other) }
     }
 
     fn smax(self, other: Self) -> ValueResult<Self> {
-        if self > other {
-            Ok(self)
-        } else {
-            Ok(other)
-        }
+        if self > other { Ok(self) } else { Ok(other) }
     }
 
     fn umin(self, other: Self) -> ValueResult<Self> {
         let lhs = self.clone().into_int_unsigned()?;
         let rhs = other.clone().into_int_unsigned()?;
-        if lhs < rhs {
-            Ok(self)
-        } else {
-            Ok(other)
-        }
+        if lhs < rhs { Ok(self) } else { Ok(other) }
     }
 
     fn smin(self, other: Self) -> ValueResult<Self> {
-        if self < other {
-            Ok(self)
-        } else {
-            Ok(other)
-        }
+        if self < other { Ok(self) } else { Ok(other) }
     }
 
     fn uno(&self, other: &Self) -> ValueResult<bool> {
@@ -794,12 +781,17 @@ impl DataValueExt for DataValue {
             DataValue::I128(a) => DataValue::I128(!a),
             DataValue::F32(a) => DataValue::F32(!a),
             DataValue::F64(a) => DataValue::F64(!a),
-            DataValue::V128(a) => {
-                let mut a2 = a.clone();
-                for a in a2.iter_mut() {
-                    *a = !*a;
+            DataValue::V64(mut a) => {
+                for byte in a.iter_mut() {
+                    *byte = !*byte;
                 }
-                DataValue::V128(a2)
+                DataValue::V64(a)
+            }
+            DataValue::V128(mut a) => {
+                for byte in a.iter_mut() {
+                    *byte = !*byte;
+                }
+                DataValue::V128(a)
             }
             _ => unimplemented!(),
         })

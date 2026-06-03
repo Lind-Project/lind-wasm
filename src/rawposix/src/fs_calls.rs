@@ -17,7 +17,7 @@ use sysdefs::constants::fs_const::{
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
@@ -861,14 +861,15 @@ pub extern "C" fn mmap_syscall(
         | MAP_ANONYMOUS as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic(&format!(
+        lind_debug_panic!(
             "mmap: unsupported flags {:#x} (allowed: {:#x})",
-            flags, allowed_flags
-        ));
+            flags,
+            allowed_flags
+        );
     }
 
     if prot & PROT_EXEC > 0 {
-        lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
+        lind_debug_panic!("mmap protection flag PROT_EXEC is not allowed in Lind");
     }
 
     // check if the provided address is multiple of pages
@@ -1155,10 +1156,11 @@ pub extern "C" fn munmap_syscall(
             ) as usize
         };
         if result != act_start_addr {
-            lind_debug_panic(&format!(
+            lind_debug_panic!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-                result as *const c_void, act_start_addr as *const c_void
-            ));
+                result as *const c_void,
+                act_start_addr as *const c_void
+            );
         }
         if result as isize == -1 {
             let errno = get_errno();
@@ -2614,13 +2616,14 @@ fn renameat_inner(
 
     let ret = unsafe {
         if use_renameat2 {
-            libc::renameat2(
+            libc::syscall(
+                libc::SYS_renameat2,
                 old_kernel_fd,
                 c_oldpath.as_ptr(),
                 new_kernel_fd,
                 c_newpath.as_ptr(),
                 flags,
-            )
+            ) as libc::c_int
         } else {
             libc::renameat(
                 old_kernel_fd,
@@ -3960,7 +3963,8 @@ pub extern "C" fn chdir_syscall(
 
     // Update the cage's current working directory
     if let Some(cage) = get_cage(cageid) {
-        let user_path = PathBuf::from(path.to_string_lossy().as_ref());
+        let path_string = path.to_string_lossy();
+        let user_path = PathBuf::from(path_without_trailing_slashes(path_string.as_ref()));
         let mut cwd = cage.cwd.write();
         *cwd = Arc::new(user_path);
     }
@@ -4576,7 +4580,7 @@ pub extern "C" fn ioctl_syscall(
     }
 
     // handle FIOCLEX, set close_on_exec flag for the file descriptor
-    if req as u64 == FIOCLEX {
+    if req as u64 == FIOCLEX as u64 {
         let ret = match fdtables::set_cloexec(cageid, vfd_arg, true) {
             Ok(_) => 0,
             Err(_) => syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor"),
@@ -4588,7 +4592,7 @@ pub extern "C" fn ioctl_syscall(
     // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, FIONREAD, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
     if req != FIONBIO && req != FIOASYNC && req != FIONREAD && req != TIOCGWINSZ {
-        lind_debug_panic("Lind unsupported ioctl request");
+        lind_debug_panic!("Lind unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -4598,7 +4602,13 @@ pub extern "C" fn ioctl_syscall(
 
     let vfd = wrappedvfd.unwrap();
 
-    let ret = unsafe { libc::ioctl(vfd.underfd as i32, req as u64, ptrunion as *mut c_void) };
+    let ret = unsafe {
+        libc::ioctl(
+            vfd.underfd as i32,
+            req as libc::Ioctl,
+            ptrunion as *mut c_void,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
@@ -4752,7 +4762,7 @@ pub extern "C" fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        lind_debug_panic("shmget key IPC_PRIVATE is not allowed in Lind");
+        lind_debug_panic!("shmget key IPC_PRIVATE is not allowed in Lind");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;

@@ -1,21 +1,32 @@
 use crate::{RunResult, RuntimeFiberStack};
+use alloc::boxed::Box;
 use std::cell::Cell;
 use std::ffi::c_void;
 use std::io;
+use std::mem::needs_drop;
 use std::ops::Range;
 use std::ptr;
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::System::Threading::*;
 
+pub type Error = io::Error;
+
 #[derive(Debug)]
 pub struct FiberStack(usize);
 
 impl FiberStack {
-    pub fn new(size: usize) -> io::Result<Self> {
+    pub fn new(size: usize, zeroed: bool) -> io::Result<Self> {
+        // We don't support fiber stack zeroing on windows.
+        let _ = zeroed;
+
         Ok(Self(size))
     }
 
-    pub unsafe fn from_raw_parts(_base: *mut u8, _len: usize) -> io::Result<Self> {
+    pub unsafe fn from_raw_parts(
+        _base: *mut u8,
+        _guard_size: usize,
+        _len: usize,
+    ) -> io::Result<Self> {
         Err(io::Error::from_raw_os_error(ERROR_NOT_SUPPORTED as i32))
     }
 
@@ -32,6 +43,10 @@ impl FiberStack {
     }
 
     pub fn range(&self) -> Option<Range<usize>> {
+        None
+    }
+
+    pub fn guard_range(&self) -> Option<Range<*mut u8>> {
         None
     }
 }
@@ -53,7 +68,7 @@ struct StartState {
 
 const FIBER_FLAG_FLOAT_SWITCH: u32 = 1;
 
-extern "C" {
+unsafe extern "C" {
     #[wasmtime_versioned_export_macros::versioned_link]
     fn wasmtime_fiber_get_current() -> *mut c_void;
 }
@@ -62,19 +77,28 @@ unsafe extern "system" fn fiber_start<F, A, B, C>(data: *mut c_void)
 where
     F: FnOnce(A, &mut super::Suspend<A, B, C>) -> C,
 {
-    // Set the stack guarantee to be consistent with what Rust expects for threads
-    // This value is taken from:
-    // https://github.com/rust-lang/rust/blob/0d97f7a96877a96015d70ece41ad08bb7af12377/library/std/src/sys/windows/stack_overflow.rs
-    if SetThreadStackGuarantee(&mut 0x5000) == 0 {
-        panic!("failed to set fiber stack guarantee");
-    }
+    unsafe {
+        // Set the stack guarantee to be consistent with what Rust expects for threads
+        // This value is taken from:
+        // https://github.com/rust-lang/rust/blob/0d97f7a96877a96015d70ece41ad08bb7af12377/library/std/src/sys/windows/stack_overflow.rs
+        if SetThreadStackGuarantee(&mut 0x5000) == 0 {
+            panic!("failed to set fiber stack guarantee");
+        }
 
-    let state = data.cast::<StartState>();
-    let func = Box::from_raw((*state).initial_closure.get().cast::<F>());
-    (*state).initial_closure.set(ptr::null_mut());
-    let suspend = Suspend { state };
-    let initial = suspend.take_resume::<A, B, C>();
-    super::Suspend::<A, B, C>::execute(suspend, initial, *func);
+        let state = data.cast::<StartState>();
+        let func = Box::from_raw((*state).initial_closure.get().cast::<F>());
+        (*state).initial_closure.set(ptr::null_mut());
+        let suspend = Suspend { state };
+        let initial = suspend.take_resume::<A, B, C>();
+        let suspend = super::Suspend::<A, B, C>::execute(suspend, initial, *func);
+
+        let parent = (*suspend.state).parent.get();
+        debug_assert!(!parent.is_null());
+
+        // Technically this means that this function `fiber_start` never
+        // returns, but that's how the fibers API works on Windows it seems.
+        SwitchToFiber(parent);
+    }
 }
 
 impl Fiber {
@@ -112,6 +136,21 @@ impl Fiber {
             let parent_fiber = if is_fiber {
                 wasmtime_fiber_get_current()
             } else {
+                // Newer Rust versions use fiber local storage to register an internal hook that
+                // calls thread locals' destructors on thread exit.
+                // This has a limitation: the hook only runs in a regular thread (not in a fiber).
+                // We convert back into a thread once execution returns to this function,
+                // but we must also ensure that the hook is registered before converting into a fiber.
+                // Otherwise, a different fiber could be the first to register the hook,
+                // causing the hook to be called (and skipped) prematurely when that fiber is deleted.
+                struct Guard;
+
+                impl Drop for Guard {
+                    fn drop(&mut self) {}
+                }
+                assert!(needs_drop::<Guard>());
+                thread_local!(static GUARD: Guard = Guard);
+                GUARD.with(|_g| {});
                 ConvertThreadToFiber(ptr::null_mut())
             };
             assert!(
@@ -131,6 +170,8 @@ impl Fiber {
             }
         }
     }
+
+    pub(crate) unsafe fn drop<A, B, C>(&mut self) {}
 }
 
 impl Drop for Fiber {
@@ -152,19 +193,30 @@ impl Suspend {
             self.take_resume::<A, B, C>()
         }
     }
+
+    pub(crate) fn start_exit<A, B, C>(&mut self, result: RunResult<A, B, C>) {
+        unsafe {
+            (*self.result_location::<A, B, C>()).set(result);
+        }
+    }
+
     unsafe fn take_resume<A, B, C>(&self) -> A {
-        match (*self.result_location::<A, B, C>()).replace(RunResult::Executing) {
-            RunResult::Resuming(val) => val,
-            _ => panic!("not in resuming state"),
+        unsafe {
+            match (*self.result_location::<A, B, C>()).replace(RunResult::Executing) {
+                RunResult::Resuming(val) => val,
+                _ => panic!("not in resuming state"),
+            }
         }
     }
 
     unsafe fn result_location<A, B, C>(&self) -> *const Cell<RunResult<A, B, C>> {
-        let ret = (*self.state)
-            .result_location
-            .get()
-            .cast::<Cell<RunResult<A, B, C>>>();
-        assert!(!ret.is_null());
-        return ret;
+        unsafe {
+            let ret = (*self.state)
+                .result_location
+                .get()
+                .cast::<Cell<RunResult<A, B, C>>>();
+            assert!(!ret.is_null());
+            return ret;
+        }
     }
 }

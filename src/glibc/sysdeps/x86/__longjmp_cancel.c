@@ -16,9 +16,14 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-/* Don't restore shadow stack register for __longjmp_cancel.  */
-// #define DO_NOT_RESTORE_SHADOW_STACK
+/* On wasm there is no shadow stack to skip, so __longjmp_cancel is identical
+   to __longjmp.  The caller (sysdeps/unix/sysv/linux/x86/longjmp.c) passes
+   two arguments (jmp_buf, val), so the signature must match.  */
+#include <setjmp.h>
 
-void __longjmp_cancel (void) {
+extern void __longjmp (__jmp_buf env, int val) __attribute__ ((__noreturn__));
 
+void __longjmp_cancel (__jmp_buf env, int val)
+{
+  __longjmp (env, val);
 }

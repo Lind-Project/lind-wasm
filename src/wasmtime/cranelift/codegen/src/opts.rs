@@ -1,9 +1,11 @@
 //! Optimization driver using ISLE rewrite rules on an egraph.
 
+mod div_const;
+
 use crate::egraph::{NewOrExistingInst, OptimizeCtx};
 pub use crate::ir::condcodes::{FloatCC, IntCC};
 use crate::ir::dfg::ValueDef;
-pub use crate::ir::immediates::{Ieee32, Ieee64, Imm64, Offset32, Uimm8, V128Imm};
+pub use crate::ir::immediates::{Ieee16, Ieee32, Ieee64, Ieee128, Imm64, Offset32, Uimm8, V128Imm};
 use crate::ir::instructions::InstructionFormat;
 pub use crate::ir::types::*;
 pub use crate::ir::{
@@ -13,13 +15,11 @@ pub use crate::ir::{
 use crate::isle_common_prelude_methods;
 use crate::machinst::isle::*;
 use crate::trace;
+use core::marker::PhantomData;
 use cranelift_entity::packed_option::ReservedValue;
-use smallvec::{smallvec, SmallVec};
-use std::marker::PhantomData;
+use smallvec::{SmallVec, smallvec};
 
-#[allow(dead_code)]
 pub type Unit = ();
-pub type Range = (usize, usize);
 pub type ValueArray2 = [Value; 2];
 pub type ValueArray3 = [Value; 3];
 
@@ -43,6 +43,13 @@ pub(crate) struct IsleContext<'a, 'b, 'c> {
     pub(crate) ctx: &'a mut OptimizeCtx<'b, 'c>,
 }
 
+impl IsleContext<'_, '_, '_> {
+    #[allow(dead_code, reason = "dead code, only on nightly rust at this time")]
+    pub(crate) fn dfg(&self) -> &crate::ir::DataFlowGraph {
+        &self.ctx.func.dfg
+    }
+}
+
 pub(crate) struct InstDataEtorIter<'a, 'b, 'c> {
     stack: SmallVec<[Value; 8]>,
     _phantom1: PhantomData<&'a ()>,
@@ -64,6 +71,7 @@ impl Default for InstDataEtorIter<'_, '_, '_> {
 impl<'a, 'b, 'c> InstDataEtorIter<'a, 'b, 'c> {
     fn new(root: Value) -> Self {
         debug_assert_ne!(root, Value::reserved_value());
+        trace!("new iter from root {root}");
         Self {
             stack: smallvec![root],
             _phantom1: PhantomData,
@@ -97,7 +105,7 @@ where
                 ValueDef::Result(inst, _) if ctx.ctx.func.dfg.inst_results(inst).len() == 1 => {
                     let ty = ctx.ctx.func.dfg.value_type(value);
                     trace!(" -> value of type {}", ty);
-                    return Some((ty, ctx.ctx.func.dfg.insts[inst].clone()));
+                    return Some((ty, ctx.ctx.func.dfg.insts[inst]));
                 }
                 _ => {}
             }
@@ -182,25 +190,41 @@ where
 impl<'a, 'b, 'c> generated_code::Context for IsleContext<'a, 'b, 'c> {
     isle_common_prelude_methods!();
 
-    type inst_data_etor_returns = InstDataEtorIter<'a, 'b, 'c>;
+    type inst_data_value_etor_returns = InstDataEtorIter<'a, 'b, 'c>;
 
-    fn inst_data_etor(&mut self, eclass: Value, returns: &mut InstDataEtorIter<'a, 'b, 'c>) {
+    fn inst_data_value_etor(&mut self, eclass: Value, returns: &mut InstDataEtorIter<'a, 'b, 'c>) {
         *returns = InstDataEtorIter::new(eclass);
     }
 
-    type inst_data_tupled_etor_returns = InstDataEtorIter<'a, 'b, 'c>;
+    type inst_data_value_tupled_etor_returns = InstDataEtorIter<'a, 'b, 'c>;
 
-    fn inst_data_tupled_etor(&mut self, eclass: Value, returns: &mut InstDataEtorIter<'a, 'b, 'c>) {
-        // Literally identical to `inst_data_etor`, just a different nominal type in ISLE
-        self.inst_data_etor(eclass, returns);
+    fn inst_data_value_tupled_etor(
+        &mut self,
+        eclass: Value,
+        returns: &mut InstDataEtorIter<'a, 'b, 'c>,
+    ) {
+        // Literally identical to `inst_data_value_etor`, just a different nominal type in ISLE
+        self.inst_data_value_etor(eclass, returns);
     }
 
     fn make_inst_ctor(&mut self, ty: Type, op: &InstructionData) -> Value {
-        let value = self
-            .ctx
-            .insert_pure_enode(NewOrExistingInst::New(op.clone(), ty));
+        trace!("make_inst_ctor: creating {:?}", op);
+        let value = self.ctx.insert_pure_enode(NewOrExistingInst::New(*op, ty));
         trace!("make_inst_ctor: {:?} -> {}", op, value);
         value
+    }
+
+    fn make_skeleton_inst_ctor(&mut self, data: &InstructionData) -> Inst {
+        let inst = self.ctx.func.dfg.make_inst(*data);
+        self.ctx
+            .func
+            .dfg
+            .make_inst_results(inst, Default::default());
+        inst
+    }
+
+    fn inst_data_etor(&mut self, inst: Inst) -> Option<InstructionData> {
+        Some(self.ctx.func.dfg.insts[inst])
     }
 
     fn value_array_2_ctor(&mut self, arg0: Value, arg1: Value) -> ValueArray2 {
@@ -291,5 +315,55 @@ impl<'a, 'b, 'c> generated_code::Context for IsleContext<'a, 'b, 'c> {
 
     fn u64_bswap64(&mut self, n: u64) -> u64 {
         n.swap_bytes()
+    }
+
+    fn ieee128_constant_extractor(&mut self, n: Constant) -> Option<Ieee128> {
+        self.ctx.func.dfg.constants.get(n).try_into().ok()
+    }
+
+    fn ieee128_constant(&mut self, n: Ieee128) -> Constant {
+        self.ctx.func.dfg.constants.insert(n.into())
+    }
+
+    fn div_const_magic_u32(&mut self, d: u32) -> generated_code::DivConstMagicU32 {
+        let div_const::MU32 {
+            mul_by,
+            do_add,
+            shift_by,
+        } = div_const::magic_u32(d);
+        generated_code::DivConstMagicU32::U32 {
+            mul_by,
+            do_add,
+            shift_by: shift_by.try_into().unwrap(),
+        }
+    }
+
+    fn div_const_magic_u64(&mut self, d: u64) -> generated_code::DivConstMagicU64 {
+        let div_const::MU64 {
+            mul_by,
+            do_add,
+            shift_by,
+        } = div_const::magic_u64(d);
+        generated_code::DivConstMagicU64::U64 {
+            mul_by,
+            do_add,
+            shift_by: shift_by.try_into().unwrap(),
+        }
+    }
+
+    fn div_const_magic_s32(&mut self, d: i32) -> generated_code::DivConstMagicS32 {
+        let div_const::MS32 { mul_by, shift_by } = div_const::magic_s32(d);
+        generated_code::DivConstMagicS32::S32 {
+            mul_by,
+            shift_by: shift_by.try_into().unwrap(),
+        }
+    }
+
+    fn div_const_magic_s64(&mut self, d: i64) -> generated_code::DivConstMagicS64 {
+        let div_const::MS64 { mul_by, shift_by } = div_const::magic_s64(d);
+        generated_code::DivConstMagicS64::S64 {
+            mul_by,
+            shift_by: shift_by.try_into().unwrap(),
+        }
     }
 }

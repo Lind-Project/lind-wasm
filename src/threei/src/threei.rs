@@ -10,6 +10,7 @@ use std::sync::RwLock;
 use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
+use sysdefs::lind_log;
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
 
 use crate::handler_table::{
@@ -321,7 +322,7 @@ pub fn register_handler(
     )
 }
 
-/// This copies the handler table used by a cage to another cage.  
+/// This copies the handler table used by a cage to another cage.
 /// This is often useful for calls like fork, so that a grate can later
 /// add or remove entries.
 ///
@@ -329,18 +330,18 @@ pub fn register_handler(
 /// interposable.
 ///
 /// ## Arguments:
-/// - targetcage: The ID of the cage receiving the copied handler mappings.
 /// - srccage: The ID of the cage whose handler mappings are being copied.
+/// - targetcage: The ID of the cage receiving the copied handler mappings.
 ///
 /// ## Returns:
 /// - 0 on success.
 /// - `ELINDESRCH` if either source or target cage is in the EXITING state.
 /// - `ELINDAPIABORTED` if srccage has no existing handler table.
 pub fn copy_handler_table_to_cage(
-    _callnum: u64,
-    targetcage: u64,
+    _thiscage: u64,
+    _targetcage: u64,
     srccage: u64,
-    _arg1cage: u64,
+    targetcage: u64,
     _arg2: u64,
     _arg2cage: u64,
     _arg3: u64,
@@ -589,7 +590,7 @@ pub fn make_syscall(
 /// it would not be cleaned up by threei.  This call gives threei a chance
 /// to know that the cage is exiting and perform some cleanup.
 ///
-/// This call is non-interposable, unlike harsh_cage_exit, which it calls.  
+/// This call is non-interposable, unlike harsh_cage_exit, which it calls.
 /// This is because this call is not a system call and cannot be triggered
 /// by userspace (except performing some sort of action which causes the
 /// system to be exited uncleanly by the caging software or similar).
@@ -737,9 +738,12 @@ fn _validate_range_read(cage: u64, addr: u64, len: usize, what: &str) -> Result<
     match check_addr_read(cage, addr, len) {
         Ok(_) => Ok(()),
         Err(_) => {
-            eprintln!(
+            lind_log!(
+                THREEI,
                 "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
-                addr, len, what
+                addr,
+                len,
+                what
             );
             Err(threei_const::ELINDAPIABORTED)
         }
@@ -755,9 +759,12 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
     match check_addr_rw(cage, addr, len) {
         Ok(_) => Ok(()),
         Err(_) => {
-            eprintln!(
+            lind_log!(
+                THREEI,
                 "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
-                addr, len, what
+                addr,
+                len,
+                what
             );
             Err(threei_const::ELINDAPIABORTED)
         }
@@ -872,7 +879,8 @@ pub fn copy_data_between_cages(
 ) -> u64 {
     // Disallow same-cage copies. This API is for cross-cage transfer only.
     if srccage == destcage {
-        eprintln!(
+        lind_log!(
+            THREEI,
             "[3i|copy] src and dest cage cannot be the same: {}",
             srccage
         );
@@ -882,7 +890,7 @@ pub fn copy_data_between_cages(
     // Reject requests where `len` exceeds the maximum allowed linear memory size
     // (`MAX_LIND_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
     if let Err(code) = _validate_len(len, lind_platform_const::MAX_LINEAR_MEMORY_SIZE) {
-        eprintln!("[3i|copy] length too large or zero: {}", len);
+        lind_log!(THREEI, "[3i|copy] length too large or zero: {}", len);
         return code;
     }
     // destaddr must be provided (no dynamic allocation support)
@@ -916,7 +924,7 @@ pub fn copy_data_between_cages(
         // strncpy: copy until '\0'
         Ok(CopyType::Strncpy) => {
             if srcaddr == 0 {
-                eprintln!("[3i|copy] src null");
+                lind_log!(THREEI, "[3i|copy] src null");
                 return threei_const::ELINDAPIABORTED;
             }
 
@@ -924,7 +932,7 @@ pub fn copy_data_between_cages(
             let actual_len = match _strlen_in_cage(srccage, srcaddr, len as usize) {
                 Some(n) => n + 1, // include '\0'
                 None => {
-                    eprintln!(
+                    lind_log!(THREEI,
                         "[3i|copy] null terminator not found within max length: cage={}, addr={:x}, max_len={}",
                         srccage, srcaddr, len
                     );
@@ -936,7 +944,7 @@ pub fn copy_data_between_cages(
         }
         // Reject invalid copytype values
         Err(other) => {
-            eprintln!("[3i|copy] invalid copy type: {}", other);
+            lind_log!(THREEI, "[3i|copy] invalid copy type: {}", other);
             return threei_const::ELINDAPIABORTED;
         }
     };
@@ -954,7 +962,7 @@ pub fn copy_data_between_cages(
     let host_dest_addr = destaddr;
     if host_src_addr == 0 || host_dest_addr == 0 {
         // src addr or dest addr is null
-        eprintln!("[3i|copy] host addr translate failed");
+        lind_log!(THREEI, "[3i|copy] host addr translate failed");
         return threei_const::ELINDAPIABORTED;
     }
 
@@ -962,9 +970,12 @@ pub fn copy_data_between_cages(
     if host_src_addr.checked_add(copy_len as u64).is_none()
         || host_dest_addr.checked_add(copy_len as u64).is_none()
     {
-        eprintln!(
+        lind_log!(
+            THREEI,
             "[3i|copy] address overflow: src={:#x} len={} dest={:#x}",
-            srcaddr, copy_len, destaddr
+            srcaddr,
+            copy_len,
+            destaddr
         );
         return threei_const::ELINDAPIABORTED;
     }

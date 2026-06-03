@@ -1,16 +1,16 @@
 use super::{
-    InstanceAllocationRequest, InstanceAllocatorImpl, MemoryAllocationIndex, TableAllocationIndex,
+    InstanceAllocationRequest, InstanceAllocator, MemoryAllocationIndex, TableAllocationIndex,
 };
 use crate::prelude::*;
+use crate::runtime::vm::CompiledModuleId;
 use crate::runtime::vm::instance::RuntimeMemoryCreator;
 use crate::runtime::vm::memory::{DefaultMemoryCreator, Memory};
 use crate::runtime::vm::mpk::ProtectionKey;
 use crate::runtime::vm::table::Table;
-use crate::runtime::vm::CompiledModuleId;
 use alloc::sync::Arc;
-use wasmtime_environ::{
-    DefinedMemoryIndex, DefinedTableIndex, HostPtr, MemoryPlan, Module, TablePlan, VMOffsets,
-};
+use core::future::Future;
+use core::pin::Pin;
+use wasmtime_environ::{DefinedMemoryIndex, DefinedTableIndex, HostPtr, Module, VMOffsets};
 
 #[cfg(feature = "gc")]
 use crate::runtime::vm::{GcHeap, GcHeapAllocationIndex, GcRuntime};
@@ -20,8 +20,8 @@ use wasmtime_fiber::RuntimeFiberStackCreator;
 
 #[cfg(feature = "component-model")]
 use wasmtime_environ::{
-    component::{Component, VMComponentOffsets},
     StaticModuleIndex,
+    component::{Component, VMComponentOffsets},
 };
 
 /// Represents the on-demand instance allocator.
@@ -32,18 +32,26 @@ pub struct OnDemandInstanceAllocator {
     stack_creator: Option<Arc<dyn RuntimeFiberStackCreator>>,
     #[cfg(feature = "async")]
     stack_size: usize,
+    #[cfg(feature = "async")]
+    stack_zeroing: bool,
 }
 
 impl OnDemandInstanceAllocator {
     /// Creates a new on-demand instance allocator.
-    pub fn new(mem_creator: Option<Arc<dyn RuntimeMemoryCreator>>, stack_size: usize) -> Self {
-        let _ = stack_size; // suppress warnings when async feature is disabled.
+    pub fn new(
+        mem_creator: Option<Arc<dyn RuntimeMemoryCreator>>,
+        stack_size: usize,
+        stack_zeroing: bool,
+    ) -> Self {
+        let _ = (stack_size, stack_zeroing); // suppress warnings when async feature is disabled.
         Self {
             mem_creator,
             #[cfg(feature = "async")]
             stack_creator: None,
             #[cfg(feature = "async")]
             stack_size,
+            #[cfg(feature = "async")]
+            stack_zeroing,
         }
     }
 
@@ -62,13 +70,15 @@ impl Default for OnDemandInstanceAllocator {
             stack_creator: None,
             #[cfg(feature = "async")]
             stack_size: 0,
+            #[cfg(feature = "async")]
+            stack_zeroing: false,
         }
     }
 }
 
-unsafe impl InstanceAllocatorImpl for OnDemandInstanceAllocator {
+unsafe impl InstanceAllocator for OnDemandInstanceAllocator {
     #[cfg(feature = "component-model")]
-    fn validate_component_impl<'a>(
+    fn validate_component<'a>(
         &self,
         _component: &Component,
         _offsets: &VMComponentOffsets<HostPtr>,
@@ -77,14 +87,21 @@ unsafe impl InstanceAllocatorImpl for OnDemandInstanceAllocator {
         Ok(())
     }
 
-    fn validate_module_impl(&self, _module: &Module, _offsets: &VMOffsets<HostPtr>) -> Result<()> {
+    fn validate_module(&self, _module: &Module, _offsets: &VMOffsets<HostPtr>) -> Result<()> {
         Ok(())
     }
 
+    #[cfg(feature = "gc")]
+    fn validate_memory(&self, _memory: &wasmtime_environ::Memory) -> Result<()> {
+        Ok(())
+    }
+
+    #[cfg(feature = "component-model")]
     fn increment_component_instance_count(&self) -> Result<()> {
         Ok(())
     }
 
+    #[cfg(feature = "component-model")]
     fn decrement_component_instance_count(&self) {}
 
     fn increment_core_instance_count(&self) -> Result<()> {
@@ -93,33 +110,40 @@ unsafe impl InstanceAllocatorImpl for OnDemandInstanceAllocator {
 
     fn decrement_core_instance_count(&self) {}
 
-    unsafe fn allocate_memory(
-        &self,
-        request: &mut InstanceAllocationRequest,
-        memory_plan: &MemoryPlan,
-        memory_index: DefinedMemoryIndex,
-    ) -> Result<(MemoryAllocationIndex, Memory)> {
+    fn allocate_memory<'a, 'b: 'a, 'c: 'a>(
+        &'a self,
+        request: &'a mut InstanceAllocationRequest<'b, 'c>,
+        ty: &'a wasmtime_environ::Memory,
+        memory_index: Option<DefinedMemoryIndex>,
+    ) -> Pin<Box<dyn Future<Output = Result<(MemoryAllocationIndex, Memory)>> + Send + 'a>> {
         let creator = self
             .mem_creator
             .as_deref()
             .unwrap_or_else(|| &DefaultMemoryCreator);
-        let image = request.runtime_info.memory_image(memory_index)?;
-        let allocation_index = MemoryAllocationIndex::default();
-        let memory = Memory::new_dynamic(
-            memory_plan,
-            creator,
-            request
-                .store
-                .get()
-                .expect("if module has memory plans, store is not empty"),
-            image,
-        )?;
-        Ok((allocation_index, memory))
+
+        crate::runtime::box_future(async move {
+            let image = if let Some(memory_index) = memory_index {
+                request.runtime_info.memory_image(memory_index)?
+            } else {
+                None
+            };
+
+            let allocation_index = MemoryAllocationIndex::default();
+            let memory = Memory::new_dynamic(
+                ty,
+                request.store.engine(),
+                creator,
+                image,
+                request.limiter.as_deref_mut(),
+            )
+            .await?;
+            Ok((allocation_index, memory))
+        })
     }
 
     unsafe fn deallocate_memory(
         &self,
-        _memory_index: DefinedMemoryIndex,
+        _memory_index: Option<DefinedMemoryIndex>,
         allocation_index: MemoryAllocationIndex,
         _memory: Memory,
     ) {
@@ -127,21 +151,22 @@ unsafe impl InstanceAllocatorImpl for OnDemandInstanceAllocator {
         // Normal destructors do all the necessary clean up.
     }
 
-    unsafe fn allocate_table(
-        &self,
-        request: &mut InstanceAllocationRequest,
-        table_plan: &TablePlan,
+    fn allocate_table<'a, 'b: 'a, 'c: 'a>(
+        &'a self,
+        request: &'a mut InstanceAllocationRequest<'b, 'c>,
+        ty: &'a wasmtime_environ::Table,
         _table_index: DefinedTableIndex,
-    ) -> Result<(TableAllocationIndex, Table)> {
-        let allocation_index = TableAllocationIndex::default();
-        let table = Table::new_dynamic(
-            table_plan,
-            request
-                .store
-                .get()
-                .expect("if module has table plans, store is not empty"),
-        )?;
-        Ok((allocation_index, table))
+    ) -> Pin<Box<dyn Future<Output = Result<(TableAllocationIndex, Table)>> + Send + 'a>> {
+        crate::runtime::box_future(async move {
+            let allocation_index = TableAllocationIndex::default();
+            let table = Table::new_dynamic(
+                ty,
+                request.store.engine().tunables(),
+                request.limiter.as_deref_mut(),
+            )
+            .await?;
+            Ok((allocation_index, table))
+        })
     }
 
     unsafe fn deallocate_table(
@@ -157,14 +182,14 @@ unsafe impl InstanceAllocatorImpl for OnDemandInstanceAllocator {
     #[cfg(feature = "async")]
     fn allocate_fiber_stack(&self) -> Result<wasmtime_fiber::FiberStack> {
         if self.stack_size == 0 {
-            anyhow::bail!("fiber stacks are not supported by the allocator")
+            crate::bail!("fiber stacks are not supported by the allocator")
         }
         let stack = match &self.stack_creator {
             Some(stack_creator) => {
-                let stack = stack_creator.new_stack(self.stack_size)?;
+                let stack = stack_creator.new_stack(self.stack_size, self.stack_zeroing)?;
                 wasmtime_fiber::FiberStack::from_custom(stack)
             }
-            None => wasmtime_fiber::FiberStack::new(self.stack_size),
+            None => wasmtime_fiber::FiberStack::new(self.stack_size, self.stack_zeroing),
         }?;
         Ok(stack)
     }
@@ -202,18 +227,24 @@ unsafe impl InstanceAllocatorImpl for OnDemandInstanceAllocator {
     #[cfg(feature = "gc")]
     fn allocate_gc_heap(
         &self,
+        engine: &crate::Engine,
         gc_runtime: &dyn GcRuntime,
+        memory_alloc_index: MemoryAllocationIndex,
+        memory: Memory,
     ) -> Result<(GcHeapAllocationIndex, Box<dyn GcHeap>)> {
-        Ok((GcHeapAllocationIndex::default(), gc_runtime.new_gc_heap()?))
+        debug_assert_eq!(memory_alloc_index, MemoryAllocationIndex::default());
+        let mut heap = gc_runtime.new_gc_heap(engine)?;
+        heap.attach(memory);
+        Ok((GcHeapAllocationIndex::default(), heap))
     }
 
     #[cfg(feature = "gc")]
     fn deallocate_gc_heap(
         &self,
         allocation_index: GcHeapAllocationIndex,
-        gc_heap: Box<dyn crate::runtime::vm::GcHeap>,
-    ) {
+        mut gc_heap: Box<dyn crate::runtime::vm::GcHeap>,
+    ) -> (MemoryAllocationIndex, Memory) {
         debug_assert_eq!(allocation_index, GcHeapAllocationIndex::default());
-        drop(gc_heap);
+        (MemoryAllocationIndex::default(), gc_heap.detach())
     }
 }

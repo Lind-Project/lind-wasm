@@ -1,5 +1,7 @@
 //! Cranelift code generation library.
 #![deny(missing_docs)]
+// Display feature requirements in the documentation when building on docs.rs
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![no_std]
 // Various bits and pieces of this crate might only be used for one platform or
 // another, but it's not really too useful to learn about that all the time. On
@@ -7,10 +9,12 @@
 // which means we'll always detect truly dead code, otherwise if this is only
 // built for one platform we don't have to worry too much about trimming
 // everything down.
-#![cfg_attr(not(feature = "all-arch"), allow(dead_code))]
+#![cfg_attr(
+    not(feature = "all-arch"),
+    allow(dead_code, reason = "see comment above")
+)]
 
-#[allow(unused_imports)] // #[macro_use] is required for no_std
-#[macro_use]
+#[cfg_attr(not(feature = "std"), macro_use)]
 extern crate alloc;
 
 #[cfg(feature = "std")]
@@ -18,9 +22,14 @@ extern crate alloc;
 extern crate std;
 
 #[cfg(not(feature = "std"))]
-use hashbrown::{hash_map, HashMap};
+use hashbrown::{HashMap, HashSet, hash_map};
 #[cfg(feature = "std")]
-use std::collections::{hash_map, HashMap};
+use std::collections::{HashMap, HashSet, hash_map};
+
+/// Type alias for a hash map that uses the Fx hashing algorithm.
+pub type FxHashMap<K, V> = HashMap<K, V, rustc_hash::FxBuildHasher>;
+/// Type alias for a hash set that uses the Fx hashing algorithm.
+pub type FxHashSet<V> = HashSet<V, rustc_hash::FxBuildHasher>;
 
 pub use crate::context::Context;
 pub use crate::value_label::{LabelValueLoc, ValueLabelsRanges, ValueLocRange};
@@ -34,6 +43,9 @@ pub use cranelift_entity as entity;
 #[cfg(feature = "unwind")]
 pub use gimli;
 
+// Pull in generated the `isle_numerics_methods` macro.
+include!(concat!(env!("ISLE_DIR"), "/isle_numerics.rs"));
+
 #[macro_use]
 mod machinst;
 
@@ -44,6 +56,7 @@ pub mod data_value;
 pub mod dbg;
 pub mod dominator_tree;
 pub mod flowgraph;
+pub mod inline;
 pub mod ir;
 pub mod isa;
 pub mod loop_analysis;
@@ -56,13 +69,15 @@ pub mod write;
 
 pub use crate::entity::packed_option;
 pub use crate::machinst::buffer::{
-    FinalizedMachReloc, FinalizedRelocTarget, MachCallSite, MachSrcLoc, MachStackMap,
-    MachTextSectionBuilder, MachTrap, OpenPatchRegion, PatchRegion,
+    ExceptionContextLoc, FinalizedMachCallSite, FinalizedMachExceptionHandler, FinalizedMachReloc,
+    FinalizedRelocTarget, MachCallSite, MachSrcLoc, MachTextSectionBuilder, MachTrap,
+    OpenPatchRegion, PatchRegion,
 };
 pub use crate::machinst::{
-    CompiledCode, Final, MachBuffer, MachBufferFinalized, MachInst, MachInstEmit,
-    MachInstEmitState, MachLabel, RealReg, Reg, RelocDistance, TextSectionBuilder,
-    VCodeConstantData, VCodeConstants, Writable,
+    CallInfo, CompiledCode, Final, FrameLayout, MachBuffer, MachBufferDebugTagList,
+    MachBufferFinalized, MachBufferFrameLayout, MachDebugTagPos, MachInst, MachInstEmit,
+    MachInstEmitState, MachLabel, RealReg, Reg, RelocDistance, TextSectionBuilder, VCodeConstant,
+    VCodeConstantData, VCodeConstants, VCodeInst, Writable,
 };
 
 mod alias_analysis;
@@ -72,7 +87,6 @@ mod ctxhash;
 mod egraph;
 mod inst_predicates;
 mod isle_prelude;
-mod iterators;
 mod legalizer;
 mod nan_canonicalization;
 mod opts;
@@ -80,7 +94,7 @@ mod ranges;
 mod remove_constant_phis;
 mod result;
 mod scoped_hash_map;
-mod unionfind;
+mod take_and_replace;
 mod unreachable_code;
 mod value_label;
 
@@ -88,6 +102,7 @@ mod value_label;
 mod souper_harvest;
 
 pub use crate::result::{CodegenError, CodegenResult, CompileError};
+pub use crate::take_and_replace::TakeAndReplace;
 
 #[cfg(feature = "incremental-cache")]
 pub mod incremental_cache;
@@ -97,9 +112,18 @@ pub mod incremental_cache;
 #[macro_export]
 macro_rules! trace {
     ($($tt:tt)*) => {
-        if cfg!(feature = "trace-log") {
+        if cfg!(any(feature = "trace-log", debug_assertions)) {
             ::log::trace!($($tt)*);
         }
+    };
+}
+
+/// Dynamic check for whether trace logging is enabled.
+#[macro_export]
+macro_rules! trace_log_enabled {
+    () => {
+        cfg!(any(feature = "trace-log", debug_assertions))
+            && ::log::log_enabled!(::log::Level::Trace)
     };
 }
 

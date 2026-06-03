@@ -1,6 +1,16 @@
 //! Debug utils for WebAssembly using Cranelift.
 
+// FIXME: this whole crate opts-in to these two noisier-than-default lints, but
+// this module has lots of hits on this warning which aren't the easiest to
+// resolve. Ideally all warnings would be resolved here though.
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "haven't had a chance to fix these yet"
+)]
+
 use crate::CompiledFunctionMetadata;
+use core::fmt;
 use cranelift_codegen::isa::TargetIsa;
 use object::write::SymbolId;
 use std::collections::HashMap;
@@ -137,7 +147,7 @@ impl<'a> Compilation<'a> {
     /// compilation.
     ///
     /// Each function is additionally accompanied with its module index.
-    fn indexes(&self) -> impl Iterator<Item = (StaticModuleIndex, DefinedFuncIndex)> + '_ {
+    fn indexes(&self) -> impl Iterator<Item = (StaticModuleIndex, DefinedFuncIndex)> + use<'_> {
         self.translations
             .iter()
             .flat_map(|(i, t)| t.module.defined_func_indices().map(move |j| (i, j)))
@@ -171,7 +181,27 @@ impl<'a> Compilation<'a> {
     }
 }
 
-pub use write_debuginfo::{emit_dwarf, DwarfSectionRelocTarget};
+impl<'a> fmt::Debug for Compilation<'a> {
+    // Sample output: '[#0: OneModule, #1: TwoModule, #3]'.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        let mut is_first_module = true;
+        for (i, translation) in self.translations {
+            if !is_first_module {
+                write!(f, ", ")?;
+            } else {
+                is_first_module = false;
+            }
+            write!(f, "#{}", i.as_u32())?;
+            if let Some(name) = translation.debuginfo.name_section.module_name {
+                write!(f, ": {name}")?;
+            }
+        }
+        write!(f, "]")
+    }
+}
+
+pub use write_debuginfo::{DwarfSectionRelocTarget, emit_dwarf};
 
 mod gc;
 mod transform;

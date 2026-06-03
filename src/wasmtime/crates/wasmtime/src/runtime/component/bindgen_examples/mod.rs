@@ -40,7 +40,10 @@
 //! [`wit_parser::Resolve::push_dir`]: https://docs.rs/wit-parser/latest/wit_parser/struct.Resolve.html#method.push_dir
 //! [open an issue]: https://github.com/bytecodealliance/wasmtime/issues/new
 
-#![allow(missing_docs)]
+#![expect(
+    missing_docs,
+    reason = "bindgen-generated types known to not have docs"
+)]
 
 // This "hack" will shadow the `bindgen` macro in general and be inherited to
 // following modules by default. This enables documenting sources as-is while
@@ -102,12 +105,18 @@ macro_rules! bindgen {
 ///     // Configuration of the linker is done through a generated `add_to_linker`
 ///     // method on the bindings structure.
 ///     //
-///     // Note that the closure provided here is a projection from `T` in
+///     // Note that the function provided here is a projection from `T` in
 ///     // `Store<T>` to `&mut U` where `U` implements the `HelloWorldImports`
 ///     // trait. In this case the `T`, `MyState`, is stored directly in the
 ///     // structure so no projection is necessary here.
+///     //
+///     // Note that the second type parameter of `add_to_linker` is chosen here
+///     // as the built-in `HasSelf` type in Wasmtime. This effectively says
+///     // that our function isn't actually projecting, it's returning the
+///     // input, so `HasSelf<_>` is a convenience to avoid writing a custom
+///     // `HasData` implementation.
 ///     let mut linker = Linker::new(&engine);
-///     HelloWorld::add_to_linker(&mut linker, |state: &mut MyState| state)?;
+///     HelloWorld::add_to_linker::<_, HasSelf<_>>(&mut linker, |state| state)?;
 ///
 ///     // As with the core wasm API of Wasmtime instantiation occurs within a
 ///     // `Store`. The bindings structure contains an `instantiate` method which
@@ -167,7 +176,7 @@ pub mod _0_hello_world;
 ///     let component = Component::from_file(&engine, "./your-component.wasm")?;
 ///
 ///     let mut linker = Linker::new(&engine);
-///     MyWorld::add_to_linker(&mut linker, |state: &mut MyState| state)?;
+///     MyWorld::add_to_linker::<_, HasSelf<_>>(&mut linker, |state| state)?;
 ///
 ///     let mut store = Store::new(
 ///         &engine,
@@ -205,11 +214,11 @@ pub mod _1_world_imports;
 ///     // ...
 /// }
 ///
-/// # mod rand { pub fn thread_rng() -> G { G } pub struct G; impl G { pub fn gen(&self) -> u32 { 0 } } }
+/// # mod rand { pub fn thread_rng() -> G { G } pub struct G; impl G { pub fn r#gen(&self) -> u32 { 0 } } }
 /// // Note that the trait here is per-interface and within a submodule now.
 /// impl my::project::host::Host for MyState {
 ///     fn gen_random_integer(&mut self) -> u32 {
-///         rand::thread_rng().gen()
+///         rand::thread_rng().r#gen()
 ///     }
 ///
 ///     fn sha256(&mut self, bytes: Vec<u8>) -> String {
@@ -224,7 +233,7 @@ pub mod _1_world_imports;
 ///     let component = Component::from_file(&engine, "./your-component.wasm")?;
 ///
 ///     let mut linker = Linker::new(&engine);
-///     HelloWorld::add_to_linker(&mut linker, |state: &mut MyState| state)?;
+///     HelloWorld::add_to_linker::<_, HasSelf<_>>(&mut linker, |state| state)?;
 ///
 ///     let mut store = Store::new(
 ///         &engine,
@@ -384,7 +393,7 @@ pub mod _4_imported_resources;
 ///
 /// ```rust
 /// use wasmtime::{Result, Engine, Store};
-/// use wasmtime::component::{bindgen, Component, Linker};
+/// use wasmtime::component::{bindgen, Component, Linker, HasSelf};
 ///
 #[doc = include_str!("./_5_all_world_export_kinds.rs")]
 ///
@@ -402,7 +411,7 @@ pub mod _4_imported_resources;
 ///     let component = Component::from_file(&engine, "./your-component.wasm")?;
 ///
 ///     let mut linker = Linker::new(&engine);
-///     WithExports::add_to_linker(&mut linker, |state: &mut MyState| state)?;
+///     WithExports::add_to_linker::<_, HasSelf<_>>(&mut linker, |state| state)?;
 ///
 ///     let mut store = Store::new(&engine, MyState);
 ///     let bindings = WithExports::instantiate(&mut store, &component, &linker)?;
@@ -486,3 +495,150 @@ pub mod _5_all_world_export_kinds;
 /// }
 /// ```
 pub mod _6_exported_resources;
+
+/// Example of generating **async** bindings for imported resources in a world.
+///
+/// Notable differences from [`_4_imported_resources`] are:
+/// * async functions are used
+/// * enabled async in bindgen! macro
+///
+/// See [wasi_async_example](https://github.com/bytecodealliance/wasmtime/blob/main/examples/wasip1-async/main.rs) for async function calls on a host.
+///
+/// ```rust
+/// use wasmtime::Result;
+/// use wasmtime::component::{bindgen, ResourceTable, Resource};
+/// use example::imported_resources::logging::{Level, Host, HostLogger};
+///
+#[doc = include_str!("./_7_async.rs")]
+///
+/// #[derive(Default)]
+/// struct MyState {
+///     // Manages the mapping of `MyLogger` structures to `Resource<MyLogger>`.
+///     table: ResourceTable,
+/// }
+///
+/// // There are no free-functions on `interface logging`, so this is an empty
+/// // impl.
+/// impl Host for MyState {}
+///
+/// // This separate `HostLogger` trait serves to act as a namespace for just
+/// // the `logger`-related resource methods.
+/// impl HostLogger for MyState {
+///     // A `constructor` in WIT maps to a `new` function in Rust.
+///     async fn new(&mut self, max_level: Level) -> Result<Resource<MyLogger>> {
+///         let id = self.table.push(MyLogger { max_level })?;
+///         Ok(id)
+///     }
+///
+///     async fn get_max_level(&mut self, logger: Resource<MyLogger>) -> Result<Level> {
+///         debug_assert!(!logger.owned());
+///         let logger = self.table.get(&logger)?;
+///         Ok(logger.max_level)
+///     }
+///
+///     async fn set_max_level(&mut self, logger: Resource<MyLogger>, level: Level) -> Result<()> {
+///         debug_assert!(!logger.owned());
+///         let logger = self.table.get_mut(&logger)?;
+///         logger.max_level = level;
+///         Ok(())
+///     }
+///
+///     async fn log(&mut self, logger: Resource<MyLogger>, level: Level, msg: String) -> Result<()> {
+///         debug_assert!(!logger.owned());
+///         let logger = self.table.get_mut(&logger)?;
+///         if (level as u32) <= (logger.max_level as u32) {
+///             println!("{msg}");
+///         }
+///         Ok(())
+///     }
+///
+///     async fn drop(&mut self, logger: Resource<MyLogger>) -> Result<()> {
+///         debug_assert!(logger.owned());
+///         let _logger: MyLogger = self.table.delete(logger)?;
+///         // ... custom destruction logic here if necessary, otherwise
+///         // a `Drop for MyLogger` would also work.
+///         Ok(())
+///     }
+/// }
+///
+/// # fn main() {}
+/// ```
+pub mod _7_async;
+
+/// Example of using [`StoreContextMut`] in imported functions.
+///
+/// This is an example of using the `store` option to the `imports`
+/// configuration of the [`bindgen!`](crate::component::bindgen) macro. Like
+/// seen in previous examples a
+/// [`MyWorldImports`](_8_store_in_imports::MyWorldImports) trait is generated
+/// for `my-world`, but imports that have access to the store get added to a
+/// separate trait with a `*WithStore` suffix, in this case
+/// [`MyWorldImportsWithStore`](_8_store_in_imports::MyWorldImportsWithStore).
+/// This second trait provides access to a [`StoreContextMut`].
+///
+/// [`StoreContextMut`]: crate::StoreContextMut
+///
+/// ```rust
+/// use wasmtime::component::{bindgen, HasData, Access, Accessor};
+/// use wasmtime::{StoreContextMut, AsContextMut};
+///
+#[doc = include_str!("./_8_store_in_imports.rs")]
+///
+/// struct MyState {
+///     // ...
+/// }
+///
+/// impl HasData for MyState {
+///     type Data<'a> = &'a mut MyState;
+/// }
+///
+/// impl MyWorldImportsWithStore for MyState {
+///     /// Synchronous functions that have access to the store are defined in
+///     /// Rust as a normal `fn` with an `Access` as the first parameter.
+///     fn sync_with_store<T>(mut host: Access<'_, T, Self>) {
+///         // The `Access` type implements `AsContextMut` to manipulate and
+///         // operate on the store.
+///         let mut store: StoreContextMut<'_, T> = host.as_context_mut();
+///
+///         // The `Access` type can be used to get the `Data` projection of
+///         // the `HasData` trait implementation above, in this case
+///         // ourselves.
+///         let my_state: &mut MyState = host.get();
+///     }
+///
+///     /// Asynchronous functions that have access to the store are defined in
+///     /// Rust as an `async fn` with an `Accessor` as the first parameter.
+///     async fn async_with_store<T>(accessor: &Accessor<T, Self>) {
+///         // The `Accessor` type does not implement `AsContextMut` directly
+///         // and instead represents the ability to, synchronously, work with
+///         // the store. Notably borrows into the store or `Self` cannot be
+///         // persisted across await points
+///         accessor.with(|mut access| {
+///             // same as `sync_with_store` above
+///             let mut store: StoreContextMut<'_, T> = access.as_context_mut();
+///             let my_state: &mut MyState = access.get();
+///
+///             // ...
+///         });
+///
+///         some_function().await;
+/// #       async fn some_function() {}
+///
+///         accessor.with(|mut access| {
+///             // ...
+///         });
+///     }
+/// }
+///
+/// // Functions that don't have access to the store are defined with
+/// // `&mut self` indicating that they can only access data in `self`, not the
+/// // entire store.
+/// impl MyWorldImports for MyState {
+///     fn sync_without_store(&mut self) { /* ... */ }
+///     async fn async_without_store(&mut self) { /* ... */ }
+/// }
+///
+/// # fn main() {}
+/// ```
+#[cfg(feature = "component-model-async")]
+pub mod _8_store_in_imports;

@@ -5,22 +5,23 @@
 
 use core::cell::Cell;
 
+#[cfg(has_virtual_memory)]
 pub mod mmap;
+pub mod traphandlers;
+#[cfg(has_host_compiler_backend)]
 pub mod unwind;
+#[cfg(has_virtual_memory)]
 pub mod vm;
 
+#[cfg(all(has_native_signals, target_vendor = "apple"))]
+pub mod machports;
+#[cfg(has_native_signals)]
 pub mod signals;
 
-cfg_if::cfg_if! {
-    if #[cfg(target_os = "macos")] {
-        pub mod machports;
-
-        pub mod macos_traphandlers;
-        pub use macos_traphandlers as traphandlers;
-    } else {
-        pub use signals as traphandlers;
-    }
-}
+#[cfg(all(target_os = "linux", target_pointer_width = "64", feature = "std"))]
+mod pagemap;
+#[cfg(not(all(target_os = "linux", target_pointer_width = "64", feature = "std")))]
+use crate::vm::pagemap_disabled as pagemap;
 
 std::thread_local!(static TLS: Cell<*mut u8> = const { Cell::new(std::ptr::null_mut()) });
 

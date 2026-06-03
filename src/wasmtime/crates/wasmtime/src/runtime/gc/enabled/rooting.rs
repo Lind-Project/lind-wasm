@@ -27,24 +27,70 @@
 //!    not a burden for users. Additionally, the API's types should be `Sync`
 //!    and `Send` so that they work well with async Rust.
 //!
-//! For example, goals (3) and (4) are in conflict when we think about how to
-//! support (2). Ideally, for ergonomics, a root would automatically unroot
-//! itself when dropped. But in the general case that requires holding a
-//! reference to the store's root set, and that root set needs to be held
-//! simultaneously by all GC roots, and they each need to mutate the set to
-//! unroot themselves. That implies `Rc<RefCell<...>>` or `Arc<Mutex<...>>`! The
-//! former makes the store and GC root types not `Send` and not `Sync`. The
-//! latter imposes synchronization and locking overhead. So we instead make GC
-//! roots indirect and require passing in a store context explicitly to unroot
-//! in the general case. This trades worse ergonomics for better performance and
-//! support for moving GC.
+//! The two main design axes that trade off the above goals are:
+//!
+//! - Where the GC reference itself is held. A root object could
+//!   directly hold the underlying GC reference (offset into the GC
+//!   storage area), which would allow more efficient dereferencing
+//!   and access to the referred-to GC object. However, goal (2)
+//!   requires that the GC is able to update references when objects
+//!   move during a GC. Thus, such "direct roots" would need to be
+//!   registered somehow in a global root registry, and would need to
+//!   unregister themselves when dropped.
+//!
+//!   The alternative is to hold some indirect kind of reference to a
+//!   GC reference, with the latter stored directly in the `Store` so
+//!   the GC can update it freely. This adds one pointer-chasing hop
+//!   to accesses, but works much more nicely with ownership
+//!   semantics. Logically, the `Store` "owns" the actual pointers;
+//!   and rooting types own the slots that they are stored in.
+//!
+//!   For the above reasons, all of our rooting types below use
+//!   indirection. This avoids the need for an unsafe
+//!   intrusive-linked-list for global registration, or a shared
+//!   reference to a mutex-protected registry, or some other
+//!   error-prone technique.
+//!
+//! - How unrooting occurs. Ideally, a rooting type would implement
+//!   the Rust `Drop` trait and unroot itself when the Rust value is
+//!   dropped. However, because the rooting state is held in the
+//!   `Store`, this direct approach would imply keeping a shared,
+//!   mutex-protected handle to the registry in every rooting
+//!   object. This would add synchronization overhead to the common
+//!   case, and in general would be a bad tradeoff.
+//!
+//!   However, there are several other approaches:
+//!
+//!   - The user could use an RAII wrapper that *does* own the `Store`,
+//!     and defines a "scope" in which roots are created and then
+//!     bulk-unrooted at the close of the scope.
+//!   - The rooting type could hold a shared reference to some state
+//!     *other* than the full registry, and update a flag in that
+//!     state indicating it has been dropped; the `Store` could then
+//!     later observe that flag and remove the root. This would have
+//!     some allocation cost, but the shared state would be
+//!     independent of the `Store` and specific to each root, so would
+//!     impose no synchronization overhead between different roots or
+//!     the GC itself.
+//!   - The rooting type could provide a fully manual `unroot` method,
+//!     allowing the user to make use of their own knowledge of their
+//!     application's lifetimes and semantics and remove roots when
+//!     appropriate.
+//!
+//!   We provide an implementation of the first two of these
+//!   strategies below in `Rooted` and `OwnedRooted`. The last, fully
+//!   manual, approach is too difficult to use correctly (it cannot
+//!   implement Rust's `Drop` trait, but there is no way in Rust to
+//!   enforce that a value must be consumed rather than dropped) so it
+//!   is not implemented.
 //!
 //! ## Two Flavors of Rooting API
 //!
-//! Okay, with that out of the way, this module provides two flavors of rooting
-//! API. One for the common, scoped lifetime case, and another for the rare case
-//! where we really need a GC root with an arbitrary, non-LIFO/non-scoped
-//! lifetime:
+//! Okay, with that out of the way, this module provides two flavors
+//! of rooting API. One for the common, scoped lifetime case, and one that
+//! carries ownership until dropped, and can work as an RAII handle
+//! that interacts well with Rust ownership semantics (but at a minor
+//! performance cost):
 //!
 //! 1. `RootScope` and `Rooted<T>`: These are used for temporarily rooting GC
 //!    objects for the duration of a scope. The internal implementation takes
@@ -64,27 +110,40 @@
 //!    This supports the common use case for rooting and provides good
 //!    ergonomics.
 //!
-//! 2. `ManuallyRooted<T>`: This is the fully general rooting API used for
-//!    holding onto non-LIFO GC roots with arbitrary lifetimes. However, users
-//!    must manually unroot them. Failure to manually unroot a
-//!    `ManuallyRooted<T>` before it is dropped will result in the GC object
-//!    (and everything it transitively references) leaking for the duration of
-//!    the `Store`'s lifetime.
+//! 2. `OwnedRooted<T>`: This is a root that manages rooting and
+//!    unrooting automatically with its lifetime as a Rust value. In
+//!    other words, the continued existence of the Rust value ensures
+//!    the rooting of the underlying GC reference; and when the Rust
+//!    value is dropped, the underlying GC reference is no longer
+//!    rooted.
+//!
+//!    Internally, this root holds a shared reference to a
+//!    *root-specific* bit of state that is also tracked and observed
+//!    by the `Store`.  This means that there is minor memory
+//!    allocation overhead (an `Arc<()>`) for each such root; this
+//!    memory is shared over all clones of this root. The rooted GC
+//!    reference is *logically* unrooted as soon as the last clone of
+//!    this root is dropped. Internally the root may still exist until
+//!    the next GC, or "root trim" when another `OwnedRooted` is
+//!    created, but that is unobservable externally, and will not
+//!    result in any additional GC object lifetime because it is
+//!    always cleaned up before a gc.
 //!
 //!    This type is roughly similar to SpiderMonkey's [`PersistentRooted<T>`],
-//!    although they avoid the manual-unrooting with internal mutation and
-//!    shared references. (Our constraints mean we can't do those things, as
-//!    mentioned explained above.)
+//!    although they register roots on a per-thread `JSContext`, avoiding
+//!    mutation costs in a way that is not viable for Wasmtime (which needs
+//!    `Store`s to be `Send`).
 //!
 //!    [`PersistentRooted<T>`]: http://devdoc.net/web/developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS::PersistentRooted.html
 //!
-//! At the end of the day, both `Rooted<T>` and `ManuallyRooted<T>` are just
-//! tagged indices into the store's `RootSet`. This indirection allows working
-//! with Rust's borrowing discipline (we use `&mut Store` to represent mutable
-//! access to the GC heap) while still allowing rooted references to be moved
-//! around without tying up the whole store in borrows. Additionally, and
-//! crucially, this indirection allows us to update the *actual* GC pointers in
-//! the `RootSet` and support moving GCs (again, as mentioned above).
+//! At the end of the day, all of the above root types are just tagged
+//! indices into the store's `RootSet`. This indirection allows
+//! working with Rust's borrowing discipline (we use `&mut Store` to
+//! represent mutable access to the GC heap) while still allowing
+//! rooted references to be moved around without tying up the whole
+//! store in borrows. Additionally, and crucially, this indirection
+//! allows us to update the *actual* GC pointers in the `RootSet` and
+//! support moving GCs (again, as mentioned above).
 //!
 //! ## Unrooted References
 //!
@@ -102,22 +161,24 @@
 //! can. However, if you really must, consider also using an `AutoAssertNoGc`
 //! across the block of code that is manipulating raw GC references.
 
-use crate::prelude::*;
 use crate::runtime::vm::{GcRootsList, GcStore, VMGcRef};
 use crate::{
-    store::{AutoAssertNoGc, StoreId, StoreOpaque},
     AsContext, AsContextMut, GcRef, Result, RootedGcRef,
+    error::OutOfMemory,
+    store::{AsStoreOpaque, AutoAssertNoGc, StoreId, StoreOpaque},
 };
+use crate::{ValRaw, prelude::*};
+use alloc::sync::{Arc, Weak};
 use core::any;
 use core::marker;
-use core::mem;
-use core::num::NonZeroU64;
+use core::mem::{self, MaybeUninit};
+use core::num::{NonZeroU64, NonZeroUsize};
 use core::{
     fmt::{self, Debug},
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
 };
-use wasmtime_slab::{Id as SlabId, Slab};
+use wasmtime_core::slab::{Id as SlabId, Slab};
 
 mod sealed {
     use super::*;
@@ -154,7 +215,7 @@ mod sealed {
         /// objects that have been unrooted.
         fn try_gc_ref<'a>(&self, store: &'a StoreOpaque) -> Result<&'a VMGcRef> {
             self.get_gc_ref(store).ok_or_else(|| {
-                anyhow!("attempted to use a garbage-collected object that has been unrooted")
+                format_err!("attempted to use a garbage-collected object that has been unrooted")
             })
         }
 
@@ -167,14 +228,14 @@ mod sealed {
         /// Panics if this root is not associated with the given store.
         fn clone_gc_ref(&self, store: &mut AutoAssertNoGc<'_>) -> Option<VMGcRef> {
             let gc_ref = self.get_gc_ref(store)?.unchecked_copy();
-            Some(store.unwrap_gc_store_mut().clone_gc_ref(&gc_ref))
+            Some(store.clone_gc_ref(&gc_ref))
         }
 
         /// Same as `clone_gc_ref` but returns an error instead of `None` for
         /// objects that have been unrooted.
         fn try_clone_gc_ref(&self, store: &mut AutoAssertNoGc<'_>) -> Result<VMGcRef> {
             let gc_ref = self.try_gc_ref(store)?.unchecked_copy();
-            Ok(store.gc_store_mut()?.clone_gc_ref(&gc_ref))
+            Ok(store.clone_gc_ref(&gc_ref))
         }
     }
 }
@@ -182,7 +243,7 @@ pub(crate) use sealed::*;
 
 /// The index of a GC root inside a particular store's GC root set.
 ///
-/// Can be either a LIFO- or manually-rooted object, depending on the
+/// Can be either a LIFO- or owned-rooted object, depending on the
 /// `PackedIndex`.
 ///
 /// Every `T` such that `T: GcRef` must be a newtype over this `GcRootIndex`.
@@ -200,7 +261,7 @@ pub struct GcRootIndex {
 const _: () = {
     // NB: these match the C API which should also be updated if this changes
     assert!(mem::size_of::<GcRootIndex>() == 16);
-    assert!(mem::align_of::<GcRootIndex>() == 8);
+    assert!(mem::align_of::<GcRootIndex>() == mem::align_of::<u64>());
 };
 
 impl GcRootIndex {
@@ -209,13 +270,23 @@ impl GcRootIndex {
         self.store_id == store.id()
     }
 
-    /// Same as `RootedGcRefImpl::get_gc_ref` but doesn't check that the raw GC
-    /// ref is only used during the scope of an `AutoAssertNoGc`.
+    /// Same as `RootedGcRefImpl::get_gc_ref` but not associated with any
+    /// particular `T: GcRef`.
     ///
-    /// It is up to callers to avoid triggering a GC while holding onto the
-    /// resulting raw `VMGcRef`. Failure to uphold this invariant is memory safe
-    /// but will lead to general incorrectness such as panics and wrong results.
-    pub(crate) fn unchecked_get_gc_ref<'a>(&self, store: &'a StoreOpaque) -> Option<&'a VMGcRef> {
+    /// We must avoid triggering a GC while holding onto the resulting raw
+    /// `VMGcRef` to avoid use-after-free bugs and similar. The `'a` lifetime
+    /// threaded from the `store` to the result will normally prevent GCs
+    /// statically, at compile time, since performing a GC requires a mutable
+    /// borrow of the store. However, if you call `VMGcRef::unchecked_copy` on
+    /// the resulting GC reference, then all bets are off and this invariant is
+    /// up to you to manually uphold. Failure to uphold this invariant is memory
+    /// safe but will lead to general incorrectness such as panics and wrong
+    /// results.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is not associated with the given store.
+    pub(crate) fn get_gc_ref<'a>(&self, store: &'a StoreOpaque) -> Option<&'a VMGcRef> {
         assert!(
             self.comes_from_same_store(store),
             "object used with wrong store"
@@ -227,8 +298,8 @@ impl GcRootIndex {
             } else {
                 None
             }
-        } else if let Some(id) = self.index.as_manual() {
-            let gc_ref = store.gc_roots().manually_rooted.get(id);
+        } else if let Some(id) = self.index.as_owned() {
+            let gc_ref = store.gc_roots().owned_rooted.get(id);
             debug_assert!(gc_ref.is_some());
             gc_ref
         } else {
@@ -236,29 +307,15 @@ impl GcRootIndex {
         }
     }
 
-    /// Same as `RootedGcRefImpl::get_gc_ref` but not associated with any
-    /// particular `T: GcRef`.
-    pub(crate) fn get_gc_ref<'a>(&self, store: &'a AutoAssertNoGc<'_>) -> Option<&'a VMGcRef> {
-        self.unchecked_get_gc_ref(store)
-    }
-
-    /// Same as `unchecked_get_gc_ref` but returns an error instead of `None` if
+    /// Same as `get_gc_ref` but returns an error instead of `None` if
     /// the GC reference has been unrooted.
     ///
     /// # Panics
     ///
     /// Panics if `self` is not associated with the given store.
-    pub(crate) fn unchecked_try_gc_ref<'a>(&self, store: &'a StoreOpaque) -> Result<&'a VMGcRef> {
-        self.unchecked_get_gc_ref(store).ok_or_else(|| {
-            anyhow!("attempted to use a garbage-collected object that has been unrooted")
-        })
-    }
-
-    /// Same as `get_gc_ref` but returns an error instead of `None` if the GC
-    /// reference has been unrooted.
-    pub(crate) fn try_gc_ref<'a>(&self, store: &'a AutoAssertNoGc<'_>) -> Result<&'a VMGcRef> {
+    pub(crate) fn try_gc_ref<'a>(&self, store: &'a StoreOpaque) -> Result<&'a VMGcRef> {
         self.get_gc_ref(store).ok_or_else(|| {
-            anyhow!("attempted to use a garbage-collected object that has been unrooted")
+            format_err!("attempted to use a garbage-collected object that has been unrooted")
         })
     }
 
@@ -266,16 +323,16 @@ impl GcRootIndex {
     /// particular `T: GcRef`.
     pub(crate) fn try_clone_gc_ref(&self, store: &mut AutoAssertNoGc<'_>) -> Result<VMGcRef> {
         let gc_ref = self.try_gc_ref(store)?.unchecked_copy();
-        Ok(store.gc_store_mut()?.clone_gc_ref(&gc_ref))
+        Ok(store.clone_gc_ref(&gc_ref))
     }
 }
 
 /// This is a bit-packed version of
 ///
 /// ```ignore
-/// enema {
+/// enum {
 ///     Lifo(usize),
-///     Manual(SlabId),
+///     Owned(SlabId),
 /// }
 /// ```
 ///
@@ -289,8 +346,8 @@ impl Debug for PackedIndex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(index) = self.as_lifo() {
             f.debug_tuple("PackedIndex::Lifo").field(&index).finish()
-        } else if let Some(id) = self.as_manual() {
-            f.debug_tuple("PackedIndex::Manual").field(&id).finish()
+        } else if let Some(id) = self.as_owned() {
+            f.debug_tuple("PackedIndex::Owned").field(&id).finish()
         } else {
             unreachable!()
         }
@@ -300,7 +357,7 @@ impl Debug for PackedIndex {
 impl PackedIndex {
     const DISCRIMINANT_MASK: u32 = 0b1 << 31;
     const LIFO_DISCRIMINANT: u32 = 0b0 << 31;
-    const MANUAL_DISCRIMINANT: u32 = 0b1 << 31;
+    const OWNED_DISCRIMINANT: u32 = 0b1 << 31;
     const PAYLOAD_MASK: u32 = !Self::DISCRIMINANT_MASK;
 
     fn new_lifo(index: usize) -> PackedIndex {
@@ -309,17 +366,17 @@ impl PackedIndex {
         let packed = PackedIndex(Self::LIFO_DISCRIMINANT | index32);
         debug_assert!(packed.is_lifo());
         debug_assert_eq!(packed.as_lifo(), Some(index));
-        debug_assert!(!packed.is_manual());
-        debug_assert!(packed.as_manual().is_none());
+        debug_assert!(!packed.is_owned());
+        debug_assert!(packed.as_owned().is_none());
         packed
     }
 
-    fn new_manual(id: SlabId) -> PackedIndex {
+    fn new_owned(id: SlabId) -> PackedIndex {
         let raw = id.into_raw();
         assert_eq!(raw & Self::DISCRIMINANT_MASK, 0);
-        let packed = PackedIndex(Self::MANUAL_DISCRIMINANT | raw);
-        debug_assert!(packed.is_manual());
-        debug_assert_eq!(packed.as_manual(), Some(id));
+        let packed = PackedIndex(Self::OWNED_DISCRIMINANT | raw);
+        debug_assert!(packed.is_owned());
+        debug_assert_eq!(packed.as_owned(), Some(id));
         debug_assert!(!packed.is_lifo());
         debug_assert!(packed.as_lifo().is_none());
         packed
@@ -333,8 +390,8 @@ impl PackedIndex {
         self.discriminant() == Self::LIFO_DISCRIMINANT
     }
 
-    fn is_manual(&self) -> bool {
-        self.discriminant() == Self::MANUAL_DISCRIMINANT
+    fn is_owned(&self) -> bool {
+        self.discriminant() == Self::OWNED_DISCRIMINANT
     }
 
     fn payload(&self) -> u32 {
@@ -349,8 +406,8 @@ impl PackedIndex {
         }
     }
 
-    fn as_manual(&self) -> Option<SlabId> {
-        if self.is_manual() {
+    fn as_owned(&self) -> Option<SlabId> {
+        if self.is_owned() {
             Some(SlabId::from_raw(self.payload()))
         } else {
             None
@@ -361,9 +418,19 @@ impl PackedIndex {
 /// The set of all embedder-API GC roots in a single store/heap.
 #[derive(Debug, Default)]
 pub(crate) struct RootSet {
-    /// GC roots with arbitrary lifetime that are manually rooted and unrooted,
-    /// for use with `ManuallyRooted<T>`.
-    manually_rooted: Slab<VMGcRef>,
+    /// GC roots with arbitrary lifetime that are unrooted when
+    /// liveness flags are cleared (seen during a trimming pass), for
+    /// use with `OwnedRooted<T>`.
+    owned_rooted: Slab<VMGcRef>,
+
+    /// List of liveness flags and corresponding `SlabId`s into the
+    /// `owned_rooted` slab.
+    liveness_flags: Vec<(Weak<()>, SlabId)>,
+
+    /// High-water mark for liveness flag trimming. We use this to
+    /// ensure we have amortized constant-time behavior on adding
+    /// roots. See note below on `trim_liveness_flags()`.
+    liveness_trim_high_water: Option<NonZeroUsize>,
 
     /// Strictly LIFO-ordered GC roots, for use with `RootScope` and
     /// `Rooted<T>`.
@@ -385,18 +452,18 @@ impl RootSet {
         log::trace!("Begin trace user LIFO roots");
         for root in &mut self.lifo_roots {
             unsafe {
-                gc_roots_list.add_root((&mut root.gc_ref).into());
+                gc_roots_list.add_root((&mut root.gc_ref).into(), "user LIFO root");
             }
         }
         log::trace!("End trace user LIFO roots");
 
-        log::trace!("Begin trace user manual roots");
-        for (_id, root) in self.manually_rooted.iter_mut() {
+        log::trace!("Begin trace user owned roots");
+        for (_id, root) in self.owned_rooted.iter_mut() {
             unsafe {
-                gc_roots_list.add_root(root.into());
+                gc_roots_list.add_root(root.into(), "user owned root");
             }
         }
-        log::trace!("End trace user manual roots");
+        log::trace!("End trace user owned roots");
     }
 
     /// Enter a LIFO rooting scope.
@@ -417,7 +484,7 @@ impl RootSet {
     ///
     /// Calls to `{enter,exit}_lifo_scope` must happen in a strict LIFO order.
     #[inline]
-    pub(crate) fn exit_lifo_scope(&mut self, gc_store: &mut GcStore, scope: usize) {
+    pub(crate) fn exit_lifo_scope(&mut self, gc_store: Option<&mut GcStore>, scope: usize) {
         debug_assert!(self.lifo_roots.len() >= scope);
 
         // If we actually have roots to unroot, call an out-of-line slow path.
@@ -428,7 +495,7 @@ impl RootSet {
 
     #[inline(never)]
     #[cold]
-    fn exit_lifo_scope_slow(&mut self, gc_store: &mut GcStore, scope: usize) {
+    fn exit_lifo_scope_slow(&mut self, mut gc_store: Option<&mut GcStore>, scope: usize) {
         self.lifo_generation += 1;
 
         // TODO: In the case where we have a tracing GC that doesn't need to
@@ -438,14 +505,20 @@ impl RootSet {
 
         let mut lifo_roots = mem::take(&mut self.lifo_roots);
         for root in lifo_roots.drain(scope..) {
-            gc_store.drop_gc_ref(root.gc_ref);
+            // Only drop the GC reference if we actually have a GC store. How
+            // can we have a GC reference but not a GC store? If we've only
+            // created `i31refs`, we never force a GC store's allocation. This
+            // is fine because `i31ref`s never need drop barriers.
+            if let Some(gc_store) = &mut gc_store {
+                gc_store.drop_gc_ref(root.gc_ref);
+            }
         }
         self.lifo_roots = lifo_roots;
     }
 
     pub(crate) fn with_lifo_scope<S, T>(store: &mut S, f: impl FnOnce(&mut S) -> T) -> T
     where
-        S: DerefMut<Target = StoreOpaque>,
+        S: ?Sized + DerefMut<Target = StoreOpaque>,
     {
         let scope = store.gc_roots().enter_lifo_scope();
         let ret = f(store);
@@ -463,6 +536,181 @@ impl RootSet {
             generation,
             index,
         }
+    }
+
+    /// Trim any stale (dropped) owned roots.
+    ///
+    /// `OwnedRooted` is implemented in a way that avoids the need to
+    /// have or keep a reference to the store (and thus this struct)
+    /// during its drop operation: to allow it to be independent, it
+    /// holds a shared reference to some other memory and sets that
+    /// "liveness flag" appropriately, then we later observe dead
+    /// liveness flags during a periodic scan and actually deallocate
+    /// the roots. We use an `Arc<()>` for this: it permits cheap
+    /// cloning, and it has minimal memory overhead. We hold a weak
+    /// ref in a list alongside the actual `GcRootIndex`, and we free
+    /// that index in the slab of owned roots when we observe that
+    /// only our weak ref remains.
+    ///
+    /// This trim step is logically separate from a full GC, though it
+    /// would not be very productive to do a GC without doing a
+    /// root-trim first: the root-trim should be quite a lot cheaper,
+    /// and it will allow for more garbage to exist.
+    ///
+    /// There is, additionally, nothing stopping us from doing trims
+    /// more often than just before each GC, and there are reasons
+    /// this could be a good idea: for example, a user program that
+    /// creates and removes many roots (perhaps as it accesses the GC
+    /// object graph) but ultimately is dealing with a static graph,
+    /// without further allocation, may need the "root set" to be GC'd
+    /// independently from the actual heap. Thus, we could trim before
+    /// adding a new root to ensure we don't grow that unboundedly (or
+    /// force an otherwise unneeded GC).
+    ///
+    /// The first case, just before GC, wants a "full trim": there's
+    /// no reason not to unroot as much as possible before we do the
+    /// expensive work of tracing the whole heap.
+    ///
+    /// On the other hand, the second case, adding a new root, wants a
+    /// kind of trim that is amortized constant time. Consider: if we
+    /// have some threshold for the trim, say N roots, and the user
+    /// program continually adds and removes one root such that it
+    /// goes just over the threshold, we might scan all N liveness
+    /// flags for each step, resulting in quadratic behavior overall.
+    ///
+    /// Thus, we implement a "high water mark" algorithm to guard
+    /// against this latter case: on the add-a-new-root case, we trim
+    /// only if the list is longer than the high water mark, and we
+    /// set the high water mark each time based on the after-trim
+    /// size. See below for details on this algorithm.
+    ///
+    /// `eager` chooses whether we eagerly trim roots or pre-filter
+    /// using the high-water mark.
+    ///
+    /// # Growth Algorithm
+    ///
+    /// We want to balance two factors: we must ensure that the
+    /// algorithmic complexity of creating a new root is amortized
+    /// O(1), and we must ensure that repeated creation and deletion
+    /// of roots without any GC must result in a root-set that has a
+    /// size linear in the actual live-root-set size. Stated formally:
+    ///
+    /// 1. Root creation must be O(1), amortized
+    /// 2. liveness_flags.len() must be O(|max live owned roots|),
+    ///    i.e., must not grow to larger than a constant multiple of
+    ///    the maximum working-root-set size of the program.
+    ///
+    /// Note that a naive exponential-growth-of-threshold algorithm,
+    /// where we trim when the root set reaches 1, 2, 4, 8, 16, 32,
+    /// ... elements, provides the first but *not* the second
+    /// property. A workload that has a constant live root set but
+    /// creates and drops roots constantly (say, as it's traversing a
+    /// static graph and moving "fingers" through it) will cause the
+    /// `liveness_flags` array to grow unboundedly.
+    ///
+    /// Instead, it turns out that we can achieve both of these goals
+    /// with a simple rule: we trim when the root list length reaches
+    /// a high-water mark; and then *after* trimming, we set the
+    /// high-water mark equal to the resulting live-root count
+    /// multiplied by a factor (e.g., 2).
+    ///
+    /// ## Proof
+    ///
+    /// - Root creation is O(1)
+    ///
+    ///   Assume a sequence of root creation and drop events (and no
+    ///   GCs, with a static GC graph, in the worst case -- only roots
+    ///   are changing). We want to show that after N root creations,
+    ///   we have incurred only only O(N) cost scanning the
+    ///   `liveness_flags` list over the whole sequence.
+    ///
+    ///   Assume a default high-water mark of D (e.g., 8) at
+    ///   initialization with an empty root list.
+    ///
+    ///   Consider "epochs" in the sequence split by trim events where
+    ///   we scan the root list. Proceed by induction over epochs to
+    ///   show: after each epoch, we will have scanned at most 2N
+    ///   roots after N root creations.
+    ///
+    ///   (These epochs don't exist in the algorithm: this is just a
+    ///   mechanism to analyze the behavior.)
+    ///
+    ///   Base case: after the first epoch, with D root creations, we
+    ///   will scan D roots.
+    ///
+    ///   Induction step: we have created N roots and scanned at most
+    ///   2N roots. After previous scan, L roots are still live; then
+    ///   we set the high-water mark for next scan at 2L. The list
+    ///   already has L, so after another L root creations, the epoch
+    ///   ends. We will then incur a scan cost of 2L (the full
+    ///   list). At that point we have thus seen N + L root creations,
+    ///   with 2N + 2L scan cost; the invariant holds.
+    ///
+    ///   (It's counter-intuitive that *not* raising the high-water
+    ///   mark exponentially can still result in a constant amortized
+    ///   cost! One intuition to understand this is that each root
+    ///   that remains alive after a scan pushes the next high-water
+    ///   mark up by one, so requires a new root creation to "pay for"
+    ///   its next scan. So any given root may be scanned many times,
+    ///   but each such root ensures other root creations happen to
+    ///   maintain the amortized cost.)
+    ///
+    /// - `liveness_flags.len()` is always O(|max live roots|)
+    ///
+    ///   Before the first trim, we have between 0 and D live roots,
+    ///   which is O(1) (`D` is a compile-time constant).
+    ///
+    ///   Just after a trim, the `liveness_flags` list has only live
+    ///   roots, and the max live-root count is at least the count at
+    ///   this time, so the property holds.
+    ///
+    ///   The instantaneous maximum number of live roots is greater
+    ///   than or equal to the maximum number of live roots observed
+    ///   during a trim. (The trim is just some point in time, and the
+    ///   max at some point in time is at most the overall max.)
+    ///
+    ///   The high-water mark is set at 2 * `liveness_flags.len()`
+    ///   after a trim, i.e., the number of live roots at that
+    ///   time. We trim when we reach the high-water mark. So the
+    ///   length of the array cannot exceed 2 *
+    ///   `liveness_flags.len()`, which is less than or equal to the
+    ///   overall max. So transitively, the list length at any time is
+    ///   always O(|max live roots|).
+    ///
+    /// We thus have tight bounds (deterministic, not randomized) for
+    /// all possible sequences of root creation/dropping, ensuring
+    /// robustness.
+    pub(crate) fn trim_liveness_flags(&mut self, gc_store: &mut GcStore, eager: bool) {
+        const DEFAULT_HIGH_WATER: usize = 8;
+        const GROWTH_FACTOR: usize = 2;
+        let high_water_mark = self
+            .liveness_trim_high_water
+            .map(|x| x.get())
+            .unwrap_or(DEFAULT_HIGH_WATER);
+        if !eager && self.liveness_flags.len() < high_water_mark {
+            return;
+        }
+
+        self.liveness_flags.retain(|(flag, index)| {
+            if flag.strong_count() == 0 {
+                // No more `OwnedRooted` instances are holding onto
+                // this; dealloc the index and drop our Weak.
+                let gc_ref = self.owned_rooted.dealloc(*index);
+                gc_store.drop_gc_ref(gc_ref);
+                // Don't retain in the list.
+                false
+            } else {
+                // Retain in the list.
+                true
+            }
+        });
+
+        let post_trim_len = self.liveness_flags.len();
+        let high_water_mark = core::cmp::max(
+            DEFAULT_HIGH_WATER,
+            post_trim_len.saturating_mul(GROWTH_FACTOR),
+        );
+        self.liveness_trim_high_water = Some(NonZeroUsize::new(high_water_mark).unwrap());
     }
 }
 
@@ -494,6 +742,7 @@ impl RootSet {
 /// // have a `Rooted<ExternRef>`.
 /// let data = hello
 ///     .data(&store)?
+///     .ok_or_else(|| Error::msg("externref has no host data"))?
 ///     .downcast_ref::<&str>()
 ///     .ok_or_else(|| Error::msg("not a str"))?;
 /// assert_eq!(*data, "hello");
@@ -549,21 +798,25 @@ impl RootSet {
 /// # }
 /// ```
 ///
-/// # Differences Between `Rooted<T>` and `ManuallyRooted<T>`
+/// # Differences Between `Rooted<T>` and `OwnedRooted<T>`
 ///
-/// While `Rooted<T>` is automatically unrooted when its scope is exited, this
-/// means that `Rooted<T>` is only valid for strictly last-in-first-out (LIFO,
-/// aka stack order) lifetimes. This is in contrast to
-/// [`ManuallyRooted<T>`][crate::ManuallyRooted], which supports rooting GC
-/// objects for arbitrary lifetimes, but requires manual unrooting.
+/// While `Rooted<T>` is automatically unrooted when its scope is
+/// exited, this means that `Rooted<T>` is only valid for strictly
+/// last-in-first-out (LIFO, aka stack order) lifetimes. This is in
+/// contrast to [`OwnedRooted<T>`][crate::OwnedRooted], which supports
+/// rooting GC objects for arbitrary lifetimes.
 ///
-/// | Type                                         | Supported Lifetimes         | Unrooting |
-/// |----------------------------------------------|-----------------------------|-----------|
-/// | [`Rooted<T>`][crate::Rooted]                 | Strictly LIFO / stack order | Automatic |
-/// | [`ManuallyRooted<T>`][crate::ManuallyRooted] | Arbitrary                   | Manual    |
+/// | Type                                         | Supported Lifetimes         | Unrooting | Cost                             |
+/// |----------------------------------------------|-----------------------------|-----------|----------------------------------|
+/// | [`Rooted<T>`][crate::Rooted]                 | Strictly LIFO / stack order | Automatic | very low (LIFO array)            |
+/// | [`OwnedRooted<T>`][crate::OwnedRooted]       | Arbitrary                   | Automatic | medium (separate `Arc` to track) |
 ///
-/// `Rooted<T>` should suffice for most use cases, and provides better
-/// ergonomics, but `ManuallyRooted<T>` exists as a fully-general escape hatch.
+/// `Rooted<T>` should suffice for most use cases, and provides decent
+/// ergonomics. In cases where LIFO scopes are difficult to reason
+/// about, e.g. heap-managed data structures, or when they may cause
+/// erroneous behavior, e.g. in errors that are propagated up the call
+/// stack, `OwnedRooted<T>` provides very safe ergonomics but at a
+/// small dynamic cost for the separate tracking allocation.
 ///
 /// # Scopes
 ///
@@ -571,8 +824,7 @@ impl RootSet {
 ///
 /// 1. A [`Store`][crate::Store] is the outermost rooting scope. Creating a
 ///    `Root<T>` directly inside a `Store` permanently roots the underlying
-///    object, similar to dropping a
-///    [`ManuallyRooted<T>`][crate::ManuallyRooted] without unrooting it.
+///    object.
 ///
 /// 2. A [`Caller`][crate::Caller] provides a rooting scope for the duration of
 ///    a call from Wasm into a host function. Any objects rooted in a `Caller`
@@ -725,13 +977,31 @@ impl<T: GcRef> Rooted<T> {
         }
     }
 
+    /// Create a new `Rooted<T>` from a `GcRootIndex`.
+    ///
+    /// Note that `Rooted::from_gc_root_index(my_rooted.index)` is not
+    /// necessarily an identity function, as it allows changing the `T` type
+    /// parameter.
+    ///
+    /// The given index should be a LIFO index of a GC reference pointing to an
+    /// instance of the GC type that `T` represents. Failure to uphold this
+    /// invariant is memory safe but will result in general incorrectness such
+    /// as panics and wrong results.
+    pub(crate) fn from_gc_root_index(inner: GcRootIndex) -> Rooted<T> {
+        debug_assert!(inner.index.is_lifo());
+        Rooted {
+            inner,
+            _phantom: marker::PhantomData,
+        }
+    }
+
     #[inline]
     pub(crate) fn comes_from_same_store(&self, store: &StoreOpaque) -> bool {
         debug_assert!(self.inner.index.is_lifo());
         self.inner.comes_from_same_store(store)
     }
 
-    /// Create a [`ManuallyRooted<T>`][crate::ManuallyRooted] holding onto the
+    /// Create an [`OwnedRooted<T>`][crate::OwnedRooted] holding onto the
     /// same GC object as `self`.
     ///
     /// Returns `None` if `self` is used outside of its scope and has therefore
@@ -751,7 +1021,7 @@ impl<T: GcRef> Rooted<T> {
     /// # fn _foo() -> Result<()> {
     /// let mut store = Store::<()>::default();
     ///
-    /// let y: ManuallyRooted<_> = {
+    /// let y: OwnedRooted<_> = {
     ///     // Create a nested rooting scope.
     ///     let mut scope = RootScope::new(&mut store);
     ///
@@ -759,29 +1029,26 @@ impl<T: GcRef> Rooted<T> {
     ///     let x: Rooted<_> = ExternRef::new(&mut scope, "hello!")?;
     ///
     ///     // Extend `x`'s rooting past its scope's lifetime by converting it
-    ///     // to a `ManuallyRooted`.
-    ///     x.to_manually_rooted(&mut scope)?
+    ///     // to an `OwnedRooted`.
+    ///     x.to_owned_rooted(&mut scope)?
     /// };
     ///
     /// // Now we can still access the reference outside the scope it was
     /// // originally defined within.
-    /// let data = y.data(&store)?;
-    /// let data = data.downcast_ref::<&str>().unwrap();
+    /// let data = y.data(&store)?.expect("should have host data");
+    /// let data = data.downcast_ref::<&str>().expect("host data should be str");
     /// assert_eq!(*data, "hello!");
-    ///
-    /// // But we have to manually unroot `y`.
-    /// y.unroot(&mut store);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn to_manually_rooted(&self, mut store: impl AsContextMut) -> Result<ManuallyRooted<T>> {
-        self._to_manually_rooted(store.as_context_mut().0)
+    pub fn to_owned_rooted(&self, mut store: impl AsContextMut) -> Result<OwnedRooted<T>> {
+        self._to_owned_rooted(store.as_context_mut().0)
     }
 
-    pub(crate) fn _to_manually_rooted(&self, store: &mut StoreOpaque) -> Result<ManuallyRooted<T>> {
+    pub(crate) fn _to_owned_rooted(&self, store: &mut StoreOpaque) -> Result<OwnedRooted<T>> {
         let mut store = AutoAssertNoGc::new(store);
         let gc_ref = self.try_clone_gc_ref(&mut store)?;
-        Ok(ManuallyRooted::new(&mut store, gc_ref))
+        Ok(OwnedRooted::new(&mut store, gc_ref)?)
     }
 
     /// Are these two `Rooted<T>`s the same GC root?
@@ -810,7 +1077,7 @@ impl<T: GcRef> Rooted<T> {
     ///
     ///     // `c` is a different GC root, in a different scope, even though it
     ///     // is rooting the same object.
-    ///     let c = a.to_manually_rooted(&mut scope)?.into_rooted(&mut scope);
+    ///     let c = a.to_owned_rooted(&mut scope)?.to_rooted(&mut scope);
     ///     assert!(!Rooted::rooted_eq(a, c));
     /// }
     ///
@@ -837,7 +1104,7 @@ impl<T: GcRef> Rooted<T> {
     /// because the scope it was rooted within has been exited.
     ///
     /// Because this method takes any `impl RootedGcRef<T>` arguments, it can be
-    /// used to compare, for example, a `Rooted<T>` and a `ManuallyRooted<T>`.
+    /// used to compare, for example, a `Rooted<T>` and a `OwnedRooted<T>`.
     ///
     /// # Panics
     ///
@@ -861,7 +1128,7 @@ impl<T: GcRef> Rooted<T> {
     ///
     ///     // `c` is a different GC root, in a different scope, but still
     ///     // rooting the same object.
-    ///     let c = a.to_manually_rooted(&mut scope)?.into_rooted(&mut scope);
+    ///     let c = a.to_owned_rooted(&mut scope)?.to_rooted(&mut scope);
     ///     assert!(!Rooted::ref_eq(&scope, &a, &c)?);
     /// }
     ///
@@ -870,12 +1137,10 @@ impl<T: GcRef> Rooted<T> {
     /// // `a` and `x` are rooting different objects.
     /// assert!(!Rooted::ref_eq(&store, &a, &x)?);
     ///
-    /// // You can also compare `Rooted<T>`s and `ManuallyRooted<T>`s with this
+    /// // You can also compare `Rooted<T>`s and `OwnedRooted<T>`s with this
     /// // function.
-    /// let d = a.to_manually_rooted(&mut store)?;
+    /// let d = a.to_owned_rooted(&mut store)?;
     /// assert!(Rooted::ref_eq(&store, &a, &d)?);
-    ///
-    /// d.unroot(&mut store);
     /// # Ok(())
     /// # }
     /// ```
@@ -885,6 +1150,14 @@ impl<T: GcRef> Rooted<T> {
         b: &impl RootedGcRef<T>,
     ) -> Result<bool> {
         let store = store.as_context().0;
+        Self::_ref_eq(store, a, b)
+    }
+
+    pub(crate) fn _ref_eq(
+        store: &StoreOpaque,
+        a: &impl RootedGcRef<T>,
+        b: &impl RootedGcRef<T>,
+    ) -> Result<bool> {
         let a = a.try_gc_ref(store)?;
         let b = b.try_gc_ref(store)?;
         Ok(a == b)
@@ -918,6 +1191,91 @@ impl<T: GcRef> Rooted<T> {
         let gc_ref = self.try_gc_ref(store.as_context().0)?;
         gc_ref.hash(state);
         Ok(())
+    }
+
+    /// Cast `self` to a `Rooted<U>`.
+    ///
+    /// It is the caller's responsibility to ensure that `self` is actually a
+    /// `U`. Failure to uphold this invariant will be memory safe but will
+    /// result in general incorrectness such as panics and wrong results.
+    pub(crate) fn unchecked_cast<U: GcRef>(self) -> Rooted<U> {
+        Rooted::from_gc_root_index(self.inner)
+    }
+
+    /// Common implementation of the `WasmTy::store` trait method for all
+    /// `Rooted<T>`s.
+    pub(super) fn wasm_ty_store(
+        self,
+        store: &mut AutoAssertNoGc<'_>,
+        ptr: &mut MaybeUninit<ValRaw>,
+        val_raw: impl Fn(u32) -> ValRaw,
+    ) -> Result<()> {
+        let gc_ref = self.inner.try_clone_gc_ref(store)?;
+
+        let raw = match store.optional_gc_store_mut() {
+            Some(s) => s.expose_gc_ref_to_wasm(gc_ref),
+            None => {
+                // NB: do not force the allocation of a GC heap just because the
+                // program is using `i31ref`s.
+                debug_assert!(gc_ref.is_i31());
+                gc_ref.as_raw_non_zero_u32()
+            }
+        };
+
+        ptr.write(val_raw(raw.get()));
+        Ok(())
+    }
+
+    /// Common implementation of the `WasmTy::load` trait method for all
+    /// `Rooted<T>`s.
+    pub(super) fn wasm_ty_load(
+        store: &mut AutoAssertNoGc<'_>,
+        raw_gc_ref: u32,
+        from_cloned_gc_ref: impl Fn(&mut AutoAssertNoGc<'_>, VMGcRef) -> Self,
+    ) -> Self {
+        debug_assert_ne!(raw_gc_ref, 0);
+        let gc_ref = VMGcRef::from_raw_u32(raw_gc_ref).expect("non-null");
+
+        let gc_ref = match store.optional_gc_store_mut() {
+            Some(s) => s.clone_gc_ref(&gc_ref),
+            None => {
+                // NB: do not force the allocation of a GC heap just because the
+                // program is using `i31ref`s.
+                debug_assert!(gc_ref.is_i31());
+                gc_ref.unchecked_copy()
+            }
+        };
+
+        from_cloned_gc_ref(store, gc_ref)
+    }
+
+    /// Common implementation of the `WasmTy::store` trait method for all
+    /// `Option<Rooted<T>>`s.
+    pub(super) fn wasm_ty_option_store(
+        me: Option<Self>,
+        store: &mut AutoAssertNoGc<'_>,
+        ptr: &mut MaybeUninit<ValRaw>,
+        val_raw: impl Fn(u32) -> ValRaw,
+    ) -> Result<()> {
+        match me {
+            Some(me) => me.wasm_ty_store(store, ptr, val_raw),
+            None => {
+                ptr.write(val_raw(0));
+                Ok(())
+            }
+        }
+    }
+
+    /// Common implementation of the `WasmTy::load` trait method for all
+    /// `Option<Rooted<T>>`s.
+    pub(super) fn wasm_ty_option_load(
+        store: &mut AutoAssertNoGc<'_>,
+        raw_gc_ref: u32,
+        from_cloned_gc_ref: impl Fn(&mut AutoAssertNoGc<'_>, VMGcRef) -> Self,
+    ) -> Option<Self> {
+        let gc_ref = VMGcRef::from_raw_u32(raw_gc_ref)?;
+        let gc_ref = store.clone_gc_ref(&gc_ref);
+        Some(from_cloned_gc_ref(store, gc_ref))
     }
 }
 
@@ -1107,18 +1465,78 @@ where
     }
 }
 
-/// A rooted reference to a garbage-collected `T` with arbitrary lifetime.
+/// Internal version of `RootScope` that only wraps a `&mut StoreOpaque` rather
+/// than a whole `impl AsContextMut<Data = T>`.
+pub(crate) struct OpaqueRootScope<S>
+where
+    S: AsStoreOpaque,
+{
+    store: S,
+    scope: usize,
+}
+
+impl<S> Drop for OpaqueRootScope<S>
+where
+    S: AsStoreOpaque,
+{
+    fn drop(&mut self) {
+        self.store.as_store_opaque().exit_gc_lifo_scope(self.scope);
+    }
+}
+
+impl<S> Deref for OpaqueRootScope<S>
+where
+    S: AsStoreOpaque,
+{
+    type Target = S;
+
+    fn deref(&self) -> &Self::Target {
+        &self.store
+    }
+}
+
+// XXX: Don't use this `DerefMut` implementation to `mem::{swap,replace}` or
+// etc... the underlying `StoreOpaque` in a `OpaqueRootScope`! That will result
+// in truncating the store's GC root set's LIFO roots to the wrong length.
+//
+// We don't implement `DerefMut` for `RootScope` for exactly this reason, but
+// allow it for `OpaqueRootScope` because it is only Wasmtime-internal and not
+// publicly exported.
+impl<S> DerefMut for OpaqueRootScope<S>
+where
+    S: AsStoreOpaque,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.store
+    }
+}
+
+impl<S> OpaqueRootScope<S>
+where
+    S: AsStoreOpaque,
+{
+    pub(crate) fn new(mut store: S) -> Self {
+        let scope = store.as_store_opaque().gc_roots().enter_lifo_scope();
+        OpaqueRootScope { store, scope }
+    }
+}
+
+/// A rooted reference to a garbage-collected `T` with automatic lifetime.
 ///
-/// A `ManuallyRooted<T>` is a strong handle to a garbage-collected `T`,
+/// An `OwnedRooted<T>` is a strong handle to a garbage-collected `T`,
 /// preventing its referent (and anything else transitively referenced) from
-/// being collected by the GC until [`unroot`][crate::ManuallyRooted::unroot] is
-/// explicitly called.
+/// being collected by the GC until it is dropped.
 ///
-/// The primary way to create a `ManuallyRooted<T>` is to promote a temporary
-/// `Rooted<T>` into a `ManuallyRooted<T>` via its
-/// [`to_manually_rooted`][crate::Rooted::to_manually_rooted] method.
+/// An `OwnedRooted<T>` keeps its rooted GC object alive at least
+/// until the `OwnedRooted<T>` itself is dropped. The
+/// "de-registration" of the root is automatic and is triggered (in a
+/// deferred way) by the drop of this type.
 ///
-/// `ManuallyRooted<T>` dereferences to its underlying `T`, allowing you to call
+/// The primary way to create an `OwnedRooted<T>` is to promote a temporary
+/// `Rooted<T>` into an `OwnedRooted<T>` via its
+/// [`to_owned_rooted`][crate::Rooted::to_owned_rooted] method.
+///
+/// `OwnedRooted<T>` dereferences to its underlying `T`, allowing you to call
 /// `T`'s methods.
 ///
 /// # Example
@@ -1126,108 +1544,60 @@ where
 /// ```
 /// # use wasmtime::*;
 /// # fn _foo() -> Result<()> {
-/// let mut store = Store::<Option<ManuallyRooted<ExternRef>>>::default();
+/// let mut store = Store::<Option<OwnedRooted<ExternRef>>>::default();
 ///
-/// // Create our `ManuallyRooted` in a nested scope to avoid rooting it for
+/// // Create our `OwnedRooted` in a nested scope to avoid rooting it for
 /// // the duration of the store's lifetime.
 /// let x = {
 ///     let mut scope = RootScope::new(&mut store);
 ///     let x = ExternRef::new(&mut scope, 1234)?;
-///     x.to_manually_rooted(&mut scope)?
+///     x.to_owned_rooted(&mut scope)?
 /// };
 ///
 /// // Place `x` into our store.
 /// *store.data_mut() = Some(x);
 ///
 /// // Do a bunch stuff that may or may not access, replace, or take `x`...
-///
-/// // At any time, in any arbitrary scope, we can remove `x` from the store
-/// // and unroot it:
-/// if let Some(x) = store.data_mut().take() {
-///     x.unroot(&mut store);
-/// }
 /// # Ok(())
 /// # }
 /// ```
-///
-/// # Differences Between `ManuallyRooted<T>` and `Rooted<T>`
-///
-/// While `ManuallyRooted<T>` can have arbitrary lifetimes, it requires manual
-/// unrooting. This is in contrast to [`Rooted<T>`][crate::Rooted] which is
-/// restricted to strictly last-in-first-out (LIFO, aka stack order) lifetimes,
-/// but comes with automatic unrooting.
-///
-/// | Type                                         | Supported Lifetimes         | Unrooting |
-/// |----------------------------------------------|-----------------------------|-----------|
-/// | [`Rooted<T>`][crate::Rooted]                 | Strictly LIFO / stack order | Automatic |
-/// | [`ManuallyRooted<T>`][crate::ManuallyRooted] | Arbitrary                   | Manual    |
-///
-/// `Rooted<T>` should suffice for most use cases, and provides better
-/// ergonomics, but `ManuallyRooted<T>` exists as a fully-general escape hatch.
-///
-/// # Manual Unrooting
-///
-/// Failure to explicitly call [`unroot`][crate::ManuallyRooted::unroot] (or
-/// another method that consumes `self` and unroots the reference, such as
-/// [`into_rooted`][crate::ManuallyRooted::into_rooted]) will leak the
-/// underlying GC object, preventing it from being garbage collected until its
-/// owning [`Store`][crate::Store] is dropped. That means all of the following
-/// will result in permanently rooting the underlying GC object:
-///
-/// * Implicitly dropping a `ManuallyRooted<T>`:
-///
-///   ```no_run
-///   # use wasmtime::*;
-///   # let get_manually_rooted = || -> ManuallyRooted<ExternRef> { todo!() };
-///   {
-///       let perma_root: ManuallyRooted<_> = get_manually_rooted();
-///
-///       // `perma_root` is implicitly dropped at the end of its scope,
-///       // permanently rooting/leaking its referent.
-///   }
-///   ```
-///
-/// * Explicitly dropping a `ManuallyRooted<T>`: `drop(my_manually_rooted)`.
-///
-/// * Forgetting a `ManuallyRooted<T>`: `std::mem::forget(my_manually_rooted)`.
-///
-/// * Inserting a `ManuallyRooted<T>` into a `std::sync::Arc` or `std::rc::Rc`
-///   cycle.
-///
-/// * Etc...
-///
-/// Wasmtime does *not* assert that a `ManuallyRooted<T>` is unrooted on `Drop`,
-/// or otherwise raise a panic, log a warning, or etc... on failure to manually
-/// unroot. Sometimes leaking is intentional and desirable, particularly when
-/// dealing with short-lived [`Store`][crate::Store]s where unrooting would just
-/// be busy work since the whole store is about to be dropped.
-#[repr(transparent)] // NB: the C API relies on this
-pub struct ManuallyRooted<T>
+pub struct OwnedRooted<T>
 where
     T: GcRef,
 {
     inner: GcRootIndex,
+    liveness_flag: Arc<()>,
     _phantom: marker::PhantomData<T>,
 }
 
 const _: () = {
     use crate::{AnyRef, ExternRef};
 
-    // NB: these match the C API which should also be updated if this changes
-    assert!(mem::size_of::<ManuallyRooted<AnyRef>>() == 16);
-    assert!(mem::align_of::<ManuallyRooted<AnyRef>>() == 8);
-    assert!(mem::size_of::<ManuallyRooted<ExternRef>>() == 16);
-    assert!(mem::align_of::<ManuallyRooted<ExternRef>>() == 8);
+    // NB: these match the C API which should also be updated if this changes.
+    //
+    // The size is really "16 + pointer + alignment", which is either
+    // 20 bytes on some 32-bit platforms or 24 bytes on other 32-bit
+    // platforms (e.g., riscv32, which adds an extra 4 bytes of
+    // padding) and 64-bit platforms.
+    assert!(
+        mem::size_of::<OwnedRooted<AnyRef>>() >= 16 && mem::size_of::<OwnedRooted<AnyRef>>() <= 24
+    );
+    assert!(mem::align_of::<OwnedRooted<AnyRef>>() == mem::align_of::<u64>());
+    assert!(
+        mem::size_of::<OwnedRooted<ExternRef>>() >= 16
+            && mem::size_of::<OwnedRooted<ExternRef>>() <= 24
+    );
+    assert!(mem::align_of::<OwnedRooted<ExternRef>>() == mem::align_of::<u64>());
 };
 
-impl<T: GcRef> Debug for ManuallyRooted<T> {
+impl<T: GcRef> Debug for OwnedRooted<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = format!("ManuallyRooted<{}>", any::type_name::<T>());
+        let name = format!("OwnedRooted<{}>", any::type_name::<T>());
         f.debug_struct(&name).field("inner", &self.inner).finish()
     }
 }
 
-impl<T: GcRef> Deref for ManuallyRooted<T> {
+impl<T: GcRef> Deref for OwnedRooted<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -1235,11 +1605,21 @@ impl<T: GcRef> Deref for ManuallyRooted<T> {
     }
 }
 
-impl<T> ManuallyRooted<T>
+impl<T: GcRef> Clone for OwnedRooted<T> {
+    fn clone(&self) -> Self {
+        OwnedRooted {
+            inner: self.inner,
+            liveness_flag: self.liveness_flag.clone(),
+            _phantom: marker::PhantomData,
+        }
+    }
+}
+
+impl<T> OwnedRooted<T>
 where
     T: GcRef,
 {
-    /// Construct a new manually-rooted GC root.
+    /// Construct a new owned GC root.
     ///
     /// `gc_ref` should belong to `store`'s heap; failure to uphold this is
     /// memory safe but will result in general failures down the line such as
@@ -1248,102 +1628,53 @@ where
     /// `gc_ref` should be a GC reference pointing to an instance of the GC type
     /// that `T` represents. Failure to uphold this invariant is memory safe but
     /// will result in general incorrectness such as panics and wrong results.
-    pub(crate) fn new(store: &mut AutoAssertNoGc<'_>, gc_ref: VMGcRef) -> Self {
-        let id = store.gc_roots_mut().manually_rooted.alloc(gc_ref);
-        ManuallyRooted {
+    pub(crate) fn new(
+        store: &mut AutoAssertNoGc<'_>,
+        gc_ref: VMGcRef,
+    ) -> Result<Self, OutOfMemory> {
+        // We always have the opportunity to trim and unregister stale
+        // owned roots whenever we have a mut borrow to the store. We
+        // take the opportunity to do so here to avoid tying growth of
+        // the root-set to the GC frequency -- it is much cheaper to
+        // eagerly trim these roots. Note that the trimming keeps a
+        // "high water mark" that grows exponentially, so we have
+        // amortized constant time even though an individual trim
+        // takes time linear in the number of roots.
+        store.trim_gc_liveness_flags(false);
+
+        let roots = store.gc_roots_mut();
+        let id = roots.owned_rooted.alloc(gc_ref)?;
+        let liveness_flag = Arc::new(());
+        roots
+            .liveness_flags
+            .push((Arc::downgrade(&liveness_flag), id));
+        Ok(OwnedRooted {
             inner: GcRootIndex {
                 store_id: store.id(),
                 generation: 0,
-                index: PackedIndex::new_manual(id),
+                index: PackedIndex::new_owned(id),
             },
+            liveness_flag,
             _phantom: marker::PhantomData,
-        }
+        })
     }
 
     #[inline]
     pub(crate) fn comes_from_same_store(&self, store: &StoreOpaque) -> bool {
-        debug_assert!(self.inner.index.is_manual());
+        debug_assert!(self.inner.index.is_owned());
         self.inner.comes_from_same_store(store)
     }
 
-    /// Clone this `ManuallyRooted`.
+    /// Clone this `OwnedRooted<T>` into a `Rooted<T>`.
     ///
-    /// Does not consume or unroot `self`: both `self` and the new
-    /// `ManuallyRooted` return value will need to be manually unrooted.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `self` is not associated with the given `store`.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use wasmtime::*;
-    /// # fn _foo() -> Result<()> {
-    /// let mut store = Store::<Vec<ManuallyRooted<ExternRef>>>::default();
-    ///
-    /// // Create our `ManuallyRooted` in a nested scope to avoid rooting it for
-    /// // the duration of the store's lifetime.
-    /// let x = {
-    ///     let mut scope = RootScope::new(&mut store);
-    ///     let x = ExternRef::new(&mut scope, 1234)?;
-    ///     x.to_manually_rooted(&mut scope)?
-    /// };
-    ///
-    /// // Push five clones of `x` into our store.
-    /// for _ in 0..5 {
-    ///     let x_clone = x.clone(&mut store);
-    ///     store.data_mut().push(x_clone);
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn clone(&self, mut store: impl AsContextMut) -> Self {
-        self._clone(store.as_context_mut().0)
-    }
-
-    pub(crate) fn _clone(&self, store: &mut StoreOpaque) -> Self {
-        let mut store = AutoAssertNoGc::new(store);
-        let gc_ref = self
-            .clone_gc_ref(&mut store)
-            .expect("ManuallyRooted always has a gc ref");
-        Self::new(&mut store, gc_ref)
-    }
-
-    /// Unroot this GC object.
-    ///
-    /// Failure to call this method will result in the GC object, and anything
-    /// it transitively references, being kept alive (aka "leaking") for the
-    /// entirety of the store's lifetime.
-    ///
-    /// See the type-level docs for example usage.
-    pub fn unroot(self, mut store: impl AsContextMut) {
-        self._unroot(store.as_context_mut().0)
-    }
-
-    pub(crate) fn _unroot(self, store: &mut StoreOpaque) {
-        assert!(
-            self.comes_from_same_store(store),
-            "object used with wrong store"
-        );
-
-        let mut store = AutoAssertNoGc::new(store);
-        let id = self.inner.index.as_manual().unwrap();
-        let roots = store.gc_roots_mut();
-        let gc_ref = roots.manually_rooted.dealloc(id);
-        store.unwrap_gc_store_mut().drop_gc_ref(gc_ref);
-    }
-
-    /// Clone this `ManuallyRooted<T>` into a `Rooted<T>`.
-    ///
-    /// This operation does not consume or unroot this `ManuallyRooted<T>`.
+    /// This operation does not consume or unroot this `OwnedRooted<T>`.
     ///
     /// The underlying GC object is re-rooted in the given context's scope. The
     /// resulting `Rooted<T>` is only valid during the given context's
     /// scope. See the [`Rooted<T>`][crate::Rooted] documentation for more
     /// details on rooting scopes.
     ///
-    /// This operation does not consume or unroot this `ManuallyRooted<T>`.
+    /// This operation does not consume or unroot this `OwnedRooted<T>`.
     ///
     /// # Panics
     ///
@@ -1358,24 +1689,19 @@ where
     ///
     /// let root1: Rooted<_>;
     ///
-    /// let manual = {
+    /// let owned = {
     ///     let mut scope = RootScope::new(&mut store);
     ///     root1 = ExternRef::new(&mut scope, 1234)?;
-    ///     root1.to_manually_rooted(&mut scope)?
+    ///     root1.to_owned_rooted(&mut scope)?
     /// };
     ///
     /// // `root1` is no longer accessible because it was unrooted when `scope`
     /// // was dropped.
     /// assert!(root1.data(&store).is_err());
     ///
-    /// // But we can re-root `manual` into this scope.
-    /// let root2 = manual.to_rooted(&mut store);
+    /// // But we can re-root `owned` into this scope.
+    /// let root2 = owned.to_rooted(&mut store);
     /// assert!(root2.data(&store).is_ok());
-    ///
-    /// // And we also still have access to `manual` and we still have to
-    /// // manually unroot it.
-    /// assert!(manual.data(&store).is_ok());
-    /// manual.unroot(&mut store);
     /// # Ok(())
     /// # }
     /// ```
@@ -1393,61 +1719,6 @@ where
         Rooted::new(&mut store, gc_ref)
     }
 
-    /// Convert this `ManuallyRooted<T>` into a `Rooted<T>`.
-    ///
-    /// The underlying GC object is re-rooted in the given context's scope. The
-    /// resulting `Rooted<T>` is only valid during the given context's
-    /// scope. See the [`Rooted<T>`][crate::Rooted] documentation for more
-    /// details on rooting scopes.
-    ///
-    /// This operation consumes and unroots this `ManuallyRooted<T>`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if this object is not associate with the given context's store.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use wasmtime::*;
-    /// # fn _foo() -> Result<()> {
-    /// let mut store = Store::<()>::default();
-    ///
-    /// let root1: Rooted<_>;
-    ///
-    /// let manual = {
-    ///     let mut scope = RootScope::new(&mut store);
-    ///     root1 = ExternRef::new(&mut scope, 1234)?;
-    ///     root1.to_manually_rooted(&mut scope)?
-    /// };
-    ///
-    /// // `root1` is no longer accessible because it was unrooted when `scope`
-    /// // was dropped.
-    /// assert!(root1.data(&store).is_err());
-    ///
-    /// // But we can re-root `manual` into this scope.
-    /// let root2 = manual.into_rooted(&mut store);
-    /// assert!(root2.data(&store).is_ok());
-    ///
-    /// // `manual` was consumed by the `into_rooted` call, and we no longer
-    /// // have access to it, nor need to manually unroot it.
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn into_rooted(self, mut context: impl AsContextMut) -> Rooted<T> {
-        self._into_rooted(context.as_context_mut().0)
-    }
-
-    pub(crate) fn _into_rooted(self, store: &mut StoreOpaque) -> Rooted<T> {
-        assert!(
-            self.comes_from_same_store(store),
-            "object used with wrong store"
-        );
-        let rooted = self._to_rooted(store);
-        self._unroot(store);
-        rooted
-    }
-
     /// Are these two GC roots referencing the same underlying GC object?
     ///
     /// This function will return `true` even when `a` and `b` are different GC
@@ -1455,7 +1726,7 @@ where
     /// are rooting the same underlying GC object.
     ///
     /// Because this method takes any `impl RootedGcRef<T>` arguments, it can be
-    /// used to compare, for example, a `Rooted<T>` and a `ManuallyRooted<T>`.
+    /// used to compare, for example, a `Rooted<T>` and an `OwnedRooted<T>`.
     ///
     /// # Panics
     ///
@@ -1468,30 +1739,30 @@ where
     /// # fn foo() -> Result<()> {
     /// let mut store = Store::<()>::default();
     ///
-    /// let a = ExternRef::new_manually_rooted(&mut store, "hello")?;
-    /// let b = a.clone(&mut store);
-    ///
-    /// // `a` and `b` are rooting the same object.
-    /// assert!(ManuallyRooted::ref_eq(&store, &a, &b)?);
+    /// let a;
+    /// let b;
+    /// let x;
     ///
     /// {
     ///     let mut scope = RootScope::new(&mut store);
     ///
+    ///     a = ExternRef::new(&mut scope, "hello")?.to_owned_rooted(&mut scope)?;
+    ///     b = a.clone();
+    ///
+    ///     // `a` and `b` are rooting the same object.
+    ///     assert!(OwnedRooted::ref_eq(&scope, &a, &b)?);
+    ///
     ///     // `c` is a different GC root, is in a different scope, and is a
-    ///     // `Rooted<T>` instead of a `ManuallyRooted<T>`, but is still rooting
+    ///     // `Rooted<T>` instead of a `OwnedRooted<T>`, but is still rooting
     ///     // the same object.
     ///     let c = a.to_rooted(&mut scope);
-    ///     assert!(ManuallyRooted::ref_eq(&scope, &a, &c)?);
+    ///     assert!(OwnedRooted::ref_eq(&scope, &a, &c)?);
+    ///
+    ///     x = ExternRef::new(&mut scope, "goodbye")?.to_owned_rooted(&mut scope)?;
+    ///
+    ///     // `a` and `x` are rooting different objects.
+    ///     assert!(!OwnedRooted::ref_eq(&scope, &a, &x)?);
     /// }
-    ///
-    /// let x = ExternRef::new_manually_rooted(&mut store, "goodbye")?;
-    ///
-    /// // `a` and `x` are rooting different objects.
-    /// assert!(!ManuallyRooted::ref_eq(&store, &a, &x)?);
-    ///
-    /// a.unroot(&mut store);
-    /// b.unroot(&mut store);
-    /// x.unroot(&mut store);
     /// # Ok(())
     /// # }
     /// ```
@@ -1509,7 +1780,7 @@ where
     /// root and *not* the underlying GC reference. That means that two
     /// different rootings of the same object will hash to different values
     /// (modulo hash collisions). If this is undesirable, use the
-    /// [`ref_hash`][crate::ManuallyRooted::ref_hash] method instead.
+    /// [`ref_hash`][crate::OwnedRooted::ref_hash] method instead.
     pub fn rooted_hash<H>(&self, state: &mut H)
     where
         H: Hasher,
@@ -1530,41 +1801,160 @@ where
     {
         let gc_ref = self
             .get_gc_ref(store.as_context().0)
-            .expect("ManuallyRooted's get_gc_ref is infallible");
+            .expect("OwnedRooted's get_gc_ref is infallible");
         gc_ref.hash(state);
     }
 
+    /// Cast `self` to an `OwnedRooted<U>`.
+    ///
+    /// It is the caller's responsibility to ensure that `self` is actually a
+    /// `U`. Failure to uphold this invariant will be memory safe but will
+    /// result in general incorrectness such as panics and wrong results.
+    pub(crate) fn unchecked_cast<U: GcRef>(self) -> OwnedRooted<U> {
+        OwnedRooted {
+            inner: self.inner,
+            liveness_flag: self.liveness_flag,
+            _phantom: core::marker::PhantomData,
+        }
+    }
+
+    /// Common implementation of the `WasmTy::store` trait method for all
+    /// `OwnedRooted<T>`s.
+    pub(super) fn wasm_ty_store(
+        self,
+        store: &mut AutoAssertNoGc<'_>,
+        ptr: &mut MaybeUninit<ValRaw>,
+        val_raw: impl Fn(u32) -> ValRaw,
+    ) -> Result<()> {
+        let gc_ref = self.try_clone_gc_ref(store)?;
+
+        let raw = match store.optional_gc_store_mut() {
+            Some(s) => s.expose_gc_ref_to_wasm(gc_ref),
+            None => {
+                debug_assert!(gc_ref.is_i31());
+                gc_ref.as_raw_non_zero_u32()
+            }
+        };
+
+        ptr.write(val_raw(raw.get()));
+        Ok(())
+    }
+
+    /// Common implementation of the `WasmTy::load` trait method for all
+    /// `OwnedRooted<T>`s.
+    pub(super) fn wasm_ty_load(
+        store: &mut AutoAssertNoGc<'_>,
+        raw_gc_ref: u32,
+        from_cloned_gc_ref: impl Fn(&mut AutoAssertNoGc<'_>, VMGcRef) -> Rooted<T>,
+    ) -> Self {
+        debug_assert_ne!(raw_gc_ref, 0);
+        let gc_ref = VMGcRef::from_raw_u32(raw_gc_ref).expect("non-null");
+        let gc_ref = store.clone_gc_ref(&gc_ref);
+        RootSet::with_lifo_scope(store, |store| {
+            let rooted = from_cloned_gc_ref(store, gc_ref);
+            rooted._to_owned_rooted(store).expect("rooted is in scope")
+        })
+    }
+
+    /// Common implementation of the `WasmTy::store` trait method for all
+    /// `Option<OwnedRooted<T>>`s.
+    pub(super) fn wasm_ty_option_store(
+        me: Option<Self>,
+        store: &mut AutoAssertNoGc<'_>,
+        ptr: &mut MaybeUninit<ValRaw>,
+        val_raw: impl Fn(u32) -> ValRaw,
+    ) -> Result<()> {
+        match me {
+            Some(me) => me.wasm_ty_store(store, ptr, val_raw),
+            None => {
+                ptr.write(val_raw(0));
+                Ok(())
+            }
+        }
+    }
+
+    /// Common implementation of the `WasmTy::load` trait method for all
+    /// `Option<OwnedRooted<T>>`s.
+    pub(super) fn wasm_ty_option_load(
+        store: &mut AutoAssertNoGc<'_>,
+        raw_gc_ref: u32,
+        from_cloned_gc_ref: impl Fn(&mut AutoAssertNoGc<'_>, VMGcRef) -> Rooted<T>,
+    ) -> Option<Self> {
+        let gc_ref = VMGcRef::from_raw_u32(raw_gc_ref)?;
+        let gc_ref = store.clone_gc_ref(&gc_ref);
+        RootSet::with_lifo_scope(store, |store| {
+            let rooted = from_cloned_gc_ref(store, gc_ref);
+            Some(rooted._to_owned_rooted(store).expect("rooted is in scope"))
+        })
+    }
+
     #[doc(hidden)]
-    pub fn into_parts_for_c_api(self) -> (NonZeroU64, u32, u32) {
+    pub fn into_parts_for_c_api(self) -> (NonZeroU64, u32, u32, *const ()) {
         (
             self.inner.store_id.as_raw(),
             self.inner.generation,
             self.inner.index.0,
+            Arc::into_raw(self.liveness_flag),
         )
     }
 
     #[doc(hidden)]
-    pub unsafe fn from_raw_parts_for_c_api(a: NonZeroU64, b: u32, c: u32) -> ManuallyRooted<T> {
-        ManuallyRooted {
+    pub unsafe fn from_borrowed_raw_parts_for_c_api(
+        a: NonZeroU64,
+        b: u32,
+        c: u32,
+        d: *const (),
+    ) -> OwnedRooted<T> {
+        // We are given a *borrow* of the Arc. This is a little
+        // sketchy because `Arc::from_raw()` takes *ownership* of the
+        // passed-in pointer, so we need to clone then forget that
+        // original.
+        let liveness_flag = {
+            let original = unsafe { Arc::from_raw(d) };
+            let clone = original.clone();
+            core::mem::forget(original);
+            clone
+        };
+        OwnedRooted {
             inner: GcRootIndex {
                 store_id: StoreId::from_raw(a),
                 generation: b,
                 index: PackedIndex(c),
             },
+            liveness_flag,
+            _phantom: marker::PhantomData,
+        }
+    }
+
+    #[doc(hidden)]
+    pub unsafe fn from_owned_raw_parts_for_c_api(
+        a: NonZeroU64,
+        b: u32,
+        c: u32,
+        d: *const (),
+    ) -> OwnedRooted<T> {
+        let liveness_flag = unsafe { Arc::from_raw(d) };
+        OwnedRooted {
+            inner: GcRootIndex {
+                store_id: StoreId::from_raw(a),
+                generation: b,
+                index: PackedIndex(c),
+            },
+            liveness_flag,
             _phantom: marker::PhantomData,
         }
     }
 }
 
-impl<T: GcRef> RootedGcRefImpl<T> for ManuallyRooted<T> {
+impl<T: GcRef> RootedGcRefImpl<T> for OwnedRooted<T> {
     fn get_gc_ref<'a>(&self, store: &'a StoreOpaque) -> Option<&'a VMGcRef> {
         assert!(
             self.comes_from_same_store(store),
             "object used with wrong store"
         );
 
-        let id = self.inner.index.as_manual().unwrap();
-        store.gc_roots().manually_rooted.get(id)
+        let id = self.inner.index.as_owned().unwrap();
+        store.gc_roots().owned_rooted.get(id)
     }
 }
 
@@ -1579,6 +1969,6 @@ mod tests {
         // Try to keep tabs on the size of these things. Don't want them growing
         // unintentionally.
         assert_eq!(std::mem::size_of::<Rooted<ExternRef>>(), 16);
-        assert_eq!(std::mem::size_of::<ManuallyRooted<ExternRef>>(), 16);
+        assert!(std::mem::size_of::<OwnedRooted<ExternRef>>() <= 24);
     }
 }

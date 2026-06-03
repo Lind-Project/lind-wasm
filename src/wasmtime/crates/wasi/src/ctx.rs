@@ -1,13 +1,13 @@
 use crate::{
+    DirPerms, FilePerms,
     clocks::{
-        host::{monotonic_clock, wall_clock},
         HostMonotonicClock, HostWallClock,
+        host::{monotonic_clock, wall_clock},
     },
     filesystem::{Dir, OpenMode},
     network::{SocketAddrCheck, SocketAddrUse},
     pipe, random, stdio,
     stdio::{StdinStream, StdoutStream},
-    DirPerms, FilePerms,
 };
 use anyhow::Result;
 use cap_rand::{Rng, RngCore, SeedableRng};
@@ -86,7 +86,7 @@ impl WasiCtxBuilder {
         // `thread_rng()`, so that it's not guessable from the insecure_random
         // API.
         let insecure_random_seed =
-            cap_rand::thread_rng(cap_rand::ambient_authority()).gen::<u128>();
+            cap_rand::thread_rng(cap_rand::ambient_authority()).r#gen::<u128>();
         Self {
             stdin: Box::new(pipe::ClosedInputStream),
             stdout: Box::new(pipe::SinkOutputStream),

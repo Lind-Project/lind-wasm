@@ -5,10 +5,10 @@ use std::sync::Arc;
 use anyhow::Result;
 use sysdefs::{
     constants::{DylinkErrorCode, RTLD_DEFAULT, RTLD_NEXT},
-    logging::lind_debug_panic,
+    lind_debug_panic, lind_log,
 };
 use wasmtime::Caller;
-use wasmtime_lind_multi_process::{get_memory_base, LindHost};
+use wasmtime_lind_multi_process::{LindHost, get_memory_base};
 
 /// Type alias for the dynamic loader callback used by `dlopen`.
 ///
@@ -84,15 +84,15 @@ pub fn dlsym_call<
             None => return -(DylinkErrorCode::ENOFOUND as i32),
         }
     } else if handle == RTLD_NEXT {
-        lind_debug_panic("[lind-dylink] dlsym RTLD_NEXT encountered but not currently supported");
+        lind_debug_panic!("[lind-dylink] dlsym RTLD_NEXT: not currently supported");
+        return -(DylinkErrorCode::ENOFOUND as i32);
     } else {
         match caller.find_library_symbol_from_local(handle, symbol) {
             Some(val) => val,
             None => return -(DylinkErrorCode::ENOFOUND as i32),
         }
     };
-    #[cfg(feature = "debug-dylink")]
-    println!("[debug] dlsym resolves {} to {}", symbol, val);
+    lind_log!(DYLINK, "dlsym resolves {} to {}", symbol, val);
     val as i32
 }
 

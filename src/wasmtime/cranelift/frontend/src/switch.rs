@@ -54,11 +54,7 @@ impl Switch {
     /// Set a switch entry
     pub fn set_entry(&mut self, index: EntryIndex, block: Block) {
         let prev = self.cases.insert(index, block);
-        assert!(
-            prev.is_none(),
-            "Tried to set the same entry {} twice",
-            index
-        );
+        assert!(prev.is_none(), "Tried to set the same entry {index} twice");
     }
 
     /// Get a reference to all existing entries
@@ -98,10 +94,7 @@ impl Switch {
             last_index = Some(index);
         }
 
-        log::trace!(
-            "build_contiguous_case_ranges after: {:#?}",
-            contiguous_case_ranges
-        );
+        log::trace!("build_contiguous_case_ranges after: {contiguous_case_ranges:#?}");
 
         contiguous_case_ranges
     }
@@ -277,10 +270,7 @@ impl Switch {
         let val_ty = bx.func.dfg.value_type(val);
         let val_ty_max = val_ty.bounds(false).1;
         if max > val_ty_max {
-            panic!(
-                "The index type {} does not fit the maximum switch entry of {}",
-                val_ty, max
-            );
+            panic!("The index type {val_ty} does not fit the maximum switch entry of {max}");
         }
 
         let contiguous_case_ranges = self.collect_contiguous_case_ranges();
@@ -355,8 +345,8 @@ mod tests {
                 let block = bx.create_block();
                 bx.switch_to_block(block);
                 let val = bx.ins().iconst(types::I8, 0);
-                #[allow(unused_mut)]
                 let mut switch = Switch::new();
+                let _ = &mut switch;
                 $(
                     let block = bx.create_block();
                     switch.set_entry($index, block);
@@ -369,19 +359,6 @@ mod tests {
                 .trim_end_matches("\n}\n")
                 .to_string()
         }};
-    }
-
-    macro_rules! assert_eq_output {
-        ($actual:ident, $expected:literal) => {
-            assert_eq!(
-                $actual,
-                $expected,
-                "\n{}",
-                similar::TextDiff::from_lines($expected, &$actual)
-                    .unified_diff()
-                    .header("expected", "actual")
-            )
-        };
     }
 
     #[test]
@@ -485,7 +462,7 @@ block12:
             func,
             "block0:
     v0 = iconst.i8 0
-    v1 = icmp_imm eq v0, 128  ; v0 = 0
+    v1 = icmp_imm eq v0, -128  ; v0 = 0
     brif v1, block1, block3
 
 block3:
@@ -517,7 +494,7 @@ block3:
             func,
             "block0:
     v0 = iconst.i8 0
-    v1 = icmp_imm eq v0, 255  ; v0 = 0
+    v1 = icmp_imm eq v0, -1  ; v0 = 0
     brif v1, block1, block4
 
 block4:
@@ -544,7 +521,7 @@ block4:
 
         for case in cases {
             for typ in &[types::I8, types::I16, types::I32, types::I64, types::I128] {
-                eprintln!("Testing {:?} with keys: {:?}", typ, case);
+                eprintln!("Testing {typ:?} with keys: {case:?}");
                 do_case(case, *typ);
             }
         }

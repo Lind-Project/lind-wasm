@@ -1,14 +1,14 @@
 use crate::{
+    EnvError, I32Exit, SystemTimeSpec, WasiCtx,
     dir::{DirEntry, OpenResult, ReaddirCursor, ReaddirEntity, TableDirExt},
     file::{
         Advice, FdFlags, FdStat, FileAccessMode, FileEntry, FileType, Filestat, OFlags, RiFlags,
         RoFlags, SdFlags, SiFlags, TableFileExt, WasiFile,
     },
     sched::{
-        subscription::{RwEventFlags, SubscriptionResult},
         Poll, Userdata,
+        subscription::{RwEventFlags, SubscriptionResult},
     },
-    I32Exit, SystemTimeSpec, WasiCtx,
 };
 use cap_std::time::{Duration, SystemClock};
 use std::borrow::Cow;
@@ -26,7 +26,7 @@ use error::{Error, ErrorExt};
 pub(crate) const MAX_SHARED_BUFFER_SIZE: usize = 1 << 16;
 
 wiggle::from_witx!({
-    witx: ["$CARGO_MANIFEST_DIR/witx/preview1/wasi_snapshot_preview1.witx"],
+    witx: ["witx/preview1/wasi_snapshot_preview1.witx"],
     errors: { errno => trappable Error },
     // Note: not every function actually needs to be async, however, nearly all of them do, and
     // keeping that set the same in this macro and the wasmtime_wiggle / lucet_wiggle macros is
@@ -108,9 +108,7 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
                 let now = self.clocks.system()?.now(precision).into_std();
                 let d = now
                     .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                    .map_err(|_| {
-                        Error::trap(anyhow::Error::msg("current time before unix epoch"))
-                    })?;
+                    .map_err(|_| Error::trap(EnvError::msg("current time before unix epoch")))?;
                 Ok(d.as_nanos().try_into()?)
             }
             types::Clockid::Monotonic => {
@@ -234,7 +232,9 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
                 .set_fdflags(FdFlags::from(flags))
                 .await
         } else {
-            log::warn!("`fd_fdstat_set_flags` does not work with wasi-threads enabled; see https://github.com/bytecodealliance/wasmtime/issues/5643");
+            log::warn!(
+                "`fd_fdstat_set_flags` does not work with wasi-threads enabled; see https://github.com/bytecodealliance/wasmtime/issues/5643"
+            );
             Err(Error::not_supported())
         }
     }
@@ -250,10 +250,10 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         let fd = u32::from(fd);
         if table.is::<FileEntry>(fd) {
             let _file_entry: Arc<FileEntry> = table.get(fd)?;
-            Ok(())
+            Err(Error::not_supported())
         } else if table.is::<DirEntry>(fd) {
             let _dir_entry: Arc<DirEntry> = table.get(fd)?;
-            Ok(())
+            Err(Error::not_supported())
         } else {
             Err(Error::badf())
         }
@@ -538,7 +538,7 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
     ) -> Result<types::Prestat, Error> {
         let table = self.table();
         let dir_entry: Arc<DirEntry> = table.get(u32::from(fd)).map_err(|_| Error::badf())?;
-        if let Some(ref preopen) = dir_entry.preopen_path() {
+        if let Some(preopen) = dir_entry.preopen_path() {
             let path_str = preopen.to_str().ok_or_else(|| Error::not_supported())?;
             let pr_name_len = u32::try_from(path_str.as_bytes().len())?;
             Ok(types::Prestat::Dir(types::PrestatDir { pr_name_len }))
@@ -556,7 +556,7 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
     ) -> Result<(), Error> {
         let table = self.table();
         let dir_entry: Arc<DirEntry> = table.get(u32::from(fd)).map_err(|_| Error::not_dir())?;
-        if let Some(ref preopen) = dir_entry.preopen_path() {
+        if let Some(preopen) = dir_entry.preopen_path() {
             let path_bytes = preopen
                 .to_str()
                 .ok_or_else(|| Error::not_supported())?
@@ -582,6 +582,9 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         let from = u32::from(from);
         let to = u32::from(to);
         if !table.contains_key(from) {
+            return Err(Error::badf());
+        }
+        if !table.contains_key(to) {
             return Err(Error::badf());
         }
         table.renumber(from, to)
@@ -634,12 +637,11 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         &mut self,
         memory: &mut GuestMemory<'_>,
         fd: types::Fd,
-        buf: GuestPtr<u8>,
+        mut buf: GuestPtr<u8>,
         buf_len: types::Size,
         cookie: types::Dircookie,
     ) -> Result<types::Size, Error> {
         let mut bufused = 0;
-        let mut buf = buf.clone();
         for entity in self
             .table()
             .get_dir(u32::from(fd))?
@@ -817,6 +819,13 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         drop(dir_entry);
 
         let fd = match file {
+            // Paper over a divergence between Windows and POSIX, where
+            // POSIX returns EISDIR if you open a directory with the
+            // WRITE flag: https://pubs.opengroup.org/onlinepubs/9699919799/functions/open.html#:~:text=EISDIR
+            #[cfg(windows)]
+            OpenResult::Dir(_) if write => {
+                return Err(types::Errno::Isdir.into());
+            }
             OpenResult::File(file) => table.push(Arc::new(FileEntry::new(file, access_mode)))?,
             OpenResult::Dir(child_dir) => table.push(Arc::new(DirEntry::new(None, child_dir)))?,
         };
@@ -1131,12 +1140,12 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         &mut self,
         _memory: &mut GuestMemory<'_>,
         status: types::Exitcode,
-    ) -> anyhow::Error {
+    ) -> EnvError {
         // Check that the status is within WASI's range.
         if status < 126 {
             I32Exit(status as i32).into()
         } else {
-            anyhow::Error::msg("exit with invalid exit status outside of [0..126)")
+            EnvError::msg("exit with invalid exit status outside of [0..126)")
         }
     }
 
@@ -1145,7 +1154,7 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
         _memory: &mut GuestMemory<'_>,
         _sig: types::Signal,
     ) -> Result<(), Error> {
-        Err(Error::trap(anyhow::Error::msg("proc_raise unsupported")))
+        Err(Error::trap(EnvError::msg("proc_raise unsupported")))
     }
 
     async fn sched_yield(&mut self, _memory: &mut GuestMemory<'_>) -> Result<(), Error> {

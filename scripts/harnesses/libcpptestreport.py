@@ -29,6 +29,7 @@ LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).res
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 CXX = os.environ.get("CXX", "c++")
 DEFAULT_CPP_DIR = Path("tests/unit-tests/cpp")
+DEFAULT_NON_GRATE_TEST_WORKERS = "1"
 
 
 def get_empty_result() -> dict[str, Any]:
@@ -225,6 +226,8 @@ def _run_native_compile_cpp(source: Path, output_binary: Path) -> tuple[int, str
 
 def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str, float]:
     cmd = [str(LIND_TOOL_PATH / "lind_run"), wasm_basename]
+    run_env = os.environ.copy()
+    run_env["LIND_GRATE_WORKERS"] = DEFAULT_NON_GRATE_TEST_WORKERS
     t0 = time.perf_counter()
     try:
         proc = subprocess.run(
@@ -233,6 +236,7 @@ def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str,
             text=True,
             cwd=str(LIND_WASM_BASE),
             timeout=timeout_sec,
+            env=run_env,
         )
     except subprocess.TimeoutExpired:
         return "timeout", f"Timed out after {timeout_sec}s", time.perf_counter() - t0

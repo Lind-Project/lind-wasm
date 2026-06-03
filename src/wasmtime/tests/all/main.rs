@@ -1,55 +1,72 @@
 #![cfg_attr(miri, allow(dead_code, unused_imports))]
 
+use wasmtime::Result;
+
+mod arrays;
 mod async_functions;
 mod call_hook;
 mod cli_tests;
-mod code_too_large;
+mod compile_time_builtins;
 mod component_model;
 mod coredump;
+mod custom_code_memory;
 mod debug;
+mod debug_component;
 mod defaults;
+mod engine;
 mod epoch_interruption;
+mod eqref;
+mod exceptions;
+mod exnrefs;
 mod externals;
 mod fuel;
 mod func;
 mod funcref;
 mod gc;
 mod globals;
+#[cfg(feature = "gdbstub")]
+mod guest_debug;
 mod host_funcs;
+mod i31ref;
 mod iloop;
 mod import_calling_export;
 mod import_indexes;
 mod instance;
+mod intrinsics;
 mod invoke_func_via_table;
 mod limits;
 mod linker;
 mod memory;
 mod memory_creator;
+mod missing_async;
 mod module;
 mod module_serialize;
 mod name;
+mod native_debug;
 mod noextern;
 mod piped_tests;
 mod pooling_allocator;
+mod profiling;
+mod pulley;
 mod relocs;
 mod stack_creator;
 mod stack_overflow;
 mod store;
+mod structs;
 mod table;
+#[cfg(all(feature = "stack-switching", unix, target_arch = "x86_64"))]
+mod tags;
 mod threads;
 mod traps;
 mod types;
 mod wait_notify;
-mod wasi_testsuite;
-// Currently Winch is only supported in x86_64.
-#[cfg(all(target_arch = "x86_64"))]
-mod winch;
+mod winch_engine_features;
 
 /// A helper to compile a module in a new store with reference types enabled.
 pub(crate) fn ref_types_module(
     use_epochs: bool,
     source: &str,
-) -> anyhow::Result<(wasmtime::Store<()>, wasmtime::Module)> {
+) -> wasmtime::Result<(wasmtime::Store<()>, wasmtime::Module)> {
     use wasmtime::*;
 
     let _ = env_logger::try_init();
@@ -57,10 +74,7 @@ pub(crate) fn ref_types_module(
     let mut config = Config::new();
     config.wasm_reference_types(true);
 
-    if !cfg!(target_arch = "s390x") {
-        // TODO(6530): s390x doesn't support tail calls yet.
-        config.wasm_tail_call(true);
-    }
+    config.wasm_tail_call(true);
 
     if use_epochs {
         config.epoch_interruption(true);
@@ -88,7 +102,7 @@ pub(crate) fn skip_pooling_allocator_tests() -> bool {
 /// Get the default pooling allocator configuration for tests, which is a
 /// smaller pool than the normal default.
 pub(crate) fn small_pool_config() -> wasmtime::PoolingAllocationConfig {
-    let mut config = wasmtime::PoolingAllocationConfig::default();
+    let mut config = wasmtime::PoolingAllocationConfig::new();
 
     config.total_memories(1);
     config.max_memory_size(1 << 16);
@@ -98,10 +112,35 @@ pub(crate) fn small_pool_config() -> wasmtime::PoolingAllocationConfig {
     // When testing, we may choose to start with MPK force-enabled to ensure
     // we use that functionality.
     if std::env::var("WASMTIME_TEST_FORCE_MPK").is_ok() {
-        config.memory_protection_keys(wasmtime::MpkEnabled::Enable);
+        config.memory_protection_keys(wasmtime::Enabled::No);
     }
 
     config.total_stacks(1);
 
     config
+}
+
+pub(crate) fn gc_store() -> Result<wasmtime::Store<()>> {
+    let _ = env_logger::try_init();
+
+    let mut config = wasmtime::Config::new();
+    config.wasm_function_references(true);
+    config.wasm_gc(true);
+
+    let engine = wasmtime::Engine::new(&config)?;
+    Ok(wasmtime::Store::new(&engine, ()))
+}
+
+trait ErrorExt {
+    fn assert_contains(&self, msg: &str);
+}
+
+impl ErrorExt for wasmtime::Error {
+    fn assert_contains(&self, msg: &str) {
+        if self.chain().any(|e| e.to_string().contains(msg)) {
+            return;
+        }
+
+        panic!("failed to find:\n{msg}\n\nwithin error message:\n{self:?}")
+    }
 }

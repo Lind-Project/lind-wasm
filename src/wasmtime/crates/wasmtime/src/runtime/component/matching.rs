@@ -1,19 +1,21 @@
+use crate::Module;
+use crate::component::ResourceType;
 use crate::component::func::HostFunc;
 use crate::component::linker::{Definition, Strings};
-use crate::component::ResourceType;
-use crate::prelude::*;
+use crate::component::types::{FutureType, StreamType};
 use crate::runtime::vm::component::ComponentInstance;
 use crate::types::matching;
-use crate::Module;
+use crate::{Engine, prelude::*};
 use alloc::sync::Arc;
-use core::any::Any;
+use wasmtime_environ::PrimaryMap;
 use wasmtime_environ::component::{
     ComponentTypes, NameMap, ResourceIndex, TypeComponentInstance, TypeDef, TypeFuncIndex,
-    TypeModule, TypeResourceTableIndex,
+    TypeFutureTableIndex, TypeModule, TypeResourceTable, TypeResourceTableIndex,
+    TypeStreamTableIndex,
 };
-use wasmtime_environ::PrimaryMap;
 
 pub struct TypeChecker<'a> {
+    pub engine: &'a Engine,
     pub types: &'a Arc<ComponentTypes>,
     pub strings: &'a Strings,
     pub imported_resources: Arc<PrimaryMap<ResourceIndex, ResourceType>>,
@@ -58,7 +60,7 @@ impl TypeChecker<'_> {
             },
 
             TypeDef::Resource(i) => {
-                let i = self.types[i].ty;
+                let i = self.types[i].unwrap_concrete_ty();
                 let actual = match actual {
                     Some(Definition::Resource(actual, _dtor)) => actual,
 
@@ -112,17 +114,17 @@ impl TypeChecker<'_> {
     }
 
     fn module(&self, expected: &TypeModule, actual: &Module) -> Result<()> {
-        let actual_types = actual.types();
         let actual = actual.env_module();
 
         // Every export that is expected should be in the actual module we have
         for (name, expected) in expected.exports.iter() {
             let idx = actual
-                .exports
-                .get(name)
-                .ok_or_else(|| anyhow!("module export `{name}` not defined"))?;
+                .strings
+                .get_atom(name)
+                .and_then(|atom| actual.exports.get(&atom))
+                .ok_or_else(|| format_err!("module export `{name}` not defined"))?;
             let actual = actual.type_of(*idx);
-            matching::entity_ty(expected, self.types.module_types(), &actual, actual_types)
+            matching::entity_ty(self.engine, expected, &actual)
                 .with_context(|| format!("module export `{name}` has the wrong type"))?;
         }
 
@@ -135,8 +137,8 @@ impl TypeChecker<'_> {
             let expected = expected
                 .imports
                 .get(&(module.to_string(), name.to_string()))
-                .ok_or_else(|| anyhow!("module import `{module}::{name}` not defined"))?;
-            matching::entity_ty(&actual, actual_types, expected, self.types.module_types())
+                .ok_or_else(|| format_err!("module import `{module}::{name}` not defined"))?;
+            matching::entity_ty(self.engine, &actual, expected)
                 .with_context(|| format!("module import `{module}::{name}` has the wrong type"))?;
         }
         Ok(())
@@ -187,30 +189,27 @@ impl Definition {
 impl<'a> InstanceType<'a> {
     pub fn new(instance: &'a ComponentInstance) -> InstanceType<'a> {
         InstanceType {
-            types: instance.component_types(),
-            resources: downcast_arc_ref(instance.resource_types()),
+            types: instance.component().types(),
+            resources: instance.resource_types(),
         }
     }
 
     pub fn resource_type(&self, index: TypeResourceTableIndex) -> ResourceType {
-        let index = self.types[index].ty;
-        self.resources
-            .get(index)
-            .copied()
-            .unwrap_or_else(|| ResourceType::uninstantiated(&self.types, index))
+        match self.types[index] {
+            TypeResourceTable::Concrete { ty, .. } => self
+                .resources
+                .get(ty)
+                .copied()
+                .unwrap_or_else(|| ResourceType::uninstantiated(&self.types, ty)),
+            TypeResourceTable::Abstract(ty) => ResourceType::abstract_(&self.types, ty),
+        }
     }
-}
 
-/// Small helper method to downcast an `Arc` borrow into a borrow of a concrete
-/// type within the `Arc`.
-///
-/// Note that this is different than `downcast_ref` which projects out `&T`
-/// where here we want `&Arc<T>`.
-fn downcast_arc_ref<T: 'static>(arc: &Arc<dyn Any + Send + Sync>) -> &Arc<T> {
-    // First assert that the payload of the `Any` is indeed a `T`
-    let _ = arc.downcast_ref::<T>();
+    pub fn future_type(&self, index: TypeFutureTableIndex) -> FutureType {
+        FutureType::from(self.types[index].ty, self)
+    }
 
-    // Next do an unsafe pointer cast to convert the `Any` into `T` which should
-    // be safe given the above check.
-    unsafe { &*(arc as *const Arc<dyn Any + Send + Sync> as *const Arc<T>) }
+    pub fn stream_type(&self, index: TypeStreamTableIndex) -> StreamType {
+        StreamType::from(self.types[index].ty, self)
+    }
 }

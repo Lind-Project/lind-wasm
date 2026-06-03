@@ -2,14 +2,13 @@
 
 use std::sync::Arc;
 
-use crate::lexer::Pos;
+use crate::{files::Files, lexer::Pos};
 
 /// A collection of errors from attempting to compile some ISLE source files.
 pub struct Errors {
     /// The individual errors.
     pub errors: Vec<Error>,
-    pub(crate) filenames: Vec<Arc<str>>,
-    pub(crate) file_texts: Vec<Arc<str>>,
+    pub(crate) files: Arc<Files>,
 }
 
 impl std::fmt::Debug for Errors {
@@ -20,10 +19,11 @@ impl std::fmt::Debug for Errors {
         let diagnostics = Vec::from_iter(self.errors.iter().map(|e| {
             let message = match e {
                 Error::IoError { context, .. } => context.clone(),
-                Error::ParseError { msg, .. } => format!("parse error: {}", msg),
-                Error::TypeError { msg, .. } => format!("type error: {}", msg),
-                Error::UnreachableError { msg, .. } => format!("unreachable rule: {}", msg),
-                Error::OverlapError { msg, .. } => format!("overlap error: {}", msg),
+                Error::ParseError { msg, .. } => format!("parse error: {msg}"),
+                Error::TypeError { msg, .. } => format!("type error: {msg}"),
+                Error::UnreachableError { msg, .. } => format!("unreachable rule: {msg}"),
+                Error::OverlapError { msg, .. } => format!("overlap error: {msg}"),
+                Error::RecursionError { msg, .. } => format!("recursion error: {msg}"),
                 Error::ShadowedError { .. } => {
                     "more general higher-priority rule shadows other rules".to_string()
                 }
@@ -34,7 +34,8 @@ impl std::fmt::Debug for Errors {
 
                 Error::ParseError { span, .. }
                 | Error::TypeError { span, .. }
-                | Error::UnreachableError { span, .. } => {
+                | Error::UnreachableError { span, .. }
+                | Error::RecursionError { span, .. } => {
                     vec![Label::primary(span.from.file, span)]
                 }
 
@@ -62,7 +63,7 @@ impl std::fmt::Debug for Errors {
             let mut sources = Vec::new();
             let mut source = e.source();
             while let Some(e) = source {
-                sources.push(format!("{:?}", e));
+                sources.push(format!("{e:?}"));
                 source = std::error::Error::source(e);
             }
 
@@ -128,6 +129,15 @@ pub enum Error {
         rules: Vec<Span>,
     },
 
+    /// Recursive rules error. Term is recursive without explicit opt-in.
+    RecursionError {
+        /// The error message.
+        msg: String,
+
+        /// The location of the term declaration.
+        span: Span,
+    },
+
     /// The rules can never match because another rule will always match first.
     ShadowedError {
         /// The locations of the unmatchable rules.
@@ -139,6 +149,11 @@ pub enum Error {
 }
 
 impl Errors {
+    /// Create new Errors
+    pub fn new(errors: Vec<Error>, files: Arc<Files>) -> Self {
+        Self { errors, files }
+    }
+
     /// Create `isle::Errors` from the given I/O error and context.
     pub fn from_io(error: std::io::Error, context: impl Into<String>) -> Self {
         Errors {
@@ -146,8 +161,7 @@ impl Errors {
                 error,
                 context: context.into(),
             }],
-            filenames: Vec::new(),
-            file_texts: Vec::new(),
+            files: Arc::new(Files::default()),
         }
     }
 
@@ -161,7 +175,12 @@ impl Errors {
         let w = termcolor::BufferWriter::stderr(termcolor::ColorChoice::Auto);
         let mut b = w.buffer();
         let mut files = codespan_reporting::files::SimpleFiles::new();
-        for (name, source) in self.filenames.iter().zip(self.file_texts.iter()) {
+        for (name, source) in self
+            .files
+            .file_names
+            .iter()
+            .zip(self.files.file_texts.iter())
+        {
             files.add(name, source);
         }
         for diagnostic in diagnostics {
@@ -179,21 +198,16 @@ impl Errors {
         f: &mut std::fmt::Formatter,
         diagnostics: Vec<Diagnostic<usize>>,
     ) -> std::fmt::Result {
-        let line_ends: Vec<Vec<_>> = self
-            .file_texts
-            .iter()
-            .map(|text| text.match_indices('\n').map(|(i, _)| i + 1).collect())
-            .collect();
         let pos = |file_id: usize, offset| {
-            let ends = &line_ends[file_id];
-            let line0 = ends.partition_point(|&end| end <= offset);
-            let text = &self.file_texts[file_id];
+            let ends = self.files.file_line_map(file_id).unwrap();
+            let line0 = ends.line(offset);
+            let text = &self.files.file_texts[file_id];
             let start = line0.checked_sub(1).map_or(0, |prev| ends[prev]);
             let end = ends.get(line0).copied().unwrap_or(text.len());
             let col = offset - start + 1;
             format!(
                 "{}:{}:{}: {}",
-                self.filenames[file_id],
+                self.files.file_names[file_id],
                 line0 + 1,
                 col,
                 &text[start..end]
@@ -205,7 +219,7 @@ impl Errors {
                 f.write_str(&pos(label.file_id, label.range.start))?;
             }
             for note in diagnostic.notes {
-                writeln!(f, "{}", note)?;
+                writeln!(f, "{note}")?;
             }
             writeln!(f)?;
         }
@@ -243,8 +257,6 @@ impl Span {
             to: Pos {
                 file: pos.file,
                 offset: pos.offset + 1,
-                line: pos.line,
-                col: pos.col + 1,
             },
         }
     }

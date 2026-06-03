@@ -873,7 +873,7 @@ impl Drop for HelperThread {
 /// arbitrary types and values.
 pub fn dynamic_component_api_target(input: &mut arbitrary::Unstructured) -> arbitrary::Result<()> {
     use crate::generators::component_types;
-    use component_fuzz_util::{TestCase, Type, EXPORT_FUNCTION, IMPORT_FUNCTION, MAX_TYPE_DEPTH};
+    use component_fuzz_util::{EXPORT_FUNCTION, IMPORT_FUNCTION, MAX_TYPE_DEPTH, TestCase, Type};
     use component_test_util::FuncExt;
     use wasmtime::component::{Component, Linker, Val};
 

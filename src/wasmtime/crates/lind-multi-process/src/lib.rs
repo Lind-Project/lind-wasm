@@ -2,15 +2,16 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{
-    unset_stack_arena_base, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
+use sysdefs::lind_log;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
@@ -22,11 +23,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
-use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
     InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque,
-    Val, ValRaw, ValType,
+    VMContext, VMOpaqueContext, Val, ValRaw, ValType,
 };
 
 use cage::alloc_cage_id;
@@ -142,10 +142,8 @@ pub struct LindCtx<T, U> {
     >,
 }
 
-impl<
-        T: Clone + Send + 'static + std::marker::Sync,
-        U: Clone + Send + 'static + std::marker::Sync,
-    > LindCtx<T, U>
+impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+    LindCtx<T, U>
 {
     // create a new LindContext
     // Function Argument:
@@ -168,18 +166,18 @@ impl<
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T, bool) -> T + Send + Sync + 'static,
         exec: impl Fn(
-                &U,
-                &str,
-                &Vec<String>,
-                Engine,
-                Module,
-                i32,
-                &Arc<LindCageManager>,
-                &Option<Vec<(String, Option<String>)>>,
-            ) -> Result<Vec<Val>>
-            + Send
-            + Sync
-            + 'static,
+            &U,
+            &str,
+            &Vec<String>,
+            Engine,
+            Module,
+            i32,
+            &Arc<LindCageManager>,
+            &Option<Vec<(String, Option<String>)>>,
+        ) -> Result<Vec<Val>>
+        + Send
+        + Sync
+        + 'static,
     ) -> Result<Self> {
         // this method should only be called once from run.rs, other instances of LindCtx
         // are supposed to be created from fork() method
@@ -421,7 +419,8 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table)
+                        .expect("failed to create store inner");
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -443,7 +442,8 @@ impl<
                         None
                     };
 
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner)
+                        .expect("failed to create store");
 
                     let (mut linker, memory_base_table, epoch_handler, child_memory_base) =
                         Linker::new_child_linker(
@@ -463,14 +463,14 @@ impl<
                     // e.g. __stack_pointer, __indirect_function_table, etc.
 
                     let child_table = if dylink_enabled {
-                        let mut table_size = 0;
+                        let mut table_size: u64 = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
                                 table_size = table.minimum();
                             }
                         }
                         let mut child_table = linker
-                            .attach_function_table(&mut store, table_size)
+                            .attach_function_table(&mut store, table_size as u32)
                             .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
@@ -485,10 +485,11 @@ impl<
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -496,14 +497,15 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -513,9 +515,10 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -570,9 +573,10 @@ impl<
                     //    Snapshots are looked up by module name from the HashMap captured before
                     //    the unwind; backup instances are never registered so they are naturally
                     //    excluded from the snapshot map.
-                    let main_module_name = module
-                        .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    let main_module_name = module.name().unwrap_or_else(|| {
+                        lind_debug_panic!("module has no name");
+                        "" // best-effort fallback in LogOnly/NoAction mode
+                    });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -609,10 +613,11 @@ impl<
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -620,14 +625,15 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -704,7 +710,7 @@ impl<
 
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().as_ptr().cast();
 
                     // 2) Extract vmctx pointer and put in a Send+Sync wrapper
                     let vmctx_wrapper = VmCtxWrapper {
@@ -785,7 +791,7 @@ impl<
                         // as the signal-handler error path so the parent
                         // sees a proper zombie and resources are freed.
                         if let Err(err) = invoke_res {
-                            eprintln!("Child Error: {:?}", err);
+                            lind_log!(Default, "Child Error: {:?}", err);
                             cage::cage_record_exit_status(
                                 child_cageid,
                                 cage::ExitStatus::Exited(1),
@@ -798,7 +804,8 @@ impl<
                             cage::signal::lind_thread_exit(child_cageid, THREAD_START_ID as u64);
                             cage::cage_finalize(child_cageid);
                             if !rm_vmctx_thread(child_cageid, 0) {
-                                eprintln!(
+                                lind_log!(
+                                    Default,
                                     "[wasmtime|fork-crash] Failed to remove VMContext for cage {}",
                                     child_cageid
                                 );
@@ -814,7 +821,7 @@ impl<
                         match exit_code {
                             Val::I32(val) => {}
                             _ => {
-                                eprintln!("unexpected _start function return type!");
+                                lind_log!(Default, "unexpected _start function return type!");
                             }
                         }
                     }
@@ -894,7 +901,7 @@ impl<
         let next_tid = match self.next_thread_id() {
             Some(val) => val,
             None => {
-                println!("running out of thread id!");
+                lind_log!(Default, "running out of thread id!");
                 0
             }
         };
@@ -1009,7 +1016,8 @@ impl<
             builder
                 .spawn(move || {
                     // create a new instance
-                    let store_inner = Store::<T>::new_inner(&engine, symbol_table);
+                    let store_inner = Store::<T>::new_inner(&engine, symbol_table)
+                        .expect("failed to create store inner");
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
@@ -1025,7 +1033,8 @@ impl<
                     let modules = child_ctx.modules.clone();
                     let dlopen_modules = child_ctx.dlopen_modules.clone();
 
-                    let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                    let mut store = Store::new_with_inner(&engine, child_host, store_inner)
+                        .expect("failed to create store");
 
                     let mut child_got = if dylink_enabled {
                         Some(LindGOT::new())
@@ -1045,14 +1054,14 @@ impl<
                         .expect("failed to create child linker");
 
                     let child_table = if dylink_enabled {
-                        let mut table_size = 0;
+                        let mut table_size: u64 = 0;
                         for import in module.imports() {
                             if let wasmtime::ExternType::Table(table) = import.ty() {
                                 table_size = table.minimum();
                             }
                         }
                         let mut child_table = linker
-                            .attach_function_table(&mut store, table_size)
+                            .attach_function_table(&mut store, table_size as u32)
                             .unwrap();
 
                         linker.attach_asyncify(&mut store).unwrap();
@@ -1067,10 +1076,11 @@ impl<
                             // within the global indirect function table.
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             // Grow the shared indirect function table by the amount requested by the
                             // library (as recorded in its dylink section). New slots are initialized
@@ -1078,14 +1088,15 @@ impl<
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1095,9 +1106,10 @@ impl<
                             // The linker records the module under `name` and uses `table_start`
                             // to relocate/interpret the library's function references into the
                             // shared table. GOT entries are patched through the shared LindGOT.
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             linker
                                 .module_with_child(
                                     &mut store,
@@ -1140,9 +1152,10 @@ impl<
                     //    Store/Instance, so globals must be explicitly synced from the parent's
                     //    snapshot. Snapshots are looked up by module name; backup instances are
                     //    never registered and are therefore naturally excluded.
-                    let main_module_name = module
-                        .name()
-                        .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                    let main_module_name = module.name().unwrap_or_else(|| {
+                        lind_debug_panic!("module has no name");
+                        "" // best-effort fallback in LogOnly/NoAction mode
+                    });
                     store
                         .as_context_mut()
                         .register_named_instance(main_module_name.to_string(), grate_instanceid);
@@ -1174,22 +1187,24 @@ impl<
                             let dylink_info = dylink_info.as_ref().unwrap();
                             let table_start = child_table.size(&mut store) as i32;
 
-                            #[cfg(feature = "debug-dylink")]
-                            println!(
+                            lind_log!(
+                                DYLINK,
                                 "[debug] dlopen library table_start: {}, grow: {}",
-                                table_start, dylink_info.table_size
+                                table_start,
+                                dylink_info.table_size
                             );
                             child_table
                                 .grow(
                                     &mut store,
-                                    dylink_info.table_size,
+                                    dylink_info.table_size as u64,
                                     wasmtime::Ref::Func(None),
                                 )
                                 .unwrap();
 
-                            let module_name = module
-                                .name()
-                                .unwrap_or_else(|| lind_debug_panic("module has no name"));
+                            let module_name = module.name().unwrap_or_else(|| {
+                                lind_debug_panic!("module has no name");
+                                "" // best-effort fallback in LogOnly/NoAction mode
+                            });
                             let module_memory_base = *memory_base_table
                                 .get(module_name)
                                 .expect("memory base not found for library");
@@ -1279,7 +1294,7 @@ impl<
                     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                     let grate_storeopaque = store.inner_mut();
                     let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().as_ptr().cast();
 
                     // 2) Extract vmctx pointer and put in a Send+Sync wrapper
                     let vmctx_wrapper = VmCtxWrapper {
@@ -1334,7 +1349,7 @@ impl<
 
                     // print errors if any when running the thread
                     if let Err(err) = invoke_res {
-                        eprintln!("Error: {:?}", err);
+                        lind_log!(Default, "Error: {:?}", err);
                         return 0;
                     }
 
@@ -1348,7 +1363,11 @@ impl<
                             rm_vmctx_thread(child_cageid as u64, next_tid as u64);
                         }
                         _ => {
-                            eprintln!("unexpected _start function return type: {:?}", exit_code);
+                            lind_log!(
+                                Default,
+                                "unexpected _start function return type: {:?}",
+                                exit_code
+                            );
                         }
                     }
 
@@ -1408,7 +1427,7 @@ impl<
 
         let engine = main_module.engine().clone();
         let exec_file_path = Path::new(&path);
-        let exec_module = match engine.detect_precompiled_file(exec_file_path) {
+        let exec_module = match Engine::detect_precompiled_file(exec_file_path) {
             Ok(_) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
             Err(_) => Module::from_file(&engine, exec_file_path),
         };
@@ -1608,7 +1627,8 @@ impl<
 
                 // Remove the VMContext pool
                 if !rm_vmctx_thread(deferred_cageid, 0) {
-                    eprintln!(
+                    lind_log!(
+                        Default,
                         "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
                         deferred_cageid
                     );
@@ -1888,11 +1908,19 @@ impl<
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    let mut memory_iter = caller.as_context_mut().0.all_memories();
-    let memory = memory_iter.next().expect("no defined memory found").clone();
-    drop(memory_iter);
-
-    memory.data_ptr(caller.as_context()) as usize as u64
+    let em = caller
+        .as_context_mut()
+        .0
+        .all_memories()
+        .next()
+        .expect("no defined memory found");
+    if let Some(base) = em.shared_base_ptr() {
+        base as usize as u64
+    } else {
+        em.unshared()
+            .expect("expected memory")
+            .data_ptr(caller.as_context()) as usize as u64
+    }
 }
 
 /// Returns `(base_ptr_as_u64, data_size_in_bytes)` for the first guest linear
@@ -1901,13 +1929,26 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
 pub fn get_memory_base_and_size<T: Clone + Send + 'static + std::marker::Sync>(
     mut caller: &mut Caller<'_, T>,
 ) -> (u64, usize) {
-    let mut memory_iter = caller.as_context_mut().0.all_memories();
-    let memory = memory_iter.next().expect("no defined memory found").clone();
-    drop(memory_iter);
-
-    let base = memory.data_ptr(caller.as_context()) as usize as u64;
-    let size = memory.data_size(caller.as_context());
-    (base, size)
+    let em = caller
+        .as_context_mut()
+        .0
+        .all_memories()
+        .next()
+        .expect("no defined memory found");
+    if let Some(base) = em.shared_base_ptr() {
+        let size = unsafe {
+            let vm = em.shared().expect("shared memory");
+            (*vm.vmmemory_ptr().as_ptr())
+                .current_length
+                .load(std::sync::atomic::Ordering::SeqCst)
+        };
+        (base as usize as u64, size)
+    } else {
+        let m = em.unshared().expect("expected memory");
+        let base = m.data_ptr(caller.as_context()) as usize as u64;
+        let size = m.data_size(caller.as_context());
+        (base, size)
+    }
 }
 
 // entry point of fork syscall
@@ -2015,7 +2056,8 @@ where
 
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
-        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         let ret = Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             // Validate clone_arg inside Caller::with where memory bounds are available.
@@ -2132,7 +2174,8 @@ where
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
-        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             let host = caller.data().clone();
@@ -2239,7 +2282,8 @@ where
         // Convert the stored opaque pointer back into a concrete VMContext
         // so that we can safely re-enter Wasmtime execution.
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
-        let vmctx_raw: *mut VMContext = VMContext::from_opaque(opaque);
+        let vmctx_raw: *mut VMContext =
+            unsafe { VMContext::from_opaque(NonNull::new_unchecked(opaque)).as_ptr() };
 
         // Re-enter Wasmtime with the recovered VMContext.
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
@@ -2314,34 +2358,112 @@ where
 
 // attach a new SharedMemory to the Linker for multi-threading usage
 // Warning: only set need_init to true for first cage initialization
+//
+// `all_modules` should include the main module plus all preload library modules.
+// The shared memory is created with limits that satisfy every module's import
+// declaration: min = max(all declared mins), max = min(all declared maxes).
 pub fn attach_shared_memory<
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 >(
     store: impl AsContext<Data = T>,
     mut linker: &mut Linker<T>,
-    module: &Module,
+    all_modules: &[Module],
     need_init: bool,
     cageid: i32,
 ) -> Result<()> {
-    for import in module.imports() {
+    // Find the shared memory import in the first module (main module) to get
+    // the import namespace / name under which to register the memory.
+    let main_module = all_modules
+        .first()
+        .ok_or_else(|| anyhow!("no modules provided"))?;
+
+    let mut import_module_name = "";
+    let mut import_name = "";
+    let mut found = false;
+    for import in main_module.imports() {
         if let Some(m) = import.ty().memory() {
             if m.is_shared() {
-                let mem = SharedMemory::new(module.engine(), m.clone())?;
-                if need_init {
-                    // in case of first cage
-                    // Initialize vmmap immediately after creating the shared linear memory
-                    let memory_base = mem.get_memory_base();
-                    cage::init_vmmap(cageid as u64, memory_base as usize, None);
-                }
-                linker.define(&store, import.module(), import.name(), mem.clone())?;
+                import_module_name = import.module();
+                import_name = import.name();
+                found = true;
+                break;
+            }
+        }
+    }
+    if !found {
+        return Err(anyhow!("Main Module does not contain a shared memory"));
+    }
 
-                return Ok(());
+    // In lind-wasm the linear memory is always a fixed 4 GiB physical
+    // reservation (MmapMemory overrides max to MAX_MEMORY_SIZE = 4 GiB).
+    // The wasm modules may declare a smaller `max` (e.g. 1024 pages = 64 MiB)
+    // but that is a compiler artifact — the runtime must honour the full 4 GiB.
+    // We therefore always create the shared memory with max = 65536 pages (4 GiB)
+    // and grow to that size immediately, so that `current_length` reflects the
+    // true accessible extent.  The max-limit type check in matching.rs is
+    // relaxed for shared memories to allow this.
+    //
+    // We still compute combined_min (= max of all declared mins) to satisfy
+    // every module's minimum requirement.
+    let mut combined_min: u64 = 0;
+    for module in all_modules.iter() {
+        for import in module.imports() {
+            if let Some(m) = import.ty().memory() {
+                if m.is_shared() {
+                    combined_min = combined_min.max(m.minimum());
+                    break;
+                }
             }
         }
     }
 
-    Err(anyhow!("Main Module does not contain a shared memory"))
+    // Always use 65536 pages (4 GiB) as the declared maximum so that
+    // current_length can be grown to the full physical reservation.
+    const LIND_MAX_PAGES: u64 = 65536;
+
+    let mem_type = wasmtime::MemoryTypeBuilder::new()
+        .shared(true)
+        .min(combined_min)
+        .max(Some(LIND_MAX_PAGES))
+        .build()
+        .map_err(anyhow::Error::from)?;
+
+    let mem = SharedMemory::new(main_module.engine(), mem_type)?;
+
+    // Grow to the full 4 GiB so that every wasm address in [0, 4GiB) passes
+    // the current_length bounds check.  The physical pages are already reserved
+    // by MmapMemory; this just makes them PROT_READ|PROT_WRITE and updates
+    // current_length atomically.
+    let delta = LIND_MAX_PAGES.saturating_sub(combined_min);
+    if delta > 0 {
+        mem.grow(delta)
+            .map_err(anyhow::Error::from)
+            .context("failed to grow shared memory to 4 GiB")?;
+    }
+
+    if need_init {
+        let memory_base = mem.get_memory_base();
+
+        // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
+        // before handing it to rawposix. rawposix vmmap is solely responsible
+        // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses
+        // them. early_init_stack (dylink) and the make_syscall in
+        // new_started_impl_with_lind re-establish the required initial regions
+        // before any wasm code runs.
+        unsafe {
+            libc::mprotect(
+                memory_base as *mut libc::c_void,
+                1usize << 32,
+                libc::PROT_NONE,
+            );
+        }
+
+        cage::init_vmmap(cageid as u64, memory_base as usize, None);
+    }
+    linker.define(&store, import_module_name, import_name, mem.clone())?;
+
+    Ok(())
 }
 
 pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {

@@ -21,14 +21,14 @@
 
 use super::Reachability;
 use crate::{FuncEnvironment, HeapData, HeapStyle};
+use Reachability::*;
 use cranelift_codegen::{
     cursor::{Cursor, FuncCursor},
-    ir::{self, condcodes::IntCC, InstBuilder, RelSourceLoc},
+    ir::{self, InstBuilder, RelSourceLoc, condcodes::IntCC},
     ir::{Expr, Fact},
 };
 use cranelift_frontend::FunctionBuilder;
 use wasmtime_types::WasmResult;
-use Reachability::*;
 
 /// Helper used to emit bounds checks (as necessary) and compute the native
 /// address of a heap access.

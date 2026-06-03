@@ -1,19 +1,23 @@
 use crate::runtime::vm::{StoreBox, VMGlobalDefinition};
 use crate::store::{AutoAssertNoGc, StoreOpaque};
+use crate::type_registry::RegisteredType;
 use crate::{GlobalType, Mutability, Result, RootedGcRefImpl, Val};
 use core::ptr;
+use wasmtime_environ::Global;
 
 #[repr(C)]
 pub struct VMHostGlobalContext {
-    pub(crate) ty: GlobalType,
+    pub(crate) ty: Global,
     pub(crate) global: VMGlobalDefinition,
+
+    _registered_type: Option<RegisteredType>,
 }
 
 pub fn generate_global_export(
     store: &mut StoreOpaque,
     ty: GlobalType,
     val: Val,
-) -> Result<crate::runtime::vm::ExportGlobal> {
+) -> Result<crate::Global> {
     let global = wasmtime_environ::Global {
         wasm_ty: ty.content().to_wasm_type(),
         mutability: match ty.mutability() {
@@ -22,47 +26,63 @@ pub fn generate_global_export(
         },
     };
     let ctx = StoreBox::new(VMHostGlobalContext {
-        ty,
+        ty: global,
         global: VMGlobalDefinition::new(),
-    });
+        _registered_type: ty.into_registered_type(),
+    })?;
 
     let mut store = AutoAssertNoGc::new(store);
-    let definition = unsafe {
-        let global = &mut (*ctx.get()).global;
+    // SAFETY: the global that this is pointing to is rooted in `ctx` above and
+    // is safe to initialize.
+    unsafe {
+        let global = &mut ctx.get().as_mut().global;
         match val {
             Val::I32(x) => *global.as_i32_mut() = x,
             Val::I64(x) => *global.as_i64_mut() = x,
             Val::F32(x) => *global.as_f32_bits_mut() = x,
             Val::F64(x) => *global.as_f64_bits_mut() = x,
-            Val::V128(x) => *global.as_u128_mut() = x.into(),
+            Val::V128(x) => global.set_u128(x.into()),
             Val::FuncRef(f) => {
                 *global.as_func_ref_mut() =
-                    f.map_or(ptr::null_mut(), |f| f.vm_func_ref(&mut store).as_ptr());
+                    f.map_or(ptr::null_mut(), |f| f.vm_func_ref(&store).as_ptr());
             }
             Val::ExternRef(x) => {
                 let new = match x {
                     None => None,
-                    Some(x) => Some(x.try_gc_ref(&mut store)?.unchecked_copy()),
+                    Some(x) => Some(x.try_gc_ref(&store)?.unchecked_copy()),
                 };
                 let new = new.as_ref();
-                global.write_gc_ref(store.gc_store_mut()?, new);
+                global.write_gc_ref(&mut store, new);
             }
             Val::AnyRef(a) => {
                 let new = match a {
                     None => None,
-                    Some(a) => Some(a.try_gc_ref(&mut store)?.unchecked_copy()),
+                    Some(a) => Some(a.try_gc_ref(&store)?.unchecked_copy()),
                 };
                 let new = new.as_ref();
-                global.write_gc_ref(store.gc_store_mut()?, new);
+                global.write_gc_ref(&mut store, new);
+            }
+            Val::ExnRef(e) => {
+                let new = match e {
+                    None => None,
+                    Some(e) => Some(e.try_gc_ref(&store)?.unchecked_copy()),
+                };
+                let new = new.as_ref();
+                global.write_gc_ref(&mut store, new);
+            }
+            Val::ContRef(None) => {
+                // Allow null continuation references for trampoline globals - these are just placeholders
+                global.write_gc_ref(&mut store, None);
+            }
+            Val::ContRef(Some(_)) => {
+                // TODO(#10248): Implement non-null trampoline continuation reference handling
+                return Err(crate::format_err!(
+                    "non-null continuation references in trampoline globals not yet supported"
+                ));
             }
         }
-        global
-    };
+    }
 
-    store.host_globals().push(ctx);
-    Ok(crate::runtime::vm::ExportGlobal {
-        definition,
-        vmctx: ptr::null_mut(),
-        global,
-    })
+    let index = store.host_globals_mut().push(ctx)?;
+    Ok(crate::Global::from_host(store.id(), index))
 }
