@@ -302,9 +302,9 @@ impl Vmmap {
     fn round_page_num_up_to_map_multiple(&self, npages: u32, pages_per_map: u32) -> u32 {
         // Add (pages_per_map - 1) to npages and mask off lower bits to round up
         npages
-        .checked_add(pages_per_map - 1)
-        .map(|n| n & !(pages_per_map - 1))
-        .unwrap_or(u32::MAX & !(pages_per_map - 1)) // clamp to max aligned value
+            .checked_add(pages_per_map - 1)
+            .map(|n| n & !(pages_per_map - 1))
+            .unwrap_or(u32::MAX & !(pages_per_map - 1)) // clamp to max aligned value
     }
 
     /// Truncates a page number down to the nearest multiple of pages_per_map
@@ -345,7 +345,8 @@ impl Vmmap {
     pub fn user_to_sys(&self, address: u32) -> usize {
         // Add base address to user address to get system address
         let base = self.base_address.unwrap();
-        (address as usize).checked_add(base)
+        (address as usize)
+            .checked_add(base)
             .expect("user_to_sys: address overflow")
     }
 
@@ -358,9 +359,13 @@ impl Vmmap {
     pub fn sys_to_user(&self, address: usize) -> u32 {
         // Subtract base address from system address to get user address
         let base = self.base_address.unwrap();
-        let user = address.checked_sub(base)
+        let user = address
+            .checked_sub(base)
             .expect("sys_to_user: address underflow");
-        assert!(user <= u32::MAX as usize, "sys_to_user: result exceeds 32-bit space");
+        assert!(
+            user <= u32::MAX as usize,
+            "sys_to_user: result exceeds 32-bit space"
+        );
         user as u32
     }
 
@@ -637,10 +642,12 @@ impl VmmapOps for Vmmap {
         // Calculate page range
         let new_region_end_page = match page_num.checked_add(npages) {
             Some(end) => end,
-            None => return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "page_num + npages overflows 32-bit address space",
-            )),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "page_num + npages overflows 32-bit address space",
+                ))
+            }
         };
         let new_region_start_page = page_num;
 
