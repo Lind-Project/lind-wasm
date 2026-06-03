@@ -636,7 +636,7 @@ impl VmmapOps for Vmmap {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Number of pages cannot be zero",
-            ))
+            ));
         }
 
         // Calculate page range

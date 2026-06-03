@@ -917,7 +917,11 @@ pub extern "C" fn mmap_syscall(
     }
 
     if (useraddr as u64) + rounded_length > 0x100000000u64 {
-        return syscall_error(Errno::EINVAL, "mmap", "address range overflows 32-bit space");
+        return syscall_error(
+            Errno::EINVAL,
+            "mmap",
+            "address range overflows 32-bit space",
+        );
     }
 
     flags |= MAP_FIXED as i32;
@@ -1125,7 +1129,13 @@ pub extern "C" fn munmap_syscall(
     let page_count: u32 = (rounded_length >> PAGESHIFT) as u32;
     let req_end: u32 = match req_start.checked_add(page_count) {
         Some(end) => end,
-        None => return syscall_error(Errno::EINVAL, "munmap", "address range overflows 32-bit space"),
+        None => {
+            return syscall_error(
+                Errno::EINVAL,
+                "munmap",
+                "address range overflows 32-bit space",
+            )
+        }
     };
 
     let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
@@ -1271,7 +1281,6 @@ pub extern "C" fn brk_syscall(
         heap.file_size,
         heap.cage_id,
     );
-    
 
     let old_heap_end_u64 = (old_brk_page as u64) * (PAGESIZE as u64);
     let new_heap_end_u64 = (brk_page as u64) * (PAGESIZE as u64);
@@ -4927,7 +4936,11 @@ pub extern "C" fn shmat_syscall(
     useraddr = (space.start() << PAGESHIFT) as u32;
 
     if (useraddr as u64) + rounded_length > 0x100000000u64 {
-        return syscall_error(Errno::EINVAL, "shmat", "address range overflows 32-bit space");
+        return syscall_error(
+            Errno::EINVAL,
+            "shmat",
+            "address range overflows 32-bit space",
+        );
     }
 
     // Convert the user address into a system address.
