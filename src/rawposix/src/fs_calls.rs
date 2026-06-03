@@ -2587,13 +2587,13 @@ fn renameat_inner(
     let ret = unsafe {
         if use_renameat2 {
             libc::syscall(
-            libc::SYS_renameat2,
-            old_kernel_fd,
-            c_oldpath.as_ptr(),
-            new_kernel_fd,
-            c_newpath.as_ptr(),
-            flags,
-        ) as libc::c_int
+                libc::SYS_renameat2,
+                old_kernel_fd,
+                c_oldpath.as_ptr(),
+                new_kernel_fd,
+                c_newpath.as_ptr(),
+                flags,
+            ) as libc::c_int
         } else {
             libc::renameat(
                 old_kernel_fd,
