@@ -1,0 +1,3 @@
+[submodule "src/linux_kernel"]
+	path = src/linux_kernel
+	url = git@github.com:Lind-Project/linux.git
