@@ -636,7 +636,7 @@ impl VmmapOps for Vmmap {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Number of pages cannot be zero",
-            ));
+            ))
         }
 
         // Calculate page range
@@ -646,7 +646,7 @@ impl VmmapOps for Vmmap {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "page_num + npages overflows 32-bit address space",
-                ));
+                ))
             }
         };
         let new_region_start_page = page_num;
