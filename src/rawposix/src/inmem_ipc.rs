@@ -559,7 +559,10 @@ pub fn listen_socket(socket_id: u64, backlog: i32) -> i32 {
     };
 
     let mut listeners = LISTENERS.lock().unwrap();
-    if listeners.contains_key(&key) {
+    if let Some(listener) = listeners.get(&key) {
+        if Arc::ptr_eq(listener, &socket) {
+            return 0;
+        }
         return syscall_error(Errno::EADDRINUSE, "listen", "address already in use");
     }
     listeners.insert(key, socket);
