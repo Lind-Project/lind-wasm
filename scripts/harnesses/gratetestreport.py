@@ -118,6 +118,17 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--testfiles", type=Path, nargs="+", help="Specific grate files (*_grate.c) to run")
     parser.add_argument("--clean-results", action="store_true", help="Delete output files and exit")
+    parser.add_argument(
+        "--grate-build",
+        choices=["static", "shared", "both"],
+        default=os.environ.get("GRATE_BUILD", "shared"),
+        help=(
+            "How to compile the grate: 'static' passes -s to lind-clang (the legacy "
+            "static grate build), 'shared' omits it (dynamically linked grate), 'both' "
+            "runs each test once per mode. Default: shared (override via GRATE_BUILD env). "
+            "Cages are always compiled shared."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -238,8 +249,13 @@ def run_subprocess(cmd: list[str], timeout: int | None = None, cwd: Path | None 
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
 
 
-def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
-    grate_compile_cmd = [GRATE_CLANG, "-s", "--compile-grate", "--output-dir", "grates", test.grate_source.name]
+def compile_grate_test(test: GrateTestCase, static_build: bool = True) -> tuple[bool, str]:
+    # `-s` produces a statically linked grate; omitting it produces a dynamically linked
+    # (shared) grate. Both are supported at runtime. Cages are always built shared.
+    static_flag = ["-s"] if static_build else []
+    grate_compile_cmd = (
+        [GRATE_CLANG] + static_flag + ["--compile-grate", "--output-dir", "grates", test.grate_source.name]
+    )
     cage_compile_cmd = [GRATE_CLANG, test.cage_source.name]
 
     try:
@@ -405,20 +421,26 @@ def run_report(argv: list[str] | None = None) -> dict[str, Any]:
     if not tests_to_run:
         logger.warning("No grate tests found.")
 
-    for idx, test in enumerate(tests_to_run, start=1):
-        logger.info(f"[{idx}/{len(tests_to_run)}] {test.name}")
-        compile_ok, compile_output = compile_grate_test(test)
-        if not compile_ok:
-            add_test_result(result, test.name, "Failure", "Compile_Failure", compile_output)
-            continue
+    build_modes = ["static", "shared"] if args.grate_build == "both" else [args.grate_build]
 
-        status, output, _ = run_grate_test(test, args.timeout)
-        if status == "Success":
-            add_test_result(result, test.name, "Success", None, output)
-        elif status == "Timeout":
-            add_test_result(result, test.name, "Failure", "Timeout", output)
-        else:
-            add_test_result(result, test.name, "Failure", "Runtime_Failure", output)
+    for idx, test in enumerate(tests_to_run, start=1):
+        for mode in build_modes:
+            # Label results with the build mode only when running more than one, so
+            # single-mode runs keep their original test names.
+            label = f"{test.name} [{mode}]" if len(build_modes) > 1 else test.name
+            logger.info(f"[{idx}/{len(tests_to_run)}] {label}")
+            compile_ok, compile_output = compile_grate_test(test, static_build=(mode == "static"))
+            if not compile_ok:
+                add_test_result(result, label, "Failure", "Compile_Failure", compile_output)
+                continue
+
+            status, output, _ = run_grate_test(test, args.timeout)
+            if status == "Success":
+                add_test_result(result, label, "Success", None, output)
+            elif status == "Timeout":
+                add_test_result(result, label, "Failure", "Timeout", output)
+            else:
+                add_test_result(result, label, "Failure", "Runtime_Failure", output)
 
     with open(output_json, "w", encoding="utf-8") as fp:
         json.dump(result, fp, indent=4)

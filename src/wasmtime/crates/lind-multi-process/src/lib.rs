@@ -25,8 +25,9 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
-    InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque,
-    VMContext, VMOpaqueContext, Val, ValRaw, ValType,
+    InstanceId, InstantiateType, LindDylinkChildStore, Linker, Module, OnCalledAction,
+    SharedMemory, Store, StoreOpaque, VMContext, VMOpaqueContext, Val, ValRaw, ValType,
+    build_dylink_child_store,
 };
 
 use cage::alloc_cage_id;
@@ -208,6 +209,18 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
     pub fn attach_linker(&mut self, linker: Linker<T>) {
         self.linker = Some(linker);
+    }
+
+    /// The cage's preloaded module list (main module first, then preloaded libraries).
+    /// Exposed so the boot layer can build a grate worker builder for dynamically linked
+    /// grates (see `build_dylink_child_store`).
+    pub fn modules(&self) -> &[(String, String, Module)] {
+        &self.modules
+    }
+
+    /// The cage's dlopen'd module list. Exposed for the same reason as [`Self::modules`].
+    pub fn dlopen_modules(&self) -> &[(String, String, Module)] {
+        &self.dlopen_modules
     }
 
     // Attach a LindGOT (Global Offset Table) to this context, wrapping it in
@@ -704,7 +717,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     let mut new_child_host = store.data_mut();
                     let new_child_ctx = get_cx(&mut new_child_host);
-                    let cloned_linker = linker.clone();
+                    let mut cloned_linker = linker.clone();
                     new_child_ctx.attach_linker(linker);
                     new_child_ctx.attach_got_table(child_got);
 
@@ -720,27 +733,77 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-                    // Grate calls only supports static linking for now, so we only register
-                    // grate workers when dylink is not enabled.
-                    if !dylink_enabled {
-                        let grate_template = GrateTemplate {
-                            engine: module.engine().clone(),
-                            module: module.clone(),
-                            linker: cloned_linker,
-                        };
+                    // Register grate workers for the forked cage. Grates now work under both
+                    // static and dynamic builds. For dynamically linked grates, build a
+                    // worker_builder that reconstructs each worker store sharing THIS forked
+                    // cage's linear memory (snapshot taken with share_memory=true from the
+                    // child linker/store, so workers attach to the child's memory — not a
+                    // fresh copy as the fork's own process snapshot does).
+                    let worker_builder: Option<WorkerBuilder<T>> = if dylink_enabled {
+                        let wb_engine = engine.clone();
+                        // `symbol_table` was already consumed into the child store; read it
+                        // back from the child store for the worker builder.
+                        let wb_symbol_table =
+                            store.as_context_mut().get_library_symbol_table().clone();
+                        let wb_modules = modules.clone();
+                        let wb_dlopen_modules = dlopen_modules.clone();
+                        let wb_global_snapshots = global_snapshots.clone();
+                        let wb_get_cx = get_cx.clone();
+                        let wb_snapshot =
+                            cloned_linker.get_linker_snapshot_for_child(&mut store, true);
 
-                        // register grate workers for this cage
-                        create_handler_for_cage(
-                            &grate_template,
-                            store.data().clone(),
-                            child_cageid,
-                            ConcurrencyMode::Parallel,
-                        )
-                        .with_context(|| {
-                            format!("failed to register grate workers for cage {}", child_cageid)
-                        })
-                        .expect("create_handler_for_cage failed");
-                    }
+                        Some(Box::new(
+                            move |cageid: u64, _worker_id: u64, host: T, slot_top: u32| {
+                                let built = build_dylink_child_store(
+                                    &wb_engine,
+                                    host,
+                                    wb_symbol_table.clone(),
+                                    cageid,
+                                    &wb_modules,
+                                    &wb_dlopen_modules,
+                                    &wb_snapshot,
+                                    &wb_global_snapshots,
+                                    true, /* dylink_enabled */
+                                    slot_top,
+                                )?;
+                                let LindDylinkChildStore {
+                                    mut store,
+                                    instance,
+                                    linker,
+                                    got,
+                                    stack_top,
+                                    ..
+                                } = built;
+                                {
+                                    let ctx = wb_get_cx(store.data_mut());
+                                    ctx.attach_linker(linker);
+                                    ctx.attach_got_table(got);
+                                }
+                                Ok((store, instance, stack_top))
+                            },
+                        ) as WorkerBuilder<T>)
+                    } else {
+                        None
+                    };
+
+                    let grate_template = GrateTemplate {
+                        engine: module.engine().clone(),
+                        module: module.clone(),
+                        linker: cloned_linker,
+                        worker_builder,
+                    };
+
+                    // register grate workers for this cage
+                    create_handler_for_cage(
+                        &grate_template,
+                        store.data().clone(),
+                        child_cageid,
+                        ConcurrencyMode::Parallel,
+                    )
+                    .with_context(|| {
+                        format!("failed to register grate workers for cage {}", child_cageid)
+                    })
+                    .expect("create_handler_for_cage failed");
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -1512,17 +1575,18 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 );
             }
 
-            // Grate calls only supports static linking for now, so we only register
-            // grate workers when dylink is not enabled.
-            if !dylink_enabled {
-                // Unset original stack arena base for the grate, since the exec-ed module might have different memory layout
-                unset_stack_arena_base(cloned_cageid as usize).unwrap_or_else(|e| {
-                    panic!(
-                        "failed to unset stack arena base for grate {}: {}",
-                        cloned_cageid, e
-                    )
-                });
-            }
+            // Unset the original stack arena base before exec: every cage now reserves a
+            // grate stack arena (static and dynamic alike), and the exec-ed module will
+            // re-reserve its own in InstantiateFirst with a possibly different memory
+            // layout. Without unsetting first, that re-reservation panics with "already
+            // initialized" (notably on the fork+exec path, where the child already
+            // inherited the parent's arena base via fork_stack_arena_base_for_child).
+            unset_stack_arena_base(cloned_cageid as usize).unwrap_or_else(|e| {
+                panic!(
+                    "failed to unset stack arena base for cage {}: {}",
+                    cloned_cageid, e
+                )
+            });
 
             let ret = exec_call(
                 &cloned_lindboot_cli,
