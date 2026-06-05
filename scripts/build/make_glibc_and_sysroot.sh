@@ -220,7 +220,7 @@ cp "$BUILD/lind_debug.o" "$SYSROOT/lib/wasm32-wasi/"
 
 "$SCRIPT_DIR/make_archive.sh"
 cd $SCRIPT_DIR
-cd ../
+cd ../../
 "$SCRIPT_DIR/make_shared_glibc.sh" "${shared_script_args[@]}"
 "$SCRIPT_DIR/make_shared_libm.sh" "${shared_script_args[@]}"
 

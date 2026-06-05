@@ -31,9 +31,9 @@ JSON_OUTPUT = "grates.json"
 HTML_OUTPUT = "grate_report.html"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
+REPO_ROOT = SCRIPT_DIR.parents[2]
 GRATE_TEST_BASE = REPO_ROOT / "tests" / "grate-tests"
-LIND_TOOL_PATH = REPO_ROOT / "scripts"
+LIND_TOOL_PATH = REPO_ROOT / "scripts" / "bin"
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", REPO_ROOT / "lindfs")).resolve()
 
 GRATE_CLANG = os.environ.get("GRATE_CLANG", "lind-clang")

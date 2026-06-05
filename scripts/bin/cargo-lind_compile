@@ -29,7 +29,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 # Set linker (allow override via environment variable)
-LINKER="${LIND_WASM_LINKER:-$HOME/lind-wasm/scripts/wasip1-clang.sh}"
+LINKER="${LIND_WASM_LINKER:-$HOME/lind-wasm/scripts/bin/wasip1-clang.sh}"
 export CARGO_TARGET_WASM32_WASIP1_LINKER="$LINKER"
 
 # Set rustflags for wasm32-wasip1 target
@@ -57,7 +57,7 @@ if [ -z "$LIND_COMPILE_BIN" ]; then
     if command -v lind_compile >/dev/null 2>&1; then
         LIND_COMPILE_BIN="$(command -v lind_compile)"
     else
-        LIND_COMPILE_BIN="$HOME/lind-wasm/scripts/lind_compile"
+        LIND_COMPILE_BIN="$HOME/lind-wasm/scripts/bin/lind_compile"
     fi
 fi
 

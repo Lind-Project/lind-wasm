@@ -11,7 +11,9 @@ set -e
 
 CC="clang"
 REPO_ROOT="$PWD"
-SCRIPTS_DIR="$REPO_ROOT/scripts"
+BUILD_SCRIPTS_DIR="$REPO_ROOT/scripts/build"
+GENERATE_DIR="$REPO_ROOT/scripts/generate"
+DATA_DIR="$REPO_ROOT/scripts/data"
 GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
@@ -22,7 +24,7 @@ if [[ "$1" == "--with-fpcast" ]]; then
     FPCAST_FLAG="--fpcast-emu"
 fi
 
-symbols=$($SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $SCRIPTS_DIR/extract_versions.py --flags --paths-file $SCRIPTS_DIR/math-path.txt)
+symbols=$($BUILD_SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $GENERATE_DIR/extract_versions.py --flags --paths-file $DATA_DIR/math-path.txt)
 
 # --import-memory, --shared-memory: to make memory shared across wasm module
 # --export-dynamic, --experimental-pic, --unresolved-symbols=import-dynamic, -shared: flags for dynamic build of libraries
@@ -48,7 +50,7 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.
 mkdir -p $REPO_ROOT/lindfs/lib
 
 # apply wasm-opt
-$REPO_ROOT/scripts/lind-wasm-opt --target=library $FPCAST_FLAG $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.so
+$REPO_ROOT/scripts/bin/lind-wasm-opt --target=library $FPCAST_FLAG $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.so
 
 # do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libm.cwasm

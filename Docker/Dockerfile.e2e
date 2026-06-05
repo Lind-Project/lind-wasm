@@ -148,10 +148,10 @@ COPY --parents scripts tests tools skip_test_cases.txt .
 
 ENV LIND_WASM_ROOT=/
 
-RUN chmod 0755 /scripts/lind_compile /scripts/lind_run /scripts/cargo-lind_compile \
- && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
- && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
+RUN chmod 0755 /scripts/bin/lind_compile /scripts/bin/lind_run /scripts/bin/cargo-lind_compile \
+ && ln -sf /scripts/bin/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/bin/lind_run     /usr/local/bin/lind_run \
+ && install -D -m 0755 /scripts/bin/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
@@ -161,12 +161,12 @@ RUN chmod 0755 /scripts/lind_compile /scripts/lind_run /scripts/cargo-lind_compi
 FROM base AS test
 ENV LIND_WASM_ROOT=/
 COPY --parents scripts tests tools skip_test_cases.txt Makefile artifacts .
-RUN chmod 0755 /scripts/test_runner.py /scripts/lind_compile /scripts/lind_compile_cpp /scripts/lind_run \
- && chmod 0755 /scripts/cargo-lind_compile \
- && ln -sf /scripts/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /scripts/lind_compile_cpp /usr/local/bin/lind_compile_cpp \
- && ln -sf /scripts/lind_run     /usr/local/bin/lind_run \
- && install -D -m 0755 /scripts/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
+RUN chmod 0755 /scripts/test/test_runner.py /scripts/bin/lind_compile /scripts/bin/lind_compile_cpp /scripts/bin/lind_run \
+ && chmod 0755 /scripts/bin/cargo-lind_compile \
+ && ln -sf /scripts/bin/lind_compile /usr/local/bin/lind_compile \
+ && ln -sf /scripts/bin/lind_compile_cpp /usr/local/bin/lind_compile_cpp \
+ && ln -sf /scripts/bin/lind_run     /usr/local/bin/lind_run \
+ && install -D -m 0755 /scripts/bin/cargo-lind_compile /usr/local/bin/cargo-lind_compile \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build

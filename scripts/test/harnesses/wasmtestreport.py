@@ -57,12 +57,12 @@ SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will 
 RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
+REPO_ROOT = SCRIPT_DIR.parents[2]
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
 CC = os.environ.get("CC", "clang")  # C compiler, defaults to clang
 
-LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
+LIND_TOOL_PATH = LIND_WASM_BASE / "scripts" / "bin"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
 TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
 TESTFILES_DST = LINDFS_ROOT / "testfiles"

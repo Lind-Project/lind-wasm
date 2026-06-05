@@ -37,7 +37,7 @@ fpcast:
 
 .PHONY: sysroot
 sysroot: build-dir
-	./scripts/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
+	./scripts/build/make_glibc_and_sysroot.sh $(if $(WITH_FPCAST),--with-fpcast)
 	$(MAKE) sync-sysroot
 
 # fdtables backend selector. One of: dashmaparray (default), dashmapvec,
@@ -74,9 +74,9 @@ lindfs:
 		mkdir -p $(LINDFS_ROOT)/$$d; \
 	done
 	touch $(LINDFS_ROOT)/dev/null
-	cp -rT scripts/lindfs-conf/etc $(LINDFS_ROOT)/etc
-	cp -rT scripts/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
-	cp -rT scripts/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
+	cp -rT scripts/config/lindfs-conf/etc $(LINDFS_ROOT)/etc
+	cp -rT scripts/config/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
+	cp -rT scripts/config/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
 	@if [ -d /usr/share/zoneinfo ]; then \
 		cp -r /usr/share/zoneinfo/* $(LINDFS_ROOT)/usr/share/zoneinfo/; \
 	fi
@@ -102,7 +102,7 @@ build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
 		echo "Building glibc with LIND_DEBUG enabled"; \
-		./scripts/make_glibc_and_sysroot.sh; \
+		./scripts/build/make_glibc_and_sysroot.sh; \
 		$(MAKE) sync-sysroot; \
 	fi
 
@@ -159,12 +159,12 @@ test: lindfs
 	  cp -a "$$prebuilt_lindfs_root/lib/." "$(LINDFS_ROOT)/lib/"; \
 	fi; \
 	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
-	python3 ./scripts/test_runner.py --export-report report.html && \
+	python3 ./scripts/test/test_runner.py --export-report report.html && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
-	  python3 ./scripts/check_reports.py --debug; \
+	  python3 ./scripts/test/check_reports.py --debug; \
 	else \
-	  python3 ./scripts/check_reports.py; \
+	  python3 ./scripts/test/check_reports.py; \
 	fi; then \
 	  echo "E2E_STATUS=pass" > e2e_status; \
 	else \
@@ -216,7 +216,7 @@ test-grate:
 		echo "GRATE and GRATE_PREFIX are mutually exclusive"; exit 1; \
 	fi
 	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
-	python3 ./scripts/harnesses/wasmtestreport.py \
+	python3 ./scripts/test/harnesses/wasmtestreport.py \
 		--allow-pre-compiled \
 		$(if $(GRATE),--grate grates/$(GRATE).cwasm) \
 		$(if $(GRATE_ARGS),--grate-args "$(GRATE_ARGS)") \
@@ -231,7 +231,7 @@ REPORT ?= report.html
 
 md_generation:
 	python3 -m pip install --quiet jinja2
-	REPORT_PATH=$(REPORT) OUT_DIR=$(OUT) python3 scripts/render_e2e_templates.py
+	REPORT_PATH=$(REPORT) OUT_DIR=$(OUT) python3 scripts/generate/render_e2e_templates.py
 	@echo "Wrote $(OUT)/e2e_comment.md"
 
 

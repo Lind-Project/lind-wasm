@@ -9,10 +9,11 @@ from pathlib import Path
 
 def repo_root() -> Path:
     """Return the root of the lind-wasm repo."""
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent.parent.parent
 
 
 ROOT = repo_root()
+LIND_TOOL_PATH = ROOT / "scripts" / "bin"
 BENCH_DIR = ROOT / "tests" / "benchmarks"
 LIND_FS = ROOT / "lindfs"
 
@@ -57,7 +58,7 @@ def lindfs_path(rel: Path) -> Path:
 
 def compile_lind(c_file: Path) -> str:
     """Compile a C benchmark to wasm using lind_compile."""
-    status = run_cmd(["lind_compile", str(c_file), str(BENCH_DIR / "bench.c")])
+    status = run_cmd([str(LIND_TOOL_PATH / "lind_compile"), str(c_file), str(BENCH_DIR / "bench.c")])
 
     if not status:
         return None
@@ -210,7 +211,7 @@ def parse_output(res, output, platform, description=None):
 
 def run_lind(wasm_paths, res, platform, description=None):
     """Run lind-boot with one or more wasm paths."""
-    cmd = ["lind_run"] + wasm_paths
+    cmd = [str(LIND_TOOL_PATH / "lind_run")] + wasm_paths
     status = run_cmd(cmd)
     if status:
         parse_output(res, status.stdout, platform, description)
