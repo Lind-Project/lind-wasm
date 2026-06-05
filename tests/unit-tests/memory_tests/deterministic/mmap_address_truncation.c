@@ -19,7 +19,7 @@ int main() {
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
 
   if (res == MAP_FAILED) {
-    printf("PASS: mmap correctly rejected — %s\n");
+    printf("PASS: mmap correctly rejected \n");
   } else {
     printf("FAIL: mmap succeeded — overflow not caught!\n");
     char *base = (char *)res;
