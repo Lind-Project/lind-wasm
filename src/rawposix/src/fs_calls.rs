@@ -4659,6 +4659,35 @@ pub extern "C" fn ioctl_syscall(
 
     let vfd = wrappedvfd.unwrap();
 
+    if vfd.fdkind == FDKIND_IMPIPE || vfd.fdkind == FDKIND_IMSOCK {
+        return match req {
+            FIONBIO => {
+                if ptrunion.is_null() {
+                    return syscall_error(Errno::EFAULT, "ioctl", "Invalid address");
+                }
+                let enable = unsafe { *(ptrunion as *const i32) } != 0;
+                let status_flags = if enable {
+                    vfd.perfdinfo | O_NONBLOCK as u64
+                } else {
+                    vfd.perfdinfo & !(O_NONBLOCK as u64)
+                };
+                match fdtables::set_perfdinfo(cageid, vfd_arg as u64, status_flags) {
+                    Ok(_) => 0,
+                    Err(_) => syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor"),
+                }
+            }
+            FIOASYNC => 0,
+            FIONREAD => {
+                if ptrunion.is_null() {
+                    return syscall_error(Errno::EFAULT, "ioctl", "Invalid address");
+                }
+                unsafe { *(ptrunion as *mut i32) = 0 };
+                0
+            }
+            _ => syscall_error(Errno::EINVAL, "ioctl", "unsupported in-memory fd request"),
+        };
+    }
+
     let ret = unsafe {
         libc::ioctl(
             vfd.underfd as i32,
