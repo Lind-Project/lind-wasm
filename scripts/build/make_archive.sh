@@ -9,7 +9,8 @@ CC="clang"
 # 1. Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-HOME_DIR=$(dirname "${SCRIPT_DIR}")
+HOME_DIR=$(dirname "$(dirname "${SCRIPT_DIR}")")
+DATA_DIR="$HOME_DIR/scripts/data"
 GLIBC="$HOME_DIR/src/glibc"
 BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
@@ -22,8 +23,8 @@ create_archive() {
     local input_list_name="$1"    # e.g., "libc_objects.txt"
     local output_archive="$2"     # e.g., "libc.a" (full path or relative)
 
-    local list_file_path="$SCRIPT_DIR/object_lists/$input_list_name"
-    local response_file="$SCRIPT_DIR/object_lists_final/$input_list_name"
+    local list_file_path="$DATA_DIR/object_lists/$input_list_name"
+    local response_file="$DATA_DIR/object_lists_final/$input_list_name"
 
     echo "------------------------------------------------"
     echo "Processing: $input_list_name -> $output_archive"
@@ -70,10 +71,10 @@ create_archive() {
     fi
 }
 
-rm -rf $SCRIPT_DIR/object_lists_final
-mkdir $SCRIPT_DIR/object_lists_final
+rm -rf $DATA_DIR/object_lists_final
+mkdir $DATA_DIR/object_lists_final
 # Loop through all files in the object_lists directory
-for file in "$SCRIPT_DIR/object_lists/"*; do
+for file in "$DATA_DIR/object_lists/"*; do
     # Skip if directory is empty or file doesn't exist
     [ -e "$file" ] || continue
 

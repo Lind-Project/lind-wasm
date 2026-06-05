@@ -11,7 +11,9 @@ set -e
 
 CC="clang"
 REPO_ROOT="$PWD"
-SCRIPTS_DIR="$REPO_ROOT/scripts"
+BUILD_SCRIPTS_DIR="$REPO_ROOT/scripts/build"
+GENERATE_DIR="$REPO_ROOT/scripts/generate"
+DATA_DIR="$REPO_ROOT/scripts/data"
 GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
@@ -22,7 +24,7 @@ if [[ "$1" == "--with-fpcast" ]]; then
     FPCAST_FLAG="--fpcast-emu"
 fi
 
-symbols=$($SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $SCRIPTS_DIR/extract_versions.py --flags --paths-file $SCRIPTS_DIR/version-path-minimal.txt)
+symbols=$($BUILD_SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $GENERATE_DIR/extract_versions.py --flags --paths-file $DATA_DIR/version-path-minimal.txt)
 
 # wasm_eh_c_longjmp_tag.o introduces a wasm Tag section into libc.so.  The
 # prebuilt add-export-tool binary cannot handle binaries with a Tag section
@@ -77,7 +79,7 @@ $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $
 $REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __stack_pointer global __stack_pointer
 
 # apply wasm-opt (use --target=libc: libc owns signal_callback, so epoch-main-module must be omitted)
-$REPO_ROOT/scripts/lind-wasm-opt --target=libc $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
+$REPO_ROOT/scripts/bin/lind-wasm-opt --target=libc $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
 
 # do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libc.cwasm

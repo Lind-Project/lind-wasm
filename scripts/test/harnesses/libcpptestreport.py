@@ -2,13 +2,13 @@
 """Shared libc++ smoke helpers used by wasmtestreport.
 
 This module intentionally exposes helper functions only; it is invoked by
-`scripts/harnesses/wasmtestreport.py` so libc++ results remain embedded in the
+`scripts/test/harnesses/wasmtestreport.py` so libc++ results remain embedded in the
 single wasm harness JSON/HTML output.
 
 Timing dicts and HTML time cells mirror `wasmtestreport` field names and
 formatting, but are implemented locally here: the harness is often run as
-``python3 scripts/harnesses/wasmtestreport.py``, so ``sys.path`` does not
-include the parent ``scripts/`` package and ``import harnesses.wasmtestreport``
+``python3 scripts/test/harnesses/wasmtestreport.py``, so ``sys.path`` does not
+include the parent ``scripts/test/`` package and ``import harnesses.wasmtestreport``
 fails inside this module.
 """
 
@@ -23,10 +23,10 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
+REPO_ROOT = SCRIPT_DIR.parents[2]
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
-LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
+LIND_TOOL_PATH = LIND_WASM_BASE / "scripts" / "bin"
 CXX = os.environ.get("CXX", "c++")
 DEFAULT_CPP_DIR = Path("tests/unit-tests/cpp")
 DEFAULT_NON_GRATE_TEST_WORKERS = "1"
@@ -201,7 +201,7 @@ def _cwasm_path_for_source(source: Path) -> Path:
 
 
 def _run_lind_compile_cpp_full(source: Path) -> tuple[int, str, float]:
-    cmd = [str(LIND_WASM_BASE / "scripts" / "lind_compile_cpp"), str(source)]
+    cmd = [str(LIND_TOOL_PATH / "lind_compile_cpp"), str(source)]
     t0 = time.perf_counter()
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(LIND_WASM_BASE))

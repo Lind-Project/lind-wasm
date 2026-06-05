@@ -198,8 +198,8 @@ if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
   REPO_ROOT="${LIND_WASM_ROOT}"
 else
   SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-  if [[ -f "${SCRIPT_DIR}/../Makefile" ]]; then
-    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
   else
     if command -v git >/dev/null 2>&1; then
       REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -268,7 +268,7 @@ esac
 
 # --- tool paths & quick checks (anchored to repo) ---
 CLANG_BIN="clang"  # must be on PATH
-LIND_WASM_OPT_BIN="${REPO_ROOT}/scripts/lind-wasm-opt"
+LIND_WASM_OPT_BIN="${REPO_ROOT}/scripts/bin/lind-wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
 LINDFS_ROOT="${REPO_ROOT}/lindfs/"
 if [[ -n "${TARGET_DIR}" ]]; then
