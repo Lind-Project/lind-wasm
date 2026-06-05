@@ -300,7 +300,8 @@ fn worker_stack_base(cageid: u64, workerid: WorkerId) -> u32 {
             panic!("STACK_ARENA_BASE is not initialized for cageid {}", cageid);
         });
     stack_arena_base
-        + (workerid as u32 - 1) * (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)
+        + (workerid as u32 - 1)
+            * (GRATE_STACK_GUARD_SIZE + lind_platform_const::grate_stack_slot_size())
         + GRATE_STACK_GUARD_SIZE
 }
 
@@ -310,7 +311,7 @@ fn worker_stack_base(cageid: u64, workerid: WorkerId) -> u32 {
 /// starting a new grate call, ensuring that each invocation begins with a clean
 /// stack state inside that worker’s private stack slot.
 fn worker_stack_top(cageid: u64, workerid: WorkerId) -> u32 {
-    worker_stack_base(cageid, workerid) + GRATE_STACK_SLOT_SIZE
+    worker_stack_base(cageid, workerid) + lind_platform_const::grate_stack_slot_size()
 }
 
 fn configured_grate_workers() -> usize {

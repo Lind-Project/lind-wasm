@@ -135,14 +135,45 @@ pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 /// instance reserves the same number of worker stack slots in linear memory.
 pub const MAX_GRATE_WORKERS: usize = 32;
 
-/// Size in bytes of the usable stack region assigned to one grate worker.
+/// Default size in bytes of the usable stack region assigned to one grate worker.
 ///
 /// Each worker executes in its own `Store + Instance` context, but workers may
 /// still attach to the same underlying linear memory. Therefore, every worker
-/// must be given a disjoint stack slot inside the shared stack arena.
+/// must be given a disjoint stack slot inside the shared stack arena. This is the
+/// usable portion of that per-worker slot.
 ///
-/// This constant specifies the usable portion of that per-worker slot.
-pub const GRATE_STACK_SLOT_SIZE: u32 = 8 * 1024 * 1024;
+/// Grate workers only ever run grate *handler* code (syscall interposition), which
+/// is shallow compared to arbitrary user programs, so the default is modest (1 MiB).
+/// Override at runtime with the `LIND_GRATE_STACK_SIZE` environment variable; see
+/// [`grate_stack_slot_size`].
+pub const DEFAULT_GRATE_STACK_SLOT_SIZE: u32 = 1024 * 1024;
+
+/// Environment variable that overrides the per-worker grate stack slot size (bytes).
+pub const GRATE_STACK_SIZE_ENV: &str = "LIND_GRATE_STACK_SIZE";
+
+static GRATE_STACK_SLOT_SIZE_CACHED: OnceLock<u32> = OnceLock::new();
+
+/// Per-worker grate stack slot size in bytes.
+///
+/// Returns [`DEFAULT_GRATE_STACK_SLOT_SIZE`] (1 MiB) unless the `LIND_GRATE_STACK_SIZE`
+/// environment variable is set to a positive integer number of bytes, in which case
+/// that value (rounded up to a 4 KiB page) is used.
+///
+/// The result is read from the environment once and cached for the process lifetime so
+/// that every consumer agrees on the same arena geometry: the arena reservation in
+/// `instance.rs` and the per-worker slot addressing in `lind-3i` must use the identical
+/// value, otherwise worker stacks would not line up with the reserved region.
+pub fn grate_stack_slot_size() -> u32 {
+    *GRATE_STACK_SLOT_SIZE_CACHED.get_or_init(|| {
+        std::env::var(GRATE_STACK_SIZE_ENV)
+            .ok()
+            .and_then(|v| v.trim().parse::<u32>().ok())
+            .filter(|n| *n > 0)
+            // Keep slot boundaries page-aligned so the arena layout stays well-formed.
+            .map(|n| (n + 4095) & !4095)
+            .unwrap_or(DEFAULT_GRATE_STACK_SLOT_SIZE)
+    })
+}
 
 /// Size in bytes of the guard region placed before each grate-worker stack slot.
 ///

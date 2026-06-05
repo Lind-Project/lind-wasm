@@ -478,7 +478,7 @@ impl Instance {
 
                     let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
                         * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
-                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                            + lind_platform_const::grate_stack_slot_size() as usize);
 
                     lind_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
                         .unwrap_or_else(|e| {
@@ -544,30 +544,31 @@ impl Instance {
                     //
                     // and each worker consumes exactly:
                     //
-                    //   `GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE`
+                    //   `GRATE_STACK_GUARD_SIZE + grate_stack_slot_size()`
                     //
                     // bytes inside the arena.
                     //
                     // Therefore, the total reserved arena size is:
                     //
                     //   `stack_arena_size = MAX_GRATE_WORKERS *
-                    //       (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)`
+                    //       (GRATE_STACK_GUARD_SIZE + grate_stack_slot_size())`
                     //
                     // The arena begins at `stack_arena_base`, which is chosen by rounding the
                     // module's minimal required memory size upward to a host page boundary.
                     // This guarantees that the worker-stack region starts at a page-aligned
                     // location after the module's initial memory footprint.
                     //
-                    // Why can `stack_arena_size` be globally constant?
+                    // Why is `stack_arena_size` the same for every cage?
                     //
                     // Because grate workers are created from one fixed runtime configuration:
-                    // every grate instance uses the same
+                    // every grate instance in this process uses the same
                     //
                     //   - MAX_GRATE_WORKERS
                     //   - GRATE_STACK_GUARD_SIZE
-                    //   - GRATE_STACK_SLOT_SIZE
+                    //   - grate_stack_slot_size() (constant per process — read once from
+                    //     LIND_GRATE_STACK_SIZE and cached)
                     //
-                    // constants.
+                    // values.
                     //
                     // In other words, the worker-pool width and the per-worker stack layout are
                     // not instance-specific; they are part of the global lind-wasm platform
@@ -583,7 +584,7 @@ impl Instance {
 
                     let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
                         * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
-                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                            + lind_platform_const::grate_stack_slot_size() as usize);
 
                     lind_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
                         .unwrap_or_else(|e| {
