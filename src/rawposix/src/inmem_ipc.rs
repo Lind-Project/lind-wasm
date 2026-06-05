@@ -887,6 +887,9 @@ pub fn poll_fd(fdentry: FDTableEntry, events: i16) -> i16 {
                 if events & libc::POLLOUT as i16 != 0 {
                     let peer = {
                         let state = socket.state.lock().unwrap();
+                        if state.listening {
+                            return revents;
+                        }
                         if state.write_shutdown {
                             revents |= libc::POLLERR as i16;
                             return revents;
