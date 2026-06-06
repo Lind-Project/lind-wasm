@@ -4,6 +4,7 @@
  *   2. No pre-existing files named "umask_test_file.txt" or "umask_test_dir".
  */
 
+
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -13,6 +14,12 @@ int main() {
     mode_t old_mask;
     int fd;
     struct stat st;
+
+     /* Cleanup from any previous run */
+    rmdir("testfiles/umask_test_dir");
+    unlink("testfiles/umask_test_file.txt");
+    unlink("testfiles/umask_test_file2.txt");
+
 
     /* Test 1: umask returns previous mask */
     old_mask = umask(0022);
