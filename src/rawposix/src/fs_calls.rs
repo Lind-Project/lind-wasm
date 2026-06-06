@@ -6,9 +6,9 @@ use cage::{
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
 use libc::c_void;
-use std::sync::Arc;
 use std::sync::atomic::Ordering::*;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64};
+use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
     AT_FDCWD, FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS,
@@ -81,7 +81,6 @@ pub extern "C" fn openat_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -120,7 +119,7 @@ pub extern "C" fn openat_syscall(
         if host_fd < 0 {
             return handle_errno(-host_fd, "openat");
         }
-        
+
         // Use raw path for dirfd case — sc_convert_path_to_host normalizes to
         // an absolute path which would cause openat to ignore the dirfd.
         let raw_path = match get_cstr(path_arg) {
