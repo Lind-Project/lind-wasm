@@ -7,7 +7,7 @@ use fdtables;
 use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
     EXIT_SUCCESS, FDKIND_KERNEL, INIT_CAGEID, MAIN_THREADID, RAWPOSIX_CAGEID, STDERR_FILENO,
@@ -287,6 +287,7 @@ pub fn rawposix_start(verbosity: isize) {
         exit_group_initiated: AtomicBool::new(false),
         is_dead: AtomicBool::new(false),
         grate_inflight: AtomicU64::new(0),
+        umask: AtomicU32::new(0o022),
     };
 
     // Add cage to cagetable

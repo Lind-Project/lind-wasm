@@ -7,6 +7,8 @@ use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
 use libc::c_void;
 use std::sync::Arc;
+use std::sync::atomic::Ordering::*;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
     AT_FDCWD, FIOASYNC, FIONBIO, FIONREAD, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS,
@@ -79,6 +81,7 @@ pub extern "C" fn openat_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -86,6 +89,7 @@ pub extern "C" fn openat_syscall(
     };
     let oflag = sc_convert_sysarg_to_i32(oflag_arg, oflag_cageid, cageid);
     let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
+
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
@@ -116,7 +120,7 @@ pub extern "C" fn openat_syscall(
         if host_fd < 0 {
             return handle_errno(-host_fd, "openat");
         }
-
+        
         // Use raw path for dirfd case — sc_convert_path_to_host normalizes to
         // an absolute path which would cause openat to ignore the dirfd.
         let raw_path = match get_cstr(path_arg) {
@@ -128,8 +132,11 @@ pub extern "C" fn openat_syscall(
             Err(_) => return syscall_error(Errno::EINVAL, "openat", "invalid path"),
         };
 
-        let kernel_fd =
-            unsafe { libc::openat(host_fd, c_path.as_ptr(), oflag, mode as libc::mode_t) };
+        let cage = get_cage(cageid).unwrap();
+        let umask = cage.umask.load(Ordering::Relaxed);
+        let masked_mode = (mode & !umask) as libc::mode_t;
+        let kernel_fd = unsafe { libc::openat(host_fd, c_path.as_ptr(), oflag, masked_mode) };
+
         if kernel_fd < 0 {
             return handle_errno(get_errno(), "openat_syscall");
         }
@@ -200,6 +207,10 @@ pub extern "C" fn open_syscall(
             "open_syscall"
         );
     }
+
+    let cage = get_cage(cageid).unwrap();
+    let umask = cage.umask.load(Ordering::Relaxed);
+    let mode = mode & !umask;
 
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
@@ -502,6 +513,10 @@ pub extern "C" fn mkdir_syscall(
         );
     }
 
+    let cage = get_cage(cageid).unwrap();
+    let umask = cage.umask.load(Ordering::Relaxed);
+    let mode = mode & !umask;
+
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
     // Error handling
     if ret < 0 {
@@ -557,6 +572,9 @@ pub extern "C" fn mknod_syscall(
             "mknod_syscall"
         );
     }
+    let cage = get_cage(cageid).unwrap();
+    let umask = cage.umask.load(Ordering::Relaxed);
+    let mode = mode & !umask;
 
     let ret = unsafe { libc::mknod(path.as_ptr(), mode, dev) };
     if ret < 0 {
@@ -5523,4 +5541,53 @@ pub extern "C" fn listxattr_syscall(
 
     // Convert ssize_t to i32 safely
     ret.try_into().unwrap_or(i32::MAX)
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/umask.2.html
+///
+/// Linux `umask()` syscall sets the calling process's file mode creation mask
+/// to `mask & 0777` and returns the previous value of the mask. The umask is
+/// applied during file/directory creation (open, mkdir, mknod) to restrict
+/// permissions. Since each cage is isolated, the umask is stored per-cage in
+/// the Cage struct rather than delegating to the host kernel.
+///
+/// ## Input:
+///     - cageid: current cage identifier
+///     - mask_arg: the new umask value (only the lower 9 bits are used)
+///     - arg2-arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - Always succeeds and returns the previous umask value.
+pub extern "C" fn umask_syscall(
+    cageid: u64,
+    mask_arg: u64,
+    mask_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let mask = sc_convert_sysarg_to_u32(mask_arg, mask_cageid, cageid);
+
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "umask_syscall"
+        );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let old_mask = cage.umask.swap(mask & 0o777, Ordering::SeqCst);
+    old_mask as i32
 }

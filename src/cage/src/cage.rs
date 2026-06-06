@@ -9,7 +9,7 @@ pub use once_cell::sync::Lazy;
 /// interaction and increases efficiency.
 pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
-pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
+pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU32, AtomicU64, Ordering};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
@@ -251,6 +251,9 @@ pub struct Cage {
     /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
     /// tracking is considered a VMContext-level concern.
     pub grate_inflight: AtomicU64,
+    /// The file mode creation mask for this cage. Applied during file/directory
+    /// creation to restrict permissions. Mirrors Linux per-process umask.
+    pub umask: AtomicU32,
 }
 
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
@@ -464,6 +467,7 @@ mod tests {
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
+            umask: AtomicU32::new(0o022),
         };
 
         add_cage(2, test_cage);

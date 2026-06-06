@@ -13,7 +13,7 @@ use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::*;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
@@ -148,6 +148,7 @@ pub extern "C" fn fork_syscall(
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
+            umask: AtomicU32::new(selfcage.umask.load(Ordering::SeqCst)),
         };
 
         // increment child counter for parent

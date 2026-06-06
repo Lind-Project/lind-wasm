@@ -81,6 +81,7 @@ pub const CHMOD_SYSCALL: i32 = 90;
 pub const FCHMOD_SYSCALL: i32 = 91;
 pub const CHOWN_SYSCALL: i32 = 92;
 pub const LCHOWN_SYSCALL: i32 = 94;
+pub const UMASK_SYSCALL: i32 = 95;
 pub const GETUID_SYSCALL: i32 = 102;
 pub const GETGID_SYSCALL: i32 = 104;
 pub const GETEUID_SYSCALL: i32 = 107;
