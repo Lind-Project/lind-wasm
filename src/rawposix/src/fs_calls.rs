@@ -6,8 +6,8 @@ use cage::{
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
 use libc::c_void;
-use std::sync::atomic::Ordering::*;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64};
+use std::sync::atomic::{Ordering, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
