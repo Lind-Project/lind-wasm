@@ -58,7 +58,7 @@ We have implemented dynamic loading support in Wasmtime. For applications that a
 	  
 ## Additional Features to be added:
 1. Complete support for fork, threads, and signals within the shared libraries (tasks 3 and 4 of [#1028](https://github.com/Lind-Project/lind-wasm/issues/1028)).
-2. As of now, the dependent libraries have to be explicitly specified using `--preload` option. The compiler (`clang`) is supposed to add metadata about the required libraries when `--shared` or `-fPIC` option is used. Currently this is not implemented. This has to be fixed so that the compiler adds the metadata and the dynamic loader can parse the metadata to determine the libraries required at runtime.
+2. As of now, the dependent libraries have to be explicitly specified using `--preload` option in lind-boot. The compiler (`clang`) is supposed to add metadata about the required libraries when `--shared` or `-fPIC` option is used. Currently this is not implemented. This has to be fixed so that linker/wasm-ld should emit wasm dynamic linking needed metadata, and the loader can parse it to determine the libraries required at runtime.
 
 ## Changes made to implement dynamic loading:
 
