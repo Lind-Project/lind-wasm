@@ -18,6 +18,8 @@ e2e_status
 reports/
 report.html
 
+**/*.so
+
 #Ignore python cache
 __pycache__/
 
