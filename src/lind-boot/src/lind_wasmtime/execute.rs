@@ -86,13 +86,12 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     init_vmctx_pool();
 
     // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(lindboot_cli.wasm_file());
     let wt_config =
         make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create execution engine")?;
-    let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
+    let module = read_main_wasm_or_cwasm(&engine, &lindboot_cli)?;
 
     // -- Run the first module in the first cage --
     let result = execute_with_lind(
@@ -236,7 +235,6 @@ pub fn execute_with_lind(
     let mut modules = Vec::new();
     modules.push((String::new(), String::new(), module.clone()));
     for (name, path) in lind_boot.preloads.iter() {
-        // Read the wasm module binary either as `*.wat` or a raw binary
         let module = read_wasm_or_cwasm(&engine, path)?;
         modules.push((
             name.clone(),
@@ -903,6 +901,37 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
 
     eprintln!("OK: {}", cwasm_path.display());
     Ok(())
+}
+
+/// Load the main Wasm module using the source selected by `CliOptions`.
+///
+/// The default is path-based loading from `WASM_FILE`. If `cli.wasm_bytes` is
+/// present, those in-memory bytes take precedence while `WASM_FILE` remains the
+/// guest-visible argv[0].
+fn read_main_wasm_or_cwasm(engine: &Engine, cli: &CliOptions) -> Result<Module> {
+    match cli.wasm_bytes.as_ref() {
+        Some(bytes) => read_wasm_or_cwasm_bytes(engine, bytes, cli.wasm_file()),
+        None => read_wasm_or_cwasm(engine, Path::new(cli.wasm_file())),
+    }
+}
+
+/// Load a Wasm module from raw bytes, supporting both `.wasm` and precompiled `.cwasm` bytes.
+pub(crate) fn read_wasm_or_cwasm_bytes(
+    engine: &Engine,
+    bytes: &[u8],
+    source_name: &str,
+) -> Result<Module> {
+    match Engine::detect_precompiled(bytes) {
+        Some(Precompiled::Module) => unsafe { Module::deserialize(engine, bytes) }
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("failed to deserialize precompiled module {source_name}")),
+        Some(Precompiled::Component) => bail!(
+            "failed to load {source_name}: precompiled components are not supported as Lind modules"
+        ),
+        None => Module::from_binary(engine, bytes)
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("failed to compile module {source_name}")),
+    }
 }
 
 /// Load a Wasm module from disk, supporting both `.wasm` and precompiled `.cwasm` files.
