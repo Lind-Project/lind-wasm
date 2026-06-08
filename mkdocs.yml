@@ -39,8 +39,6 @@ nav:
     - Pipelines:
       - Overview: contribute/pipelines/overview.md
       - lind-wasm: contribute/pipelines/lind-wasm.md
-      - lind-wasm-apps: contribute/pipelines/lind-wasm-apps.md
-      - lind-wasm-example-grates: contribute/pipelines/lind-wasm-example-grates.md
   - Community:
     - community/index.md
     - Team: community/team.md
