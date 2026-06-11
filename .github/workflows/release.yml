@@ -2,7 +2,7 @@ name: Release on Docker Hub
 
 on:
   workflow_dispatch:
-  schedule:
+  push:
     branches: [main]
 
 # Serialize releases on the same ref.
@@ -12,8 +12,6 @@ concurrency:
   cancel-in-progress: false
 
 permissions: {}
-
-name: Test and release on Docker Hub
 
 jobs:
   # Release job: build the 'release' image and publish to Docker Hub.
