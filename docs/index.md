@@ -6,7 +6,7 @@ id: Overview
 
 Lind is a sandboxing system that runs multiple mutually untrusted applications within a single, unprivileged Linux process. Each application executes in an isolated execution context, called a cage, with its own memory, control flow, and system call behavior.
 
-Unlike traditional process isolation, Lind provides strong intra-process isolation while preserving POSIX semantics and avoiding kernel modifications or privileged execution.
+Unlike traditional process isolation, Lind provides strong intra-process isolation while aiming to preserve POSIX-style semantics and avoid kernel modifications or privileged execution.
 
 In Old Norse, Old High German, and Old English, a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight and resistant to splitting — an appropriate metaphor for a sandboxing system built from layered isolation technologies.
 
@@ -18,7 +18,7 @@ Lind-Wasm is a realization of Lind that uses WebAssembly for software fault isol
 
 A cage is an isolated execution context within the Lind process. Conceptually, a cage is similar to a Linux process, but multiple cages coexist within a single host process.
 
-Applications are recompiled to WebAssembly and linked against a modified glibc so that all system calls are issued through 3i. Most applications require no source-level changes.
+Applications are recompiled to WebAssembly and linked against a modified glibc so that all system calls are issued through 3i. Most C/POSIX applications can be rebuilt without source-level changes.
 
 Each cage has:
 - isolated memory and control flow
