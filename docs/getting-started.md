@@ -1,7 +1,7 @@
 # Getting Started
 
 1. Make sure to read the [Basics](index.md) first.
-2. If you want to start contributing, check out the [Contributor Instructions](contribute/README.md).
+2. If you want to start contributing, check out the [Contributor Instructions](contribute/index.md).
 3. Continue reading to run a *__Hello World__* program in the Lind Sandbox.
 
 ## Hello World!
@@ -14,9 +14,10 @@ that comes with the Lind Sandbox. *You'll need [Docker installed](https://docs.d
 ```
 docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev  # this might take a while ...
 docker run --platform=linux/amd64 -it securesystemslab/lind-wasm-dev /bin/bash
+cd lind-wasm
 ```
 
-This is a development environment with tooling and source code available, additional instructions to be found [here](contribute/dev-container.md)
+This is a development environment with tooling and source code available. Additional instructions can be found [here](contribute/dev-container.md).
 
 **2. Write a program**
 
@@ -34,19 +35,21 @@ int main() {
 EOF
 ```
 
-**3. Compile Lind-Wasm Runtime**
+**3. Compile the Lind-Wasm runtime**
 
-Lind-wasm runtime must be compiled before running the program. To compile the lind-wasm runtime, you will first go to the `lind-wasm/` directory. At there, you can choose:
+The Lind-Wasm runtime must be compiled before running the program. Use this path for a first build:
 
-3.a. use `make all` to compile both lind-glibc and rust code at once.
+```bash
+make lind-boot sysroot
+```
 
-3.b. use `make lind-boot` to compile runtime(lind-boot/wasmtime/rawposix/3i/etc.), and `make sysroot` to compile lind-glibc.
+This builds the runtime (`lind-boot`, Wasmtime, RawPOSIX, 3i, etc.) and the lind-glibc sysroot.
 
-**NOTES: More options can be found in lind-wasm/Makefile**
+For a full build, including both lind-glibc and Rust code, use `make all`. More build targets are documented in `lind-wasm/Makefile`.
 
-**3. Compile and run**
+**4. Compile and run**
 
-Use lind scripts to compile and run your program in the Lind Sandbox.
+Inside the development container, `lind-clang` is an alias for `scripts/lind_compile`, and `lind-wasm` is an alias for `scripts/lind_run`. If you are running outside the container, use the scripts directly or add the aliases to your shell.
 
 ```bash
 lind-clang hello.c
@@ -55,10 +58,10 @@ lind-wasm hello.cwasm
 
 *Here is what happens under the hood:*
 
-1.  `lind-clang`(aka `scripts/lind_compile`) compiles `hello.c` into a WebAssembly (WASM)
-binary that is linked against *lind-glibc*, and put into lind file system root(`lind-wasm/lindfs`).
-1. `lind-wasm`(aka `scripts/lind_run`) runs the compiled wasm using *lind-wasm* runtime
-and the *lind-posix* microvisor.
+1. `lind-clang` (aka `scripts/lind_compile`) compiles `hello.c` into a WebAssembly (WASM)
+binary that is linked against *lind-glibc* and put into the Lind file system root (`lind-wasm/lindfs`).
+1. `lind-wasm` (aka `scripts/lind_run`) runs the compiled wasm using the *Lind-Wasm* runtime
+and the *RawPOSIX* microvisor.
 
 --- 
 
@@ -67,5 +70,5 @@ To compile a Rust crate into a *lind-glibc* linked WASM binary, follow this guid
 ## What's next!
 
 The Lind documentation is currently under heavy construction. Please [submit an
-issue](contribute/README.md), if something doesn't seem right or is missing.
+issue](https://github.com/Lind-Project/lind-wasm/issues), if something doesn't seem right or is missing.
 More detailed usage guides will follow soon!
