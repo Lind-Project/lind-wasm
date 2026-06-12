@@ -39,7 +39,7 @@ This monorepo combines various subprojects and dependencies that work together t
 
 | Project       | Location          | Description                                                                 |
 |---------------|-------------------|-----------------------------------------------------------------------------|
-| `glibc`       | `third_party/glibc` | Modified version of glibc to support WebAssembly and Lind interfaces       |
+| `glibc`       | `src/glibc`      | Modified version of glibc to support WebAssembly and Lind interfaces       |
 | `wasmtime`    | `src/wasmtime`    | Embedded Wasmtime runtime for running and debugging Lind-Wasm modules      |
 
 ### Third-Party Binaries
@@ -49,4 +49,3 @@ This monorepo combines various subprojects and dependencies that work together t
 | `binaryen`    | `tools/binaryen`   | Provides `wasm-opt` and other utilities used for optimizing wasm binaries |
 
 ---
-
