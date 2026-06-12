@@ -82,7 +82,7 @@ Runs `scripts/make_glibc_and_sysroot.sh` to:
 
 ### make test
 
-Runs `scripts/wasmtestreport.py` which:
+Runs `scripts/harnesses/wasmtestreport.py` which:
 
 - Discovers tests from the repository’s test trees and honors `skip_test_cases.txt`.
 
@@ -147,5 +147,4 @@ High level:
 - Stale artifacts → run make clean/make distclean and rebuild inside the dev (base) container.
 
 - Cache debugging → add --progress=plain to docker build to see which step invalidated.
-
 
