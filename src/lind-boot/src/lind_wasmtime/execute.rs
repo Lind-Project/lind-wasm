@@ -32,39 +32,25 @@ use wasmtime_lind_multi_process::{
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
-/// Boots the Lind + RawPOSIX + 3i runtime and executes the initial Wasm program
-/// in the first cage.
+/// Initializes the Wasmtime runtime environment for Lind.
 ///
-/// This function is the *only* entry point for the initial launch of `lind-boot`.
-/// It performs three high-level tasks.
+/// This function performs one-time initialization that is shared across all cages:
 ///
-/// First, it initializes the Wasmtime execution environment by creating the
-/// engine/store and loading the main module from disk.
+/// 1. Creates the cage manager for tracking active cages
+/// 2. Registers the Wasmtime grate trampoline with 3i for syscall re-entry
+/// 3. Registers syscall handlers (clone/exec/exit) with 3i
+/// 4. Initializes the VMContext pool for runtime re-entry
 ///
-/// Second, it brings up the Lind runtime by starting RawPOSIX, creating the first
-/// cage, and initializing the `VMContext` pool used for later re-entry into Wasmtime
-/// during *grate calls*. It also registers the Wasmtime-specific 3i trampoline, which
-/// serves as the unified callback path for interposed syscalls routed through 3i.
+/// This initialization is performed once at boot time. Subsequent fork() operations
+/// inherit the handler table from RawPOSIX, and exec() operations reuse the existing
+/// runtime infrastructure.
 ///
-/// Third, it registers the syscall handlers (clone/exec/exit) with 3i exactly once
-/// during the initial boot. This is intentional: during `fork()`, RawPOSIX clones
-/// the parent process's handler table into the child, so children automatically
-/// inherit all registered handlers without additional registration. In contrast,
-/// `exec()` replaces the guest program within an existing cage and does not require
-/// rebuilding the handler table. Special needs will be handled per user request in
-/// their implementation through `register_handler` via glibc.
-///
-/// After initialization, the function attaches all host-side APIs (Lind common,
-/// WASI threads, and Lind multi-process contexts) to the wasmtime linker,
-/// instantiates the module into the starting cage, and runs the program's
-/// entrypoint. On successful completion it waits for all cages to exit before
-/// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
-/// last process terminates.
-pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
-    // -- Initialize Lind + RawPOSIX + 3i runtime --
+/// Returns the cage manager, which tracks the number of active cages and allows
+/// the main process to wait for all cages to exit before shutting down.
+pub fn init_wasmtime() -> Arc<LindCageManager> {
     // Initialize the Lind cage counter
     let lind_manager = Arc::new(LindCageManager::new(0));
-    // new cage is created
+    // First cage will be created
     lind_manager.increment();
 
     let grate_cleanup_funcptr = cleanup_grate_handler as *const () as usize as u64;
@@ -84,6 +70,26 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     // initialize the vmctx pool for exit/exec/clone reentry into wasmtime runtime
     init_vmctx_pool();
 
+    lind_manager
+}
+
+/// Executes a Wasm program in a cage using an initialized Wasmtime runtime.
+///
+/// This function loads and executes a Wasm module in the specified cage. It handles:
+/// - Engine and module loading from disk
+/// - Module instantiation
+/// - Program execution
+/// - Error handling and cleanup
+///
+/// This function can be used both for initial program launch and for exec() within
+/// an existing cage. The cage_id parameter determines which cage runs the module.
+///
+/// Returns the exit code from the Wasm program on success.
+pub fn exec_wasm(
+    lindboot_cli: CliOptions,
+    lind_manager: Arc<LindCageManager>,
+    cage_id: u64,
+) -> anyhow::Result<i32> {
     // -- Initialize the Wasmtime execution environment --
     let wasm_file_path = Path::new(lindboot_cli.wasm_file());
     let wt_config =
@@ -93,13 +99,13 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         .context("failed to create execution engine")?;
     let module = read_wasm_or_cwasm(&engine, wasm_file_path)?;
 
-    // -- Run the first module in the first cage --
+    // -- Run the module in the specified cage --
     let result = execute_with_lind(
         lindboot_cli,
         lind_manager.clone(),
         engine,
         module,
-        CAGE_START_ID as u64,
+        cage_id,
     );
 
     match result {
@@ -118,23 +124,37 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             Ok(exit_code)
         }
         Err(e) => {
-            // Initial cage crashed.  Do the same cleanup as the
+            // Cage crashed.  Do the same cleanup as the
             // fork-crash and signal-handler error paths so child
             // cages see proper termination and resources are freed.
-            let cageid = CAGE_START_ID as u64;
-            cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(1));
-            if let Some(c) = cage::get_cage(cageid) {
+            cage::cage_record_exit_status(cage_id, cage::ExitStatus::Exited(1));
+            if let Some(c) = cage::get_cage(cage_id) {
                 c.is_dead.store(true, std::sync::atomic::Ordering::Release);
             }
-            threei::EXITING_TABLE.insert(cageid);
-            threei::handler_table::_rm_grate_from_handler(cageid);
-            cage::signal::lind_thread_exit(cageid, THREAD_START_ID as u64);
-            cage::cage_finalize(cageid);
+            threei::EXITING_TABLE.insert(cage_id);
+            threei::handler_table::_rm_grate_from_handler(cage_id);
+            cage::signal::lind_thread_exit(cage_id, THREAD_START_ID as u64);
+            cage::cage_finalize(cage_id);
             lind_manager.decrement();
             lind_manager.wait();
             return Err(e);
         }
     }
+}
+
+/// Boots the Lind + RawPOSIX + 3i runtime and executes the initial Wasm program
+/// in the first cage.
+///
+/// This is a convenience wrapper that combines `init_wasmtime()` and `exec_wasm()`
+/// for the common case of initializing the runtime and immediately executing the
+/// first program.
+///
+/// This function is the traditional entry point for `lind-boot` when executing
+/// a single Wasm program. For more complex scenarios (e.g., multi-backend support,
+/// grate-based exec), use `init_wasmtime()` and `exec_wasm()` separately.
+pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
+    let lind_manager = init_wasmtime();
+    exec_wasm(lindboot_cli, lind_manager, CAGE_START_ID as u64)
 }
 
 /// Executes a Wasm program *within an existing Lind runtime* as part of an `exec()` path.
