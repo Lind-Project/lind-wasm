@@ -17,7 +17,7 @@ use sysdefs::constants::fs_const::{
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
@@ -861,14 +861,15 @@ pub extern "C" fn mmap_syscall(
         | MAP_ANONYMOUS as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic(&format!(
+        lind_debug_panic!(
             "mmap: unsupported flags {:#x} (allowed: {:#x})",
-            flags, allowed_flags
-        ));
+            flags,
+            allowed_flags
+        );
     }
 
     if prot & PROT_EXEC > 0 {
-        lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
+        lind_debug_panic!("mmap protection flag PROT_EXEC is not allowed in Lind");
     }
 
     // check if the provided address is multiple of pages
@@ -897,11 +898,11 @@ pub extern "C" fn mmap_syscall(
 
         // pick an address of appropriate size, anywhere
         if useraddr == 0 {
-            result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
+            result = vmmap.find_map_space((rounded_length >> PAGESHIFT) as u32, 1);
         } else {
             // use address user provided as hint to find address
             result = vmmap.find_map_space_with_hint(
-                rounded_length as u32 >> PAGESHIFT,
+                (rounded_length >> PAGESHIFT) as u32,
                 1,
                 addr as u32 >> PAGESHIFT,
             );
@@ -914,6 +915,14 @@ pub extern "C" fn mmap_syscall(
 
         let space = result.unwrap();
         useraddr = (space.start() << PAGESHIFT) as u32;
+    }
+
+    if (useraddr as u64) + rounded_length > 0x100000000u64 {
+        return syscall_error(
+            Errno::EINVAL,
+            "mmap",
+            "address range overflows 32-bit space",
+        );
     }
 
     flags |= MAP_FIXED as i32;
@@ -1117,8 +1126,18 @@ pub extern "C" fn munmap_syscall(
 
     let mut vmmap = cage.vmmap.write();
 
-    let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
-    let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
+    let req_start: u32 = (vmmap.sys_to_user(rounded_addr) >> PAGESHIFT) as u32;
+    let page_count: u32 = (rounded_length >> PAGESHIFT) as u32;
+    let req_end: u32 = match req_start.checked_add(page_count) {
+        Some(end) => end,
+        None => {
+            return syscall_error(
+                Errno::EINVAL,
+                "munmap",
+                "address range overflows 32-bit space",
+            )
+        }
+    };
 
     let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
 
@@ -1137,10 +1156,11 @@ pub extern "C" fn munmap_syscall(
             ) as usize
         };
         if result != act_start_addr {
-            lind_debug_panic(&format!(
+            lind_debug_panic!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
-                result as *const c_void, act_start_addr as *const c_void
-            ));
+                result as *const c_void,
+                act_start_addr as *const c_void
+            );
         }
         if result as isize == -1 {
             let errno = get_errno();
@@ -1264,10 +1284,22 @@ pub extern "C" fn brk_syscall(
         heap.cage_id,
     );
 
-    let old_heap_end_usr = (old_brk_page * PAGESIZE) as u32;
+    let old_heap_end_u64 = (old_brk_page as u64) * (PAGESIZE as u64);
+    let new_heap_end_u64 = (brk_page as u64) * (PAGESIZE as u64);
+
+    // Prevent 32-bit address-space overflow
+    if old_heap_end_u64 > 0xFFFF_FFFFu64 || new_heap_end_u64 > 0xFFFF_FFFFu64 {
+        return syscall_error(
+            Errno::ENOMEM,
+            "brk",
+            "heap end address overflows 32-bit space",
+        );
+    }
+
+    let old_heap_end_usr = old_heap_end_u64 as u32;
     let old_heap_end_sys = vmmap.user_to_sys(old_heap_end_usr) as *mut u8;
 
-    let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
+    let new_heap_end_usr = new_heap_end_u64 as u32;
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
 
     drop(vmmap);
@@ -2584,13 +2616,14 @@ fn renameat_inner(
 
     let ret = unsafe {
         if use_renameat2 {
-            libc::renameat2(
+            libc::syscall(
+                libc::SYS_renameat2,
                 old_kernel_fd,
                 c_oldpath.as_ptr(),
                 new_kernel_fd,
                 c_newpath.as_ptr(),
                 flags,
-            )
+            ) as libc::c_int
         } else {
             libc::renameat(
                 old_kernel_fd,
@@ -4559,7 +4592,7 @@ pub extern "C" fn ioctl_syscall(
     // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, FIONREAD, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
     if req != FIONBIO && req != FIOASYNC && req != FIONREAD && req != TIOCGWINSZ {
-        lind_debug_panic("Lind unsupported ioctl request");
+        lind_debug_panic!("Lind unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -4729,7 +4762,7 @@ pub extern "C" fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        lind_debug_panic("shmget key IPC_PRIVATE is not allowed in Lind");
+        lind_debug_panic!("shmget key IPC_PRIVATE is not allowed in Lind");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;
@@ -4911,6 +4944,14 @@ pub extern "C" fn shmat_syscall(
     let space = result.unwrap();
     // Update the user address to the start of the allocated memory space.
     useraddr = (space.start() << PAGESHIFT) as u32;
+
+    if (useraddr as u64) + rounded_length > 0x100000000u64 {
+        return syscall_error(
+            Errno::EINVAL,
+            "shmat",
+            "address range overflows 32-bit space",
+        );
+    }
 
     // Convert the user address into a system address.
     // Read the virtual memory map to access the user address space.

@@ -42,6 +42,7 @@ wasmtime-types = { workspace = true }
 semver = { workspace = true, optional = true, features = ['serde'] }
 smallvec = { workspace = true, features = ['serde'] }
 sha2 = { workspace = true }
+sysdefs = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true, features = ['default'] }
@@ -82,7 +83,7 @@ compile = [
   "dep:wasm-encoder",
   "dep:wasmprinter",
 ]
-debug-dylink = []
+lind-logging = ["sysdefs/lind-logging"]
 stack-switching = []
 threads = ['std']
 wmemcheck = ['std']

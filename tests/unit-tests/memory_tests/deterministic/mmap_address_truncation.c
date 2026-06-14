@@ -9,17 +9,16 @@ int main() {
 
   printf("=== Bug 1: Silent Wrap-Around ===\n");
 
-  uintptr_t addr = 0xfffff000;
+  uintptr_t addr = 0xfffffffffffff000ull;
   size_t len = page_size * 2; // addr + len overflows 32-bit
 
-  printf("Requesting mmap at 0x%lx with size 0x%zx\n", (unsigned long)addr, len);
-  printf("Expected end addr: 0x%lx (overflows 32-bit!)\n", (unsigned long)(addr + len));
+  printf("Expected end addr: (overflows at the highest bit!)\n");
 
   void *res = mmap((void *)addr, len, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
 
   if (res == MAP_FAILED) {
-    printf("PASS: mmap correctly rejected — %s\n", strerror(errno));
+    printf("PASS: mmap correctly rejected \n");
   } else {
     printf("FAIL: mmap succeeded — overflow not caught!\n");
     char *base = (char *)res;

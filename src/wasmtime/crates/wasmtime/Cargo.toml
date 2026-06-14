@@ -448,6 +448,6 @@ rr = [
   "wasmtime-environ/rr"
 ]
 
-debug-dylink = ["wasmtime-environ/debug-dylink"]
 remote-lib = ["dep:lind-remote-lib"]
 asyncify-setjmp = []
+lind-logging = ["sysdefs/lind-logging", "wasmtime-environ/lind-logging"]

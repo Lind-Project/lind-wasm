@@ -28,5 +28,5 @@ cfg-if = { workspace = true }
 [features]
 default = []
 disable_signals = []
-debug-dylink = []
 asyncify-setjmp = []
+lind-logging = ["sysdefs/lind-logging"]
