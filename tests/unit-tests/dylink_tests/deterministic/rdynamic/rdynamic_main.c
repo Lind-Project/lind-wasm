@@ -14,7 +14,7 @@ int main(void) {
     void (*plugin_entry)(void);
 
     // Load the shared library
-    handle = dlopen("./rdynamic_lib.cwasm", RTLD_NOW);
+    handle = dlopen("rdynamic_lib.so", RTLD_NOW);
     if (!handle) {
         fprintf(stderr, "dlopen error: %s\n", dlerror());
         return 1;

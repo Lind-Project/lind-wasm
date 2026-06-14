@@ -72,6 +72,7 @@
 //! depends on entering a compatible grate instance, not on resuming a previously suspended continuation.
 use anyhow::Context;
 use std::collections::{HashMap, VecDeque};
+use std::env;
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -79,7 +80,7 @@ use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
 use wasmtime::error::Context as WasmtimeContext;
-use wasmtime::{Engine, Instance, Linker, Module, Store, TypedFunc, Val};
+use wasmtime::{Engine, Global, Linker, Module, Store, TypedFunc, Val};
 
 type PassFptrTyped = TypedFunc<
     (
@@ -102,6 +103,9 @@ type PassFptrTyped = TypedFunc<
 >;
 
 type WorkerId = u64;
+
+const DEFAULT_GRATE_WORKERS: usize = MAX_GRATE_WORKERS;
+const GRATE_WORKERS_ENV: &str = "LIND_GRATE_WORKERS";
 
 /// Concurrency policy for a grate handler.
 ///
@@ -233,17 +237,19 @@ struct GrateWorker<T: 'static> {
     /// runtime context from other concurrently executing workers.
     store: Store<T>,
 
-    /// Worker-local instance of the grate module.
-    ///
-    /// Calls submitted to this worker execute inside this instance.
-    instance: Instance,
-
     /// Typed handle to the grate entry export, if present.
     ///
     /// This is usually the `pass_fptr_to_wt` trampoline used to enter the
     /// grate from the handler. It is cached here to avoid resolving the export
     /// on every call.
     pass_fptr_func: Option<PassFptrTyped>,
+
+    /// Handle to this worker's mutable Wasm stack pointer global.
+    ///
+    /// This is cached for the same reason as `pass_fptr_func`: every grate call
+    /// resets the worker stack, so resolving the export on each call adds fixed
+    /// overhead to even trivial grate calls.
+    stack_pointer: Global,
 
     /// Base address of this worker’s assigned stack slot in the stack arena.
     ///
@@ -279,6 +285,16 @@ fn worker_stack_base(cageid: u64, workerid: WorkerId) -> u32 {
 /// stack state inside that worker’s private stack slot.
 fn worker_stack_top(cageid: u64, workerid: WorkerId) -> u32 {
     worker_stack_base(cageid, workerid) + GRATE_STACK_SLOT_SIZE
+}
+
+fn configured_grate_workers() -> usize {
+    // Defaults to MAX_GRATE_WORKERS; set LIND_GRATE_WORKERS to configure a smaller positive pool size.
+    env::var(GRATE_WORKERS_ENV)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|count| *count > 0)
+        .map(|count| count.min(MAX_GRATE_WORKERS))
+        .unwrap_or(DEFAULT_GRATE_WORKERS)
 }
 
 /// Scoped ownership of a borrowed worker.
@@ -344,15 +360,6 @@ pub struct GrateHandler<T: 'static> {
     /// This is mainly used for diagnostics and error reporting.
     grate_id: u64,
 
-    /// Id of the designated main worker.
-    ///
-    /// This field records the canonical first worker in the pool.
-    ///
-    /// todo:
-    /// It may be useful for debugging or future policy decisions, even
-    /// though the current submission path leases any available worker.
-    main_worker: WorkerId,
-
     /// Configured concurrency policy for this grate.
     ///
     /// Determines whether `submit()` dispatches through serialized or parallel
@@ -400,7 +407,7 @@ impl<T: Clone + 'static> GrateHandler<T> {
     /// Pre-create the worker pool for a grate handler.
     ///
     /// Each worker is an independent `store + instance + call stack` execution
-    /// context for the same grate module. Pre-initializing the full pool allows
+    /// context for the same grate module. Pre-initializing the configured pool allows
     /// later grate calls to lease a ready-to-run worker without paying the cost
     /// of instantiation on the fast path.
     ///
@@ -413,7 +420,9 @@ impl<T: Clone + 'static> GrateHandler<T> {
         host: &T,
         cageid: u64,
     ) -> anyhow::Result<()> {
-        for handler_id in 1_u64..=MAX_GRATE_WORKERS as u64 {
+        let worker_count = configured_grate_workers();
+
+        for handler_id in 1_u64..=worker_count as u64 {
             let worker =
                 create_worker(template, host.clone(), cageid, handler_id).with_context(|| {
                     format!(
@@ -425,7 +434,6 @@ impl<T: Clone + 'static> GrateHandler<T> {
             self.inner.lock().unwrap().workers.push_back(worker);
         }
 
-        self.main_worker = 1;
         Ok(())
     }
 }
@@ -454,8 +462,11 @@ impl<T: 'static> GrateHandler<T> {
     /// ensures that blocked callers can resume when capacity becomes available.
     fn return_worker(&self, worker: GrateWorker<T>) {
         let mut inner = self.inner.lock().unwrap();
+        let should_notify = inner.workers.is_empty();
         inner.workers.push_back(worker);
-        self.cv.notify_one();
+        if should_notify {
+            self.cv.notify_one();
+        }
     }
 
     /// Mark this grate handler as shutting down.
@@ -564,7 +575,9 @@ impl<'a, T> Drop for ActiveCallGuard<'a, T> {
     /// allowing shutdown code to observe when the handler has become idle.
     fn drop(&mut self) {
         self.owner.active_calls.fetch_sub(1, Ordering::AcqRel);
-        self.owner.cv.notify_all();
+        if self.owner.shutting_down.load(Ordering::Acquire) {
+            self.owner.cv.notify_all();
+        }
     }
 }
 
@@ -577,12 +590,7 @@ impl<T: 'static> GrateWorker<T> {
     /// from a previous call.
     fn reset_worker_stack(&mut self) {
         let sp = self.stack_top;
-        let stack_global = self
-            .instance
-            .get_global(&mut self.store, "__stack_pointer")
-            .expect("missing __stack_pointer");
-
-        stack_global
+        self.stack_pointer
             .set(&mut self.store, Val::I32(sp as i32))
             .expect("failed to set __stack_pointer");
     }
@@ -703,12 +711,15 @@ where
 
     let stack_base = worker_stack_base(cageid, worker_id);
     let stack_top = worker_stack_top(cageid, worker_id);
+    let stack_pointer = instance
+        .get_global(&mut store, "__stack_pointer")
+        .ok_or_else(|| anyhow::anyhow!("missing __stack_pointer"))?;
 
     Ok(GrateWorker {
         worker_id,
         store,
-        instance,
         pass_fptr_func,
+        stack_pointer,
         stack_base,
         stack_top,
     })
@@ -722,8 +733,11 @@ where
 /// mode, calls still use the same worker-pool abstraction, but entry is gated
 /// so that only one call runs at a time.
 ///
-/// This function performs eager worker creation so that the handler is ready to
-/// serve grate calls immediately after registration.
+/// This function eagerly creates the configured worker pool so that the handler
+/// is ready to serve grate calls immediately after registration.
+///
+/// By default, the pool size is MAX_GRATE_WORKERS; set LIND_GRATE_WORKERS
+/// to configure it.
 pub fn create_handler_for_cage<T: Clone + 'static>(
     template: &GrateTemplate<T>,
     host: T,
@@ -732,7 +746,6 @@ pub fn create_handler_for_cage<T: Clone + 'static>(
 ) -> anyhow::Result<GrateHandler<T>> {
     let mut handler = GrateHandler {
         grate_id: cageid,
-        main_worker: 1,
         concurrency_mode,
         serial_executor: SerialExecutor::new(),
         inner: Mutex::new(GrateHandlerInner {

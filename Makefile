@@ -45,19 +45,27 @@ sysroot: build-dir
 # via Cargo features.
 #
 # Examples:
-#   make                                  # default (dashmaparray)
-#   make build FDTABLES_IMPL=muthashmax   # full build with muthashmax
-#   make lind-boot FDTABLES_IMPL=vanilla  # rebuild only lind-boot with vanilla
-#   make fpcast FDTABLES_IMPL=dashmapvec  # fpcast variant with dashmapvec
-#   make lind-debug FDTABLES_IMPL=muthashmax   # debug build with muthashmax
-#   FDTABLES_IMPL=muthashmax make         # also works via env var
+#   make                                              # default (dashmaparray, EH setjmp)
+#   make build FDTABLES_IMPL=muthashmax               # full build with muthashmax
+#   make lind-boot FDTABLES_IMPL=vanilla              # rebuild only lind-boot with vanilla
+#   make fpcast FDTABLES_IMPL=dashmapvec              # fpcast variant with dashmapvec
+#   make lind-debug FDTABLES_IMPL=muthashmax          # debug build with muthashmax
+#   FDTABLES_IMPL=muthashmax make                     # also works via env var
+#   LIND_ASYNCIFY_SETJMP=1 make lind-boot             # asyncify-based setjmp/longjmp
 FDTABLES_IMPL ?= dashmaparray
+
+# When LIND_ASYNCIFY_SETJMP=1, build lind-boot with the asyncify-setjmp Cargo feature so the
+# runtime uses asyncify-unwind/rewind based setjmp/longjmp instead of the wasm-EH based one.
+LIND_BOOT_EXTRA_FEATURES ?= $(if $(filter 1,$(LIND_ASYNCIFY_SETJMP)),asyncify-setjmp,)
+
+# When NO_LOGGING=1, omit the lind-logging feature (e.g. make lind-boot NO_LOGGING=1).
+LIND_LOGGING_FEATURE ?= $(if $(filter 1,$(NO_LOGGING)),,lind-logging)
 
 .PHONY: lind-boot
 lind-boot: build-dir
 	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
-	    --no-default-features --features "fdtables-$(FDTABLES_IMPL) remote-lib"
+	    --no-default-features --features "$(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES)"
 	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 .PHONY: lindfs
@@ -85,7 +93,7 @@ clean-lindfs:
 lind-debug: lindfs build-dir
 	# Build lind-boot with the lind_debug feature enabled
 	cargo build --manifest-path src/lind-boot/Cargo.toml \
-	    --no-default-features --features "lind_debug fdtables-$(FDTABLES_IMPL)"
+	    --no-default-features --features "lind_debug $(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL)"
 	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
@@ -241,7 +249,7 @@ lint:
 	# and pin to the default fdtables impl.
 	cargo clippy \
 	    --manifest-path src/lind-boot/Cargo.toml \
-	    --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
+	    --features "disable_signals secure lind_debug lind-logging debug-grate-calls fdtables-dashmaparray" \
 	    --keep-going \
 	    -- \
 	    -A warnings \

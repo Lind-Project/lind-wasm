@@ -39,6 +39,14 @@ pub struct CliOptions {
     #[arg(long = "enable-fpcast")]
     pub enable_fpcast: bool,
 
+    /// Optional in-memory Wasm module bytes.
+    ///
+    /// This is not parsed from the command line. When present, lind-boot loads
+    /// the main module from these bytes instead of reading `WASM_FILE` from disk.
+    /// `WASM_FILE` is still used as guest argv[0].
+    #[arg(skip)]
+    pub wasm_bytes: Option<Vec<u8>>,
+
     /// First item is WASM file (argv[0]), rest are program args (argv[1..])
     ///
     /// Example:

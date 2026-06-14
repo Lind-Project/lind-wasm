@@ -26,3 +26,5 @@ typemap = { path = "../typemap" }
 
 [features]
 lind_debug = []
+lind-logging = ["sysdefs/lind-logging"]
+asyncify-setjmp = ["wasmtime-lind-multi-process/asyncify-setjmp"]

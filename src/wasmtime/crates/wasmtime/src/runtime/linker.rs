@@ -7,6 +7,8 @@ use crate::{
     GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result, SharedMemory,
     StoreContextMut, Table, Val, ValRaw, ValType, prelude::*,
 };
+#[cfg(not(feature = "asyncify-setjmp"))]
+use crate::{Tag, TagType};
 use alloc::sync::Arc;
 use cage::DashMap;
 use core::fmt::{self, Debug};
@@ -18,6 +20,7 @@ use log::warn;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
+use sysdefs::lind_log;
 use threei::make_syscall;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
 use wasmtime_lind_utils::LindGOT;
@@ -318,8 +321,8 @@ impl<T> Linker<T> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
-                    #[cfg(feature = "debug-dylink")]
-                    println!(
+                    lind_log!(
+                        DYLINK,
                         "[debug] Warning: link undefined symbol \"{}\" to trap",
                         import.name()
                     );
@@ -358,8 +361,8 @@ impl<T> Linker<T> {
                     if !weak_imports.is_weak_symbol(import.module(), import.name()) {
                         continue;
                     }
-                    #[cfg(feature = "debug-dylink")]
-                    println!(
+                    lind_log!(
+                        DYLINK,
                         "[debug] define weak symbol {}.{} into trap",
                         import.module(),
                         import.name()
@@ -390,8 +393,8 @@ impl<T> Linker<T> {
     {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
-                #[cfg(feature = "debug-dylink")]
-                println!(
+                lind_log!(
+                    DYLINK,
                     "[debug]: define_GOT_dispatcher: import module: {}, name: {}",
                     import.module(),
                     import.name()
@@ -593,10 +596,26 @@ impl<T> Linker<T> {
                     if delta > 0 {
                         mem.grow(delta)?;
                     }
-                    memory_base = Some(mem.get_memory_base());
+                    let base = mem.get_memory_base();
+                    memory_base = Some(base);
+                    // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
+                    // rawposix takes ownership via init_vmmap + fork_vmmap.
+                    unsafe {
+                        libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE);
+                    }
                     new_linker.define(&mut store, &module, &name, mem)?;
                 }
             }
+        }
+
+        // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp in the child.
+        // Each Store owns its tag objects, so the forked child needs its own instance of
+        // the tag even though it's functionally identical to the parent's.
+        #[cfg(not(feature = "asyncify-setjmp"))]
+        {
+            let tag_type = TagType::new(FuncType::new(engine, [ValType::I32], []));
+            let tag = Tag::new(&mut store, &tag_type)?;
+            new_linker.define(&mut store, "env", "__c_longjmp", tag)?;
         }
 
         Ok((new_linker, memory_base_table, epoch_handler, memory_base))
@@ -863,7 +882,7 @@ impl<T> Linker<T> {
     /// # let engine = Engine::default();
     /// let mut linker = Linker::new(&engine);
     /// linker.func_wrap("host", "double", |x: i32| x * 2)?;
-    /// linker.func_wrap("host", "log_i32", |x: i32| println!("{}", x))?;
+    /// linker.func_wrap("host", "log_i32", |x: i32| lind_log!(DYLINK, "{}", x))?;
     /// linker.func_wrap("host", "log_str", |caller: Caller<'_, ()>, ptr: i32, len: i32| {
     ///     // ...
     /// })?;
@@ -1037,6 +1056,7 @@ impl<T> Linker<T> {
             {
                 continue;
             }
+
             let export = match export {
                 Extern::Func(original_func) => {
                     // Library-level 3i: if a handler has been registered for this
@@ -1224,6 +1244,11 @@ impl<T> Linker<T> {
                 }
                 other => other,
             };
+            // For dedup symbols, silently skip if already defined (first definition wins).
+            if module_name == "env" && is_dylink_dedup_symbol(&name) && self.map.get(&key).is_some()
+            {
+                continue;
+            }
             self.insert(key, Definition::new(store.0, export))?;
         }
         Ok(self)
@@ -1776,8 +1801,12 @@ impl<T> Linker<T> {
 
                         // Cache the resolved table index; also updates the GOT cell if it exists.
                         if got.cache_symbol(final_name, index) {
-                            #[cfg(feature = "debug-dylink")]
-                            println!("[debug] update GOT.func.{} to {}", final_name, index);
+                            lind_log!(
+                                DYLINK,
+                                "[debug] update GOT.func.{} to {}",
+                                final_name,
+                                index
+                            );
                         }
 
                         // append the symbol into mappings
@@ -1788,9 +1817,11 @@ impl<T> Linker<T> {
                     let val = global.get(&mut store);
                     // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                     let Some(raw) = val.i32() else {
-                        eprintln!(
-                            "[lind] Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
-                            name, val
+                        lind_log!(
+                            DYLINK,
+                            "Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
+                            name,
+                            val
                         );
                         continue;
                     };
@@ -1798,14 +1829,13 @@ impl<T> Linker<T> {
                     let val = match (raw as u32).checked_add(memory_base) {
                         Some(val) => val,
                         None => {
-                            eprintln!("[lind] Warning: GOT entry {} overflow u32", name);
+                            lind_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
                             continue;
                         }
                     };
                     // Cache the resolved address; also updates the GOT cell if it already exists.
                     if got.cache_symbol(&name, val) {
-                        #[cfg(feature = "debug-dylink")]
-                        println!("[debug] update GOT.mem.{} to {}", name, val);
+                        lind_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
                     }
                     // Only expose as dlsym-resolvable if it's a known GOT data symbol.
                     if got.has_entry(&name) {
@@ -2029,14 +2059,14 @@ impl<T> Linker<T> {
                 None => bail!("import of `{module}` defined twice"),
             }
         }
-        #[cfg(feature = "debug-dylink")]
+        #[cfg(feature = "lind-logging")]
         if self.map.contains_key(&key) {
             let module = &self.pool[key.module];
             let desc = match key.name.and_then(|n| self.pool.get(n)) {
                 Some(name) => format!("{}::{}", module, name),
                 None => module.to_string(),
             };
-            println!("[debug]: warning: {:?} definition overwrite", desc);
+            sysdefs::lind_log!(DYLINK, "warning: {:?} definition overwrite", desc);
         }
 
         self.map.insert(key, item)?;

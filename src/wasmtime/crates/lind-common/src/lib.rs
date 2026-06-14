@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use sysdefs::constants::Errno;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
-use sysdefs::logging::lind_debug_panic;
+use sysdefs::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
@@ -111,7 +111,7 @@ fn add_syscall_to_linker<
               arg5cageid: u64,
               arg6: u64,
               arg6cageid: u64|
-              -> i32 {
+              -> wasmtime::Result<i32> {
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
@@ -139,11 +139,11 @@ fn add_syscall_to_linker<
                             // Only override the return value with the pending visible retval if it is actually set.
                             // If it's not set, that means the clone syscall being replayed on rewind is the one in the child process, and we should return the actual syscall return value (0) instead of the pending visible retval from the parent process.
                             if retval > 0 {
-                                return retval;
+                                return Ok(retval);
                             }
                         }
                     }
-                    return rewind_res;
+                    return Ok(rewind_res);
                 }
             }
 
@@ -156,13 +156,13 @@ fn add_syscall_to_linker<
                 let retval = match caller.as_context_mut().get_current_syscall_rewind_data() {
                     Some(v) => v,
                     None => {
-                        wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-                        return 0;
+                        wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
+                        return Ok(0);
                     }
                 };
                 // let signal handler finish rest of the rewinding process
-                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-                return retval;
+                wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
+                return Ok(retval);
             }
 
             // Some thread-related operations must be executed against a specific thread's
@@ -222,16 +222,21 @@ fn add_syscall_to_linker<
             // since negating `I32::MIN` would cause an overflow panic.
             if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i32 {
                 caller.as_context_mut().append_syscall_asyncify_data(retval);
-                wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                if let Err(e) =
+                    wasmtime_lind_multi_process::signal::signal_handler(&mut caller)
+                {
+                    caller.as_context_mut().pop_syscall_asyncify_data();
+                    return Err(e);
+                }
 
                 if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
-                    return 0;
+                    return Ok(0);
                 } else {
                     caller.as_context_mut().pop_syscall_asyncify_data();
                 }
             }
 
-            retval
+            Ok(retval)
         },
     )?;
     Ok(())
@@ -262,9 +267,10 @@ fn add_runtime_to_linker<
 
     linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
         let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
-        sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
+        lind_debug_panic!("FROM GUEST: {}", _panic_str);
     })?;
 
+    #[cfg(feature = "asyncify-setjmp")]
     linker.func_wrap(
         "lind",
         "lind-setjmp",
@@ -273,6 +279,7 @@ fn add_runtime_to_linker<
         },
     )?;
 
+    #[cfg(feature = "asyncify-setjmp")]
     linker.func_wrap(
         "lind",
         "lind-longjmp",
@@ -284,8 +291,9 @@ fn add_runtime_to_linker<
     linker.func_wrap(
         "lind",
         "epoch_callback",
-        move |mut caller: Caller<'_, T>| {
-            wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+        move |mut caller: Caller<'_, T>| -> wasmtime::Result<()> {
+            wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
+            Ok(())
         },
     )?;
 
@@ -523,7 +531,8 @@ pub fn add_dylink_to_linker<
                     cloned_dynamic_loader.clone().unwrap(),
                 )
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;
@@ -535,7 +544,8 @@ pub fn add_dylink_to_linker<
             if dylink_enabled {
                 wasmtime_lind_dylink::dlsym_call(&mut caller, handle, name)
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;
@@ -547,7 +557,8 @@ pub fn add_dylink_to_linker<
             if dylink_enabled {
                 wasmtime_lind_dylink::dlclose_call(&mut caller, handle)
             } else {
-                lind_debug_panic("dynamic loading support is not enabled!");
+                lind_debug_panic!("dynamic loading support is not enabled!");
+                -(sysdefs::constants::DylinkErrorCode::EOPEN as i32)
             }
         },
     )?;
