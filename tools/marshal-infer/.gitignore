@@ -1,0 +1,6 @@
+build/
+# generated artifacts (reproducible via run.sh / the tool)
+*.bc
+example/demo.ll
+example/demo.tree.txt
+example/demo.marshal.json

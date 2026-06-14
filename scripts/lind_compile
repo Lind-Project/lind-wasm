@@ -33,6 +33,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
   Modes (at most one, defaults to full pipeline):
     (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
     --compile-only      : .c -> .wasm
+    --emit-llvm         : .c -> .bc  (wasm32 LLVM bitcode + DWARF, for static analysis)
     --opt-only          : .wasm -> .wasm  (in-place optimization)
     --precompile-only   : .wasm -> .cwasm (AOT compile via lind-boot)
 
@@ -47,6 +48,9 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     --print-args, --debug-args  print parsed arguments after option handling
     --compile-grate             add grate-specific clang flags (exports pass_fptr_to_wt);
                                 compatible with dynamic and static backends
+    --emit-marshal              also emit <src>.marshal.json (argument-marshalling
+                                inference for library interposition) alongside the
+                                artifact, via tools/marshal-infer
     --fpcast-emu                enable function-pointer-cast emulation via wasm-opt
                                 (applies to full and --opt-only modes; for dynamic/library
                                 builds also passes --pass-arg=relocatable-fpcast)
@@ -85,6 +89,7 @@ PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
 COMPILE_LIBRARY="false"
+EMIT_MARSHAL="false"
 RDYNAMIC="false"
 TARGET_DIR=""
 ORIGINAL_ARGS=("$@")
@@ -115,6 +120,9 @@ while [[ "$#" -gt 0 ]]; do
     --compile-only)
       set_mode "compile-only"
       ;;
+    --emit-llvm)
+      set_mode "emit-llvm"
+      ;;
     --opt-only)
       set_mode "opt-only"
       ;;
@@ -144,6 +152,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --compile-grate)
       COMPILE_GRATE="true"
+      ;;
+    --emit-marshal)
+      EMIT_MARSHAL="true"
       ;;
     --output-dir)
       shift
@@ -232,6 +243,7 @@ EXT="${SRC##*.}"
 
 OUT_WASM=""
 OUT_CWASM=""
+OUT_BC=""
 
 case "${MODE}" in
   full|"compile-only")
@@ -242,7 +254,15 @@ case "${MODE}" in
     fi
     OUT_WASM="${SRC%.c}.wasm"
     OUT_CWASM="${SRC%.c}.cwasm"
-    ;;  
+    ;;
+  "emit-llvm")
+    if [[ "${EXT}" != "c" ]]; then
+      echo "error: ${MODE} mode expects a .c file, got: ${SRC}" >&2
+      usage
+      exit 2
+    fi
+    OUT_BC="${SRC%.c}.bc"
+    ;;
   "opt-only")
     if [[ "${EXT}" != "wasm" ]]; then
       echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
@@ -284,7 +304,7 @@ if [[ ! -d "${SYSROOT}" ]]; then
 fi
 
 # Only check tools needed for the selected mode, to be more flexible
-if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" ]]; then
+if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" || "${MODE}" == "emit-llvm" ]]; then
   command -v "${CLANG_BIN}" >/dev/null 2>&1 || { echo "error: clang not found on PATH" >&2; exit 2; }
   [[ -d "${SYSROOT}" ]] || { echo "error: sysroot missing at ${SYSROOT}" >&2; exit 2; }
 fi
@@ -469,6 +489,48 @@ do_compile() {
   fi
 }
 
+do_emit_llvm() {
+  # Emit wasm32-ABI LLVM bitcode with DWARF debug info for static analysis
+  # (e.g. marshal-spec inference). Compiles a single translation unit; no linking.
+  #   -g  : DWARF gives pointee types & struct layout — required because clang-18
+  #         emits opaque `ptr`, so IR types alone can't recover a pointee's shape.
+  #   -O1 : mem2reg/clean SSA for def-use analysis, without inlining away argument
+  #         structure (KSplit likewise analyzes at low opt).
+  local -a mandatory_clang_flags=(
+    "--sysroot=${SYSROOT}"
+    --target=wasm32-unknown-wasi
+    -emit-llvm
+    -c
+  )
+  local -a default_clang_flags=(
+    -g
+    -O1
+  )
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+  run_cmd "${CLANG_BIN}" "${mandatory_clang_flags[@]}" "${default_clang_flags[@]}" \
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_BC}"
+}
+
+do_emit_marshal() {
+  # Generate the marshalling-inference sidecar (<src>.marshal.json) for a library
+  # being compiled. Emits a throwaway wasm32 bitcode (with DWARF) and runs the
+  # marshal-infer tool over it. Non-fatal: a missing tool just warns.
+  local mi="${REPO_ROOT}/tools/marshal-infer/build/marshal-infer"
+  if [[ ! -x "${mi}" ]]; then
+    echo "warning: --emit-marshal: tool not built at ${mi}; run tools/marshal-infer/build.sh" >&2
+    return 0
+  fi
+  local bc="${SRC%.c}.marshal.bc"
+  local json="${SRC%.c}.marshal.json"
+  run_cmd "${CLANG_BIN}" "--sysroot=${SYSROOT}" --target=wasm32-unknown-wasi \
+    -emit-llvm -c -g -O1 "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${bc}"
+  run_cmd "${mi}" --json -o "${json}" --module "$(basename "${SRC%.c}")" "${bc}"
+  rm -f "${bc}"
+  echo "OK: ${json}"
+}
+
 do_optimize() {
   local fpcast_flag=()
   [[ "${WITH_FPCAST}" == "true" ]] && fpcast_flag=(--fpcast-emu)
@@ -499,13 +561,18 @@ cp_to_lindfs() {
 case "${MODE}" in
   full)
     do_compile
+    [[ "${EMIT_MARSHAL}" == "true" ]] && do_emit_marshal
     do_optimize
     do_precompile
     cp_to_lindfs
     ;;
   "compile-only")
     do_compile
+    [[ "${EMIT_MARSHAL}" == "true" ]] && do_emit_marshal
     cp_to_lindfs
+    ;;
+  "emit-llvm")
+    do_emit_llvm
     ;;
   "opt-only")
     do_optimize
@@ -523,6 +590,9 @@ case "${MODE}" in
     ;;
   "compile-only"|"opt-only")
     echo "OK: ${OUT_WASM}"
+    ;;
+  "emit-llvm")
+    echo "OK: ${OUT_BC}"
     ;;
   "precompile-only")
     echo "OK: ${OUT_CWASM}"
