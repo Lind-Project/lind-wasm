@@ -655,7 +655,6 @@ fn grow_gc_heap(store: &mut dyn VMStore, _instance: InstanceId, bytes_needed: u6
             .current_length(),
     )
     .unwrap();
-
     let (mut limiter, store) = store.resource_limiter_and_store_opaque();
     block_on!(store, async |store, asyncness| {
         store

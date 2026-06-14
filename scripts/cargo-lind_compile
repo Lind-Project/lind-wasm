@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-shift
+if [ "${1:-}" = "lind_compile" ]; then
+    shift
+fi
 
 # Determine profile and output dir from arguments
 PROFILE="debug"
@@ -27,7 +29,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 # Set linker (allow override via environment variable)
-LINKER="${LIND_WASM_LINKER:-/home/lind/lind-wasm/scripts/wasip1-clang.sh}"
+LINKER="${LIND_WASM_LINKER:-$HOME/lind-wasm/scripts/wasip1-clang.sh}"
 export CARGO_TARGET_WASM32_WASIP1_LINKER="$LINKER"
 
 # Set rustflags for wasm32-wasip1 target
@@ -46,6 +48,23 @@ export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="\
 # Set wasm-opt and wasmtime paths (allow override via environment variables)
 WASM_OPT_BIN="${WASM_OPT_BIN:-wasm-opt}"
 WASMTIME_BIN="${WASMTIME_BIN:-wasmtime}"
+# 1. If LIND_COMPILE_BIN is set, use it.
+# 2. Else if lind_compile is available in PATH, use it.
+# 3. Else fall back to $HOME/lind-wasm/scripts/lind_compile.
+LIND_COMPILE_BIN="${LIND_COMPILE_BIN:-}"
+
+if [ -z "$LIND_COMPILE_BIN" ]; then
+    if command -v lind_compile >/dev/null 2>&1; then
+        LIND_COMPILE_BIN="$(command -v lind_compile)"
+    else
+        LIND_COMPILE_BIN="$HOME/lind-wasm/scripts/lind_compile"
+    fi
+fi
+
+if [ ! -x "$LIND_COMPILE_BIN" ]; then
+    echo "Error: lind_compile not found or not executable: $LIND_COMPILE_BIN" >&2
+    exit 1
+fi
 
 echo "Building with profile: $PROFILE"
 cargo +nightly-2026-02-11 build -Z build-std=std,panic_abort "${CARGO_ARGS[@]}"
@@ -58,7 +77,7 @@ fi
 
 for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -path "*deps*" 2>/dev/null | sort -r); do
         # Find the wasm files in the appropriate profile directory
-        lind_compile -s --opt-only "$f" &> /dev/null || true
+        "$LIND_COMPILE_BIN" -s --opt-only "$f" &> /dev/null || true
         # Precompile the optimized wasm file to cache it to LindFS
-        lind_compile "${LIND_TARGET_ARGS[@]}" --precompile-only "$f" &> /dev/null || true
+        "$LIND_COMPILE_BIN" "${LIND_TARGET_ARGS[@]}" --precompile-only "$f" &> /dev/null || true
 done

@@ -22,7 +22,7 @@ int main(void) {
         /* ---- child ---- */
 
         /* dlopen inside the child. */
-        void *handle = dlopen("lib.cwasm", RTLD_LAZY);
+        void *handle = dlopen("lib.so", RTLD_LAZY);
         if (!handle) {
             fprintf(stderr, "child: dlopen failed: %s\n", dlerror());
             return 1;
@@ -96,7 +96,7 @@ int main(void) {
 
         /* Parent never called dlopen; confirm it still works after the child
            tree has exited. */
-        void *handle = dlopen("lib.cwasm", RTLD_LAZY);
+        void *handle = dlopen("lib.so", RTLD_LAZY);
         if (!handle) {
             fprintf(stderr, "parent: dlopen failed: %s\n", dlerror());
             return 1;

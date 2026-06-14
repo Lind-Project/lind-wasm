@@ -15,9 +15,10 @@ parking_lot = "0.12"
 nodit = "0.9.2" # Used for VMMAP
 
 [features]
-default = ["hashmap"]        
+default = ["hashmap"]
 hashmap = []
-dashmap = [] 
+dashmap = []
+lind-logging = ["sysdefs/lind-logging"]
 
 [dev-dependencies]
 serial_test = "3"

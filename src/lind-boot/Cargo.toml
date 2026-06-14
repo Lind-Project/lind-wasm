@@ -8,9 +8,22 @@ default = ["fdtables-dashmaparray"]
 disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_signals"]
 secure = ["typemap/secure"]
 lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug" ]
-debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
 remote-lib = ["wasmtime-lind-dylink/remote-lib", "wasmtime/remote-lib"]
+lind-logging = [
+    "cage/lind-logging",
+    "rawposix/lind-logging",
+    "wasmtime-lind-common/lind-logging",
+    "wasmtime-lind-multi-process/lind-logging",
+    "wasmtime-lind-dylink/lind-logging",
+    "wasmtime-lind-utils/lind-logging",
+    "threei/lind-logging",
+    "wasmtime/lind-logging",
+]
 debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
+# Use the old asyncify-unwind/rewind based setjmp/longjmp instead of the default wasm-EH
+# based one. Requires glibc and user programs compiled without -fwasm-exceptions
+# (set LIND_ASYNCIFY_SETJMP=1 when running the build scripts).
+asyncify-setjmp = ["wasmtime/asyncify-setjmp", "wasmtime-lind-common/asyncify-setjmp"]
 # Pass-through selectors for the fdtables backend. Pick exactly one.
 fdtables-dashmaparray = ["rawposix/fdtables-dashmaparray"]
 fdtables-dashmapvec = ["rawposix/fdtables-dashmapvec"]

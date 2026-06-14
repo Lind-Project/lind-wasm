@@ -23,5 +23,5 @@ cage = { path = "../cage" }
 typemap = { path = "../typemap" }
 
 [features]
-debug-dylink = []
 remote-lib = ["wasmtime/remote-lib"]
+lind-logging = ["sysdefs/lind-logging"]

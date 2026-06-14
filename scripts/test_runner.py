@@ -16,6 +16,7 @@ import argparse
 import importlib
 import inspect
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -97,6 +98,10 @@ def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, 
         tuple(return_code, combined_output)
     """
     output_lines: list[str] = []
+    env = os.environ.copy()
+    env.setdefault("LIND_DEBUG_PANIC", "panic-and-exit")
+    env.setdefault("LIND_LOG_OUTPUT", "none")
+
     proc = subprocess.Popen(
         command,
         cwd=cwd,
@@ -104,6 +109,7 @@ def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, 
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        env=env,
     )
 
     assert proc.stdout is not None

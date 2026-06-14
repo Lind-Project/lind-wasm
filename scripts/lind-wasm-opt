@@ -137,13 +137,25 @@ fi
 LIND_FLAGS=()
 
 if [[ "${STATIC}" == "true" ]]; then
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-exception-handling --enable-reference-types)
+  fi
   [[ "${WITHOUT_EPOCH}" == "false" ]] && LIND_FLAGS+=(--epoch-injection)
   [[ "${WITHOUT_ASYNCIFY}" == "false" ]] && LIND_FLAGS+=(--asyncify)
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu)
   fi
+  # Convert clang 18 legacy EH (try/catch/throw) to standard EH (try_table/throw) after
+  # asyncify: asyncify handles legacy EH natively but Cranelift only supports standard EH.
+  # --enable-reference-types is required because --translate-to-exnref emits (ref exn) blocks
+  # (via catch_all_ref) when setjmp frames are nested across function calls.
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 elif [[ "${TARGET}" == "main" ]]; then
-  LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  else
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  fi
   if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
     LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module)
   fi
@@ -153,8 +165,17 @@ elif [[ "${TARGET}" == "main" ]]; then
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
   fi
+  # Convert clang 18 legacy EH (try/catch/throw) to standard EH (try_table/throw) after
+  # asyncify: asyncify handles legacy EH natively but Cranelift only supports standard EH.
+  # --enable-reference-types is required because --translate-to-exnref emits (ref exn) blocks
+  # (via catch_all_ref) when setjmp frames are nested across function calls.
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 elif [[ "${TARGET}" == "library" ]]; then
-  LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  else
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  fi
   if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
     LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import --pass-arg=epoch-main-module)
   fi
@@ -164,8 +185,13 @@ elif [[ "${TARGET}" == "library" ]]; then
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
   fi
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 else  # libc — owns signal_callback; inject epoch calls without redefining/reimporting it
-  LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads --enable-exception-handling --enable-reference-types)
+  else
+    LIND_FLAGS+=(--enable-bulk-memory --enable-threads)
+  fi
   if [[ "${WITHOUT_EPOCH}" == "false" ]]; then
     LIND_FLAGS+=(--epoch-injection --pass-arg=epoch-import)
   fi
@@ -175,6 +201,7 @@ else  # libc — owns signal_callback; inject epoch calls without redefining/rei
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
   fi
+  [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 fi
 
 LIND_FLAGS+=(-O2 --debuginfo)

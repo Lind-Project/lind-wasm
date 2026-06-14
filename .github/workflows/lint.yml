@@ -20,7 +20,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -48,7 +48,7 @@ jobs:
           # See `cargo clippy` and `cargo check` for available options
           cargo clippy \
               --manifest-path src/lind-boot/Cargo.toml \
-              --features "disable_signals secure lind_debug debug-dylink debug-grate-calls fdtables-dashmaparray" \
+              --features "disable_signals secure lind_debug lind-logging debug-grate-calls fdtables-dashmaparray" \
               --keep-going \
               -- \
               -A warnings \

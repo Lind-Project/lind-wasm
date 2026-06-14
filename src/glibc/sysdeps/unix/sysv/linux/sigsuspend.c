@@ -17,37 +17,46 @@
 
 #include <signal.h>
 #include <errno.h>
-#include <sched.h>
+#include <stddef.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
-/* Change the set of blocked signals to SET,
-   wait until a signal arrives, and restore the set of blocked signals.
+/* Change the set of blocked signals to SET, wait until a signal arrives,
+   and restore the set of blocked signals.  Always returns -1 / EINTR.
 
-   In Lind-WASM, signal delivery is epoch-based: sigprocmask sets the
-   epoch to 0xc0ffee when unblocking pending signals, and the next WASM
-   function call or loop back-edge fires the epoch callback which
-   delivers all pending unblocked signals synchronously.  So we
-   implement sigsuspend by swapping the mask, yielding (to trigger
-   epoch-based delivery), and restoring the original mask.
-
-   TODO: This only handles the case where signals are already pending
-   when sigsuspend is called (e.g., kill then sigsuspend).  A real
-   sigsuspend should block until a signal arrives, which would require
-   a condvar in the Cage struct that lind_send_signal notifies.  */
+   The rt_sigsuspend syscall atomically saves the current mask into
+   rawposix_old, installs the new mask, checks for pending signals, and
+   spins — all inside a single host call with no epoch injection points
+   between any of those steps.  The restore call after the syscall runs
+   back in wasm, so signal_callback fires at its function-header epoch
+   point and delivers the signal before the mask is restored.  */
 int
 __sigsuspend (const sigset_t *set)
 {
+  unsigned long long rawposix_set;
+  unsigned long long rawposix_old = 0;
   sigset_t old;
-  /* Atomically replace the signal mask.  sigprocmask triggers the
-     epoch if any pending signals become unblocked.  */
-  sigprocmask (SIG_SETMASK, set, &old);
 
-  /* Yield so the epoch callback fires and delivers pending signals
-     synchronously before sched_yield's host call runs.  */
-  sched_yield ();
+  if (set == NULL)
+    {
+      __set_errno (EINVAL);
+      return -1;
+    }
 
-  /* Restore the original mask.  */
-  sigprocmask (SIG_SETMASK, &old, NULL);
+  rawposix_set = set->__val[0];
 
+  /* Atomically save old mask, install new mask, and wait for a signal.  */
+  MAKE_LEGACY_SYSCALL (RT_SIGSUSPEND_SYSCALL, "syscall|sigsuspend",
+                       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&rawposix_set),
+                       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&rawposix_old),
+                       NOTUSED, NOTUSED, NOTUSED, NOTUSED,
+                       TRANSLATE_ERRNO_ON);
+
+  /* Restore old mask.  signal_callback fires at the function entry of
+     sigprocmask, delivering the pending signal before the mask changes.  */
+  old.__val[0] = (unsigned long int) rawposix_old;
+  __sigprocmask (SIG_SETMASK, &old, NULL);
   __set_errno (EINTR);
   return -1;
 }

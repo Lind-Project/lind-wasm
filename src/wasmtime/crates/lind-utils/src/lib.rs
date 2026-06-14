@@ -6,6 +6,7 @@ use std::sync::{
 };
 
 use dashmap::DashMap;
+use sysdefs::lind_log;
 
 pub mod symbol_table;
 
@@ -156,16 +157,20 @@ impl LindGOT {
                 let val = *cached_val;
                 let cell = unsafe { &*(handler as *const AtomicU32) };
                 cell.store(val, Ordering::Release);
-                #[cfg(feature = "debug-dylink")]
-                println!(
+                lind_log!(
+                    DYLINK,
                     "[debug] pre-resolve GOT entry {} = {} from cache",
-                    name, *cached_val
+                    name,
+                    *cached_val
                 );
             }
             self.global_offset_table.insert(name, handler as u64);
         } else {
-            #[cfg(feature = "debug-dylink")]
-            println!("[debug] Warning: ignore duplicated GOT entry {}", name);
+            lind_log!(
+                DYLINK,
+                "[debug] Warning: ignore duplicated GOT entry {}",
+                name
+            );
         }
     }
 
@@ -260,7 +265,7 @@ impl LindGOT {
             let val = cell.load(Ordering::Acquire);
 
             if val == 0 {
-                eprintln!("[lind] Warning: GOT entry \"{}\" unresolved", name);
+                lind_log!(DYLINK, "Warning: GOT entry \"{}\" unresolved", name);
             }
         }
     }

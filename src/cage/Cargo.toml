@@ -20,6 +20,7 @@ criterion = "0.5"
 [features]
 disable_signals = []
 lind_debug = []
+lind-logging = ["sysdefs/lind-logging"]
 
 [[bench]]
 name = "cage_map_bench"

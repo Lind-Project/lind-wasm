@@ -2,6 +2,7 @@ use crate::threei_const;
 use dashmap::DashMap;
 use std::sync::Mutex;
 use sysdefs::constants::lind_platform_const;
+use sysdefs::lind_log;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
@@ -23,19 +24,20 @@ lazy_static::lazy_static! {
 /// Prints the current contents of `HANDLERTABLE` in a readable format
 /// to help inspect cage–callnum–target mappings during development.
 pub fn print_handler_table() {
-    println!("=== HANDLERTABLE ===");
+    lind_log!(THREEI, "=== HANDLERTABLE ===");
     for self_entry in HANDLERTABLE.iter() {
         let self_cageid = *self_entry.key();
-        println!("CageID: {}", self_cageid);
+        lind_log!(THREEI, "CageID: {}", self_cageid);
 
         let callnum_map: &CallnumMap = self_entry.value();
         for call_entry in callnum_map.iter() {
             let callnum = *call_entry.key();
-            println!("  Callnum: {}", callnum);
+            lind_log!(THREEI, "  Callnum: {}", callnum);
 
             let target_map: &TargetCageMap = call_entry.value();
             for target_entry in target_map.iter() {
-                println!(
+                lind_log!(
+                    THREEI,
                     "    dest_grateid: {} -> in_grate_addr: {}",
                     *target_entry.key(),
                     *target_entry.value()
@@ -43,7 +45,7 @@ pub fn print_handler_table() {
             }
         }
     }
-    println!("====================");
+    lind_log!(THREEI, "====================");
 }
 
 /// Checks if a given cage has any registered syscall handlers in HANDLERTABLE.
@@ -239,7 +241,8 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
         drop(src_entry);
         snap
     } else {
-        eprintln!(
+        lind_log!(
+            THREEI,
             "[3i|copy_handler_table_to_cage] srccage {} has no handler table",
             srccage
         );

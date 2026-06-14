@@ -10,7 +10,7 @@
    The GNU C Library is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   Lesser General Public License for more details.
+   Library General Public License for more details.
 
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library.  If not, see
@@ -18,17 +18,15 @@
 
 #include <signal.h>
 #include <unistd.h>
-#include <sysdep-cancel.h>
 
 /* Suspend the process until a signal arrives.
-   This always returns -1 and sets errno to EINTR.  */
+   Implemented as sigsuspend with the current mask so that the
+   underlying rt_sigsuspend syscall handles both atomically.  */
 int
 __libc_pause (void)
 {
-#ifdef __NR_pause
-  return SYSCALL_CANCEL (pause);
-#else
-  return SYSCALL_CANCEL (ppoll, NULL, 0, NULL, NULL);
-#endif
+  sigset_t set;
+  __sigprocmask (SIG_BLOCK, NULL, &set);
+  return __sigsuspend (&set);
 }
 weak_alias (__libc_pause, pause)
