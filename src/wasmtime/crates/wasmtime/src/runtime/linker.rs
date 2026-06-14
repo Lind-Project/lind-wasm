@@ -1244,11 +1244,8 @@ impl<T> Linker<T> {
                 }
                 other => other,
             };
-            // For dedup symbols, silently skip if already defined (first definition wins).
-            if module_name == "env" && is_dylink_dedup_symbol(&name) && self.map.get(&key).is_some()
-            {
-                continue;
-            }
+            // Dedup check already performed at the top of the loop (before `name` is
+            // moved into the portal/RPC closure); no second check needed here.
             self.insert(key, Definition::new(store.0, export))?;
         }
         Ok(self)
