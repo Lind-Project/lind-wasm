@@ -600,7 +600,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         );
 
                         linker
-                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .instance_dylink(
+                                &mut store,
+                                "env",
+                                instance,
+                                Some(child_cageid),
+                                vec!["signal_callback"],
+                            )
                             .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {
@@ -1179,7 +1185,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         );
 
                         linker
-                            .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
+                            .instance_dylink(
+                                &mut store,
+                                "env",
+                                instance,
+                                Some(child_cageid as u64),
+                                vec!["signal_callback"],
+                            )
                             .unwrap();
 
                         for (name, _path, module) in dlopen_modules.iter() {

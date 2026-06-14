@@ -23,4 +23,5 @@ cage = { path = "../cage" }
 typemap = { path = "../typemap" }
 
 [features]
+remote-lib = ["wasmtime/remote-lib"]
 lind-logging = ["sysdefs/lind-logging"]

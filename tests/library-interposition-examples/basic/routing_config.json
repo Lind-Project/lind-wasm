@@ -1,0 +1,10 @@
+{
+  "default_route": "local",
+  "remotes": {
+    "toy": { "endpoint": "unix:///tmp/test.sock" }
+  },
+  "routes": [
+    { "symbol": "add", "route": "remote", "remote": "toy", "call_id": 1 },
+    { "symbol": "mul", "route": "remote", "remote": "toy", "call_id": 2 }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "default_route": "local",
+  "remotes": {
+    "unix_server": { "endpoint": "unix:///tmp/percage_unix.sock" },
+    "tcp_server":  { "endpoint": "tcp://127.0.0.1:19000" }
+  },
+  "routes": [
+    {
+      "comment":  "cage 2: Unix domain socket remote strcpy",
+      "symbol":   "strcpy",
+      "route":    "remote",
+      "remote":   "unix_server",
+      "call_id":  1,
+      "cageid":   2,
+      "args": [
+        { "type": "ptr", "direction": "out", "same_as_arg": 1 },
+        { "type": "ptr", "direction": "in",  "null_terminated": true }
+      ]
+    },
+    {
+      "comment":  "cage 3: TCP socket remote strcpy",
+      "symbol":   "strcpy",
+      "route":    "remote",
+      "remote":   "tcp_server",
+      "call_id":  1,
+      "cageid":   3,
+      "args": [
+        { "type": "ptr", "direction": "out", "same_as_arg": 1 },
+        { "type": "ptr", "direction": "in",  "null_terminated": true }
+      ]
+    }
+  ]
+}
