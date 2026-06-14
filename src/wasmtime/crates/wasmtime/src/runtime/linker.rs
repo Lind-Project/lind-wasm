@@ -7,6 +7,8 @@ use crate::{
     GlobalType, ImportType, Instance, IntoFunc, MemoryType, Module, Result, SharedMemory,
     StoreContextMut, Table, Val, ValRaw, ValType, prelude::*,
 };
+#[cfg(not(feature = "asyncify-setjmp"))]
+use crate::{Tag, TagType};
 use alloc::sync::Arc;
 use cage::DashMap;
 use core::fmt::{self, Debug};
@@ -581,10 +583,26 @@ impl<T> Linker<T> {
                     if delta > 0 {
                         mem.grow(delta)?;
                     }
-                    memory_base = Some(mem.get_memory_base());
+                    let base = mem.get_memory_base();
+                    memory_base = Some(base);
+                    // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
+                    // rawposix takes ownership via init_vmmap + fork_vmmap.
+                    unsafe {
+                        libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE);
+                    }
                     new_linker.define(&mut store, &module, &name, mem)?;
                 }
             }
+        }
+
+        // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp in the child.
+        // Each Store owns its tag objects, so the forked child needs its own instance of
+        // the tag even though it's functionally identical to the parent's.
+        #[cfg(not(feature = "asyncify-setjmp"))]
+        {
+            let tag_type = TagType::new(FuncType::new(engine, [ValType::I32], []));
+            let tag = Tag::new(&mut store, &tag_type)?;
+            new_linker.define(&mut store, "env", "__c_longjmp", tag)?;
         }
 
         Ok((new_linker, memory_base_table, epoch_handler, memory_base))

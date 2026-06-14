@@ -48,6 +48,7 @@ logger.addHandler(ch)
 DEFAULT_TIMEOUT = 30 # in seconds
 GRATE_DEFAULT_TIMEOUT = 90  # bumped default when running tests under a grate
 DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for lind_run on libc++ smoke .cwasm
+DEFAULT_NON_GRATE_TEST_WORKERS = "1"
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
@@ -75,6 +76,10 @@ GRATE_PREFIX = None
 GRATE_ARGS = []
 GRATE_CHAIN = []  # raw token list to prepend before the test wasm (set when --grate-prefix is used)
 MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
+
+def running_under_grate():
+    return bool(GRATE_CHAIN or GRATE_PREFIX)
+
 
 error_types = {
     "Failure_native_compiling": "Compilation Failure Native",
@@ -539,8 +544,19 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 
 
     try:
+        run_env = os.environ.copy()
+        if not running_under_grate():
+            run_env["LIND_GRATE_WORKERS"] = DEFAULT_NON_GRATE_TEST_WORKERS
+
         run_start = time.perf_counter()
-        proc = run_subprocess(run_cmd,label="wasm run",timeout=timeout_sec, cwd=None, shell = False)
+        proc = run_subprocess(
+            run_cmd,
+            label="wasm run",
+            timeout=timeout_sec,
+            cwd=None,
+            shell=False,
+            env=run_env,
+        )
         run_time = round(time.perf_counter() - run_start, 6)       
         output = proc.stdout if proc.returncode == 0 else (proc.stdout + proc.stderr)
 
@@ -1288,7 +1304,7 @@ def compare_test_results(file1, file2):
 #   subprocess.TimeoutExpired - If the command exceeds the timeout.
 #   Exception - For all other unexpected execution errors.
 # ----------------------------------------------------------------------
-def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
+def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None, env=None):
     """
     Wrapper for subprocess.run with optional debug logging.
     """
@@ -1305,7 +1321,8 @@ def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
             text=True,
             cwd=cwd,
             shell=shell,
-            timeout=timeout
+            timeout=timeout,
+            env=env,
         )
 
         

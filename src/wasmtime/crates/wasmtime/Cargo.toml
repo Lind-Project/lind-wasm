@@ -450,3 +450,4 @@ rr = [
 
 debug-dylink = ["wasmtime-environ/debug-dylink"]
 remote-lib = ["dep:lind-remote-lib"]
+asyncify-setjmp = []

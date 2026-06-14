@@ -2415,7 +2415,6 @@ impl StoreOpaque {
                 .allocator()
                 .allocate_memory(&mut request, &mem_ty, None)
                 .await?;
-
             // Then, allocate the actual GC heap, passing in that memory
             // storage.
             let gc_runtime = engine.gc_runtime().ok_or_else(|| {
