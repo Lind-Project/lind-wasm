@@ -1052,7 +1052,7 @@ impl<T> Linker<T> {
             {
                 continue;
             }
-            
+
             let export = match export {
                 Extern::Func(original_func) => {
                     // Decide at link time whether to install an RPC wrapper or link directly.

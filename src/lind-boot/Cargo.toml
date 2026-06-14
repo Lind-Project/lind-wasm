@@ -8,10 +8,7 @@ default = ["fdtables-dashmaparray"]
 disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_signals"]
 secure = ["typemap/secure"]
 lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug" ]
-<<<<<<< HEAD
-debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
 remote-lib = ["wasmtime-lind-dylink/remote-lib", "wasmtime/remote-lib"]
-=======
 lind-logging = [
     "cage/lind-logging",
     "rawposix/lind-logging",
@@ -22,7 +19,6 @@ lind-logging = [
     "threei/lind-logging",
     "wasmtime/lind-logging",
 ]
->>>>>>> main
 debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
 # Use the old asyncify-unwind/rewind based setjmp/longjmp instead of the default wasm-EH
 # based one. Requires glibc and user programs compiled without -fwasm-exceptions
