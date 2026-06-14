@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
 use sysdefs::lind_log;
+use threei::make_syscall;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
 use wasmtime_lind_utils::LindGOT;
 use wasmtime_lind_utils::symbol_table::SymbolMap;
@@ -1023,6 +1024,9 @@ impl<T> Linker<T> {
         // The cage that owns this linker. None means apply global routes only.
         cage_id: Option<u64>,
         skiplist: Vec<&str>,
+        // Optional GOT to update when a portal is installed (so GOT.func.X also
+        // points to the portal rather than the real library function).
+        got: Option<&LindGOT>,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1055,6 +1059,92 @@ impl<T> Linker<T> {
 
             let export = match export {
                 Extern::Func(original_func) => {
+                    // Library-level 3i: if a handler has been registered for this
+                    // (cage_id, module_name, symbol), install a portal that captures
+                    // (handler_cage_id, fn_ptr) at link time and calls dispatch_lib_call.
+                    if let Some(cid) = cage_id {
+                        let maybe_handler = threei::get_lib_handler(cid, module_name, &name);
+                        if let Some((handler_cage_id, fn_ptr)) = maybe_handler {
+                            let name_for_got = name.clone();
+                            let func_ty = original_func.ty(&store);
+                            let func_ty_for_portal = func_ty.clone();
+                            let portal = Func::new(
+                                &mut store,
+                                func_ty,
+                                move |_caller, params, results| {
+                                    let mut raw = [0u64; 6];
+                                    for (i, v) in params.iter().enumerate().take(6) {
+                                        raw[i] = match v {
+                                            Val::I32(x) => *x as u32 as u64,
+                                            Val::I64(x) => *x as u64,
+                                            Val::F32(b) => *b as u64,
+                                            Val::F64(b) => *b,
+                                            _ => 0,
+                                        };
+                                    }
+                                    let ret = threei::dispatch_lib_call(
+                                        handler_cage_id,
+                                        fn_ptr,
+                                        raw[0],
+                                        cid,
+                                        raw[1],
+                                        cid,
+                                        raw[2],
+                                        cid,
+                                        raw[3],
+                                        cid,
+                                        raw[4],
+                                        cid,
+                                        raw[5],
+                                        cid,
+                                    );
+                                    for (slot, ty) in
+                                        results.iter_mut().zip(func_ty_for_portal.results())
+                                    {
+                                        *slot = match ty {
+                                            ValType::I32 => Val::I32(ret),
+                                            ValType::I64 => Val::I64(ret as i64),
+                                            ValType::F32 => Val::F32(ret as u32),
+                                            ValType::F64 => Val::F64(ret as u64),
+                                            other => {
+                                                return Err(format_err!(
+                                                    "lib-3i portal: unsupported return type {other} for {name}"
+                                                ));
+                                            }
+                                        };
+                                    }
+                                    Ok(())
+                                },
+                            );
+                            // Also add the portal to the shared function table and update
+                            // the GOT cache, so that PIC calls via GOT.func.X also hit the
+                            // portal rather than the original library function.
+                            if let Some(g) = got {
+                                let shared_table = self
+                                    .get(&mut store, "env", "__indirect_function_table")
+                                    .ok()
+                                    .and_then(|e| {
+                                        if let Extern::Table(t) = e {
+                                            Some(t)
+                                        } else {
+                                            None
+                                        }
+                                    });
+                                if let Some(table) = shared_table {
+                                    if let Ok(idx) = table.grow(
+                                        store.as_context_mut(),
+                                        1,
+                                        crate::Ref::Func(Some(portal.clone())),
+                                    ) {
+                                        g.cache_symbol(&name_for_got, idx as u32);
+                                    }
+                                }
+                            }
+                            self.insert(key, Definition::new(store.0, Extern::Func(portal)))?;
+                            continue;
+                        }
+                    }
+
                     // Decide at link time whether to install an RPC wrapper or link directly.
                     // The routing config is static (OnceLock), so this decision is stable for
                     // the lifetime of the linker and need not be re-evaluated on every call.
@@ -1154,11 +1244,8 @@ impl<T> Linker<T> {
                 }
                 other => other,
             };
-            // For dedup symbols, silently skip if already defined (first definition wins).
-            if module_name == "env" && is_dylink_dedup_symbol(&name) && self.map.get(&key).is_some()
-            {
-                continue;
-            }
+            // Dedup check already performed at the top of the loop (before `name` is
+            // moved into the portal/RPC closure); no second check needed here.
             self.insert(key, Definition::new(store.0, export))?;
         }
         Ok(self)
@@ -1448,7 +1535,14 @@ impl<T> Linker<T> {
                 // run data relocation functions and constructor functions
                 instance.apply_relocs_func_and_constructor(&mut store)?;
 
-                self.instance_dylink(store, module_name, instance, Some(cageid), vec![])
+                self.instance_dylink(
+                    store,
+                    module_name,
+                    instance,
+                    Some(cageid),
+                    vec![],
+                    Some(got),
+                )
             }
         }
     }
@@ -1545,7 +1639,7 @@ impl<T> Linker<T> {
                     }
                 }
 
-                self.instance_dylink(store, module_name, instance, Some(cageid), vec![])
+                self.instance_dylink(store, module_name, instance, Some(cageid), vec![], None)
             }
         }
     }
@@ -1763,8 +1857,14 @@ impl<T> Linker<T> {
 
                 if !is_local {
                     // only attach library symbol to Linker if it is global scope
-                    let _ =
-                        self.instance_dylink(store, module_name, instance, Some(cageid), vec![]);
+                    let _ = self.instance_dylink(
+                        store,
+                        module_name,
+                        instance,
+                        Some(cageid),
+                        vec![],
+                        Some(got),
+                    );
                 }
 
                 Ok(handler)

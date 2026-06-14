@@ -653,6 +653,7 @@ fn load_main_module(
                 instance,
                 Some(cageid as u64),
                 vec!["signal_callback"],
+                None,
             )
             .unwrap();
 

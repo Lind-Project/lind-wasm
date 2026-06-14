@@ -50,3 +50,7 @@ pub const COPY_DATA_BETWEEN_CAGES_SYSCALL: u64 = 1002;
 /// TODO: When introducing a Rust-side unified syscall number table
 /// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const COPY_HANDLER_TABLE_TO_CAGE_SYSCALL: u64 = 1003;
+/// 3i-specific syscall number for `register_lib_handler`.
+///
+/// Match the definition in `glibc/lind_syscall_num.h`.
+pub const REGISTER_LIB_HANDLER_SYSCALL: u64 = 1004;
