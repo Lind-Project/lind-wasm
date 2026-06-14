@@ -14,6 +14,7 @@ that comes with the Lind Sandbox. *You'll need [Docker installed](https://docs.d
 ```
 docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev  # this might take a while ...
 docker run --platform=linux/amd64 -it securesystemslab/lind-wasm-dev /bin/bash
+cd lind-wasm
 ```
 
 This is a development environment with tooling and source code available. Additional instructions can be found [here](contribute/dev-container.md).
@@ -34,19 +35,19 @@ int main() {
 EOF
 ```
 
-**3. Compile Lind-Wasm Runtime**
+**3. Compile the Lind-Wasm runtime**
 
-The Lind-Wasm runtime must be compiled before running the program. To compile the runtime, first go to the `lind-wasm/` directory. From there, you can choose:
+The Lind-Wasm runtime must be compiled before running the program. Use this path for a first build:
 
-3.a. Use `make all` to compile both lind-glibc and Rust code at once.
+```bash
+make lind-boot sysroot
+```
 
-3.b. Use `make lind-boot` to compile the runtime (`lind-boot`, Wasmtime, RawPOSIX, 3i, etc.), and `make sysroot` to compile lind-glibc.
+This builds the runtime (`lind-boot`, Wasmtime, RawPOSIX, 3i, etc.) and the lind-glibc sysroot.
 
-**NOTES: More options can be found in lind-wasm/Makefile**
+For a full build, including both lind-glibc and Rust code, use `make all`. More build targets are documented in `lind-wasm/Makefile`.
 
 **4. Compile and run**
-
-Use lind scripts to compile and run your program in the Lind Sandbox.
 
 Inside the development container, `lind-clang` is an alias for `scripts/lind_compile`, and `lind-wasm` is an alias for `scripts/lind_run`. If you are running outside the container, use the scripts directly or add the aliases to your shell.
 
