@@ -1007,7 +1007,9 @@ pub fn copy_data_between_cages(
         lind_log!(
             THREEI,
             "[3i|copy] address overflow: src={:#x} len={} dest={:#x}",
-            host_src_addr, copy_len, host_dest_addr
+            host_src_addr,
+            copy_len,
+            host_dest_addr
         );
         return threei_const::ELINDAPIABORTED;
     }
