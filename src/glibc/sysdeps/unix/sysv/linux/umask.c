@@ -1,7 +1,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 
