@@ -44,25 +44,114 @@ int dwarfIndexOf(const Value *v, unsigned sretOffset) {
   return -1;
 }
 
-// Trace a pointer value back to the source argument it derives from, following
-// casts, GEPs (pointer-into-arg), and phi/select. Returns the DWARF index or -1.
-int tracePtrToArg(const Value *v, unsigned sretOffset,
-                  SmallPtrSetImpl<const Value *> &seen) {
+// Find the pointer an integer value derived from (via ptrtoint + arithmetic).
+// Any arithmetic en route means the eventual pointer is reached with an offset.
+const Value *underlyingPtrOfInt(const Value *iv, bool &hadOffset,
+                                SmallPtrSetImpl<const Value *> &seen) {
+  if (!iv || !seen.insert(iv).second) return nullptr;
+  iv = stripIntCasts(iv);
+  if (auto *bo = dyn_cast<BinaryOperator>(iv)) {
+    hadOffset = true; // add/sub/or on a pointer-derived integer = an offset
+    if (const Value *p = underlyingPtrOfInt(bo->getOperand(0), hadOffset, seen))
+      return p;
+    return underlyingPtrOfInt(bo->getOperand(1), hadOffset, seen);
+  }
+  if (auto *p2i = dyn_cast<PtrToIntInst>(iv))
+    return p2i->getPointerOperand();
+  return nullptr;
+}
+
+// Trace a returned pointer back to the source argument it derives from —
+// following casts, GEPs, phi/select, and int<->ptr arithmetic. Sets `hadOffset`
+// when the return is arg+offset (a pointer INTO the arg) vs the arg itself.
+int traceReturnPtr(const Value *v, unsigned sretOffset, bool &hadOffset,
+                   SmallPtrSetImpl<const Value *> &seen) {
   if (!v || !seen.insert(v).second) return -1;
   v = v->stripPointerCasts();
   if (int idx = dwarfIndexOf(v, sretOffset); idx >= 0) return idx;
-  if (auto *gep = dyn_cast<GetElementPtrInst>(v))
-    return tracePtrToArg(gep->getPointerOperand(), sretOffset, seen);
-  if (auto *phi = dyn_cast<PHINode>(v)) {
-    for (const Value *iv : phi->incoming_values())
-      if (int idx = tracePtrToArg(iv, sretOffset, seen); idx >= 0) return idx;
+  if (auto *gep = dyn_cast<GetElementPtrInst>(v)) {
+    if (!gep->hasAllZeroIndices()) hadOffset = true;
+    return traceReturnPtr(gep->getPointerOperand(), sretOffset, hadOffset, seen);
   }
+  if (auto *i2p = dyn_cast<IntToPtrInst>(v)) {
+    SmallPtrSet<const Value *, 16> iseen;
+    if (const Value *p = underlyingPtrOfInt(i2p->getOperand(0), hadOffset, iseen))
+      return traceReturnPtr(p, sretOffset, hadOffset, seen);
+  }
+  if (auto *phi = dyn_cast<PHINode>(v))
+    for (const Value *iv : phi->incoming_values())
+      if (int idx = traceReturnPtr(iv, sretOffset, hadOffset, seen); idx >= 0)
+        return idx;
   if (auto *sel = dyn_cast<SelectInst>(v)) {
-    if (int idx = tracePtrToArg(sel->getTrueValue(), sretOffset, seen); idx >= 0)
+    if (int idx = traceReturnPtr(sel->getTrueValue(), sretOffset, hadOffset, seen);
+        idx >= 0)
       return idx;
-    return tracePtrToArg(sel->getFalseValue(), sretOffset, seen);
+    return traceReturnPtr(sel->getFalseValue(), sretOffset, hadOffset, seen);
   }
   return -1;
+}
+
+// --- known opaque, library-owned types: handle, never deep-copied (C2/C4) ---
+// Canonicalize so typedef spellings collapse to one class string.
+std::string canonicalHandleClass(const std::string &typeName) {
+  if (typeName == "_IO_FILE" || typeName == "FILE") return "FILE";
+  if (typeName == "__dirstream" || typeName == "DIR") return "DIR";
+  if (typeName == "__locale_struct") return "locale";
+  if (typeName.empty()) return "void";
+  return typeName;
+}
+bool isKnownOpaqueStruct(const std::string &typeName) {
+  return typeName == "_IO_FILE" || typeName == "__dirstream" ||
+         typeName == "__locale_struct";
+}
+
+// --- allocator classification (C3) ---
+// allocsize attr is absent in our -O1 glibc bitcode, so use a curated table.
+struct AllocInfo {
+  bool isAlloc = false;      // plain allocation -> ptr_alloc
+  bool forceLocal = false;   // realloc-style -> whole function local
+  SmallVector<int, 2> sizeArgs;
+};
+AllocInfo allocatorInfo(StringRef raw) {
+  StringRef n = raw;
+  if (!n.consume_front("__libc_")) n.consume_front("__");
+  AllocInfo a;
+  if (n == "malloc" || n == "valloc" || n == "pvalloc") { a.isAlloc = true; a.sizeArgs = {0}; }
+  else if (n == "aligned_alloc" || n == "memalign") { a.isAlloc = true; a.sizeArgs = {1}; }
+  else if (n == "calloc") { a.isAlloc = true; a.sizeArgs = {0, 1}; }
+  else if (n == "realloc" || n == "reallocarray" || n == "posix_memalign" ||
+           n == "strdup" || n == "strndup")
+    a.forceLocal = true;
+  return a;
+}
+
+// Classic search functions whose result is a pointer INTO arg0. Their return is
+// computed in a callee (e.g. strchr -> __strchrnul + select), so the intraproc
+// IR trace can't see it — recognize them by name (V1).
+int searcherReturnsIntoArg0(StringRef raw) {
+  StringRef n = raw;
+  n.consume_front("__");
+  if (n == "strchr" || n == "strrchr" || n == "index" || n == "rindex" ||
+      n == "strchrnul" || n == "memchr" || n == "memrchr" || n == "rawmemchr" ||
+      n == "strstr" || n == "strcasestr" || n == "strpbrk")
+    return 0;
+  return -1;
+}
+
+// Final decisiveness net (E2): any non-mappable node anywhere → force_local.
+// Catches by-value struct/union/array args (which the pointer-only per-arg loop
+// skips) and any other leftover. Handles are opaque — their uncopied pointee is
+// not inspected.
+bool treeHasUnmappable(const TreeNode *n) {
+  if (n->isHandle) return false;
+  if (n->kind == NodeKind::Unknown) return true;
+  if (n->kind == NodeKind::Pointer && n->sizeKind != SizeKind::Const &&
+      n->sizeKind != SizeKind::FromArg &&
+      n->sizeKind != SizeKind::FromArgPointee && n->sizeKind != SizeKind::Cstr)
+    return true;
+  for (const auto &c : n->children)
+    if (treeHasUnmappable(c.get())) return true;
+  return false;
 }
 
 bool isSizeyTypeName(const std::string &t) {
@@ -201,66 +290,74 @@ Access analyzeAccess(const Argument *A) {
   return acc;
 }
 
-// Annotate the fields of a struct/union pointee, best-effort. We lack per-field
-// access analysis on the caller side, so: mark every field touched; size pointer
-// fields from a size-like SIBLING FIELD (the (buf,len)-in-struct idiom, e.g.
-// toy_buffer{data,len}); default nested-pointer direction to IN (nested buffers
-// are inputs by convention). Recurses into nested structs.
-void annotateComposite(TreeNode *s, FunctionTrees &ft, size_t topArg) {
+// Annotate the fields of a struct/union pointee, best-effort. Returns whether the
+// struct is fully *resolvable* (every field maps to a concrete action). We lack
+// caller-side per-field access analysis, so: mark every field touched; size a
+// pointer field from a size-like sibling FIELD only on a tight (buf,len) signal
+// (exactly one pointer + one size_t-ish scalar, e.g. toy_buffer{data,len}); a
+// function-pointer / truncated / unresolvable-nested field makes the struct
+// unresolvable (caller decides shallow vs force_local).
+bool annotateComposite(TreeNode *s, FunctionTrees &ft, size_t topArg) {
+  // Detect the tight (buf,len) shape.
+  int nPtr = 0, nSizeScalar = 0, sizeField = -1, sizeRank = 0;
+  for (size_t g = 0; g < s->children.size(); ++g) {
+    TreeNode *c = s->children[g].get();
+    if (c->kind == NodeKind::Pointer) nPtr++;
+    else if (c->kind == NodeKind::Scalar) {
+      int rk = sizeyRank(c->typeName);
+      if (rk >= 2) { nSizeScalar++; if (rk > sizeRank) { sizeRank = rk; sizeField = (int)g; } }
+    }
+  }
+  bool tightPair = (nPtr == 1 && nSizeScalar == 1);
+
+  bool resolvable = true;
   for (size_t f = 0; f < s->children.size(); ++f) {
     TreeNode *fld = s->children[f].get();
     fld->touched = true;
+
     if (fld->kind == NodeKind::Struct || fld->kind == NodeKind::Union) {
-      annotateComposite(fld, ft, topArg);
+      if (!annotateComposite(fld, ft, topArg)) resolvable = false;
       continue;
     }
-    if (fld->kind != NodeKind::Pointer)
+    if (fld->kind == NodeKind::Scalar || fld->kind == NodeKind::Array)
+      continue; // plain data — fine
+    if (fld->kind != NodeKind::Pointer) { // Unknown: fn ptr / depth-cut / cyclic
+      resolvable = false;
+      const char *why = fld->depthTruncated
+                            ? "depth-truncated (deep/cyclic struct)"
+                            : (fld->typeName == "<func>" ? "function pointer"
+                                                         : "unresolved");
+      ft.warnings.push_back("arg" + std::to_string(topArg) + " field '" +
+          fld->fieldName + "': " + why + " — not marshalable");
       continue;
+    }
 
-    // Find a size-like sibling scalar field (becomes FROM_ARG sibling index).
-    int sib = -1, rank = 0;
-    for (size_t g = 0; g < s->children.size(); ++g) {
-      if (g == f) continue;
-      TreeNode *c = s->children[g].get();
-      if (c->kind == NodeKind::Scalar) {
-        int rk = sizeyRank(c->typeName);
-        if (rk > rank) { rank = rk; sib = (int)g; }
-      }
-    }
+    // --- a pointer field ---
     TreeNode *pe = fld->children.empty() ? nullptr : fld->children[0].get();
-    bool opaque = fld->pointeeOpaque || !pe;
-    // nested buffers default to IN (best-effort); const makes it certain.
-    fld->dir = Dir::In;
+    fld->dir = Dir::In; // nested buffers default to IN (best-effort)
 
-    if (opaque) {
+    if (fld->pointeeOpaque || !pe) {            // void* field -> handle
       fld->isHandle = true; fld->handleClass = "void";
-      fld->sizeKind = SizeKind::Unknown;
-      ft.warnings.push_back("arg" + std::to_string(topArg) + " field '" +
-          fld->fieldName + "': opaque void* nested pointer — handle candidate");
+    } else if (isKnownOpaqueStruct(pe->typeName)) { // FILE*/DIR* field -> handle
+      fld->isHandle = true; fld->handleClass = canonicalHandleClass(pe->typeName);
     } else if (pe->isComposite()) {
-      if (pe->sizeBytes > 0 && !pe->depthTruncated) {
+      if (pe->sizeBytes > 0 && !pe->depthTruncated &&
+          annotateComposite(pe, ft, topArg)) {
         fld->sizeKind = SizeKind::Const; fld->constSize = pe->sizeBytes;
-        annotateComposite(pe, ft, topArg);
       } else {
-        fld->isHandle = true; fld->handleClass = pe->typeName;
-        fld->sizeKind = SizeKind::Unknown;
-        ft.warnings.push_back("arg" + std::to_string(topArg) + " field '" +
-            fld->fieldName + "': opaque/recursive struct — handle candidate");
+        resolvable = false; // nested struct we can't fully resolve
       }
-    } else {
+    } else if (pe->kind == NodeKind::Unknown ||
+               pe->kind == NodeKind::Pointer) { // ptr to fn/truncated/ptr
+      resolvable = false;
+    } else {                                    // ptr to scalar
       uint64_t elem = pe->sizeBytes ? pe->sizeBytes : 1;
-      if (sib >= 0) {
-        fld->sizeKind = SizeKind::FromArg; // sibling FIELD index
-        fld->sizeArgIndex = sib;
-      } else if (elem == 1) {
-        fld->sizeKind = SizeKind::Cstr;
-      } else {
-        fld->sizeKind = SizeKind::Const; fld->constSize = elem;
-      }
-      ft.warnings.push_back("arg" + std::to_string(topArg) + " field '" +
-          fld->fieldName + "': nested pointer direction assumed IN");
+      if (tightPair) { fld->sizeKind = SizeKind::FromArg; fld->sizeArgIndex = sizeField; }
+      else if (elem == 1) fld->sizeKind = SizeKind::Cstr; // char* -> assume string
+      else { fld->sizeKind = SizeKind::Const; fld->constSize = elem; } // singleton
     }
   }
+  return resolvable;
 }
 
 Dir directionFrom(const Argument *A, const Access &acc) {
@@ -311,21 +408,54 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
     bool opaque = node->pointeeOpaque || !pointee;
     bool charPointee = pointee && pointee->kind == NodeKind::Scalar &&
                        pointee->sizeBytes == 1;
+    bool sizeHeuristic = false; // set when sizeArg is a guess, not from dataflow
 
-    // Heuristic fallback: pick the most size_t-shaped scalar argument. For a
-    // char* (likely a C string) require a *strong* size_t-shaped companion
-    // (rank>=2); a plain int is more likely a flag/char (e.g. strchr's char),
-    // so leave such pointers to fall through to CSTR.
-    bool sizeHeuristic = false;
-    if (sizeArg < 0) {
-      int best = -1, bestRank = 0;
-      for (size_t q = 0; q < ft.params.size(); ++q) {
-        if (q == p || ft.params[q]->kind != NodeKind::Scalar) continue;
-        int rk = sizeyRank(ft.params[q]->typeName);
-        if (rk > bestRank) { bestRank = rk; best = (int)q; }
+    // (buf, *lenptr) idiom: a byte/void buffer immediately followed by a pointer
+    // to a size-like scalar is sized by *that pointer — compress2/uncompress's
+    // (dest, uLongf *destLen). This is FROM_ARG_POINTEE; check it BEFORE the
+    // plain-scalar heuristic so `dest` is sized by *destLen, not a later scalar
+    // (and `source`, followed by a scalar `sourceLen`, still gets plain FROM_ARG).
+    if (sizeArg < 0 && (charPointee || opaque)) {
+      size_t q = p + 1;
+      if (q < ft.params.size() && ft.params[q]->kind == NodeKind::Pointer &&
+          !ft.params[q]->children.empty()) {
+        const TreeNode *lenPointee = ft.params[q]->children[0].get();
+        if (lenPointee->kind == NodeKind::Scalar &&
+            sizeyRank(lenPointee->typeName) >= 2) {
+          sizeArg = (int)q; fromPointee = true; sizeHeuristic = true;
+        }
       }
-      int minRank = charPointee ? 2 : 1;
-      if (best >= 0 && bestRank >= minRank) { sizeArg = best; sizeHeuristic = true; }
+    }
+
+    // Heuristic fallback: in the (buf,len) idiom the length is the size-like
+    // scalar that *follows* the buffer — e.g. adler32(seed, buf, len) is sized by
+    // `len`, NOT the preceding `seed` (which may outrank it by type). So prefer
+    // the nearest qualifying scalar after the pointer, then fall back to the
+    // nearest before. A char* needs a strong (size_t-shaped, rank>=2) companion
+    // so a plain int (e.g. strchr's char) doesn't count and it falls through to
+    // CSTR; non-char buffers accept rank>=1.
+    if (sizeArg < 0) {
+      // Highest-rank size-like scalar in one half (after: q>p, before: q<p).
+      auto bestSizey = [&](bool after, int minR) -> int {
+        int best = -1, bestRank = 0;
+        for (size_t q = 0; q < ft.params.size(); ++q) {
+          if (q == p || ft.params[q]->kind != NodeKind::Scalar) continue;
+          if (after ? (q < p) : (q > p)) continue;
+          int rk = sizeyRank(ft.params[q]->typeName);
+          if (rk >= minR && rk > bestRank) { bestRank = rk; best = (int)q; }
+        }
+        return best;
+      };
+      // A genuine size_t-shaped scalar (rank>=2) is the strong length signal;
+      // prefer the one AFTER the buffer (the (buf,len) idiom: adler32(seed,buf,
+      // len)->len), then before. Strong type dominates position, so memchr(s,
+      // int c, size_t n) sizes by n (rank 3), not the nearer c (rank 1). Only
+      // non-char buffers fall back to a weak (plain int) length.
+      int best = bestSizey(/*after=*/true, 2);
+      if (best < 0) best = bestSizey(/*after=*/false, 2);
+      if (best < 0 && !charPointee) best = bestSizey(/*after=*/true, 1);
+      if (best < 0 && !charPointee) best = bestSizey(/*after=*/false, 1);
+      if (best >= 0) { sizeArg = best; sizeHeuristic = true; }
     }
 
     // --- pick a size kind ---
@@ -340,7 +470,8 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
         node->sizeArgIndex = sizeArg;
         if (sizeHeuristic)
           ft.warnings.push_back("arg" + std::to_string(p) +
-              ": void* size paired to arg" + std::to_string(sizeArg) + " heuristically");
+              (fromPointee ? ": void* size taken from *arg" : ": void* size paired to arg") +
+              std::to_string(sizeArg) + " heuristically");
       } else {
         node->isHandle = true;
         node->handleClass = "void";
@@ -350,20 +481,28 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
             ": opaque void* treated as handle (verify; could be an unsized buffer)");
       }
     } else if (pointee->isComposite()) {
-      // pointer to struct/union: copy sizeof(pointee); fields handled by layout.
-      if (pointee->sizeBytes > 0 && !pointee->depthTruncated) {
-        node->sizeKind = SizeKind::Const;
+      if (isKnownOpaqueStruct(pointee->typeName)) {
+        node->isHandle = true;                          // FILE*/DIR* -> handle
+        node->handleClass = canonicalHandleClass(pointee->typeName);
+      } else if (pointee->sizeBytes > 0 && !pointee->depthTruncated &&
+                 annotateComposite(node->children[0].get(), ft, p)) {
+        node->sizeKind = SizeKind::Const;               // resolvable -> deep marshal
         node->constSize = pointee->sizeBytes;
-        annotateComposite(node->children[0].get(), ft, p);
       } else {
-        node->isHandle = true;
-        node->handleClass = pointee->typeName;
-        node->sizeKind = SizeKind::Unknown;
-        node->note = "opaque/cyclic struct — handle candidate";
-        ft.warnings.push_back("arg" + std::to_string(p) +
-            ": opaque/recursive struct '" + pointee->typeName +
-            "' treated as handle");
+        ft.forceLocal = true;                           // cycle/fn-ptr/unsized inner
+        ft.warnings.push_back("arg" + std::to_string(p) + ": struct '" +
+            pointee->typeName + "' not fully resolvable — force_local");
       }
+    } else if (pointee->kind == NodeKind::Unknown) {
+      ft.forceLocal = true;                             // pointer to function/etc
+      ft.warnings.push_back("arg" + std::to_string(p) +
+          ": pointer to function/unresolved type — force_local");
+    } else if (pointee->kind == NodeKind::Pointer) {
+      // pointer-to-pointer (char**, void**): the inner pointer needs translation
+      // we can't perform, so a flat const copy would be silently wrong.
+      ft.forceLocal = true;
+      ft.warnings.push_back("arg" + std::to_string(p) +
+          ": pointer-to-pointer (inner pointer untranslatable) — force_local");
     } else {
       // pointer to a scalar/array element.
       uint64_t elem = pointee->sizeBytes ? pointee->sizeBytes : 1;
@@ -378,12 +517,13 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
           ft.warnings.push_back("arg" + std::to_string(p) +
               ": char* assumed NUL-terminated (CSTR) — verify");
       } else if (charLike && sizeArg >= 0) {
-        // byte buffer paired with a length arg (heuristically).
-        node->sizeKind = SizeKind::FromArg;
+        // byte buffer paired with a length arg (heuristically) — *lenptr or len.
+        node->sizeKind = fromPointee ? SizeKind::FromArgPointee : SizeKind::FromArg;
         node->sizeArgIndex = sizeArg;
         ft.warnings.push_back("arg" + std::to_string(p) +
-            ": byte buffer size paired to arg" + std::to_string(sizeArg) +
-            " heuristically");
+            (fromPointee ? ": byte buffer size taken from *arg"
+                         : ": byte buffer size paired to arg") +
+            std::to_string(sizeArg) + " heuristically");
       } else {
         // non-char scalar pointee with no proven length → one fixed object.
         node->sizeKind = SizeKind::Const;
@@ -413,7 +553,26 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
             ": pointer direction undetermined");
       }
     }
+
+    // Any pointer we still couldn't size (and isn't a handle) is non-mappable →
+    // the whole function runs locally (E2 / V4).
+    if (!node->isHandle && node->sizeKind != SizeKind::Const &&
+        node->sizeKind != SizeKind::FromArg &&
+        node->sizeKind != SizeKind::FromArgPointee &&
+        node->sizeKind != SizeKind::Cstr) {
+      ft.forceLocal = true;
+    }
   }
+
+  // Safety net: by-value struct/union args (skipped by the pointer-only loop) and
+  // any other non-mappable leftover → run the call locally.
+  for (const auto &pn : ft.params)
+    if (treeHasUnmappable(pn.get())) {
+      ft.forceLocal = true;
+      ft.warnings.push_back(
+          "non-mappable component (by-value struct / nested pointer) — force_local");
+      break;
+    }
 
   // ---- return kind ----
   Type *rt = F.getReturnType();
@@ -422,32 +581,39 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
   } else if (!rt->isPointerTy()) {
     ft.retKind = RetKind::Scalar;
   } else {
-    // pointer return: does it alias one of the pointer args?
-    int aliasArg = -1;
-    for (const BasicBlock &bb : F) {
-      if (auto *ri = dyn_cast<ReturnInst>(bb.getTerminator())) {
-        if (Value *rv = ri->getReturnValue()) {
-          SmallPtrSet<const Value *, 16> seen;
-          if (int idx = tracePtrToArg(rv, sretOffset, seen); idx >= 0)
-            aliasArg = idx;
-        }
-      }
-    }
-    bool retOpaque = ft.ret && ft.ret->pointeeOpaque;
-    if (aliasArg >= 0) {
-      ft.retKind = RetKind::PtrAliasArg;
-      ft.retAliasArg = aliasArg;
-    } else if (F.returnDoesNotAlias()) {
-      if (retOpaque) {
-        ft.retKind = RetKind::Handle;     // constructor of an opaque object
-        if (ft.ret) { ft.ret->isHandle = true; ft.ret->handleClass = "void"; }
-      } else {
-        ft.retKind = RetKind::ForceLocal; // fresh malloc'd buffer
-        ft.warnings.push_back("return: freshly-allocated pointer (FORCE_LOCAL)");
-      }
+    AllocInfo ai = allocatorInfo(ft.funcName);
+    const TreeNode *retPointee =
+        (ft.ret && !ft.ret->children.empty()) ? ft.ret->children[0].get() : nullptr;
+    bool retKnownOpaque = retPointee && isKnownOpaqueStruct(retPointee->typeName);
+
+    if (ai.forceLocal) {                          // realloc-style alloc+copy
+      ft.forceLocal = true;
+      ft.warnings.push_back("return: realloc-style allocation — force_local");
+    } else if (ai.isAlloc) {                      // malloc/calloc/... -> caller-cage alloc
+      ft.retKind = RetKind::PtrAlloc;
+      for (int s : ai.sizeArgs) ft.retAllocSizeArgs.push_back(s);
+    } else if (retKnownOpaque) {                  // fopen/opendir -> FILE*/DIR* handle
+      ft.retKind = RetKind::Handle;
+      ft.retHandleClass = canonicalHandleClass(retPointee->typeName);
     } else {
-      ft.retKind = RetKind::PtrUnknown;
-      ft.warnings.push_back("return: pointer of undetermined provenance");
+      // does the return derive from an argument's buffer (alias vs into)?
+      int aliasArg = -1; bool hadOffset = false;
+      for (const BasicBlock &bb : F)
+        if (auto *ri = dyn_cast<ReturnInst>(bb.getTerminator()))
+          if (Value *rv = ri->getReturnValue()) {
+            SmallPtrSet<const Value *, 16> seen;
+            if (int idx = traceReturnPtr(rv, sretOffset, hadOffset, seen); idx >= 0)
+              aliasArg = idx;
+          }
+      if (aliasArg >= 0) {
+        ft.retKind = hadOffset ? RetKind::PtrIntoArg : RetKind::PtrAliasArg;
+        ft.retAliasArg = aliasArg;
+      } else if (int si = searcherReturnsIntoArg0(ft.funcName); si >= 0) {
+        ft.retKind = RetKind::PtrIntoArg; ft.retAliasArg = si;  // strchr/index/...
+      } else {
+        ft.forceLocal = true;                     // unclassified pointer return
+        ft.warnings.push_back("return: pointer of undetermined provenance — force_local");
+      }
     }
   }
 }

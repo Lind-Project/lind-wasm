@@ -10,14 +10,14 @@ namespace marshal {
 
 const char *nodeKindName(NodeKind k) {
   switch (k) {
-  case NodeKind::Scalar:  return "SCALAR";
-  case NodeKind::Pointer: return "PTR";
-  case NodeKind::Struct:  return "STRUCT";
-  case NodeKind::Union:   return "UNION";
-  case NodeKind::Array:   return "ARRAY";
-  case NodeKind::Unknown: return "UNKNOWN";
+  case NodeKind::Scalar:  return "scalar";
+  case NodeKind::Pointer: return "ptr";
+  case NodeKind::Struct:  return "struct";
+  case NodeKind::Union:   return "union";
+  case NodeKind::Array:   return "array";
+  case NodeKind::Unknown: return "unknown";
   }
-  return "UNKNOWN";
+  return "unknown";
 }
 
 const char *dirName(Dir d) {
@@ -48,9 +48,10 @@ const char *retKindName(RetKind r) {
   case RetKind::Void:        return "void";
   case RetKind::Scalar:      return "scalar";
   case RetKind::PtrAliasArg: return "ptr_alias_arg";
-  case RetKind::ForceLocal:  return "force_local";
+  case RetKind::PtrIntoArg:  return "ptr_into_arg";
+  case RetKind::PtrAlloc:    return "ptr_alloc";
   case RetKind::Handle:      return "handle";
-  case RetKind::PtrUnknown:  return "ptr_unknown";
+  case RetKind::ForceLocal:  return "force_local";
   }
   return "void";
 }
@@ -166,6 +167,14 @@ std::unique_ptr<TreeNode> buildTreeFromDIType(const DIType *rawTy,
     auto *comp = cast<DICompositeType>(ty);
     node->children.push_back(
         buildTreeFromDIType(comp->getBaseType(), maxDepth - 1));
+    return node;
+  }
+
+  if (tag == dwarf::DW_TAG_subroutine_type) {
+    // A function type (reached via a function pointer). Not marshalable as data;
+    // mark Unknown so a struct carrying a vtable becomes unresolvable.
+    node->kind = NodeKind::Unknown;
+    node->typeName = "<func>";
     return node;
   }
 

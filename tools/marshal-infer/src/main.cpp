@@ -102,31 +102,46 @@ static void jsonStr(raw_ostream &os, StringRef s) {
 
 static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
   std::string pad(ind * 2, ' ');
+  bool isField = !n->fieldName.empty();
   os << pad << "{";
+
+  // A handle is its own canonical kind; it carries no dir/size/pointee.
+  if (n->isHandle) {
+    os << "\"kind\":\"handle\"";
+    if (isField) {
+      os << ",\"field\":"; jsonStr(os, n->fieldName);
+      os << ",\"offset\":" << n->offsetBytes;
+      os << ",\"touched\":" << (n->touched ? "true" : "false");
+    }
+    os << ",\"handle_class\":"; jsonStr(os, n->handleClass);
+    os << "}";
+    return;
+  }
+
   os << "\"kind\":"; jsonStr(os, nodeKindName(n->kind));
-  os << ",\"type\":"; jsonStr(os, n->typeName);
-  os << ",\"size\":" << n->sizeBytes;
-  if (!n->fieldName.empty()) {
+  if (isField) {
     os << ",\"field\":"; jsonStr(os, n->fieldName);
     os << ",\"offset\":" << n->offsetBytes;
     os << ",\"touched\":" << (n->touched ? "true" : "false");
   }
+  os << ",\"type\":"; jsonStr(os, n->typeName);
+  os << ",\"size\":" << n->sizeBytes;
   if (n->isPointer()) {
     os << ",\"dir\":"; jsonStr(os, dirName(n->dir));
     os << ",\"size_kind\":"; jsonStr(os, sizeKindName(n->sizeKind));
     if (n->sizeKind == SizeKind::FromArg ||
         n->sizeKind == SizeKind::FromArgPointee)
-      os << ",\"size_arg\":" << n->sizeArgIndex;
+      os << (isField ? ",\"size_field_index\":" : ",\"size_arg_index\":")
+         << n->sizeArgIndex;
     if (n->sizeKind == SizeKind::Const)
       os << ",\"const_size\":" << n->constSize;
-    if (n->isHandle) {
-      os << ",\"handle\":true,\"handle_class\":"; jsonStr(os, n->handleClass);
-    }
-    if (n->pointeeOpaque) os << ",\"opaque\":true";
+    if (n->shallow) os << ",\"shallow\":true";
   }
-  if (n->depthTruncated) os << ",\"depth_truncated\":true";
-  if (!n->note.empty()) { os << ",\"note\":"; jsonStr(os, n->note); }
-  if (!n->children.empty()) {
+
+  // Recurse: pointer -> "pointee"; struct/union -> "fields". (Arrays are leaves.)
+  bool recurse = (n->kind == NodeKind::Pointer || n->kind == NodeKind::Struct ||
+                  n->kind == NodeKind::Union) && !n->children.empty();
+  if (recurse) {
     const char *key = n->isPointer() ? "pointee" : "fields";
     os << ",\"" << key << "\":[\n";
     for (size_t i = 0; i < n->children.size(); ++i) {
@@ -138,11 +153,43 @@ static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
   os << "}";
 }
 
+static void jsonWarnings(raw_ostream &os, const FunctionTrees *ft) {
+  os << "\"warnings\":[";
+  for (size_t i = 0; i < ft->warnings.size(); ++i) {
+    if (i) os << ",";
+    os << "\n        "; jsonStr(os, ft->warnings[i]);
+  }
+  if (!ft->warnings.empty()) os << "\n      ";
+  os << "]";
+}
+
 static void jsonFunction(raw_ostream &os, const FunctionTrees *ft) {
   os << "    {\n      \"name\":"; jsonStr(os, ft->funcName);
+  os << ",\n      \"decision\":";
+  jsonStr(os, ft->forceLocal ? "force_local" : "marshal");
+
+  // Compact record for force_local: the runtime ignores args/ret.
+  if (ft->forceLocal) {
+    os << ",\n      "; jsonWarnings(os, ft);
+    os << "\n    }";
+    return;
+  }
+
   os << ",\n      \"ret\":{\"kind\":"; jsonStr(os, retKindName(ft->retKind));
-  if (ft->retKind == RetKind::PtrAliasArg)
+  if (ft->retKind == RetKind::PtrAliasArg || ft->retKind == RetKind::PtrIntoArg)
     os << ",\"alias_arg\":" << ft->retAliasArg;
+  else if (ft->retKind == RetKind::PtrAlloc) {
+    if (ft->retAllocSizeArgs.size() == 1)
+      os << ",\"size_arg_index\":" << ft->retAllocSizeArgs[0];
+    else if (!ft->retAllocSizeArgs.empty()) {
+      os << ",\"size_arg_indices\":[";
+      for (size_t i = 0; i < ft->retAllocSizeArgs.size(); ++i)
+        os << (i ? "," : "") << ft->retAllocSizeArgs[i];
+      os << "]";
+    }
+  } else if (ft->retKind == RetKind::Handle) {
+    os << ",\"handle_class\":"; jsonStr(os, ft->retHandleClass);
+  }
   os << "},\n      \"args\":[";
   if (!ft->params.empty()) {
     os << "\n";
@@ -153,13 +200,8 @@ static void jsonFunction(raw_ostream &os, const FunctionTrees *ft) {
     os << "      ";
   }
   os << "]";
-  os << ",\n      \"warnings\":[";
-  for (size_t i = 0; i < ft->warnings.size(); ++i) {
-    if (i) os << ",";
-    os << "\n        "; jsonStr(os, ft->warnings[i]);
-  }
-  if (!ft->warnings.empty()) os << "\n      ";
-  os << "]\n    }";
+  os << ",\n      "; jsonWarnings(os, ft);
+  os << "\n    }";
 }
 
 int main(int argc, char **argv) {

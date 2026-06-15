@@ -57,10 +57,11 @@ const char *sizeKindName(SizeKind s);
 enum class RetKind {
   Void,
   Scalar,
-  PtrAliasArg,   // returns one of its pointer args (memcpy/strcpy shape)
-  ForceLocal,    // freshly-allocated pointer (malloc-like) — can't cross cages
-  Handle,        // opaque constructor result -> handle token
-  PtrUnknown,    // pointer return we couldn't classify — residue
+  PtrAliasArg,   // returns a pointer arg unchanged (== arg, no offset)
+  PtrIntoArg,    // returns a pointer INTO an arg buffer (arg + offset): memchr/strchr
+  PtrAlloc,      // freshly-allocated buffer (malloc family) — caller-cage alloc
+  Handle,        // opaque constructor result (FILE*/DIR*) -> handle token
+  ForceLocal,    // can't classify / must run locally
 };
 const char *retKindName(RetKind r);
 
@@ -102,7 +103,11 @@ struct TreeNode {
   // For Pointer nodes: this pointer is an opaque handle (translate via token
   // table, never deep-copy the pointee). E.g. FILE*, z_stream's state, toy_ctx.
   bool isHandle = false;
-  std::string handleClass;  // grouping key (the pointee type name)
+  std::string handleClass;  // canonical grouping key (the pointee type name)
+
+  // For Pointer-to-struct nodes: const-sized flat blit, inner pointers left
+  // untranslated (not chased). Advisory — the copy uses the existing const path.
+  bool shallow = false;
 
   // KSplit projection bit (meaningful for struct fields): marshal this field
   // only if set. Library-side best-effort = mark every field touched (we lack
@@ -131,8 +136,15 @@ struct FunctionTrees {
 
   // Filled by the inference step (Infer.cpp).
   RetKind retKind = RetKind::Void;
-  int retAliasArg = -1;                                // PtrAliasArg: which arg
-  std::vector<std::string> warnings;                   // residue report
+  int retAliasArg = -1;                  // PtrAliasArg / PtrIntoArg: which arg
+  std::vector<int> retAllocSizeArgs;     // PtrAlloc: 1 arg (malloc) or 2 (calloc)
+  std::string retHandleClass;            // Handle return: canonical class
+
+  // Per-function verdict (E2). When true, the runtime runs the call locally and
+  // ignores args/ret; the record is emitted in compact form (name+decision+warnings).
+  bool forceLocal = false;
+
+  std::vector<std::string> warnings;     // residue report
 };
 
 // Build the parameter forest for a function from its DISubprogram debug info.
