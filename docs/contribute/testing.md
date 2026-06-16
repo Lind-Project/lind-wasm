@@ -146,7 +146,7 @@ hello_grate.c
 
 Each grate test must:
 
-- Has dispatcher function called `pass_fptr_to_wt`
+- Register the handlers needed by the cage under test
 - Determine test success internally
 - Exit with EXIT_FAILURE if the test fails
 - Exit normally (e.g., EXIT_SUCCESS) on success
@@ -172,7 +172,7 @@ Make sure the lind-wasm runtime has already been compiled.
 **Step 1 — Compile the Grate**
 
 ```sh
-lind-clang --compile-grate <cage_name>_grate.c
+lind-clang <cage_name>_grate.c
 ```
 
 This produces `<cage_name>_grate.cwasm`

@@ -1,56 +1,65 @@
-# Lind and Wasmtime
+# Lind-Wasm Runtime Contexts
 
-## What is Wasmtime?
+Lind-Wasm embeds a modified Wasmtime runtime to execute cages and grates. This
+page describes how Lind-Wasm tracks Wasmtime execution contexts when control
+moves between cages, grates, 3i, and RawPOSIX.
 
-Wasmtime is a standalone JIT-style runtime for WebAssembly, designed for use with WebAssembly System Interface (WASI) and other WASI-inspired environments. It is part of the Bytecode Alliance, an open-source effort to create secure software foundations.
+The core problem is that not every transfer back into Wasmtime has the same
+requirements. Some operations must return to the exact execution context that
+issued the original call. Others only need any compatible execution context for
+the target grate. Lind-Wasm handles these cases differently.
 
-Wasmtime can run WebAssembly modules that follow the WASI standard, providing a robust and efficient environment for running WebAssembly outside of the browser.
+For general upstream Wasmtime concepts and APIs, see the
+[Wasmtime documentation](https://docs.wasmtime.dev/). The sections below focus
+only on the pieces needed to understand Lind-Wasm's runtime integration.
 
-## Getting Started with Wasmtime
+## Wasmtime Concepts Used by Lind-Wasm
 
-To get started with Wasmtime, you can download and install it from the [official Wasmtime releases](https://github.com/bytecodealliance/wasmtime/releases) page. Follow the installation instructions specific to your operating system.
+### Store
 
-## Prototype Implementation - Lind-Wasm
+In Wasmtime, a `Store` is the top-level container that owns runtime objects. A
+single `Store` may own multiple `Instance`s, and every `Instance` must belong to
+exactly one `Store`. Runtime items, such as functions, tables, memories, and
+globals, are allocated within the `Store` and are tied to its lifetime.
 
-[todo]
-- figure
-
-### Background - Wasmtime
-
-#### Store
-
-In Wasmtime, a `Store` is the top-level container that owns all runtime objects. A single `Store` may own multiple `Instance`s, and every `Instance` must belong to exactly one `Store`. All runtime items, such as Functions, Tables, Memories, and Globals, are allocated within the `Store` and are tied to its lifetime.
-
-#### Module & Instance
+### Module & Instance
 
 - A `Module` is only a compiled binary: it contains code and type information but no runtime state.
 - An `Instance` is the executable instantiation of a `Module` within a `Store`.
 
 You cannot read memory, table, globals, or call functions on a `Module`. All executable interactions happen through an `Instance`.
 
-#### VMContext
+### VMContext
 
-Each `Instance` has an internal data structure called `VMContext`. `VMContext` is a raw pointer used by the JIT-generated machine code. This has information about globals, memories, tables, and other runtime state associated with the current instance.
+Each `Instance` has an internal data structure called `VMContext`. `VMContext`
+is a raw pointer used by JIT-generated machine code. It contains information
+about globals, memories, tables, and other runtime state associated with the
+current instance.
 
-#### Call Stack
+### Call Stack
 
 Although WebAssembly defines an abstract operand stack and structured control flow, Wasmtime lowers all function calls and stack frames to the native call stack of the executing host thread. Each Wasm function is compiled into a normal machine function that receives a `VMContext` pointer as an implicit first argument. Local variables, temporaries, and control-flow state are therefore represented using standard native stack slots and registers.
 
 Wasmtime attaches a `VMRuntimeLimits` structure to every `VMContext`, which stores a stack-limit pointer. At function-entry, compiled code inserts a prologue check comparing the current native stack pointer against this limit; exceeding it triggers a Wasmtime stack-overflow trap rather than a process-level segmentation fault.
 
-#### Memory
+### Memory
 
 Wasmtime implements each linear memory as a sandboxed region in the host virtual address space. At instantiation time, the runtime reserves a contiguous virtual range using `mmap` and commits only the portion required by the module’s initial size.
 
 Each memory is represented internally by a `VMMemoryDefinition` structure embedded in the instance’s `VMContext`. The `VMContext` is passed as an implicit argument to all JIT-compiled functions. Every load or store instruction is lowered to native code that first reads the memory’s base pointer and current length from the `VMContext`, performs an explicit bounds check, and then translates the Wasm address into a native pointer (`base + offset`).
 
-#### Implementation
+## Lind-Wasm Runtime Lookup
 
 ![VMContext Pool Overview](../images/doc-images/grate-call-vmctx.png)
 
-This module provides a runtime-state lookup and execution-transfer mechanism for lind-wasm and lind-3i, enabling controlled transfers of execution across cages and grates.
+Lind-Wasm provides a runtime-state lookup and execution-transfer mechanism for
+3i, enabling controlled transfers of execution across cages and grates.
 
-Unlike a conventional WebAssembly execution model, where control flow stays inside one Wasmtime `Store`, one `Instance`, and one linear call stack, lind-wasm must sometimes re-enter Wasmtime module from outside the currently executing module or continuation. However, not all such re-entries are equivalent.
+Unlike a conventional WebAssembly execution model, where control flow stays
+inside one Wasmtime `Store`, one `Instance`, and one linear call stack,
+Lind-Wasm must sometimes re-enter a Wasmtime module from outside the currently
+executing module or continuation. However, not all such re-entries are
+equivalent.
 
 Some operations must resume execution in the **same continuation context** that originally issued the call. Others only need a **compatible execution context** for the target grate. The implementation therefore distinguishes these cases explicitly rather than treating all runtime lookup as one uniform mechanism.
 
@@ -76,7 +85,7 @@ In the current implementation, that compatible context is represented not by a s
 
 - its own Wasmtime `Store`
 - its own instantiated grate `Instance`
-- all workers with same grateid are attached by same linear memory
+- all workers with the same grate ID attach to the same linear memory
 - its own independent Wasm call stack region inside the shared linear memory
 
 Operationally, a grate call is executed by leasing one available worker from the target grate’s `GrateHandler`, invoking the grate entry trampoline (`pass_fptr_to_wt`) inside that worker, and returning the worker to the pool after the call completes.
@@ -95,7 +104,7 @@ By giving each grate worker its own `Store` and `Instance`, lind-wasm ensures th
 
 #### `VmCtxWrapper`
 
-For continuation-sensitive operations, lind-wasm stores Wasmtime runtime context pointers in a lightweight wrapper:
+For continuation-sensitive operations, Lind-Wasm stores Wasmtime runtime context pointers in a lightweight wrapper:
 
 ```rust
 pub struct VmCtxWrapper {
@@ -154,7 +163,7 @@ A GrateRequest represents one cross-module execution transfer. It includes the t
 
 #### Grate handler and worker pool
 
-Each grate owns a `GrateHandler<T>`, which manages a reusable pool of workers and defines how incoming grate calls are scheduled.The handler supports two concurrency policies:
+Each grate owns a `GrateHandler<T>`, which manages a reusable pool of workers and defines how incoming grate calls are scheduled. The handler supports two concurrency policies:
 
 ```rust
 pub enum ConcurrencyMode {
@@ -190,9 +199,7 @@ Together, those properties preserve isolation for concurrent grate execution.
 
 To support intercage interposition without modifying the kernel or Wasmtime itself, lind-3i provides a user-space dispatch layer that allows system calls and other calls to be redirected across cages and grates.
 
-The following execution flow illustrates the overall dispatch model:
-
-(todo: add figure)
+At a high level, the dispatch path works as follows:
 
 #### Callback definition
 
@@ -207,8 +214,8 @@ When a Wasm module registers a handler, the redirection metadata is recorded so 
 When a call from cage A is routed to grate B:
 
 - the request reaches 3i through the normal dispatch path
-- 3i send the request to Wasmtime callback function according to information registered in the table
-- [`wasmtime/lind-3i`] resolves the target grate handler for B
+- 3i sends the request to the Wasmtime callback function using information registered in the handler table
+- Lind-Wasm resolves the target grate handler for B
 - the target `GrateHandler` leases an available worker
 - the request is executed inside that worker by invoking the grate entry trampoline (`pass_fptr_func`)
 - when the call finishes, the worker is returned to the pool
