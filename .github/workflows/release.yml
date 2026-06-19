@@ -1,14 +1,23 @@
-name: Test and release on Docker Hub
+name: Release on Docker Hub
 
 on:
   workflow_dispatch:
-  schedule:
-  - cron: "0 8 * * 1" # Run at 08:00, every Monday
+  push:
+    branches: [main]
+
+# Serialize releases on the same ref.
+# Do NOT cancel in-progress runs: a cancelled run could abort a push and leave Docker Hub in a partial state.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  docker:
+  # Release job: build the 'release' image and publish to Docker Hub.
+  release:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     environment: dockerhub
     steps:
@@ -20,14 +29,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-
-      # Build 'test' stage (default) to run tests
-      - name: Test
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          platforms: linux/amd64
-          cache-from: type=gha
-          file: Docker/Dockerfile.e2e
 
       # Configure Docker release tags:
       # - securesystemslab/lind-wasm:sha-<short commit id>
@@ -43,7 +44,7 @@ jobs:
           flavor: |
             latest=true
 
-      # Build 'release' stage and push to Dockerhub
+      # Build 'release' stage and push to Docker Hub.
       - name: Release and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
@@ -51,5 +52,6 @@ jobs:
           push: true
           platforms: linux/amd64
           cache-from: type=gha
+          cache-to: type=gha,mode=max
           file: Docker/Dockerfile.e2e
           tags: ${{ steps.meta.outputs.tags }}

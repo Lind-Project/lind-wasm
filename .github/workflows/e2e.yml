@@ -3,9 +3,9 @@ name: End-to-end testing
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches:
-      - main
+  # NOTE: push(main) trigger removed.
+  # This workflow is a CI gate for PRs only.
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -18,12 +18,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    # If the workflow was triggered by anything other than a pull_request event 
-    # (e.g., push, workflow_dispatch, schedule, pull_request_target), 
-    # github.event_name != 'pull_request' is true.
-    # github.event.pull_request is only populated on pull_request events. 
-    # It is true when the PR is not a draft (i.e., “Ready for review”).
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # This workflow is triggered by pull_request events only.
+    # Skip draft PRs; run only when the PR is "Ready for review".
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     env:
       REPORT_LOCAL_DIR: test-reports
