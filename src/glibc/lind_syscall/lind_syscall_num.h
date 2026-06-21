@@ -140,6 +140,7 @@
 #define PWRITEV_SYSCALL 296
 #define PRLIMIT64_SYSCALL 302
 #define GETRANDOM_SYSCALL 318
+#define COPY_FILE_RANGE_SYSCALL 326
 
 /* Lind-specific syscalls (not part of the Linux syscall table) */
 #define REGISTER_HANDLER_SYSCALL 1001

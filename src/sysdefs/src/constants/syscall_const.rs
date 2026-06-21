@@ -118,4 +118,5 @@ pub const DUP3_SYSCALL: i32 = 292;
 pub const PIPE2_SYSCALL: i32 = 293;
 pub const RENAMEAT2_SYSCALL: i32 = 316;
 pub const GETRANDOM_SYSCALL: i32 = 318;
+pub const COPY_FILE_RANGE_SYSCALL: i32 = 326;
 pub const STATX_SYSCALL: i32 = 332;
