@@ -1,306 +1,411 @@
 # Applying Syscall Interposition to Different glibc Versions
 
-This guide provides step-by-step instructions for applying the syscall interposition infrastructure to different versions of glibc.
+This guide provides step-by-step instructions for applying the syscall interposition infrastructure to different versions of glibc, using the recommended `git cherry-pick` approach.
 
 ## Quick Start
 
-For a quick reference, here's the minimal set of changes needed:
+For a quick reference, here's the fastest way to apply all changes:
 
 ```bash
-# 1. Checkout target glibc version
-git checkout glibc-2.X  # or your target version tag
+# 1. Identify the commits with your changes
+cd /path/to/reference-glibc  # e.g., glibc-new
+git log --oneline origin/master..HEAD
+# Note the commit hashes (e.g., 922057b7e8, 5d435612f8)
 
-# 2. Create feature branch
-git switch -c add/syscall-interposition
+# 2. Checkout target glibc version
+cd /path/to/target-glibc
+git checkout -b feature/interposition v2.35  # or your target tag
 
-# 3. Copy interposition files
-cp /path/to/reference/glibc/sysdeps/unix/sysv/linux/syscall-interpose.* \
-   sysdeps/unix/sysv/linux/
+# 3. Cherry-pick the commits
+git cherry-pick 922057b7e8 5d435612f8
 
-# 4. Apply patches (if available)
-git apply /path/to/interposition.patch
+# 4. If conflicts occur, resolve them (see section below)
+# Then continue with:
+git cherry-pick --continue
 
-# 5. Build and test
-mkdir build && cd build && ../configure && make -j$(nproc)
+# 5. Verify and build
+make -j$(nproc)
 ```
+
+## Why Git Cherry-Pick?
+
+Using `git cherry-pick` is better than manually applying patches because:
+
+- **Preserves commit metadata**: Author, date, original commit message
+- **Automatic merge detection**: Git automatically merges non-conflicting changes
+- **Clear conflict resolution**: Conflicts are clearly marked for manual review
+- **Easy continuation**: Resume with `--continue` after resolving conflicts
+- **Maintains history**: Clean commit history in your branch
 
 ## Detailed Walkthrough
 
 ### Setup
 
 **Prerequisites:**
-- glibc source tree for target version
-- Reference implementation (e.g., from `lind-glibc` repository)
-- Build tools: gcc, make, autoconf
+- glibc source trees for both reference and target versions
+- Commits with the changes ready (e.g., in `origin/master..HEAD`)
+- Git configured locally
 
 **Recommended directory structure:**
 ```
 glibc-work/
+├── glibc-new/           # Reference with latest changes
 ├── glibc-2.35/          # Target version
 ├── glibc-2.39/          # Another target version
-├── glibc-new/           # Reference with latest changes
-└── patches/             # Store generated patches
+└── patches/             # For exporting patches (optional)
 ```
 
-### Phase 1: Extract Changes as Patches
+### Phase 1: Identify Commits
 
-If you have a reference implementation with the changes already applied:
+In your reference glibc repository, identify the commits:
 
 ```bash
-cd reference-glibc
-git format-patch ORIGIN_TAG..HEAD -o ../patches/
+cd glibc-new
+git log --oneline origin/master..HEAD
 
-# This creates numbered patch files like:
-# 0001-basic-interposition-infra.patch
-# 0002-tested-toggled-interposition.patch
+# Output example:
+# 5d435612f8 [add:] tested toggled interposition
+# 922057b7e8 [add:] basic interposition infra
 ```
 
-### Phase 2: Apply to Target Version
+Note these commit hashes - you'll use them in Phase 2.
+
+### Phase 2: Prepare Target Repository
 
 ```bash
 cd target-glibc
-git checkout -b feature/interposition
 
-# Try automatic application first
-git apply ../patches/*.patch
+# Verify you're at the correct base version
+git describe --tags --always
 
-# If that fails, try with more flexibility:
-git apply --reject --whitespace=fix ../patches/*.patch
-
-# This will create *.rej files for failed hunks
+# Create a feature branch
+git checkout -b feature/syscall-interposition v2.35
+# (or use your target version tag/commit)
 ```
 
-### Phase 3: Manual Integration
-
-If automatic patching fails (especially for older versions), manually apply changes:
-
-#### Step 1: Add Core Files
+### Phase 3: Cherry-Pick Commits
 
 ```bash
-# Copy the two main files
-cp reference-glibc/sysdeps/unix/sysv/linux/syscall-interpose.{c,h} \
-   target-glibc/sysdeps/unix/sysv/linux/
-
-# Stage them
-git add sysdeps/unix/sysv/linux/syscall-interpose.*
+# Apply commits in order (oldest first)
+git cherry-pick 922057b7e8 5d435612f8
 ```
 
-#### Step 2: Update Makefile
+**What happens next:**
 
-**Location:** `sysdeps/unix/sysv/linux/Makefile`
-
-Find the line with `splice \` and add `syscall-interpose \` after it:
-
-```diff
- ifeq ($(subdir),misc)
- sysdep_routines += ... splice \
-+                  syscall-interpose \
-                   sysctl \
+**Case A: No conflicts**
+```
+[feature/syscall-interposition abc1234] [add:] basic interposition infra
+ Date: Tue Jun 16 04:08:40 2026 +0200
+ 12 files changed, 838 insertions(+), 518 deletions(-)
+Auto-merging ...
+[feature/syscall-interposition def5678] [add:] tested toggled interposition
+ Date: Tue Jun 16 23:51:38 2026 +0200
+ 2 files changed, 45 insertions(+), 35 deletions(-)
 ```
 
-**Tools to use:**
-```bash
-# Search for the location
-grep -n "splice" sysdeps/unix/sysv/linux/Makefile
+You're done! Both commits applied cleanly.
 
-# Edit with your preferred editor
-sed -i '/splice \\\/{a\                  syscall-interpose \\\
-}' sysdeps/unix/sysv/linux/Makefile
-```
+**Case B: Conflicts detected**
 
-#### Step 3: Update Versions
+If there are conflicts, see the **Conflict Resolution** section below.
 
-**Location:** `sysdeps/unix/sysv/linux/Versions`
+### Phase 4: Verify Integration
 
-Find the section with `__netlink_assert_response;` and add the new symbols:
-
-```diff
-     __sigtimedwait;
-     # functions used by nscd
-     __netlink_assert_response;
-+    # syscall interposition
-+    __syscall_interpose;
-+    __syscall_interpose_enabled;
-+    __enable_syscall_interpose;
-```
-
-**Tools to use:**
-```bash
-# Find line number
-grep -n "__netlink_assert_response" sysdeps/unix/sysv/linux/Versions
-
-# Use sed to insert lines
-sed -i '/^    __netlink_assert_response;/a\    # syscall interposition\n    __syscall_interpose;\n    __syscall_interpose_enabled;\n    __enable_syscall_interpose;' \
-    sysdeps/unix/sysv/linux/Versions
-```
-
-### Phase 4: Architecture-Specific Changes (Optional)
-
-For full syscall interception, integrate with architecture-specific stubs:
-
-#### For x86_64 Assembly Versions (glibc 2.35 and earlier)
-
-You may want to add interposition calls to syscall wrapper functions. This requires modifying assembly files like:
-- `sysdeps/unix/sysv/linux/x86_64/clone.S`
-- `sysdeps/unix/sysv/linux/x86_64/vfork.S`
-- `sysdeps/unix/sysv/linux/x86_64/syscall.S`
-
-This is complex and version-specific. For most use cases, the basic infrastructure is sufficient.
-
-#### For C-based Versions (glibc 2.39+)
-
-If the version uses C instead of assembly, you can modify syscall wrappers to use the interposition layer more directly. Check files like:
-- `sysdeps/unix/sysv/linux/x86_64/clone.c`
-- `sysdeps/unix/sysv/linux/x86_64/vfork.c`
-
-## Testing the Integration
-
-### 1. Verify Files are in Place
+After cherry-pick completes (with or without conflicts):
 
 ```bash
-ls -la sysdeps/unix/sysv/linux/syscall-interpose.*
+# Verify commits are in place
+git log --oneline -3
+# Should show your 2 new commits on top of the base version
+
+# Verify key files exist
+ls -la sysdeps/unix/sysv/linux/syscall-interpose.{c,h}
+ls -la sysdeps/unix/sysv/linux/x86_64/{clone,clone3,vfork}.c
+
+# Check for exported symbols
+grep "syscall_interpose" sysdeps/unix/sysv/linux/Versions
 ```
 
-### 2. Verify Makefile Update
-
-```bash
-grep syscall-interpose sysdeps/unix/sysv/linux/Makefile
-```
-
-### 3. Verify Versions Update
-
-```bash
-grep -A2 "syscall interposition" sysdeps/unix/sysv/linux/Versions
-```
-
-### 4. Build Test
+### Phase 5: Build and Test
 
 ```bash
 mkdir build
 cd build
 
-# Configure for current system
-../configure
+# Configure
+../configure --prefix=/tmp/glibc-test
 
-# Build
-make -j$(nproc) 2>&1 | tee build.log
+# Build (may take several minutes)
+make -j$(nproc)
 
-# Check for errors
-grep -i "error" build.log
-
-# Quick sanity check
-make test -k "test-1"
+# Optional: run tests
+make test -k "test-1"  # quick sanity check
 ```
 
-### 5. Symbol Verification
+## Conflict Resolution
 
-After installation, verify symbols are exported:
+Cherry-pick may fail if the target version has significant differences from the reference. Here's how to handle it:
+
+### Understanding Conflicts
+
+```
+error: could not apply 922057b7e8... [add:] basic interposition infra
+hint: After resolving the conflicts, mark them with
+hint:   "git add/rm <pathspec>"
+hint: then run "git cherry-pick --continue"
+```
+
+This means some files have conflicts that Git couldn't automatically merge.
+
+### Common Conflict Scenarios
+
+**1. File Deleted in Target but Modified in Patch**
+
+For example, if your target v2.35 doesn't have `syscall_cancel.c`:
 
 ```bash
-nm /path/to/libc.so | grep __syscall_interpose
+# Git will show this conflict
+# Resolution: remove the file (patch intent is to remove it anyway)
+git rm sysdeps/unix/sysv/linux/syscall_cancel.c
+```
 
-# Should show something like:
-# 00000000001234 T __enable_syscall_interpose
-# 00000000005678 B __syscall_interpose_enabled
-# 0000000000abcd T __syscall_interpose
+**2. Assembly Files vs. C Files**
+
+Your patch converts assembly (.S) to C (.c):
+
+```bash
+# Remove the assembly files as patch intends
+git rm sysdeps/unix/sysv/linux/x86_64/clone.S
+git rm sysdeps/unix/sysv/linux/x86_64/clone3.S
+git rm sysdeps/unix/sysv/linux/x86_64/vfork.S
+
+# The new .c files should already be added by the patch
+```
+
+**3. Text Content Conflicts (Makefile, Versions)**
+
+These files have conflict markers:
+
+```makefile
+<<<<<<< HEAD
+  splice \
+  sysctl \
+=======
+  splice \
+  syscall-interpose \
+  sysctl \
+>>>>>>> 922057b7e8
+```
+
+Resolution options:
+
+**Option A: Accept the incoming patch version**
+```bash
+git checkout --theirs sysdeps/unix/sysv/linux/Makefile
+git checkout --theirs sysdeps/unix/sysv/linux/Versions
+```
+
+**Option B: Manually merge**
+```bash
+# Edit the files with your editor, remove conflict markers:
+# Keep the lines you want from both sides
+vim sysdeps/unix/sysv/linux/Makefile
+```
+
+**Option C: Use diff to understand both versions**
+```bash
+# See what HEAD (target) has
+git show HEAD:sysdeps/unix/sysv/linux/Makefile > /tmp/makefile.target
+
+# See what the patch wants
+git show 922057b7e8:sysdeps/unix/sysv/linux/Makefile > /tmp/makefile.patch
+
+# Use a merge tool or editor to combine them
+diff -u /tmp/makefile.target /tmp/makefile.patch
+```
+
+### Completing the Cherry-Pick
+
+After resolving all conflicts:
+
+```bash
+# Stage the resolved files
+git add sysdeps/unix/sysv/linux/Makefile
+git add sysdeps/unix/sysv/linux/Versions
+# ... etc for all resolved files
+
+# Stage deletions
+git rm sysdeps/unix/sysv/linux/x86_64/clone.S
+# ... etc for all deleted files
+
+# Continue the cherry-pick
+git cherry-pick --continue
+
+# You can optionally edit the commit message
+# (or use --no-edit to keep the original)
+```
+
+The cherry-pick will complete and you'll be back to `feature/syscall-interposition` branch.
+
+### Aborting a Cherry-Pick
+
+If you make a mistake and want to start over:
+
+```bash
+git cherry-pick --abort
+
+# You'll be back to the state before cherry-pick started
+git reset --hard origin/master  # or whatever your safe point is
+```
+
+## Testing Different Versions
+
+### glibc 2.35
+
+```bash
+git checkout -b v2.35-interpose glibc-2.35
+git cherry-pick 922057b7e8 5d435612f8
+# Expected: minor conflicts in Makefile/Versions and assembly→C conversion
+```
+
+### glibc 2.39+
+
+```bash
+git checkout -b v2.39-interpose glibc-2.39
+git cherry-pick 922057b7e8 5d435612f8
+# Expected: fewer conflicts as many files already use C implementations
+```
+
+### glibc master/main
+
+```bash
+git checkout -b main-interpose main
+git cherry-pick 922057b7e8 5d435612f8
+# Expected: minimal conflicts (master may already have similar changes)
+```
+
+## Exporting Your Changes
+
+Once you've successfully applied to a version, you can create patches for others:
+
+```bash
+# Export as patch files
+git format-patch ORIGINAL_TAG..HEAD -o ../patches/
+
+# Or as a single patch
+git diff ORIGINAL_TAG..HEAD > ../patches/glibc-2.35-interposition.patch
+
+# Share the patch or push the branch to your fork
+git push origin feature/syscall-interposition
+```
+
+## Applying Exported Patches
+
+If someone sends you a patch file:
+
+```bash
+# Apply the patch
+git apply /path/to/glibc-2.35-interposition.patch
+
+# Or if it's a formatted patch:
+git am /path/to/0001-*.patch /path/to/0002-*.patch
+```
+
+## Automation Script
+
+You can create a script to apply to multiple versions:
+
+```bash
+#!/bin/bash
+REFERENCE="~/edu/NYU/glibc-new"
+COMMITS="922057b7e8 5d435612f8"
+VERSIONS=("glibc-2.35" "glibc-2.39" "glibc-2.40")
+
+for version in "${VERSIONS[@]}"; do
+    echo "Processing $version..."
+    git clone --depth 1 --branch "$version" \
+        https://github.com/bminor/glibc.git "glibc-$version"
+    cd "glibc-$version"
+    git checkout -b feature/interposition
+    git cherry-pick $COMMITS
+    if [ $? -eq 0 ]; then
+        echo "✓ $version: Success"
+    else
+        echo "✗ $version: Conflicts - manual resolution needed"
+    fi
+    cd ..
+done
 ```
 
 ## Troubleshooting
 
-### Build Fails: "syscall-interpose.c:X: error: ..."
+### Cherry-Pick Hangs or Takes Forever
 
-**Problem:** Compilation errors in the interposition layer
-
-**Solution:**
-1. Check that all includes are available (particularly `<libc-symbols.h>`)
-2. Verify architecture - the assembly inline code is x86_64 specific
-3. Try adapting `raw_syscall()` for your target architecture
-
-### Symbol Not Found at Runtime
-
-**Problem:** "undefined symbol: __syscall_interpose"
-
-**Solution:**
-1. Verify Versions file has the symbols (see step 3 above)
-2. Rebuild the libc.so with the changes
-3. Check that old versions of libc aren't being linked
-
-### Patch Fails to Apply
-
-**Problem:** "patch does not apply"
-
-**Solution:**
-1. Check glibc version matches reference:
-   ```bash
-   git describe --tags --always
-   ```
-2. Look for *.rej files to see which hunks failed
-3. Manually apply those sections
-4. Or check if the target version already has similar changes
-
-## Version-Specific Notes
-
-### glibc 2.35
-
-- **Status:** Fully supported (see `/home/fwilke/edu/NYU/glibc-2.35`)
-- **Assembly-based:** Uses .S files for x86_64 syscalls
-- **Integration:** Partial - infrastructure only, no assembly integration
-- **Build:** Standard glibc build process
-
-### glibc 2.36-2.38
-
-- **Similar to 2.35**
-- **Minor differences in Makefile/Versions**
-- **Use same approach as 2.35**
-
-### glibc 2.39+
-
-- **Partially C-based:** Some syscalls converted to C
-- **Easier integration:** Can modify C implementations directly
-- **Recommended for new projects**
-
-### glibc master (main branch)
-
-- **Full C-based:** Complete C implementation of syscall stubs
-- **See:** `/home/fwilke/edu/NYU/glibc-new` for full implementation
-- **Direct integration:** Syscalls can call interposition layer directly
-
-## Creating a Patch for Distribution
-
-Once you've successfully applied changes to a version:
+This usually means it's prompting for a merge commit message:
 
 ```bash
-# Create a patch file
-git format-patch origin/master.. --output-directory ../patches/
+# Press Ctrl+C to stop
+# Then use --no-edit to auto-complete
+git cherry-pick --abort
+git cherry-pick 922057b7e8 --no-edit
+git cherry-pick 5d435612f8 --no-edit
+```
 
-# Or for a single-commit change:
-git show HEAD > ../patches/glibc-2.X-interposition.patch
+### "Your branch is ahead of 'origin/master' by X commits"
 
-# Create a patch bundle
-git format-patch origin/master.. --cover-letter
+This is normal after cherry-picking. Your local branch has the new commits but origin doesn't yet.
 
-# Apply later on another system:
-git am ../patches/*.patch
+### "fatal: cherry-pick failed"
+
+This means the cherry-pick couldn't even start (e.g., the commit doesn't exist). Verify:
+
+```bash
+# Commit exists in your repo?
+git log --oneline | grep 922057b7e8
+
+# In the right repo?
+pwd
+git remote -v
+```
+
+### Build Fails After Cherry-Pick
+
+```bash
+# Make sure you resolved all conflicts
+git status  # Should show nothing (clean working directory)
+
+# Clean build directory
+rm -rf build/
+mkdir build && cd build
+../configure
+make -j$(nproc)
 ```
 
 ## Integration with Lind Build System
 
 To integrate an interposed glibc version into the Lind project:
 
-1. Push changes to a feature branch in your glibc fork
-2. Update Lind build configuration to use the new branch
-3. Update documentation (this file) with version info
-4. Run full integration tests
+1. Push changes to your fork:
+   ```bash
+   git push origin feature/syscall-interposition
+   ```
 
-```bash
-# Example in Lind build scripts:
-GLIBC_URL="https://github.com/F-Wilke/lind-glibc.git"
-GLIBC_BRANCH="v2.35-interposition"
-GLIBC_TAG="v2.35"
-```
+2. In Lind build configuration, reference the branch:
+   ```bash
+   GLIBC_URL="https://github.com/YOUR_USERNAME/glibc.git"
+   GLIBC_BRANCH="feature/syscall-interposition"
+   GLIBC_TAG="v2.35"
+   ```
+
+3. Tag the commit for release:
+   ```bash
+   git tag -a v2.35-with-interpose -m "glibc 2.35 with syscall interposition"
+   git push origin v2.35-with-interpose
+   ```
 
 ## See Also
 
 - [Syscall Interposition Infrastructure](./syscall-interposition.md) - Technical details
 - [glibc Modifications](./libc.md) - General Lind glibc changes
 - [Building glibc](https://sourceware.org/glibc/wiki/Setting%20up%20and%20testing%20glibc)
+- [Git Cherry-Pick Documentation](https://git-scm.com/docs/git-cherry-pick)

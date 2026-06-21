@@ -42,7 +42,31 @@ The interposition layer must be integrated at:
 - Understanding of the specific glibc version's internal structure
 - Access to architecture-specific syscall implementations
 
-### Step-by-Step Process
+### Recommended Approach: Git Cherry-Pick
+
+The cleanest way to apply these changes is using `git cherry-pick`:
+
+```bash
+# Get the commit hashes from your reference implementation
+cd reference-glibc
+git log --oneline origin/master..HEAD
+# Output:
+# 5d435612f8 [add:] tested toggled interposition
+# 922057b7e8 [add:] basic interposition infra
+
+# Switch to target version branch
+cd target-glibc
+git checkout -b feature/syscall-interposition v2.35  # or your target version
+
+# Cherry-pick the commits in order
+git cherry-pick 922057b7e8 5d435612f8
+
+# If conflicts occur, resolve them (see Conflict Resolution below)
+# Then continue:
+git cherry-pick --continue
+```
+
+### Step-by-Step Manual Application (If Cherry-Pick Fails)
 
 #### 1. Identify Target Version
 
@@ -55,7 +79,7 @@ git branch -a | grep -i "v2.X\|glibc-2.X"
 #### 2. Create a Branch for Changes
 
 ```bash
-git checkout -b feature/syscall-interposition
+git checkout -b feature/syscall-interposition v2.35
 ```
 
 #### 3. Add the Core Infrastructure Files
@@ -65,21 +89,16 @@ Copy the `syscall-interpose.c` and `syscall-interpose.h` files:
 ```bash
 cp /path/to/reference/sysdeps/unix/sysv/linux/syscall-interpose.* \
    sysdeps/unix/sysv/linux/
+git add sysdeps/unix/sysv/linux/syscall-interpose.*
 ```
 
 #### 4. Update Makefile
 
 Edit `sysdeps/unix/sysv/linux/Makefile`:
 
-**Find the sysdep_routines section:**
-```makefile
-ifeq ($(subdir),misc)
-sysdep_routines += ... splice \
-```
+Find the line with `splice \` and add `syscall-interpose \` after it:
 
-**Add syscall-interpose:**
 ```makefile
-ifeq ($(subdir),misc)
 sysdep_routines += ... splice \
                    syscall-interpose \
 ```
@@ -88,13 +107,8 @@ sysdep_routines += ... splice \
 
 Edit `sysdeps/unix/sysv/linux/Versions`:
 
-**Find the GLIBC_2.X section (usually after `__netlink_assert_response`):**
-```
-    # functions used by nscd
-    __netlink_assert_response;
-```
+Find the section with `__netlink_assert_response;` and add the new symbols:
 
-**Add new symbols:**
 ```
     # functions used by nscd
     __netlink_assert_response;
@@ -104,37 +118,115 @@ Edit `sysdeps/unix/sysv/linux/Versions`:
     __enable_syscall_interpose;
 ```
 
-#### 6. Architecture-Specific Integration (Optional)
+#### 6. Convert Assembly to C (Optional but Recommended)
 
-To fully integrate interposition with syscall stubs, you need to modify architecture-specific files.
-
-**For glibc versions using Assembly (.S files):**
-
-You may need to add calls to `__syscall_interpose()` in key syscall files:
-- `sysdeps/unix/sysv/linux/x86_64/clone.S`
-- `sysdeps/unix/sysv/linux/x86_64/vfork.S`
-- `sysdeps/unix/sysv/linux/x86_64/syscall.S`
-- Similar files for other architectures (aarch64, arm, etc.)
-
-**For glibc versions using C (.c files):**
-
-The integration is simpler - modify the C implementations to call `__syscall_interpose()`.
-
-#### 7. Build and Test
+For full interposition support, convert key syscall implementations:
 
 ```bash
-# Configure glibc for your system
-mkdir build && cd build
-../configure --prefix=/usr
+# Copy C implementations from reference
+cp /path/to/reference/sysdeps/unix/sysv/linux/x86_64/clone.c \
+   sysdeps/unix/sysv/linux/x86_64/
+cp /path/to/reference/sysdeps/unix/sysv/linux/x86_64/clone3.c \
+   sysdeps/unix/sysv/linux/x86_64/
+cp /path/to/reference/sysdeps/unix/sysv/linux/x86_64/vfork.c \
+   sysdeps/unix/sysv/linux/x86_64/
+
+# Remove old assembly files
+git rm sysdeps/unix/sysv/linux/x86_64/clone.S
+git rm sysdeps/unix/sysv/linux/x86_64/clone3.S
+git rm sysdeps/unix/sysv/linux/x86_64/vfork.S
+
+# Update sysdep.h to use the C implementations
+# (Usually simplify the macro definitions)
+```
+
+#### 7. Commit the Changes
+
+```bash
+git commit -m "[add:] syscall interposition infrastructure
+
+This adds a syscall interposition layer that allows applications
+to hook and intercept system calls at the glibc level.
+
+Changes:
+- Add syscall-interpose.c and .h for interposition layer
+- Update Makefile to include syscall-interpose in build
+- Export interposition symbols in Versions
+- Convert x86_64 syscall stubs from assembly to C"
+```
+
+### Conflict Resolution
+
+If `git cherry-pick` fails with conflicts, you'll need to resolve them:
+
+```bash
+# See which files have conflicts
+git status
+
+# For files deleted in the patch but present in your version:
+git rm sysdeps/unix/sysv/linux/x86_64/clone.S  # etc.
+
+# For files with merge conflicts:
+# - Edit the file and fix the conflict markers
+# - Or accept the incoming version from the patch:
+git checkout --theirs sysdeps/unix/sysv/linux/Makefile
+
+# Then stage and continue:
+git add <resolved-files>
+git cherry-pick --continue
+```
+
+## Testing the Integration
+
+### 1. Verify Files are in Place
+
+```bash
+ls -la sysdeps/unix/sysv/linux/syscall-interpose.*
+ls -la sysdeps/unix/sysv/linux/x86_64/clone.c
+```
+
+### 2. Verify Makefile Update
+
+```bash
+grep syscall-interpose sysdeps/unix/sysv/linux/Makefile
+```
+
+### 3. Verify Versions Update
+
+```bash
+grep -A3 "syscall interposition" sysdeps/unix/sysv/linux/Versions
+```
+
+### 4. Build Test
+
+```bash
+mkdir build
+cd build
+
+# Configure for current system
+../configure
 
 # Build
-make -j$(nproc)
+make -j$(nproc) 2>&1 | tee build.log
 
-# Optionally install to a custom prefix for testing
-make install DESTDIR=/tmp/glibc-test
+# Check for errors
+grep -i "error" build.log
 
-# Run basic tests
+# Quick sanity check
 make test -k "test-1"
+```
+
+### 5. Symbol Verification
+
+After installation, verify symbols are exported:
+
+```bash
+nm /path/to/libc.so | grep __syscall_interpose
+
+# Should show something like:
+# 00000000001234 T __enable_syscall_interpose
+# 00000000005678 B __syscall_interpose_enabled
+# 0000000000abcd T __syscall_interpose
 ```
 
 ## Version-Specific Considerations
@@ -142,8 +234,14 @@ make test -k "test-1"
 ### glibc 2.35
 
 - Uses assembly-based syscall implementations (.S files)
-- Integration with assembly requires careful register handling
 - See `/home/fwilke/edu/NYU/glibc-2.35` for a complete example
+- Cherry-pick approach works well with conflict resolution for assembly→C conversion
+
+### glibc 2.36-2.38
+
+- Similar to 2.35
+- Minor differences in Makefile/Versions locations
+- Use same cherry-pick approach as 2.35
 
 ### glibc 2.39+
 
@@ -153,9 +251,9 @@ make test -k "test-1"
 
 ### glibc master/main
 
-- Full C implementations of syscall stubs
-- Direct integration with interposition layer
-- See `/home/fwilke/edu/NYU/glibc-new` for the upstream implementation
+- Full C-based implementations of syscall stubs
+- Complete interposition infrastructure already integrated
+- See `/home/fwilke/edu/NYU/glibc-new` for the full implementation
 
 ## Architecture Support
 
@@ -231,6 +329,23 @@ Modify `syscall-interpose.c` to add debug logging:
 3. **Syscalls Not Intercepted**: Verify that `__syscall_interpose_enabled` is set to 1 and a handler is registered
 4. **Architecture Mismatches**: Ensure the `raw_syscall()` implementation matches your target architecture
 
+## Exporting Changes as Patches
+
+Once you've successfully applied changes to a version, you can create patches for distribution:
+
+```bash
+# Create patch files from commits
+git format-patch ORIGINAL_TAG..HEAD -o ../patches/
+
+# Or create a single patch
+git diff ORIGINAL_TAG..HEAD > ../patches/glibc-2.X-interposition.patch
+
+# Apply later on another system:
+git apply ../patches/glibc-2.X-interposition.patch
+# Or:
+git am ../patches/0001-*.patch ../patches/0002-*.patch
+```
+
 ## References
 
 - **glibc Source**: https://github.com/bminor/glibc
@@ -239,7 +354,7 @@ Modify `syscall-interpose.c` to add debug logging:
 
 ## Related Documentation
 
-- [libc.md](./libc.md) - General glibc modifications for Lind
+- [glibc Modifications](./libc.md) - General glibc modifications for Lind
 - [grates.md](./grates.md) - GRATES sandboxing system
 - [rawposix.md](./rawposix.md) - RawPOSIX implementation
 
@@ -251,3 +366,4 @@ When updating the syscall interposition infrastructure:
 2. Test on multiple glibc versions if possible
 3. Document any architecture-specific requirements
 4. Update this guide with new version-specific information as needed
+5. Use `git cherry-pick` for applying to new versions
