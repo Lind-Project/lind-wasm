@@ -54,8 +54,14 @@ impl MmapMemory {
         minimum: usize,
         mut maximum: Option<usize>,
     ) -> Result<Self> {
+        const LIND_INTERNAL_MEMORY_RESERVATION: u64 = 10 * 1024 * 1024;
+
+        let is_lind_guest_memory = ty.shared;
         // lind-wasm: we enable maximum use of memory at start
-        maximum = Some(super::MAX_MEMORY_SIZE);
+        if is_lind_guest_memory {
+            maximum = Some(super::MAX_MEMORY_SIZE);
+        }
+
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).
@@ -80,8 +86,18 @@ impl MmapMemory {
         // to reserve any extra for growth.
         //
         // If the minimum size doesn't fit within this linear memory.
-        let mut alloc_bytes = tunables.memory_reservation;
-        let mut extra_to_reserve_on_growth = tunables.memory_reservation_for_growth;
+        let mut alloc_bytes = if is_lind_guest_memory {
+            tunables.memory_reservation
+        } else {
+            tunables.lind_internal_memory_reservation
+        };
+
+        let mut extra_to_reserve_on_growth = if is_lind_guest_memory {
+            tunables.memory_reservation_for_growth
+        } else {
+            0
+        };
+
         let minimum_u64 = u64::try_from(minimum).unwrap();
         if minimum_u64 <= alloc_bytes {
             if let Ok(max) = ty.maximum_byte_size() {
