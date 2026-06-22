@@ -18,16 +18,30 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 ssize_t
 copy_file_range (int infd, __off64_t *pinoff,
                  int outfd, __off64_t *poutoff,
                  size_t length, unsigned int flags)
 {
-  // BUG: we currently cannot support this syscall
-  //      so instead of letting it crash directly,
-  //      let's just set the errno and return - Qianxi Chen
-  __set_errno (ENOSYS);
-  return -1;
+  uint64_t host_pinoff = pinoff == NULL
+                         ? 0
+                         : TRANSLATE_GUEST_POINTER_TO_HOST (pinoff);
+  uint64_t host_poutoff = poutoff == NULL
+                          ? 0
+                          : TRANSLATE_GUEST_POINTER_TO_HOST (poutoff);
+
+  return MAKE_LEGACY_SYSCALL (COPY_FILE_RANGE_SYSCALL,
+                              "syscall|copy_file_range",
+                              (uint64_t) infd,
+                              host_pinoff,
+                              (uint64_t) outfd,
+                              host_poutoff,
+                              (uint64_t) length,
+                              (uint64_t) flags,
+                              TRANSLATE_ERRNO_ON);
 }
-stub_warning (copy_file_range)

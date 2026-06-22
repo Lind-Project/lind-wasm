@@ -3901,6 +3901,71 @@ pub extern "C" fn pwrite_syscall(
     ret
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/copy_file_range.2.html
+///
+/// Linux `copy_file_range()` copies up to `len` bytes from one file descriptor
+/// to another. If `off_in` or `off_out` is NULL, the corresponding file offset
+/// is used and updated by the kernel. If they are non-NULL, they point to file
+/// offsets and the file offsets of the descriptors are not changed.
+pub extern "C" fn copy_file_range_syscall(
+    cageid: u64,
+    fd_in_arg: u64,
+    fd_in_cageid: u64,
+    off_in_arg: u64,
+    off_in_cageid: u64,
+    fd_out_arg: u64,
+    fd_out_cageid: u64,
+    off_out_arg: u64,
+    off_out_cageid: u64,
+    len_arg: u64,
+    len_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+) -> i32 {
+    let fd_in = convert_fd_to_host(fd_in_arg, fd_in_cageid, cageid);
+    if fd_in < 0 {
+        return handle_errno(-fd_in, "copy_file_range");
+    }
+
+    let fd_out = convert_fd_to_host(fd_out_arg, fd_out_cageid, cageid);
+    if fd_out < 0 {
+        return handle_errno(-fd_out, "copy_file_range");
+    }
+
+    let off_in = if off_in_arg == 0 {
+        std::ptr::null_mut()
+    } else {
+        sc_convert_buf(off_in_arg, off_in_cageid, cageid) as *mut libc::loff_t
+    };
+
+    let off_out = if off_out_arg == 0 {
+        std::ptr::null_mut()
+    } else {
+        sc_convert_buf(off_out_arg, off_out_cageid, cageid) as *mut libc::loff_t
+    };
+
+    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
+    let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
+
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_copy_file_range as libc::c_long,
+            fd_in,
+            off_in,
+            fd_out,
+            off_out,
+            len,
+            flags,
+        ) as i32
+    };
+
+    if ret < 0 {
+        return handle_errno(get_errno(), "copy_file_range");
+    }
+
+    ret
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/chdir.2.html
 ///
 /// Linux `chdir()` syscall changes the current working directory of the calling process to the directory
