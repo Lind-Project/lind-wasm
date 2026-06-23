@@ -39,6 +39,18 @@ pub struct CliOptions {
     #[arg(long = "enable-fpcast")]
     pub enable_fpcast: bool,
 
+    /// Instead of running the module's entry point (`_start`), instantiate the
+    /// module as a resident "reactor"/library and call a single exported function
+    /// by name, then print its return value(s) and exit.
+    ///
+    /// Integer arguments to the called function are taken from the trailing
+    /// program args (everything after WASM_FILE).
+    ///
+    /// Example:
+    ///   lind-boot --call add add_sub.cwasm 2 3
+    #[arg(long = "call", value_name = "EXPORT_NAME")]
+    pub call: Option<String>,
+
     /// Optional in-memory Wasm module bytes.
     ///
     /// This is not parsed from the command line. When present, lind-boot loads

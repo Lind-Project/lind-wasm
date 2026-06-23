@@ -93,6 +93,12 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         .context("failed to create execution engine")?;
     let module = read_main_wasm_or_cwasm(&engine, &lindboot_cli)?;
 
+    // In `--call` (resident library) mode the guest never invokes exit(), so the
+    // initial cage will not tear itself down on its own. Remember this here, before
+    // `lindboot_cli` is moved into `execute_with_lind`, so we can finalize the cage
+    // ourselves once the call returns; otherwise `lind_manager.wait()` blocks forever.
+    let is_resident_call = lindboot_cli.call.is_some();
+
     // -- Run the first module in the first cage --
     let result = execute_with_lind(
         lindboot_cli,
@@ -104,8 +110,6 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
 
     match result {
         Ok(ref ret_vals) => {
-            // we wait until all other cage exits
-            lind_manager.wait();
             // Interpret the first return value of the Wasm entry point
             // as the process exit code. If the module does not explicitly
             // return an i32, we treat it as a successful exit (code = 0).
@@ -113,6 +117,27 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
                 Some(Val::I32(code)) => *code,
                 _ => 0,
             };
+            
+            // In resident-library (`--call`) mode no guest exit() ran, so the
+            // initial cage is still alive. Finalize it ourselves (the same
+            // teardown the crash path performs) so `lind_manager.wait()` does
+            // not block forever waiting for a cage that never exits.
+            if is_resident_call {
+                let cageid = CAGE_START_ID as u64;
+                cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(exit_code));
+                if let Some(c) = cage::get_cage(cageid) {
+                    c.is_dead.store(true, std::sync::atomic::Ordering::Release);
+                }
+                threei::EXITING_TABLE.insert(cageid);
+                threei::handler_table::_rm_grate_from_handler(cageid);
+                cage::signal::lind_thread_exit(cageid, THREAD_START_ID as u64);
+                cage::cage_finalize(cageid);
+                lind_manager.decrement();
+            }
+            // we wait until all other cage exits
+            lind_manager.wait();
+
+
             // Propagate the exit code to the main, which will translate it
             // into the host process exit status.
             Ok(exit_code)
@@ -355,6 +380,7 @@ pub fn execute_with_lind(
             cageid as u64,
             &args,
             dylink_metadata,
+            lind_boot.call.clone(),
         )
         .with_context(|| format!("failed to run main module"))
     });
@@ -588,6 +614,7 @@ fn load_main_module(
     cageid: u64,
     args: &[String],
     mut dylink_metadata: DylinkMetadata,
+    call_export: Option<String>,
 ) -> Result<Vec<Val>> {
     let mut linker_guard = linker.lock().unwrap();
 
@@ -616,11 +643,20 @@ fn load_main_module(
         func.typed::<(), ()>(&store)?.call(&mut *store, ())?;
     }
 
-    // Look for the specific function provided or otherwise look for
-    // "" or "_start" exports to run as a "main" function.
-    let func = instance
-        .get_func(&mut *store, "")
-        .or_else(|| instance.get_func(&mut *store, "_start"));
+    // If `--call <name>` was provided, run this module as a resident
+    // reactor/library: look up the requested export instead of the program
+    // entry point. Otherwise fall back to the usual "" / "_start" entry point.
+    let func = if let Some(ref name) = call_export {
+        Some(
+            instance
+                .get_func(&mut *store, name)
+                .ok_or_else(|| anyhow!("exported function `{}` not found", name))?,
+        )
+    } else {
+        instance
+            .get_func(&mut *store, "")
+            .or_else(|| instance.get_func(&mut *store, "_start"))
+    };
 
     if !dylink_metadata.dylink_enabled {
         let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
@@ -734,7 +770,19 @@ fn load_main_module(
     drop(linker_guard);
 
     let ret = match func {
-        Some(func) => invoke_func(store, func, &args),
+        Some(func) => {
+            if let Some(ref name) = call_export {
+                // Resident library mode: the trailing program args (everything
+                // after WASM_FILE, i.e. args[1..]) are the called function's
+                // integer arguments.
+                let call_args: &[String] = if args.len() > 1 { &args[1..] } else { &[] };
+                let results = invoke_func(store, func, call_args)?;
+                println!("[lind-boot] {}({}) => {:?}", name, call_args.join(", "), results);
+                Ok(results)
+            } else {
+                invoke_func(store, func, &args)
+            }
+        }
         None => Ok(vec![]),
     };
 
