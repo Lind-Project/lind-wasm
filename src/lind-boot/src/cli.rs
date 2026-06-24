@@ -77,6 +77,10 @@ pub struct CliOptions {
     /// Defaults to 64 MiB.
     #[arg(long = "thread-stack-size", default_value_t = 64 * 1024 * 1024)]
     pub thread_stack_size: usize,
+
+    /// Internal memory reservation for Lind's own use (e.g., GC Heap) in bytes.
+    #[arg(long = "lind-internal-memory-reservation", default_value_t = 10 * 1024 * 1024)]
+    pub lind_internal_memory_reservation: u64,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {

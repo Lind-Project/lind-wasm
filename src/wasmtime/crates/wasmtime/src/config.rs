@@ -1791,6 +1791,14 @@ impl Config {
         self
     }
 
+    /// lind-wasm:
+    /// Configures the reservation size for lind-wasm internal memories,
+    /// such as Wasmtime GC heap. This does not affect Lind guest shared memory.
+    pub fn lind_internal_memory_reservation(&mut self, bytes: u64) -> &mut Self {
+        self.tunables.lind_internal_memory_reservation = Some(bytes);
+        self
+    }
+
     /// Indicates whether linear memories may relocate their base pointer at
     /// runtime.
     ///

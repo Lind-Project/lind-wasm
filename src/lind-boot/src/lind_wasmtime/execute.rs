@@ -86,8 +86,11 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     init_vmctx_pool();
 
     // -- Initialize the Wasmtime execution environment --
-    let wt_config =
-        make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
+    let wt_config = make_wasmtime_config(
+        lindboot_cli.wasmtime_backtrace,
+        lindboot_cli.enable_fpcast,
+        lindboot_cli.lind_internal_memory_reservation,
+    );
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create execution engine")?;
@@ -886,7 +889,11 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     let wasm_path = Path::new(cli.wasm_file());
     let cwasm_path = wasm_path.with_extension("cwasm");
 
-    let wt_config = make_wasmtime_config(cli.wasmtime_backtrace, false);
+    let wt_config = make_wasmtime_config(
+        cli.wasmtime_backtrace,
+        false,
+        cli.lind_internal_memory_reservation,
+    );
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create engine")?;
@@ -1001,12 +1008,17 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
 
 /// Generates a wasmtime config based on the whether or not the --wasmtime-backtrace flag was
 /// provided to lind-boot.
-fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Config {
+fn make_wasmtime_config(
+    backtrace: bool,
+    enable_fpcast: bool,
+    lind_internal_memory_reservation: u64,
+) -> wasmtime::Config {
     let mut wt_config = wasmtime::Config::new();
     wt_config.wasm_backtrace(backtrace);
     wt_config.fpcast_enabled(enable_fpcast);
     wt_config.wasm_threads(true);
     wt_config.shared_memory(true);
+    wt_config.lind_internal_memory_reservation(lind_internal_memory_reservation);
     // wasm-opt --translate-to-exnref converts clang 18's legacy EH to the standard proposal.
     // The standard EXCEPTIONS proposal is supported by Cranelift; the legacy proposal is not.
     #[cfg(not(feature = "asyncify-setjmp"))]
