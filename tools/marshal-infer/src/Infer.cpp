@@ -2,6 +2,7 @@
 // LLVM IR. We keep it deliberately heuristic ("infer the common case, flag the
 // rest"): every uncertain decision becomes a warning rather than a silent guess.
 #include "Infer.h"
+#include "Annotations.h"
 
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Function.h"
@@ -92,21 +93,17 @@ int traceReturnPtr(const Value *v, unsigned sretOffset, bool &hadOffset,
 }
 
 // --- known opaque, library-owned types: handle, never deep-copied (C2/C4) ---
-// Canonicalize so typedef spellings collapse to one class string.
+// Handle/allocator/searcher lookups now consult the (data-driven) annotation
+// set — built-in defaults extended by any --annotations file. See Annotations.h.
 std::string canonicalHandleClass(const std::string &typeName) {
-  if (typeName == "_IO_FILE" || typeName == "FILE") return "FILE";
-  if (typeName == "__dirstream" || typeName == "DIR") return "DIR";
-  if (typeName == "__locale_struct") return "locale";
-  if (typeName.empty()) return "void";
-  return typeName;
+  auto &ht = annotations().handleTypes;
+  if (auto it = ht.find(typeName); it != ht.end()) return it->second;
+  return typeName.empty() ? std::string("void") : typeName;
 }
 bool isKnownOpaqueStruct(const std::string &typeName) {
-  return typeName == "_IO_FILE" || typeName == "__dirstream" ||
-         typeName == "__locale_struct";
+  return annotations().handleTypes.count(typeName) != 0;
 }
 
-// --- allocator classification (C3) ---
-// allocsize attr is absent in our -O1 glibc bitcode, so use a curated table.
 struct AllocInfo {
   bool isAlloc = false;      // plain allocation -> ptr_alloc
   bool forceLocal = false;   // realloc-style -> whole function local
@@ -116,26 +113,74 @@ AllocInfo allocatorInfo(StringRef raw) {
   StringRef n = raw;
   if (!n.consume_front("__libc_")) n.consume_front("__");
   AllocInfo a;
-  if (n == "malloc" || n == "valloc" || n == "pvalloc") { a.isAlloc = true; a.sizeArgs = {0}; }
-  else if (n == "aligned_alloc" || n == "memalign") { a.isAlloc = true; a.sizeArgs = {1}; }
-  else if (n == "calloc") { a.isAlloc = true; a.sizeArgs = {0, 1}; }
-  else if (n == "realloc" || n == "reallocarray" || n == "posix_memalign" ||
-           n == "strdup" || n == "strndup")
-    a.forceLocal = true;
+  auto &al = annotations().allocators;
+  if (auto it = al.find(n.str()); it != al.end()) {
+    if (it->second.forceLocal) a.forceLocal = true;
+    else { a.isAlloc = true;
+           for (int s : it->second.sizeArgs) a.sizeArgs.push_back(s); }
+  }
   return a;
 }
 
-// Classic search functions whose result is a pointer INTO arg0. Their return is
-// computed in a callee (e.g. strchr -> __strchrnul + select), so the intraproc
-// IR trace can't see it — recognize them by name (V1).
+// Classic search functions whose result is a pointer INTO arg0, computed in a
+// sibling TU (e.g. strchr -> __strchrnul) so the IR trace can't see it.
 int searcherReturnsIntoArg0(StringRef raw) {
   StringRef n = raw;
   n.consume_front("__");
-  if (n == "strchr" || n == "strrchr" || n == "index" || n == "rindex" ||
-      n == "strchrnul" || n == "memchr" || n == "memrchr" || n == "rawmemchr" ||
-      n == "strstr" || n == "strcasestr" || n == "strpbrk")
-    return 0;
+  return annotations().returnIntoArg0.count(n.str()) ? 0 : -1;
+}
+
+// GENERAL detector for the "out pointer-to-pointer into another arg" case: does
+// the function store into *P (P a char**/void** arg) a pointer value that derives
+// from a *different* pointer argument? If so, *P is an offset into that arg (the
+// endptr idiom), translatable soundly. Returns the target arg's DWARF index, or
+// -1. This is the primary path — it works for any in-body write in any library;
+// the strtoX name table below is only the fallback for glibc functions that
+// write *endptr in a sibling TU (invisible here).
+int detectOutPtrIntoArg(const Argument *P, unsigned sretOffset) {
+  int pIdx = dwarfIndexOf(P, sretOffset);
+  SmallVector<const Value *, 8> work;
+  SmallPtrSet<const Value *, 16> seen;
+  work.push_back(P);
+  seen.insert(P);
+  while (!work.empty()) {
+    const Value *D = work.pop_back_val();
+    for (const User *U : D->users()) {
+      if (auto *st = dyn_cast<StoreInst>(U)) {
+        if (st->getPointerOperand() == D &&
+            st->getValueOperand()->getType()->isPointerTy()) {
+          bool off = false;
+          SmallPtrSet<const Value *, 16> s2;
+          int q = traceReturnPtr(st->getValueOperand(), sretOffset, off, s2);
+          if (q >= 0 && q != pIdx) return q; // *P = (value derived from arg q)
+        }
+      } else if (auto *g = dyn_cast<GetElementPtrInst>(U)) {
+        if (g->getPointerOperand() == D && seen.insert(g).second) work.push_back(g);
+      } else if (isa<BitCastInst>(U)) {
+        if (seen.insert(U).second) work.push_back(U);
+      }
+    }
+  }
   return -1;
+}
+
+// The strtoX/wcstoX parse family: int strtol(const char *nptr, char **endptr,
+// int base[, locale]). POSIX guarantees *endptr points INTO nptr (arg0). glibc
+// writes *endptr in a sibling TU (____strtol_l_internal, only declared here), so
+// detectOutPtrIntoArg can't see it — this name table is the interprocedural
+// FALLBACK for that family (endptr=arg1, into=arg0).
+bool isParseEndptrFn(StringRef raw) {
+  StringRef n = raw.ltrim('_');   // __strtol / ____strtol_l_internal -> strip leading _
+  n.consume_front("isoc23_");
+  n.consume_back("_internal");    // __strtol_internal -> strtol
+  n.consume_back("_l");           // strtol_l -> strtol
+  if (!n.consume_front("strto") && !n.consume_front("wcsto")) return false;
+  static const char *suf[] = {"l",  "ll",   "ul",  "ull",  "imax", "umax",
+                              "q",  "uq",   "d",   "f",    "ld",   "f16",
+                              "f32","f64",  "f128","f32x", "f64x"};
+  for (const char *s : suf)
+    if (n == s) return true;
+  return false;
 }
 
 // Final decisiveness net (E2): any non-mappable node anywhere → force_local.
@@ -143,7 +188,7 @@ int searcherReturnsIntoArg0(StringRef raw) {
 // skips) and any other leftover. Handles are opaque — their uncopied pointee is
 // not inspected.
 bool treeHasUnmappable(const TreeNode *n) {
-  if (n->isHandle) return false;
+  if (n->isHandle || n->ptrIntoArg) return false;
   if (n->kind == NodeKind::Unknown) return true;
   if (n->kind == NodeKind::Pointer && n->sizeKind != SizeKind::Const &&
       n->sizeKind != SizeKind::FromArg &&
@@ -498,11 +543,31 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
       ft.warnings.push_back("arg" + std::to_string(p) +
           ": pointer to function/unresolved type — force_local");
     } else if (pointee->kind == NodeKind::Pointer) {
-      // pointer-to-pointer (char**, void**): the inner pointer needs translation
-      // we can't perform, so a flat const copy would be silently wrong.
-      ft.forceLocal = true;
-      ft.warnings.push_back("arg" + std::to_string(p) +
-          ": pointer-to-pointer (inner pointer untranslatable) — force_local");
+      // OUT pointer-to-pointer whose inner value is an offset into another arg
+      // (endptr idiom). General dataflow first; name-table fallback for the glibc
+      // parse family that writes *endptr in a sibling TU.
+      int into = detectOutPtrIntoArg(A, sretOffset);
+      bool byTable = false;
+      if (into < 0 && isParseEndptrFn(ft.funcName) && p == 1) { into = 0; byTable = true; }
+      if (into >= 0) {
+        node->dir = Dir::Out;
+        node->sizeKind = SizeKind::Const;
+        node->constSize = pointee->sizeBytes ? pointee->sizeBytes : 4;
+        TreeNode *inner = node->children[0].get();
+        inner->ptrIntoArg = true;
+        inner->intoArgIndex = into;
+        ft.warnings.push_back(
+            "arg" + std::to_string(p) + ": *p translated as offset into arg" +
+            std::to_string(into) + (byTable ? " (parse-family fallback)"
+                                            : " (out-ptr-into-arg)"));
+      } else {
+        // genuine pointer-to-pointer (char**/void** to an independent or fresh
+        // buffer): the inner pointer needs translation we can't perform, so a
+        // flat const copy would be silently wrong.
+        ft.forceLocal = true;
+        ft.warnings.push_back("arg" + std::to_string(p) +
+            ": pointer-to-pointer (inner pointer untranslatable) — force_local");
+      }
     } else {
       // pointer to a scalar/array element.
       uint64_t elem = pointee->sizeBytes ? pointee->sizeBytes : 1;

@@ -11,6 +11,7 @@
 //   -o <file>     write output to file (default: stdout)
 //   --all         include internal/static functions
 //   --module NAME label the module in JSON output (default: input path)
+#include "Annotations.h"
 #include "Infer.h"
 #include "ParamTree.h"
 
@@ -40,6 +41,10 @@ static cl::opt<std::string> OutFile("o", cl::desc("output file (default stdout)"
                                     cl::value_desc("file"));
 static cl::opt<std::string> ModuleName("module",
                                        cl::desc("module label for JSON"));
+static cl::opt<std::string> AnnoFile("annotations",
+    cl::desc("JSON file extending the built-in handle-type/allocator/searcher "
+             "tables (per-library customization)"),
+    cl::value_desc("file"));
 static cl::opt<std::string> ExportsFile("exports",
     cl::desc("only emit functions whose name is in this newline-separated file "
              "(e.g. the library's exported-symbol list)"),
@@ -115,6 +120,12 @@ static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
     }
     os << ",\"handle_class\":"; jsonStr(os, n->handleClass);
     os << "}";
+    return;
+  }
+
+  // An inner pointer translated as an offset into another argument (strtol endptr).
+  if (n->ptrIntoArg) {
+    os << "\"kind\":\"ptr_into_arg\",\"into_arg\":" << n->intoArgIndex << "}";
     return;
   }
 
@@ -206,6 +217,15 @@ static void jsonFunction(raw_ostream &os, const FunctionTrees *ft) {
 
 int main(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv, "marshal-infer: lind marshalling inference\n");
+
+  // Extend the built-in handle/allocator/searcher tables with a per-library file.
+  if (!AnnoFile.empty()) {
+    std::string aerr;
+    if (!loadAnnotationsFile(AnnoFile, aerr)) {
+      errs() << "marshal-infer: --annotations " << AnnoFile << ": " << aerr << "\n";
+      return 1;
+    }
+  }
 
   // Output stream.
   std::error_code ec;

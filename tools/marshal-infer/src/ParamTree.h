@@ -109,6 +109,12 @@ struct TreeNode {
   // untranslated (not chased). Advisory — the copy uses the existing const path.
   bool shallow = false;
 
+  // For an inner pointer that is written as an offset INTO another argument's
+  // buffer (e.g. strtol's *endptr -> into the input string). The runtime
+  // translates the value as src_base(intoArgIndex) + (written - shadow_base).
+  bool ptrIntoArg = false;
+  int  intoArgIndex = -1;
+
   // KSplit projection bit (meaningful for struct fields): marshal this field
   // only if set. Library-side best-effort = mark every field touched (we lack
   // the caller side needed for the precise both-sides intersection).

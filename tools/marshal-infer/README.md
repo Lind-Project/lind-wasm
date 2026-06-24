@@ -32,6 +32,9 @@ lind-clang --emit-llvm path/to/lib.c          # -> path/to/lib.bc
 tools/marshal-infer/build/marshal-infer path/to/lib.bc
 ```
 
+`--annotations <file.json>` extends the built-in handle-type / allocator / searcher
+tables for a specific library (see `annotations.json` for the format and defaults).
+
 `--all` also analyzes internal/static functions (default: interface candidates
 only, i.e. non-local-linkage definitions).
 
