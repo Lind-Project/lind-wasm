@@ -1,7 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shebang {

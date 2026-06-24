@@ -2,12 +2,12 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::fs_const::O_RDONLY;
 use sysdefs::constants::lind_platform_const::{
-    unset_stack_arena_base, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{
     CLOSE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, OPEN_SYSCALL, READ_SYSCALL,
@@ -64,14 +64,13 @@ pub trait LindHost<T, U> {
 
 // Route host-side runtime file access through Lind's syscall/interposition layer
 // instead of reading the host filesystem directly. The syscall target is
-// RawPOSIX, while each argument is still owned by the current cage so cwd/path
-// normalization and fd-table lookup use the guest process state.
+// self cageid to indicate routing to rawposix (according to 3i lookup logic).
 fn lind_syscall(cageid: u64, syscall_num: i32, args: [(u64, u64); 6]) -> i32 {
     make_syscall(
         cageid,
         syscall_num as u64,
         0,
-        RAWPOSIX_CAGEID,
+        cageid,
         args[0].0,
         args[0].1,
         args[1].0,
@@ -88,11 +87,7 @@ fn lind_syscall(cageid: u64, syscall_num: i32, args: [(u64, u64); 6]) -> i32 {
 }
 
 fn syscall_errno(ret: i32) -> Option<i32> {
-    if ret < 0 {
-        Some(-ret)
-    } else {
-        None
-    }
+    if ret < 0 { Some(-ret) } else { None }
 }
 
 // Close the virtual fd allocated by RawPOSIX open. This keeps the exec loader
