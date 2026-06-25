@@ -14,8 +14,8 @@ docker build \
   --platform=linux/amd64 \
   --build-arg USERNAME=lind \
   --build-arg BRANCH_NAME=main \
-  --build-arg LLVM_VERSION=llvmorg-16.0.4 \
-  --build-arg CLANG_PACKAGE=clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 \
+  --build-arg LLVM_VERSION=llvmorg-18.1.8 \
+  --build-arg CLANG_PACKAGE=clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 \
   -f ./Docker/Dockerfile.dev \
   -t lind-dev .
 ```
