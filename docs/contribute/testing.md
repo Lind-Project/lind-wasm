@@ -39,7 +39,9 @@ make lind-boot sysroot
 6. Run the test suite 
 ```
 ./scripts/test/harnesses/wasmtestreport.py
+./scripts/test/harnesses/wasmtestreport.py
 ```
+Run `scripts/test/harnesses/wasmtestreport.py --help` to list available usage options.
 Run `scripts/test/harnesses/wasmtestreport.py --help` to list available usage options.
 
 ## Directory Structure
@@ -98,11 +100,7 @@ lind-wasm outputs are compared to the native gcc output.
 ### Example Combined Usage
 
 ```
-<<<<<<< HEAD
 ./scripts/test/harnesses/wasmtestreport.py \
-=======
-./scripts/harnesses/wasmtestreport.py \
->>>>>>> 2dc950b5c (Fix stale docs links and commands (#1261))
   --generate-html \
   --skip config_tests file_tests \
   --timeout 10 \
