@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
+REPO_ROOT = SCRIPT_DIR.parents[2]
 WASMTESTREPORT = SCRIPT_DIR / "wasmtestreport.py"
 
 # Flags forwarded to wasmtestreport for static builds:

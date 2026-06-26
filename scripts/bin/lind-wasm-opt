@@ -113,8 +113,8 @@ if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
   REPO_ROOT="${LIND_WASM_ROOT}"
 else
   SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-  if [[ -f "${SCRIPT_DIR}/../Makefile" ]]; then
-    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
   elif command -v git >/dev/null 2>&1; then
     REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   else

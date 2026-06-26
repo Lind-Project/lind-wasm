@@ -67,7 +67,7 @@ Multi-stage **.e2e** flow for lind-wasm **end-to-end testing and image creation*
 
 ### make sysroot
 
-Runs `scripts/make_glibc_and_sysroot.sh` to:
+Runs `scripts/build/make_glibc_and_sysroot.sh` to:
 
 - Configure & build glibc (WASM/WASI target) and compile additional NPTL/syscall bits and tiny ASM stubs.
 
@@ -82,7 +82,7 @@ Runs `scripts/make_glibc_and_sysroot.sh` to:
 
 ### make test
 
-Runs `scripts/harnesses/wasmtestreport.py` which:
+Runs `scripts/test/harnesses/wasmtestreport.py` which:
 
 - Discovers tests from the repository’s test trees and honors `skip_test_cases.txt`.
 

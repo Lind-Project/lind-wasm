@@ -1,0 +1,5 @@
+/home/lind/lind-wasm/src/glibc/build/nss/compat-grp.os
+/home/lind/lind-wasm/src/glibc/build/nss/compat-pwd.os
+/home/lind/lind-wasm/src/glibc/build/nss/compat-spwd.os
+/home/lind/lind-wasm/src/glibc/build/nss/compat-initgroups.os
+/home/lind/lind-wasm/src/glibc/build/nss/nisdomain.os

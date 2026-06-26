@@ -2,7 +2,7 @@
 """Unified Python test runner for Lind test harnesses.
 
 Behavior:
-- Discovers harness modules in scripts/harnesses/.
+- Discovers harness modules in scripts/test/harnesses/.
 - Executes each module exposing run_harness(...).
 - Provides a shared subprocess echo helper that harnesses can reuse.
 - Writes each harness JSON payload to reports/<harness>.json (or module override).

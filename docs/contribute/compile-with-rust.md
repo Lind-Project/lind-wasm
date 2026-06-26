@@ -2,7 +2,7 @@
 
 To compile Rust programs against **`lind-glibc`**:
 
-- Ensure that the `scripts/cargo-lind_compile` script exists in `PATH`
+- Ensure that the `scripts/bin/cargo-lind_compile` script exists in `PATH`
 - Run `cargo lind_compile` at the root of your Rust crate.
 
 `cargo-lind-compile` is a drop-in replace for `cargo build`. It supports the same flags (such as --release) and is intended to be used in same contexts.
@@ -17,7 +17,7 @@ Alternatively, you can use `lind-cargo-build` at the root of your Rust crate to 
 ## 1. Cargo Configuration (`.cargo/config.toml`)
 
 Create or modify `.cargo/config.toml` as follows (based on
-`scripts/rust/config.toml.template`):
+`scripts/config/rust/config.toml.template`):
 
 ```toml
 [build]
@@ -26,7 +26,7 @@ target = "wasm32-wasip1"
 
 [target.wasm32-wasip1]
 # Use lind’s custom clang wrapper for glibc-based WASI linking
-linker = "/home/lind-wasm/scripts/wasip1-clang.sh"
+linker = "/home/lind-wasm/scripts/bin/wasip1-clang.sh"
 
 rustflags = [
   # Do not use Rust’s built-in self-contained WASI linker
@@ -63,7 +63,7 @@ rustflags = [
 
 ---
 
-## 2. Custom Linker Wrapper (`scripts/wasip1-clang.sh`)
+## 2. Custom Linker Wrapper (`scripts/bin/wasip1-clang.sh`)
 
 The following script replaces Cargo’s default linker and ensures that:
 

@@ -58,9 +58,9 @@ lind-wasm hello.cwasm
 
 *Here is what happens under the hood:*
 
-1. `lind-clang` (aka `scripts/lind_compile`) compiles `hello.c` into a WebAssembly (WASM)
-binary that is linked against *lind-glibc* and put into the Lind file system root (`lind-wasm/lindfs`).
-1. `lind-wasm` (aka `scripts/lind_run`) runs the compiled wasm using the *Lind-Wasm* runtime
+1.  `lind-clang`(aka `scripts/bin/lind_compile`) compiles `hello.c` into a WebAssembly (WASM)
+binary that is linked against *lind-glibc*, and put into lind file system root(`lind-wasm/lindfs`).
+1. `lind-wasm`(aka `scripts/bin/lind_run`) runs the compiled wasm using *Lind-Wasm* runtime
 and the *RawPOSIX* microvisor.
 
 --- 
