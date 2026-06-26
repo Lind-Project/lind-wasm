@@ -458,14 +458,50 @@ impl Instance {
                     let stack_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
                     let rounded_stack_size = round_up_size(stack_size, PAGESIZE);
 
+                    // Reserve a grate stack arena immediately after the module's data
+                    // region, mirroring the static-build layout. Grate workers are
+                    // separate Wasmtime stores that share this single linear memory, so
+                    // they are isolated by disjoint stack slots carved out of this arena.
+                    //
+                    // Without this reservation `get_stack_arena_base(cageid)` returns
+                    // `None` for dynamically linked grates and `worker_stack_base()`
+                    // panics before any worker can be created. The arena is included in
+                    // the mmap'd region below so `init_vmmap` places the heap start
+                    // (required_memory_page) above it, exactly as the static branch does.
+                    //
+                    // Layout (dynamic):
+                    //   [0, rounded_stack_size)                   main-thread stack
+                    //   [rounded_stack_size, +rounded_data_size)  module data region
+                    //   [stack_arena_base, +stack_arena_size)     grate stack arena
+                    //   [heap_start, ...)                         heap (grows up)
+                    stack_arena_base = rounded_stack_size + rounded_data_size;
+
+                    let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
+                        * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
+                            + lind_platform_const::grate_stack_slot_size() as usize);
+
+                    lind_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "failed to initialize stack arena base for cageid {}: {}",
+                                cageid, e
+                            )
+                        });
+
+                    let required_memory_size: u32 = (rounded_data_size as usize + stack_arena_size)
+                        .try_into()
+                        .expect("allocated memory is larger than 4GB");
+
                     lind_log!(
                         DYLINK,
-                        "[debug] main module allocate {} + {} bytes",
+                        "[debug] main module allocate {} + {} bytes (+ {} bytes grate stack arena @ {})",
                         rounded_stack_size,
-                        rounded_data_size
+                        rounded_data_size,
+                        stack_arena_size,
+                        stack_arena_base
                     );
 
-                    (rounded_stack_size, rounded_data_size)
+                    (rounded_stack_size, required_memory_size)
                 } else {
                     // retrieve the initial memory size for static module
                     let memories = &module.compiled_module().module().memories;
@@ -508,30 +544,31 @@ impl Instance {
                     //
                     // and each worker consumes exactly:
                     //
-                    //   `GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE`
+                    //   `GRATE_STACK_GUARD_SIZE + grate_stack_slot_size()`
                     //
                     // bytes inside the arena.
                     //
                     // Therefore, the total reserved arena size is:
                     //
                     //   `stack_arena_size = MAX_GRATE_WORKERS *
-                    //       (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)`
+                    //       (GRATE_STACK_GUARD_SIZE + grate_stack_slot_size())`
                     //
                     // The arena begins at `stack_arena_base`, which is chosen by rounding the
                     // module's minimal required memory size upward to a host page boundary.
                     // This guarantees that the worker-stack region starts at a page-aligned
                     // location after the module's initial memory footprint.
                     //
-                    // Why can `stack_arena_size` be globally constant?
+                    // Why is `stack_arena_size` the same for every cage?
                     //
                     // Because grate workers are created from one fixed runtime configuration:
-                    // every grate instance uses the same
+                    // every grate instance in this process uses the same
                     //
                     //   - MAX_GRATE_WORKERS
                     //   - GRATE_STACK_GUARD_SIZE
-                    //   - GRATE_STACK_SLOT_SIZE
+                    //   - grate_stack_slot_size() (constant per process — read once from
+                    //     LIND_GRATE_STACK_SIZE and cached)
                     //
-                    // constants.
+                    // values.
                     //
                     // In other words, the worker-pool width and the per-worker stack layout are
                     // not instance-specific; they are part of the global lind-wasm platform
@@ -547,7 +584,7 @@ impl Instance {
 
                     let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
                         * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
-                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                            + lind_platform_const::grate_stack_slot_size() as usize);
 
                     lind_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
                         .unwrap_or_else(|e| {
@@ -619,17 +656,17 @@ impl Instance {
 
                 fork_vmmap(parent_cageid as u64, child_cageid);
 
-                // For child instances, the stack arena is inherited from the parent cage, and grate calls
-                // only works at static build, so we only need to fork the stack arena base if dylink is not enabled.
-                if !dylink_enabled {
-                    lind_platform_const::fork_stack_arena_base_for_child(parent_cageid as usize, child_cageid as usize)
-                        .unwrap_or_else(|e| {
-                            panic!(
-                                "failed to fork stack arena base from parent cageid {} to child cageid {}: {}",
-                                parent_cageid, child_cageid, e
-                            )
-                        });
-                }
+                // For child instances, the stack arena is inherited from the parent cage.
+                // Grates now work under both static and dynamic builds (the dynamic main
+                // module reserves its arena in the InstantiateFirst branch above), so the
+                // child must always inherit the parent's arena base regardless of dylink.
+                lind_platform_const::fork_stack_arena_base_for_child(parent_cageid as usize, child_cageid as usize)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "failed to fork stack arena base from parent cageid {} to child cageid {}: {}",
+                            parent_cageid, child_cageid, e
+                        )
+                    });
             }
             InstantiateType::InstantiateLib {
                 cageid,

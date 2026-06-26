@@ -18,8 +18,15 @@ int main(void) {
     }
 
     if (pid == 0) {
-        /* child: dereference an unmapped address */
-        volatile int *addr = (volatile int *)0x1234567;
+        /*
+         * child: dereference an unmapped address.  1 GiB sits above everything
+         * rawposix maps for this cage -- stack, data region, grate worker stack
+         * arena (scales with worker count and per-worker stack size), and the
+         * tiny heap -- yet stays within the 4 GiB wasm linear memory, so the
+         * page is reserved PROT_NONE and the access faults.  (A lower address
+         * like 0x1234567 can fall inside the grate stack arena and read as valid.)
+         */
+        volatile int *addr = (volatile int *)0x40000000;
         int val = *addr;   /* expected to trap / fault */
         printf("val=%d\n", val);
         exit(0);

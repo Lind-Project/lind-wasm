@@ -23,7 +23,7 @@ use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
 use sysdefs::lind_log;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
 use wasmtime_lind_utils::LindGOT;
-use wasmtime_lind_utils::symbol_table::SymbolMap;
+use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
 
 use super::{InstanceId, InstantiateType};
 
@@ -2245,6 +2245,255 @@ impl<T> Linker<T> {
         // Otherwise return a no-op function.
         Ok(Func::wrap(store, || {}))
     }
+}
+
+/// Result of [`build_dylink_child_store`]: a fully set-up child Wasmtime store that
+/// shares the parent cage's linear memory.
+///
+/// This bundles everything a caller needs to finish wiring a *thread* or a *grate
+/// worker* (both are separate `Store`s that share the cage's single linear memory):
+/// the child [`Store`](crate::Store), its main-module [`Instance`], the per-store
+/// [`Linker`] and [`LindGOT`] (which the caller attaches to its host context), the
+/// epoch global handler, and the post-TLS stack top.
+#[allow(missing_docs)]
+pub struct LindDylinkChildStore<T: 'static> {
+    pub store: crate::Store<T>,
+    pub instance: Instance,
+    pub instance_id: InstanceId,
+    pub linker: Linker<T>,
+    pub got: Option<LindGOT>,
+    pub epoch_handler: Option<*mut u64>,
+    /// Stack top after per-instance TLS has been carved out of the input `stack_addr`.
+    /// Threads set `__stack_pointer` relative to this; grate workers use it as the
+    /// per-call stack-reset target.
+    pub stack_top: u32,
+}
+
+/// Build a child Wasmtime store that shares the parent cage's linear memory, set up for
+/// dynamic linking (or static, when `dylink_enabled` is `false`).
+///
+/// This is the per-store dynamic-linking replay used to create **grate workers** (each
+/// worker is a separate `Store` that shares the cage's single linear memory). It mirrors,
+/// step for step, the thread-creation path in `lind-multi-process::pthread_create_call`
+/// (each thread is likewise a separate `Store` sharing memory). That path currently keeps
+/// its own inline copy of this logic; unifying it to call this helper is a deferred DRY
+/// cleanup (kept separate for now to avoid destabilizing the proven thread path). If you
+/// change one, change the other. Wasmtime `Table`/`Global`
+/// objects are store-bound and cannot be reused across stores, so each child must:
+/// rebuild a fresh per-store linker from `snapshot`, allocate a fresh indirect function
+/// table, replay the preloaded and dlopen'd libraries into the new store (re-growing the
+/// table in the same order and applying the parent's global snapshots so GOT cell values
+/// and memory bases match), instantiate the main module, and carve per-instance TLS out
+/// of `stack_addr` (growing downward).
+///
+/// It deliberately does NOT touch the lind `LindCtx` (cageid/tid bookkeeping,
+/// `attach_linker`/`attach_got_table`), perform signal init, register the vmctx, or run
+/// `_start`/asyncify rewind — those are caller-specific and stay in `pthread_create` /
+/// the grate worker builder. Keeping them out lets this helper live in the wasmtime crate
+/// (where all the involved types are in scope) and remain free of lind-multi-process types.
+///
+/// `stack_addr` is the high address of the child's stack region (stacks grow down); for a
+/// thread it is the thread stack top, for a grate worker it is the worker's stack-slot top.
+/// The returned `stack_top` is `stack_addr` after TLS has been reserved.
+pub fn build_dylink_child_store<T: 'static>(
+    engine: &Engine,
+    child_host: T,
+    symbol_table: SymbolTable,
+    cageid: u64,
+    modules: &[(String, String, Module)],
+    dlopen_modules: &[(String, String, Module)],
+    snapshot: &(
+        Vec<(String, String, GlobalType, Val)>,
+        Vec<(String, String, Arc<HostFunc>)>,
+        Option<(String, String, ClonedMemory)>,
+    ),
+    global_snapshots: &HashMap<String, Vec<(GlobalIndex, i64)>>,
+    dylink_enabled: bool,
+    mut stack_addr: u32,
+) -> Result<LindDylinkChildStore<T>> {
+    // The main module is the first entry in the module list.
+    let module = modules
+        .get(0)
+        .expect("module list must contain the main module")
+        .2
+        .clone();
+
+    let store_inner = crate::Store::<T>::new_inner(engine, symbol_table)?;
+    let mut store = crate::Store::new_with_inner(engine, child_host, store_inner)?;
+
+    let mut child_got = if dylink_enabled {
+        Some(LindGOT::new())
+    } else {
+        None
+    };
+
+    // Rebuild a fresh per-store linker from the parent's snapshot: store-local Globals
+    // (re-registering GOT cell pointers), the shared memory re-defined into this store,
+    // and store-independent host functions re-inserted.
+    let (mut linker, memory_base_table, epoch_handler, _) = Linker::new_child_linker(
+        &mut store,
+        engine,
+        &mut child_got,
+        &snapshot.0,
+        &snapshot.1,
+        &snapshot.2,
+    )?;
+
+    let child_table = if dylink_enabled {
+        // The main module declares the minimal indirect-function-table size via its
+        // table import; start the fresh table there.
+        let mut table_size: u64 = 0;
+        for import in module.imports() {
+            if let ExternType::Table(table) = import.ty() {
+                table_size = table.minimum();
+            }
+        }
+        let mut child_table = linker.attach_function_table(&mut store, table_size as u32)?;
+        linker.attach_asyncify(&mut store)?;
+
+        // Replay each preloaded library into this store, re-growing the shared table in
+        // the SAME order as the parent so cloned GOT indices remain valid.
+        for (name, _path, lib_module) in modules.iter().skip(1) {
+            let dylink_info = lib_module.dylink_meminfo();
+            let dylink_info = dylink_info.as_ref().unwrap();
+            let table_start = child_table.size(&mut store) as i32;
+
+            lind_log!(
+                DYLINK,
+                "[debug] library table_start: {}, grow: {}",
+                table_start,
+                dylink_info.table_size
+            );
+            child_table.grow(
+                &mut store,
+                dylink_info.table_size as u64,
+                crate::Ref::Func(None),
+            )?;
+
+            let module_name = lib_module.name().unwrap_or("");
+            let module_memory_base = *memory_base_table
+                .get(module_name)
+                .expect("memory base not found for library");
+
+            linker.allow_shadowing(true);
+            linker.module_with_child(
+                &mut store,
+                cageid,
+                name,
+                lib_module,
+                &mut child_table,
+                table_start,
+                module_memory_base,
+                ChildLibraryType::Thread(&mut stack_addr),
+                global_snapshots
+                    .get(module_name)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+            )?;
+            linker.allow_shadowing(false);
+        }
+
+        Some(child_table)
+    } else {
+        None
+    };
+
+    // Workers/threads share the cage's linear memory. `is_thread` is only consulted on
+    // fork paths (which neither a freshly-created thread child nor a grate worker takes
+    // here), so this is a safe, behavior-neutral label that also matches the thread path
+    // this routine is modeled on.
+    store.set_is_thread(true);
+
+    let (instance, _stack_arena, instance_id) =
+        linker.instantiate_with_lind_thread(&mut store, &module, false)?;
+
+    // Register the main-module instance by name so global-snapshot lookups resolve it,
+    // then restore the parent's globals (GOT cell addresses, stack pointer, memory base).
+    let main_module_name = module.name().unwrap_or("");
+    store
+        .as_context_mut()
+        .register_named_instance(main_module_name.to_string(), instance_id);
+    instance.apply_global_snapshots(
+        &mut store,
+        global_snapshots
+            .get(main_module_name)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+    );
+
+    if dylink_enabled {
+        let mut child_table = child_table.unwrap();
+        let fpcast_enabled = engine.fpcast_enabled();
+        // got=None: the table is rebuilt for this store but GOT cell values come from the
+        // applied global snapshot, so they must not be re-derived here.
+        instance.apply_GOT_relocs(&mut store, None, &child_table, None, fpcast_enabled)?;
+
+        // Expose the main module's exports to this store's linker (skip signal_callback).
+        linker.instance_dylink(&mut store, "env", instance, vec!["signal_callback"])?;
+
+        // Replay dlopen'd libraries the same way as preloaded ones.
+        for (name, _path, lib_module) in dlopen_modules.iter() {
+            let dylink_info = lib_module.dylink_meminfo();
+            let dylink_info = dylink_info.as_ref().unwrap();
+            let table_start = child_table.size(&mut store) as i32;
+
+            lind_log!(
+                DYLINK,
+                "[debug] dlopen library table_start: {}, grow: {}",
+                table_start,
+                dylink_info.table_size
+            );
+            child_table.grow(
+                &mut store,
+                dylink_info.table_size as u64,
+                crate::Ref::Func(None),
+            )?;
+
+            let module_name = lib_module.name().unwrap_or("");
+            let module_memory_base = *memory_base_table
+                .get(module_name)
+                .expect("memory base not found for library");
+
+            linker.allow_shadowing(true);
+            linker.module_with_child(
+                &mut store,
+                cageid,
+                name,
+                lib_module,
+                &mut child_table,
+                table_start,
+                module_memory_base,
+                ChildLibraryType::Thread(&mut stack_addr),
+                global_snapshots
+                    .get(module_name)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+            )?;
+            linker.allow_shadowing(false);
+        }
+    }
+
+    // Carve per-instance TLS out of the stack (grows downward). The remaining stack_addr
+    // becomes the effective stack top for this child.
+    if let Ok(init_tls) =
+        instance.get_typed_func::<i32, ()>(store.as_context_mut(), "__wasm_init_tls")
+    {
+        let get_tls_size =
+            instance.get_typed_func::<(), i32>(store.as_context_mut(), "__get_aligned_tls_size")?;
+        let tls_size = get_tls_size.call(store.as_context_mut(), ())?;
+        stack_addr -= tls_size as u32;
+        init_tls.call(store.as_context_mut(), stack_addr as i32)?;
+    }
+
+    Ok(LindDylinkChildStore {
+        store,
+        instance,
+        instance_id,
+        linker,
+        got: child_got,
+        epoch_handler,
+        stack_top: stack_addr,
+    })
 }
 
 /// Additional APIs for attaching common imports used by the Lind runtime and toolchain.

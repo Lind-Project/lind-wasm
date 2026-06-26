@@ -706,25 +706,80 @@ fn load_main_module(
     // This function will be called at either the first cage or exec-ed cages.
     set_vmctx_thread(cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-    // Grate calls only supports static linking for now, so we only initialize the grate pool and register
-    // grate workers when dylink is not enabled.
-    if !dylink_metadata.dylink_enabled {
-        // 4) register grate workers for this cage
-        let grate_template = GrateTemplate {
-            engine: module.engine().clone(),
-            module: module.clone(),
-            linker: linker_guard.clone(),
+    // 4) Register grate workers for this cage. Grates now work under both static and
+    // dynamic builds.
+    //
+    // Static grates: workers clone the template linker and instantiate the module directly
+    // (worker_builder = None).
+    //
+    // Dynamically linked grates: a worker is a separate Store sharing the cage's linear
+    // memory, and Wasmtime Table/Global objects are store-bound, so each worker must
+    // rebuild its own per-store linker, indirect function table, and GOT — exactly like a
+    // thread of the grate cage. We capture, from the fully-relocated main store, everything
+    // build_dylink_child_store needs and hand it to the worker pool as a worker_builder.
+    let worker_builder: Option<WorkerBuilder<HostCtx>> = if dylink_metadata.dylink_enabled {
+        let engine = module.engine().clone();
+        let symbol_table = store.as_context_mut().get_library_symbol_table().clone();
+        let (modules, dlopen_modules) = {
+            let ctx = store.data().lind_fork_ctx.as_ref().unwrap();
+            (ctx.modules().to_vec(), ctx.dlopen_modules().to_vec())
         };
-        let host = store.data().clone();
+        // Snapshot the parent linker's store-independent imports (GOT cells, host funcs,
+        // shared memory) and all global values AFTER GOT relocation has finalized them.
+        let snapshot = linker_guard.get_linker_snapshot_for_child(&mut *store, true);
+        let global_snapshots = store.as_context_mut().get_global_snapshot();
 
-        // initialize the grate pool for later use in grate calls and
-        // other syscalls that require re-entry into wasmtime runtime.
-        init_grate_pool();
-        unregister_grate_handler(cageid);
+        Some(Box::new(
+            move |cageid: u64, _worker_id: u64, host: HostCtx, slot_top: u32| {
+                let built = wasmtime::build_dylink_child_store(
+                    &engine,
+                    host,
+                    symbol_table.clone(),
+                    cageid,
+                    &modules,
+                    &dlopen_modules,
+                    &snapshot,
+                    &global_snapshots,
+                    true, /* dylink_enabled */
+                    slot_top,
+                )?;
+                let wasmtime::LindDylinkChildStore {
+                    mut store,
+                    instance,
+                    linker,
+                    got,
+                    stack_top,
+                    ..
+                } = built;
+                // Give the worker's host context its own per-store linker and GOT so any
+                // later ctx.linker / ctx.got use stays consistent within this worker store.
+                {
+                    let ctx = store.data_mut().lind_fork_ctx.as_mut().unwrap();
+                    ctx.attach_linker(linker);
+                    ctx.attach_got_table(got);
+                }
+                Ok((store, instance, stack_top))
+            },
+        ) as WorkerBuilder<HostCtx>)
+    } else {
+        None
+    };
 
-        register_grate_handler_for_cage(&grate_template, host, cageid)
-            .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
-    }
+    let grate_template = GrateTemplate {
+        engine: module.engine().clone(),
+        module: module.clone(),
+        linker: linker_guard.clone(),
+        worker_builder,
+    };
+    let host = store.data().clone();
+
+    // initialize the grate pool for later use in grate calls and
+    // other syscalls that require re-entry into wasmtime runtime.
+    init_grate_pool();
+    unregister_grate_handler(cageid);
+
+    register_grate_handler_for_cage(&grate_template, host, cageid)
+        .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
 
     // 5) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);

@@ -80,7 +80,7 @@ use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
 use wasmtime::error::Context as WasmtimeContext;
-use wasmtime::{Engine, Global, Linker, Module, Store, TypedFunc, Val};
+use wasmtime::{Engine, Global, Instance, Linker, Module, Store, TypedFunc, Val};
 
 type PassFptrTyped = TypedFunc<
     (
@@ -103,6 +103,24 @@ type PassFptrTyped = TypedFunc<
 >;
 
 type WorkerId = u64;
+
+/// Optional per-worker store builder for dynamically linked grates.
+///
+/// Static grates clone the template linker and instantiate the module directly (see the
+/// `None` branch of [`create_worker`]). Dynamically linked grates cannot do that: each
+/// worker owns a separate `Store`, and Wasmtime `Table`/`Global` objects are store-bound,
+/// so a worker must rebuild its own per-store linker, indirect function table, and GOT —
+/// exactly like a thread of the grate cage. That replay needs `LindGOT`/`LindCtx`
+/// machinery that lives in crates above `lind-3i`, so it is injected here as an opaque
+/// builder rather than depended upon directly.
+///
+/// Arguments: `(cageid, worker_id, host, slot_top)`. Returns the worker's
+/// `(Store, Instance, effective_stack_top)`, where `effective_stack_top` is the worker's
+/// stack-slot top AFTER per-instance TLS has been reserved (TLS is carved downward from
+/// `slot_top`). This is the value the worker resets `__stack_pointer` to before each call,
+/// so it must sit below the TLS region — see [`GrateWorker::reset_worker_stack`].
+pub type WorkerBuilder<T> =
+    Box<dyn Fn(u64, u64, T, u32) -> anyhow::Result<(Store<T>, Instance, u32)>>;
 
 const DEFAULT_GRATE_WORKERS: usize = MAX_GRATE_WORKERS;
 const GRATE_WORKERS_ENV: &str = "LIND_GRATE_WORKERS";
@@ -127,7 +145,7 @@ pub enum ConcurrencyMode {
 /// construct worker-local execution contexts for the same grate module.
 /// Each worker clones or reuses these components to create its own
 /// `Store + Instance` runtime state.
-pub struct GrateTemplate<T> {
+pub struct GrateTemplate<T: 'static> {
     /// The Wasmtime engine used to create worker-local stores and instances.
     ///
     /// This is shared across all workers for the same grate.
@@ -144,6 +162,14 @@ pub struct GrateTemplate<T> {
     /// Each worker starts from this template linker and clones it during
     /// worker creation so that instantiation can proceed independently.
     pub linker: Linker<T>,
+
+    /// Per-worker store builder for dynamically linked grates.
+    ///
+    /// `None` for statically linked grates: `create_worker` clones [`Self::linker`] and
+    /// instantiates [`Self::module`] directly. `Some` for dynamically linked grates: each
+    /// worker store is rebuilt with full dynamic-linking replay (separate store sharing the
+    /// cage memory, fresh per-store linker/table/GOT). See [`WorkerBuilder`].
+    pub worker_builder: Option<WorkerBuilder<T>>,
 }
 
 /// Marshalled arguments for one grate call.
@@ -274,7 +300,8 @@ fn worker_stack_base(cageid: u64, workerid: WorkerId) -> u32 {
             panic!("STACK_ARENA_BASE is not initialized for cageid {}", cageid);
         });
     stack_arena_base
-        + (workerid as u32 - 1) * (GRATE_STACK_GUARD_SIZE + GRATE_STACK_SLOT_SIZE)
+        + (workerid as u32 - 1)
+            * (GRATE_STACK_GUARD_SIZE + lind_platform_const::grate_stack_slot_size())
         + GRATE_STACK_GUARD_SIZE
 }
 
@@ -284,7 +311,7 @@ fn worker_stack_base(cageid: u64, workerid: WorkerId) -> u32 {
 /// starting a new grate call, ensuring that each invocation begins with a clean
 /// stack state inside that worker’s private stack slot.
 fn worker_stack_top(cageid: u64, workerid: WorkerId) -> u32 {
-    worker_stack_base(cageid, workerid) + GRATE_STACK_SLOT_SIZE
+    worker_stack_base(cageid, workerid) + lind_platform_const::grate_stack_slot_size()
 }
 
 fn configured_grate_workers() -> usize {
@@ -681,13 +708,32 @@ pub fn create_worker<T>(
 where
     T: Clone + 'static,
 {
-    let mut store = Store::new(&template.engine, host);
-
-    let linker: Linker<T> = template.linker.clone();
-
-    let (instance, _, _) = linker
-        .instantiate_with_lind_thread(&mut store, &template.module, false)
-        .context("failed to instantiate grate module")?;
+    // Acquire this worker's store + instance + effective stack top.
+    //
+    // Static grates (no dylink section): clone the template linker and instantiate the
+    // module directly. All workers are byte-identical because globals are baked in. The
+    // worker's stack top is simply the slot top.
+    //
+    // Dynamically linked grates: delegate to the injected worker builder, which rebuilds a
+    // separate per-store linker/table/GOT (sharing the cage's linear memory) just like a
+    // thread of the grate cage. It returns the effective stack top AFTER per-instance TLS
+    // has been carved out of the slot, which the worker must use as its stack reset target.
+    let (mut store, instance, stack_top) = match &template.worker_builder {
+        Some(build_worker) => {
+            let slot_top = worker_stack_top(cageid, worker_id);
+            build_worker(cageid, worker_id, host, slot_top)
+                .context("failed to build dynamically linked grate worker")?
+        }
+        None => {
+            let mut store = Store::new(&template.engine, host);
+            let linker: Linker<T> = template.linker.clone();
+            let (instance, _, _) = linker
+                .instantiate_with_lind_thread(&mut store, &template.module, false)
+                .context("failed to instantiate grate module")?;
+            let stack_top = worker_stack_top(cageid, worker_id);
+            (store, instance, stack_top)
+        }
+    };
 
     let pass_fptr_func = match instance.get_export(&mut store, "pass_fptr_to_wt") {
         Some(_) => Some(instance.get_typed_func::<(
@@ -709,8 +755,9 @@ where
         None => None,
     };
 
+    // `stack_top` is already determined above (slot top for static, post-TLS slot top for
+    // dynamic); only the slot base is computed here.
     let stack_base = worker_stack_base(cageid, worker_id);
-    let stack_top = worker_stack_top(cageid, worker_id);
     let stack_pointer = instance
         .get_global(&mut store, "__stack_pointer")
         .ok_or_else(|| anyhow::anyhow!("missing __stack_pointer"))?;

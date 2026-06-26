@@ -239,7 +239,11 @@ def run_subprocess(cmd: list[str], timeout: int | None = None, cwd: Path | None 
 
 
 def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
-    grate_compile_cmd = [GRATE_CLANG, "-s", "--compile-grate", "--output-dir", "grates", test.grate_source.name]
+    # Grates are always built as dynamically linked (no -s); that is the only
+    # supported grate build mode for the test suite.
+    grate_compile_cmd = (
+        [GRATE_CLANG, "--compile-grate", "--output-dir", "grates", test.grate_source.name]
+    )
     cage_compile_cmd = [GRATE_CLANG, test.cage_source.name]
 
     try:
