@@ -1,5 +1,41 @@
 use libc;
+use std::io;
+use std::path::Path;
 use sysdefs::data::fs_struct::{FSData, StatData};
+
+/// ELF magic: \x7fELF
+const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+/// Wasm magic: \0asm
+const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6d];
+
+/// The type of an executable binary as determined by its file header magic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryFileType {
+    Elf,
+    Wasm,
+    Unknown,
+}
+
+/// Reads the first four bytes of `path` and returns the corresponding
+/// [`BinaryFileType`] based on the ELF (`\x7fELF`) or Wasm (`\0asm`) magic.
+///
+/// Returns `BinaryFileType::Unknown` for any file whose magic does not match
+/// either format, and also on any I/O error (e.g. file not found).
+pub fn detect_binary_type(path: &Path) -> BinaryFileType {
+    let mut magic = [0u8; 4];
+    match read_magic(path, &mut magic) {
+        Ok(4) if magic == ELF_MAGIC => BinaryFileType::Elf,
+        Ok(4) if magic == WASM_MAGIC => BinaryFileType::Wasm,
+        _ => BinaryFileType::Unknown,
+    }
+}
+
+fn read_magic(path: &Path, buf: &mut [u8; 4]) -> io::Result<usize> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let n = f.read(buf)?;
+    Ok(n)
+}
 
 // These conversion functions are necessary because:
 // 1. Host kernel's libc structures vary across platforms, while our StatData/FSData provide a stable ABI

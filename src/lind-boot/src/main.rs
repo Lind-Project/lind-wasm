@@ -1,10 +1,13 @@
 mod cli;
+mod lind_mpk;
 mod lind_wasmtime;
 
 use crate::{
     cli::CliOptions,
-    lind_wasmtime::{exec_wasm, execute_wasmtime, init_wasmtime, precompile_module},
+    lind_mpk::execute_mpk,
+    lind_wasmtime::{exec_wasm, init_wasmtime, precompile_module},
 };
+use typemap::{BinaryFileType, detect_binary_type};
 
 use clap::Parser;
 use libc;
@@ -75,25 +78,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize the Wasmtime runtime (one-time setup)
     let lind_manager = init_wasmtime();
 
-    // Execute the selected runtime backend and translate its unified
-    // execution result into a host-level process exit status.
+    // Detect the binary format from the file magic and route to the
+    // appropriate runtime backend:
+    //   - ELF  (.so / native)  → MPK-isolated dlmopen execution
+    //   - Wasm (.wasm/.cwasm)  → Wasmtime execution
     //
-    // At this layer, we intentionally do NOT interpret Wasm return
-    // conventions or runtime-specific details. All exit semantics
-    // (e.g., proc_exit, return values, traps) are already normalized
-    // inside `exec_wasm` into a single `i32` exit code.
-    //
-    // This design keeps the runtime backend pluggable (e.g., Wasmtime,
-    // MPK-based runtime, SGX-enclosed runtime) while preserving a
-    // consistent host process contract: exit(code) on success.
-    // If the runtime backend fails before producing a normalized
-    // program exit code, terminate with EX_SOFTWARE (70) to signal
-    // a runtime-level failure rather than a cage-provided exit code.
-    //
-    // Future enhancement: file type detection can be added here to route
-    // to different backends (exec_wasm vs exec_elf_mpk vs exec_grate).
+    // All exit semantics are normalized to a single i32 exit code inside
+    // each backend. EX_SOFTWARE (70) signals a runtime-level failure.
+    let binary_path = std::path::Path::new(lindboot_cli.wasm_file());
+    let file_type = detect_binary_type(binary_path);
+
     let cage_id = CAGE_START_ID as u64;
-    match exec_wasm(lindboot_cli, lind_manager, cage_id) {
+    let result = match file_type {
+        BinaryFileType::Elf => execute_mpk(lindboot_cli),
+        BinaryFileType::Wasm | BinaryFileType::Unknown => {
+            exec_wasm(lindboot_cli, lind_manager, cage_id)
+        }
+    };
+    match result {
         Ok(code) => std::process::exit(code),
         Err(e) => {
             eprintln!("{:?}", e);
