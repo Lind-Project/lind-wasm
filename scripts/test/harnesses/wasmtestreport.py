@@ -402,14 +402,14 @@ def add_test_result(result, file_path, status, error_type, output, timing_info=N
     if status.lower() == "success":
         result["number_of_success"] += 1
         result["success"].append(file_path)
-        logger.info("SUCCESS")
+        logger.debug("SUCCESS")
     else:
         result["number_of_failures"] += 1
         result["failures"].append(file_path)
         
         error_message = error_types.get(error_type, "Undefined Failure")
 
-        logger.error(f"FAILURE: {error_message}")
+        logger.debug(f"FAILURE: {error_message}")
         if error_type in error_types:
             result[f"number_of_{error_type}"] += 1
             result[error_type].append(file_path)
@@ -1298,7 +1298,7 @@ def is_file_in_folder(file_path, folder_list):
 # ----------------------------------------------------------------------
 def should_run_file(file_path, run_folders, skip_folders, skip_test_cases):
     if file_path in skip_test_cases:
-        logger.info(f"Skipping {file_path}")
+        logger.debug(f"Skipping {file_path}")
         return False
 
     if skip_folders and is_file_in_folder(file_path, skip_folders):
@@ -1580,24 +1580,97 @@ def get_test_mode(source_file):
 #          results - results dictionary, timeout_sec - timeout for tests
 # - Output: None (modifies results dictionary)
 # ----------------------------------------------------------------------
+def _get_new_test_case(result, before_test_cases):
+    """Return the newly recorded test case after running one test, if any."""
+    after_test_cases = set(result["test_cases"].keys())
+    new_cases = list(after_test_cases - before_test_cases)
+    if not new_cases:
+        return None, None
+    test_name = new_cases[0]
+    return test_name, result["test_cases"][test_name]
+
+
+def _print_failure_details(failed_tests):
+    """Print deferred failure details after the compact progress line."""
+    if not failed_tests:
+        return
+
+    print("\nFailures:", flush=True)
+    for test_name, test_case in failed_tests:
+        print(f"\n{test_name}", flush=True)
+        error_type = test_case.get("error_type")
+        if error_type:
+            print(f"Error type: {error_type}", flush=True)
+
+        output = test_case.get("output", "")
+        if output:
+            print(output.rstrip(), flush=True)
+
+
 def run_tests(config, artifacts_root, results, timeout_sec):
-    """Execute all tests"""
+    """Execute all tests with compact progress and deferred failure details."""
     total_count = len(config['tests_to_run'])
+    failed_tests = []
+    skipped_count = 0
+
+    print(f"Running {total_count} tests")
     
-    for i, original_source in enumerate(config['tests_to_run']):
-        logger.info(f"[{i+1}/{total_count}] {original_source}")
-        
+    for original_source in config['tests_to_run']:
         dest_source = setup_test_file_in_artifacts(original_source, artifacts_root)
         
         # Determine test type and run appropriate test
         test_mode = get_test_mode(original_source)
+        if test_mode not in ("deterministic", "fail"):
+            logger.debug(f"Test file {original_source} is not in a deterministic or fail folder - skipping")
+            print("S", end="", flush=True)
+            skipped_count += 1
+            continue
+
+        result_bucket = results[test_mode]
+        before_test_cases = set(result_bucket["test_cases"].keys())
+
         if test_mode == "deterministic":
-            test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
-        elif test_mode == "fail":
-            test_single_file_fail(dest_source, results["fail"], timeout_sec, allow_precompiled=config['allow_precompiled'])
+            test_single_file_deterministic(
+                dest_source,
+                result_bucket,
+                timeout_sec,
+                allow_precompiled=config['allow_precompiled'],
+            )
         else:
-            # Log warning for tests not in deterministic/fail folders
-            logger.warning(f"Test file {original_source} is not in a deterministic or fail folder - skipping")
+            test_single_file_fail(
+                dest_source,
+                result_bucket,
+                timeout_sec,
+                allow_precompiled=config['allow_precompiled'],
+            )
+
+        test_name, test_case = _get_new_test_case(result_bucket, before_test_cases)
+        if test_case is None:
+            print("S", end="", flush=True)
+            skipped_count += 1
+            continue
+
+        if str(test_case.get("status", "")).lower() == "success":
+            print(".", end="", flush=True)
+        else:
+            print("X", end="", flush=True)
+            failed_tests.append((str(original_source), test_case))
+
+    print("\n", flush=True)
+
+    passed_count = sum(results[k]["number_of_success"] for k in ("deterministic", "fail"))
+    failed_count = sum(results[k]["number_of_failures"] for k in ("deterministic", "fail"))
+
+    summary_parts = [
+        f"{passed_count} passed",
+        f"{failed_count} failed",
+    ]
+    if skipped_count:
+        summary_parts.append(f"{skipped_count} skipped")
+
+    print(", ".join(summary_parts), flush=True)
+    _print_failure_details(failed_tests)
+    sys.stdout.flush()
 
 def build_fail_message(case: str, native_output: str, wasm_output: str, native_retcode=None, wasm_retcode=None) -> str:
     """
