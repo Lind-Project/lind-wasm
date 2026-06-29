@@ -1,60 +1,163 @@
 ---
 id: Overview
+hide:
+  - toc
 ---
 
-# Lind-Wasm
+<section class="lw-hero">
+  <div class="lw-hero__content">
+    <div class="lw-brand">
+      <img src="images/lindv1.png" alt="Lind-Wasm logo">
+      <span>Lind-Wasm</span>
+    </div>
+    <h1>POSIX-style isolation, rebuilt for WebAssembly.</h1>
+    <p class="lw-hero__lead">
+      Run mutually untrusted Linux-style workloads as isolated WebAssembly cages
+      inside one unprivileged process, with programmable syscall interposition
+      and a small trusted runtime.
+    </p>
+    <div class="lw-actions">
+      <a class="lw-button lw-button--primary" href="getting-started/">Get started</a>
+      <a class="lw-button lw-button--secondary" href="internal/">Explore internals</a>
+    </div>
+  </div>
+  <div class="lw-runtime-panel" aria-label="Lind-Wasm runtime flow">
+    <div class="lw-panel-top">
+      <span></span>
+      <span></span>
+      <span></span>
+      <code>lind-wasm runtime</code>
+    </div>
+    <div class="lw-stack">
+      <div class="lw-grid">
+        <div class="lw-node lw-node--app">
+          <strong>Application cage</strong>
+          <span>Wasm + lind-glibc</span>
+        </div>
+        <div class="lw-node lw-node--grate">
+          <strong>Grate</strong>
+          <span>policy cage</span>
+        </div>
+      </div>
+      <div class="lw-route">
+        <span>syscalls through 3i</span>
+      </div>
+      <div class="lw-node lw-node--threei">
+        <strong>3i routing table</strong>
+        <span>lookup, interpose, delegate</span>
+      </div>
+      <div class="lw-route">
+        <span>host calls</span>
+      </div>
+      <div class="lw-node lw-node--rawposix">
+        <strong>RawPOSIX</strong>
+        <span>trusted host boundary</span>
+      </div>
+    </div>
+  </div>
+</section>
 
-Lind is a sandboxing system that runs multiple mutually untrusted applications within a single, unprivileged Linux process. Each application executes in an isolated execution context, called a cage, with its own memory, control flow, and system call behavior.
+<section class="lw-strip" aria-label="Core properties">
+  <div>
+    <strong>Single host process</strong>
+    <span>Many isolated cages share one unprivileged runtime.</span>
+  </div>
+  <div>
+    <strong>POSIX-oriented</strong>
+    <span>Applications use a modified glibc and familiar process semantics.</span>
+  </div>
+  <div>
+    <strong>Programmable mediation</strong>
+    <span>3i can inspect, redirect, or handle system calls.</span>
+  </div>
+</section>
 
-Unlike traditional process isolation, Lind provides strong intra-process isolation while aiming to preserve POSIX-style semantics and avoid kernel modifications or privileged execution.
+## Built For Sandboxed Systems Research
 
-In Old Norse, Old High German, and Old English, a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight and resistant to splitting — an appropriate metaphor for a sandboxing system built from layered isolation technologies.
+<div class="lw-feature-grid">
+  <article>
+    <h3>Run untrusted programs</h3>
+    <p>
+      Compile C/POSIX workloads to WebAssembly and execute them in cages with
+      isolated memory, control flow, and syscall routing state.
+    </p>
+  </article>
+  <article>
+    <h3>Interpose without kernel changes</h3>
+    <p>
+      Route calls through 3i to userspace grates or RawPOSIX, enabling policy
+      and system services without privileged execution.
+    </p>
+  </article>
+  <article>
+    <h3>Study runtime boundaries</h3>
+    <p>
+      Explore the division between Wasmtime, lind-glibc, 3i, RawPOSIX, and
+      multiprocess support through focused internal documentation.
+    </p>
+  </article>
+</div>
 
-Lind-Wasm is a realization of Lind that uses WebAssembly for software fault isolation and a small trusted runtime to enforce isolation and mediate system calls.
+## How It Fits Together
 
-## Technology Overview
+<div class="lw-system">
+  <div class="lw-system__copy">
+    <p>
+      Lind-Wasm realizes Lind with WebAssembly software fault isolation and a
+      compact trusted runtime. Applications issue system calls through 3i; those
+      calls can be routed to grates at the cage layer or passed down to RawPOSIX
+      for host interaction.
+    </p>
+    <div class="lw-link-list">
+      <a href="internal/3i/">3i syscall routing</a>
+      <a href="internal/grates/">Grates</a>
+      <a href="internal/rawposix/">RawPOSIX</a>
+      <a href="internal/wasmtime/">Wasmtime integration</a>
+    </div>
+  </div>
+  <figure class="lw-system__visual">
+    <img src="images/doc-images/syscall_flow_diagram.svg" alt="Lind-Wasm syscall routing flow">
+  </figure>
+</div>
 
-### Cages
+## Runtime Layers
 
-A cage is an isolated execution context within the Lind process. Conceptually, a cage is similar to a Linux process, but multiple cages coexist within a single host process.
+<div class="lw-layer-list">
+  <a href="internal/libc/">
+    <span>01</span>
+    <strong>lind-glibc</strong>
+    <em>POSIX-facing libc adapted for WebAssembly and 3i calls.</em>
+  </a>
+  <a href="internal/3i/">
+    <span>02</span>
+    <strong>3i</strong>
+    <em>Per-cage handler tables for syscall lookup, delegation, and interposition.</em>
+  </a>
+  <a href="internal/wasmtime/">
+    <span>03</span>
+    <strong>Wasmtime</strong>
+    <em>Execution engine and embedding layer for isolated cages.</em>
+  </a>
+  <a href="internal/rawposix/">
+    <span>04</span>
+    <strong>RawPOSIX</strong>
+    <em>Trusted runtime services that mediate access to host kernel behavior.</em>
+  </a>
+</div>
 
-Applications are recompiled to WebAssembly and linked against a modified glibc so that all system calls are issued through 3i. Most C/POSIX applications can be rebuilt without source-level changes.
+## Start Here
 
-Each cage has:
-- isolated memory and control flow
-- its own system call routing configuration
-- POSIX-like process and thread semantics
-
-### Grates
-
-A grate is a cage whose primary purpose is to intercept and handle system calls issued by other cages. Lind makes no distinction between cages and grates at the mechanism level; any cage may act as a grate by registering system call handlers.
-
-Grates are commonly used to implement policy and system services outside the trusted runtime. They are lightweight, composable, and run entirely in user space.
-
-### 3i
-
-The Intercage Interposition Interface (3i) provides a programmable system call routing mechanism between cages, grates, and the microvisor.
-
-Each cage has its own system call table, which may route system calls to:
-- another cage acting as a grate
-- or the microvisor
-
-3i enables interception, delegation, filtering, and mediation of system calls without modifying kernel code.
-
-### Microvisor (RawPOSIX)
-
-RawPOSIX is a small, trusted runtime component that provides POSIX-compatible system call implementations on behalf of cages. It runs entirely within the unprivileged Lind process and is responsible for interacting with the host kernel.
-
-## Components
-
-### Wasmtime
-
-Lind-Wasm uses [Wasmtime](https://github.com/bytecodealliance/wasmtime) as the WebAssembly runtime responsible for executing cages. Wasmtime provides fast execution, memory isolation, and a well-defined embedding API.
-
-### lind-glibc
-
-Lind includes a modified glibc that can be compiled to WebAssembly. The modifications remove architecture-specific assembly and redirect system calls through 3i using a uniform 64-bit calling convention.
-
-### 3i Implementation
-
-The 3i implementation provides the core system call routing and interposition mechanism used by both application cages and grates.
+<div class="lw-start-grid">
+  <a href="getting-started/">
+    <strong>Getting started</strong>
+    <span>Set up the project and run the first Lind-Wasm workflow.</span>
+  </a>
+  <a href="contribute/testing/">
+    <strong>Testing</strong>
+    <span>Run unit, integration, and end-to-end test paths.</span>
+  </a>
+  <a href="contribute/">
+    <strong>Contributing</strong>
+    <span>Follow the development, style, and pipeline conventions.</span>
+  </a>
+</div>
