@@ -21,4 +21,9 @@ dashmap = []
 lind-logging = ["sysdefs/lind-logging"]
 
 [dev-dependencies]
+criterion = { workspace = true }
 serial_test = "3"
+
+[[bench]]
+name = "handler_lookup"
+harness = false
