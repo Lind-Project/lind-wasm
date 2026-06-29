@@ -1,6 +1,6 @@
 # lind-wasm
 
-Its pipeline covers both code validation on pull requests and scheduled Docker image builds.
+Its pipeline covers both code validation on pull requests and Docker image builds.
 
 ## Overview
 
@@ -22,7 +22,10 @@ Workflow files are located under `.github/workflows/` in the repository.
 and static analysis.
 
 - **`e2e.yml`** — Builds and runs the full test suite inside a container. Uploads
-HTML and JSON test reports as artifacts and posts a summary comment to the PR.
+HTML and JSON test reports as artifacts and posts a summary comment to the PR. 
+  
+    - [Testing](../testing.md) for details on test.
+    - [End-to-End Testing](../e2e-testing.md) for details on e2e structure.
 
 - **`zizmor.yml`** — Scans GHA workflow files for security vulnerabilities such as
 script injection and overly broad permissions.
@@ -38,11 +41,9 @@ PR to keep storage usage under control.
 
 | Event | Workflows Triggered |
 | --- | --- |
-| PR opened or updated | `lint.yml`, `e2e.yml`, `zizmor.yml` |
-| Push to `main` | `lint.yml`, `e2e.yml`, `docs.yml` |
+| PR opened or updated (non-draft, targeting `main`) | `lint.yml`, `e2e.yml`, `zizmor.yml` |
+| Push to `main` | `lint.yml`, `docs.yml`, `release.yml` |
 | PR closed | `pr-cache-cleanup.yml` |
-| Monthly schedule (1st of each month, 08:00 UTC) | `release.yml` |
-| Manual (`workflow_dispatch`) | `release.yml` |
 
 
 ## GCP Cloud Build
@@ -51,7 +52,7 @@ Build configuration files are located under `scripts/` in the repository.
 
 ### Workflows
 
-- **`dev-build`** — Cloning the `main` branch at the time of execution. Builds `Docker/Dockerfile.dev` and publishes the resulting image to Docker Hub as `securesystemslab/lind-wasm-dev`.
+**`dev-build`** — Cloning the `main` branch at the time of execution. Builds `Docker/Dockerfile.dev` and publishes the resulting image to Docker Hub as `securesystemslab/lind-wasm-dev`.
 
 ## Docker Images
 
@@ -59,7 +60,7 @@ The `lind-wasm` pipeline publishes two Docker images to Docker Hub.
 
 ### `securesystemslab/lind-wasm-dev`
 
-The development image containing the full Lind toolchain for building and running WASM applications.
+The development image containing the full Lind toolchain for building and running WASM applications. Used as the base image for `lind-wasm-apps` and `lind-wasm-example-grates`.
 
 | Property | Detail |
 | --- | --- |
@@ -70,14 +71,13 @@ The development image containing the full Lind toolchain for building and runnin
 
 ### `securesystemslab/lind-wasm`
 
-The release image built from the `release` stage of `Docker/Dockerfile.e2e`.
-
 | Property | Detail |
 | --- | --- |
 | Source | `Docker/Dockerfile.e2e` (`release` stage) |
-| Published by | GHA `release.yml` (monthly) |
+| Published by | GHA `release.yml` (on push to `main`) |
 | Tags | `latest` — most recent build; `sha-<commit>` — immutable snapshot for rollback |
-| Update frequency | Monthly (1st of each month, 08:00 UTC) |
+| Version tags | `vX.Y.Z` — manually applied after a corresponding GitHub Release is created (e.g. `v0.1.0`) |
+| Update frequency | On every push to `main` |
 
 ### Pulling the Images
 
