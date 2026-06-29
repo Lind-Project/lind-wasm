@@ -13,7 +13,7 @@ that comes with the Lind Sandbox. *You'll need [Docker installed](https://docs.d
 
 ```
 docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev  # this might take a while ...
-docker run --platform=linux/amd64 -it securesystemslab/lind-wasm-dev /bin/bash
+docker run --platform=linux/amd64 -it --privileged --ipc=host --init --cap-add=SYS_PTRACE securesystemslab/lind-wasm-dev /bin/bash
 cd lind-wasm
 ```
 
