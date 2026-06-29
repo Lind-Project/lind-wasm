@@ -341,8 +341,8 @@ fn bench_runtime_trampoline_lookup(c: &mut Criterion) {
 
             let trampoline = get_runtime_trampoline(black_box(runtime)).unwrap();
             assert_eq!(
-                trampoline as *const () as usize,
-                noop_trampoline as *const () as usize
+                trampoline(0, runtime, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                0
             );
             black_box(trampoline);
         });

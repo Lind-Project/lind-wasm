@@ -21,7 +21,7 @@ dashmap = []
 lind-logging = ["sysdefs/lind-logging"]
 
 [dev-dependencies]
-criterion = { workspace = true }
+criterion = { version = "0.3", features = ["html_reports"]}
 serial_test = "3"
 
 [[bench]]
