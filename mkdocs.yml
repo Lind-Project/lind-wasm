@@ -4,6 +4,7 @@ repo_url: https://github.com/Lind-Project/lind-wasm/
 edit_uri: edit/main/docs/
 theme:
   name: material
+  logo: images/lindv1.png
   features:
     - content.action.edit
 
@@ -14,6 +15,7 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Technical Overview: technical-overview.md
   - Internal Documentation:
     - internal/index.md
     - libc: internal/libc.md
