@@ -1,0 +1,1830 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://lind-project.github.io/lind-wasm/internal/logging/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Lind Logging System - Lind-Wasm Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/img.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#lind-logging-system" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Lind-Wasm Docs" class="md-header__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Lind-Wasm Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Lind Logging System
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Lind-Wasm Docs" class="md-nav__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Lind-Wasm Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Internal Documentation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Internal Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../libc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    libc
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wasmtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Wasmtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../3i/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threei
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../grates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../clamping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Clamping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rawposix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RawPOSIX
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multiprocess-support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../signals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Signals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../contribute/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/dev-container/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/styleguide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust style guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/toolchain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lind toolchain
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/debug-programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Debug programs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/add-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding to the docs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/security.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/docker-release-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Hub release workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/e2e-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    End-to-End Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipelines
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipelines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/pipelines/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/pipelines/lind-wasm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    lind-wasm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../community/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Community
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Community
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/team/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/conduct/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code of conduct
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-usage-and-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Usage and Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Usage and Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-quick-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 Quick Reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-common-configurations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 Common Configurations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-environment-variable-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 Environment Variable Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.3 Environment Variable Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lind_log_output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LIND_LOG_OUTPUT
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lind_log_categories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LIND_LOG_CATEGORIES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lind_debug_panic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LIND_DEBUG_PANIC
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-compile-time-switch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 Compile-Time Switch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-the-three-diagnostic-levels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. The Three Diagnostic Levels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. The Three Diagnostic Levels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lind_log-general-diagnostic-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lind_log! — General Diagnostic Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lind_debug_panic-soft-panic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lind_debug_panic! — Soft Panic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#panic-unrecoverable-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        panic! — Unrecoverable Failure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-log-categories" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Log Categories
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-output-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Output Format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-compile-time-gating" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Compile-Time Gating
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-global-logger-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Global Logger State
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-initialization-sequence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Initialization Sequence
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#54-category-bitmask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.4 Category Bitmask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#55-file-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.5 File Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#56-logoutputnone-vs-no_logging1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.6 LogOutput::None vs NO_LOGGING=1
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/Lind-Project/lind-wasm/edit/main/docs/internal/logging.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="lind-logging-system">Lind Logging System</h1>
+<h2 id="1-usage-and-configuration">1. Usage and Configuration</h2>
+<h3 id="11-quick-reference">1.1 Quick Reference</h3>
+<p>The logging system is controlled by three environment variables set before launching <code>lind-boot</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Purpose</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LIND_LOG_OUTPUT</code></td>
+<td>Where <code>lind_log!</code> output is written</td>
+<td><code>$LIND_WASM_ROOT/LIND.log</code> (or <code>/tmp/LIND.log</code>)</td>
+</tr>
+<tr>
+<td><code>LIND_LOG_CATEGORIES</code></td>
+<td>Which log categories are emitted</td>
+<td><code>default</code></td>
+</tr>
+<tr>
+<td><code>LIND_DEBUG_PANIC</code></td>
+<td>Behavior of <code>lind_debug_panic!</code></td>
+<td><code>panic-and-exit</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-common-configurations">1.2 Common Configurations</h3>
+<p><strong>Development (default — nothing to set):</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Logs go to $LIND_WASM_ROOT/LIND.log, only Default category, panics on unexpected conditions.</span>
+make<span class="w"> </span>lind-boot
+./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>Print all logs to stderr and see every category:</strong>
+<div class="highlight"><pre><span></span><code><span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>stderr<span class="w"> </span><span class="nv">LIND_LOG_CATEGORIES</span><span class="o">=</span>all<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>Debug dynamic linking only:</strong>
+<div class="highlight"><pre><span></span><code><span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>stderr<span class="w"> </span><span class="nv">LIND_LOG_CATEGORIES</span><span class="o">=</span>dylink<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>Debug ThreeI syscall routing only:</strong>
+<div class="highlight"><pre><span></span><code><span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>stderr<span class="w"> </span><span class="nv">LIND_LOG_CATEGORIES</span><span class="o">=</span>threei<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>Debug both dynamic linking and ThreeI:</strong>
+<div class="highlight"><pre><span></span><code><span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>stderr<span class="w"> </span><span class="nv">LIND_LOG_CATEGORIES</span><span class="o">=</span>dylink,threei<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>Write logs to a custom file:</strong>
+<div class="highlight"><pre><span></span><code><span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>/var/log/lind.log<span class="w"> </span><span class="nv">LIND_LOG_CATEGORIES</span><span class="o">=</span>all<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+<span class="c1"># or equivalently:</span>
+<span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>file:/var/log/lind.log<span class="w"> </span><span class="nv">LIND_LOG_CATEGORIES</span><span class="o">=</span>all<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>Deployment — best-effort continuation on unexpected conditions:</strong>
+<div class="highlight"><pre><span></span><code><span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>/var/log/lind.log<span class="w"> </span><span class="nv">LIND_DEBUG_PANIC</span><span class="o">=</span>log-only<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>CI — silence log noise but keep unexpected-condition detection as test failures:</strong>
+<div class="highlight"><pre><span></span><code><span class="nv">LIND_LOG_OUTPUT</span><span class="o">=</span>none<span class="w"> </span><span class="nv">LIND_DEBUG_PANIC</span><span class="o">=</span>panic-and-exit<span class="w"> </span>./build/lind-boot<span class="w"> </span>program.wasm
+</code></pre></div></p>
+<p><strong>Maximum performance / benchmark — remove all logging code from the binary:</strong>
+<div class="highlight"><pre><span></span><code>make<span class="w"> </span>lind-boot<span class="w"> </span><span class="nv">NO_LOGGING</span><span class="o">=</span><span class="m">1</span>
+</code></pre></div></p>
+<h3 id="13-environment-variable-reference">1.3 Environment Variable Reference</h3>
+<h4 id="lind_log_output"><code>LIND_LOG_OUTPUT</code></h4>
+<p>Controls where <code>lind_log!</code> output is written. Has no effect on whether <code>lind_debug_panic!</code> panics.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stderr</code></td>
+<td>Write to standard error</td>
+</tr>
+<tr>
+<td><code>stdout</code></td>
+<td>Write to standard output</td>
+</tr>
+<tr>
+<td><code>none</code></td>
+<td>Discard all log output (does not suppress panics)</td>
+</tr>
+<tr>
+<td><code>file:/path/to/file</code></td>
+<td>Append to file at path; created if absent</td>
+</tr>
+<tr>
+<td><code>/path/to/file</code></td>
+<td>Same as <code>file:</code> prefix</td>
+</tr>
+</tbody>
+</table>
+<h4 id="lind_log_categories"><code>LIND_LOG_CATEGORIES</code></h4>
+<p>Controls which categories of <code>lind_log!</code> messages are emitted. Messages from disabled categories are discarded before any formatting occurs.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Categories enabled</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>all</code></td>
+<td>All three categories</td>
+</tr>
+<tr>
+<td><code>none</code></td>
+<td>No categories (silences all <code>lind_log!</code>)</td>
+</tr>
+<tr>
+<td><code>default</code></td>
+<td>General / uncategorized messages</td>
+</tr>
+<tr>
+<td><code>dylink</code></td>
+<td>Dynamic linking messages</td>
+</tr>
+<tr>
+<td><code>threei</code></td>
+<td>ThreeI syscall routing messages</td>
+</tr>
+<tr>
+<td><code>dylink,threei</code></td>
+<td>Any comma-separated combination</td>
+</tr>
+</tbody>
+</table>
+<h4 id="lind_debug_panic"><code>LIND_DEBUG_PANIC</code></h4>
+<p>Controls the behavior of <code>lind_debug_panic!</code>. Regardless of this setting, <code>lind_debug_panic!</code> does <strong>not</strong> use the log category filter — it always fires.</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>panic</code> or <code>panic-and-exit</code></td>
+<td>Log the message then call <code>panic!</code></td>
+</tr>
+<tr>
+<td><code>log</code> or <code>log-only</code></td>
+<td>Log the message and return normally</td>
+</tr>
+<tr>
+<td><code>none</code> or <code>no-action</code></td>
+<td>Return immediately without logging or panicking</td>
+</tr>
+</tbody>
+</table>
+<h3 id="14-compile-time-switch">1.4 Compile-Time Switch</h3>
+<p>When benchmarking or building for maximum performance, the entire logging system can be compiled out:</p>
+<div class="highlight"><pre><span></span><code>make<span class="w"> </span>lind-boot<span class="w"> </span><span class="nv">NO_LOGGING</span><span class="o">=</span><span class="m">1</span>
+</code></pre></div>
+<p>With <code>NO_LOGGING=1</code>, both <code>lind_log!</code> and <code>lind_debug_panic!</code> expand to nothing. Formatting arguments are not evaluated — there is zero overhead at the call site.</p>
+<hr />
+<h2 id="2-the-three-diagnostic-levels">2. The Three Diagnostic Levels</h2>
+<p>The logging system distinguishes three escalating levels of concern:</p>
+<div class="highlight"><pre><span></span><code>Is continued execution possible?
+│
+├─ No, always → panic!
+│
+└─ Yes, or maybe →
+       Is this condition expected during normal operation?
+       │
+       ├─ Yes → lind_log!
+       │
+       └─ No — something that should never happen →
+              lind_debug_panic!
+</code></pre></div>
+<h3 id="lind_log-general-diagnostic-output"><code>lind_log!</code> — General Diagnostic Output</h3>
+<p>Use for conditions that are informational or mildly suspicious but do not indicate a failure. Examples: reporting which code path was taken, noting that an optional resource was absent but a fallback succeeded, tracing intermediate values for debuggability.</p>
+<div class="highlight"><pre><span></span><code><span class="n">lind_log</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;cage {} started&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">cageid</span><span class="p">);</span>
+<span class="n">lind_log</span><span class="o">!</span><span class="p">(</span><span class="n">DYLINK</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;resolved symbol {} at 0x{:x}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">sym</span><span class="p">,</span><span class="w"> </span><span class="n">addr</span><span class="p">);</span>
+<span class="n">lind_log</span><span class="o">!</span><span class="p">(</span><span class="n">THREEI</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;registered handler for call {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">call_id</span><span class="p">);</span>
+</code></pre></div>
+<p><code>lind_log!</code> <strong>never panics</strong>. If the category is disabled or the output is <code>None</code>, it returns immediately without evaluating format arguments.</p>
+<h3 id="lind_debug_panic-soft-panic"><code>lind_debug_panic!</code> — Soft Panic</h3>
+<p>Use for conditions that <em>should never happen</em> under correct operation and may indicate corrupted internal state, but where best-effort continuation is preferable to a hard crash in production.</p>
+<div class="highlight"><pre><span></span><code><span class="n">lind_debug_panic</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;signal_epoch_trigger: cage {} not found&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">cageid</span><span class="p">);</span>
+</code></pre></div>
+<p>Does <strong>not</strong> take a category. Always fires regardless of the active <code>LIND_LOG_CATEGORIES</code>. Behavior is controlled by <code>LIND_DEBUG_PANIC</code>.</p>
+<p><strong>Call sites must always supply explicit fallback control flow</strong>, because <code>lind_debug_panic!</code> may return normally in <code>log-only</code>, <code>no-action</code>, and compiled-out modes:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// Good</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">cage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">get_cage</span><span class="p">(</span><span class="n">cageid</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">,</span>
+<span class="w">    </span><span class="nb">None</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">lind_debug_panic</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;cage {} not found&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">cageid</span><span class="p">);</span>
+<span class="w">        </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="c1">// required — macro may return normally</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">};</span>
+
+<span class="c1">// Bad — assumes lind_debug_panic! always diverges</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">cage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">get_cage</span><span class="p">(</span><span class="n">cageid</span><span class="p">).</span><span class="n">unwrap_or_else</span><span class="p">(</span><span class="o">||</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">lind_debug_panic</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;cage {} not found&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">cageid</span><span class="p">);</span>
+<span class="w">    </span><span class="fm">unreachable!</span><span class="p">()</span><span class="w"> </span><span class="c1">// wrong</span>
+<span class="p">});</span>
+</code></pre></div>
+<h3 id="panic-unrecoverable-failure"><code>panic!</code> — Unrecoverable Failure</h3>
+<p>Use only when continued execution is truly impossible — a lock is poisoned, a required resource is missing at boot, or an invariant that can never be violated has been violated. <code>panic!</code> is never softened by the logging system.</p>
+<hr />
+<h2 id="3-log-categories">3. Log Categories</h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Token</th>
+<th>Scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Default</code></td>
+<td><code>lind_log!(...)</code> or <code>lind_log!(Default, ...)</code></td>
+<td>Uncategorized Lind diagnostics</td>
+</tr>
+<tr>
+<td><code>DYLINK</code></td>
+<td><code>lind_log!(DYLINK, ...)</code></td>
+<td>dlopen/dlsym/dlclose, GOT updates, symbol resolution, library replay, weak imports</td>
+</tr>
+<tr>
+<td><code>THREEI</code></td>
+<td><code>lind_log!(THREEI, ...)</code></td>
+<td>Syscall routing, handler registration, inter-cage call routing, ThreeI interposition</td>
+</tr>
+</tbody>
+</table>
+<p>Categories are checked before format arguments are evaluated. Disabled categories add no overhead beyond a single bitmask test.</p>
+<hr />
+<h2 id="4-output-format">4. Output Format</h2>
+<p>All log lines share a consistent prefix that includes the category, source file, line number, and Rust module path:</p>
+<div class="highlight"><pre><span></span><code>[LIND][DYLINK][src/dylink.rs:88 lind::dylink] resolved symbol malloc at 0x7f001000
+[LIND][Default][src/cage.rs:42 lind::cage] cage 3 started
+[LIND][THREEI][src/threei.rs:77 threei::threei] registered handler call_id=7
+</code></pre></div>
+<p><code>lind_debug_panic!</code> uses a different prefix to make it easy to grep for unexpected conditions in logs:</p>
+<div class="highlight"><pre><span></span><code># PanicAndExit mode — appears before the panic backtrace
+[LIND][DEBUG PANIC][src/signal.rs:182 lind::signal] cage 3 not found
+
+# LogOnly mode — execution continues after this line
+[LIND][DEBUG PANIC continuing][src/signal.rs:182 lind::signal] cage 3 not found
+</code></pre></div>
+<hr />
+<h2 id="5-architecture">5. Architecture</h2>
+<h3 id="51-compile-time-gating">5.1 Compile-Time Gating</h3>
+<p>Both macros are defined in <code>src/sysdefs/src/logging.rs</code> and re-exported from the <code>sysdefs</code> crate root. The body of each macro is wrapped in <code>#[cfg(feature = "lind-logging")]</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#[macro_export]</span>
+<span class="fm">macro_rules!</span><span class="w"> </span><span class="n">lind_log</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">(</span><span class="o">@</span><span class="n">cat</span><span class="w"> </span><span class="cp">$category</span><span class="p">:</span><span class="nc">expr</span><span class="p">,</span><span class="w"> </span><span class="cp">$($arg</span><span class="p">:</span><span class="nc">tt</span><span class="p">)</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="cp">#[cfg(feature = </span><span class="s">&quot;lind-logging&quot;</span><span class="cp">)]</span>
+<span class="w">            </span><span class="p">{</span>
+<span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="cp">$crate</span><span class="p">::</span><span class="n">logging</span><span class="p">::</span><span class="n">category_enabled</span><span class="p">(</span><span class="cp">$category</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="cp">$crate</span><span class="p">::</span><span class="n">logging</span><span class="p">::</span><span class="n">log</span><span class="p">(</span><span class="cp">$category</span><span class="p">,</span><span class="w"> </span><span class="fm">format_args!</span><span class="p">(</span><span class="cp">$($arg</span><span class="p">)</span><span class="o">*</span><span class="p">),</span><span class="w"> </span><span class="fm">file!</span><span class="p">(),</span><span class="w"> </span><span class="fm">line!</span><span class="p">(),</span><span class="w"> </span><span class="fm">module_path!</span><span class="p">());</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">};</span>
+<span class="w">    </span><span class="c1">// ... category dispatch arms</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>The <code>#[cfg]</code> is evaluated at the <strong>call site's crate</strong>, so every crate that uses the macros must declare and forward the feature:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Cargo.toml of any crate that uses lind_log! or lind_debug_panic!</span>
+<span class="k">[features]</span>
+<span class="n">lind-logging</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;sysdefs/lind-logging&quot;</span><span class="p">]</span>
+</code></pre></div>
+<p>The root <code>lind-boot</code> crate activates <code>lind-logging</code> for the entire workspace. The Makefile handles this automatically and respects <code>NO_LOGGING=1</code>.</p>
+<h3 id="52-global-logger-state">5.2 Global Logger State</h3>
+<p>The logger is stored in a <code>OnceLock&lt;LindLogger&gt;</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">static</span><span class="w"> </span><span class="n">LIND_LOGGER</span><span class="p">:</span><span class="w"> </span><span class="nc">OnceLock</span><span class="o">&lt;</span><span class="n">LindLogger</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">OnceLock</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+
+<span class="k">struct</span><span class="w"> </span><span class="nc">LindLogger</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">writer</span><span class="p">:</span><span class="w"> </span><span class="nc">Mutex</span><span class="o">&lt;</span><span class="n">LogWriter</span><span class="o">&gt;</span><span class="p">,</span><span class="w">      </span><span class="c1">// output destination</span>
+<span class="w">    </span><span class="n">panic_behavior</span><span class="p">:</span><span class="w"> </span><span class="nc">PanicBehavior</span><span class="p">,</span><span class="w"> </span><span class="c1">// lind_debug_panic! behavior</span>
+<span class="w">    </span><span class="n">enabled_categories</span><span class="p">:</span><span class="w"> </span><span class="nc">LogCategorySet</span><span class="p">,</span><span class="w"> </span><span class="c1">// bitmask of active categories</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><code>OnceLock</code> gives first-call-wins initialization with no locking overhead on subsequent reads. The <code>Mutex&lt;LogWriter&gt;</code> only serializes the actual write — the category check and feature gate happen before acquiring the lock.</p>
+<p>If <code>init_lind_logger</code> is never called, all accesses fall through to a hardcoded default that writes to the file path derived from <code>LIND_WASM_ROOT</code> (or <code>/tmp/LIND.log</code>), panics on <code>lind_debug_panic!</code>, and enables only the <code>Default</code> category.</p>
+<h3 id="53-initialization-sequence">5.3 Initialization Sequence</h3>
+<p><code>init_lind_logger</code> is called at the very top of <code>main()</code> in <code>lind-boot</code>, before CLI parsing, before <code>chroot</code>, and before <code>rawposix_start</code>. This ensures every subsequent log message — including those emitted during RawPOSIX or wasmtime initialization — picks up the environment-configured behavior:</p>
+<div class="highlight"><pre><span></span><code><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="nb">Box</span><span class="o">&lt;</span><span class="k">dyn</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">error</span><span class="p">::</span><span class="n">Error</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">init_lind_logger</span><span class="p">(</span><span class="n">config_from_env</span><span class="p">().</span><span class="n">unwrap_or_default</span><span class="p">());</span>
+<span class="w">    </span><span class="c1">// ... rest of startup</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><code>config_from_env()</code> reads the three environment variables and builds a <code>LindLoggerConfig</code>. If the variable is absent, the corresponding field retains its default value. If the variable contains an unrecognised value, <code>config_from_env()</code> returns an error and <code>unwrap_or_default()</code> falls back to the compiled-in defaults silently.</p>
+<h3 id="54-category-bitmask">5.4 Category Bitmask</h3>
+<p><code>LogCategorySet</code> is a <code>u8</code> bitmask — one bit per category. The check in <code>category_enabled</code> is a single AND operation:</p>
+<div class="highlight"><pre><span></span><code><span class="k">const</span><span class="w"> </span><span class="n">BIT_DEFAULT</span><span class="p">:</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mb">0b001</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="n">BIT_DYLINK</span><span class="p">:</span><span class="w">  </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mb">0b010</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="n">BIT_THREEI</span><span class="p">:</span><span class="w">  </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mb">0b100</span><span class="p">;</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">contains</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">category</span><span class="p">:</span><span class="w"> </span><span class="nc">LogCategory</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="bp">self</span><span class="p">.</span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">bit</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Format arguments are inside the <code>if category_enabled(...)</code> check, so they are not evaluated for disabled categories.</p>
+<h3 id="55-file-output">5.5 File Output</h3>
+<p>When <code>LogOutput::File</code> is selected, the file is opened once during <code>init_lind_logger</code> with <code>OpenOptions::append(true).create(true)</code> and the handle is stored inside the <code>Mutex&lt;LogWriter&gt;</code>. Every <code>write_line</code> call acquires the mutex, writes a single line, and releases it. The file descriptor is never closed and reopened per message.</p>
+<h3 id="56-logoutputnone-vs-no_logging1">5.6 <code>LogOutput::None</code> vs <code>NO_LOGGING=1</code></h3>
+<p>These are two distinct suppression mechanisms:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>LogOutput::None</code></th>
+<th><code>NO_LOGGING=1</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>When decided</td>
+<td>Runtime</td>
+<td>Compile time</td>
+</tr>
+<tr>
+<td><code>lind_log!</code></td>
+<td>Suppressed (no output)</td>
+<td>Compiled out entirely</td>
+</tr>
+<tr>
+<td><code>lind_debug_panic!</code> logging</td>
+<td>Suppressed</td>
+<td>Compiled out entirely</td>
+</tr>
+<tr>
+<td><code>lind_debug_panic!</code> panic</td>
+<td>Still happens (if <code>PanicAndExit</code>)</td>
+<td>Compiled out</td>
+</tr>
+<tr>
+<td>Use case</td>
+<td>CI — silence noise, keep panics as test failures</td>
+<td>Benchmarks, max-performance builds</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.action.edit"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

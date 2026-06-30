@@ -1,0 +1,1838 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://lind-project.github.io/lind-wasm/internal/setjmp/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>setjmp / longjmp in lind-wasm - Lind-Wasm Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/img.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#setjmp-longjmp-in-lind-wasm" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Lind-Wasm Docs" class="md-header__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Lind-Wasm Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              setjmp / longjmp in lind-wasm
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Lind-Wasm Docs" class="md-nav__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Lind-Wasm Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Internal Documentation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Internal Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../libc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    libc
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../wasmtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Wasmtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../3i/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threei
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../grates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../clamping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Clamping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rawposix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RawPOSIX
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multiprocess-support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../signals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Signals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../contribute/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/dev-container/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/styleguide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust style guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/toolchain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lind toolchain
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/debug-programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Debug programs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/add-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding to the docs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/security.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/docker-release-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Hub release workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/e2e-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    End-to-End Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipelines
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipelines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/pipelines/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/pipelines/lind-wasm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    lind-wasm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../community/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Community
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Community
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/team/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Team
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/conduct/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code of conduct
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#two-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two modes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two modes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-lind_asyncify_setjmp1-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What LIND_ASYNCIFY_SETJMP=1 changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-mechanism-the-llvm-sjlj-pass-eh-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core mechanism: the LLVM SjLj pass (EH mode)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core mechanism: the LLVM SjLj pass (EH mode)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jmp_buf-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jmp_buf layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#__longjmp-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __longjmp dispatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sigsetjmp-siglongjmp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sigsetjmp / siglongjmp
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="sigsetjmp / siglongjmp">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-sigsetjmp-must-expand-at-the-call-site" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why sigsetjmp must expand at the call site
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sigprocmask-forward-declaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sigprocmask forward declaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-module-tag-sharing-dynamic-builds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-module tag sharing (dynamic builds)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#longjmp-from-signal-handlers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Longjmp from signal handlers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#clang-18-and-translate-to-exnref" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clang 18 and --translate-to-exnref
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-with-wasi-libc-migration-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison with wasi-libc / migration path
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open tasks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Open tasks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#table-memory-leak-on-normal-function-exit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table memory leak on normal function exit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#savesetjmp-table-scan-starts-from-index-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        saveSetjmp table scan starts from index 0
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File map
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/Lind-Project/lind-wasm/edit/main/docs/internal/setjmp.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="setjmp-longjmp-in-lind-wasm">setjmp / longjmp in lind-wasm</h1>
+<h2 id="two-modes">Two modes</h2>
+<p>Lind-wasm supports two setjmp/longjmp implementations, selected at build time
+via the <code>LIND_ASYNCIFY_SETJMP</code> environment variable:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>How to select</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>EH</strong> (default)</td>
+<td>unset <code>LIND_ASYNCIFY_SETJMP</code></td>
+<td>Wasm exception tags (<code>-fwasm-exceptions</code>), <code>__builtin_wasm_throw</code></td>
+</tr>
+<tr>
+<td><strong>Asyncify</strong></td>
+<td><code>LIND_ASYNCIFY_SETJMP=1</code></td>
+<td><code>lind.lind-longjmp</code> host import, asyncify stack snapshots</td>
+</tr>
+</tbody>
+</table>
+<p>The EH mode is the default and recommended path. Asyncify mode exists as a
+fallback for debugging or environments where wasm EH is unavailable.</p>
+<h3 id="what-lind_asyncify_setjmp1-changes">What <code>LIND_ASYNCIFY_SETJMP=1</code> changes</h3>
+<p>Setting this flag affects every layer of the build:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>EH (default)</th>
+<th>Asyncify (<code>LIND_ASYNCIFY_SETJMP=1</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>make_glibc_and_sysroot.sh</code></td>
+<td>Compiles glibc with <code>-DLIND_EH_SETJMP</code>, <code>-fwasm-exceptions -mllvm -wasm-enable-sjlj</code>; compiles <code>wasm_eh_setjmp.o</code> and <code>wasm_eh_c_longjmp_tag.o</code></td>
+<td>Skips EH setjmp objects; <code>__longjmp</code> calls <code>lind.lind-longjmp</code> import</td>
+</tr>
+<tr>
+<td><code>lind_compile</code> (user programs)</td>
+<td>Adds <code>-fwasm-exceptions -mllvm -wasm-enable-sjlj</code> to every clang invocation</td>
+<td>No EH flags; asyncify handles longjmp via <code>lind.lind-longjmp</code></td>
+</tr>
+<tr>
+<td><code>lind-wasm-opt</code> (binaryen)</td>
+<td>Adds <code>--translate-to-exnref</code> after asyncify; passes <code>--enable-exception-handling --enable-reference-types</code></td>
+<td>Skips <code>--translate-to-exnref</code>; no EH feature flags</td>
+</tr>
+<tr>
+<td><code>make_shared_glibc.sh</code></td>
+<td>Strips <code>wasm_eh_c_longjmp_tag.o</code> from shared <code>libc.a</code> before linking <code>libc.so</code></td>
+<td>No special handling</td>
+</tr>
+<tr>
+<td><code>lind-boot</code> (Rust)</td>
+<td>Built with <code>asyncify-setjmp</code> Cargo feature <strong>absent</strong>; defines <code>__c_longjmp</code> tag in linker</td>
+<td>Built with <code>asyncify-setjmp</code> Cargo feature; no tag defined</td>
+</tr>
+</tbody>
+</table>
+<p>Usage:
+<div class="highlight"><pre><span></span><code><span class="c1"># EH mode (default)</span>
+make
+
+<span class="c1"># Asyncify mode</span>
+<span class="nv">LIND_ASYNCIFY_SETJMP</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>make
+</code></pre></div></p>
+<hr />
+<h2 id="core-mechanism-the-llvm-sjlj-pass-eh-mode">Core mechanism: the LLVM SjLj pass (EH mode)</h2>
+<p>When user code is compiled with <code>-fwasm-exceptions -mllvm -wasm-enable-sjlj</code>,
+the LLVM <code>WebAssemblyLowerEmscriptenEHSjLj</code> pass rewrites every <code>_setjmp</code>
+call site:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// User writes:</span>
+<span class="n">val</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">setjmp</span><span class="p">(</span><span class="n">buf</span><span class="p">);</span>
+<span class="p">...</span>
+
+<span class="c1">// LLVM rewrites (conceptually):</span>
+<span class="n">table</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">saveSetjmp</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span><span class="w"> </span><span class="n">label_id</span><span class="p">,</span><span class="w"> </span><span class="n">table</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+<span class="n">size</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">getTempRet0</span><span class="p">();</span>
+<span class="n">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">...</span><span class="n">continuation</span><span class="p">...</span>
+<span class="p">}</span><span class="w"> </span><span class="n">catch</span><span class="w"> </span><span class="p">(</span><span class="n">__c_longjmp</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">testSetjmp</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">table</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">val</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">buf</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span><span class="w">   </span><span class="c1">// normalised return value</span>
+<span class="w">        </span><span class="k">goto</span><span class="w"> </span><span class="n">after_setjmp</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">rethrow</span><span class="p">;</span><span class="w">        </span><span class="c1">// belongs to an outer frame</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>And <code>longjmp(buf, val)</code> is lowered to a call to <code>__wasm_longjmp(buf, val)</code>,
+which throws the <code>__c_longjmp</code> wasm exception.</p>
+<p>The runtime support functions are in <code>src/glibc/setjmp/wasm_eh_setjmp.c</code>:</p>
+<ul>
+<li><strong><code>saveSetjmp(buf, label_id, table, size)</code></strong> — stores <code>(buf, label_id)</code> in
+  a per-call-site table; grows via <code>realloc</code> when full; returns the new size
+  via <code>setTempRet0</code>.</li>
+<li><strong><code>testSetjmp(env, table, size)</code></strong> — searches the table for a matching <code>buf</code>
+  address; returns the <code>label_id</code> of the matching frame, or 0 (must rethrow).</li>
+<li><strong><code>getTempRet0</code> / <code>setTempRet0</code></strong> — thread-local "second return value" used
+  because wasm imported functions cannot return multiple values.</li>
+<li><strong><code>__wasm_longjmp(buf, val)</code></strong> — stores the normalised return value in
+  <code>buf[3]</code>, a self-pointer in <code>buf[2]</code>, then throws <code>__c_longjmp</code> via
+  <code>__builtin_wasm_throw(1, &amp;buf[2])</code>.</li>
+</ul>
+<h3 id="jmp_buf-layout"><code>jmp_buf</code> layout</h3>
+<p><code>jmp_buf</code> is <code>long int[8]</code> (32 bytes on wasm32). The EH implementation uses
+four 4-byte slots:</p>
+<table>
+<thead>
+<tr>
+<th>Slot</th>
+<th>Set by</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>buf[0]</code></td>
+<td><code>saveSetjmp</code></td>
+<td>self-pointer for frame matching in <code>testSetjmp</code></td>
+</tr>
+<tr>
+<td><code>buf[1]</code></td>
+<td>—</td>
+<td>unused / reserved</td>
+</tr>
+<tr>
+<td><code>buf[2]</code></td>
+<td><code>__wasm_longjmp</code></td>
+<td>self-pointer passed as exception payload</td>
+</tr>
+<tr>
+<td><code>buf[3]</code></td>
+<td><code>__wasm_longjmp</code></td>
+<td>normalised return value (<code>val != 0 ? val : 1</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The normalisation rule: only <code>val == 0</code> is replaced with <code>1</code> (POSIX
+requirement). Negative values and all other non-zero values pass through
+unchanged.</p>
+<h3 id="__longjmp-dispatch"><code>__longjmp</code> dispatch</h3>
+<p><code>src/glibc/sysdeps/i386/__longjmp.c</code> selects the implementation at compile time:</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#ifdef LIND_EH_SETJMP</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">__longjmp</span><span class="p">(</span><span class="n">__jmp_buf</span><span class="w"> </span><span class="n">env</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">val</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">__wasm_longjmp</span><span class="p">((</span><span class="kt">int</span><span class="w"> </span><span class="o">*</span><span class="p">)</span><span class="n">env</span><span class="p">,</span><span class="w"> </span><span class="n">val</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">val</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="cp">#else</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">__longjmp</span><span class="p">(</span><span class="n">__jmp_buf</span><span class="w"> </span><span class="n">env</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">val</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">__imported_wasi_lind_longjmp</span><span class="p">((</span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="n">env</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="kt">unsigned</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="n">val</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="cp">#endif</span>
+</code></pre></div>
+<hr />
+<h2 id="sigsetjmp-siglongjmp"><code>sigsetjmp</code> / <code>siglongjmp</code></h2>
+<h3 id="why-sigsetjmp-must-expand-at-the-call-site">Why <code>sigsetjmp</code> must expand at the call site</h3>
+<p>The LLVM SjLj pass only instruments <code>_setjmp</code> call sites visible in the
+compilation unit. If <code>sigsetjmp</code> remained a regular function call to
+<code>__sigsetjmp</code>, the pass would emit no <code>try_table</code> at that call site — a
+subsequent <code>longjmp</code> would throw <code>__c_longjmp</code> with nowhere to land.</p>
+<p>The fix: <code>sigsetjmp</code> is a <strong>macro</strong> that expands to <code>_setjmp</code> directly in
+user code, where the pass can see and transform it:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// src/glibc/setjmp/setjmp.h</span>
+<span class="cp">#define sigsetjmp(env, savemask)                                        \</span>
+<span class="cp">  (__extension__ ({                                                      \</span>
+<span class="cp">    int __sm = (savemask);                                              \</span>
+<span class="cp">    (env)[0].__mask_was_saved =                                         \</span>
+<span class="cp">      __sm &amp;&amp; (sigprocmask(SIG_BLOCK, (__sigset_t *)NULL,               \</span>
+<span class="cp">                           (__sigset_t *)&amp;(env)[0].__saved_mask) == 0); \</span>
+<span class="cp">    _setjmp(env);   </span><span class="cm">/* LLVM transforms this */</span><span class="cp">                          \</span>
+<span class="cp">  }))</span>
+</code></pre></div>
+<p>The signal mask is saved inline before <code>_setjmp</code>; restoration on <code>siglongjmp</code>
+is handled by <code>__libc_siglongjmp</code> → <code>__longjmp</code> → <code>__wasm_longjmp</code> as normal.</p>
+<h3 id="sigprocmask-forward-declaration"><code>sigprocmask</code> forward declaration</h3>
+<p>The macro calls <code>sigprocmask</code> before <code>&lt;signal.h&gt;</code> may have been included.
+A forward declaration is added inside <code>&lt;setjmp.h&gt;</code>, guarded by
+<code>#ifndef _SIGNAL_H</code> to prevent a type conflict when glibc includes
+<code>&lt;signal.h&gt;</code> first (<code>sigset_t</code> vs <code>__sigset_t</code>).</p>
+<p><code>sigprocmask</code> (the public POSIX name) is used rather than the private
+<code>__sigprocmask</code> so that dynamic builds resolve it from <code>libc.so</code>'s exported
+symbol table.</p>
+<hr />
+<h2 id="cross-module-tag-sharing-dynamic-builds">Cross-module tag sharing (dynamic builds)</h2>
+<p>In lind-wasm's dynamic build, <code>libc.so</code> and user code are separate wasmtime
+<code>Instance</code> objects. Wasm exception tags are instance-level constructs: each
+instance gets its own runtime tag value even if both name it <code>__c_longjmp</code>.
+A throw using instance A's tag is not caught by instance B's catch.</p>
+<p><strong>Solution:</strong> the wasmtime host creates <strong>one</strong> <code>Tag</code> object per cage <code>Store</code>
+and registers it in the <code>Linker</code> under <code>"env"."__c_longjmp"</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// src/lind-boot/src/lind_wasmtime/execute.rs</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">tag_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TagType</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="n">FuncType</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="o">&amp;</span><span class="n">engine</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">ValType</span><span class="p">::</span><span class="n">I32</span><span class="p">],</span><span class="w"> </span><span class="p">[]));</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Tag</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="o">*</span><span class="n">wstore</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">tag_type</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="n">linker_guard</span><span class="p">.</span><span class="n">define</span><span class="p">(</span><span class="o">&amp;*</span><span class="n">wstore</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;env&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;__c_longjmp&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">tag</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+</code></pre></div>
+<p>The same is done for forked children in <code>linker.rs:new_child_linker</code>.</p>
+<p>When all module instances — user code, <code>libc.so</code>, any dynamically loaded
+library — import <code>"env"."__c_longjmp"</code>, they all receive the same <code>Tag</code>
+object. A throw in <code>libc.so</code> is caught by a <code>try_table</code> in user code.</p>
+<p>All glibc objects are compiled with <code>-fPIC</code>. In PIC mode, the LLVM SjLj pass
+emits a tag <strong>import</strong> for <code>__c_longjmp</code> rather than a local weak definition
+— which is correct: the host owns the authoritative definition.</p>
+<p>For the <strong>static build</strong> there is no host linker. Because <code>__builtin_wasm_throw(1, …)</code>
+references <code>__c_longjmp</code> but the LLVM SjLj pass only emits a weak tag definition
+in objects that contain a <code>_setjmp</code> call site, programs that never call <code>setjmp</code>
+themselves would have an undefined <code>__c_longjmp</code> at link time.
+<code>src/glibc/setjmp/wasm_eh_c_longjmp_tag.c</code> solves this with a synthetic object
+that has a dummy <code>_setjmp</code> call site; the pass emits a weak <code>__c_longjmp</code> tag
+definition into it, which <code>wasm-ld</code> uses to satisfy all imports. This object must
+be compiled <strong>without <code>-fPIE</code></strong> (<code>EXTRA_FLAGS_NO_PIE</code> in
+<code>scripts/build/make_glibc_and_sysroot.sh</code>), and is excluded from the <code>libc.so</code> shared
+link since the dynamic build uses host-provided tag imports instead.</p>
+<hr />
+<h2 id="longjmp-from-signal-handlers">Longjmp from signal handlers</h2>
+<p>When a signal handler calls <code>longjmp</code>, the <code>__c_longjmp</code> exception must unwind
+back through the signal delivery call chain — <code>signal_callback</code> → <code>pause()</code> /
+<code>sigsuspend()</code> — to the <code>try_table</code> at the original <code>setjmp</code> call site. That
+chain is entirely pure-wasm, so exception propagation works naturally. The one
+place that requires explicit handling is the Rust/wasm boundary at
+<code>signal_func.call()</code> in <code>signal.rs</code>.</p>
+<p><code>signal_func.call()</code> returns <code>Err(ThrownException)</code> when the wasm signal handler
+throws an uncaught exception. For this error to re-enter wasmtime as a live wasm
+exception (rather than a fatal cage error), <code>signal_handler</code> must return
+<code>wasmtime::Result&lt;i32&gt;</code> — not <code>anyhow::Result&lt;i32&gt;</code>. <code>wasmtime::Result</code> preserves
+<code>ThrownException</code> as a distinct variant; <code>?</code> propagates it through <code>epoch_callback</code>
+back into the wasmtime execution engine, which re-throws the pending wasm exception
+in the original execution context. It then propagates normally to the <code>try_table</code>
+at the <code>setjmp</code> call site.</p>
+<p>If <code>anyhow::Result</code> were used instead, <code>ThrownException</code> would be erased into a
+generic error, the exception would not be re-thrown, and the cage would terminate
+rather than returning to the setjmp site.</p>
+<p>Note: any host function registered with <code>func_wrap</code> that may surface wasm
+exceptions must follow the same rule — return <code>wasmtime::Result&lt;T&gt;</code>.</p>
+<hr />
+<h2 id="clang-18-and-translate-to-exnref">Clang 18 and <code>--translate-to-exnref</code></h2>
+<p>Wasm EH has two wire formats:</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Instructions</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Legacy</strong></td>
+<td><code>try</code> / <code>catch</code> / <code>rethrow</code> with inline tag indices</td>
+<td>Emitted by clang 18</td>
+</tr>
+<tr>
+<td><strong>Standard (exnref)</strong></td>
+<td><code>try_table</code> / <code>exnref</code> as first-class values</td>
+<td>W3C ratified spec; required by wasmtime's Cranelift backend</td>
+</tr>
+</tbody>
+</table>
+<p>Clang 18 can only emit the legacy format. Wasmtime's Cranelift only accepts the
+standard exnref format. The gap is bridged by Binaryen's <code>--translate-to-exnref</code>
+pass, which <code>lind-wasm-opt</code> runs after asyncify:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># from scripts/bin/lind-wasm-opt</span>
+<span class="c1"># Convert clang 18 legacy EH to standard EH after asyncify.</span>
+<span class="c1"># Asyncify handles legacy EH natively; Cranelift only supports standard EH.</span>
+<span class="c1"># --enable-reference-types is required because --translate-to-exnref emits</span>
+<span class="c1"># (ref exn) blocks via catch_all_ref when setjmp frames are nested.</span>
+<span class="o">[[</span><span class="w"> </span>-z<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">LIND_ASYNCIFY_SETJMP</span><span class="k">:-</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">]]</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nv">LIND_FLAGS</span><span class="o">+=(</span>--translate-to-exnref<span class="o">)</span>
+</code></pre></div>
+<p><strong>This is a toolchain version limitation, not a design choice.</strong> Clang 19+
+can emit exnref natively, at which point <code>--translate-to-exnref</code> could be
+dropped. Until the toolchain is upgraded, the pass is mandatory for all EH
+mode builds.</p>
+<hr />
+<h2 id="comparison-with-wasi-libc-migration-path">Comparison with wasi-libc / migration path</h2>
+<p><code>wasm_eh_setjmp.c</code> was written from scratch for lind-wasm. It implements the
+<strong>old Emscripten JS-sjlj ABI</strong> generated by clang 18. wasi-libc's <code>rt.c</code>
+implements a <strong>different, newer ABI</strong> introduced in LLVM 19 (PR #84137). They
+are not variants of the same design — they target two different compiler ABIs.</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>lind-wasm (<code>wasm_eh_setjmp.c</code>)</th>
+<th>wasi-libc (<code>rt.c</code>, LLVM 19+)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Entry points</td>
+<td><code>saveSetjmp(buf, label_id, table, size)</code> / <code>testSetjmp(env, table, size)</code></td>
+<td><code>__wasm_setjmp(env, label, func_invocation_id)</code> / <code>__wasm_setjmp_test(env, func_invocation_id)</code></td>
+</tr>
+<tr>
+<td>Frame identity</td>
+<td>per-thread malloc'd table of <code>(buf_ptr, label_id)</code> pairs</td>
+<td><code>func_invocation_id</code> pointer stored directly in <code>jmp_buf</code> (points to a local variable in the setjmp frame, unique per invocation)</td>
+</tr>
+<tr>
+<td><code>getTempRet0</code>/<code>setTempRet0</code></td>
+<td>C thread-local <code>g_tempRet0</code></td>
+<td>wasm global via <code>.globaltype tempRet0, i32</code></td>
+</tr>
+<tr>
+<td><code>__wasm_longjmp</code> payload</td>
+<td>throws <code>&amp;buf[2]</code> (i32 self-pointer into <code>jmp_buf</code>)</td>
+<td>throws <code>&amp;jb-&gt;arg</code> (pointer to <code>struct { void *env; int val; }</code>)</td>
+</tr>
+<tr>
+<td>Memory allocation</td>
+<td><code>malloc</code> + <code>realloc</code> per setjmp call site — known leak</td>
+<td>no allocation; no leak</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Migration path:</strong> when lind-wasm upgrades to clang 19+, <code>wasm_eh_setjmp.c</code>
+can be replaced with wasi-libc's <code>rt.c</code> directly. The new ABI eliminates the
+per-thread table entirely, resolving the table memory leak. The <code>--translate-to-exnref</code>
+binaryen pass can also be dropped at that point if clang 19+ emits exnref natively.</p>
+<hr />
+<h2 id="open-tasks">Open tasks</h2>
+<h3 id="table-memory-leak-on-normal-function-exit">Table memory leak on normal function exit</h3>
+<p><code>saveSetjmp</code> allocates a per-call-site table via <code>malloc</code> (initial 40 bytes,
+grows via <code>realloc</code>). The EH catch block frees the table when a longjmp is
+caught. However, if the protected scope exits <em>normally</em> (no longjmp occurs),
+the table is never freed — a per-<code>setjmp</code>-call-site memory leak proportional
+to the number of calls without a corresponding longjmp.</p>
+<p><strong>Suggested fix:</strong> emit a <code>free(table)</code> call on the normal exit path. This
+requires either a compiler-side change to clang's wasm-sjlj lowering or a
+wrapper in <code>wasm_eh_setjmp.c</code>.</p>
+<h3 id="savesetjmp-table-scan-starts-from-index-0"><code>saveSetjmp</code> table scan starts from index 0</h3>
+<p><code>saveSetjmp</code> always searches for a free slot starting from index 0, making
+each <code>setjmp</code> call O(n) in the number of active entries. A simple cached
+<code>next_free</code> index stored alongside the table (reset on compaction or free)
+would make the common case O(1).</p>
+<hr />
+<h2 id="file-map">File map</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/glibc/setjmp/wasm_eh_setjmp.c</code></td>
+<td>Runtime: <code>saveSetjmp</code>, <code>testSetjmp</code>, <code>__wasm_longjmp</code>, <code>getTempRet0</code>, <code>setTempRet0</code></td>
+</tr>
+<tr>
+<td><code>src/glibc/setjmp/wasm_eh_c_longjmp_tag.c</code></td>
+<td>Weak <code>__c_longjmp</code> tag anchor for static builds without setjmp call sites</td>
+</tr>
+<tr>
+<td><code>src/glibc/setjmp/setjmp.h</code></td>
+<td><code>sigsetjmp</code> macro; <code>sigprocmask</code> forward declaration</td>
+</tr>
+<tr>
+<td><code>src/glibc/sysdeps/i386/__longjmp.c</code></td>
+<td><code>__longjmp</code> dispatch (<code>#ifdef LIND_EH_SETJMP</code>)</td>
+</tr>
+<tr>
+<td><code>src/glibc/sysdeps/i386/setjmp.c</code></td>
+<td><code>__sigsetjmp</code> stub (mask save + return 0 in EH mode)</td>
+</tr>
+<tr>
+<td><code>src/glibc/sysdeps/x86/__longjmp_cancel.c</code></td>
+<td><code>__longjmp_cancel</code> stub with correct 2-arg signature</td>
+</tr>
+<tr>
+<td><code>src/glibc/setjmp/longjmp.c</code></td>
+<td><code>__libc_siglongjmp</code> → <code>__longjmp</code> → <code>__wasm_longjmp</code></td>
+</tr>
+<tr>
+<td><code>src/lind-boot/src/lind_wasmtime/execute.rs</code></td>
+<td>Host-provided <code>__c_longjmp</code> tag for dynamic builds</td>
+</tr>
+<tr>
+<td><code>src/wasmtime/crates/wasmtime/src/runtime/linker.rs</code></td>
+<td><code>new_child_linker</code>: per-child <code>__c_longjmp</code> tag for forked cages</td>
+</tr>
+<tr>
+<td><code>src/wasmtime/crates/lind-multi-process/src/signal.rs</code></td>
+<td><code>signal_handler</code> returns <code>wasmtime::Result</code> to propagate <code>ThrownException</code> through epoch callback</td>
+</tr>
+<tr>
+<td><code>scripts/build/make_glibc_and_sysroot.sh</code></td>
+<td>Compiles EH setjmp objects; strips <code>-fPIE</code> for tag anchor</td>
+</tr>
+<tr>
+<td><code>scripts/build/make_shared_glibc.sh</code></td>
+<td>Excludes <code>wasm_eh_c_longjmp_tag.o</code> from <code>libc.so</code> link</td>
+</tr>
+<tr>
+<td><code>scripts/bin/lind_compile</code></td>
+<td>Adds <code>-fwasm-exceptions -mllvm -wasm-enable-sjlj</code> when <code>LIND_ASYNCIFY_SETJMP</code> unset</td>
+</tr>
+<tr>
+<td><code>scripts/bin/lind-wasm-opt</code></td>
+<td>Runs <code>--translate-to-exnref</code> when <code>LIND_ASYNCIFY_SETJMP</code> unset</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.action.edit"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
