@@ -65,9 +65,9 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// 1. The lookup path is:
 ///        HANDLERTABLE[self_cageid][syscall_num][target_cageid]
 ///
-/// 2. The registration logic guarantees that for a given (cageid, syscall_num)
-/// pair there will be only one handler stored in the map. Thus we can
-/// directly retrieve the first entry here.
+/// 2. Dispatch is target-sensitive: the registered handler must match the
+/// requested `target_cageid`. This avoids accidentally routing runtime-internal
+/// calls to an unrelated grate registered for the same syscall number.
 ///
 /// ## Arguments:
 /// - `self_cageid`: The ID of the calling cage (the one executing the syscall).
@@ -75,12 +75,12 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// - `target_cageid`: The ID of the target cage for the syscall.
 ///
 /// ## Returns:
-///     Some((actual_target_cageid, handler_addr))
+///     Some((target_cageid, handler_addr)) if an exact mapping exists.
+///     None if no handler entry exists for the given `target_cageid`.
 ///
 /// ## Panics:
 ///     - If no entry exists for `self_cageid`.
 ///     - If no entry exists for `syscall_num`.
-///    - If no handler entry exists for the given `target_cageid` (or any fallback) under this syscall.
 pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
     // Grab the per-cage map guard.
     let self_entry = HANDLERTABLE.get(&self_cageid).unwrap_or_else(|| {
@@ -98,18 +98,9 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         )
     });
 
-    let target_map = call_entry.value();
+    let addr = call_entry.value().get(&target_cageid)?;
 
-    if let Some(any) = target_map.iter().next() {
-        let gid = *any.key();
-        let addr = *any.value();
-        return Some((gid, addr));
-    }
-
-    panic!(
-        "No handlers for self_cageid={} syscall_num={} (target_cageid={})",
-        self_cageid, syscall_num, target_cageid
-    );
+    Some((target_cageid, *addr))
 }
 
 /// Removes **ALL** handler entries across all cages that point to a specific grateid.
@@ -196,12 +187,11 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 /// the number of registered handlers, for example choosing a non-RAWPOSIX
 /// handler whenever more than one entry exists.
 ///
-/// To reduce complexity and avoid ambiguous runtime inference, we adopt
-/// a simpler registration policy. Whenever a specific grate handler is
-/// registered for a `(srccage, syscall)` pair any entry is removed and
-/// replaced. By enforcing this rule at registration time, we eliminate
-/// the need for complicated dispatch disambiguation logic later in 3i
-/// and keep the runtime decision path deterministic and structurally clean.
+/// To keep dispatch deterministic without losing RawPOSIX as an explicit
+/// target, registration preserves all handlers under the same
+/// `(srccage, syscall)` and overwrites only the entry for the same
+/// `handlefunccage`. Runtime dispatch then selects the handler by the
+/// requested target ID.
 pub fn register_handler_impl(
     srccage: u64,
     targetcallnum: u64,
@@ -224,10 +214,7 @@ pub fn register_handler_impl(
     let target_map_ref = call_map.entry(targetcallnum).or_insert_with(DashMap::new);
     let target_map: &TargetCageMap = &*target_map_ref;
 
-    // Each (srccage, targetcallnum) pair keeps only one handler entry,
-    // so we clear any existing mapping and replace it directly.
-    target_map.clear();
-
+    // Keep distinct target handlers side by side; only overwrite the same target.
     target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
 
     0
