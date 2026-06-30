@@ -5,10 +5,13 @@ use cfg_if::cfg_if;
 use anyhow::{Context, Result, anyhow};
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use sysdefs::constants::fs_const::O_RDONLY;
 use sysdefs::constants::lind_platform_const::{
-    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
+    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
 };
-use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
+use sysdefs::constants::syscall_const::{
+    CLOSE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, OPEN_SYSCALL, READ_SYSCALL,
+};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
 use sysdefs::lind_debug_panic;
 use sysdefs::lind_log;
@@ -17,9 +20,8 @@ use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::*;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
@@ -52,11 +54,137 @@ const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 // Two u32 fields: buf[0] = write/read position, buf[4] = end limit.
 // Binaryen's asyncify uses 32-bit pointers regardless of host word size.
 const UNWIND_METADATA_SIZE: u64 = 8;
+const EXEC_READ_CHUNK_SIZE: usize = 64 * 1024;
 
 // Define the trait with the required method
 pub trait LindHost<T, U> {
     fn get_ctx(&self) -> LindCtx<T, U>;
     fn get_ctx_mut(&mut self) -> &mut LindCtx<T, U>;
+}
+
+// Route host-side runtime file access through Lind's syscall/interposition layer
+// instead of reading the host filesystem directly. The syscall target is
+// self cageid to indicate routing to rawposix (according to 3i lookup logic).
+fn lind_syscall(cageid: u64, syscall_num: i32, args: [(u64, u64); 6]) -> i32 {
+    make_syscall(
+        cageid,
+        syscall_num as u64,
+        0,
+        cageid,
+        args[0].0,
+        args[0].1,
+        args[1].0,
+        args[1].1,
+        args[2].0,
+        args[2].1,
+        args[3].0,
+        args[3].1,
+        args[4].0,
+        args[4].1,
+        args[5].0,
+        args[5].1,
+    )
+}
+
+fn syscall_errno(ret: i32) -> Option<i32> {
+    if ret < 0 { Some(-ret) } else { None }
+}
+
+// Close the virtual fd allocated by RawPOSIX open. This keeps the exec loader
+// from leaking fdtables entries when module compilation or shebang parsing fails.
+fn close_via_lind_syscall(cageid: u64, fd: i32) -> Result<(), i32> {
+    let ret = lind_syscall(
+        cageid,
+        CLOSE_SYSCALL,
+        [
+            (fd as u64, cageid),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+        ],
+    );
+    match syscall_errno(ret) {
+        Some(errno) => Err(errno),
+        None => Ok(()),
+    }
+}
+
+// Read an executable candidate using guest-visible file semantics. This is used
+// by execve before Wasmtime sees the bytes, so missing files, cwd handling, and
+// grates/3i interposition all match a normal guest read path.
+fn read_file_via_lind_syscalls(cageid: u64, path: &str) -> Result<Vec<u8>, i32> {
+    let path = CString::new(path).map_err(|_| Errno::EINVAL as i32)?;
+    let fd = lind_syscall(
+        cageid,
+        OPEN_SYSCALL,
+        [
+            (path.as_ptr() as u64, cageid),
+            (O_RDONLY as u64, cageid),
+            (0, cageid),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+        ],
+    );
+    let fd = match syscall_errno(fd) {
+        Some(errno) => return Err(errno),
+        None => fd,
+    };
+
+    let mut bytes = Vec::new();
+    let mut chunk = vec![0u8; EXEC_READ_CHUNK_SIZE];
+    let mut read_errno = None;
+
+    loop {
+        let ret = lind_syscall(
+            cageid,
+            READ_SYSCALL,
+            [
+                (fd as u64, cageid),
+                (chunk.as_mut_ptr() as u64, cageid),
+                (chunk.len() as u64, cageid),
+                (UNUSED_ARG, UNUSED_ID),
+                (UNUSED_ARG, UNUSED_ID),
+                (UNUSED_ARG, UNUSED_ID),
+            ],
+        );
+
+        if let Some(errno) = syscall_errno(ret) {
+            if errno == Errno::EINTR as i32 {
+                continue;
+            }
+            read_errno = Some(errno);
+            break;
+        }
+
+        let n = ret as usize;
+        if n == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..n]);
+    }
+
+    match (read_errno, close_via_lind_syscall(cageid, fd)) {
+        (Some(errno), _) => Err(errno),
+        (None, Err(errno)) => Err(errno),
+        (None, Ok(())) => Ok(bytes),
+    }
+}
+
+// Compile either raw Wasm or a serialized cwasm module after the file has been
+// read through Lind syscalls. This replaces Wasmtime's file-based loaders, which
+// bypass the Lind filesystem path.
+fn module_from_lind_bytes(engine: &Engine, bytes: &[u8], path: &str) -> Result<Module> {
+    match Engine::detect_precompiled(bytes) {
+        Some(_) => unsafe { Module::deserialize(engine, bytes) }
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("failed to deserialize precompiled module {}", path)),
+        None => Module::from_binary(engine, bytes)
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("failed to compile module {}", path)),
+    }
 }
 
 // Closures are abused in this file, mainly because the architecture of wasmtime itself does not support
@@ -1413,12 +1541,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             return Ok(-(Errno::ELOOP as i32));
         }
 
-        // if the file to exec does not exist
-        if !std::path::Path::new(&path).exists() {
-            // return ENOENT
-            return Ok(-(Errno::ENOENT as i32));
-        }
-
         // parse the wasm module as soon as possible to catch the error before unwinding, which is hard to unwind back if exec file has some problems
         let mut main_module = &self.modules.get(0).unwrap().2;
 
@@ -1426,13 +1548,17 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let dylink_enabled = main_module.dylink_meminfo().is_some();
 
         let engine = main_module.engine().clone();
-        let exec_file_path = Path::new(&path);
-        let exec_module = match Engine::detect_precompiled_file(exec_file_path) {
-            Ok(_) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
-            Err(_) => Module::from_file(&engine, exec_file_path),
+
+        // Load the exec target through RawPOSIX instead of Wasmtime's
+        // file-based module APIs so exec observes the same Lind filesystem view
+        // as guest syscalls.
+        let exec_file_bytes = match read_file_via_lind_syscalls(self.cageid as u64, &path) {
+            Ok(bytes) => bytes,
+            Err(errno) => return Ok(-errno),
         };
+        let exec_module = module_from_lind_bytes(&engine, &exec_file_bytes, &path);
         if exec_module.is_err() {
-            let shebang_res = parse_shebang(exec_file_path);
+            let shebang_res = parse_shebang(&exec_file_bytes);
 
             if shebang_res.is_err() {
                 return Ok(-(Errno::ENOEXEC as i32));
