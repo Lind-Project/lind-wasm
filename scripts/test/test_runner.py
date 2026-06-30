@@ -91,11 +91,34 @@ def discover_harness_modules(selected: set[str] | None = None) -> list[str]:
     return modules
 
 
-def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, str]:
-    """Run command and stream output lines with a prefix.
+def _is_compact_test_progress_line(line: str) -> bool:
+    """Return True for compact test-progress lines that should be passed through unchanged."""
+    stripped = line.strip()
 
-    Returns:
-        tuple(return_code, combined_output)
+    if not stripped:
+        return True
+
+    if re.fullmatch(r"Running \d+ tests", stripped):
+        return True
+
+    if re.fullmatch(r"[.XS]+", stripped):
+        return True
+
+    if re.fullmatch(r"\d+ passed, \d+ failed(, \d+ skipped)?", stripped):
+        return True
+
+    if stripped == "Failures:":
+        return True
+
+    return False
+
+
+def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, str]:
+    """Run command and stream output.
+
+    Compact test-progress lines are passed through unchanged so targets such as
+    `make test` show the same concise progress output as the underlying harness.
+    Other lines keep a harness prefix for context.
     """
     output_lines: list[str] = []
     env = os.environ.copy()
@@ -114,7 +137,10 @@ def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, 
 
     assert proc.stdout is not None
     for line in proc.stdout:
-        print(f"[{prefix}] {line}", end="")
+        if prefix == "wasmtestreport" or _is_compact_test_progress_line(line):
+            print(line, end="")
+        else:
+            print(f"[{prefix}] {line}", end="")
         output_lines.append(line)
 
     proc.wait()
