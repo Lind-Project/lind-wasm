@@ -1,0 +1,16 @@
+{
+  "module":"libtoy",
+  "function_count":1,
+  "functions":[
+    { "name":"toy_argv_len", "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"ptr_array","terminator":"null",
+         "pointee":[
+           {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"cstr",
+            "pointee":[{"kind":"scalar","type":"char","size":1}]}
+         ]}
+      ]
+    }
+  ]
+}

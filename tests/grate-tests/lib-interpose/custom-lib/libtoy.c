@@ -47,3 +47,14 @@ int toy_ctx_get_val(void *ctx) {
 void toy_ctx_close(void *ctx) {
     free(ctx);
 }
+
+// toy_argv_len: sum of strlen of each element of a NULL-terminated argv array.
+// Used by the ptr_array (argv) marshalling test.
+int toy_argv_len(const char **argv) {
+    int total = 0;
+    for (int i = 0; argv[i] != 0; i++) {
+        const char *s = argv[i];
+        while (*s) { total++; s++; }
+    }
+    return total;
+}

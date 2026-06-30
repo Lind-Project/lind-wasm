@@ -97,6 +97,7 @@ enum lind_size_kind {
     LIND_SIZE_FROM_ARG          = 2,  // value of raw_args[i] (top-level) or sibling field[i] (struct)
     LIND_SIZE_FROM_ARG_POINTEE  = 3,  // *(uint32_t at raw_args[i]) — two-pass, read from source cage
     LIND_SIZE_CSTR              = 4,  // scan for '\0', capped at LIND_MARSHAL_CSTR_CAP
+    LIND_SIZE_PTR_ARRAY         = 5,  // NULL-terminated array of pointers (argv); `element` describes each
 };
 
 enum lind_return_kind {
@@ -134,8 +135,16 @@ struct lind_arg_spec {
     uint64_t                const_size;
     uint32_t                size_arg_index;  // arg index (top) or sibling field index (struct)
     struct lind_layout     *layout;          // NULL = flat buffer; non-NULL = structured pointee
+    // PTR_ARRAY: describes each element of a NULL-terminated pointer array (argv).
+    struct lind_arg_spec   *element;
     // HANDLE fields:
     uint32_t                handle_class;
+    // OUT pointer-to-pointer that aliases an argument (strtol's char** endptr):
+    // this is an OUT ptr to a 4-byte slot; the value the callee writes there is a
+    // pointer INTO arg[out_ptr_into_arg1 - 1]. On copy-back, translate that inner
+    // pointer from grate-shadow offset to the source cage's buffer.
+    // 1-based so the designated-init default (0) means "not applicable".
+    uint32_t                out_ptr_into_arg1;
     uint32_t                flags;
 };
 
@@ -304,6 +313,9 @@ static void *_lind_pre_ptr(uint64_t src_ptr, const struct lind_arg_spec *as,
 static void _lind_post_struct(const struct _lind_shadow *s,
                                uint64_t source_cage, uint64_t grate_cage);
 
+static void *_lind_pre_ptr_array(uint64_t src_ptr, const struct lind_arg_spec *elem,
+                                  uint64_t source_cage, uint64_t grate_cage);
+
 // ---------------------------------------------------------------------------
 // Compute size for a PTR arg given context.
 //   raw_or_sibling: top-level → raw_args array; struct → shadow of parent struct
@@ -364,6 +376,11 @@ static void *_lind_pre_ptr(uint64_t src_ptr, const struct lind_arg_spec *as,
     if (out_n_ptr_fields) *out_n_ptr_fields = 0;
 
     if (src_ptr == 0) return NULL;
+
+    // NULL-terminated array of pointers (argv): scan + marshal each element.
+    if (as->size_kind == LIND_SIZE_PTR_ARRAY) {
+        return _lind_pre_ptr_array(src_ptr, as->element, source_cage, grate_cage);
+    }
 
     // Compute size
     size_t size;
@@ -473,6 +490,47 @@ static void *_lind_pre_ptr(uint64_t src_ptr, const struct lind_arg_spec *as,
         if (out_n_ptr_fields) *out_n_ptr_fields  = n;
     }
 
+    return shadow;
+}
+
+// ---------------------------------------------------------------------------
+// Pre-call: marshal a NULL-terminated array of pointers (argv-style).
+//   src_ptr : source-cage address of the pointer array (p0, p1, ..., NULL)
+//   elem    : spec describing each element (typically a cstr pointer)
+// Builds a grate-local array of marshalled element shadows, NULL-terminated.
+// IN-only (argv is read, not written) — no copy-back.
+// ---------------------------------------------------------------------------
+
+#define LIND_PTR_ARRAY_MAX 1024
+
+static void *_lind_pre_ptr_array(uint64_t src_ptr, const struct lind_arg_spec *elem,
+                                  uint64_t source_cage, uint64_t grate_cage)
+{
+    // Scan the source-cage array of 4-byte pointers until a NULL terminator.
+    uint32_t elems[LIND_PTR_ARRAY_MAX];
+    uint32_t n = 0;
+    while (n < LIND_PTR_ARRAY_MAX) {
+        uint32_t p = 0;
+        copy_data_between_cages(grate_cage, source_cage,
+            src_ptr + (uint64_t)n * 4, source_cage,
+            (uint64_t)(uintptr_t)&p, grate_cage, 4, 0);
+        if (p == 0) break;
+        elems[n++] = p;
+    }
+
+    // Allocate the shadow array: n element pointers + a NULL terminator.
+    uint32_t *shadow = (uint32_t *)_lind_marshal_alloc((size_t)(n + 1) * 4);
+    if (!shadow) return (void *)(uintptr_t)src_ptr;  // arena exhausted fallback
+
+    // Marshal each element per its spec (e.g. each is a cstr pointer -> copy the string).
+    for (uint32_t i = 0; i < n; i++) {
+        void *child = elem
+            ? _lind_pre_ptr((uint64_t)elems[i], elem, source_cage, grate_cage,
+                            NULL, 0, NULL, NULL)
+            : (void *)(uintptr_t)elems[i];
+        shadow[i] = (uint32_t)(uintptr_t)child;
+    }
+    shadow[n] = 0;  // NULL terminator
     return shadow;
 }
 
@@ -636,6 +694,34 @@ static inline uint64_t lind_marshal_dispatch(
 
     // --- Post-call ---
     for (uint32_t s = 0; s < nshadows; s++) {
+        const struct lind_arg_spec *sas = &spec->args[shadows[s].arg_index];
+
+        // OUT pointer-to-pointer that aliases an arg (strtol's char** endptr):
+        // the callee wrote a pointer into arg[target]'s buffer; translate it from
+        // the grate shadow to the source cage and write it back to the outer slot.
+        if (sas->out_ptr_into_arg1 != 0) {
+            uint32_t target = sas->out_ptr_into_arg1 - 1;
+            uint32_t inner = *(uint32_t *)shadows[s].shadow_ptr;  // what the callee wrote
+            uint32_t translated = inner;                          // default: pass through (e.g. NULL)
+            if (inner != 0) {
+                for (uint32_t t = 0; t < nshadows; t++) {
+                    if (shadows[t].arg_index == target) {
+                        uintptr_t base = (uintptr_t)shadows[t].shadow_ptr;
+                        if ((uintptr_t)inner >= base &&
+                            (uintptr_t)inner <= base + shadows[t].size) {
+                            uint64_t off = (uintptr_t)inner - base;
+                            translated = (uint32_t)((uint32_t)shadows[t].source_ptr + off);
+                        }
+                        break;
+                    }
+                }
+            }
+            copy_data_between_cages(grate_cage, source_cage,
+                (uint64_t)(uintptr_t)&translated, grate_cage,
+                shadows[s].source_ptr, source_cage, 4, 0);
+            continue;
+        }
+
         if (shadows[s].layout != NULL) {
             _lind_post_struct(&shadows[s], source_cage, grate_cage);
         } else if (shadows[s].direction == LIND_PTR_OUT ||
