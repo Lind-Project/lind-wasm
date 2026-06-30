@@ -15,20 +15,18 @@ def strip_top_h1(html: str) -> str:
     return re.sub(r'(?is)<\s*h1\b[^>]*>.*?</\s*h1\s*>', '', html, count=1)
 
 def wrap_sections_as_details(html: str) -> str:
-    
-    #Wrap each <div class="test-section">…</div> as:
-    #  <details><summary>{h2 text}</summary>…(section content without the h2)…</details>
-    
+    # Wrap each <section>/<div class="test-section"> from its h2 title:
+    #   <details><summary>{h2 text}</summary>…(content without the h2)…</details>
     pattern = re.compile(
         r"""
-        <div
+        <(?P<tag>section|div)
             [^>]*
             class="[^"]*\btest-section\b[^"]*"
             [^>]*>
             \s*
             (?:<h2[^>]*>(?P<title>.*?)</h2>)?
             (?P<body>.*?)
-        </div>
+        </(?P=tag)>
         """,
         re.IGNORECASE | re.DOTALL | re.VERBOSE,
     )
