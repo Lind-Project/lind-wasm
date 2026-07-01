@@ -2,4 +2,4 @@ pub mod cli;
 pub mod lind_wasmtime;
 
 pub use cli::CliOptions;
-pub use lind_wasmtime::{execute_wasmtime, precompile_module};
+pub use lind_wasmtime::{SandboxedLib, execute_wasmtime, init_sandboxed_lib, precompile_module};

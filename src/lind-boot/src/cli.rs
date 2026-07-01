@@ -40,7 +40,7 @@ pub struct CliOptions {
     pub enable_fpcast: bool,
 
     /// Instead of running the module's entry point (`_start`), instantiate the
-    /// module as a resident "reactor"/library and call a single exported function
+    /// module as a long-lived "reactor"/library and call a single exported function
     /// by name, then print its return value(s) and exit.
     ///
     /// Integer arguments to the called function are taken from the trailing
@@ -102,5 +102,27 @@ pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
 impl CliOptions {
     pub fn wasm_file(&self) -> &str {
         &self.args[0]
+    }
+
+    /// Build a minimal `CliOptions` for embedding the runtime as a sandboxed
+    /// library: load the main module from `module_path`, run no entry point, and
+    /// use default settings for everything else.
+    ///
+    /// Provided so embedders (e.g. a cdylib wrapper) don't have to track the full
+    /// field set as the CLI evolves.
+    pub fn for_sandboxed_lib(module_path: impl Into<String>) -> Self {
+        CliOptions {
+            verbose: 0,
+            debug: false,
+            precompile: false,
+            wasmtime_backtrace: false,
+            enable_fpcast: false,
+            call: None,
+            wasm_bytes: None,
+            args: vec![module_path.into()],
+            vars: Vec::new(),
+            preloads: Vec::new(),
+            thread_stack_size: 64 * 1024 * 1024,
+        }
     }
 }

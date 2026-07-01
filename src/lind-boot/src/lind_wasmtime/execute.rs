@@ -21,8 +21,8 @@ use sysdefs::lind_debug_panic;
 use sysdefs::lind_log;
 use threei::threei_const;
 use wasmtime::{
-    AsContext, AsContextMut, Cache, Engine, Export, Func, InstantiateType, Linker, Module,
-    Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails,
+    AsContext, AsContextMut, Cache, Engine, Export, Func, Instance, InstantiateType, Linker,
+    Module, Precompiled, SharedMemory, Store, Val, ValType, WasmBacktraceDetails,
 };
 use wasmtime_lind_3i::*;
 use wasmtime_lind_common::LindEnviron;
@@ -93,11 +93,11 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         .context("failed to create execution engine")?;
     let module = read_main_wasm_or_cwasm(&engine, &lindboot_cli)?;
 
-    // In `--call` (resident library) mode the guest never invokes exit(), so the
+    // In `--call` (sandboxed-lib) mode the guest never invokes exit(), so the
     // initial cage will not tear itself down on its own. Remember this here, before
     // `lindboot_cli` is moved into `execute_with_lind`, so we can finalize the cage
     // ourselves once the call returns; otherwise `lind_manager.wait()` blocks forever.
-    let is_resident_call = lindboot_cli.call.is_some();
+    let is_sandboxed_lib_call = lindboot_cli.call.is_some();
 
     // -- Run the first module in the first cage --
     let result = execute_with_lind(
@@ -117,12 +117,11 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
                 Some(Val::I32(code)) => *code,
                 _ => 0,
             };
-            
-            // In resident-library (`--call`) mode no guest exit() ran, so the
+            // In sandboxed-lib (`--call`) mode no guest exit() ran, so the
             // initial cage is still alive. Finalize it ourselves (the same
             // teardown the crash path performs) so `lind_manager.wait()` does
             // not block forever waiting for a cage that never exits.
-            if is_resident_call {
+            if is_sandboxed_lib_call {
                 let cageid = CAGE_START_ID as u64;
                 cage::cage_record_exit_status(cageid, cage::ExitStatus::Exited(exit_code));
                 if let Some(c) = cage::get_cage(cageid) {
@@ -136,8 +135,6 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
             }
             // we wait until all other cage exits
             lind_manager.wait();
-
-
             // Propagate the exit code to the main, which will translate it
             // into the host process exit status.
             Ok(exit_code)
@@ -182,8 +179,41 @@ pub fn execute_with_lind(
     module: Module,
     cageid: u64,
 ) -> Result<Vec<Val>> {
-    // -- Initialize the Wasmtime execution environment --
     let args = lind_boot.args.clone();
+    let call_export = lind_boot.call.clone();
+
+    // Prepare the instance, then run its entry point. Both the instantiation
+    // (inside `prepare_main_instance`) and the entry invocation must run under an
+    // ambient tokio runtime, matching the original code path.
+    wasmtime_wasi::runtime::with_ambient_tokio_runtime(move || {
+        let (mut wstore, _linker, instance) =
+            prepare_main_instance(lind_boot, lind_manager, &engine, &module, cageid)?;
+        run_entry(&mut wstore, instance, &args, call_export)
+    })
+    .with_context(|| format!("failed to run main module"))
+}
+
+/// Brings up a Wasm module inside `cageid` as a long-lived instance: creates the
+/// store/linker, sets up dynamic-linking imports if needed, attaches host APIs,
+/// links any preloaded libraries, and performs per-cage setup via
+/// `setup_main_module` — but does NOT run an entry point.
+///
+/// Returns the live `Store` + `Linker` + `Instance`. Shared by `execute_with_lind`
+/// (which then runs the entry point and tears the cage down) and sandboxed-lib
+/// embedding (which keeps these alive and calls exports on demand).
+///
+/// Handles both static and dynamic (dylink) modules. Must be called inside
+/// `with_ambient_tokio_runtime`.
+pub(crate) fn prepare_main_instance(
+    lind_boot: CliOptions,
+    lind_manager: Arc<LindCageManager>,
+    engine: &Engine,
+    module: &Module,
+    cageid: u64,
+) -> Result<(Store<HostCtx>, Arc<Mutex<Linker<HostCtx>>>, Instance)> {
+    // -- Initialize the Wasmtime execution environment --
+    let engine = engine.clone();
+    let module = module.clone();
     let host = HostCtx::default();
     let mut wstore = Store::new(&engine, host);
 
@@ -371,21 +401,11 @@ pub fn execute_with_lind(
         got_guard.warning_undefined();
     }
 
-    // -- Run the module in the cage --
-    let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-        load_main_module(
-            &mut wstore,
-            &mut linker,
-            &module,
-            cageid as u64,
-            &args,
-            dylink_metadata,
-            lind_boot.call.clone(),
-        )
-        .with_context(|| format!("failed to run main module"))
-    });
+    // Instantiate + per-cage setup, but do NOT run an entry point. The caller runs
+    // this under an ambient tokio runtime.
+    let instance = setup_main_module(&mut wstore, &mut linker, &module, cageid, dylink_metadata)?;
 
-    result
+    Ok((wstore, linker, instance))
 }
 
 /// Register Wasmtime re-entry trampolines into the 3i handler table.
@@ -492,7 +512,7 @@ fn register_wasmtime_syscall_entry() -> bool {
 /// The `cageid` parameter allows this function to be used both for the initial
 /// boot (where no cage override is needed) and for exec-ed cages (where the
 /// target cage is explicitly specified).
-fn attach_api(
+pub(crate) fn attach_api(
     wstore: &mut Store<HostCtx>,
     mut linker: &mut Arc<Mutex<Linker<HostCtx>>>,
     got_table: Option<Arc<Mutex<LindGOT>>>,
@@ -604,18 +624,53 @@ fn attach_api(
     Ok(())
 }
 
-/// This function takes a compiled module, instantiates it with the current store and linker,
-/// and executes its entry point. This is the point where the Wasm "process" actually starts
-/// executing.
-fn load_main_module(
+/// Process-global, one-time Lind + RawPOSIX + 3i initialization for embedding the
+/// runtime as a sandboxed library.
+///
+/// This mirrors the initialization block performed by `execute_wasmtime` (and the
+/// `rawposix_start` call in `main`), but is idempotent (guarded by a `OnceLock`) and
+/// intentionally does NOT `chroot` into lindfs: a shared library must not change the
+/// filesystem root of the host process that loads it. This is safe for guests that
+/// perform no filesystem I/O.
+pub(crate) fn ensure_global_runtime_init() {
+    static RUNTIME_INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    RUNTIME_INIT.get_or_init(|| {
+        // Bring up RawPOSIX and register its syscalls with 3i.
+        rawposix::init::rawposix_start(0);
+
+        // Register the Wasmtime grate-call trampoline with 3i.
+        let grate_cleanup_funcptr = cleanup_grate_handler as *const () as usize as u64;
+        threei::register_trampoline(
+            threei_const::RUNTIME_TYPE_WASMTIME,
+            grate_callback_trampoline,
+            grate_cleanup_funcptr,
+        );
+
+        // Register clone/exec/exit handlers with 3i.
+        if !register_wasmtime_syscall_entry() {
+            panic!("[lind-sandboxed-lib] register syscall handlers (clone/exec/exit) with 3i failed");
+        }
+
+        // Initialize the vmctx pool used for re-entry into the Wasmtime runtime.
+        init_vmctx_pool();
+    });
+}
+
+/// Instantiate `module` into `cageid` and perform all per-cage runtime setup
+/// (named-instance registration, `_initialize`, stack bounds, dylink relocations,
+/// signal/epoch init, vmctx registration, and grate-worker registration) *up to but
+/// not including* invoking an entry point.
+///
+/// Called by `prepare_main_instance` as the final step of bringing up a cage; the
+/// `Store` is borrowed and retained by the caller, and the live `Instance` is
+/// returned for the caller to run an entry point on or to keep alive.
+pub(crate) fn setup_main_module(
     mut store: &mut Store<HostCtx>,
     linker: &mut Arc<Mutex<Linker<HostCtx>>>,
     module: &Module,
     cageid: u64,
-    args: &[String],
     mut dylink_metadata: DylinkMetadata,
-    call_export: Option<String>,
-) -> Result<Vec<Val>> {
+) -> Result<Instance> {
     let mut linker_guard = linker.lock().unwrap();
 
     // todo:
@@ -642,21 +697,6 @@ fn load_main_module(
     if let Some(func) = instance.get_func(&mut *store, "_initialize") {
         func.typed::<(), ()>(&store)?.call(&mut *store, ())?;
     }
-
-    // If `--call <name>` was provided, run this module as a resident
-    // reactor/library: look up the requested export instead of the program
-    // entry point. Otherwise fall back to the usual "" / "_start" entry point.
-    let func = if let Some(ref name) = call_export {
-        Some(
-            instance
-                .get_func(&mut *store, name)
-                .ok_or_else(|| anyhow!("exported function `{}` not found", name))?,
-        )
-    } else {
-        instance
-            .get_func(&mut *store, "")
-            .or_else(|| instance.get_func(&mut *store, "_start"))
-    };
 
     if !dylink_metadata.dylink_enabled {
         let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
@@ -769,10 +809,37 @@ fn load_main_module(
     drop(linker);
     drop(linker_guard);
 
+    Ok(instance)
+}
+
+/// Selects and invokes the entry point on an already-prepared instance. This is the
+/// point where the Wasm "process" actually starts executing. In `--call` mode it
+/// invokes the named export instead of the program entry point.
+fn run_entry(
+    store: &mut Store<HostCtx>,
+    instance: Instance,
+    args: &[String],
+    call_export: Option<String>,
+) -> Result<Vec<Val>> {
+    // If `--call <name>` was provided, run this module as a sandboxed
+    // library: look up the requested export instead of the program
+    // entry point. Otherwise fall back to the usual "" / "_start" entry point.
+    let func = if let Some(ref name) = call_export {
+        Some(
+            instance
+                .get_func(&mut *store, name)
+                .ok_or_else(|| anyhow!("exported function `{}` not found", name))?,
+        )
+    } else {
+        instance
+            .get_func(&mut *store, "")
+            .or_else(|| instance.get_func(&mut *store, "_start"))
+    };
+
     let ret = match func {
         Some(func) => {
             if let Some(ref name) = call_export {
-                // Resident library mode: the trailing program args (everything
+                // Sandboxed-lib mode: the trailing program args (everything
                 // after WASM_FILE, i.e. args[1..]) are the called function's
                 // integer arguments.
                 let call_args: &[String] = if args.len() > 1 { &args[1..] } else { &[] };
@@ -956,7 +1023,7 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
 /// The default is path-based loading from `WASM_FILE`. If `cli.wasm_bytes` is
 /// present, those in-memory bytes take precedence while `WASM_FILE` remains the
 /// guest-visible argv[0].
-fn read_main_wasm_or_cwasm(engine: &Engine, cli: &CliOptions) -> Result<Module> {
+pub(crate) fn read_main_wasm_or_cwasm(engine: &Engine, cli: &CliOptions) -> Result<Module> {
     match cli.wasm_bytes.as_ref() {
         Some(bytes) => read_wasm_or_cwasm_bytes(engine, bytes, cli.wasm_file()),
         None => read_wasm_or_cwasm(engine, Path::new(cli.wasm_file())),
@@ -1049,7 +1116,7 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
 
 /// Generates a wasmtime config based on the whether or not the --wasmtime-backtrace flag was
 /// provided to lind-boot.
-fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Config {
+pub(crate) fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Config {
     let mut wt_config = wasmtime::Config::new();
     wt_config.wasm_backtrace(backtrace);
     wt_config.fpcast_enabled(enable_fpcast);
