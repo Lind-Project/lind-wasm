@@ -1,0 +1,9 @@
+# Stub manifest for this example. One exported function per line:
+#
+#   <name> <ret-type> <arg-type>...
+#
+# Scalar stage: every type is i32, so only the arg count shapes each stub.
+# `make gen` turns this into stub/src/lib.rs.
+
+add       i32  i32 i32
+subtract  i32  i32 i32

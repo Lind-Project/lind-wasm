@@ -1,0 +1,5 @@
+# Per-example build outputs and generated guest modules.
+build/
+**/target/
+*.wasm
+*.cwasm

@@ -1,0 +1,16 @@
+[package]
+name = "lind-libadd-sub"
+version = "0.1.0"
+edition = "2024"
+
+# Build a native shared object. `name = "add_sub"` makes the output `libadd_sub.so`,
+# so a native program can link it with `-ladd_sub`.
+[lib]
+name = "add_sub"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Reuses lind-boot's sandboxed-lib API (init_sandboxed_lib / SandboxedLib) and, through
+# it, the whole lind/wasmtime/rawposix/3i stack. Default features match how lind-boot
+# itself is normally built (fdtables-dashmaparray, signals on, wasm-EH setjmp).
+lind-boot = { path = "../../../../src/lind-boot" }
