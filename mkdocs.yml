@@ -25,6 +25,7 @@ nav:
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
     - Memory: internal/memory.md
+    - Threat Model: internal/threat-model.md
   - Contributing:
     - contribute/index.md
     - Development setup: contribute/dev-container.md
