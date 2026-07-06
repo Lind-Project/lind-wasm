@@ -128,7 +128,7 @@ __attribute__((visibility("default"))) int *saveSetjmp(int *buf, int label_id, i
  * buf[0]/env reflects whatever a caller's raw jmp_buf save/restore (e.g. an
  * unwind-protect helper built on memcpy(&saved, &buf, sizeof(buf))) currently
  * holds, which may be an older, still-live outer registration's token rather
- * than this frame's own — see the file header comment.  In that case env
+ * than this frame's own — see the file header comment. In that case env
  * simply won't match anything in *this* table and correctly falls through to
  * be re-thrown to the enclosing frame, which still holds that token in its
  * own table.  This is what actually resolves an unbounded catch/rethrow loop
