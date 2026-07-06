@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use std::hint::black_box;
 use std::thread;
 use std::time::{Duration, Instant};
-use sysdefs::constants::lind_platform_const::WASMTIME_CAGEID;
+use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::handler_table::{
     _check_cage_handler_exists, _get_handler, _rm_cage_from_handler,
     copy_handler_table_to_cage_impl, register_handler_impl, HANDLERTABLE,
@@ -66,7 +66,13 @@ fn populate_handler_table(cage_count: u64) {
         let handler_addr = HANDLER_ADDR_BASE + cageid;
 
         assert_eq!(
-            register_handler_impl(cageid, cageid, syscall_num, handler_cageid, handler_addr),
+            register_handler_impl(
+                RAWPOSIX_CAGEID,
+                cageid,
+                syscall_num,
+                handler_cageid,
+                handler_addr,
+            ),
             0
         );
     }
@@ -78,7 +84,7 @@ fn populate_copy_source(call_count: u64) {
     for call_index in 0..call_count {
         assert_eq!(
             register_handler_impl(
-                COPY_SOURCE_CAGE,
+                RAWPOSIX_CAGEID,
                 COPY_SOURCE_CAGE,
                 SYSCALL_BASE + call_index,
                 HANDLER_CAGE_BASE + call_index,
@@ -255,7 +261,7 @@ fn bench_register_handler(c: &mut Criterion) {
             },
             |cageid| {
                 let ret = register_handler_impl(
-                    black_box(cageid),
+                    black_box(RAWPOSIX_CAGEID),
                     black_box(cageid),
                     black_box(SYSCALL_BASE + cageid),
                     black_box(HANDLER_CAGE_BASE + cageid),
@@ -276,7 +282,7 @@ fn bench_overwrite_handler(c: &mut Criterion) {
     let syscall_num = SYSCALL_BASE + cageid;
     assert_eq!(
         register_handler_impl(
-            cageid,
+            RAWPOSIX_CAGEID,
             cageid,
             syscall_num,
             HANDLER_CAGE_BASE,
@@ -291,7 +297,7 @@ fn bench_overwrite_handler(c: &mut Criterion) {
         b.iter(|| {
             next_addr += 1;
             let ret = register_handler_impl(
-                black_box(cageid),
+                black_box(RAWPOSIX_CAGEID),
                 black_box(cageid),
                 black_box(syscall_num),
                 black_box(HANDLER_CAGE_BASE),
@@ -320,7 +326,7 @@ fn bench_deregister_handler(c: &mut Criterion) {
                 let syscall_num = SYSCALL_BASE + cageid;
                 assert_eq!(
                     register_handler_impl(
-                        cageid,
+                        RAWPOSIX_CAGEID,
                         cageid,
                         syscall_num,
                         HANDLER_CAGE_BASE,
@@ -332,7 +338,7 @@ fn bench_deregister_handler(c: &mut Criterion) {
             },
             |(cageid, syscall_num)| {
                 let ret = register_handler_impl(
-                    black_box(cageid),
+                    black_box(RAWPOSIX_CAGEID),
                     black_box(cageid),
                     black_box(syscall_num),
                     black_box(THREEI_DEREGISTER),

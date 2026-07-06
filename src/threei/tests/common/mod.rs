@@ -60,7 +60,7 @@ pub fn register_simple(
 ) -> i32 {
     register_handler(
         0,              // _self_cageid placeholder
-        0,              // _target_cageid placeholder
+        handlefunccage, // target_cageid lookup key
         targetcage,     // targetcage (srccage in impl)
         targetcallnum,  // syscall number
         0,              // _runtime_id placeholder

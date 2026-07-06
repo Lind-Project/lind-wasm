@@ -67,11 +67,11 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// Lookup the interposed handler for a given (self_cageid, syscall_num, target_cageid).
 ///
 /// 1. The lookup path is:
-///        HANDLERTABLE[self_cageid][syscall_num][target_cageid]
+///        HANDLERTABLE[self_cageid][syscall_num][lookup_target]
 ///
-/// 2. Dispatch is target-sensitive: the registered handler must match the
-/// requested `target_cageid`. This avoids accidentally routing runtime-internal
-/// calls to an unrelated grate registered for the same syscall number.
+/// 2. If `self_cageid == target_cageid`, this is a legacy/default syscall
+/// and lookup uses the RawPOSIX target key. Otherwise lookup uses the explicit
+/// `target_cageid`.
 ///
 /// ## Arguments:
 /// - `self_cageid`: The ID of the calling cage (the one executing the syscall).
@@ -102,7 +102,12 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         )
     });
 
-    let entry = call_entry.value().get(&target_cageid)?;
+    let lookup_target = if self_cageid == target_cageid {
+        lind_platform_const::RAWPOSIX_CAGEID
+    } else {
+        target_cageid
+    };
+    let entry = call_entry.value().get(&lookup_target)?;
     let (handler_cageid, addr) = *entry;
 
     Some((handler_cageid, addr))
@@ -170,15 +175,8 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 ///
 /// In all other cases, the function performs registration or overwrite. The
 /// `(srccage, targetcallnum)` containers are created if they do not already
-/// exist. The handler is then inserted into the innermost map, replacing any
-/// previous handler registered for the same lookup target. This keeps dispatch
-/// target-sensitive: `make_syscall(self, callnum, target)` only considers the
-/// entry registered for that exact `target`.
-///
-/// Because legacy glibc calls use `target_cageid == self_cageid`, RawPOSIX,
-/// 3i-control, and grate interposition handlers use `srccage` as their lookup
-/// key. Runtime callbacks that explicitly target Wasmtime use `WASMTIME_CAGEID`
-/// as the lookup key. The value still records the true handler owner.
+/// exist. The handler is then inserted under the requested `target_cageid`,
+/// replacing any previous handler registered for the same lookup target.
 pub fn register_handler_impl(
     target_cageid: u64,
     srccage: u64,
@@ -201,14 +199,8 @@ pub fn register_handler_impl(
 
     let target_map_ref = call_map.entry(targetcallnum).or_insert_with(DashMap::new);
     let target_map: &TargetCageMap = &*target_map_ref;
-    let lookup_target = if target_cageid == lind_platform_const::WASMTIME_CAGEID {
-        target_cageid
-    } else {
-        srccage
-    };
-
     // Keep distinct target handlers side by side; only overwrite the same target.
-    target_map.insert(lookup_target, (handlefunccage, in_grate_fn_ptr_u64));
+    target_map.insert(target_cageid, (handlefunccage, in_grate_fn_ptr_u64));
 
     0
 }
@@ -245,14 +237,8 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
         for src_target_entry in src_target_map.iter() {
             let target_id = *src_target_entry.key();
             let entry = *src_target_entry.value();
-            // Self-targeted legacy entries must follow the copied cage.
-            let copied_target_id = if target_id == srccage {
-                targetcage
-            } else {
-                target_id
-            };
 
-            dst_target_map.insert(copied_target_id, entry);
+            dst_target_map.insert(target_id, entry);
         }
     }
 
