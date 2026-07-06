@@ -10,6 +10,10 @@
 /* Define NOTUSED for unused arguments */
 #define NOTUSED 0xdeadbeefdeadbeefULL
 
+/* Virtual target cage ID for 3i control calls. Keep in sync with
+ * sysdefs::constants::lind_platform_const::THREEI_CAGEID. */
+#define THREEI_CAGEID 999999ULL
+
 /* Define flags for errno translation
  * See comments in lind_syscall/lind_syscall.c for details */
 #define TRANSLATE_ERRNO_ON  1

@@ -122,14 +122,15 @@ int register_handler (int64_t targetcage,
     uint64_t this_grate_id,
     uint64_t in_grate_fn_ptr_u64)
 {
-    // register_handler is treated as a syscall called by `this_grate_id`.
-    // This approach allows us to interpose on register_handler calls based on which cage
-    // this syscall was meant to be redirected to. 
+    // register_handler is treated as a 3i control syscall called by
+    // `this_grate_id`.  The target is THREEI_CAGEID so lookup happens in
+    // the 3i-control namespace; the handler table may still route this
+    // call through an interposing grate before it reaches 3i.
     return make_threei_call(
         REGISTER_HANDLER_SYSCALL, 
         NOTUSED, // callname is not used in the trampoline
         this_grate_id, // pass grate calling register handler as self_cageid
-        this_grate_id, // self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        THREEI_CAGEID, // explicit 3i-control target; still interposable
         targetcage, 
         targetcallnum, 
         NOTUSED, // runtime_id currently not used
@@ -157,7 +158,7 @@ int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t src
         COPY_DATA_BETWEEN_CAGES_SYSCALL, 
         NOTUSED, // callname is not used in the trampoline
         thiscage, // self_cageid
-        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        THREEI_CAGEID, // explicit 3i-control target; still interposable
         TRANSLATE_UADDR_TO_HOST(srcaddr, srccage),
         TRANSLATE_UADDR_TO_HOST(destaddr, destcage),
         len, NOTUSED,
@@ -179,7 +180,7 @@ int copy_handler_table_to_cage(uint64_t thiscage, uint64_t targetcage)
         COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, 
         NOTUSED, // callname is not used in the trampoline
         thiscage, // self_cageid
-        thiscage, // target_cageid. Self_cageid and target_cageid are the same to adapt with regular make_syscall lookup logic in 3i
+        THREEI_CAGEID, // explicit 3i-control target; still interposable
         thiscage, 
         targetcage,
         NOTUSED, NOTUSED,
