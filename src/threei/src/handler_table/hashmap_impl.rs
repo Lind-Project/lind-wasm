@@ -168,10 +168,12 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 /// target-sensitive: `make_syscall(self, callnum, target)` only considers the
 /// entry registered for that exact `target`.
 ///
-/// Because legacy glibc calls use `target_cageid == self_cageid`, the default
-/// registration key is `srccage`. The value still records the true handler
-/// owner, such as `RAWPOSIX_CAGEID`, `THREEI_CAGEID`, or a grate cage id.
+/// Because legacy glibc calls use `target_cageid == self_cageid`, RawPOSIX,
+/// 3i-control, and grate interposition handlers use `srccage` as their lookup
+/// key. Runtime callbacks that explicitly target Wasmtime use `WASMTIME_CAGEID`
+/// as the lookup key. The value still records the true handler owner.
 pub fn register_handler_impl(
+    target_cageid: u64,
     srccage: u64,
     targetcallnum: u64,
     handlefunccage: u64,
@@ -196,9 +198,14 @@ pub fn register_handler_impl(
     // Case 2: Register or overwrite handler
     let call_map = table.entry(srccage).or_insert_with(HashMap::new);
     let target_map = call_map.entry(targetcallnum).or_insert_with(HashMap::new);
+    let lookup_target = if target_cageid == lind_platform_const::WASMTIME_CAGEID {
+        target_cageid
+    } else {
+        srccage
+    };
 
     // Keep distinct target handlers side by side; only overwrite the same target.
-    target_map.insert(srccage, (handlefunccage, in_grate_fn_ptr_u64));
+    target_map.insert(lookup_target, (handlefunccage, in_grate_fn_ptr_u64));
 
     0
 }

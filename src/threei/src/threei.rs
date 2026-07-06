@@ -294,7 +294,7 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub fn register_handler(
     _self_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
-    _target_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
+    target_cageid: u64,
     targetcage: u64,
     targetcallnum: u64,  // Syscall number or match-all indicator. todo: Match-all.
     _runtime_id: u64,    // Currently unused, reserved for future potential use
@@ -315,6 +315,7 @@ pub fn register_handler(
 
     // Actual implementation is in handler_table module according to feature flag
     register_handler_impl(
+        target_cageid,
         targetcage,
         targetcallnum,
         handlefunccage,
