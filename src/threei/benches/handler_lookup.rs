@@ -2,6 +2,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use std::hint::black_box;
 use std::thread;
 use std::time::{Duration, Instant};
+use sysdefs::constants::lind_platform_const::WASMTIME_CAGEID;
 use threei::handler_table::{
     _check_cage_handler_exists, _get_handler, _rm_cage_from_handler,
     copy_handler_table_to_cage_impl, register_handler_impl, HANDLERTABLE,
@@ -65,7 +66,7 @@ fn populate_handler_table(cage_count: u64) {
         let handler_addr = HANDLER_ADDR_BASE + cageid;
 
         assert_eq!(
-            register_handler_impl(cageid, syscall_num, handler_cageid, handler_addr),
+            register_handler_impl(cageid, cageid, syscall_num, handler_cageid, handler_addr),
             0
         );
     }
@@ -77,6 +78,7 @@ fn populate_copy_source(call_count: u64) {
     for call_index in 0..call_count {
         assert_eq!(
             register_handler_impl(
+                COPY_SOURCE_CAGE,
                 COPY_SOURCE_CAGE,
                 SYSCALL_BASE + call_index,
                 HANDLER_CAGE_BASE + call_index,
@@ -131,6 +133,39 @@ fn bench_many_cage_lookup(c: &mut Criterion) {
 
             assert_eq!(handler.0, HANDLER_CAGE_BASE + cageid);
             assert_eq!(handler.1, HANDLER_ADDR_BASE + cageid);
+            black_box(handler);
+        });
+    });
+}
+
+fn bench_explicit_target_lookup(c: &mut Criterion) {
+    clear_globals();
+
+    let source_cage = COPY_SOURCE_CAGE;
+    let syscall_num = SYSCALL_BASE;
+    let handler_cageid = WASMTIME_CAGEID;
+    let handler_addr = HANDLER_ADDR_BASE;
+
+    assert_eq!(
+        register_handler_impl(
+            WASMTIME_CAGEID,
+            source_cage,
+            syscall_num,
+            handler_cageid,
+            handler_addr,
+        ),
+        0
+    );
+
+    c.bench_function("handler_lookup/explicit_target_hit", |b| {
+        b.iter(|| {
+            let handler = _get_handler(
+                black_box(source_cage),
+                black_box(syscall_num),
+                black_box(WASMTIME_CAGEID),
+            )
+            .unwrap();
+            assert_eq!(handler, (handler_cageid, handler_addr));
             black_box(handler);
         });
     });
@@ -221,6 +256,7 @@ fn bench_register_handler(c: &mut Criterion) {
             |cageid| {
                 let ret = register_handler_impl(
                     black_box(cageid),
+                    black_box(cageid),
                     black_box(SYSCALL_BASE + cageid),
                     black_box(HANDLER_CAGE_BASE + cageid),
                     black_box(HANDLER_ADDR_BASE + cageid),
@@ -239,7 +275,13 @@ fn bench_overwrite_handler(c: &mut Criterion) {
     let cageid = 1;
     let syscall_num = SYSCALL_BASE + cageid;
     assert_eq!(
-        register_handler_impl(cageid, syscall_num, HANDLER_CAGE_BASE, HANDLER_ADDR_BASE),
+        register_handler_impl(
+            cageid,
+            cageid,
+            syscall_num,
+            HANDLER_CAGE_BASE,
+            HANDLER_ADDR_BASE
+        ),
         0
     );
 
@@ -249,6 +291,7 @@ fn bench_overwrite_handler(c: &mut Criterion) {
         b.iter(|| {
             next_addr += 1;
             let ret = register_handler_impl(
+                black_box(cageid),
                 black_box(cageid),
                 black_box(syscall_num),
                 black_box(HANDLER_CAGE_BASE),
@@ -278,6 +321,7 @@ fn bench_deregister_handler(c: &mut Criterion) {
                 assert_eq!(
                     register_handler_impl(
                         cageid,
+                        cageid,
                         syscall_num,
                         HANDLER_CAGE_BASE,
                         HANDLER_ADDR_BASE
@@ -288,6 +332,7 @@ fn bench_deregister_handler(c: &mut Criterion) {
             },
             |(cageid, syscall_num)| {
                 let ret = register_handler_impl(
+                    black_box(cageid),
                     black_box(cageid),
                     black_box(syscall_num),
                     black_box(THREEI_DEREGISTER),
@@ -395,6 +440,7 @@ criterion_group!(
     benches,
     bench_single_hot_lookup,
     bench_many_cage_lookup,
+    bench_explicit_target_lookup,
     bench_cage_exists_lookup,
     bench_parallel_lookup,
     bench_register_handler,
