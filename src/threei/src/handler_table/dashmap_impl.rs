@@ -7,16 +7,18 @@ use sysdefs::lind_log;
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
 ///
-/// <self_cageid, <callnum, (dest_grateid, in_grate_addr)>
-/// Keys are the grate, the value is a HashMap with a key of the callnum
-/// and the values are a (dest_grateid, in_grate_addr) tuple for the actual handlers...
-type TargetCageMap = DashMap<u64, u64>; // Maps dest_grateid to destfunc in grate addr
+/// HANDLERTABLE[self_cageid][callnum][target_cageid] =
+///     (handler_cageid, handler_addr)
+///
+/// The innermost key is the target cage requested by `make_syscall`.
+/// The value records which cage owns the handler function and the raw
+/// function pointer to dispatch to.
+type TargetCageMap = DashMap<u64, (u64, u64)>; // target id -> (handler cage id, handler addr)
 type CallnumMap = DashMap<u64, TargetCageMap>; // Maps targetcallnum to TargetCageMap
 type CageHandlerTable = DashMap<u64, CallnumMap>; // Maps self_cageid to CallnumMap
 
 lazy_static::lazy_static! {
-    // <self_cageid, <callnum, (dest_grateid, in_grate_addr)>>
-    // callnum is mapped to addr, not self
+    // <self_cageid, <callnum, <target_cageid, (handler_cageid, handler_addr)>>>
     pub static ref HANDLERTABLE: CageHandlerTable = DashMap::new();
 }
 
@@ -36,11 +38,13 @@ pub fn print_handler_table() {
 
             let target_map: &TargetCageMap = call_entry.value();
             for target_entry in target_map.iter() {
+                let (dest_grateid, in_grate_addr) = *target_entry.value();
                 lind_log!(
                     THREEI,
-                    "    dest_grateid: {} -> in_grate_addr: {}",
+                    "    target_id: {} -> dest_grateid: {} -> in_grate_addr: {}",
                     *target_entry.key(),
-                    *target_entry.value()
+                    dest_grateid,
+                    in_grate_addr
                 );
             }
         }
@@ -75,7 +79,7 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// - `target_cageid`: The ID of the target cage for the syscall.
 ///
 /// ## Returns:
-///     Some((target_cageid, handler_addr)) if an exact mapping exists.
+///     Some((handler_cageid, handler_addr)) if an exact mapping exists.
 ///     None if no handler entry exists for the given `target_cageid`.
 ///
 /// ## Panics:
@@ -98,9 +102,10 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> O
         )
     });
 
-    let addr = call_entry.value().get(&target_cageid)?;
+    let entry = call_entry.value().get(&target_cageid)?;
+    let (handler_cageid, addr) = *entry;
 
-    Some((target_cageid, *addr))
+    Some((handler_cageid, addr))
 }
 
 /// Removes **ALL** handler entries across all cages that point to a specific grateid.
@@ -120,7 +125,7 @@ pub fn _rm_grate_from_handler(grateid: u64) {
         let call_map: &CallnumMap = self_entry.value();
         for call_entry in call_map.iter() {
             let target_map: &TargetCageMap = call_entry.value();
-            target_map.retain(|dest_grateid, _| *dest_grateid != grateid);
+            target_map.retain(|_, entry| entry.0 != grateid);
         }
     }
 }
@@ -146,8 +151,8 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 ///
 /// ## Implementation details:
 ///
-/// This function supports three distinct behaviors according to the value of
-/// `handlefunccage` and `register_flag`.
+/// This function supports two behaviors according to the value of
+/// `handlefunccage`.
 ///
 /// Case 1: Remove handler for (srccage, targetcallnum)
 ///
@@ -166,32 +171,13 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 /// In all other cases, the function performs registration or overwrite. The
 /// `(srccage, targetcallnum)` containers are created if they do not already
 /// exist. The handler is then inserted into the innermost map, replacing any
-/// previous handler registered for the same `handlefunccage`. This ensures that RAWPOSIX
-/// behaves strictly as a fallback dispatch target and does not shadow a more specific
-/// interposed grate handler.
+/// previous handler registered for the same lookup target. This keeps dispatch
+/// target-sensitive: `make_syscall(self, callnum, target)` only considers the
+/// entry registered for that exact `target`.
 ///
-/// At the moment, all glibc-originated cage syscalls issued through
-/// `MAKE_LEGACY_SYSCALL` unconditionally set the target cage ID to
-/// `self_cageid`. From the perspective of the glibc cage, every
-/// syscall is therefore dispatched toward RAWPOSIX by default. This
-/// means that even if a grate has already registered an interposed
-/// handler for a given `(srccage, syscall)`, the cage itself has no
-/// prior knowledge of that registration. The grate knows, and 3i knows,
-/// but the cage does not.
-///
-/// As a result, when the syscall reaches 3i, distinguishing the true
-/// intended target becomes difficult. The original target cage was set
-/// to self_cageid by glibc, and no additional metadata is available at the
-/// call site to indicate that a non-RAWPOSIX grate handler should be
-/// preferred. One possible strategy would be to infer intent based on
-/// the number of registered handlers, for example choosing a non-RAWPOSIX
-/// handler whenever more than one entry exists.
-///
-/// To keep dispatch deterministic without losing RawPOSIX as an explicit
-/// target, registration preserves all handlers under the same
-/// `(srccage, syscall)` and overwrites only the entry for the same
-/// `handlefunccage`. Runtime dispatch then selects the handler by the
-/// requested target ID.
+/// Because legacy glibc calls use `target_cageid == self_cageid`, the default
+/// registration key is `srccage`. The value still records the true handler
+/// owner, such as `RAWPOSIX_CAGEID`, `THREEI_CAGEID`, or a grate cage id.
 pub fn register_handler_impl(
     srccage: u64,
     targetcallnum: u64,
@@ -215,7 +201,7 @@ pub fn register_handler_impl(
     let target_map: &TargetCageMap = &*target_map_ref;
 
     // Keep distinct target handlers side by side; only overwrite the same target.
-    target_map.insert(handlefunccage, in_grate_fn_ptr_u64);
+    target_map.insert(srccage, (handlefunccage, in_grate_fn_ptr_u64));
 
     0
 }
@@ -250,10 +236,16 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
         let dst_target_map: &TargetCageMap = &*dst_target_map_ref;
 
         for src_target_entry in src_target_map.iter() {
-            let handlefunccage = *src_target_entry.key();
-            let addr = *src_target_entry.value();
+            let target_id = *src_target_entry.key();
+            let entry = *src_target_entry.value();
+            // Self-targeted legacy entries must follow the copied cage.
+            let copied_target_id = if target_id == srccage {
+                targetcage
+            } else {
+                target_id
+            };
 
-            dst_target_map.insert(handlefunccage, addr);
+            dst_target_map.insert(copied_target_id, entry);
         }
     }
 

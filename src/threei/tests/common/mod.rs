@@ -15,14 +15,17 @@ pub fn clear_globals() {
     EXITING_TABLE.clear();
 }
 
-/// Read current mapping for (cage, callnum) into a Vec<(handlefunc, dest)>
+/// Read current mapping for (cage, callnum) into a Vec<(handler_owner, handler_addr)>
 pub fn mappings_for(cage: u64, callnum: u64) -> Vec<(u64, u64)> {
     #[cfg(feature = "hashmap")]
     {
         let tbl = HANDLERTABLE.lock().unwrap();
         if let Some(cage_entry) = tbl.get(&cage) {
             if let Some(callnum_entry) = cage_entry.get(&callnum) {
-                return callnum_entry.iter().map(|(k, v)| (*k, *v)).collect();
+                return callnum_entry
+                    .iter()
+                    .map(|(_, (handler_owner, addr))| (*handler_owner, *addr))
+                    .collect();
             }
         }
     }
@@ -35,7 +38,10 @@ pub fn mappings_for(cage: u64, callnum: u64) -> Vec<(u64, u64)> {
                 let callnum_entry = callnum_entry_ref.value();
                 return callnum_entry
                     .iter()
-                    .map(|kv| (*kv.key(), *kv.value()))
+                    .map(|kv| {
+                        let (handler_owner, addr) = *kv.value();
+                        (handler_owner, addr)
+                    })
                     .collect();
             }
         }
@@ -50,7 +56,7 @@ pub fn register_simple(
     targetcallnum: u64,
     handlefunccage: u64,
     in_grate_fn_ptr_u64: u64,
-    op_flag: u64,
+    _op_flag: u64,
 ) -> i32 {
     register_handler(
         0,              // _self_cageid placeholder
@@ -58,7 +64,6 @@ pub fn register_simple(
         targetcage,     // targetcage (srccage in impl)
         targetcallnum,  // syscall number
         0,              // _runtime_id placeholder
-        op_flag,        // is_register: 0 for deregister, otherwise register
         handlefunccage, // dest grate/cage id, or THREEI_DEREGISTER
         in_grate_fn_ptr_u64,
         0,
@@ -67,9 +72,10 @@ pub fn register_simple(
         0, // _arg5, _arg5cageid
         0,
         0, // _arg6, _arg6cageid
+        0,
     )
 }
 
 pub fn cpy(target: u64, src: u64) -> u64 {
-    copy_handler_table_to_cage(0, target, src, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    copy_handler_table_to_cage(0, 0, src, target, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 }

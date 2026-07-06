@@ -566,11 +566,11 @@ pub fn make_syscall(
         }
     }
 
-    // _get_handler returned None — the target_map for this
-    // (self_cageid, syscall_num) exists but has no dest_grateid entry.
+    // _get_handler returned None: the table has an entry for this
+    // (self_cageid, syscall_num), but not for this exact target cage.
     panic!(
-        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
-        self_cageid, syscall_num
+        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={} target_cageid={}",
+        self_cageid, syscall_num, target_cageid
     );
 }
 
