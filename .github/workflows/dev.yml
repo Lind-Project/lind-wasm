@@ -2,6 +2,9 @@ name: Release lind-wasm-dev on Docker Hub
 
 on:
   workflow_dispatch:
+  schedule:
+    # Daily build at 06:00 UTC
+    - cron: "0 6 * * *"
 
 permissions: {}
 
