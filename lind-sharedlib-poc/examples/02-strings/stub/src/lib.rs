@@ -9,7 +9,9 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use lind_boot::{CliOptions, SandboxedLib, init_sandboxed_lib};
+use core::ffi::{CStr, c_char};
+
+use lind_boot::{Arg, CliOptions, SandboxedLib, init_sandboxed_lib};
 
 // Why the guest is initialized lazily (on the first call) rather than in a
 // load-time constructor (C `__attribute__((constructor))` / Rust `#[ctor]`, which
@@ -59,20 +61,25 @@ fn lib() -> &'static Mutex<SandboxedLib> {
     })
 }
 
-fn call(name: &str, args: &[i32]) -> i32 {
+/// Read a host C string into an owned buffer INCLUDING the trailing NUL, so that
+/// after it is copied into guest memory the guest still sees a valid C string.
+unsafe fn cstr_bytes(p: *const c_char) -> Vec<u8> {
+    if p.is_null() {
+        return vec![0];
+    }
+    unsafe { CStr::from_ptr(p) }.to_bytes_with_nul().to_vec()
+}
+
+fn call_buf(name: &str, args: &[Arg]) -> i64 {
     lib()
         .lock()
         .unwrap()
-        .call_scalar(name, args)
+        .call(name, args)
         .unwrap_or_else(|e| panic!("lind call `{name}` failed: {e:?}"))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn add(a0: i32, a1: i32) -> i32 {
-    call("add", &[a0, a1])
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn subtract(a0: i32, a1: i32) -> i32 {
-    call("subtract", &[a0, a1])
+pub extern "C" fn str_len(a0: *const c_char) -> usize {
+    let b0 = unsafe { cstr_bytes(a0) };
+    call_buf("str_len", &[Arg::Buf(&b0)]) as usize
 }

@@ -16,7 +16,7 @@ marshalling capability on top of the previous:
 | Example | Adds |
 | --- | --- |
 | [`examples/01-scalars`](examples/01-scalars) | plumbing only — scalar `int(int,int)`, no marshalling |
-| [`examples/02-buffers`](examples/02-strings) | copy-in of a `const char*` (first marshalled argument) |
+| `examples/02-buffers` *(next)* | caller-allocated in/out buffer |
 | `examples/03-strings` | NUL-terminated string copy across the boundary |
 | `examples/04-structs` | struct copy + ILP32/LP64 layout |
 | `examples/05-callbacks` | guest trampoline re-entering the host |

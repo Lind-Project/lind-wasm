@@ -1,0 +1,15 @@
+[package]
+name = "lind-libstrdemo"
+version = "0.1.0"
+edition = "2024"
+
+# Build a native shared object. `name = "strdemo"` makes the output `libstrdemo.so`,
+# so a native program can link it with `-lstrdemo`.
+[lib]
+name = "strdemo"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Reuses lind-boot's sandboxed-lib API (init_sandboxed_lib / SandboxedLib / Arg) and,
+# through it, the whole lind/wasmtime/rawposix/3i stack.
+lind-boot = { path = "../../../../src/lind-boot" }

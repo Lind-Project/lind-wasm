@@ -89,14 +89,9 @@ $(NATIVE_DIR)/demo: $(DEMO_SRC) $(NATIVE_DIR)/lib$(LIB).so | $(NATIVE_DIR)
 # Sandboxed path: compile guest.c to wasm, build the wasm-backed cdylib, and link
 # the SAME demo against it. The guest functions run inside the lind/wasmtime cage.
 # --------------------------------------------------------------------------
-# PRELOAD (optional, set by an example): host paths of guest libraries to preload
-# into the sandbox, e.g. libc/libm for a guest that calls them. Same `name=path`
-# syntax as lind-boot's --preload, comma-separated. The .so reads it via LIND_PRELOAD.
-PRELOAD ?=
-
 run: $(LIND_DIR)/demo $(GUEST_MODULE)
 	@echo "================ LIND (wasm-sandboxed) ================="
-	@LIND_MODULE=$(GUEST_MODULE) LIND_PRELOAD="$(PRELOAD)" LD_LIBRARY_PATH=$(CDYLIB_DIR) $(LIND_DIR)/demo
+	@LIND_MODULE=$(GUEST_MODULE) LD_LIBRARY_PATH=$(CDYLIB_DIR) $(LIND_DIR)/demo
 
 # Run both, back to back, for comparison.
 compare: run-native run

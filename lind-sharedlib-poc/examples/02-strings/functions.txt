@@ -1,0 +1,13 @@
+# Stub manifest for this example. One exported function per line:
+#
+#   <name> <ret-type> <arg-type>...
+#
+# Types:
+#   i32    scalar int (passed by value)
+#   usize  size_t return
+#   cstr   const char* — the string is copied into guest memory (marshalling), and
+#          the call receives the resulting guest offset
+#
+# `make gen` turns this into stub/src/lib.rs.
+
+str_len  usize  cstr

@@ -4,4 +4,4 @@ pub mod sandboxed_lib;
 pub mod trampoline;
 
 pub use execute::{execute_wasmtime, precompile_module};
-pub use sandboxed_lib::{SandboxedLib, init_sandboxed_lib};
+pub use sandboxed_lib::{Arg, SandboxedLib, init_sandboxed_lib};

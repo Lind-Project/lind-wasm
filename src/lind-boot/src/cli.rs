@@ -11,6 +11,30 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
     Ok((parts[0].into(), parts[1].into()))
 }
 
+/// Preloads for the embedding (`.so`) path, taken from the `LIND_PRELOAD` env var.
+///
+/// Unlike the `lind_run` binary — which is chrooted into lindfs, so it can preload
+/// `env=/lib/libc.cwasm` by a lindfs-relative path — a loaded `.so` is not chrooted
+/// and doesn't know the repo layout, so the caller passes **host** paths. The syntax
+/// matches the CLI `--preload` flag (`name=path`), comma-separated for several:
+///
+/// ```text
+/// LIND_PRELOAD="env=/abs/lindfs/lib/libc.cwasm,env=/abs/lindfs/lib/libm.cwasm"
+/// ```
+fn preloads_from_env() -> Vec<(String, PathBuf)> {
+    match std::env::var("LIND_PRELOAD") {
+        Ok(s) => s
+            .split(',')
+            .map(str::trim)
+            .filter(|e| !e.is_empty())
+            .map(|e| {
+                parse_preloads(e).unwrap_or_else(|err| panic!("invalid LIND_PRELOAD entry `{e}`: {err}"))
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
 #[derive(Debug, Parser, Clone)]
 #[command(name = "lind-boot")]
 pub struct CliOptions {
@@ -121,7 +145,7 @@ impl CliOptions {
             wasm_bytes: None,
             args: vec![module_path.into()],
             vars: Vec::new(),
-            preloads: Vec::new(),
+            preloads: preloads_from_env(),
             thread_stack_size: 64 * 1024 * 1024,
         }
     }
