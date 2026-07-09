@@ -14,7 +14,10 @@ int __GI___clone3 (struct clone_args *cl_args, size_t size, int (*func)(void *),
   int pid = MAKE_LEGACY_SYSCALL(CLONE_SYSCALL, "syscall|clone3",
                          host_cl_args,
                          NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
-
+  
+  /* Restore guest-visible clone_args. */
+  cl_args->child_tid = guest_child_tid;
+  
   if (pid == 0) {
     // Reinitialize address translation only for fork (new cage).
     // For threads (CLONE_VM), the address space is shared with the parent,
