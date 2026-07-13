@@ -32,6 +32,8 @@ use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
+use threei::threei_const;
+
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/clone.2.html
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
@@ -558,8 +560,17 @@ pub extern "C" fn waitpid_syscall(
                 if zombies.len() > 0 {
                     continue;
                 }
-                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                let cage_runtime = threei::get_cage_runtime(cageid);
+                if cage_runtime == Some(threei_const::RUNTIME_TYPE_WASMTIME) {
+                    if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
+                }
+                else if cage_runtime == Some(threei_const::RUNTIME_TYPE_MPK) {
+                    //TODO: allow preemption
+                }
+                else {
+                    panic!("waitpid: unknown cage runtime type");
                 }
                 continue;
             } else {
@@ -628,10 +639,19 @@ pub extern "C" fn waitpid_syscall(
                 }
 
                 // Check for pending signals after yielding (only if WNOHANG is not set)
-                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                let cage_runtime = threei::get_cage_runtime(cageid);
+                if cage_runtime == Some(threei_const::RUNTIME_TYPE_WASMTIME) {
+                    if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
                 }
-
+                else if cage_runtime == Some(threei_const::RUNTIME_TYPE_MPK) {
+                    //TODO: allow preemption
+                }
+                else {
+                    panic!("waitpid: unknown cage runtime type");
+                }
+                
                 continue;
             }
         }

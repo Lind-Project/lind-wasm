@@ -4,11 +4,18 @@
 
 
 use crate::cli::CliOptions;
+use crate::lind_mpk::syscalls::{
+    ENABLE_INTERPOSE_PTR, LIND_MANAGER,
+    mpk_clone_syscall_entry
+};
+use crate::lind_mpk::RuntimeInfo::MPKRuntimeInfo;
 use anyhow::{Context, bail};
+use cage::get_cage;
 use libc::{c_char, c_int, c_ulong, c_void};
+use std::sync::atomic::Ordering;
 use std::env;
 use std::ffi::{CStr, CString};
-
+use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 /// Minimal reproduction of the `link_map` struct from `<link.h>`.
 /// The libc crate does not expose this type, so we define only the fields we
 /// actually need. The layout matches the glibc ABI on x86-64 Linux.
@@ -21,9 +28,13 @@ struct LinkMap {
     l_prev: *mut LinkMap,
 }
 use std::sync::Arc;
-use sysdefs::constants::lind_platform_const::UNUSED_ID;
-use wasmtime_lind_multi_process::CAGE_START_ID;
 use wasmtime_lind_utils::LindCageManager;
+use sysdefs::constants::lind_platform_const::{UNUSED_ID,  UNUSED_ARG, WASMTIME_CAGEID, RAWPOSIX_CAGEID};
+use wasmtime_lind_multi_process::CAGE_START_ID;
+use threei::threei_const;
+
+// Import the type alias from RuntimeInfo module
+use crate::lind_mpk::RuntimeInfo::EnableInterposeF;
 
 // dlinfo request codes not yet exposed by the libc crate.
 const RTLD_DI_LMID: c_int = 1;
@@ -76,18 +87,14 @@ extern "C" fn lind_syscall_handler(
     ) as i64
 }
 
-pub fn init_mpk() -> Arc<LindCageManager>  {
+pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
     mpk_debug("initializing lind-mpk");
-    
-    let lind_manager = Arc::new(LindCageManager::new(0));
-    // First cage will be created
-    lind_manager.increment();
-
+    // Publish the manager globally so mpk_clone_syscall_entry can reach it.
+    LIND_MANAGER.set(lind_manager).ok();
     mpk_debug("lind-mpk initialized successfully");
-    lind_manager
 }
 
-pub fn execute_mpk(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
+pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
     let so_path = lindboot_cli.wasm_file();
     let c_so_path = CString::new(so_path).context("NUL byte in .so path")?;
 
@@ -209,10 +216,11 @@ pub fn execute_mpk(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     }
 
     mpk_debug("registering syscall interposition handler");
-    type EnableInterposeF = unsafe extern "C" fn(
-        handler: Option<unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i32) -> i64>,
-    ) -> c_int;
+
     let enable_interpose: EnableInterposeF = unsafe { std::mem::transmute(sym_ptr) };
+    // Publish the resolved function pointer so that mpk_clone_syscall_entry can
+    // re-register a new handler inside the child process after fork.
+    ENABLE_INTERPOSE_PTR.store(sym_ptr as u64, Ordering::Release);
     let ret = unsafe { enable_interpose(Some(lind_syscall_handler)) };
     if ret != 0 {
         unsafe {
@@ -228,7 +236,35 @@ pub fn execute_mpk(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     ));
     }
 
-    // Step 5: Build argc / argv / envp from CliOptions and call main().
+    //step 4.1: debug print the resolved addresses of fork, clone, __clone_internal
+    let fork_sym = CString::new("fork").unwrap();
+    let fork_ptr = unsafe { libc::dlsym(libc_handle, fork_sym.as_ptr()) };
+    mpk_debug(format!("resolved fork at {fork_ptr:p}"));
+
+    let clone_sym = CString::new("clone").unwrap();
+    let clone_ptr = unsafe { libc::dlsym(libc_handle, clone_sym.as_ptr()) };
+    mpk_debug(format!("resolved clone at {clone_ptr:p}"));
+
+    let clone_internal_sym = CString::new("__clone_internal").unwrap();
+    let clone_internal_ptr = unsafe { libc::dlsym(libc_handle, clone_internal_sym.as_ptr()) };
+    mpk_debug(format!("resolved __clone_internal at {clone_internal_ptr:p}"));
+
+    // Step 4.2: Set up MPKRuntimeInfo and store it in the cage
+    mpk_debug("creating MPKRuntimeInfo for cage");
+    let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0);
+    
+    // Get the cage and update its runtime_info
+    let cage = get_cage(cage_id)
+        .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
+    *cage.runtime_info.write() = Box::new(mpk_info);
+    mpk_debug(format!("MPKRuntimeInfo stored in cage {}", cage_id));
+
+    //Step 5: Notify threei of the cage runtime type
+    // (syscall handler registration is now done once at boot by shims::register_syscall_entries)
+    threei::set_cage_runtime(cage_id, threei_const::RUNTIME_TYPE_MPK);
+
+
+    // Step 6: Build argc / argv / envp from CliOptions and call main().
     let c_args: Vec<CString> = lindboot_cli
         .args
         .iter()
@@ -268,7 +304,9 @@ pub fn execute_mpk(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) };
     mpk_debug(format!("cage_main returned exit_code={exit_code}"));
 
-    // Step 6: Clean up dlmopen handles.
+    //TODO: forward this to 3i::makesyscall(exitgroup)
+
+    // Step 7: Clean up dlmopen handles.
     mpk_debug("closing dlmopen handles");
     unsafe {
         libc::dlclose(libc_handle);

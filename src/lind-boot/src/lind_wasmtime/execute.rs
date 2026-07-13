@@ -47,12 +47,7 @@ use wasmtime_lind_utils::{LindCageManager, LindGOT};
 ///
 /// Returns the cage manager, which tracks the number of active cages and allows
 /// the main process to wait for all cages to exit before shutting down.
-pub fn init_wasmtime() -> Arc<LindCageManager> {
-    // Initialize the Lind cage counter
-    let lind_manager = Arc::new(LindCageManager::new(0));
-    // First cage will be created
-    lind_manager.increment();
-
+pub fn init_wasmtime(lind_manager: Arc<LindCageManager>) {
     let grate_cleanup_funcptr = cleanup_grate_handler as *const () as usize as u64;
     // Initialize trampoline entry function pointer for wasmtime runtime.
     // This is for grate calls to re-enter wasmtime runtime.
@@ -62,15 +57,8 @@ pub fn init_wasmtime() -> Arc<LindCageManager> {
         grate_cleanup_funcptr,
     );
 
-    // Register syscall handlers (clone/exec/exit) with 3i
-    if !register_wasmtime_syscall_entry() {
-        panic!("[lind-boot] register syscall handlers (clone/exec/exit) with 3i failed");
-    }
-
     // initialize the vmctx pool for exit/exec/clone reentry into wasmtime runtime
     init_vmctx_pool();
-
-    lind_manager
 }
 
 /// Executes a Wasm program in a cage using an initialized Wasmtime runtime.
@@ -153,7 +141,9 @@ pub fn exec_wasm(
 /// a single Wasm program. For more complex scenarios (e.g., multi-backend support,
 /// grate-based exec), use `init_wasmtime()` and `exec_wasm()` separately.
 pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
-    let lind_manager = init_wasmtime();
+    let lind_manager = Arc::new(LindCageManager::new(0));
+    lind_manager.increment();
+    init_wasmtime(lind_manager.clone());
     exec_wasm(lindboot_cli, lind_manager, CAGE_START_ID as u64)
 }
 
@@ -379,96 +369,6 @@ pub fn execute_with_lind(
     result
 }
 
-/// Register Wasmtime re-entry trampolines into the 3i handler table.
-///
-/// During `lind-boot` initialization, we extract raw function pointers for a
-/// small set of syscalls whose semantics must be completed inside Wasmtime
-/// (e.g., instance/thread creation and termination). These functions act as
-/// **Wasmtime re-entry trampolines**:
-///
-/// ```
-///   Wasm
-///     -> Wasmtime lind-common trampoline
-///     -> 3i dispatch
-///     -> RawPOSIX handling
-///     -> 3i dispatch
-///     -> **back to Wasmtime (registered trampolines)**
-/// ```
-/// All handlers are registered from the RawPOSIX cage (`RAWPOSIX_CAGEID`)
-/// targeting the Wasmtime runtime cage (`WASMTIME_CAGEID`).
-///
-/// Registered syscalls:
-/// - `clone` (56): fork / pthread_create completion in Wasmtime
-/// - `exec`  (59): exec completion in Wasmtime (instance replacement / image switch)
-/// - `exit`  (60): thread/process termination completion in Wasmtime
-fn register_wasmtime_syscall_entry() -> bool {
-    // Register clone trampoline (syscall 56).
-    let fp_clone = clone_syscall_entry;
-    let clone_call_u64: u64 = fp_clone as *const () as usize as u64;
-    let clone_ret = threei::register_handler(
-        UNUSED_ID,
-        WASMTIME_CAGEID,                     // target cageid for this syscall handler
-        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        CLONE3_SYSCALL as u64,                // clone syscall number
-        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        WASMTIME_CAGEID,                     // handler function is in the 3i
-        clone_call_u64,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    );
-
-    // Register exec trampoline (syscall 59).
-    let fp_exec = exec_syscall_entry;
-    let exec_call_u64: u64 = fp_exec as *const () as usize as u64;
-    let exec_ret = threei::register_handler(
-        UNUSED_ID,
-        WASMTIME_CAGEID,                     // target cageid for this syscall handler
-        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXEC_SYSCALL as u64,                 // exec syscall number
-        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        WASMTIME_CAGEID,                     // handler function is in the 3i
-        exec_call_u64,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    );
-
-    // Register exit trampoline (syscall 60).
-    let fp_exit = exit_syscall_entry;
-    let exit_call_u64: u64 = fp_exit as *const () as usize as u64;
-    let exit_ret = threei::register_handler(
-        UNUSED_ID,
-        WASMTIME_CAGEID,                     // target cageid for this syscall handler
-        RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        EXIT_SYSCALL as u64,                 // exit syscall number
-        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-        WASMTIME_CAGEID,                     // handler function is in the 3i
-        exit_call_u64,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-        UNUSED_ARG,
-        UNUSED_ID,
-    );
-
-    // Return false if registration failed
-    if (clone_ret | exec_ret | exit_ret) != 0 {
-        return false;
-    };
-    // Succeed
-    true
-}
 
 /// Attaches all host-side APIs and Lind runtime contexts to the linker and store.
 ///

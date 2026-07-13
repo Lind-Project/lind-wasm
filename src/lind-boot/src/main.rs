@@ -1,10 +1,12 @@
 mod cli;
 mod lind_mpk;
 mod lind_wasmtime;
+mod shims;
 
 use crate::{
     cli::CliOptions,
     lind_mpk::execute_mpk,
+    lind_mpk::init_mpk,
     lind_wasmtime::{exec_wasm, init_wasmtime, precompile_module},
 };
 use typemap::{BinaryFileType, detect_binary_type};
@@ -17,6 +19,8 @@ use std::path::Path;
 use rawposix::init::{rawposix_shutdown, rawposix_start};
 use sysdefs::constants::LINDFS_ROOT;
 use wasmtime_lind_multi_process::CAGE_START_ID;
+use wasmtime_lind_utils::LindCageManager;
+use std::sync::Arc;
 
 /// Helper function which `chroot`s to `lindfs`.
 ///
@@ -75,8 +79,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize RawPOSIX and register RawPOSIX syscalls with 3i
     rawposix_start(0);
 
+    // Create the shared cage lifecycle manager once, before routing to any backend.
+    // Both the Wasmtime and MPK paths share the same manager so cage counts and
+    // shutdown synchronisation are consistent regardless of the binary type.
+    let lind_manager = Arc::new(LindCageManager::new(0));
+    lind_manager.increment(); // account for the first cage about to be created
+
     // Initialize the Wasmtime runtime (one-time setup)
-    let lind_manager = init_wasmtime();
+    init_wasmtime(lind_manager.clone());
+    init_mpk(lind_manager.clone());
+
+    // Register the unified clone/exec/exit shims with 3i.  This must happen
+    // after rawposix_start() and before any cage is created.
+    shims::register_syscall_entries();
 
     // Detect the binary format from the file magic and route to the
     // appropriate runtime backend:
@@ -90,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cage_id = CAGE_START_ID as u64;
     let result = match file_type {
-        BinaryFileType::Elf => execute_mpk(lindboot_cli),
+        BinaryFileType::Elf => execute_mpk(lindboot_cli, cage_id),
         BinaryFileType::Wasm | BinaryFileType::Unknown => {
             exec_wasm(lindboot_cli, lind_manager, cage_id)
         }
