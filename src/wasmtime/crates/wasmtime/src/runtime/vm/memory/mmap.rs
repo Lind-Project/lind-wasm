@@ -54,8 +54,15 @@ impl MmapMemory {
         minimum: usize,
         mut maximum: Option<usize>,
     ) -> Result<Self> {
+        const LIND_INTERNAL_MEMORY_RESERVATION: u64 = 10 * 1024 * 1024;
+
+        let is_lind_guest_memory = ty.shared;
         // lind-wasm: we enable maximum use of memory at start
-        maximum = Some(super::MAX_MEMORY_SIZE);
+        // maximum = Some(super::MAX_MEMORY_SIZE);
+        if is_lind_guest_memory {
+            maximum = Some(super::MAX_MEMORY_SIZE);
+        }
+        
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).
@@ -80,8 +87,18 @@ impl MmapMemory {
         // to reserve any extra for growth.
         //
         // If the minimum size doesn't fit within this linear memory.
-        let mut alloc_bytes = tunables.memory_reservation;
-        let mut extra_to_reserve_on_growth = tunables.memory_reservation_for_growth;
+        // let mut alloc_bytes = tunables.memory_reservation;
+        let mut alloc_bytes = if is_lind_guest_memory {
+            tunables.memory_reservation
+        } else {
+            LIND_INTERNAL_MEMORY_RESERVATION
+        };
+        // let mut extra_to_reserve_on_growth = tunables.memory_reservation_for_growth;
+        let mut extra_to_reserve_on_growth = if is_lind_guest_memory {
+            tunables.memory_reservation_for_growth
+        } else {
+            0
+        };
         let minimum_u64 = u64::try_from(minimum).unwrap();
         if minimum_u64 <= alloc_bytes {
             if let Ok(max) = ty.maximum_byte_size() {
@@ -106,6 +123,16 @@ impl MmapMemory {
             .and_then(|i| i.checked_add(offset_guard_bytes))
             .with_context(|| format!("cannot allocate {minimum} with guard regions"))?;
 
+        // eprintln!(
+        //     "[MmapMemory::new] shared={}, minimum={:#x}, maximum={:?}, thread={:?}, extra_to_reserve_on_growth={:#x}, alloc_bytes={:#x}, tunables.memory_reservation={:#x}",
+        //     ty.shared,
+        //     minimum,
+        //     maximum,
+        //     std::thread::current().name(),
+        //     extra_to_reserve_on_growth,
+        //     alloc_bytes,
+        //     tunables.memory_reservation,
+        // );
         // lind-wasm: make_accessible is a no-op because rawposix manages wasm memory
         // permissions. Pre-allocate the entire region (including guards) as
         // PROT_READ|PROT_WRITE so both wasm memories and host-internal allocations

@@ -617,8 +617,16 @@ impl Instance {
                     }
                 };
 
+                println!(
+                    "[debug] child cage {} memory base address: {:#x}",
+                    child_cageid, child_address
+                );
                 fork_vmmap(parent_cageid as u64, child_cageid);
 
+                println!(
+                    "[debug] forked memory from parent cage {} to child cage {}",
+                    parent_cageid, child_cageid
+                );
                 // For child instances, the stack arena is inherited from the parent cage, and grate calls
                 // only works at static build, so we only need to fork the stack arena base if dylink is not enabled.
                 if !dylink_enabled {
@@ -629,6 +637,13 @@ impl Instance {
                                 parent_cageid, child_cageid, e
                             )
                         });
+                    println!(
+                        "[stack-arena] parent={} child={} parent_base={:?} child_base={:?}",
+                        parent_cageid,
+                        child_cageid,
+                        lind_platform_const::get_stack_arena_base(parent_cageid as usize),
+                        lind_platform_const::get_stack_arena_base(child_cageid as usize),
+                    );
                 }
             }
             InstantiateType::InstantiateLib {

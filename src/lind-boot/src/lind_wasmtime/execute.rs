@@ -243,7 +243,7 @@ pub fn execute_with_lind(
         ));
     }
 
-    attach_api(
+    match attach_api(
         &mut wstore,
         &mut linker,
         dylink_metadata.got.clone(),
@@ -252,7 +252,12 @@ pub fn execute_with_lind(
         lind_boot.clone(),
         cageid as i32,
         &dylink_metadata,
-    )?;
+    ) {
+        Ok(_) => (),
+        Err(_) => {
+            panic!("failed to attach host APIs for exec");
+        }
+    }
 
     if dylink_metadata.dylink_enabled {
         let lind_got = dylink_metadata.got.as_ref().unwrap();
@@ -733,6 +738,7 @@ fn load_main_module(
     drop(linker);
     drop(linker_guard);
 
+    println!("start executing main module in cage {}", cageid);
     let ret = match func {
         Some(func) => invoke_func(store, func, &args),
         None => Ok(vec![]),

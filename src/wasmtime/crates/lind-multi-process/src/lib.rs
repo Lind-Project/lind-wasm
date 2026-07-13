@@ -1413,12 +1413,16 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             return Ok(-(Errno::ELOOP as i32));
         }
 
+        // enarx edits:
+        // start
+        println!("execve called with path: {}, argv: {:?}, envs: {:?}", path, argv, environs);
         // if the file to exec does not exist
-        if !std::path::Path::new(&path).exists() {
-            // return ENOENT
-            return Ok(-(Errno::ENOENT as i32));
-        }
+        // if !std::path::Path::new(&path).exists() {
+        //     // return ENOENT
+        //     return Ok(-(Errno::ENOENT as i32));
+        // }
 
+        // println!("execve: file exists, continue to exec");
         // parse the wasm module as soon as possible to catch the error before unwinding, which is hard to unwind back if exec file has some problems
         let mut main_module = &self.modules.get(0).unwrap().2;
 
@@ -1426,11 +1430,38 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let dylink_enabled = main_module.dylink_meminfo().is_some();
 
         let engine = main_module.engine().clone();
+
+        use std::fs::File;
+        use std::io::Read;
+
         let exec_file_path = Path::new(&path);
-        let exec_module = match Engine::detect_precompiled_file(exec_file_path) {
-            Ok(_) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
-            Err(_) => Module::from_file(&engine, exec_file_path),
+        let mut exec_file = File::open(&exec_file_path)
+            .expect("Failed to open exec file");
+        let mut exec_webasm = Vec::new();
+        exec_file.read_to_end(&mut exec_webasm).context("Failed to read exec file")?;
+
+        // let detected = Engine::detect_precompiled_file(exec_file_path);
+        // println!("detect_precompiled_file: {:?}", detected);
+
+        let exec_module = match Engine::detect_precompiled(&exec_webasm) {
+            Some(_) => unsafe { Module::deserialize(&engine, &exec_webasm) },
+            None => Module::from_binary(&engine, &exec_webasm),
         };
+
+        // let exec_module = match detected {
+        //     Ok(Some(_)) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
+        //     Ok(None) => Module::from_file(&engine, exec_file_path),
+        //     Err(e) => {
+        //         println!("failed to inspect exec file: {e:#}");
+        //         return Ok(-(Errno::ENOENT as i32));
+        //     }
+        // };
+
+        if let Err(ref e) = exec_module {
+            println!("failed to load exec module: {e:#}");
+            return Ok(-(Errno::ENOENT as i32));
+        }
+        // end
         if exec_module.is_err() {
             let shebang_res = parse_shebang(exec_file_path);
 

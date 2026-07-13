@@ -81,35 +81,80 @@ impl Mmap<AlignedLength> {
         accessible_size: HostAlignedByteCount,
         mapping_size: HostAlignedByteCount,
     ) -> Result<Self> {
+        // eprintln!("[accessible_reserved new] enter");
+
         assert!(accessible_size <= mapping_size);
 
         if mapping_size.is_zero() {
+            // eprintln!("[accessible_reserved new] branch: empty");
+
             Ok(Mmap {
                 sys: mmap::Mmap::new_empty(),
                 data: AlignedLength {},
             })
         } else if accessible_size == mapping_size {
+            // eprintln!("[accessible_reserved new] branch: mmap::Mmap::new");
+            // eprintln!(
+            //     "[accessible_reserved new] before mmap::Mmap::new({:#x})",
+            //     mapping_size
+            // );
+
+            let sys = mmap::Mmap::new(mapping_size).map_err(|e| {
+                eprintln!("[accessible_reserved new] mmap::Mmap::new ERR: {:#?}", e);
+                e
+            })
+            .with_context(|| format!("mmap failed to allocate {mapping_size:#x} bytes"))?;
+
             Ok(Mmap {
-                sys: mmap::Mmap::new(mapping_size)
-                    .with_context(|| format!("mmap failed to allocate {mapping_size:#x} bytes"))?,
+                sys,
                 data: AlignedLength {},
             })
         } else {
+            // eprintln!("[accessible_reserved new] branch: reserve + make_accessible");
+            // eprintln!(
+            //     "[accessible_reserved new] before mmap::Mmap::reserve({:#x})",
+            //     mapping_size
+            // );
+
             let result = Mmap {
                 sys: mmap::Mmap::reserve(mapping_size)
+                    .map_err(|e| {
+                        eprintln!(
+                            "[accessible_reserved new] mmap::Mmap::reserve ERR: {:#?}",
+                            e
+                        );
+                        e
+                    })
                     .with_context(|| format!("mmap failed to reserve {mapping_size:#x} bytes"))?,
                 data: AlignedLength {},
             };
+
+            // eprintln!("[accessible_reserved new] after mmap::Mmap::reserve OK");
+
             if !accessible_size.is_zero() {
-                // SAFETY: result was just created and is not in use.
+                // eprintln!(
+                //     "[accessible_reserved new] before make_accessible({:#x})",
+                //     accessible_size
+                // );
+
                 unsafe {
                     result
                         .make_accessible(HostAlignedByteCount::ZERO, accessible_size)
+                        .map_err(|e| {
+                            eprintln!(
+                                "[accessible_reserved new] make_accessible ERR: {:#?}",
+                                e
+                            );
+                            e
+                        })
                         .with_context(|| {
                             format!("mmap failed to allocate {accessible_size:#x} bytes")
                         })?;
                 }
+
+                // eprintln!("[accessible_reserved new] after make_accessible OK");
             }
+
             Ok(result)
         }
     }

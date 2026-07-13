@@ -585,24 +585,58 @@ impl<T> Linker<T> {
                     new_linker.define(&mut store, &module, &name, shared_memory.clone())?;
                 }
                 ClonedMemory::New(memory_type) => {
+                    // let mem = SharedMemory::new(&engine, memory_type.clone())?;
+                    // // Grow to the declared max (65536 pages = 4 GiB) so that
+                    // // fork_vmmap can copy parent data at any user address and wasm
+                    // // bounds checks pass in the child.
+                    // let max_pages = memory_type.maximum().unwrap_or(65536);
+                    // let cur_pages = memory_type.minimum();
+                    // let delta = max_pages.saturating_sub(cur_pages);
+                    // if delta > 0 {
+                    //     mem.grow(delta)?;
+                    // }
+                    // let base = mem.get_memory_base();
+                    // memory_base = Some(base);
+                    // // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
+                    // // rawposix takes ownership via init_vmmap + fork_vmmap.
+                    // unsafe {
+                    //     libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE);
+                    // }
+                    // new_linker.define(&mut store, &module, &name, mem)?;
+                    // eprintln!("[fork-child] before SharedMemory::new");
                     let mem = SharedMemory::new(&engine, memory_type.clone())?;
-                    // Grow to the declared max (65536 pages = 4 GiB) so that
-                    // fork_vmmap can copy parent data at any user address and wasm
-                    // bounds checks pass in the child.
+                    // eprintln!("[fork-child] after SharedMemory::new");
+
                     let max_pages = memory_type.maximum().unwrap_or(65536);
                     let cur_pages = memory_type.minimum();
                     let delta = max_pages.saturating_sub(cur_pages);
+                    // eprintln!("[fork-child] before mem.grow");
+                    // eprintln!(
+                    //     "[fork-child] type_min={}, type_max={:?}, actual_size={}",
+                    //     memory_type.minimum(),
+                    //     memory_type.maximum(),
+                    //     mem.size(),
+                    // );
                     if delta > 0 {
                         mem.grow(delta)?;
                     }
+                    // eprintln!("[fork-child] after mem.grow");
+
                     let base = mem.get_memory_base();
                     memory_base = Some(base);
-                    // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
-                    // rawposix takes ownership via init_vmmap + fork_vmmap.
-                    unsafe {
-                        libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE);
-                    }
+                    // eprintln!("[fork-child] before mprotect");
+                    let ret = unsafe {
+                        libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE)
+                    };
+                    // eprintln!(
+                    //     "[fork-child] after mprotect ret={}, errno={}",
+                    //     ret,
+                    //     std::io::Error::last_os_error()
+                    // );
+
+                    // eprintln!("[fork-child] before linker.define");
                     new_linker.define(&mut store, &module, &name, mem)?;
+                    // eprintln!("[fork-child] after linker.define");
                 }
             }
         }

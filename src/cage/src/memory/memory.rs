@@ -63,6 +63,12 @@ pub fn is_mmap_error(ret: usize) -> bool {
     true // treat as error in LogOnly/NoAction mode
 }
 
+pub fn get_base_address(cageid: u64) -> usize {
+    let cage = get_cage(cageid).unwrap();
+    let vmmap = cage.vmmap.read();
+    vmmap.get_base_address()
+}
+
 /// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.
 ///
 /// This function is designed to replicate the parent's memory space into the child immediately after
@@ -83,6 +89,7 @@ pub fn is_mmap_error(ret: usize) -> bool {
 /// * `parent_cageid` - cageid of parent
 /// * `child_cageid` - caegid of child
 pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
+    eprintln!("[fork_vmmap] begin");
     // first retrieve corresponding vmmaps
     let parent_cage = get_cage(parent_cageid).unwrap();
     let child_cage = get_cage(child_cageid).unwrap();
@@ -90,7 +97,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     let child_vmmap = child_cage.vmmap.read();
 
     // iterate through each vmmap entry
-    for (_interval, entry) in parent_vmmap.entries.iter() {
+    for (interval, entry) in parent_vmmap.entries.iter() {
         // PROT_NONE regions are already configured with PROT_NONE by default,
         // and reading from a host PROT_NONE page would cause a SIGSEGV
         if entry.prot == PROT_NONE {
@@ -104,27 +111,128 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
         // translate user address to system address
         let parent_st = parent_vmmap.user_to_sys(addr_st);
         let child_st = child_vmmap.user_to_sys(addr_st);
-        if entry.flags & (MAP_SHARED as i32) > 0 {
-            // for shared memory, we are using mremap to fork shared memory
-            // See "man 2 mremap" for description of what MREMAP_MAYMOVE does with old_size=0
-            // when old_address points to a shared mapping
+
+        // eprintln!(
+        //     "[fork_vmmap] interval={:?}, user={:#x}, len={:#x}, \
+        //     parent={:#x}, child={:#x}, prot={:#x}, flags={:#x}, backing={:?}",
+        //     interval,
+        //     addr_st,
+        //     addr_len,
+        //     parent_st,
+        //     child_st,
+        //     entry.prot,
+        //     entry.flags,
+        //     entry.backing,
+        // );
+        let hit = addr_st <= 0xffffe000
+            && 0xffffe000 < addr_st.wrapping_add(addr_len as u32);
+
+        if hit {
+            eprintln!(
+                "[fork_vmmap-hit-ffffe000] user=[{:#x},{:#x}) len={:#x} parent={:#x} child={:#x} prot={:#x} flags={:#x} backing={:?}",
+                addr_st,
+                addr_st.wrapping_add(addr_len as u32),
+                addr_len,
+                parent_st,
+                child_st,
+                entry.prot,
+                entry.flags,
+                entry.backing,
+            );
+        }
+        
+        let hits_target = {
+            const TARGET: u64 = 0xffffe000;
+            let start = addr_st as u64;
+            let end = start + addr_len as u64;
+            start <= TARGET && TARGET < end
+        };
+
+        if entry.flags & (MAP_SHARED as i32) != 0 {
             unsafe {
-                libc::mremap(
+                let parent_value_before =
+                    std::ptr::read_volatile(parent_st as *const u32);
+                let child_value_before =
+                    std::ptr::read_volatile(child_st as *const u32);
+
+                if hits_target {
+                    eprintln!(
+                        "[fork-shared-before] cage={}->{} \
+                        user={:#x} len={:#x} \
+                        parent={:#x} child={:#x} \
+                        parent_value={} child_value={} \
+                        prot={:#x} flags={:#x} backing={:?}",
+                        parent_cageid,
+                        child_cageid,
+                        addr_st,
+                        addr_len,
+                        parent_st,
+                        child_st,
+                        parent_value_before,
+                        child_value_before,
+                        entry.prot,
+                        entry.flags,
+                        entry.backing,
+                    );
+                }
+
+                // Clear errno so that it belongs to this mremap call.
+                *libc::__errno_location() = 0;
+
+                let ret = libc::mremap(
                     parent_st as *mut libc::c_void,
                     0,
                     addr_len,
                     (MREMAP_MAYMOVE | MREMAP_FIXED) as i32,
                     child_st as *mut libc::c_void,
                 );
-            };
+
+                let errno = *libc::__errno_location();
+
+                let parent_value_after =
+                    std::ptr::read_volatile(parent_st as *const u32);
+                let child_value_after =
+                    std::ptr::read_volatile(child_st as *const u32);
+
+                if hits_target {
+                    eprintln!(
+                        "[fork-shared-after] ret={:?} errno={} \
+                        parent_value={} child_value={} \
+                        same_address={}",
+                        ret,
+                        errno,
+                        parent_value_after,
+                        child_value_after,
+                        parent_st == child_st,
+                    );
+                }
+
+                if ret == libc::MAP_FAILED {
+                    eprintln!(
+                        "[fork-shared-error] mremap failed: {} \
+                        user={:#x} parent={:#x} child={:#x}",
+                        std::io::Error::from_raw_os_error(errno),
+                        addr_st,
+                        parent_st,
+                        child_st,
+                    );
+                }
+            }
         } else {
+            let needs_write = entry.prot & PROT_WRITE == 0;
+
+            
+            // eprintln!("[fork_vmmap] before writable mprotect");
             unsafe {
                 // temporarily enable write on child's memory region to write parent data
-                libc::mprotect(
-                    child_st as *mut libc::c_void,
-                    addr_len,
-                    PROT_READ | PROT_WRITE,
-                );
+                if needs_write {
+                    let ret = libc::mprotect(
+                        child_st as *mut libc::c_void,
+                        addr_len,
+                        entry.prot | PROT_WRITE,
+                    );
+                    assert_eq!(ret, 0, "failed to make child mapping writable");
+                }
 
                 // write parent data
                 let local_iov = libc::iovec {
@@ -135,6 +243,8 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     iov_base: child_st as *mut libc::c_void,
                     iov_len: addr_len,
                 };
+
+                // eprintln!("[fork_vmmap] before process_vm_writev");
                 let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
                 if ret < 0 {
                     lind_log!(
@@ -145,6 +255,11 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                         child_st,
                         addr_len,
                     );
+                    // eprintln!(
+                    //     "[fork_vmmap] after process_vm_writev ret={}, errno={}",
+                    //     ret,
+                    //     std::io::Error::last_os_error()
+                    // );
                     std::ptr::copy_nonoverlapping(
                         parent_st as *const u8,
                         child_st as *mut u8,
@@ -152,8 +267,16 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     );
                 }
 
+                // println!("[fork_vmmap] before restore mprotect");
                 // revert child's memory region prot
-                libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
+                if needs_write {
+                    let ret = libc::mprotect(
+                        child_st as *mut libc::c_void,
+                        addr_len,
+                        entry.prot,
+                    );
+                    assert_eq!(ret, 0, "failed to restore child mapping protection");
+                }
             };
         }
     }

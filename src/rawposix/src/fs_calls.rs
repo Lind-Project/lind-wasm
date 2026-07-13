@@ -1,7 +1,7 @@
 use cage::{
     get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
     shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
-    SHM_METADATA,
+    SHM_METADATA, get_base_address,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
@@ -382,6 +382,36 @@ pub extern "C" fn futex_syscall(
     let uaddr2 = uaddr2_arg;
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
+    // println!("[rawposix-futex] futex_syscall called with uaddr: {}, futex_op: {}, val: {}, timeout: {}, uaddr2: {}, val3: {}", uaddr, futex_op, val, timeout, uaddr2, val3);
+
+    // let cage_base = get_base_address(cageid);
+    // println!(
+    //     "[rawposix-futex] cage={} host_uaddr={:#x} guest_uaddr={:#x} op={:#x} val={} current={}",
+    //     cageid,
+    //     uaddr as usize,
+    //     (uaddr as usize).wrapping_sub(cage_base),
+    //     futex_op,
+    //     val,
+    //     unsafe { *(uaddr as *const u32) },
+    // );
+    // let base_op = futex_op & !((FUTEX_PRIVATE_FLAG as u32) | (FUTEX_CLOCK_REALTIME as u32));
+
+    // if base_op == (FUTEX_WAKE as u32) || base_op == (FUTEX_WAKE_BITSET as u32) {
+    //     let vmmap = get_cage(cageid).unwrap();
+    //     let vmmap = vmmap.vmmap.read();
+    //     let guest_uaddr = vmmap.sys_to_user(uaddr as usize);
+
+    //     eprintln!(
+    //         "[rawposix-futex-wake] cage={} \
+    //         host={:p} guest={:#x} op={:#x} count={} val3={:#x}",
+    //         cageid,
+    //         uaddr as *const u32,
+    //         guest_uaddr,
+    //         futex_op,
+    //         val,
+    //         val3,
+    //     );
+    // }
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3) as i32 };
     if ret < 0 {
         let errno = get_errno();
@@ -792,6 +822,13 @@ pub extern "C" fn pipe2_syscall(
     ret
 }
 
+const FUTEX_GUEST_ADDR: u32 = 0xffffe000;
+
+fn range_hits_addr(start: u32, len: u64, target: u32) -> bool {
+    let end = start as u64 + len;
+    (start as u64) <= target as u64 && (target as u64) < end
+}
+
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
 ///
 /// This function processes the `mmap_syscall` by updating the `vmmap` entries and performing
@@ -925,6 +962,21 @@ pub extern "C" fn mmap_syscall(
         );
     }
 
+    // if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
+    //     eprintln!(
+    //         "[mmap-syscall-hit-ffffe000] cage={} user=[{:#x},{:#x}) len={:#x} addr_arg={:#x} sysaddr_pending prot={:#x} flags_before_fixed={:#x} fd={} off={:#x}",
+    //         cageid,
+    //         useraddr,
+    //         useraddr as u64 + rounded_length,
+    //         rounded_length,
+    //         addr_arg,
+    //         prot,
+    //         flags,
+    //         fildes,
+    //         off,
+    //     );
+    // }
+
     flags |= MAP_FIXED as i32;
 
     // either MAP_PRIVATE or MAP_SHARED should be set, but not both
@@ -937,6 +989,18 @@ pub extern "C" fn mmap_syscall(
     let sysaddr = vmmap.user_to_sys(useraddr);
 
     drop(vmmap);
+
+    if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
+        eprintln!(
+            "[mmap-syscall-hit-ffffe000-sys] cage={} user=[{:#x},{:#x}) sys=[{:#x},{:#x}) target_host={:#x}",
+            cageid,
+            useraddr,
+            useraddr as u64 + rounded_length,
+            sysaddr,
+            sysaddr + rounded_length as usize,
+            sysaddr + (FUTEX_GUEST_ADDR - useraddr) as usize,
+        );
+    }
 
     if rounded_length > 0 {
         if flags & MAP_ANONYMOUS as i32 > 0 {
@@ -999,8 +1063,30 @@ pub extern "C" fn mmap_syscall(
                 }
             };
 
+            if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
+                let target_host = sysaddr + (FUTEX_GUEST_ADDR - useraddr) as usize;
+                let target_val = unsafe { *(target_host as *const u32) };
+
+                eprintln!(
+                    "[vmmap-add-hit-ffffe000-before] cage={} user=[{:#x},{:#x}) pages={} sys=[{:#x},{:#x}) target_host={:#x} target_val={} prot={:#x} maxprot={:#x} flags={:#x} backing={:?} off={:#x} orig_len={:#x}",
+                    cageid,
+                    useraddr,
+                    useraddr as u64 + rounded_length,
+                    rounded_length >> PAGESHIFT,
+                    sysaddr,
+                    sysaddr + rounded_length as usize,
+                    target_host,
+                    target_val,
+                    prot,
+                    maxprot,
+                    flags,
+                    backing,
+                    off,
+                    len,
+                );
+            }
             // update vmmap entry
-            let _ = vmmap.add_entry_with_overwrite(
+            let add_ret = vmmap.add_entry_with_overwrite(
                 useraddr >> PAGESHIFT,
                 (rounded_length >> PAGESHIFT) as u32,
                 prot,
@@ -1011,6 +1097,14 @@ pub extern "C" fn mmap_syscall(
                 len as i64,
                 cageid,
             );
+
+            if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
+                eprintln!(
+                    "[vmmap-add-hit-ffffe000-after] cage={} ret={:?}",
+                    cageid,
+                    add_ret,
+                );
+            }
         }
     }
 
@@ -1035,6 +1129,32 @@ pub extern "C" fn mmap_inner(
     vfd_arg: i32,
     off: i64,
 ) -> usize {
+    // enarx edits:
+    // start
+    // println!(
+    //     "mmap_inner called with addr={:?}, len={}, prot={:#x}, flags={:#x}, vfd_arg={}, off={}",
+    //     addr, len, prot, flags, vfd_arg, off
+    // );
+    // let host_start = addr as u32;
+    // let host_end = host_start.wrapping_add(len as u32);
+
+    // if host_start <= 0xffffe000 && 0xffffe000 < host_end {
+    //     eprintln!(
+    //         "[mmap-hit-futex-page] cage={} host=[{:#x}, {:#x}) host_addr={:p} len={:#x} prot={:#x} flags={:#x}",
+    //         cageid, host_start, host_end, addr, len, prot, flags
+    //     );
+    // }
+    // SGX workaround: translated addr is already inside Wasmtime linear memory.
+    let has_anon = flags & (MAP_ANONYMOUS as i32) != 0;
+    let has_fixed = flags & (MAP_FIXED as i32) != 0;
+    let is_private = flags & (MAP_PRIVATE as i32) != 0;
+    let is_shared = flags & (MAP_SHARED as i32) != 0;
+
+    if vfd_arg == -1 && has_anon && has_fixed && (is_private || is_shared) {
+        println!("[mmap_inner] anonymous fixed mapping, returning addr={:?}", addr);
+        return addr as usize;
+    }
+    // end
     if vfd_arg != -1 {
         match fdtables::translate_virtual_fd(cageid, vfd_arg as u64) {
             Ok(kernel_fd) => {

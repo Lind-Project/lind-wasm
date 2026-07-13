@@ -267,7 +267,8 @@ case "${MODE}" in
 esac
 
 # --- tool paths & quick checks (anchored to repo) ---
-CLANG_BIN="clang"  # must be on PATH
+# CLANG_BIN="clang"  # must be on PATH
+CLANG_BIN="/home/alice/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/clang"  # must be on PATH
 LIND_WASM_OPT_BIN="${REPO_ROOT}/scripts/lind-wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
 LINDFS_ROOT="${REPO_ROOT}/lindfs/"

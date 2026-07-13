@@ -328,6 +328,10 @@ impl Vmmap {
         self.base_address = Some(base_address);
     }
 
+    pub fn get_base_address(&self) -> usize {
+        self.base_address.unwrap()
+    }
+
     /// Sets the heap start page number for the memory
     ///
     /// Arguments:

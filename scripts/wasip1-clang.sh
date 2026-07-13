@@ -23,7 +23,7 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-SYSROOT="$REPO_ROOT/src/glibc/sysroot"
+SYSROOT="$REPO_ROOT/build/sysroot"
 LIBDIR="$SYSROOT/lib/wasm32-wasi"
 CRT1="$LIBDIR/crt1.o"
 
@@ -33,7 +33,7 @@ CRT1="$LIBDIR/crt1.o"
 
 # Build the actual clang command we will exec
 cmd=(
-  clang
+  /home/alice/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/clang
   --target=wasm32-unknown-wasip1
   --sysroot="$SYSROOT"
   -nostartfiles          # prevent clang from looking for its own crt1.o
