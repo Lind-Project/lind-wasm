@@ -287,6 +287,7 @@ pub fn rawposix_start(verbosity: isize) {
         exit_group_initiated: AtomicBool::new(false),
         is_dead: AtomicBool::new(false),
         grate_inflight: AtomicU64::new(0),
+        runtime_info: RwLock::new(Box::new(cage::NullRuntimeInfo)),
     };
 
     // Add cage to cagetable

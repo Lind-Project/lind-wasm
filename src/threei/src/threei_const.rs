@@ -32,6 +32,7 @@ pub const GRATE_ERR: i32 = -0x1FFF_0003;
 ///
 /// The value is expected to be globally unique among all runtimes registered with 3i
 pub const RUNTIME_TYPE_WASMTIME: u64 = 1;
+pub const RUNTIME_TYPE_MPK: u64 = 2;
 /// 3i-specific syscall number for `register_handler`.
 ///
 /// Match the definition in `glibc/lind_syscall_num.h`.
