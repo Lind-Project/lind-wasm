@@ -141,6 +141,7 @@
 #define PWRITEV_SYSCALL 296
 #define PRLIMIT64_SYSCALL 302
 #define GETRANDOM_SYSCALL 318
+#define CLONE3_SYSCALL 435
 
 /* Lind-specific syscalls (not part of the Linux syscall table) */
 #define REGISTER_HANDLER_SYSCALL 1001

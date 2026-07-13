@@ -15,7 +15,7 @@ use std::{ffi::c_void, sync::Mutex};
 use sysdefs::constants::lind_platform_const::{
     INSTANCE_NUMBER, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, WASMTIME_CAGEID,
 };
-use sysdefs::constants::syscall_const::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
+use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use sysdefs::constants::{DEFAULT_STACKSIZE, DylinkErrorCode, GUARD_SIZE, TABLE_START_INDEX};
 use sysdefs::logging::lind_debug_panic;
 use threei::threei_const;
@@ -409,7 +409,7 @@ fn register_wasmtime_syscall_entry() -> bool {
         UNUSED_ID,
         WASMTIME_CAGEID,                     // target cageid for this syscall handler
         RAWPOSIX_CAGEID,                     // cage to modify: current cageid
-        CLONE_SYSCALL as u64,                // clone syscall number
+        CLONE3_SYSCALL as u64,                // clone syscall number
         threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
         WASMTIME_CAGEID,                     // handler function is in the 3i
         clone_call_u64,

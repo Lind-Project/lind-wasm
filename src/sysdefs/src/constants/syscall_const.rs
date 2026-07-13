@@ -120,3 +120,4 @@ pub const RENAMEAT2_SYSCALL: i32 = 316;
 pub const GETRANDOM_SYSCALL: i32 = 318;
 pub const STATX_SYSCALL: i32 = 332;
 pub const RT_SIGSUSPEND_SYSCALL: i32 = 130;
+pub const CLONE3_SYSCALL: i32 = 435;

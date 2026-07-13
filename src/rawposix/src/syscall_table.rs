@@ -102,7 +102,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::SOCKETPAIR_SYSCALL as u64, socketpair_syscall),
     (syscall_const::SETSOCKOPT_SYSCALL as u64, setsockopt_syscall),
     (syscall_const::GETSOCKOPT_SYSCALL as u64, getsockopt_syscall),
-    (syscall_const::CLONE_SYSCALL as u64, fork_syscall),
     (syscall_const::EXEC_SYSCALL as u64, exec_syscall),
     (syscall_const::EXIT_SYSCALL as u64, exit_syscall),
     (syscall_const::WAITPID_SYSCALL as u64, waitpid_syscall),
@@ -183,4 +182,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::PRLIMIT64_SYSCALL as u64, prlimit64_syscall),
     (syscall_const::RENAMEAT2_SYSCALL as u64, renameat2_syscall),
     (syscall_const::GETRANDOM_SYSCALL as u64, getrandom_syscall),
+    (syscall_const::CLONE3_SYSCALL as u64, fork_syscall),
+
 ];
