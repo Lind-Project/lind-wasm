@@ -192,7 +192,7 @@ pub extern "C" fn fork_syscall(
     //   - Resume execution in parent and child
     threei::make_syscall(
         RAWPOSIX_CAGEID,
-        syscall_const::CLONE_SYSCALL as u64,
+        syscall_const::CLONE3_SYSCALL as u64,
         UNUSED_NAME,
         WASMTIME_CAGEID,
         clone_arg,
