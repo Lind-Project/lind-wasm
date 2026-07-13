@@ -28,7 +28,7 @@ use wasmtime_lind_multi_process::{LindHost, get_memory_base, get_memory_base_and
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
 use sysdefs::constants::syscall_const::{
-    CLONE_SYSCALL, EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL,
+    CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL,
 };
 
 /// Stores argv and environment variables for the guest program. During glibc's
@@ -127,10 +127,10 @@ fn add_syscall_to_linker<
             //
             // In lind-boot we forward syscalls directly to RawPOSIX, so we replicate the state
             // check here to early-return when we are on a rewind replay path.
-            if call_number as i32 == CLONE_SYSCALL {
+            if call_number as i32 == CLONE3_SYSCALL {
                 if let Some(rewind_res) = wasmtime_lind_multi_process::catch_rewind(&mut caller) {
                     if rewind_res > 0 {
-                        // On Asyncify rewind replay, `clone` must not be executed again.
+                        // On Asyncify rewind replay, `clone3` must not be executed again.
                         // The positive rewind result is the real child cage id returned to the
                         // parent guest by default. If a grate supplied a pending visible return
                         // value during the first normal execution, consume it here and return it
@@ -178,7 +178,7 @@ fn add_syscall_to_linker<
             let final_arg2 = if target_cageid == self_cageid
                 && matches!(
                     call_number as i32,
-                    CLONE_SYSCALL | EXIT_SYSCALL | EXIT_GROUP_SYSCALL
+                    CLONE3_SYSCALL | EXIT_SYSCALL | EXIT_GROUP_SYSCALL
                 ) {
                 wasmtime_lind_multi_process::current_tid(&mut caller) as u64
             } else {
@@ -204,8 +204,8 @@ fn add_syscall_to_linker<
                 arg6cageid,
             );
 
-            if call_number as i32 == CLONE_SYSCALL {
-                // Save the grate-defined return value produced by the normal clone execution. 
+            if call_number as i32 == CLONE3_SYSCALL {
+                // Save the grate-defined return value produced by the normal clone3 execution. 
                 // The guest-visible parent return is produced later during Asyncify rewind 
                 // replay, so this value must be carried across that boundary.
                 wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval).unwrap_or_else(|e| {
