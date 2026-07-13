@@ -27,6 +27,32 @@ DEFAULT_REPORTS_DIR = Path("reports")
 HARNESS_PACKAGE = "harnesses"
 HARNESS_DIR = Path(__file__).resolve().parent / HARNESS_PACKAGE
 
+UNIT_TEST_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "math": (
+        "math_tests",
+    ),
+    "filesystem": (
+        "file_tests",
+    ),
+    "memory": (
+        "memory_tests",
+    ),
+    "process": (
+        "process_tests",
+    ),
+    "signals": (
+        "signal_tests",
+    ),
+    "networking": (
+        "networking_tests",
+    ),
+    "dynamic-linking": (
+        "dylink_tests",
+    ),
+}
+
+UNIT_TEST_CATEGORY_ORDER: tuple[str, ...] = tuple(UNIT_TEST_CATEGORIES)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified test harness runner")
@@ -48,6 +74,23 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to copy combined reports/report.html for external export.",
     )
     parser.add_argument(
+        "--category",
+        action="append",
+        choices=UNIT_TEST_CATEGORY_ORDER,
+        help=(
+            "Run one or more unit-test categories. "
+            "Repeat the option to select multiple categories."
+        ),
+    )
+    parser.add_argument(
+        "--no-staged",
+        action="store_true",
+        help=(
+            "Run selected unit-test categories together instead of "
+            "progressively stopping after the first failing category."
+        ),
+    )
+    parser.add_argument(
         "harness_args",
         nargs=argparse.REMAINDER,
         help=(
@@ -56,8 +99,6 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     return parser.parse_args()
-
-
 
 
 def normalize_args(parsed: argparse.Namespace | tuple[argparse.Namespace, list[str]] | list[Any]) -> argparse.Namespace:
@@ -77,6 +118,41 @@ def normalize_args(parsed: argparse.Namespace | tuple[argparse.Namespace, list[s
         return parsed[0]
 
     raise TypeError(f"Unexpected parse_args() return type: {type(parsed)!r}")
+
+
+def ordered_categories(requested: list[str] | None) -> list[str]:
+    """Return selected categories in canonical staged execution order."""
+    if not requested:
+        return list(UNIT_TEST_CATEGORY_ORDER)
+
+    requested_set = set(requested)
+    return [
+        category
+        for category in UNIT_TEST_CATEGORY_ORDER
+        if category in requested_set
+    ]
+
+
+def category_folders(categories: list[str]) -> list[str]:
+    """Expand category names into unit-test folder names."""
+    return [
+        folder
+        for category in categories
+        for folder in UNIT_TEST_CATEGORIES[category]
+    ]
+
+
+def remaining_categories(
+    categories: list[str],
+    completed: list[str],
+    failed: str | None,
+) -> list[str]:
+    """Return categories skipped after staged execution stops."""
+    return [
+        category
+        for category in categories
+        if category not in completed and category != failed
+    ]
 
 
 def discover_harness_modules(selected: set[str] | None = None) -> list[str]:
@@ -166,6 +242,113 @@ def run_harness(module_name: str, forward_args: list[str]) -> dict[str, Any]:
         raise RuntimeError(f"Harness module '{module_name}' result must include 'report'")
 
     return result
+
+
+def report_failure_count(report: dict[str, Any]) -> int:
+    """Count failed test cases across all sections of a harness report."""
+    failure_count = 0
+
+    for section in report.values():
+        if not isinstance(section, dict):
+            continue
+
+        test_cases = section.get("test_cases")
+        if isinstance(test_cases, dict):
+            for test_case in test_cases.values():
+                if not isinstance(test_case, dict):
+                    continue
+
+                status = str(test_case.get("status", "")).lower()
+                if status and status not in {"success", "skipped"}:
+                    failure_count += 1
+            continue
+
+        number_of_failures = section.get("number_of_failures", 0)
+        if isinstance(number_of_failures, int):
+            failure_count += number_of_failures
+
+    return failure_count
+
+
+def report_has_failures(report: dict[str, Any]) -> bool:
+    """Return True when a harness report contains failed test cases."""
+    return report_failure_count(report) > 0
+
+
+def run_wasm_categories(
+    categories: list[str],
+    passthrough_args: list[str],
+    staged: bool = True,
+) -> tuple[list[dict[str, Any]], str | None, list[str]]:
+    """Run selected WASM unit-test categories.
+
+    In staged mode, categories run in canonical order and execution stops
+    after the first failing category.
+    """
+    if not staged:
+        harness_args = [
+            *passthrough_args,
+            "--allow-pre-compiled",
+            "--skip-libcpp",
+            "--skip",
+            "static_tests",
+            "--run",
+            *category_folders(categories),
+        ]
+        result = run_harness("wasmtestreport", harness_args)
+        result["name"] = "wasm-selected-categories"
+        result["json_filename"] = "wasm-selected-categories.json"
+        result["html_filename"] = "wasm-selected-categories.html"
+        failed = "combined" if report_has_failures(result["report"]) else None
+        return [result], failed, []
+
+    results: list[dict[str, Any]] = []
+    completed: list[str] = []
+    failed: str | None = None
+
+    for category in categories:
+        print(f"Running category: {category}")
+
+        harness_args = [
+            *passthrough_args,
+            "--allow-pre-compiled",
+            "--skip-libcpp",
+            "--skip",
+            "static_tests",
+            "--run",
+            *UNIT_TEST_CATEGORIES[category],
+        ]
+
+        try:
+            result = run_harness("wasmtestreport", harness_args)
+        except RuntimeError as error:
+            failed = category
+            print(f"Category failed: {category}")
+            print(error)
+            break
+
+        result["name"] = f"wasm-{category}"
+        result["json_filename"] = f"wasm-{category}.json"
+        result["html_filename"] = f"wasm-{category}.html"
+
+        results.append(result)
+
+        if report_has_failures(result["report"]):
+            failed = category
+            print(f"Category failed: {category}")
+            break
+
+        completed.append(category)
+        print(f"Category passed: {category}")
+
+    skipped = remaining_categories(categories, completed, failed)
+
+    print("Category summary:")
+    print(f"  Completed: {', '.join(completed) if completed else 'none'}")
+    print(f"  Failed: {failed or 'none'}")
+    print(f"  Skipped: {', '.join(skipped) if skipped else 'none'}")
+
+    return results, failed, skipped
 
 
 def write_outputs(result: dict[str, Any], reports_dir: Path) -> dict[str, Any]:
@@ -266,18 +449,41 @@ def main() -> None:
     print(f"Discovered harnesses: {', '.join(harness_modules)}")
 
     harness_outputs: list[dict[str, Any]] = []
+    failed_category: str | None = None
+
     for module_name in harness_modules:
-        print(f"Running harness: {module_name}")
-        harness_args = list(passthrough_args)
-
         if module_name == "wasmtestreport":
-            harness_args.append("--allow-pre-compiled")
-            # static_tests are owned by the statictestreport harness; exclude them here
-            # so they don't also run as ordinary dynamic-build tests.
-            harness_args.extend(["--skip", "static_tests"])
+            categories = ordered_categories(cli_args.category)
+            staged = not cli_args.no_staged
 
-        result = run_harness(module_name, harness_args)
-        
+            print(
+                "Running unit-test categories: "
+                f"{', '.join(categories)} "
+                f"({'staged' if staged else 'combined'})"
+            )
+
+            category_results, failed_category, _ = run_wasm_categories(
+                categories,
+                passthrough_args,
+                staged=staged,
+            )
+
+            for result in category_results:
+                output_info = write_outputs(result, reports_dir)
+                harness_outputs.append(output_info)
+
+                print(f"Wrote {output_info['json_path']}")
+                if output_info["html_path"] is not None:
+                    print(f"Wrote {output_info['html_path']}")
+
+            if failed_category is not None:
+                break
+
+            continue
+
+        print(f"Running harness: {module_name}")
+        result = run_harness(module_name, list(passthrough_args))
+
         output_info = write_outputs(result, reports_dir)
         harness_outputs.append(output_info)
 
@@ -293,6 +499,12 @@ def main() -> None:
         export_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(combined_path, export_path)
         print(f"Exported combined report to {export_path}")
+
+    if failed_category is not None:
+        raise SystemExit(
+            f"Unit-test category '{failed_category}' failed; "
+            "higher-level categories were skipped."
+        )
 
 
 if __name__ == "__main__":
