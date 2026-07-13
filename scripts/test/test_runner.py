@@ -275,6 +275,36 @@ def report_has_failures(report: dict[str, Any]) -> bool:
     return report_failure_count(report) > 0
 
 
+
+def build_wasm_category_summary(
+    category_results: list[dict[str, Any]],
+    failed_category: str | None,
+    skipped_categories: list[str],
+) -> dict[str, Any]:
+    """Build the legacy wasm.json report for category-based runs."""
+    categories: dict[str, Any] = {}
+    completed_categories: list[str] = []
+
+    for result in category_results:
+        result_name = str(result.get("name", ""))
+        category = result_name.removeprefix("wasm-")
+        categories[category] = result["report"]
+
+        if category != failed_category:
+            completed_categories.append(category)
+
+    return {
+        "number_of_failures": sum(
+            report_failure_count(result["report"])
+            for result in category_results
+        ),
+        "completed_categories": completed_categories,
+        "failed_category": failed_category,
+        "skipped_categories": skipped_categories,
+        "categories": categories,
+    }
+
+
 def run_wasm_categories(
     categories: list[str],
     passthrough_args: list[str],
@@ -462,7 +492,7 @@ def main() -> None:
                 f"({'staged' if staged else 'combined'})"
             )
 
-            category_results, failed_category, _ = run_wasm_categories(
+            category_results, failed_category, skipped_categories = run_wasm_categories(
                 categories,
                 passthrough_args,
                 staged=staged,
@@ -476,8 +506,17 @@ def main() -> None:
                 if output_info["html_path"] is not None:
                     print(f"Wrote {output_info['html_path']}")
 
-            if failed_category is not None:
-                break
+            wasm_summary = build_wasm_category_summary(
+                category_results,
+                failed_category,
+                skipped_categories,
+            )
+            wasm_json_path = reports_dir / "wasm.json"
+            wasm_json_path.write_text(
+                json.dumps(wasm_summary, indent=2),
+                encoding="utf-8",
+            )
+            print(f"Wrote {wasm_json_path}")
 
             continue
 

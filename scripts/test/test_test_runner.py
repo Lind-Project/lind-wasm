@@ -85,6 +85,40 @@ class CategorySelectionTests(unittest.TestCase):
         }
 
         self.assertFalse(test_runner.report_has_failures(report))
+    def test_build_wasm_category_summary(self):
+        category_results = [
+            {
+                "name": "wasm-math",
+                "report": {
+                    "deterministic": {
+                        "number_of_failures": 0,
+                    }
+                },
+            },
+            {
+                "name": "wasm-filesystem",
+                "report": {
+                    "deterministic": {
+                        "number_of_failures": 2,
+                    }
+                },
+            },
+        ]
+
+        summary = test_runner.build_wasm_category_summary(
+            category_results,
+            failed_category="filesystem",
+            skipped_categories=["memory"],
+        )
+
+        self.assertEqual(summary["number_of_failures"], 2)
+        self.assertEqual(summary["completed_categories"], ["math"])
+        self.assertEqual(summary["failed_category"], "filesystem")
+        self.assertEqual(summary["skipped_categories"], ["memory"])
+        self.assertEqual(
+            set(summary["categories"]),
+            {"math", "filesystem"},
+        )
 
 class CategoryExecutionTests(unittest.TestCase):
     @staticmethod
