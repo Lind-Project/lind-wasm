@@ -372,6 +372,8 @@ pub extern "C" fn mpk_exit_syscall_entry(
         } else {
             mpk_debug(format!("mpk_exit: cage {} has no MPKRuntimeInfo", exiting_cageid));
         }
+        
+        cage::cage_finalize(exiting_cageid);
     } else {
         mpk_debug(format!("mpk_exit: cage {} not found", exiting_cageid));
     }
@@ -380,6 +382,7 @@ pub extern "C" fn mpk_exit_syscall_entry(
     if let Some(lind_manager) = LIND_MANAGER.get() {
         lind_manager.decrement();
     }
+
     
     mpk_debug(format!("mpk_exit: cage {} cleanup complete", exiting_cageid));
     exit_status as i32
