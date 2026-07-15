@@ -18,12 +18,16 @@ pub const ELINDESRCH: u64 = 0xE001_0002;
 /// This value (0) is returned from functions that perform a Grate-side
 /// operation or callback through Wasmtime when the call completes
 /// normally without error.
-pub const GRATE_OK: i32 = 0;
+pub const GRATE_OK: i64 = 0;
 /// Indicates a failed Grate call.
 /// This value is used by Wasmtime to signal an error or invalid
 /// state during Grate function dispatch (e.g., invalid pointer, missing
 /// context, or lookup failure).
-pub const GRATE_ERR: i32 = -0x1FFF_0003;
+///
+/// i64-width (not i32): this sentinel shares the same return channel as the
+/// grate call's actual result, which can be a full 64-bit scalar (double,
+/// int64_t, pointer) — see pass_fptr_to_wt/lind_marshal_dispatch.
+pub const GRATE_ERR: i64 = -0x1FFF_0003;
 /// Runtime identifier for the Wasmtime-based execution environment.
 /// This constant represents the runtime ID assigned to the Wasmtime runtime
 /// when integrating with the 3i library. It is used to associate cages or

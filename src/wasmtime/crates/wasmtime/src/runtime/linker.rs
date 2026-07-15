@@ -1098,12 +1098,19 @@ impl<T> Linker<T> {
                                         raw[5],
                                         cid,
                                     );
+                                    // ret now carries the callee's real return value at
+                                    // full 64-bit width (see threei::dispatch_lib_call /
+                                    // pass_fptr_to_wt). I32/F32 take the low 32 bits;
+                                    // I64/F64 are a direct bit-preserving pass-through —
+                                    // previously `ret` was i32 and this F64 arm did
+                                    // `ret as u64`, which sign-extended a truncated
+                                    // 32-bit half into a bogus 64-bit double bit pattern.
                                     for (slot, ty) in
                                         results.iter_mut().zip(func_ty_for_portal.results())
                                     {
                                         *slot = match ty {
-                                            ValType::I32 => Val::I32(ret),
-                                            ValType::I64 => Val::I64(ret as i64),
+                                            ValType::I32 => Val::I32(ret as i32),
+                                            ValType::I64 => Val::I64(ret),
                                             ValType::F32 => Val::F32(ret as u32),
                                             ValType::F64 => Val::F64(ret as u64),
                                             other => {

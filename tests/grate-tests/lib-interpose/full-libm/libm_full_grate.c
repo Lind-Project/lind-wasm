@@ -6659,7 +6659,7 @@ static struct reg_entry g_table[] = {
 };
 #define G_TABLE_N ((int)(sizeof(g_table)/sizeof(g_table[0])))
 
-int pass_fptr_to_wt(uint64_t ctx_ptr_u64, uint64_t cageid,
+int64_t pass_fptr_to_wt(uint64_t ctx_ptr_u64, uint64_t cageid,
                     uint64_t a1, uint64_t a1c, uint64_t a2, uint64_t a2c,
                     uint64_t a3, uint64_t a3c, uint64_t a4, uint64_t a4c,
                     uint64_t a5, uint64_t a5c, uint64_t a6, uint64_t a6c) {
@@ -6672,7 +6672,11 @@ int pass_fptr_to_wt(uint64_t ctx_ptr_u64, uint64_t cageid,
     // recover the enclosing reg_entry (ctx is always &g_table[i].ctx) for its name
     struct reg_entry *_re =
         (struct reg_entry *)((char *)ctx - offsetof(struct reg_entry, ctx));
-    return (int)lind_marshal_dispatch(ctx->real_fn, ctx->spec, src, cageid,
+    // Full 64-bit lind_marshal_dispatch() result, not truncated to int, so
+    // 64-bit scalar returns (double, int64_t, pointers) survive the round
+    // trip through the wasm-level call/host dispatch/wasm-level return --
+    // matches lind_marshal.h's LIND_DEFINE_MARSHAL_HANDLER.
+    return (int64_t)lind_marshal_dispatch(ctx->real_fn, ctx->spec, src, cageid,
                                       raw, ctx->spec->nargs, _re->name);
 }
 

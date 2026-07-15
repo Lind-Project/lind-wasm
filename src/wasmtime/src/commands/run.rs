@@ -93,7 +93,7 @@ pub extern "C" fn grate_callback_trampoline(
     arg5cageid: u64,
     arg6: u64,
     arg6cageid: u64,
-) -> i32 {
+) -> i64 {
     let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
         Some(v) => v,
         None => {
@@ -138,7 +138,7 @@ pub extern "C" fn grate_callback_trampoline(
                 u64,
                 u64,
                 u64,
-            ), i32>(&mut store)?;
+            ), i64>(&mut store)?;
 
             // Call the entry function with all arguments and in grate function pointer
             typed_func.call(

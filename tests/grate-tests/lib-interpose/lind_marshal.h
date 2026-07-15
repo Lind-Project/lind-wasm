@@ -818,12 +818,16 @@ done:
 
 // ---------------------------------------------------------------------------
 // Macro: generate raw handler wrapper for register_lib_handler.
-// Defines: int lind_mh_##name(uint64_t cageid, u64 a1, u64 a1c, ...)
+// Defines: int64_t lind_mh_##name(uint64_t cageid, u64 a1, u64 a1c, ...)
 // Source cage inferred from first non-zero argNcage.
+//
+// Returns the full 64-bit lind_marshal_dispatch() result (not truncated to
+// int) so 64-bit scalar returns (double, int64_t, pointers) survive the
+// round trip through the wasm-level call/host dispatch/wasm-level return.
 // ---------------------------------------------------------------------------
 
 #define LIND_DEFINE_MARSHAL_HANDLER(name, spec_ptr, typed_fn)                  \
-static int lind_mh_##name(                                                      \
+static int64_t lind_mh_##name(                                                  \
     uint64_t _cageid,                                                           \
     uint64_t _a1, uint64_t _a1c,                                                \
     uint64_t _a2, uint64_t _a2c,                                                \
@@ -837,7 +841,7 @@ static int lind_mh_##name(                                                      
     uint64_t _src_cage = 0;                                                     \
     for (int _i = 0; _i < 6 && _src_cage == 0; _i++)                           \
         _src_cage = _cages[_i];                                                 \
-    return (int)lind_marshal_dispatch(                                          \
+    return (int64_t)lind_marshal_dispatch(                                      \
         (void *)(uintptr_t)(typed_fn),                                          \
         (spec_ptr), _src_cage, _cageid, _raw,                                   \
         (spec_ptr)->nargs, #name);                                             \

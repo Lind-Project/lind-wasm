@@ -57,7 +57,7 @@ pub type GrateTrampolineFn = extern "C" fn(
     arg5cageid: u64,
     arg6: u64,
     arg6cageid: u64,
-) -> i32;
+) -> i64;
 
 #[derive(Clone, Copy, Debug)]
 pub struct TrampolineEntry {
@@ -215,7 +215,7 @@ fn _call_grate_func(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> Option<i32> {
+) -> Option<i64> {
     let runtimeid = match get_cage_runtime(grateid) {
         Some(r) => r,
         None => panic!(
@@ -485,6 +485,7 @@ pub fn make_syscall(
             // threei special case: directly call the function pointer
             let func: GrateTrampolineFn =
                 unsafe { std::mem::transmute::<u64, GrateTrampolineFn>(in_grate_fn_ptr_u64) };
+            // make_syscall's own contract stays i32 — see the ret-as-i32 note below.
             return func(
                 self_cageid,
                 target_cageid,
@@ -500,7 +501,7 @@ pub fn make_syscall(
                 arg5_cageid,
                 arg6,
                 arg6_cageid,
-            );
+            ) as i32;
         }
 
         // Grate case: call into the corresponding grate function
@@ -553,7 +554,11 @@ pub fn make_syscall(
         });
 
         if let Some(ret) = grate_result {
-            return ret;
+            // make_syscall's own contract stays i32 (regular syscall results).
+            // _call_grate_func is now i64 to support dispatch_lib_call's wider
+            // library-call return values (double/int64_t/pointer scalars) — this
+            // register_handler-based syscall path doesn't need the extra width.
+            return ret as i32;
         } else {
             // syscall has been registered to register_handler but grate's entry function
             // doesn't provide
@@ -1116,7 +1121,7 @@ pub fn dispatch_lib_call(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let cage_dead = with_cage(handler_cage_id, |grate| {
         grate
             .grate_inflight
@@ -1125,12 +1130,12 @@ pub fn dispatch_lib_call(
             grate
                 .grate_inflight
                 .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
-            return -(Errno::ESRCH as i32);
+            return -(Errno::ESRCH as i64);
         }
         0
     });
     if cage_dead != Some(0) {
-        return -(Errno::ESRCH as i32);
+        return -(Errno::ESRCH as i64);
     }
 
     let result = _call_grate_func(
@@ -1156,5 +1161,5 @@ pub fn dispatch_lib_call(
             .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
     });
 
-    result.unwrap_or(-(Errno::ESRCH as i32))
+    result.unwrap_or(-(Errno::ESRCH as i64))
 }

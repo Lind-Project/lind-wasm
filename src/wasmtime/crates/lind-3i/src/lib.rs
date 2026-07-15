@@ -99,7 +99,7 @@ type PassFptrTyped = TypedFunc<
         u64,
         u64,
     ),
-    i32,
+    i64,
 >;
 
 type WorkerId = u64;
@@ -500,7 +500,7 @@ impl<T: 'static> GrateHandler<T> {
     /// This path acquires the serialization lock before leasing a worker,
     /// ensuring that at most one call enters the grate at a time even though
     /// the handler may still own multiple workers.
-    fn submit_serialized(&self, req: GrateRequest) -> anyhow::Result<i32> {
+    fn submit_serialized(&self, req: GrateRequest) -> anyhow::Result<i64> {
         let _serial_guard = self.serial_executor.enter();
         let worker = self.take_worker_blocking();
         let mut lease = WorkerLease::new(self, worker);
@@ -512,7 +512,7 @@ impl<T: 'static> GrateHandler<T> {
     /// In parallel mode, the handler simply leases an available worker and
     /// runs the request immediately. Different callers may therefore execute
     /// concurrently as long as different workers are available.
-    fn submit_parallel(&self, req: GrateRequest) -> anyhow::Result<i32> {
+    fn submit_parallel(&self, req: GrateRequest) -> anyhow::Result<i64> {
         let worker = self.take_worker_blocking();
         let mut lease = WorkerLease::new(self, worker);
         lease.worker_mut().run(req)
@@ -524,7 +524,7 @@ impl<T: 'static> GrateHandler<T> {
     /// request as an active in-flight call, rejecting it if shutdown has begun,
     /// and then dispatches the request according to the handler’s configured
     /// concurrency mode.
-    pub fn submit(&self, req: GrateRequest) -> anyhow::Result<i32> {
+    pub fn submit(&self, req: GrateRequest) -> anyhow::Result<i64> {
         let _active_guard = ActiveCallGuard::new(self)?;
 
         match self.concurrency_mode {
@@ -601,7 +601,7 @@ impl<T: 'static> GrateWorker<T> {
     /// which isolates its runtime state from other concurrently executing workers.
     /// The worker resets its stack, resolves the exported grate entry function,
     /// and invokes `pass_fptr_to_wt` with the marshalled request arguments.
-    fn run(&mut self, req: GrateRequest) -> anyhow::Result<i32> {
+    fn run(&mut self, req: GrateRequest) -> anyhow::Result<i64> {
         #[cfg(feature = "debug-grate-calls")]
         {
             println!(
@@ -705,7 +705,7 @@ where
             u64,
             u64,
             u64,
-        ), i32>(&mut store, "pass_fptr_to_wt")?),
+        ), i64>(&mut store, "pass_fptr_to_wt")?),
         None => None,
     };
 
