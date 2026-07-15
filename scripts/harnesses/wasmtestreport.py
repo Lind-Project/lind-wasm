@@ -273,11 +273,18 @@ def _native_dylink_libs():
     try:
         for so_name, native_path in DYLINK_NATIVE_LIB_CACHE.items():
             wasm_path = LINDFS_ROOT / so_name
-            if wasm_path.exists():
-                backup = wasm_path.with_suffix(".wasm.bak")
-                shutil.copy2(str(wasm_path), str(backup))
-                backed_up[wasm_path] = backup
-            shutil.copy2(str(native_path), str(wasm_path))
+            try:
+                if wasm_path.exists():
+                    backup = wasm_path.with_suffix(".wasm.bak")
+                    shutil.copy2(str(wasm_path), str(backup))
+                    backed_up[wasm_path] = backup
+                shutil.copy2(str(native_path), str(wasm_path))
+            except OSError as exc:
+                # A prior `sudo lind_run` can leave root-owned .so files in LINDFS_ROOT
+                # that this (non-root) harness cannot overwrite. Skip the swap for such
+                # libs rather than aborting the whole run; the affected native dylink
+                # test will simply be recorded as a failure.
+                logger.warning(f"Could not stage native dylink lib {so_name}: {exc}")
         yield
     finally:
         if old_ld:
@@ -292,7 +299,11 @@ def _native_dylink_libs():
         for so_name in DYLINK_NATIVE_LIB_CACHE:
             wasm_path = LINDFS_ROOT / so_name
             if wasm_path not in backed_up and wasm_path.exists():
-                wasm_path.unlink(missing_ok=True)
+                try:
+                    wasm_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    # Root-owned staged lib (see note above); non-fatal for cleanup.
+                    logger.warning(f"Could not remove staged dylink lib {wasm_path}: {exc}")
 
 
 def _is_dylink_test(source_file: Path) -> bool:
@@ -662,6 +673,23 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 #   Since the script outputs the command being run, we ignore 
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
+def reap_orphaned_lind_boot():
+    """Kill any lingering lind-boot processes (best-effort).
+
+    lind_run runs lind-boot as root via sudo, so when a run is killed (e.g. on
+    timeout) the root-owned lind-boot survives as an orphan. Reap by exact program
+    name — never `pkill -f`, which would also match this harness's own command
+    line. `sudo -n` no-ops when passwordless sudo is unavailable.
+    """
+    try:
+        subprocess.run(
+            ["sudo", "-n", "pkill", "-9", "-x", "lind-boot"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10,
+        )
+    except Exception:
+        pass
+
+
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     wasm_file = Path(wasm_file)
     run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run")]
@@ -672,12 +700,25 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
         run_cmd.extend(GRATE_ARGS)
     run_cmd.append(wasm_file.name)
     
-    logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
+    logger.debug(f"Running command: {' '.join(map(str, run_cmd))}")
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
         logger.debug("File exists and is a regular file!")
     else:
         logger.debug("File not found or it's a directory!")
 
+    # Stage the compiled wasm into LINDFS_ROOT so it can be resolved by basename.
+    # The harness compiles tests into a separate artifacts directory, but lind-boot
+    # loads the module from within the lind virtual filesystem (lindfs), and in grate
+    # mode the grate launches the test via execv() which also resolves through lindfs.
+    # Neither can see the artifacts directory, so the .wasm must live under lindfs.
+    staged_wasm = LINDFS_ROOT / wasm_file.name
+    staged_created = False
+    try:
+        if wasm_file.exists() and wasm_file.resolve() != staged_wasm.resolve():
+            shutil.copy2(str(wasm_file), str(staged_wasm))
+            staged_created = True
+    except Exception as e:
+        logger.debug(f"Could not stage wasm into LINDFS_ROOT: {e}")
 
     try:
         run_env = os.environ.copy()
@@ -693,15 +734,28 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
             shell=False,
             env=run_env,
         )
-        run_time = round(time.perf_counter() - run_start, 6)       
+        run_time = round(time.perf_counter() - run_start, 6)
         output = proc.stdout if proc.returncode == 0 else (proc.stdout + proc.stderr)
 
         return (proc.returncode, output, run_time)
 
     except subprocess.TimeoutExpired as e:
+        # lind_run re-execs lind-boot via `sudo`, so this subprocess timeout kills
+        # the lind_run shell but leaves the root-owned lind-boot orphaned (reparented
+        # to init). It keeps running and, accumulated across a run, floods the host
+        # and makes later tests time out too (a self-reinforcing cascade). Reap it.
+        # Safe because tests run sequentially — the only live lind-boot is the one
+        # that just timed out.
+        reap_orphaned_lind_boot()
         return ("timeout", f"Timed Out (timeout: {timeout_sec}s)", None)
     except Exception as e:
         return ("unknown_error", f"Exception during wasm run: {str(e)}", None)
+    finally:
+        if staged_created:
+            try:
+                staged_wasm.unlink()
+            except OSError:
+                pass
 
 def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic", allow_precompiled=False):
     """Unified test function for deterministic and failing tests"""
@@ -1580,12 +1634,30 @@ def get_test_mode(source_file):
 #          results - results dictionary, timeout_sec - timeout for tests
 # - Output: None (modifies results dictionary)
 # ----------------------------------------------------------------------
+def ensure_lindfs_writable():
+    """Restore owner rwx on LINDFS_ROOT (best-effort).
+
+    Tests staged/run through lind write their wasm into LINDFS_ROOT, and lind
+    resolves the module relative to that directory. A misbehaving test can strip
+    the directory's write bit — e.g. a chmod test whose path argument is
+    mis-marshalled under a grate ends up chmod'ing the fs root to 0500 — which
+    would then break compilation/staging for every *subsequent* test (a one-bad-
+    test cascade). Reset the bit before each test so failures stay isolated.
+    """
+    try:
+        st = os.stat(LINDFS_ROOT)
+        os.chmod(LINDFS_ROOT, st.st_mode | 0o700)
+    except OSError as e:
+        logger.debug(f"Could not restore LINDFS_ROOT permissions: {e}")
+
+
 def run_tests(config, artifacts_root, results, timeout_sec):
     """Execute all tests"""
     total_count = len(config['tests_to_run'])
-    
+
     for i, original_source in enumerate(config['tests_to_run']):
         logger.info(f"[{i+1}/{total_count}] {original_source}")
+        ensure_lindfs_writable()
         
         dest_source = setup_test_file_in_artifacts(original_source, artifacts_root)
         
