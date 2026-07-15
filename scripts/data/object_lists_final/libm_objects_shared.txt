@@ -1,4 +1,5 @@
 /home/lind/lind-wasm/src/glibc/build/math/s_lib_version.os
+/home/lind/lind-wasm/src/glibc/build/math/fenv_state.os
 /home/lind/lind-wasm/src/glibc/build/math/s_matherr.os
 /home/lind/lind-wasm/src/glibc/build/math/s_signgam.os
 /home/lind/lind-wasm/src/glibc/build/math/fclrexcpt.os

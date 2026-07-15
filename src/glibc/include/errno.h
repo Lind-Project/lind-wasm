@@ -22,13 +22,18 @@ extern int rtld_errno attribute_hidden;
 
 # elif IS_IN_LIB && !IS_IN (rtld)
 
-#  undef  errno
 #  if IS_IN (libc)
+#   undef  errno
 #   define errno __libc_errno
-#  else
-#   define errno errno		/* For #ifndef errno tests.  */
-#  endif
 extern __thread int errno attribute_tls_model_ie;
+#  endif
+   /* For libraries other than libc (e.g. libm), keep the
+      errno (*__errno_location ()) definition already provided by
+      stdlib/errno.h above: this target links each such library as a
+      separate WASM shared object, and wasm-ld's dynamic-linking mode
+      cannot resolve a direct TLS reference to libc's errno across
+      module boundaries the way an ELF dynamic linker can, so a raw
+      __thread extern here would silently bind to a private copy.  */
 
 # endif	/* IS_IN_LIB */
 

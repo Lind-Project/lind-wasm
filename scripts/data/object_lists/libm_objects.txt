@@ -1,4 +1,5 @@
 math/s_lib_version.o
+math/fenv_state.o
 math/s_matherr.o
 math/s_signgam.o
 math/fclrexcpt.o
