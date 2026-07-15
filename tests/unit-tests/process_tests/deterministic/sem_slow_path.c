@@ -1,9 +1,10 @@
-/* Test case for cross-process semaphore synchronization 
-* This test will create a semaphore in shared memory, 
-* fork a child process, and ensure that the child waits 
-* on the semaphore until the parent posts it, demonstrating 
+/* Test case for cross-process semaphore synchronization
+* This test will create a semaphore in shared memory,
+* fork a child process, and ensure that the child waits
+* on the semaphore until the parent posts it, demonstrating
 * cross-process synchronization.
 */
+#include <assert.h>
 #include <errno.h>
 #include <semaphore.h>
 #include <stdio.h>
@@ -23,31 +24,19 @@ int main(void)
         0
     );
 
-    if (sem == MAP_FAILED) {
-        perror("mmap");
-        return 1;
-    }
+    assert(sem != MAP_FAILED);
 
     // pshared=1 and initial value=0 force cross-process synchronization.
-    if (sem_init(sem, 1, 0) != 0) {
-        perror("sem_init");
-        return 1;
-    }
+    assert(sem_init(sem, 1, 0) == 0);
 
     pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork");
-        return 1;
-    }
+    assert(pid >= 0);
 
     if (pid == 0) {
         printf("[child] waiting\n");
         fflush(stdout);
 
-        if (sem_wait(sem) != 0) {
-            perror("sem_wait");
-            _exit(1);
-        }
+        assert(sem_wait(sem) == 0);
 
         printf("[child] awakened\n");
         fflush(stdout);
@@ -59,14 +48,15 @@ int main(void)
     printf("[parent] posting\n");
     fflush(stdout);
 
-    if (sem_post(sem) != 0) {
-        perror("sem_post");
-        return 1;
-    }
+    assert(sem_post(sem) == 0);
 
-    waitpid(pid, NULL, 0);
-    sem_destroy(sem);
-    munmap(sem, sizeof(*sem));
+    int status;
+    assert(waitpid(pid, &status, 0) == pid);
+    assert(WIFEXITED(status));
+    assert(WEXITSTATUS(status) == 0);
+
+    assert(sem_destroy(sem) == 0);
+    assert(munmap(sem, sizeof(*sem)) == 0);
 
     printf("[parent] done\n");
     return 0;
