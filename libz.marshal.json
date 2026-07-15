@@ -1,0 +1,1959 @@
+{
+  "module":"libz",
+  "function_count":93,
+  "functions":[
+    {
+      "name":"deflateInit_",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg0: pointer direction undetermined",
+        "arg2: char* assumed NUL-terminated (CSTR) — verify",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateInit2_",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg6: char* assumed NUL-terminated (CSTR) — verify",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateEnd",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateReset",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateSetDictionary",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1: byte buffer size paired to arg2 heuristically",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateGetDictionary",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1: byte buffer size taken from *arg2 heuristically",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateResetKeep",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateSetHeader",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflatePending",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateUsed",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflatePrime",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateParams",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflate",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateTune",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateBound_z",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateBound",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg0: pointer direction undetermined",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"deflateCopy",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg0 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg0 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1 field 'next_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'avail_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'total_in': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'next_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'avail_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'total_out': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'msg': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'state': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'zalloc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'zfree': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'opaque': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'data_type': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'adler': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'reserved': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'strm': nested struct 'z_stream_s' not resolvable — not marshalable",
+        "arg1 field 'text': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'time': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'xflags': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'os': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'extra': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'extra_len': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'extra_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'name': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'name_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'comment': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'comm_max': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'hcrc': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'done': depth-truncated (deep/cyclic struct) — not marshalable",
+        "arg1 field 'gzhead': nested struct 'gz_header_s' not resolvable — not marshalable",
+        "arg1 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'dyn_tree': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'stat_desc': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'state': nested struct 'internal_state' not resolvable — not marshalable",
+        "arg1 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg1: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"gzwrite",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":2},
+        {"kind":"scalar","type":"unsigned int","size":4}
+      ],
+      "warnings":[
+        "arg1: void* size paired to arg2 heuristically"
+      ]
+    },
+    {
+      "name":"gzfwrite",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":1},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[
+        "arg0: void* size paired to arg1 heuristically"
+      ]
+    },
+    {
+      "name":"gzputc",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzputs",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+          {"kind":"scalar","type":"char","size":1}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzflush",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzsetparams",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"scalar","type":"int","size":4},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzclose_w",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"adler32_z",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":2,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[
+        "arg1: byte buffer size paired to arg2 heuristically"
+      ]
+    },
+    {
+      "name":"adler32",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":2,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned int","size":4}
+      ],
+      "warnings":[
+        "arg1: byte buffer size paired to arg2 heuristically"
+      ]
+    },
+    {
+      "name":"adler32_combine",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"adler32_combine64",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"compress2_z",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size paired to arg3 heuristically"
+      ]
+    },
+    {
+      "name":"compress2",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size paired to arg3 heuristically"
+      ]
+    },
+    {
+      "name":"compress_z",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size paired to arg3 heuristically"
+      ]
+    },
+    {
+      "name":"compress",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size paired to arg3 heuristically"
+      ]
+    },
+    {
+      "name":"compressBound_z",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"compressBound",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzread",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg","size_arg_index":2},
+        {"kind":"scalar","type":"unsigned int","size":4}
+      ],
+      "warnings":[
+        "arg1: void* size paired to arg2 heuristically",
+        "arg1: direction unobserved (escapes to callee?) — defaulted to INOUT"
+      ]
+    },
+    {
+      "name":"gzfread",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg","size_arg_index":1},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[
+        "arg0: void* size paired to arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT"
+      ]
+    },
+    {
+      "name":"gzgetc",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzgetc_",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT"
+      ]
+    },
+    {
+      "name":"gzungetc",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"int","size":4},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzgets",
+      "decision":"marshal",
+      "ret":{"kind":"ptr_alias_arg","alias_arg":1},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"out","size_kind":"cstr","pointee":[
+          {"kind":"scalar","type":"char","size":1}
+        ]},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[
+        "arg1: char* assumed NUL-terminated (CSTR) — verify"
+      ]
+    },
+    {
+      "name":"gzdirect",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzclose_r",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"zlibVersion",
+      "decision":"marshal",
+      "ret":{"kind":"ptr_to_static","copyout_bytes":0},
+      "args":[],
+      "warnings":[
+        "return: pointer into a static/global buffer — copy-out (cstr); valid until next call"
+      ]
+    },
+    {
+      "name":"zlibCompileFlags",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[],
+      "warnings":[]
+    },
+    {
+      "name":"zError",
+      "decision":"force_local",
+      "warnings":[
+        "return: pointer of undetermined provenance — force_local"
+      ]
+    },
+    {
+      "name":"uncompress2_z",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg_pointee","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size taken from *arg3 heuristically"
+      ]
+    },
+    {
+      "name":"uncompress2",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg_pointee","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size taken from *arg3 heuristically"
+      ]
+    },
+    {
+      "name":"uncompress_z",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg1: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size paired to arg3 heuristically"
+      ]
+    },
+    {
+      "name":"uncompress",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"from_arg_pointee","size_arg_index":1,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"unsigned long","size":4}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":3,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[
+        "arg0: byte buffer size taken from *arg1 heuristically",
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT",
+        "arg2: byte buffer size paired to arg3 heuristically"
+      ]
+    },
+    {
+      "name":"get_crc_table",
+      "decision":"marshal",
+      "ret":{"kind":"ptr_to_static","copyout_bytes":4},
+      "args":[],
+      "warnings":[
+        "return: pointer into a static/global buffer — copy-out (4 bytes); valid until next call"
+      ]
+    },
+    {
+      "name":"crc32_z",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":2,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[
+        "arg1: byte buffer size paired to arg2 heuristically"
+      ]
+    },
+    {
+      "name":"crc32",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"from_arg","size_arg_index":2,"pointee":[
+          {"kind":"scalar","type":"unsigned char","size":1}
+        ]},
+        {"kind":"scalar","type":"unsigned int","size":4}
+      ],
+      "warnings":[
+        "arg1: byte buffer size paired to arg2 heuristically"
+      ]
+    },
+    {
+      "name":"crc32_combine64",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"crc32_combine",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"crc32_combine_gen64",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"crc32_combine_gen",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"crc32_combine_op",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4},
+        {"kind":"scalar","type":"unsigned long","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzopen",
+      "decision":"force_local",
+      "warnings":[
+        "arg0: char* assumed NUL-terminated (CSTR) — verify",
+        "arg1: char* assumed NUL-terminated (CSTR) — verify",
+        "return: pointer of undetermined provenance — force_local"
+      ]
+    },
+    {
+      "name":"gzopen64",
+      "decision":"force_local",
+      "warnings":[
+        "arg0: char* assumed NUL-terminated (CSTR) — verify",
+        "arg1: char* assumed NUL-terminated (CSTR) — verify",
+        "return: pointer of undetermined provenance — force_local"
+      ]
+    },
+    {
+      "name":"gzdopen",
+      "decision":"force_local",
+      "warnings":[
+        "arg1: char* assumed NUL-terminated (CSTR) — verify",
+        "return: pointer of undetermined provenance — force_local"
+      ]
+    },
+    {
+      "name":"gzbuffer",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"scalar","type":"unsigned int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzrewind",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzseek64",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"scalar","type":"long","size":4},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzseek",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"scalar","type":"long","size":4},
+        {"kind":"scalar","type":"int","size":4}
+      ],
+      "warnings":[
+        "arg0: direction unobserved (escapes to callee?) — defaulted to INOUT"
+      ]
+    },
+    {
+      "name":"gztell64",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gztell",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzoffset64",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzoffset",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzeof",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"gzerror",
+      "decision":"marshal",
+      "ret":{"kind":"ptr_to_static","copyout_bytes":0},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]},
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"out","size_kind":"const","const_size":4,"pointee":[
+          {"kind":"scalar","type":"int","size":4}
+        ]}
+      ],
+      "warnings":[
+        "return: pointer into a static/global buffer — copy-out (cstr); valid until next call"
+      ]
+    },
+    {
+      "name":"gzclearerr",
+      "decision":"marshal",
+      "ret":{"kind":"void"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"inout","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"inflateBackInit_",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg2: char* assumed NUL-terminated (CSTR) — verify",
+        "arg3: char* assumed NUL-terminated (CSTR) — verify",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateBack",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1: pointer to function/unresolved type — force_local",
+        "arg1: pointer direction undetermined",
+        "arg2: opaque void* treated as handle (verify; could be an unsized buffer)",
+        "arg3: pointer to function/unresolved type — force_local",
+        "arg3: pointer direction undetermined",
+        "arg4: opaque void* treated as handle (verify; could be an unsized buffer)",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateBackEnd",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"gzclose",
+      "decision":"marshal",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"ptr","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":12,"pointee":[
+          {"kind":"struct","type":"gzFile_s","size":12,"fields":[
+            {"kind":"scalar","field":"have","offset":0,"touched":true,"type":"unsigned int","size":4},
+            {"kind":"ptr","field":"next","offset":4,"touched":true,"type":"<ptr>","size":4,"dir":"in","size_kind":"cstr","pointee":[
+              {"kind":"scalar","type":"unsigned char","size":1}
+            ]},
+            {"kind":"scalar","field":"pos","offset":8,"touched":true,"type":"long","size":4}
+          ]}
+        ]}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"inflateResetKeep",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateReset",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateReset2",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateInit2_",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg2: char* assumed NUL-terminated (CSTR) — verify",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateInit_",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg0: pointer direction undetermined",
+        "arg1: char* assumed NUL-terminated (CSTR) — verify",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflatePrime",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflate",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateEnd",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateGetDictionary",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1: byte buffer size taken from *arg2 heuristically",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateSetDictionary",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1: byte buffer size paired to arg2 heuristically",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateGetHeader",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateSync",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateSyncPoint",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateCopy",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "arg1 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg1 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg1: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateUndermine",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateValidate",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateMark",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    },
+    {
+      "name":"inflateCodesUsed",
+      "decision":"force_local",
+      "warnings":[
+        "arg0 field 'zalloc': pointer to fn/unresolved — not marshalable",
+        "arg0 field 'zfree': pointer to fn/unresolved — not marshalable",
+        "arg0: struct 'z_stream_s' not fully resolvable — force_local",
+        "non-mappable component (by-value struct / nested pointer) — force_local"
+      ]
+    }
+  ]
+}
