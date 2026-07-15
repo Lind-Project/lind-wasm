@@ -491,7 +491,10 @@ fn attach_api(
             let dynamic_loader: DynamicLoader<HostCtx> =
                 Arc::new(move |caller, cageid, library_name, mode| {
                     let lind_ctx = caller.data().lind_fork_ctx.as_ref().unwrap();
-                    let linker = lind_ctx.linker.clone().unwrap();
+                    // Deep-clone the linker (through the Arc) — load_library_module
+                    // needs an owned linker to define the dlopen'd library's exports.
+                    // dlopen is not on the hot path, so the deep clone is fine here.
+                    let linker = (*lind_ctx.linker.clone().unwrap()).clone();
                     let got_table = lind_ctx.got_table.clone().unwrap();
 
                     if lind_ctx.had_threads() {

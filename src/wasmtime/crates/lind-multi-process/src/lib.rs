@@ -65,8 +65,16 @@ pub trait LindHost<T, U> {
 // top level runtime engine is abusing closures.
 #[derive(Clone)]
 pub struct LindCtx<T, U> {
-    // linker used by the module
-    pub linker: Option<Linker<T>>,
+    // linker used by the module.
+    //
+    // Wrapped in `Arc` because `LindCtx` is cloned on essentially every syscall
+    // (via `get_ctx()` / `caller.data().clone()`), and a bare `Linker<T>` clones
+    // its entire `StringPool`. Under an interposing grate the linker registers
+    // thousands of handlers, so a deep clone (and its later drop) dominates the
+    // syscall/exit path. `Arc` makes `LindCtx::clone` O(1). The rare sites that
+    // need a mutable linker copy (fork/pthread child snapshots) deep-clone
+    // explicitly through the `Arc`.
+    pub linker: Option<Arc<Linker<T>>>,
 
     // Global Offset Table of the process
     pub got_table: Option<Arc<Mutex<LindGOT>>>,
@@ -189,7 +197,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
-            linker: Some(linker),
+            linker: Some(Arc::new(linker)),
             got_table,
             modules: modules.clone(),
             dlopen_modules: vec![],
@@ -207,7 +215,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     }
 
     pub fn attach_linker(&mut self, linker: Linker<T>) {
-        self.linker = Some(linker);
+        self.linker = Some(Arc::new(linker));
     }
 
     // Attach a LindGOT (Global Offset Table) to this context, wrapping it in
@@ -366,7 +374,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let parent_ctx = get_cx(&mut parent_host);
             // has to clone to prevent double mutable reference of caller
             // TODO: may worth a refactor in the future for performance
-            let mut parent_linker = parent_ctx.linker.clone().unwrap();
+            // Deep-clone the linker (through the Arc) here because building the
+            // child snapshot needs a mutable copy. This only happens on
+            // fork/pthread_create, not on the hot syscall/exit path.
+            let mut parent_linker = (*parent_ctx.linker.clone().unwrap()).clone();
 
             let snapshot = parent_linker.get_linker_snapshot_for_child(&mut caller, false);
 
@@ -946,7 +957,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let parent_ctx = get_cx(&mut parent_host);
             // has to clone to prevent double mutable reference of caller
             // TODO: may worth a refactor in the future for performance
-            let mut parent_linker = parent_ctx.linker.clone().unwrap();
+            // Deep-clone the linker (through the Arc) here because building the
+            // child snapshot needs a mutable copy. This only happens on
+            // fork/pthread_create, not on the hot syscall/exit path.
+            let mut parent_linker = (*parent_ctx.linker.clone().unwrap()).clone();
 
             let snapshot = parent_linker.get_linker_snapshot_for_child(&mut caller, true);
 
@@ -2356,9 +2370,12 @@ pub fn current_cageid<
 >(
     caller: &mut Caller<'_, T>,
 ) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
-    ctx.this_cageid()
+    // Read the cage id through get_ctx_mut() (a &mut borrow) rather than
+    // get_ctx()/data().clone(), both of which deep-clone the whole LindCtx —
+    // including the Linker and its StringPool. Under an interposing grate the
+    // Linker holds thousands of registered handlers, so that clone is O(handlers)
+    // and dominates the syscall path.
+    caller.data_mut().get_ctx_mut().this_cageid()
 }
 
 // Get thread id of current caller
@@ -2367,7 +2384,8 @@ where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
 {
-    caller.data().get_ctx().tid as i32
+    // See current_cageid: avoid get_ctx()'s deep Linker clone on the syscall path.
+    caller.data_mut().get_ctx_mut().tid as i32
 }
 
 // attach a new SharedMemory to the Linker for multi-threading usage
