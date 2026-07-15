@@ -1,0 +1,68 @@
+{
+  "module":"libtoy",
+  "functions":[
+    {
+      "name":"toy_add",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"SCALAR","type":"int","size":4},
+        {"kind":"SCALAR","type":"int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"toy_mul",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"SCALAR","type":"int","size":4},
+        {"kind":"SCALAR","type":"int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"toy_buf_checksum",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"PTR","type":"<ptr>","size":4,"dir":"in","size_kind":"const","const_size":8,"pointee":[
+          {"kind":"STRUCT","type":"toy_buffer","size":8,"fields":[
+            {"kind":"PTR","type":"<ptr>","size":4,"field":"data","offset":0,"touched":true,"dir":"in","size_kind":"from_arg","size_arg":1,"pointee":[
+              {"kind":"SCALAR","type":"char","size":1}
+            ]},
+            {"kind":"SCALAR","type":"unsigned int","size":4,"field":"len","offset":4,"touched":true}
+          ]}
+        ]}
+      ],
+      "warnings":[
+        "arg0 field 'data': nested pointer direction assumed IN"
+      ]
+    },
+    {
+      "name":"toy_ctx_create",
+      "ret":{"kind":"handle"},
+      "args":[
+        {"kind":"SCALAR","type":"int","size":4}
+      ],
+      "warnings":[]
+    },
+    {
+      "name":"toy_ctx_get_val",
+      "ret":{"kind":"scalar"},
+      "args":[
+        {"kind":"PTR","type":"<ptr>","size":4,"dir":"in","size_kind":"unknown","handle":true,"handle_class":"void","opaque":true,"note":"opaque void* with no length — handle candidate"}
+      ],
+      "warnings":[
+        "arg0: opaque void* treated as handle (verify; could be an unsized buffer)"
+      ]
+    },
+    {
+      "name":"toy_ctx_close",
+      "ret":{"kind":"void"},
+      "args":[
+        {"kind":"PTR","type":"<ptr>","size":4,"dir":"unknown","size_kind":"unknown","handle":true,"handle_class":"void","opaque":true,"note":"opaque void* with no length — handle candidate"}
+      ],
+      "warnings":[
+        "arg0: opaque void* treated as handle (verify; could be an unsized buffer)"
+      ]
+    }
+  ]
+}
