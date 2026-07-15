@@ -48,14 +48,122 @@ SUPPORTED_SIZE = {None, "none", "na", "const", "from_arg", "from_arg_pointee",
                   "cstr", "ptr_array"}
 
 
+# Name substrings whose functions cannot be interposed in a static grate:
+#  - setjmp/longjmp: toolchain rejects taking setjmp's address; longjmp restores
+#    a jmp_buf saved on the *caller* cage's stack, so it must run there
+#  - locale: static-linking drags in unresolved TLS/locale machinery
+#  - printf/scanf: variadic — the spec can't describe `...` args, so marshalling
+#    them corrupts the call (and the inference wrongly marks them marshal)
+# NOTE: "exit"/"exec" are deliberately NOT here as substrings — both are broad
+# enough to false-positive on unrelated functions (__cyg_profile_func_exit is an
+# instrumentation hook, not a terminator; re_exec is a legacy regex matcher, not
+# process exec). The real exit-/exec-family members are listed by exact name in
+# NEVER_INTERPOSE below instead.
+NEVER_INTERPOSE_SUBSTR = (
+    "setjmp", "longjmp", "locale", "printf", "scanf",
+)
+# Other variadic / address-unsafe / terminating functions to exclude by exact name.
+NEVER_INTERPOSE = {
+    # control-flow terminators: interposed, they run in the grate cage and RETURN
+    # to the app, so the app's exit() never ends the app cage — glibc's `_exit`
+    # (`while(1){exit_group();exit();}`) then spins forever. Must be force_local.
+    "exit", "_exit", "_Exit", "quick_exit", "pthread_exit", "abort",
+    # image replacement: replaces the *calling* cage's image; only meaningful there.
+    "execl", "execlp", "execle", "execv", "execve", "execveat", "execvp",
+    "execvpe", "fexecve",
+    "fcntl", "ioctl", "open", "open64",
+    "syscall", "err", "errx", "warn", "warnx", "verr", "verrx", "vwarn", "vwarnx",
+    "syslog", "vsyslog", "prctl", "ptrace", "semctl",
+    # DIAGNOSTIC (pending discussion): per-cage runtime *init* functions called by
+    # __libc_start_main during startup. They set up the calling cage's TLS / ctype
+    # tables / thread pointer; interposed, they initialize the *grate* cage instead,
+    # leaving the app's runtime state uninitialized (e.g. breaks whole-number %f).
+    "__libc_setup_tls", "__ctype_init", "__wasi_init_tp",
+    # STATIC-LINK-BLOCKED on this port (not a marshalling issue): a static grate must
+    # resolve every symbol libm.a's *implementation objects* transitively reference,
+    # not just what we call directly. These pull in ceill/floorl/rintl/truncl (long
+    # double gamma helpers) or __ieee754_{acosl,fmodl,remainder} (double remainder's
+    # own internal impl symbol), which are genuinely missing from this build's libm —
+    # see LIBM_INTERPOSITION.md. Confirmed via a static-link attempt with full errors
+    # (llvm-nm on the blocking .o members) — includes the f64x/f32x weak aliases that
+    # resolve to the same long-double-backed implementation objects (ldbl-96 makes
+    # float64x/etc wider than double, so they alias the *l long-double body, not the
+    # plain double one).
+    "acosl", "acosf64x", "fmodl", "fmodf64x",
+    "remainder", "drem", "remainderf32x", "remainderf64",
+    "gammal", "lgammal", "lgammal_r", "tgammal",
+    "lgammaf64x", "lgammaf64x_r", "tgammaf64x",
+    "powl", "powf64x", "remquol", "remquof64x",
+    # BINARYEN wasm-opt bug (not a marshalling issue): triggers a parser crash
+    # ("popping from empty stack") in the fpcast-emu / epoch-injection pass, both
+    # standalone (see LIBM_INTERPOSITION.md's `test-double-scalb` opt-failure) and
+    # when linked into this grate. `scalbln` (long-exponent variant) is unaffected.
+    "scalb", "scalbf", "scalbl",
+}
+
+# Functions that operate on, or hand out, a file descriptor. A POSIX fd is a
+# per-cage handle (an index into *that* cage's fdtable), passed/returned as a bare
+# int the marshaller can't distinguish from any other int. Interposed, the call
+# runs in the grate cage: an fd the app opened (open() is force_local) is invalid
+# there → EBADF, and an fd the grate creates (socket/pipe/...) is unusable by the
+# app. So the whole fd family must be force_local — same reason open/fcntl/ioctl
+# already are. (Proper long-term fix: teach marshal-infer to flag fd params/returns
+# so this is data-driven instead of a name list.)
+FD_FUNCS = {
+    # operate on an fd (first arg)
+    "read", "write", "close", "lseek", "lseek64", "pread", "pwrite", "pread64",
+    "pwrite64", "readv", "writev", "preadv", "pwritev", "preadv64", "pwritev64",
+    "preadv2", "pwritev2", "dup", "dup2", "dup3", "fchdir", "fchmod", "fchown",
+    "fstat", "fstat64", "fstatfs", "fstatfs64", "fstatvfs", "fstatvfs64", "fsync",
+    "fdatasync", "ftruncate", "ftruncate64", "flock", "fcntl64", "sendfile",
+    "sendfile64", "fgetxattr", "fsetxattr", "flistxattr", "fremovexattr", "getdents",
+    "getdents64", "epoll_ctl", "epoll_wait", "epoll_pwait", "epoll_pwait2",
+    "fpathconf", "isatty", "ttyname", "ttyname_r", "tcgetattr", "tcsetattr",
+    "tcflush", "tcdrain", "tcflow", "tcsendbreak", "tcgetsid", "tcgetpgrp",
+    "tcsetpgrp", "fdopendir", "fdopen", "syncfs", "posix_fadvise", "posix_fadvise64",
+    "posix_fallocate", "posix_fallocate64", "fallocate", "readahead", "flockfile",
+    # socket fd (first arg)
+    "accept", "accept4", "bind", "listen", "connect", "send", "recv", "sendto",
+    "recvfrom", "sendmsg", "recvmsg", "recvmmsg", "sendmmsg", "getsockopt",
+    "setsockopt", "getsockname", "getpeername", "shutdown", "sockatmark",
+    # create / return an fd
+    "socket", "socketpair", "pipe", "pipe2", "eventfd", "eventfd2", "epoll_create",
+    "epoll_create1", "timerfd_create", "timerfd_settime", "timerfd_gettime",
+    "signalfd", "inotify_init", "inotify_init1", "inotify_add_watch",
+    "inotify_rm_watch", "memfd_create", "creat", "creat64", "mkstemp", "mkstemp64",
+    "mkostemp", "mkostemp64",
+    # *at family: first arg is a dirfd (or AT_FDCWD, itself cage-relative)
+    "openat", "openat64", "faccessat", "faccessat2", "fchmodat", "fchownat", "fstatat",
+    "fstatat64", "newfstatat", "linkat", "mkdirat", "mknodat", "readlinkat",
+    "renameat", "renameat2", "symlinkat", "unlinkat", "utimensat", "statx",
+    "name_to_handle_at", "open_by_handle_at",
+}
+
+
 def is_marshalable(f):
     """True iff the runtime can faithfully marshal every part of this spec."""
-    r = (f.get("ret") or {}).get("kind")
+    name = f.get("name", "")
+    if name in NEVER_INTERPOSE or name in FD_FUNCS \
+            or any(s in name for s in NEVER_INTERPOSE_SUBSTR):
+        return False
+    ret = f.get("ret") or {}
+    r = ret.get("kind")
     if r is not None and r not in SUPPORTED_RET:
         return False  # ptr_alloc, ptr_to_static, ptr_into_cursor, ...
+    if ret.get("type") == "complex":
+        return False  # defensive: no case seen with type=="complex" on ret itself
 
     def walk(n):
         if n.get("cursor"):                       # strsep-style cursor: not implemented
+            return False
+        if n.get("type") == "complex":
+            # C99 _Complex is described at the C/DWARF level (a size-16 "scalar"),
+            # but the wasm32 ABI actually lowers EVERY _Complex value (regardless of
+            # size — confirmed even for 8-byte complex float) to indirect/sret pointer
+            # passing. Treating it as LIND_ARG_SCALAR would pass the caller's raw
+            # pointer through untranslated, corrupting the call cross-cage. See
+            # LIBM_INTERPOSITION.md "The one real gap found" for the wasm-objdump
+            # evidence. Excluded pending a proper indirect/sret-aware spec kind.
             return False
         if n.get("kind") == "ptr" and n.get("size_kind") not in SUPPORTED_SIZE:
             return False                          # unknown sizing -> can't copy safely
@@ -242,8 +350,11 @@ int pass_fptr_to_wt(uint64_t ctx_ptr_u64, uint64_t cageid,
     uint64_t cages[6] = {{ a1c, a2c, a3c, a4c, a5c, a6c }};
     uint64_t src = 0;
     for (int i = 0; i < 6 && src == 0; i++) src = cages[i];
+    // recover the enclosing reg_entry (ctx is always &g_table[i].ctx) for its name
+    struct reg_entry *_re =
+        (struct reg_entry *)((char *)ctx - offsetof(struct reg_entry, ctx));
     return (int)lind_marshal_dispatch(ctx->real_fn, ctx->spec, src, cageid,
-                                      raw, ctx->spec->nargs);
+                                      raw, ctx->spec->nargs, _re->name);
 }}
 
 int main(int argc, char *argv[]) {{
@@ -273,6 +384,74 @@ int main(int argc, char *argv[]) {{
 '''
 
 
+FREESTANDING_TEMPLATE = r'''// AUTO-GENERATED by tools/marshal-gen/gen_grate.py (freestanding) — do not edit.
+// Full-library auto-interposition grate. Includes NO libc headers so it can
+// extern-declare every interposed libc symbol without prototype conflicts; the
+// grate's own helpers are declared by hand below.
+#define LIND_MARSHAL_NO_LIBC_HEADERS
+#include "lind_marshal.h"   // -> lind_syscall.h (register_lib_handler, copy_data_between_cages), stdint, stddef
+
+// grate's own helpers (K&R extern long; compatible with the table's extern decls).
+// No stdio: the grate stays SILENT so it doesn't perturb a test's stdout/stderr,
+// and returns the child's real exit code, so the harness sees the unmodified test.
+extern long getpid();
+extern long fork();
+extern long wait();
+extern long execv();
+#define LIND_WIFEXITED(s)   (((s) & 0x7f) == 0)
+#define LIND_WEXITSTATUS(s) (((s) >> 8) & 0xff)
+
+// --- real library functions (defined via static-linked libc) ---
+{externs}
+
+// --- per-function marshalling specs ---
+{specs}
+
+struct libctx {{ const struct lind_marshal_spec *spec; void *real_fn; }};
+struct reg_entry {{ const char *name; struct libctx ctx; }};
+static struct reg_entry g_table[] = {{
+{table}
+}};
+#define G_TABLE_N ((int)(sizeof(g_table)/sizeof(g_table[0])))
+
+int pass_fptr_to_wt(uint64_t ctx_ptr_u64, uint64_t cageid,
+                    uint64_t a1, uint64_t a1c, uint64_t a2, uint64_t a2c,
+                    uint64_t a3, uint64_t a3c, uint64_t a4, uint64_t a4c,
+                    uint64_t a5, uint64_t a5c, uint64_t a6, uint64_t a6c) {{
+    if (ctx_ptr_u64 == 0) __builtin_trap();
+    struct libctx *ctx = (struct libctx *)(uintptr_t)ctx_ptr_u64;
+    uint64_t raw[6]   = {{ a1, a2, a3, a4, a5, a6 }};
+    uint64_t cages[6] = {{ a1c, a2c, a3c, a4c, a5c, a6c }};
+    uint64_t src = 0;
+    for (int i = 0; i < 6 && src == 0; i++) src = cages[i];
+    // recover the enclosing reg_entry (ctx is always &g_table[i].ctx) for its name
+    struct reg_entry *_re =
+        (struct reg_entry *)((char *)ctx - offsetof(struct reg_entry, ctx));
+    return (int)lind_marshal_dispatch(ctx->real_fn, ctx->spec, src, cageid,
+                                      raw, ctx->spec->nargs, _re->name);
+}}
+
+int main(int argc, char *argv[]) {{
+    if (argc < 2) __builtin_trap();
+    long grateid = getpid();
+    long pid = fork();
+    if (pid < 0) __builtin_trap();
+    if (pid == 0) {{
+        long cageid = getpid();
+        for (int i = 0; i < G_TABLE_N; i++) {{
+            register_lib_handler((uint64_t)cageid, "env", g_table[i].name,
+                        (uint64_t)grateid, (uint64_t)(uintptr_t)&g_table[i].ctx);
+        }}
+        execv(argv[1], &argv[1]);
+        __builtin_trap();  // execv only returns on failure
+    }}
+    int status = 0;
+    while (wait(&status) > 0) {{}}
+    return LIND_WIFEXITED(status) ? LIND_WEXITSTATUS(status) : 1;
+}}
+'''
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("json", help="<lib>.marshal.json")
@@ -282,6 +461,9 @@ def main():
     ap.add_argument("--no-externs", action="store_true",
                     help="don't emit extern decls (real fns come from included headers, e.g. libc)")
     ap.add_argument("--include", default="", help="comma-separated extra headers to #include")
+    ap.add_argument("--freestanding", action="store_true",
+                    help="emit a header-free grate that extern-declares every symbol "
+                         "(for interposing all of libc without prototype conflicts)")
     args = ap.parse_args()
 
     d = json.load(open(args.json))
@@ -298,9 +480,10 @@ def main():
 
     em = Emitter()
     externs, specs, table = [], [], []
+    emit_externs = args.freestanding or not args.no_externs
     for f in fns:
         name = f["name"]
-        if not args.no_externs:
+        if emit_externs:
             externs.append(f"extern long {name}();")
         spec_name, spec_body = em.emit_function_spec(f)
         specs.append(spec_body)
@@ -314,7 +497,8 @@ def main():
         extern_block = "\n".join(f"#include <{h.strip()}>" for h in args.include.split(",")) \
             + "\n" + extern_block
 
-    out = GRATE_TEMPLATE.format(
+    template = FREESTANDING_TEMPLATE if args.freestanding else GRATE_TEMPLATE
+    out = template.format(
         lib_name=args.lib_name,
         externs=extern_block,
         specs="\n".join(em.decls + specs),
