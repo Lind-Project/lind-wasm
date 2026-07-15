@@ -49,6 +49,7 @@ enum class SizeKind {
   FromArg,       // value of another argument (buf,len idiom) -> sizeArgIndex
   FromArgPointee,// *(*lenptr) — length read through another pointer arg
   Cstr,          // NUL-terminated
+  PtrArray,      // NULL-terminated array of pointers (argv/envp); pointee = element
   Unknown,       // could not size — residue
 };
 const char *sizeKindName(SizeKind s);
@@ -59,6 +60,9 @@ enum class RetKind {
   Scalar,
   PtrAliasArg,   // returns a pointer arg unchanged (== arg, no offset)
   PtrIntoArg,    // returns a pointer INTO an arg buffer (arg + offset): memchr/strchr
+  PtrIntoCursor, // returns a pointer into a cursor arg's deep-copied buffer (strsep)
+  PtrToStatic,   // returns a pointer into a module-global/static buffer (inet_ntoa,
+                 // ctime, localtime) — copy OUT to caller; valid until next call
   PtrAlloc,      // freshly-allocated buffer (malloc family) — caller-cage alloc
   Handle,        // opaque constructor result (FILE*/DIR*) -> handle token
   ForceLocal,    // can't classify / must run locally
@@ -115,6 +119,12 @@ struct TreeNode {
   bool ptrIntoArg = false;
   int  intoArgIndex = -1;
 
+  // For an inner pointer that is a CURSOR into its own (deep-copied) pointee
+  // buffer: it is advanced within the buffer (strsep/mbsrtowcs *p). The runtime
+  // deep-copies the pointee per `dir`, then translates the advanced pointer back
+  // as source_base + (written - shadow_base).
+  bool cursor = false;
+
   // KSplit projection bit (meaningful for struct fields): marshal this field
   // only if set. Library-side best-effort = mark every field touched (we lack
   // the caller side needed for the precise both-sides intersection).
@@ -145,6 +155,15 @@ struct FunctionTrees {
   int retAliasArg = -1;                  // PtrAliasArg / PtrIntoArg: which arg
   std::vector<int> retAllocSizeArgs;     // PtrAlloc: 1 arg (malloc) or 2 (calloc)
   std::string retHandleClass;            // Handle return: canonical class
+  uint64_t retStaticSize = 0;            // PtrToStatic: copy-out byte count
+                                         // (0 => NUL-terminated C-string)
+
+  // True if the function is variadic (F.isVarArg()) OR takes an explicit
+  // va_list-typed parameter (vprintf-shaped). Recovered variadic-tail slots, if
+  // any, are appended to `params` as synthetic trailing TreeNodes (built from a
+  // recovered LLVM type rather than DWARF, since variadic args have no DWARF
+  // type) and classified through the same machinery as named parameters.
+  bool isVariadic = false;
 
   // Per-function verdict (E2). When true, the runtime runs the call locally and
   // ignores args/ret; the record is emitted in compact form (name+decision+warnings).

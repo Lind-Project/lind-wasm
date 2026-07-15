@@ -24,5 +24,11 @@
   "return_into_arg0": [
     "strchr", "strrchr", "index", "rindex", "strchrnul",
     "memchr", "memrchr", "rawmemchr", "strstr", "strcasestr", "strpbrk"
-  ]
+  ],
+
+  "ptr_array_args": {
+    "execv": [1], "execvp": [1], "execvpe": [1, 2], "execve": [1, 2],
+    "fexecve": [1, 2], "execveat": [2, 3], "getopt": [1], "getopt_long": [1],
+    "getopt_long_only": [1], "posix_spawn": [4, 5], "posix_spawnp": [4, 5]
+  }
 }

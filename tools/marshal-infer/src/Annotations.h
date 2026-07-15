@@ -24,6 +24,9 @@ struct Annotations {
   std::map<std::string, std::string> handleTypes;    // DWARF struct name -> class
   std::map<std::string, AllocSpec>   allocators;     // fn base name -> alloc spec
   std::set<std::string>              returnIntoArg0;  // searcher fn base names
+  // fn base name -> arg indices that are NULL-terminated arrays of cstr pointers
+  // (argv/envp); the array walk is interprocedural (exec -> syscall), so listed.
+  std::map<std::string, std::vector<int>> ptrArrayArgs;
 };
 
 // The active annotations: built-in defaults, extended by any --annotations file.

@@ -31,6 +31,12 @@ Annotations &annotations() {
     d.returnIntoArg0 = {"strchr",    "strrchr", "index",  "rindex",
                         "strchrnul", "memchr",  "memrchr","rawmemchr",
                         "strstr",    "strcasestr", "strpbrk"};
+    // NULL-terminated char* arrays (argv/envp). Indices are DWARF arg positions.
+    d.ptrArrayArgs = {
+        {"execv", {1}},        {"execvp", {1}},      {"execvpe", {1, 2}},
+        {"execve", {1, 2}},    {"fexecve", {1, 2}},  {"execveat", {2, 3}},
+        {"getopt", {1}},       {"getopt_long", {1}}, {"getopt_long_only", {1}},
+        {"posix_spawn", {4, 5}}, {"posix_spawnp", {4, 5}}};
     return d;
   }();
   return a;
@@ -67,6 +73,15 @@ bool loadAnnotationsFile(StringRef path, std::string &err) {
   if (json::Array *ri = obj->getArray("return_into_arg0"))
     for (auto &v : *ri)
       if (auto s = v.getAsString()) a.returnIntoArg0.insert(s->str());
+
+  if (json::Object *pa = obj->getObject("ptr_array_args"))
+    for (auto &kv : *pa) {
+      std::vector<int> idxs;
+      if (json::Array *ar = kv.second.getAsArray())
+        for (auto &v : *ar)
+          if (auto i = v.getAsInteger()) idxs.push_back((int)*i);
+      a.ptrArrayArgs[StringRef(kv.first).str()] = idxs;
+    }
 
   return true;
 }

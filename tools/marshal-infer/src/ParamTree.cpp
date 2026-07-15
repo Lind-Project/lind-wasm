@@ -38,6 +38,7 @@ const char *sizeKindName(SizeKind s) {
   case SizeKind::FromArg:        return "from_arg";
   case SizeKind::FromArgPointee: return "from_arg_pointee";
   case SizeKind::Cstr:           return "cstr";
+  case SizeKind::PtrArray:       return "ptr_array";
   case SizeKind::Unknown:        return "unknown";
   }
   return "unknown";
@@ -49,6 +50,8 @@ const char *retKindName(RetKind r) {
   case RetKind::Scalar:      return "scalar";
   case RetKind::PtrAliasArg: return "ptr_alias_arg";
   case RetKind::PtrIntoArg:  return "ptr_into_arg";
+  case RetKind::PtrIntoCursor: return "ptr_into_cursor";
+  case RetKind::PtrToStatic: return "ptr_to_static";
   case RetKind::PtrAlloc:    return "ptr_alloc";
   case RetKind::Handle:      return "handle";
   case RetKind::ForceLocal:  return "force_local";

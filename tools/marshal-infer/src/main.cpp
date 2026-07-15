@@ -140,6 +140,7 @@ static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
   if (n->isPointer()) {
     os << ",\"dir\":"; jsonStr(os, dirName(n->dir));
     os << ",\"size_kind\":"; jsonStr(os, sizeKindName(n->sizeKind));
+    if (n->sizeKind == SizeKind::PtrArray) os << ",\"terminator\":\"null\"";
     if (n->sizeKind == SizeKind::FromArg ||
         n->sizeKind == SizeKind::FromArgPointee)
       os << (isField ? ",\"size_field_index\":" : ",\"size_arg_index\":")
@@ -147,6 +148,7 @@ static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
     if (n->sizeKind == SizeKind::Const)
       os << ",\"const_size\":" << n->constSize;
     if (n->shallow) os << ",\"shallow\":true";
+    if (n->cursor) os << ",\"cursor\":true";
   }
 
   // Recurse: pointer -> "pointee"; struct/union -> "fields". (Arrays are leaves.)
@@ -178,6 +180,7 @@ static void jsonFunction(raw_ostream &os, const FunctionTrees *ft) {
   os << "    {\n      \"name\":"; jsonStr(os, ft->funcName);
   os << ",\n      \"decision\":";
   jsonStr(os, ft->forceLocal ? "force_local" : "marshal");
+  if (ft->isVariadic) os << ",\n      \"variadic\":true";
 
   // Compact record for force_local: the runtime ignores args/ret.
   if (ft->forceLocal) {
@@ -189,6 +192,10 @@ static void jsonFunction(raw_ostream &os, const FunctionTrees *ft) {
   os << ",\n      \"ret\":{\"kind\":"; jsonStr(os, retKindName(ft->retKind));
   if (ft->retKind == RetKind::PtrAliasArg || ft->retKind == RetKind::PtrIntoArg)
     os << ",\"alias_arg\":" << ft->retAliasArg;
+  else if (ft->retKind == RetKind::PtrIntoCursor)
+    os << ",\"cursor_arg\":" << ft->retAliasArg;
+  else if (ft->retKind == RetKind::PtrToStatic)
+    os << ",\"copyout_bytes\":" << ft->retStaticSize; // 0 => NUL-terminated cstr
   else if (ft->retKind == RetKind::PtrAlloc) {
     if (ft->retAllocSizeArgs.size() == 1)
       os << ",\"size_arg_index\":" << ft->retAllocSizeArgs[0];
