@@ -364,6 +364,24 @@ $(libm-test-c-narrow-obj): $(objpfx)libm-test%.c: libm-test%.inc \
 	$(make-target-directory)
 	$(PYTHON) gen-libm-test.py -c $< -a auto-libm-test-out$* -C $@
 
+# LIND: standalone target to (re)generate the libm test *sources* only — no
+# compiling/linking/running. Reuses the existing generation rules above and
+# below (family .c files, per-(type,function) wrapper .c files, the ulps
+# header, and per-type support-object wrappers) — otherwise only reachable
+# through the `tests` goal, which this port can't complete: it additionally
+# tries to bootstrap a native-execution testroot that isn't wired up for a
+# cross-compiled build. Invoke directly, bypassing the top-level Makefile's
+# goal recognition, the same way build/Makefile's `regen-ulps` target
+# already does:
+#   $(MAKE) -C $(srcdir)/math objdir=`pwd` gen-libm-test-sources
+# See tests/grate-tests/lib-interpose/full-libm/run_libm_tests.sh, which
+# calls this instead of hand-duplicating the function/type lists.
+.PHONY: gen-libm-test-sources
+gen-libm-test-sources: $(libm-test-c-auto-obj) $(libm-test-c-noauto-obj) \
+			$(libm-test-c-narrow-obj) $(objpfx)libm-test-ulps.h \
+			$(foreach t,$(test-types),$(objpfx)libm-test-support-$(t).c) \
+			$(addprefix $(objpfx),$(addsuffix .c,$(libm-tests-normal) $(libm-tests-narrow)))
+
 # Tests for totalorder compat symbols reuse the table of tests as
 # processed by gen-libm-test.py, so add dependencies on the generated
 # .c files.

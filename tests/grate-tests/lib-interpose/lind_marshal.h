@@ -45,8 +45,13 @@
 #include <lind_syscall.h>
 #include <stdint.h>
 #include <stddef.h>
+// string.h/stdio.h are not used by this header itself; a grate that interposes
+// libc functions defines LIND_MARSHAL_NO_LIBC_HEADERS to skip them, so it can
+// `extern`-declare libc symbols without prototype conflicts.
+#ifndef LIND_MARSHAL_NO_LIBC_HEADERS
 #include <string.h>
 #include <stdio.h>
+#endif
 
 // ---------------------------------------------------------------------------
 // Handler argument / return cast helpers
@@ -624,14 +629,41 @@ static void _lind_post_struct(const struct _lind_shadow *s,
 // Core dispatch
 // ---------------------------------------------------------------------------
 
+#ifdef LIND_MARSHAL_DEBUG
+// Debug-only: log each interposed call's name, first arg, and real return value
+// to the grate's stderr (fd 2), so an interposed run can be compared against a
+// normal one. Uses the grate's own libc write() (a direct syscall — not
+// interposed). Hex output to avoid pulling in printf.
+extern long write(long, const void *, long);
+static void _lind_dbg_hex(char *b, int *p, uint64_t v) {
+    for (int i = 60; i >= 0; i -= 4) {
+        int n = (int)((v >> i) & 0xf);
+        b[(*p)++] = (char)(n < 10 ? '0' + n : 'a' + n - 10);
+    }
+}
+static void _lind_dbg_log(const char *name, uint64_t arg0, uint64_t ret) {
+    char b[160]; int p = 0;
+    for (const char *s = "[marshal] "; *s; s++) b[p++] = *s;
+    for (const char *s = name; *s && p < 120; s++) b[p++] = *s;
+    for (const char *s = " arg0=0x"; *s; s++) b[p++] = *s;
+    _lind_dbg_hex(b, &p, arg0);
+    for (const char *s = " ret=0x"; *s; s++) b[p++] = *s;
+    _lind_dbg_hex(b, &p, ret);
+    b[p++] = '\n';
+    write(2, b, p);
+}
+#endif
+
 static inline uint64_t lind_marshal_dispatch(
     void                           *typed_handler,
     const struct lind_marshal_spec *spec,
     uint64_t                        source_cage,
     uint64_t                        grate_cage,
     uint64_t                       *raw_args,
-    uint32_t                        nargs)
+    uint32_t                        nargs,
+    const char                     *_dbg_name)
 {
+    (void)_dbg_name;
     _lind_marshal_reset();
     _lind_marshal_source_cage = source_cage;
     _lind_marshal_grate_cage  = grate_cage;
@@ -691,6 +723,10 @@ static inline uint64_t lind_marshal_dispatch(
     uint64_t handler_ret = ((lind_handler6_t)typed_handler)(
         handler_args[0], handler_args[1], handler_args[2],
         handler_args[3], handler_args[4], handler_args[5]);
+
+#ifdef LIND_MARSHAL_DEBUG
+    _lind_dbg_log(_dbg_name, handler_args[0], handler_ret);
+#endif
 
     // --- Post-call ---
     for (uint32_t s = 0; s < nshadows; s++) {
@@ -804,5 +840,5 @@ static int lind_mh_##name(                                                      
     return (int)lind_marshal_dispatch(                                          \
         (void *)(uintptr_t)(typed_fn),                                          \
         (spec_ptr), _src_cage, _cageid, _raw,                                   \
-        (spec_ptr)->nargs);                                                     \
+        (spec_ptr)->nargs, #name);                                             \
 }

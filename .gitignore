@@ -17,6 +17,10 @@ scripts/object_lists_final/
 e2e_status
 reports/
 report.html
+results.json
+grates.json
+dup2test.txt
+tests/grate-tests/lib-interpose/full-libm/generated/
 
 **/*.so
 
