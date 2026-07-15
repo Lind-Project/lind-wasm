@@ -36,3 +36,6 @@ Cargo.lock
 
 #Ignore Lind runtime log file
 LIND.log
+
+#Ignore embedded reference clone (has its own .git; not meant to be a submodule)
+research/arg-marshalling/Cali-library-isolation/
