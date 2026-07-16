@@ -5,9 +5,9 @@ For setting up Lind testing environment, see [Testing](../../docs/contribute/tes
 Unit tests can be run using the test harness:
 
 ```bash
-./scripts/test/harnesses/wasmtestreport.py
+/home/lind/lind-wasm/scripts/test/harnesses/wasmtestreport.py
 ```
 To see available options:
 ```bash 
-./scripts/test/harnesses/wasmtestreport.py --help
+/home/lind/lind-wasm/scripts/test/harnesses/wasmtestreport.py --help
 ```
