@@ -4,9 +4,12 @@ Thanks for your interest in contributing to Lind! Lind is a community-driven,
 open-source project, and it grows through the people who use it, file issues,
 improve the docs, and send patches. Contributions of every size are welcome.
 
-This guide explains how to get started, what you can work on, and how we review
-and merge changes. For deeper, topic-specific guidance, see the
-[contributor documentation](https://lind-project.github.io/lind-wasm/contribute/).
+Project-wide contribution policies, review requirements, governance, and
+community expectations are maintained in the
+[Lind community repository](https://github.com/Lind-Project/community/blob/main/CONTRIBUTING.md).
+This guide supplements those policies with the setup, testing, and code-style
+information specific to `lind-wasm`. For deeper, topic-specific guidance, see
+the [contributor documentation](https://lind-project.github.io/lind-wasm/contribute/).
 
 ## Our Vision
 
@@ -31,7 +34,7 @@ built in the open.
 - **Star and share** the [repository](https://github.com/Lind-Project/lind-wasm)
   to help others find the project.
 - To report a **security vulnerability**, please follow the
-  [Security Policy](security.md) rather than opening a public issue.
+  [Security Policy](SECURITY.md) rather than opening a public issue.
 
 ### Set up your development environment
 
@@ -153,20 +156,17 @@ for details.
 ## Becoming a Maintainer
 
 Maintainers are contributors who have shown sustained, high-quality involvement
-in the project, through code implementation, review, documentation, and helping others. What
-matters is consistent, thoughtful contribution and adherence to the
-[Code of Conduct](https://lind-project.github.io/lind-wasm/community/conduct/),
-not the raw number of PRs.
-
-New maintainers are nominated by existing maintainers. A nomination is discussed
-by the current maintainers, and confirmed by consensus. If you're interested in
-taking on a larger role, the best path is to keep contributing and reviewing, and
-to let a maintainer know.
+in the project through code implementation, review, documentation, issue
+triage, testing, design work, and community support. The authoritative process
+for becoming a maintainer is defined in the Lind
+[Governance](https://github.com/Lind-Project/community/blob/main/GOVERNANCE.md)
+document. Current maintainers and their focus areas are listed in
+[MAINTAINER.md](https://github.com/Lind-Project/community/blob/main/MAINTAINER.md).
 
 ## Code of Conduct
 
 Participation in the Lind community is governed by our
-[Code of Conduct](https://lind-project.github.io/lind-wasm/community/conduct/).
+[Code of Conduct](https://github.com/Lind-Project/community/blob/main/CODE_OF_CONDUCT.md).
 By participating, you agree to uphold it.
 
 ## License
@@ -180,6 +180,6 @@ the same license as the project. See [LICENSE](LICENSE) for details.
   [GitHub issue](https://github.com/Lind-Project/lind-wasm/issues) or discussion.
 - **Documentation:** browse the
   [Lind docs](https://lind-project.github.io/lind-wasm/).
-- **Community:** see the
-  [community page](https://lind-project.github.io/lind-wasm/community/) to connect
-  with the team.
+- **Community:** see
+  [COMMUNITY.md](https://github.com/Lind-Project/community/blob/main/COMMUNITY.md)
+  for Slack and community meeting information.

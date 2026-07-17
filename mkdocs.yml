@@ -33,16 +33,12 @@ nav:
     - Testing: contribute/testing.md
     - Debug programs: contribute/debug-programs.md
     - Adding to the docs: contribute/add-docs.md
-    - Security policy: contribute/security.md
+    - Security policy: https://github.com/Lind-Project/lind-wasm/security/policy
     - Docker Hub release workflow: contribute/docker-release-workflow.md
     - End-to-End Testing: contribute/e2e-testing.md
     - Pipelines:
       - Overview: contribute/pipelines/overview.md
       - lind-wasm: contribute/pipelines/lind-wasm.md
-  - Community:
-    - community/index.md
-    - Team: community/team.md
-    - Code of conduct: community/conduct.md
 
 extra_css:
   - stylesheets/img.css
