@@ -25,11 +25,15 @@ nav:
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
     - Memory: internal/memory.md
+    - setjmp / longjmp: internal/setjmp.md
+    - Logging: internal/logging.md
+    - C++ support: internal/libcpp.md
   - Contributing:
     - contribute/index.md
     - Development setup: contribute/dev-container.md
     - Rust style guide: contribute/styleguide.md
     - Lind toolchain: contribute/toolchain.md
+    - Compiling Rust programs: contribute/compile-with-rust.md
     - Testing: contribute/testing.md
     - Debug programs: contribute/debug-programs.md
     - Adding to the docs: contribute/add-docs.md
