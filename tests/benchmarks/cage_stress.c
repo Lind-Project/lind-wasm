@@ -1,115 +1,70 @@
+// DESCRIPTION: Measures cage metadata lookup and fork/wait lifecycle latency.
 /*
  * Microbenchmark for process/cage metadata lookup and fork lifecycle overhead.
  *
- * This benchmark measures the cost of several lightweight process-related
- * syscalls that are expected to exercise the runtime's hot-path cage lookup
- * logic, including getpid(), getppid(), getuid(), and geteuid().
+ * Each result uses benchrunner.py's tab-delimited output format:
  *
- * It also measures fork() + waitpid() performance, which exercises the heavier
- * cage lifecycle path: cage ID allocation, child cage creation, parent/child
- * bookkeeping, child exit, zombie recording, SIGCHLD delivery, waitpid()
- * wakeup, fd-table cleanup, and final cage removal.
+ *   <test>\t<param>\t<loops>\t<average nanoseconds>
  *
- * The benchmark reports total operations, elapsed time, nanoseconds per
- * operation, and operations per second for each workload. A short warmup phase
- * is run before the measured section to reduce one-time initialization noise.
- *
- * Usage:
- *   ./benchmark [iters] [forks] [threads]
- *
- * Defaults:
- *   iters   = 1000000
- *   forks   = 2000
- *   threads = 4
+ * The lookup workloads exercise getpid(), getppid(), getuid(), and geteuid().
+ * The fork workload also exercises cage allocation, parent/child bookkeeping,
+ * child exit, zombie recording, SIGCHLD delivery, waitpid(), and cleanup.
  */
 #define _GNU_SOURCE
+#include "bench.h"
+
 #include <errno.h>
-#include <inttypes.h>
 #include <pthread.h>
-#include <sched.h>
-#include <signal.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/resource.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
 
-#ifndef DEFAULT_ITERS
-#define DEFAULT_ITERS 1000000
-#endif
+#define LOOKUP_LOOPS LOOPS_LARGE
+#define FORK_LOOPS 2000
+#define THREAD_COUNT 4
+#define WARMUP_LOOPS LOOPS_SMALL
 
-#ifndef DEFAULT_FORKS
-#define DEFAULT_FORKS 2000
-#endif
-
-#ifndef DEFAULT_THREADS
-#define DEFAULT_THREADS 4
-#endif
-
-static uint64_t now_ns(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        perror("clock_gettime");
-        exit(1);
-    }
-    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
-}
-
-static void print_result(const char *name, uint64_t ops, uint64_t ns) {
-    double sec = (double)ns / 1e9;
-    double ns_per_op = ops ? (double)ns / (double)ops : 0.0;
-    double ops_per_sec = sec > 0.0 ? (double)ops / sec : 0.0;
-
-    printf("%-28s ops=%" PRIu64 " time=%.6f sec ns/op=%.2f ops/sec=%.2f\n",
-           name, ops, sec, ns_per_op, ops_per_sec);
-}
-
-static void bench_getpid_loop(uint64_t iters) {
+static long long bench_getpid_loop(int loops) {
     volatile pid_t sink = 0;
+    long long start = gettimens();
 
-    uint64_t start = now_ns();
-
-    for (uint64_t i = 0; i < iters; i++) {
+    for (int i = 0; i < loops; i++) {
         sink ^= getpid();
     }
 
-    uint64_t end = now_ns();
+    long long end = gettimens();
 
     if (sink == (pid_t)-1) {
-        fprintf(stderr, "impossible sink value\n");
+        fprintf(stderr, "impossible getpid sink value\n");
     }
 
-    print_result("getpid loop", iters, end - start);
+    return (end - start) / loops;
 }
 
-static void bench_getppid_loop(uint64_t iters) {
+static long long bench_getppid_loop(int loops) {
     volatile pid_t sink = 0;
+    long long start = gettimens();
 
-    uint64_t start = now_ns();
-
-    for (uint64_t i = 0; i < iters; i++) {
+    for (int i = 0; i < loops; i++) {
         sink ^= getppid();
     }
 
-    uint64_t end = now_ns();
+    long long end = gettimens();
 
     if (sink == (pid_t)-1) {
-        fprintf(stderr, "impossible sink value\n");
+        fprintf(stderr, "impossible getppid sink value\n");
     }
 
-    print_result("getppid loop", iters, end - start);
+    return (end - start) / loops;
 }
 
-static void bench_mixed_lookup_loop(uint64_t iters) {
+static long long bench_mixed_lookup_loop(int loops) {
     volatile long sink = 0;
+    long long start = gettimens();
 
-    uint64_t start = now_ns();
-
-    for (uint64_t i = 0; i < iters; i++) {
+    for (int i = 0; i < loops; i++) {
         switch (i & 3) {
             case 0:
                 sink ^= getpid();
@@ -126,29 +81,29 @@ static void bench_mixed_lookup_loop(uint64_t iters) {
         }
     }
 
-    uint64_t end = now_ns();
+    long long end = gettimens();
 
     if (sink == -1) {
-        fprintf(stderr, "impossible sink value\n");
+        fprintf(stderr, "impossible mixed lookup sink value\n");
     }
 
-    print_result("mixed lookup syscalls", iters, end - start);
+    return (end - start) / loops;
 }
 
-static void bench_fork_wait(uint64_t forks) {
-    uint64_t start = now_ns();
+static long long bench_fork_wait(int loops) {
+    long long start = gettimens();
 
-    for (uint64_t i = 0; i < forks; i++) {
+    for (int i = 0; i < loops; i++) {
         pid_t pid = fork();
 
         if (pid < 0) {
             perror("fork");
-            fprintf(stderr, "failed at fork iteration %" PRIu64 "\n", i);
+            fprintf(stderr, "failed at fork iteration %d\n", i);
             exit(1);
         }
 
         if (pid == 0) {
-            _exit((int)(i & 0xff));
+            _exit(i & 0xff);
         }
 
         int status = 0;
@@ -159,36 +114,35 @@ static void bench_fork_wait(uint64_t forks) {
         }
 
         if (!WIFEXITED(status)) {
-            fprintf(stderr, "child did not exit normally at iteration %" PRIu64 "\n", i);
+            fprintf(stderr, "child did not exit normally at iteration %d\n", i);
             exit(1);
         }
 
-        if (WEXITSTATUS(status) != (int)(i & 0xff)) {
+        if (WEXITSTATUS(status) != (i & 0xff)) {
             fprintf(stderr,
-                    "bad exit status at iteration %" PRIu64 ": got %d expected %d\n",
+                    "bad exit status at iteration %d: got %d expected %d\n",
                     i,
                     WEXITSTATUS(status),
-                    (int)(i & 0xff));
+                    i & 0xff);
             exit(1);
         }
     }
 
-    uint64_t end = now_ns();
-
-    print_result("fork + waitpid", forks, end - start);
+    long long end = gettimens();
+    return (end - start) / loops;
 }
 
 struct thread_arg {
-    uint64_t iters;
+    int loops;
     int tid;
 };
 
 static void *thread_lookup_worker(void *argp) {
-    struct thread_arg *arg = (struct thread_arg *)argp;
+    struct thread_arg *arg = argp;
     volatile long sink = arg->tid;
 
-    for (uint64_t i = 0; i < arg->iters; i++) {
-        switch ((i + (uint64_t)arg->tid) & 3) {
+    for (int i = 0; i < arg->loops; i++) {
+        switch ((i + arg->tid) & 3) {
             case 0:
                 sink ^= getpid();
                 break;
@@ -204,25 +158,25 @@ static void *thread_lookup_worker(void *argp) {
         }
     }
 
-    return (void *)(uintptr_t)(sink & 0xff);
+    return NULL;
 }
 
-static void bench_threaded_lookup(int threads, uint64_t iters_per_thread) {
-    pthread_t *ths = calloc((size_t)threads, sizeof(pthread_t));
-    struct thread_arg *args = calloc((size_t)threads, sizeof(struct thread_arg));
+static long long bench_threaded_lookup(int threads, int loops_per_thread) {
+    pthread_t *thread_ids = calloc((size_t)threads, sizeof(*thread_ids));
+    struct thread_arg *args = calloc((size_t)threads, sizeof(*args));
 
-    if (!ths || !args) {
+    if (thread_ids == NULL || args == NULL) {
         perror("calloc");
         exit(1);
     }
 
-    uint64_t start = now_ns();
+    long long start = gettimens();
 
     for (int i = 0; i < threads; i++) {
-        args[i].iters = iters_per_thread;
+        args[i].loops = loops_per_thread;
         args[i].tid = i;
 
-        int rc = pthread_create(&ths[i], NULL, thread_lookup_worker, &args[i]);
+        int rc = pthread_create(&thread_ids[i], NULL, thread_lookup_worker, &args[i]);
         if (rc != 0) {
             errno = rc;
             perror("pthread_create");
@@ -231,8 +185,7 @@ static void bench_threaded_lookup(int threads, uint64_t iters_per_thread) {
     }
 
     for (int i = 0; i < threads; i++) {
-        void *ret = NULL;
-        int rc = pthread_join(ths[i], &ret);
+        int rc = pthread_join(thread_ids[i], NULL);
         if (rc != 0) {
             errno = rc;
             perror("pthread_join");
@@ -240,78 +193,43 @@ static void bench_threaded_lookup(int threads, uint64_t iters_per_thread) {
         }
     }
 
-    uint64_t end = now_ns();
+    long long end = gettimens();
 
-    uint64_t total_ops = (uint64_t)threads * iters_per_thread;
-    print_result("pthread mixed lookup", total_ops, end - start);
-
-    free(ths);
+    free(thread_ids);
     free(args);
+
+    return (end - start) / (threads * loops_per_thread);
 }
 
-static void usage(const char *prog) {
-    fprintf(stderr,
-            "usage: %s [iters] [forks] [threads]\n"
-            "\n"
-            "defaults:\n"
-            "  iters   = %d\n"
-            "  forks   = %d\n"
-            "  threads = %d\n"
-            "\n"
-            "examples:\n"
-            "  %s\n"
-            "  %s 10000000 5000 8\n",
-            prog,
-            DEFAULT_ITERS,
-            DEFAULT_FORKS,
-            DEFAULT_THREADS,
-            prog,
-            prog);
-}
+int main(void) {
+    const int threaded_loops = LOOKUP_LOOPS / THREAD_COUNT;
+    const int threaded_total_ops = threaded_loops * THREAD_COUNT;
 
-int main(int argc, char **argv) {
-    uint64_t iters = DEFAULT_ITERS;
-    uint64_t forks = DEFAULT_FORKS;
-    int threads = DEFAULT_THREADS;
+    /* Reduce one-time initialization noise without emitting warmup rows. */
+    (void)bench_getpid_loop(WARMUP_LOOPS);
+    (void)bench_getppid_loop(WARMUP_LOOPS);
+    (void)bench_mixed_lookup_loop(WARMUP_LOOPS);
 
-    if (argc > 4) {
-        usage(argv[0]);
-        return 2;
-    }
-
-    if (argc >= 2) {
-        iters = strtoull(argv[1], NULL, 10);
-    }
-
-    if (argc >= 3) {
-        forks = strtoull(argv[2], NULL, 10);
-    }
-
-    if (argc >= 4) {
-        threads = atoi(argv[3]);
-        if (threads <= 0) {
-            fprintf(stderr, "threads must be positive\n");
-            return 2;
-        }
-    }
-
-    printf("pid=%ld iters=%" PRIu64 " forks=%" PRIu64 " threads=%d\n",
-           (long)getpid(), iters, forks, threads);
-
-    /*
-     * Warmup. This reduces one-time initialization noise from the benchmark.
-     */
-    bench_getpid_loop(10000);
-    bench_getppid_loop(10000);
-    bench_mixed_lookup_loop(10000);
-
-    printf("\n--- measured ---\n");
-
-    bench_getpid_loop(iters);
-    bench_getppid_loop(iters);
-    bench_mixed_lookup_loop(iters);
-    bench_threaded_lookup(threads, iters / (uint64_t)threads);
-    bench_fork_wait(forks);
+    emit_result_string("Cage getpid",
+                       "-",
+                       bench_getpid_loop(LOOKUP_LOOPS),
+                       LOOKUP_LOOPS);
+    emit_result_string("Cage getppid",
+                       "-",
+                       bench_getppid_loop(LOOKUP_LOOPS),
+                       LOOKUP_LOOPS);
+    emit_result_string("Cage mixed lookup",
+                       "-",
+                       bench_mixed_lookup_loop(LOOKUP_LOOPS),
+                       LOOKUP_LOOPS);
+    emit_result("Cage threaded lookup",
+                THREAD_COUNT,
+                bench_threaded_lookup(THREAD_COUNT, threaded_loops),
+                threaded_total_ops);
+    emit_result_string("Cage fork + waitpid",
+                       "-",
+                       bench_fork_wait(FORK_LOOPS),
+                       FORK_LOOPS);
 
     return 0;
 }
