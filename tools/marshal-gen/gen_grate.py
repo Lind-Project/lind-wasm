@@ -150,20 +150,23 @@ def is_marshalable(f):
     r = ret.get("kind")
     if r is not None and r not in SUPPORTED_RET:
         return False  # ptr_alloc, ptr_to_static, ptr_into_cursor, ...
-    if ret.get("type") == "complex":
-        return False  # defensive: no case seen with type=="complex" on ret itself
+    # NOTE: no `type == "complex"` exclusion anymore. marshal-infer now detects
+    # byval/sret-lowered arguments and returns (C99 _Complex, ordinary large
+    # by-value structs, and long double's sret-shaped return) via LLVM IR
+    # attributes / a hardcoded fp128 rule and represents them as ordinary
+    # `kind:"ptr"` entries (const-sized, IN for byval args with no copy-back,
+    # OUT for the synthetic leading sret pointer) -- the SAME shape the
+    # existing LIND_ARG_PTR path below already handles for any other
+    # pointer-taking function, so no extra check is needed here. `"type"` is
+    # purely an informational label on the pointee now, not a kind that
+    # affects marshalling. See issues/fix-complex-and-ldbl-abi-marshalling.md.
+    # (long double's ARGUMENT side is still unfixed -- it splits into 2 raw
+    # wasm slots invisible at marshal-infer's IR level, not byval-lowered, so
+    # the function stays force_local upstream and never reaches this check as
+    # "marshal" at all.)
 
     def walk(n):
         if n.get("cursor"):                       # strsep-style cursor: not implemented
-            return False
-        if n.get("type") == "complex":
-            # C99 _Complex is described at the C/DWARF level (a size-16 "scalar"),
-            # but the wasm32 ABI actually lowers EVERY _Complex value (regardless of
-            # size — confirmed even for 8-byte complex float) to indirect/sret pointer
-            # passing. Treating it as LIND_ARG_SCALAR would pass the caller's raw
-            # pointer through untranslated, corrupting the call cross-cage. See
-            # LIBM_INTERPOSITION.md "The one real gap found" for the wasm-objdump
-            # evidence. Excluded pending a proper indirect/sret-aware spec kind.
             return False
         if n.get("kind") == "ptr" and n.get("size_kind") not in SUPPORTED_SIZE:
             return False                          # unknown sizing -> can't copy safely

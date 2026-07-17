@@ -133,6 +133,34 @@ struct TreeNode {
   // True if the depth cap truncated this node (cycle / very deep nesting).
   bool depthTruncated = false;
 
+  // WASM ABI LOWERING: how many raw wasm-level call-site slots this ONE
+  // logical (DWARF-level) parameter actually occupies. Almost always 1 --
+  // every ordinary scalar/pointer argument is exactly one wasm value. Set to
+  // N>1 for a value whose LLVM type has no native wasm value-type
+  // representation and gets legalized by the wasm32 BACKEND (SelectionDAG
+  // type-legalization, which runs after -emit-llvm has already produced the
+  // bitcode this tool reads) into N raw same-width parts passed as N separate
+  // positional arguments -- e.g. fp128 (`long double`) always splits into 2
+  // raw i64 slots (confirmed via wasm-objdump: two incoming values, stored
+  // directly, never loaded through any pointer -- there is no address
+  // involved at all). This is a hardcoded, hardware-target-level fact about
+  // the LLVM type itself (not something inferred per-function), distinct from
+  // -- and detected completely differently than -- the FRONTEND-level
+  // indirect-passing lowering (`hasByValAttr`) below, which clang's own
+  // codegen already makes IR-visible; a >1-native-word-wide SCALAR type with
+  // no dedicated wasm value type is expanded into parts, while an aggregate
+  // (struct/_Complex) too wide to pass directly goes indirect via a pointer.
+  // For abiSlots>1, `kind` stays whatever the DWARF-derived type says
+  // (Scalar), `dir`/`sizeKind` are meaningless (multi-slot values are pure
+  // raw-bits passthrough, never an address, so nothing needs translating) --
+  // main.cpp expands this ONE TreeNode into N consecutive plain-scalar JSON
+  // "args" entries at emission time, mirroring how FunctionTrees::retSretArg
+  // is spliced in as a synthetic argument only at emission time: ft.params's
+  // own length/indexing (and every dwarfIndexOf/sretOffset computation
+  // elsewhere in Infer.cpp that assumes 1 DWARF argument == 1 vector entry)
+  // never needs to change to accommodate it.
+  uint32_t abiSlots = 1;
+
   // Free-form per-node note explaining a residue / heuristic decision.
   std::string note;
 
@@ -164,6 +192,21 @@ struct FunctionTrees {
   // recovered LLVM type rather than DWARF, since variadic args have no DWARF
   // type) and classified through the same machinery as named parameters.
   bool isVariadic = false;
+
+  // Set when the return is sret-shaped: the wasm32 ABI writes the real result
+  // through a hidden pointer instead of a genuine return value (retKind is
+  // Void in this case — that IS the real ABI-level return). This happens for
+  // (a) TRUE sret, IR-visible via hasStructRetAttr() on arg0 — ordinary large
+  // struct-by-value and C99 _Complex returns; (b) long double (fp128) on this
+  // target, which is NOT IR-visible (the wasm32 backend's split/indirection is
+  // a legalization detail applied after the .bc this tool reads) and is
+  // instead detected via a hardcoded Type::isFP128Ty() check. Either way this
+  // node (kind=Pointer, dir=Out, sizeKind=Const) is spliced in as the FIRST
+  // emitted argument at JSON-emission time (main.cpp) — matching its real
+  // position as the first raw wasm-level call argument — rather than folded
+  // into `params`/`ret`, so none of this file's existing DWARF-index
+  // arithmetic (dwarfIndexOf/sretOffset) needs to change to accommodate it.
+  std::unique_ptr<TreeNode> retSretArg;
 
   // Per-function verdict (E2). When true, the runtime runs the call locally and
   // ignores args/ret; the record is emitted in compact form (name+decision+warnings).

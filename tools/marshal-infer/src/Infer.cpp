@@ -5,6 +5,7 @@
 #include "Annotations.h"
 
 #include "llvm/IR/Argument.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -12,6 +13,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -1038,6 +1040,113 @@ void inferVariadic(const Function &F, FunctionTrees &ft, unsigned sretOffset) {
   (void)anyRoot;
 }
 
+// =============================================================================
+// WebAssembly ABI lowering layer.
+//
+// marshal-infer analyzes .bc produced by `-emit-llvm -c` — LLVM IR PRE-backend.
+// For most C types, the ABI-lowered shape (how a value actually crosses a wasm
+// function-call boundary) already matches what this IR shows: a scalar stays a
+// scalar, a T* stays one pointer argument. Two families of C types do NOT
+// match, and need this layer to reconcile the DWARF/IR view with reality:
+//
+//   1. AGGREGATES too wide to pass/return directly (an ordinary large struct
+//      passed by value, or C99 _Complex, which is structurally a 2-element
+//      record) — clang's FRONTEND lowers these during -emit-llvm itself, so
+//      the .bc already shows the real shape as LLVM attributes: `byval` on an
+//      argument, `sret` on a hidden return-pointer argument
+//      (`hasByValAttr()`/`hasStructRetAttr()`, both IR-visible, no guessing
+//      needed).
+//   2. SCALARS wider than any native wasm value type (i32/i64/f32/f64) with no
+//      dedicated hardware representation — fp128 (`long double` on this
+//      target) is the only known instance. The wasm32 BACKEND legalizes these
+//      by (a) returning via a hidden pointer exactly like sret, and (b)
+//      splitting an argument into N raw same-width parts (2x i64 for fp128,
+//      confirmed via wasm-objdump: two incoming values, stored directly,
+//      never loaded through any pointer — there is no address involved at
+//      all). This legalization runs strictly AFTER -emit-llvm, so there is no
+//      IR attribute for it — detected via a hardcoded, target-constant rule
+//      keyed on the LLVM type itself (`Type::isFP128Ty()`), not inferred.
+//
+// Both families funnel into representations the rest of this file already
+// understands: a wrapped pointer node (byval) or extra raw scalar slots
+// (fp128 args, TreeNode::abiSlots — see its comment in ParamTree.h) alongside
+// the existing per-argument tree, and a synthetic leading OUT-pointer argument
+// (any sret-shaped return, real or fp128-hardcoded) via
+// FunctionTrees::retSretArg. Neither needs ft.params's own length/indexing to
+// change — dwarfIndexOf/sretOffset elsewhere in this file, which assume one
+// DWARF argument == one ft.params entry, are untouched by this layer.
+// =============================================================================
+
+// Case 2 (scalar splitting): an fp128 argument is pure raw-bits passthrough,
+// never an address — dir/sizeKind stay meaningless, nothing to translate.
+void lowerFp128Arg(TreeNode *node, unsigned p, FunctionTrees &ft) {
+  node->abiSlots = 2;
+  ft.warnings.push_back("arg" + std::to_string(p) +
+      ": long double argument (fp128) — the wasm32 backend splits this into "
+      "2 raw i64 slots (low half, then high half); represented as 2 "
+      "plain-scalar args, no address translation needed");
+}
+
+// Case 1 (indirect aggregate passing): wrap the existing, DWARF-correct node
+// as the pointee of a synthetic pointer layer — the exact shape a real T*
+// argument already produces, so nested struct fields (an ordinary byval
+// struct) still flow through annotateComposite and the existing global safety
+// net. dir is FORCED to In regardless of what analyzeAccess would otherwise
+// infer: byval guarantees the callee's copy is private, so any writes the
+// callee makes to its own copy must never be read back into the caller.
+void lowerByvalArg(FunctionTrees &ft, size_t p, const Argument *A,
+                   const Function &F) {
+  TreeNode *node = ft.params[p].get();
+  uint64_t byvalSize = node->sizeBytes;
+  if (Type *bt = A->getParamByValType())
+    byvalSize = F.getParent()->getDataLayout().getTypeAllocSize(bt);
+  auto pointee = std::move(ft.params[p]);
+  if (pointee->isComposite() && pointee->sizeBytes > 0 && !pointee->depthTruncated)
+    annotateComposite(pointee.get(), ft, p); // resolves nested fields; the
+        // global safety net below force_locals the whole function if any
+        // field comes back unresolved, exactly as for a named struct ptr.
+  auto wrapper = std::make_unique<TreeNode>();
+  wrapper->kind = NodeKind::Pointer;
+  wrapper->typeName = pointee->typeName;
+  wrapper->sizeBytes = 4; // wasm32 pointer
+  wrapper->dir = Dir::In; // byval = callee's own copy; writes never reach the caller
+  wrapper->sizeKind = SizeKind::Const;
+  wrapper->constSize = byvalSize;
+  wrapper->children.push_back(std::move(pointee));
+  ft.params[p] = std::move(wrapper);
+  ft.warnings.push_back("arg" + std::to_string(p) +
+      ": byval-lowered aggregate (complex/large struct) — marshalled as "
+      "a const-sized IN pointer, no copy-back");
+}
+
+// Case 1 (return) + case 2 (return): a hidden-pointer-shaped return, real
+// (sret attribute) or hardcoded (fp128). Builds ft.retSretArg; the caller is
+// responsible for forcing ft.retKind = RetKind::Void for the fp128 case (true
+// sret already naturally computes Void, since F.getReturnType() really is
+// void there).
+void lowerAbiReturn(const Function &F, FunctionTrees &ft, bool trueSret,
+                    bool fp128Ret) {
+  const DataLayout &DL = F.getParent()->getDataLayout();
+  Type *rt = F.getReturnType();
+  uint64_t sretSize = (trueSret && F.getArg(0)->getParamStructRetType())
+      ? DL.getTypeAllocSize(F.getArg(0)->getParamStructRetType())
+      : DL.getTypeAllocSize(rt);
+  auto sret = std::make_unique<TreeNode>();
+  sret->kind = NodeKind::Pointer;
+  sret->typeName = "<sret>";
+  sret->sizeBytes = 4; // wasm32 pointer
+  sret->dir = Dir::Out;
+  sret->sizeKind = SizeKind::Const;
+  sret->constSize = sretSize;
+  ft.retSretArg = std::move(sret);
+  ft.warnings.push_back(trueSret
+      ? "return: sret-shaped (struct/complex-by-value) — copied out via a "
+        "synthetic leading pointer argument, not a return value"
+      : "return: long double (fp128) is sret-lowered by the wasm32 "
+        "backend, invisible at this IR level — copied out via a "
+        "synthetic leading pointer argument, not a return value");
+}
+
 } // namespace
 
 void inferFunction(const Function &F, FunctionTrees &ft) {
@@ -1056,12 +1165,27 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
   // ---- per-parameter analysis ----
   for (size_t p = 0; p < ft.params.size(); ++p) {
     TreeNode *node = ft.params[p].get();
+    unsigned irNo = (unsigned)p + sretOffset;
+    const Argument *Airn = (irNo < F.arg_size()) ? F.getArg(irNo) : nullptr;
+
+    // WASM ABI lowering layer (see the block comment above lowerFp128Arg) --
+    // both checks below fire on the LLVM Argument itself, before this node's
+    // DWARF-derived NodeKind (which knows nothing about ABI-level lowering)
+    // would otherwise cause it to be silently skipped or misclassified.
+    if (Airn && Airn->getType()->isFP128Ty()) {
+      lowerFp128Arg(node, (unsigned)p, ft);
+      continue;
+    }
+    if (node->kind != NodeKind::Pointer && Airn && Airn->hasByValAttr()) {
+      lowerByvalArg(ft, p, Airn, F);
+      continue;
+    }
+
     if (node->kind != NodeKind::Pointer)
       continue; // scalars need no marshalling
-    unsigned irNo = (unsigned)p + sretOffset;
     if (irNo >= F.arg_size())
       continue;
-    const Argument *A = F.getArg(irNo);
+    const Argument *A = Airn;
 
     Access acc = analyzeAccess(A);
     node->dir = directionFrom(A, acc);
@@ -1326,8 +1450,23 @@ void inferFunction(const Function &F, FunctionTrees &ft) {
 
   // ---- return kind ----
   Type *rt = F.getReturnType();
-  if (rt->isVoidTy()) {
-    ft.retKind = RetKind::Void;
+
+  // WASM ABI lowering layer (see the block comment above lowerFp128Arg) --
+  // TRUE sret is IR-visible via hasStructRetAttr() on arg0 (sretOffset==1);
+  // fp128 return is the hardcoded case, since rt genuinely says `fp128`, not
+  // void, at this level (confirmed via wasm-objdump: the real compiled
+  // function takes a hidden i32 sret pointer as arg0 despite the .bc showing
+  // a plain `fp128 @f(...)`). Either way, lowerAbiReturn represents the
+  // hidden pointer as a synthetic LEADING argument (matching its real
+  // position as the first raw wasm-level call argument) via ft.retSretArg,
+  // spliced in as args[0] only at JSON-emission time in main.cpp.
+  bool trueSret = sretOffset == 1;
+  bool fp128Ret = rt->isFP128Ty();
+  if (trueSret || fp128Ret)
+    lowerAbiReturn(F, ft, trueSret, fp128Ret);
+
+  if (fp128Ret || rt->isVoidTy()) {
+    ft.retKind = RetKind::Void; // fp128's real ABI-level return IS void here
   } else if (!rt->isPointerTy()) {
     ft.retKind = RetKind::Scalar;
   } else if (cursorArg >= 0 &&

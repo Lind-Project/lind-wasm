@@ -80,8 +80,12 @@ static void printFunctionTree(raw_ostream &os, const FunctionTrees *ft) {
   os << "=== " << ft->funcName << " ===  ret=" << retKindName(ft->retKind);
   if (ft->retKind == RetKind::PtrAliasArg) os << "(arg" << ft->retAliasArg << ")";
   os << "\n";
+  if (ft->retSretArg) {
+    os << "  arg0 (sret):\n";
+    printNode(os, ft->retSretArg.get(), 2);
+  }
   for (size_t i = 0; i < ft->params.size(); ++i) {
-    os << "  arg" << i << ":\n";
+    os << "  arg" << (i + (ft->retSretArg ? 1 : 0)) << ":\n";
     printNode(os, ft->params[i].get(), 2);
   }
   for (const auto &w : ft->warnings) os << "  ! " << w << "\n";
@@ -105,9 +109,30 @@ static void jsonStr(raw_ostream &os, StringRef s) {
   os << '"';
 }
 
-static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
+// `argRemap`, when non-null, maps a ft.params-internal top-level argument
+// index to its FINAL position in the emitted JSON "args" array. Needed
+// whenever ft->retSretArg and/or any preceding argument's abiSlots>1 (see
+// ParamTree.h's TreeNode::abiSlots and FunctionTrees::retSretArg comments)
+// shift the JSON array out of 1:1 correspondence with ft.params's own
+// indexing — sizeArgIndex/intoArgIndex are computed in ft.params-internal
+// terms (by dwarfIndexOf and friends in Infer.cpp) but consumed by
+// gen_grate.py/lind_marshal_dispatch as literal positions into the FINAL
+// spec->args[] array, so they must be translated at emission time. Threaded
+// through recursive calls (not just the top-level one) because
+// TreeNode::intoArgIndex (the ptrIntoArg case, e.g. strtol's endptr) lives on
+// a NESTED pointee one level below the top-level argument, yet still refers
+// to a top-level sibling argument's index, same as a top-level FromArg. A
+// struct FIELD's sizeArgIndex (isField true) is a sibling-FIELD index within
+// the same struct, never a top-level argument index — never remapped.
+static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind,
+                     const std::vector<size_t> *argRemap = nullptr) {
   std::string pad(ind * 2, ' ');
   bool isField = !n->fieldName.empty();
+  auto remapArg = [&](int idx) -> long long {
+    if (argRemap && !isField && idx >= 0 && (size_t)idx < argRemap->size())
+      return (long long)(*argRemap)[idx];
+    return idx;
+  };
   os << pad << "{";
 
   // A handle is its own canonical kind; it carries no dir/size/pointee.
@@ -123,9 +148,12 @@ static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
     return;
   }
 
-  // An inner pointer translated as an offset into another argument (strtol endptr).
+  // An inner pointer translated as an offset into another argument (strtol
+  // endptr) — into_arg always names a TOP-LEVEL sibling argument, regardless
+  // of the fact that this node itself is one level below it (the pointee of
+  // a T** argument), so it's remapped the same as a top-level FromArg would be.
   if (n->ptrIntoArg) {
-    os << "\"kind\":\"ptr_into_arg\",\"into_arg\":" << n->intoArgIndex << "}";
+    os << "\"kind\":\"ptr_into_arg\",\"into_arg\":" << remapArg(n->intoArgIndex) << "}";
     return;
   }
 
@@ -144,7 +172,7 @@ static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
     if (n->sizeKind == SizeKind::FromArg ||
         n->sizeKind == SizeKind::FromArgPointee)
       os << (isField ? ",\"size_field_index\":" : ",\"size_arg_index\":")
-         << n->sizeArgIndex;
+         << (isField ? (long long)n->sizeArgIndex : remapArg(n->sizeArgIndex));
     if (n->sizeKind == SizeKind::Const)
       os << ",\"const_size\":" << n->constSize;
     if (n->shallow) os << ",\"shallow\":true";
@@ -158,12 +186,29 @@ static void jsonNode(raw_ostream &os, const TreeNode *n, unsigned ind) {
     const char *key = n->isPointer() ? "pointee" : "fields";
     os << ",\"" << key << "\":[\n";
     for (size_t i = 0; i < n->children.size(); ++i) {
-      jsonNode(os, n->children[i].get(), ind + 1);
+      jsonNode(os, n->children[i].get(), ind + 1, argRemap);
       os << (i + 1 < n->children.size() ? ",\n" : "\n");
     }
     os << pad << "]";
   }
   os << "}";
+}
+
+// Emits ONE raw ABI slot for a node whose abiSlots > 1 (see ParamTree.h's
+// TreeNode::abiSlots comment) — a plain scalar, no dir/size_kind/pointee,
+// since a multi-slot value is never an address, just raw passed-through bits.
+// `idx` is 0-based (0 = low-order slot, matching the confirmed wasm32 fp128
+// argument order: low i64 first, then high).
+static void jsonAbiSlot(raw_ostream &os, const TreeNode *n, unsigned idx,
+                        unsigned ind) {
+  std::string pad(ind * 2, ' ');
+  uint64_t slotSize = n->abiSlots ? n->sizeBytes / n->abiSlots : n->sizeBytes;
+  std::string label = (n->abiSlots == 2)
+      ? (idx == 0 ? " (lo)" : " (hi)")          // the only confirmed case
+      : (" (slot " + std::to_string(idx) + ")"); // future-proofing, unconfirmed order
+  os << pad << "{\"kind\":\"scalar\",\"type\":";
+  jsonStr(os, n->typeName + label);
+  os << ",\"size\":" << slotSize << "}";
 }
 
 static void jsonWarnings(raw_ostream &os, const FunctionTrees *ft) {
@@ -209,11 +254,51 @@ static void jsonFunction(raw_ostream &os, const FunctionTrees *ft) {
     os << ",\"handle_class\":"; jsonStr(os, ft->retHandleClass);
   }
   os << "},\n      \"args\":[";
-  if (!ft->params.empty()) {
-    os << "\n";
+  // ft->retSretArg (if set) is the hidden sret/fp128-lowered return pointer --
+  // spliced in as args[0] here, matching its real position as the first raw
+  // wasm-level call argument. A params[] entry with abiSlots>1 (fp128 -- see
+  // ParamTree.h's TreeNode::abiSlots comment) similarly expands to N
+  // consecutive raw-scalar entries. Both are emission-only concerns:
+  // ft->params itself is never reindexed/resized for either.
+  size_t total = (ft->retSretArg ? 1 : 0);
+  for (const auto &pn : ft->params) total += std::max<uint32_t>(1, pn->abiSlots);
+
+  // sizeArgIndex/intoArgIndex are computed (in Infer.cpp) as ft->params-
+  // internal indices, but the runtime (lind_marshal_dispatch's
+  // _lind_compute_size, LIND_SIZE_FROM_ARG case) indexes the FINAL raw_args[]
+  // array, which gen_grate.py builds 1:1 from this JSON "args" array. That
+  // array only matches ft->params's own indexing when there's no retSretArg
+  // and every param has abiSlots==1; otherwise it's shifted, so translate
+  // here. (A multi-slot param's own remapped position is never actually
+  // referenced -- FromArg/ptrIntoArg always target a single-slot
+  // scalar/pointer sibling -- but it's filled in for completeness.)
+  std::vector<size_t> argRemap(ft->params.size());
+  {
+    size_t pos = ft->retSretArg ? 1 : 0;
     for (size_t i = 0; i < ft->params.size(); ++i) {
-      jsonNode(os, ft->params[i].get(), 4);
-      os << (i + 1 < ft->params.size() ? ",\n" : "\n");
+      argRemap[i] = pos;
+      pos += std::max<uint32_t>(1, ft->params[i]->abiSlots);
+    }
+  }
+
+  if (total > 0) {
+    os << "\n";
+    size_t emitted = 0;
+    if (ft->retSretArg) {
+      jsonNode(os, ft->retSretArg.get(), 4, &argRemap);
+      os << (++emitted < total ? ",\n" : "\n");
+    }
+    for (size_t i = 0; i < ft->params.size(); ++i) {
+      const TreeNode *pn = ft->params[i].get();
+      if (pn->abiSlots > 1) {
+        for (unsigned s = 0; s < pn->abiSlots; ++s) {
+          jsonAbiSlot(os, pn, s, 4);
+          os << (++emitted < total ? ",\n" : "\n");
+        }
+      } else {
+        jsonNode(os, pn, 4, &argRemap);
+        os << (++emitted < total ? ",\n" : "\n");
+      }
     }
     os << "      ";
   }
