@@ -1,0 +1,25 @@
+# Long double on this port already IS binary128 (see sysdeps/lind/Implies:
+# ieee754/ldbl-128), which correctly sets __HAVE_DISTINCT_FLOAT128=0
+# (sysdeps/ieee754/ldbl-128/bits/floatn.h) and provides *f128-suffixed
+# aliases for long-double functions via weak_alias
+# (sysdeps/generic/libm-alias-ldouble.h's libm_alias_ldouble_other_r_f128).
+#
+# ieee754/float128 is still pulled into +sysdep_dirs as a low-priority
+# fallback via the standard i386/Implies chain (this port configures with
+# --host=i686-linux-gnu, so sysdeps/i386/Implies's own
+# "ieee754/float128 / ieee754/ldbl-96" pair is appended after sysdeps/lind's
+# own Implies entries). Per-file sysdeps resolution correctly prefers
+# ldbl-128's own files (listed earlier), but Makeconfig fragments from every
+# resolved sysdeps dir get merged regardless of priority order
+# (Makeconfig:1401's `sysdep-makeconfigs := $(wildcard $(+sysdep_dirs:=/Makeconfig))`),
+# so ieee754/float128/Makeconfig's `float128-fcts = yes` still takes effect
+# and makes math/Makefile separately generate its own *f128 wrapper sources
+# (e.g. s_totalorderf128.c) — which then collide at link time with the
+# weak-aliased symbols of the same name that ldbl-128's own s_totalorderl.c
+# already provides (duplicate symbol: totalorderf128).
+#
+# `override` is required (not a plain assignment) because
+# ieee754/float128/Makeconfig is included *after* this file in
+# +sysdep_dirs order, and a plain assignment here would just be
+# overwritten by that later include.
+override float128-fcts := no

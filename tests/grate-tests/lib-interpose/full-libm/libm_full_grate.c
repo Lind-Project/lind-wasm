@@ -16,134 +16,150 @@ extern long execv();
 #define LIND_WEXITSTATUS(s) (((s) >> 8) & 0xff)
 
 // --- real library functions (defined via static-linked libc) ---
-extern long roundl();
-extern long roundf64x();
+extern long casin();
+extern long casinf64();
+extern long casinf32x();
+extern long setpayloadf();
+extern long setpayloadf32();
+extern long ccosh();
+extern long ccoshf64();
+extern long ccoshf32x();
 extern long canonicalizel();
 extern long canonicalizef64x();
-extern long f32divf128();
 extern long atan2l();
 extern long atan2f64x();
-extern long rintf();
-extern long rintf32();
-extern long pow();
-extern long powf64();
-extern long powf32x();
-extern long f64addf128();
-extern long f32xaddf128();
 extern long log();
 extern long logf64();
 extern long logf32x();
+extern long fmaxl();
+extern long fmaxf64x();
+extern long cosl();
+extern long cosf64x();
+extern long roundf();
+extern long roundf32();
 extern long __iseqsigl();
-extern long lrintl();
-extern long lrintf64x();
+extern long sincos();
+extern long sincosf64();
+extern long sincosf32x();
 extern long fmaximum_magf();
 extern long fmaximum_magf32();
-extern long ffma();
-extern long f32fmaf64();
-extern long f32fmaf32x();
-extern long sincosf();
-extern long sincosf32();
-extern long fminimum_mag_numf128();
+extern long cbrtf();
+extern long cbrtf32();
+extern long logb();
+extern long logbf64();
+extern long logbf32x();
+extern long casinhf();
+extern long casinhf32();
+extern long exp10f();
+extern long exp10f32();
+extern long lrint();
+extern long lrintf64();
+extern long lrintf32x();
 extern long expf();
 extern long expf32();
-extern long totalorderf();
-extern long totalorderf32();
 extern long nanf();
 extern long nanf32();
-extern long totalordermagf128();
-extern long powf();
-extern long powf32();
-extern long exp10();
-extern long exp10f64();
-extern long exp10f32x();
+extern long fmod();
+extern long fmodf64();
+extern long fmodf32x();
+extern long setpayloadsigf();
+extern long setpayloadsigf32();
 extern long fminimum_mag_numl();
 extern long fminimum_mag_numf64x();
 extern long j1f();
 extern long j1f32();
 extern long y1f();
 extern long y1f32();
+extern long powf();
+extern long powf32();
 extern long log1pl();
 extern long log1pf64x();
-extern long f64sqrtf128();
-extern long f32xsqrtf128();
 extern long atanhl();
 extern long atanhf64x();
-extern long fminl();
-extern long fminf64x();
-extern long getpayloadl();
-extern long getpayloadf64x();
-extern long dfmal();
-extern long f32xfmaf64x();
-extern long f64fmaf64x();
+extern long modff();
+extern long modff32();
 extern long jnl();
 extern long jnf64x();
 extern long ynl();
 extern long ynf64x();
-extern long totalorder();
-extern long totalorderf64();
-extern long totalorderf32x();
-extern long f64fmaf128();
-extern long f32xfmaf128();
+extern long ufromfpx();
+extern long ufromfpxf64();
+extern long ufromfpxf32x();
+extern long frexp();
+extern long frexpf64();
+extern long frexpf32x();
+extern long __signbitl();
+extern long cargl();
+extern long cargf64x();
+extern long modf();
+extern long modff64();
+extern long modff32x();
+extern long sqrt();
+extern long sqrtf64();
+extern long sqrtf32x();
+extern long f32xsqrtf64();
 extern long j0l();
 extern long j0f64x();
 extern long y0l();
 extern long y0f64x();
-extern long __iscanonicall();
-extern long totalordermag();
-extern long totalordermagf64();
-extern long totalordermagf32x();
-extern long fsub();
-extern long f32subf64();
-extern long f32subf32x();
-extern long lround();
-extern long lroundf64();
-extern long lroundf32x();
-extern long fmin();
-extern long fminf64();
-extern long fminf32x();
+extern long fdiv();
+extern long f32divf64();
+extern long f32divf32x();
+extern long f64xaddf128();
+extern long rint();
+extern long rintf64();
+extern long rintf32x();
+extern long atanl();
+extern long atanf64x();
+extern long fmul();
+extern long f32mulf64();
+extern long f32mulf32x();
+extern long ctanh();
+extern long ctanhf64();
+extern long ctanhf32x();
 extern long logl();
 extern long logf64x();
 extern long feclearexcept();
 extern long nextdown();
 extern long nextdownf64();
 extern long nextdownf32x();
-extern long erff();
-extern long erff32();
-extern long erfcf();
-extern long erfcf32();
 extern long acosh();
 extern long acoshf64();
 extern long acoshf32x();
-extern long log2f();
-extern long log2f32();
-extern long floorf();
-extern long floorf32();
-extern long fsubl();
-extern long f32subf64x();
+extern long floorl();
+extern long floorf64x();
 extern long feupdateenv();
+extern long conjl();
+extern long conjf64x();
+extern long fadd();
+extern long f32addf64();
+extern long f32addf32x();
 extern long log1pf();
 extern long log1pf32();
+extern long cexpf();
+extern long cexpf32();
 extern long fegetexceptflag();
 extern long log2();
 extern long log2f64();
 extern long log2f32x();
-extern long f64xmulf128();
-extern long exp2f();
-extern long exp2f32();
+extern long totalordermagf();
+extern long totalordermagf32();
 extern long fmaximuml();
 extern long fmaximumf64x();
-extern long floor();
-extern long floorf64();
-extern long floorf32x();
+extern long nearbyint();
+extern long nearbyintf64();
+extern long nearbyintf32x();
 extern long scalblnl();
 extern long scalblnf64x();
-extern long fmaximum_magf128();
-extern long nextafterf();
-extern long nextafterf32();
-extern long asinhf();
-extern long asinhf32();
-extern long fmull();
-extern long f32mulf64x();
+extern long fmin();
+extern long fminf64();
+extern long fminf32x();
+extern long expm1f();
+extern long expm1f32();
+extern long cosf();
+extern long cosf32();
+extern long expm1l();
+extern long expm1f64x();
 extern long asinf();
 extern long asinf32();
 extern long acoshl();
@@ -156,136 +172,179 @@ extern long log10f32x();
 extern long exp2();
 extern long exp2f64();
 extern long exp2f32x();
-extern long f64xsubf128();
-extern long f32xaddf64();
-extern long f32mulf128();
+extern long setpayloadsig();
+extern long setpayloadsigf64();
+extern long setpayloadsigf32x();
 extern long jnf();
 extern long jnf32();
 extern long ynf();
 extern long ynf32();
-extern long fsqrtl();
-extern long f32sqrtf64x();
-extern long fminf();
-extern long fminf32();
+extern long erf();
+extern long erff64();
+extern long erff32x();
+extern long erfc();
+extern long erfcf64();
+extern long erfcf32x();
+extern long pow();
+extern long powf64();
+extern long powf32x();
+extern long ceil();
+extern long ceilf64();
+extern long ceilf32x();
+extern long casinl();
+extern long casinf64x();
+extern long fmaf();
+extern long fmaf32();
 extern long fedisableexcept();
-extern long fmod();
-extern long fmodf64();
-extern long fmodf32x();
-extern long sinl();
-extern long sinf64x();
+extern long csinf();
+extern long csinf32();
+extern long fromfp();
+extern long fromfpf64();
+extern long fromfpf32x();
 extern long fmaxmagl();
 extern long fmaxmagf64x();
+extern long nearbyintf();
+extern long nearbyintf32();
+extern long crealf();
+extern long crealf32();
+extern long tanf();
+extern long tanf32();
 extern long atan2();
 extern long atan2f64();
 extern long atan2f32x();
-extern long exp();
-extern long expf64();
-extern long expf32x();
+extern long __issignaling();
 extern long jn();
 extern long jnf64();
 extern long jnf32x();
 extern long yn();
 extern long ynf64();
 extern long ynf32x();
-extern long ceil();
-extern long ceilf64();
-extern long ceilf32x();
 extern long nextafter();
 extern long nextafterf64();
 extern long nextafterf32x();
 extern long canonicalize();
 extern long canonicalizef64();
 extern long canonicalizef32x();
-extern long llrintl();
-extern long llrintf64x();
 extern long f32xsubf64();
+extern long ctan();
+extern long ctanf64();
+extern long ctanf32x();
+extern long nexttoward();
+extern long floor();
+extern long floorf64();
+extern long floorf32x();
+extern long f64xmulf128();
+extern long atan();
+extern long atanf64();
+extern long atanf32x();
+extern long __finitel();
+extern long finitel();
+extern long __clog10f();
+extern long clog10f();
+extern long clog10f32();
 extern long j0();
 extern long j0f64();
 extern long j0f32x();
 extern long y0();
 extern long y0f64();
 extern long y0f32x();
-extern long fmaximum_mag_numf128();
-extern long roundeven();
-extern long roundevenf64();
-extern long roundevenf32x();
+extern long dmull();
+extern long f32xmulf128();
+extern long f64mulf128();
+extern long f32xmulf64x();
+extern long f64mulf64x();
+extern long __clog10l();
+extern long clog10l();
+extern long clog10f64x();
+extern long truncf();
+extern long truncf32();
+extern long csqrtf();
+extern long csqrtf32();
+extern long ctanhf();
+extern long ctanhf32();
 extern long fminimum_num();
 extern long fminimum_numf64();
 extern long fminimum_numf32x();
+extern long fminf();
+extern long fminf32();
 extern long tgammaf();
 extern long tgammaf32();
-extern long ceilf();
-extern long ceilf32();
-extern long expm1();
-extern long expm1f64();
-extern long expm1f32x();
+extern long creal();
+extern long crealf64();
+extern long crealf32x();
 extern long llogb();
 extern long llogbf64();
 extern long llogbf32x();
-extern long ufromfpxf();
-extern long ufromfpxf32();
-extern long totalorderf128();
-extern long f32addf128();
-extern long nexttoward();
-extern long __fpclassifyf();
-extern long ufromfpx();
-extern long ufromfpxf64();
-extern long ufromfpxf32x();
-extern long setpayloadsig();
-extern long setpayloadsigf64();
-extern long setpayloadsigf32x();
-extern long ufromfpf();
-extern long ufromfpf32();
+extern long __finitef();
+extern long finitef();
+extern long lroundf();
+extern long lroundf32();
+extern long erfl();
+extern long erff64x();
+extern long erfcl();
+extern long erfcf64x();
+extern long roundl();
+extern long roundf64x();
 extern long llogbl();
 extern long llogbf64x();
+extern long fdivl();
+extern long f32divf128();
+extern long f32divf64x();
+extern long csinhl();
+extern long csinhf64x();
+extern long trunc();
+extern long truncf64();
+extern long truncf32x();
 extern long ilogbl();
 extern long ilogbf64x();
 extern long sinhl();
 extern long sinhf64x();
-extern long llrintf();
-extern long llrintf32();
-extern long nextup();
-extern long nextupf64();
-extern long nextupf32x();
-extern long cosf();
-extern long cosf32();
-extern long f32subf128();
-extern long fromfpf();
-extern long fromfpf32();
-extern long fmul();
-extern long f32mulf64();
-extern long f32mulf32x();
-extern long tanh();
-extern long tanhf64();
-extern long tanhf32x();
-extern long llroundf();
-extern long llroundf32();
-extern long f64xdivf128();
+extern long __isinf();
+extern long isinf();
+extern long catanhf();
+extern long catanhf32();
+extern long __clog10();
+extern long clog10();
+extern long clog10f64();
+extern long clog10f32x();
+extern long cacoshl();
+extern long cacoshf64x();
+extern long cacoshf();
+extern long cacoshf32();
+extern long ctanf();
+extern long ctanf32();
+extern long cproj();
+extern long cprojf64();
+extern long cprojf32x();
+extern long log2f();
+extern long log2f32();
+extern long fmull();
+extern long f32mulf128();
+extern long f32mulf64x();
+extern long atanf();
+extern long atanf32();
+extern long fesetenv();
+extern long frexpf();
+extern long frexpf32();
+extern long conjf();
+extern long conjf32();
+extern long ufromfpxl();
+extern long ufromfpxf64x();
+extern long cabsl();
+extern long cabsf64x();
+extern long fegetmode();
 extern long getpayloadf();
 extern long getpayloadf32();
-extern long f32sqrtf128();
-extern long fmaximum_numf128();
-extern long fmaxf();
-extern long fmaxf32();
-extern long fesetenv();
-extern long fsqrt();
-extern long f32sqrtf64();
-extern long f32sqrtf32x();
-extern long fdivl();
-extern long f32divf64x();
-extern long fegetmode();
-extern long cbrtl();
-extern long cbrtf64x();
-extern long tan();
-extern long tanf64();
-extern long tanf32x();
+extern long asinhf();
+extern long asinhf32();
+extern long __isnanf();
+extern long isnanf();
 extern long fminimum_numf();
 extern long fminimum_numf32();
-extern long f64xsqrtf128();
 extern long coshf();
 extern long coshf32();
-extern long tanhf();
-extern long tanhf32();
+extern long rintl();
+extern long rintf64x();
 extern long scalbln();
 extern long scalblnf64();
 extern long scalblnf32x();
@@ -293,83 +352,105 @@ extern long fetestexceptflag();
 extern long fmaximum_mag();
 extern long fmaximum_magf64();
 extern long fmaximum_magf32x();
-extern long nearbyintl();
-extern long nearbyintf64x();
 extern long fminimum_mag_numf();
 extern long fminimum_mag_numf32();
-extern long remquo();
-extern long remquof64();
-extern long remquof32x();
-extern long logbf();
-extern long logbf32();
+extern long nearbyintl();
+extern long nearbyintf64x();
 extern long log1p();
 extern long log1pf64();
 extern long log1pf32x();
-extern long fadd();
-extern long f32addf64();
-extern long f32addf32x();
-extern long lroundf();
-extern long lroundf32();
+extern long roundevenf();
+extern long roundevenf32();
+extern long fromfpx();
+extern long fromfpxf64();
+extern long fromfpxf32x();
+extern long asinhl();
+extern long asinhf64x();
+extern long remquof();
+extern long remquof32();
 extern long fminimuml();
 extern long fminimumf64x();
 extern long sinhf();
 extern long sinhf32();
-extern long cbrtf();
-extern long cbrtf32();
-extern long lroundl();
-extern long lroundf64x();
+extern long ldexpf();
+extern long ldexpf32();
+extern long scalbnf();
+extern long scalbnf32();
+extern long fsub();
+extern long f32subf64();
+extern long f32subf32x();
+extern long cbrt();
+extern long cbrtf64();
+extern long cbrtf32x();
+extern long cpow();
+extern long cpowf64();
+extern long cpowf32x();
 extern long fminimum_mag_num();
 extern long fminimum_mag_numf64();
 extern long fminimum_mag_numf32x();
+extern long cos();
+extern long cosf64();
+extern long cosf32x();
+extern long sin();
+extern long sinf64();
+extern long sinf32x();
+extern long frexpl();
+extern long frexpf64x();
+extern long catanf();
+extern long catanf32();
+extern long catanhl();
+extern long catanhf64x();
+extern long setpayloadl();
+extern long setpayloadf64x();
+extern long fminimum_magl();
+extern long fminimum_magf64x();
+extern long ufromfp();
+extern long ufromfpf64();
+extern long ufromfpf32x();
+extern long tanhl();
+extern long tanhf64x();
+extern long feenableexcept();
+extern long fromfpxl();
+extern long fromfpxf64x();
+extern long fmaximum_mag_num();
+extern long fmaximum_mag_numf64();
+extern long fmaximum_mag_numf32x();
+extern long tgamma();
+extern long tgammaf64();
+extern long tgammaf32x();
+extern long modfl();
+extern long modff64x();
+extern long fetestexcept();
+extern long rintf();
+extern long rintf32();
+extern long nextdownl();
+extern long nextdownf64x();
 extern long fma();
 extern long fmaf64();
 extern long fmaf32x();
 extern long f32xfmaf64();
-extern long fromfpx();
-extern long fromfpxf64();
-extern long fromfpxf32x();
-extern long fmaxl();
-extern long fmaxf64x();
-extern long fminimum_magl();
-extern long fminimum_magf64x();
-extern long setpayloadsigf();
-extern long setpayloadsigf32();
-extern long dsubl();
-extern long f32xsubf64x();
-extern long f64subf64x();
-extern long feenableexcept();
-extern long llroundl();
-extern long llroundf64x();
-extern long fmaximum_mag_num();
-extern long fmaximum_mag_numf64();
-extern long fmaximum_mag_numf32x();
-extern long totalordermagf();
-extern long totalordermagf32();
-extern long tgamma();
-extern long tgammaf64();
-extern long tgammaf32x();
-extern long fetestexcept();
-extern long sincosl();
-extern long sincosf64x();
-extern long ffmal();
-extern long f32fmaf64x();
-extern long nextdownl();
-extern long nextdownf64x();
-extern long totalorderl();
-extern long totalorderf64x();
 extern long fminimum_numl();
 extern long fminimum_numf64x();
 extern long feraiseexcept();
+extern long exp10();
+extern long exp10f64();
+extern long exp10f32x();
 extern long canonicalizef();
 extern long canonicalizef32();
-extern long tanl();
-extern long tanf64x();
+extern long fsubl();
+extern long f32subf128();
+extern long f32subf64x();
 extern long sqrtl();
 extern long sqrtf64x();
-extern long fmaximumf128();
-extern long sincos();
-extern long sincosf64();
-extern long sincosf32x();
+extern long sincosf();
+extern long sincosf32();
+extern long cbrtl();
+extern long cbrtf64x();
+extern long ctanhl();
+extern long ctanhf64x();
+extern long fdim();
+extern long fdimf64();
+extern long fdimf32x();
 extern long fminimum_mag();
 extern long fminimum_magf64();
 extern long fminimum_magf32x();
@@ -381,303 +462,446 @@ extern long exp10f64x();
 extern long fmaximum_num();
 extern long fmaximum_numf64();
 extern long fmaximum_numf32x();
+extern long totalorderf();
+extern long totalorderf32();
 extern long __iseqsig();
-extern long ufromfp();
-extern long ufromfpf64();
-extern long ufromfpf32x();
+extern long f32xaddf64();
+extern long getpayload();
+extern long getpayloadf64();
+extern long getpayloadf32x();
+extern long dsqrtl();
+extern long f32xsqrtf128();
+extern long f64sqrtf128();
+extern long f32xsqrtf64x();
+extern long f64sqrtf64x();
 extern long nan();
 extern long nanf64();
 extern long nanf32x();
-extern long ddivl();
-extern long f32xdivf64x();
-extern long f64divf64x();
+extern long conj();
+extern long conjf64();
+extern long conjf32x();
+extern long clogf();
+extern long clogf32();
+extern long fmax();
+extern long fmaxf64();
+extern long fmaxf32x();
 extern long acosf();
 extern long acosf32();
 extern long sinh();
 extern long sinhf64();
 extern long sinhf32x();
-extern long ufromfpl();
-extern long ufromfpf64x();
-extern long tanhl();
-extern long tanhf64x();
-extern long ufromfpxl();
-extern long ufromfpxf64x();
-extern long faddl();
-extern long f32addf64x();
-extern long cbrt();
-extern long cbrtf64();
-extern long cbrtf32x();
+extern long dfmal();
+extern long f32xfmaf128();
+extern long f64fmaf128();
+extern long f32xfmaf64x();
+extern long f64fmaf64x();
+extern long ddivl();
+extern long f32xdivf128();
+extern long f64divf128();
+extern long f32xdivf64x();
+extern long f64divf64x();
+extern long logbf();
+extern long logbf32();
+extern long llround();
+extern long llroundf64();
+extern long llroundf32x();
+extern long cprojl();
+extern long cprojf64x();
+extern long truncl();
+extern long truncf64x();
+extern long casinh();
+extern long casinhf64();
+extern long casinhf32x();
+extern long ccoshf();
+extern long ccoshf32();
+extern long lroundl();
+extern long lroundf64x();
+extern long cacos();
+extern long cacosf64();
+extern long cacosf32x();
+extern long exp2f();
+extern long exp2f32();
+extern long clogl();
+extern long clogf64x();
 extern long fmaximum_numl();
 extern long fmaximum_numf64x();
+extern long fsqrt();
+extern long f32sqrtf64();
+extern long f32sqrtf32x();
+extern long nextafterf();
+extern long nextafterf32();
+extern long catan();
+extern long catanf64();
+extern long catanf32x();
 extern long acos();
 extern long acosf64();
 extern long acosf32x();
+extern long clog();
+extern long clogf64();
+extern long clogf32x();
 extern long fegetround();
 extern long lgammaf();
 extern long lgammaf32();
 extern long gammaf();
-extern long fromfpxl();
-extern long fromfpxf64x();
-extern long rint();
-extern long rintf64();
-extern long rintf32x();
+extern long cacosl();
+extern long cacosf64x();
 extern long logf();
 extern long logf32();
-extern long setpayloadl();
-extern long setpayloadf64x();
-extern long fmodf();
-extern long fmodf32();
-extern long llogbf();
-extern long llogbf32();
-extern long totalordermagl();
-extern long totalordermagf64x();
-extern long fegetexcept();
-extern long f64subf128();
-extern long f32xsubf128();
-extern long ilogb();
-extern long ilogbf64();
-extern long ilogbf32x();
-extern long fdiml();
-extern long fdimf64x();
-extern long fesetexceptflag();
-extern long expl();
-extern long expf64x();
-extern long __issignaling();
-extern long truncf();
-extern long truncf32();
-extern long llrint();
-extern long llrintf64();
-extern long llrintf32x();
-extern long fegetenv();
-extern long f64divf128();
-extern long f32xdivf128();
-extern long __fpclassifyl();
-extern long sqrt();
-extern long sqrtf64();
-extern long sqrtf32x();
-extern long f32xsqrtf64();
-extern long dmull();
-extern long f32xmulf64x();
-extern long f64mulf64x();
-extern long log2l();
-extern long log2f64x();
-extern long nextupl();
-extern long nextupf64x();
-extern long ilogbf();
-extern long ilogbf32();
-extern long fmaxmag();
-extern long fmaxmagf64();
-extern long fmaxmagf32x();
-extern long fmal();
-extern long fmaf64x();
-extern long log10f();
-extern long log10f32();
-extern long fminimumf128();
-extern long hypotl();
-extern long hypotf64x();
-extern long erfl();
-extern long erff64x();
-extern long erfcl();
-extern long erfcf64x();
-extern long fabsl();
-extern long fabsf64x();
-extern long scalblnf();
-extern long scalblnf32();
-extern long fminmagf();
-extern long fminmagf32();
-extern long hypotf();
-extern long hypotf32();
+extern long __issignalingf();
 extern long fabs();
 extern long fabsf64();
 extern long fabsf32x();
+extern long copysign();
+extern long copysignf64();
+extern long copysignf32x();
+extern long llogbf();
+extern long llogbf32();
+extern long hypotf();
+extern long hypotf32();
+extern long cimagf();
+extern long cimagf32();
+extern long fegetexcept();
+extern long copysignf();
+extern long copysignf32();
+extern long lrintf();
+extern long lrintf32();
+extern long cpowf();
+extern long cpowf32();
+extern long ilogb();
+extern long ilogbf64();
+extern long ilogbf32x();
+extern long nextupl();
+extern long nextupf64x();
+extern long f64xdivf128();
+extern long cpowl();
+extern long cpowf64x();
+extern long fdiml();
+extern long fdimf64x();
+extern long __isinfl();
+extern long isinfl();
+extern long __finite();
+extern long finite();
+extern long ldexp();
+extern long ldexpf64();
+extern long ldexpf32x();
+extern long scalbn();
+extern long scalbnf64();
+extern long scalbnf32x();
+extern long fesetexceptflag();
+extern long __isnan();
+extern long isnan();
+extern long expl();
+extern long expf64x();
+extern long cargf();
+extern long cargf32();
+extern long expm1();
+extern long expm1f64();
+extern long expm1f32x();
+extern long asinh();
+extern long asinhf64();
+extern long asinhf32x();
+extern long tanhf();
+extern long tanhf32();
+extern long fegetenv();
+extern long __signbitf();
+extern long setpayloadsigl();
+extern long setpayloadsigf64x();
+extern long tanl();
+extern long tanf64x();
+extern long ccoshl();
+extern long ccoshf64x();
+extern long llroundl();
+extern long llroundf64x();
+extern long log2l();
+extern long log2f64x();
+extern long __fpclassifyf();
+extern long ilogbf();
+extern long ilogbf32();
+extern long creall();
+extern long crealf64x();
+extern long fmaxf();
+extern long fmaxf32();
+extern long ufromfpf();
+extern long ufromfpf32();
+extern long fmaxmag();
+extern long fmaxmagf64();
+extern long fmaxmagf32x();
+extern long log10f();
+extern long log10f32();
+extern long floorf();
+extern long floorf32();
+extern long hypotl();
+extern long hypotf64x();
+extern long scalblnf();
+extern long scalblnf32();
 extern long nexttowardf();
-extern long tanf();
-extern long tanf32();
-extern long trunc();
-extern long truncf64();
-extern long truncf32x();
+extern long fminmagf();
+extern long fminmagf32();
+extern long dsubl();
+extern long f32xsubf128();
+extern long f64subf128();
+extern long f32xsubf64x();
+extern long f64subf64x();
+extern long roundeven();
+extern long roundevenf64();
+extern long roundevenf32x();
+extern long f32xdivf64();
+extern long csin();
+extern long csinf64();
+extern long csinf32x();
+extern long nextup();
+extern long nextupf64();
+extern long nextupf32x();
 extern long fesetround();
+extern long ceill();
+extern long ceilf64x();
 extern long lgamma_r();
 extern long lgammaf64_r();
 extern long lgammaf32x_r();
+extern long csqrtl();
+extern long csqrtf64x();
+extern long llrintl();
+extern long llrintf64x();
+extern long ufromfpxf();
+extern long ufromfpxf32();
+extern long sincosl();
+extern long sincosf64x();
 extern long fmaximumf();
 extern long fmaximumf32();
+extern long cexp();
+extern long cexpf64();
+extern long cexpf32x();
 extern long fdimf();
 extern long fdimf32();
+extern long ufromfpl();
+extern long ufromfpf64x();
 extern long atanhf();
 extern long atanhf32();
-extern long f64xfmaf128();
-extern long fminimum_numf128();
-extern long lrint();
-extern long lrintf64();
-extern long lrintf32x();
-extern long f32xdivf64();
-extern long daddl();
-extern long f32xaddf64x();
-extern long f64addf64x();
-extern long cosl();
-extern long cosf64x();
-extern long setpayloadf();
-extern long setpayloadf32();
-extern long llround();
-extern long llroundf64();
-extern long llroundf32x();
+extern long cabsf();
+extern long cabsf32();
+extern long sinl();
+extern long sinf64x();
+extern long exp();
+extern long expf64();
+extern long expf32x();
+extern long lrintl();
+extern long lrintf64x();
+extern long lround();
+extern long lroundf64();
+extern long lroundf32x();
+extern long llroundf();
+extern long llroundf32();
+extern long __isinff();
+extern long isinff();
 extern long atanh();
 extern long atanhf64();
 extern long atanhf32x();
+extern long fmal();
+extern long fmaf64x();
+extern long f64xfmaf128();
+extern long fminl();
+extern long fminf64x();
 extern long feholdexcept();
 extern long cosh();
 extern long coshf64();
 extern long coshf32x();
-extern long atan();
-extern long atanf64();
-extern long atanf32x();
-extern long f64mulf128();
-extern long f32xmulf128();
-extern long __issignalingl();
-extern long erf();
-extern long erff64();
-extern long erff32x();
-extern long erfc();
-extern long erfcf64();
-extern long erfcf32x();
-extern long dsqrtl();
-extern long f32xsqrtf64x();
-extern long f64sqrtf64x();
-extern long nearbyintf();
-extern long nearbyintf32();
-extern long f32xmulf64();
-extern long asinh();
-extern long asinhf64();
-extern long asinhf32x();
-extern long exp2l();
-extern long exp2f64x();
-extern long asinhl();
-extern long asinhf64x();
-extern long lrintf();
-extern long lrintf32();
-extern long cos();
-extern long cosf64();
-extern long cosf32x();
-extern long sin();
-extern long sinf64();
-extern long sinf32x();
+extern long csinh();
+extern long csinhf64();
+extern long csinhf32x();
+extern long fsqrtl();
+extern long f32sqrtf128();
+extern long f32sqrtf64x();
+extern long totalordermag();
+extern long totalordermagf64();
+extern long totalordermagf32x();
+extern long fmodf();
+extern long fmodf32();
+extern long cprojf();
+extern long cprojf32();
+extern long __fpclassify();
+extern long catanh();
+extern long catanhf64();
+extern long catanhf32x();
+extern long ceilf();
+extern long ceilf32();
+extern long ldexpl();
+extern long ldexpf64x();
+extern long scalbnl();
+extern long scalbnf64x();
 extern long fromfpxf();
 extern long fromfpxf32();
-extern long logb();
-extern long logbf64();
-extern long logbf32x();
+extern long ccosf();
+extern long ccosf32();
+extern long fromfpf();
+extern long fromfpf32();
+extern long cimag();
+extern long cimagf64();
+extern long cimagf32x();
+extern long csqrt();
+extern long csqrtf64();
+extern long csqrtf32x();
+extern long exp2l();
+extern long exp2f64x();
+extern long fromfpl();
+extern long fromfpf64x();
+extern long cacosf();
+extern long cacosf32();
+extern long sinf();
+extern long sinf32();
+extern long csinhf();
+extern long csinhf32();
+extern long daddl();
+extern long f32xaddf128();
+extern long f64addf128();
+extern long f32xaddf64x();
+extern long f64addf64x();
+extern long catanl();
+extern long catanf64x();
+extern long copysignl();
+extern long copysignf64x();
+extern long ctanl();
+extern long ctanf64x();
+extern long llrintf();
+extern long llrintf32();
 extern long asinl();
 extern long asinf64x();
 extern long fesetmode();
-extern long getpayload();
-extern long getpayloadf64();
-extern long getpayloadf32x();
+extern long ccos();
+extern long ccosf64();
+extern long ccosf32x();
 extern long atan2f();
 extern long atan2f32();
-extern long roundf();
-extern long roundf32();
-extern long roundevenl();
-extern long roundevenf64x();
+extern long ffmal();
+extern long f32fmaf128();
+extern long f32fmaf64x();
+extern long cabs();
+extern long cabsf64();
+extern long cabsf32x();
+extern long totalorderl();
+extern long totalorderf128();
+extern long totalorderf64x();
+extern long remquo();
+extern long remquof64();
+extern long remquof32x();
+extern long nextupf();
+extern long nextupf32();
 extern long acoshf();
 extern long acoshf32();
 extern long remainderl();
 extern long remainderf64x();
 extern long dreml();
+extern long hypot();
+extern long hypotf64();
+extern long hypotf32x();
+extern long logbl();
+extern long logbf64x();
+extern long cacosh();
+extern long cacoshf64();
+extern long cacoshf32x();
 extern long fmaximum();
 extern long fmaximumf64();
 extern long fmaximumf32x();
-extern long setpayload();
-extern long setpayloadf64();
-extern long setpayloadf32x();
+extern long f64xsubf128();
+extern long carg();
+extern long cargf64();
+extern long cargf32x();
+extern long llrint();
+extern long llrintf64();
+extern long llrintf32x();
+extern long ccosl();
+extern long ccosf64x();
 extern long j0f();
 extern long j0f32();
 extern long y0f();
 extern long y0f32();
 extern long log10l();
 extern long log10f64x();
-extern long __issignalingf();
-extern long atanf();
-extern long atanf32();
-extern long round();
-extern long roundf64();
-extern long roundf32x();
-extern long exp10f();
-extern long exp10f32();
+extern long cimagl();
+extern long cimagf64x();
+extern long ffma();
+extern long f32fmaf64();
+extern long f32fmaf32x();
 extern long nextdownf();
 extern long nextdownf32();
 extern long fminimum_magf();
 extern long fminimum_magf32();
-extern long nearbyint();
-extern long nearbyintf64();
-extern long nearbyintf32x();
+extern long f32xmulf64();
 extern long fesetexcept();
-extern long fdiv();
-extern long f32divf64();
-extern long f32divf32x();
 extern long fmaximum_mag_numf();
 extern long fmaximum_mag_numf32();
-extern long fabsf();
-extern long fabsf32();
+extern long round();
+extern long roundf64();
+extern long roundf32x();
 extern long fmaximum_magl();
 extern long fmaximum_magf64x();
+extern long faddl();
+extern long f32addf128();
+extern long f32addf64x();
 extern long nanl();
 extern long nanf64x();
+extern long casinhl();
+extern long casinhf64x();
+extern long fabsf();
+extern long fabsf32();
 extern long fmaximum_mag_numl();
 extern long fmaximum_mag_numf64x();
 extern long coshl();
 extern long coshf64x();
-extern long nextupf();
-extern long nextupf32();
-extern long expm1f();
-extern long expm1f32();
 extern long j1l();
 extern long j1f64x();
 extern long y1l();
 extern long y1f64x();
-extern long fdim();
-extern long fdimf64();
-extern long fdimf32x();
-extern long fromfpl();
-extern long fromfpf64x();
-extern long setpayloadsigl();
-extern long setpayloadsigf64x();
-extern long hypot();
-extern long hypotf64();
-extern long hypotf32x();
-extern long __fpclassify();
-extern long fromfp();
-extern long fromfpf64();
-extern long fromfpf32x();
-extern long fmaf();
-extern long fmaf32();
+extern long tan();
+extern long tanf64();
+extern long tanf32x();
+extern long __issignalingl();
+extern long totalorder();
+extern long totalorderf64();
+extern long totalorderf32x();
+extern long roundevenl();
+extern long roundevenf64x();
 extern long fminmag();
 extern long fminmagf64();
 extern long fminmagf32x();
-extern long f32fmaf128();
-extern long sinf();
-extern long sinf32();
-extern long remquof();
-extern long remquof32();
+extern long __iscanonicall();
+extern long csinl();
+extern long csinf64x();
+extern long cexpl();
+extern long cexpf64x();
+extern long casinf();
+extern long casinf32();
+extern long __fpclassifyl();
 extern long fmaximum_numf();
 extern long fmaximum_numf32();
+extern long setpayload();
+extern long setpayloadf64();
+extern long setpayloadf32x();
 extern long sqrtf();
 extern long sqrtf32();
-extern long roundevenf();
-extern long roundevenf32();
+extern long nextafterl();
+extern long nextafterf64x();
+extern long nexttowardl();
 extern long lgammaf_r();
 extern long lgammaf32_r();
-extern long f64xaddf128();
-extern long fminimum_magf128();
 extern long remainderf();
 extern long remainderf32();
 extern long dremf();
 extern long fminmagl();
 extern long fminmagf64x();
+extern long erff();
+extern long erff32();
+extern long erfcf();
+extern long erfcf32();
+extern long fabsl();
+extern long fabsf64x();
 extern long lgamma();
 extern long lgammaf64();
 extern long lgammaf32x();
 extern long gamma();
+extern long __signbit();
+extern long tanh();
+extern long tanhf64();
+extern long tanhf32x();
 extern long j1();
 extern long j1f64();
 extern long j1f32x();
@@ -687,15 +911,16 @@ extern long y1f32x();
 extern long asin();
 extern long asinf64();
 extern long asinf32x();
+extern long totalordermagl();
+extern long totalordermagf128();
+extern long totalordermagf64x();
 extern long fminimumf();
 extern long fminimumf32();
 extern long __iseqsigf();
-extern long fmax();
-extern long fmaxf64();
-extern long fmaxf32x();
-extern long nextafterl();
-extern long nextafterf64x();
-extern long nexttowardl();
+extern long getpayloadl();
+extern long getpayloadf64x();
+extern long __isnanl();
+extern long isnanl();
 
 // --- per-function marshalling specs ---
 static struct lind_arg_spec fspec_1 = { .kind = LIND_ARG_SCALAR };
@@ -832,19 +1057,69 @@ static struct lind_field fields_69[] = {
     { .offset = 4, .spec = &fspec_68, .touched = 1 },
 };
 static struct lind_layout layout_70 = { .kind = LIND_LO_STRUCT, .nfields = 3, .fields = fields_69, .struct_size = 8 };
-static struct lind_marshal_spec spec_roundl = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_casin = {
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_setpayloadf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_roundf64x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_setpayloadf32 = {
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ccosh = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccoshf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccoshf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_canonicalizel = {
     .nargs = 2,
@@ -862,83 +1137,27 @@ static struct lind_marshal_spec spec_canonicalizef64x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32divf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_atan2l = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_atan2f64x = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_rintf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_rintf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_pow = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_powf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_powf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64addf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xaddf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_log = {
     .nargs = 1,
@@ -961,27 +1180,96 @@ static struct lind_marshal_spec spec_logf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_fmaxl = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmaxf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cosl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cosf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_roundf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_roundf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
 static struct lind_marshal_spec spec___iseqsigl = {
-    .nargs = 2,
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_lrintl = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_sincos = {
+    .nargs = 3,
     .args = {
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_lrintf64x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_sincosf64 = {
+    .nargs = 3,
     .args = {
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_sincosf32x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fmaximum_magf = {
     .nargs = 2,
@@ -999,55 +1287,88 @@ static struct lind_marshal_spec spec_fmaximum_magf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ffma = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_cbrtf = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32fmaf64 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_cbrtf32 = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32fmaf32x = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_logb = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_sincosf = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_logbf64 = {
+    .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
-    .ret = { .kind = LIND_RET_VOID },
+    .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_sincosf32 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_logbf32x = {
+    .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
-    .ret = { .kind = LIND_RET_VOID },
+    .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminimum_mag_numf128 = {
+static struct lind_marshal_spec spec_casinhf = {
     .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinhf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_exp10f = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_exp10f32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lrint = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lrintf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lrintf32x = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
@@ -1066,22 +1387,6 @@ static struct lind_marshal_spec spec_expf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_totalorderf = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalorderf32 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_nanf = {
     .nargs = 1,
     .args = {
@@ -1096,15 +1401,7 @@ static struct lind_marshal_spec spec_nanf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_totalordermagf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_powf = {
+static struct lind_marshal_spec spec_fmod = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1112,7 +1409,7 @@ static struct lind_marshal_spec spec_powf = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_powf32 = {
+static struct lind_marshal_spec spec_fmodf64 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1120,42 +1417,51 @@ static struct lind_marshal_spec spec_powf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_exp10 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_fmodf32x = {
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_exp10f64 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_setpayloadsigf = {
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_exp10f32x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_setpayloadsigf32 = {
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_fminimum_mag_numl = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fminimum_mag_numf64x = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_j1f = {
     .nargs = 1,
@@ -1185,162 +1491,115 @@ static struct lind_marshal_spec spec_y1f32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_log1pl = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_powf = {
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_powf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_log1pl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_log1pf64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64sqrtf128 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xsqrtf128 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_atanhl = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_atanhf64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_fminl = {
+static struct lind_marshal_spec spec_modff = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminf64x = {
+static struct lind_marshal_spec spec_modff32 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_getpayloadl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_getpayloadf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_dfmal = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xfmaf64x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64fmaf64x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_jnl = {
-    .nargs = 2,
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_jnf64x = {
-    .nargs = 2,
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_ynl = {
-    .nargs = 2,
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_ynf64x = {
-    .nargs = 2,
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_totalorder = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalorderf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalorderf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64fmaf128 = {
+static struct lind_marshal_spec spec_ufromfpx = {
     .nargs = 3,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1349,120 +1608,235 @@ static struct lind_marshal_spec spec_f64fmaf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32xfmaf128 = {
+static struct lind_marshal_spec spec_ufromfpxf64 = {
     .nargs = 3,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpxf32x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_frexp = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_frexpf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_frexpf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___signbitl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cargl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cargf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_modf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_modff64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_modff32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sqrt = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sqrtf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sqrtf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xsqrtf64 = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_j0l = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_j0f64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_y0l = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_y0f64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fdiv = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32divf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32divf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64xaddf128 = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_rint = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec___iscanonicall = {
+static struct lind_marshal_spec spec_rintf64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_totalordermag = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalordermagf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalordermagf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fsub = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32subf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32subf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_lround = {
+static struct lind_marshal_spec spec_rintf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_lroundf64 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_atanl = {
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_lroundf32x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_atanf64x = {
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_fmin = {
+static struct lind_marshal_spec spec_fmul = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1470,7 +1844,7 @@ static struct lind_marshal_spec spec_fmin = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminf64 = {
+static struct lind_marshal_spec spec_f32mulf64 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1478,27 +1852,55 @@ static struct lind_marshal_spec spec_fminf64 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminf32x = {
+static struct lind_marshal_spec spec_f32mulf32x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ctanh = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanhf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanhf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_logl = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_logf64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_feclearexcept = {
     .nargs = 1,
@@ -1528,34 +1930,6 @@ static struct lind_marshal_spec spec_nextdownf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_erff = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erff32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfcf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfcf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_acosh = {
     .nargs = 1,
     .args = {
@@ -1577,54 +1951,68 @@ static struct lind_marshal_spec spec_acoshf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_log2f = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_floorl = {
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_log2f32 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_floorf64x = {
+    .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_floorf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_floorf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fsubl = {
-    .nargs = 2,
-    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32subf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_feupdateenv = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 28, .layout = &layout_15 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_conjl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_conjf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fadd = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32addf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32addf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -1641,6 +2029,22 @@ static struct lind_marshal_spec spec_log1pf32 = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cexpf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cexpf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fegetexceptflag = {
     .nargs = 2,
@@ -1671,59 +2075,59 @@ static struct lind_marshal_spec spec_log2f32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f64xmulf128 = {
+static struct lind_marshal_spec spec_totalordermagf = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_exp2f = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_totalordermagf32 = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_exp2f32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_fmaximuml = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fmaximumf64x = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_floor = {
+static struct lind_marshal_spec spec_nearbyint = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_floorf64 = {
+static struct lind_marshal_spec spec_nearbyintf64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_floorf32x = {
+static struct lind_marshal_spec spec_nearbyintf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1731,14 +2135,26 @@ static struct lind_marshal_spec spec_floorf32x = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_scalblnl = {
-    .nargs = 2,
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_scalblnf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmin = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1746,7 +2162,7 @@ static struct lind_marshal_spec spec_scalblnf64x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaximum_magf128 = {
+static struct lind_marshal_spec spec_fminf64 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1754,7 +2170,7 @@ static struct lind_marshal_spec spec_fmaximum_magf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_nextafterf = {
+static struct lind_marshal_spec spec_fminf32x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1762,43 +2178,51 @@ static struct lind_marshal_spec spec_nextafterf = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_nextafterf32 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_asinhf = {
+static struct lind_marshal_spec spec_expm1f = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_asinhf32 = {
+static struct lind_marshal_spec spec_expm1f32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmull = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_cosf = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32mulf64x = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_cosf32 = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_expm1l = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_expm1f64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_asinf = {
     .nargs = 1,
@@ -1815,18 +2239,22 @@ static struct lind_marshal_spec spec_asinf32 = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_acoshl = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_acoshf64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fmaxmagf = {
     .nargs = 2,
@@ -1886,26 +2314,26 @@ static struct lind_marshal_spec spec_exp2f32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f64xsubf128 = {
+static struct lind_marshal_spec spec_setpayloadsig = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32xaddf64 = {
+static struct lind_marshal_spec spec_setpayloadsigf64 = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32mulf128 = {
+static struct lind_marshal_spec spec_setpayloadsigf32x = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
@@ -1942,21 +2370,49 @@ static struct lind_marshal_spec spec_ynf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fsqrtl = {
+static struct lind_marshal_spec spec_erf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32sqrtf64x = {
+static struct lind_marshal_spec spec_erff64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminf = {
+static struct lind_marshal_spec spec_erff32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_erfc = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_erfcf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_erfcf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_pow = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -1964,9 +2420,72 @@ static struct lind_marshal_spec spec_fminf = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminf32 = {
+static struct lind_marshal_spec spec_powf64 = {
     .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_powf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ceil = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ceilf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ceilf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_casinl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmaf = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmaf32 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
@@ -1979,56 +2498,109 @@ static struct lind_marshal_spec spec_fedisableexcept = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmod = {
+static struct lind_marshal_spec spec_csinf = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_fmodf64 = {
+static struct lind_marshal_spec spec_csinf32 = {
     .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fromfp = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmodf32x = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_fromfpf64 = {
+    .nargs = 3,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sinl = {
-    .nargs = 1,
-    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_sinf64x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_fromfpf32x = {
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_fmaxmagl = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmaxmagf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_nearbyintf = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaxmagf64x = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_nearbyintf32 = {
+    .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_crealf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_crealf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanf32 = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
@@ -2057,21 +2629,7 @@ static struct lind_marshal_spec spec_atan2f32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_exp = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_expf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_expf32x = {
+static struct lind_marshal_spec spec___issignaling = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -2126,27 +2684,6 @@ static struct lind_marshal_spec spec_ynf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ceil = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_ceilf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_ceilf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_nextafter = {
     .nargs = 2,
     .args = {
@@ -2195,20 +2732,6 @@ static struct lind_marshal_spec spec_canonicalizef32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_llrintl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llrintf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_f32xsubf64 = {
     .nargs = 2,
     .args = {
@@ -2216,6 +2739,132 @@ static struct lind_marshal_spec spec_f32xsubf64 = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ctan = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_nexttoward = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_floor = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_floorf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_floorf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64xmulf128 = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_atan = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_atanf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_atanf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___finitel = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_finitel = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___clog10f = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clog10f = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clog10f32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_j0 = {
     .nargs = 1,
@@ -2259,34 +2908,125 @@ static struct lind_marshal_spec spec_y0f32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaximum_mag_numf128 = {
+static struct lind_marshal_spec spec_dmull = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xmulf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64mulf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xmulf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64mulf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___clog10l = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_roundeven = {
+static struct lind_marshal_spec spec_clog10l = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clog10f64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_truncf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_roundevenf64 = {
+static struct lind_marshal_spec spec_truncf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_roundevenf32x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_csqrtf = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_csqrtf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanhf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanhf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fminimum_num = {
     .nargs = 2,
@@ -2312,6 +3052,22 @@ static struct lind_marshal_spec spec_fminimum_numf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_fminf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fminf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
 static struct lind_marshal_spec spec_tgammaf = {
     .nargs = 1,
     .args = {
@@ -2326,38 +3082,24 @@ static struct lind_marshal_spec spec_tgammaf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ceilf = {
+static struct lind_marshal_spec spec_creal = {
     .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ceilf32 = {
+static struct lind_marshal_spec spec_crealf64 = {
     .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_expm1 = {
+static struct lind_marshal_spec spec_crealf32x = {
     .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_expm1f64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_expm1f32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -2382,132 +3124,165 @@ static struct lind_marshal_spec spec_llogbf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpxf = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_ufromfpxf32 = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalorderf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32addf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nexttoward = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec___fpclassifyf = {
+static struct lind_marshal_spec spec___finitef = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpx = {
+static struct lind_marshal_spec spec_finitef = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lroundf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lroundf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_erfl = {
     .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_ufromfpxf64 = {
+static struct lind_marshal_spec spec_erff64x = {
     .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_ufromfpxf32x = {
+static struct lind_marshal_spec spec_erfcl = {
     .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_setpayloadsig = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_setpayloadsigf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_setpayloadsigf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_ufromfpf = {
+static struct lind_marshal_spec spec_erfcf64x = {
     .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_ufromfpf32 = {
+static struct lind_marshal_spec spec_roundl = {
     .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_roundf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_llogbl = {
-    .nargs = 1,
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_llogbf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fdivl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32divf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32divf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_csinhl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_csinhf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_trunc = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_truncf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_truncf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -2515,172 +3290,310 @@ static struct lind_marshal_spec spec_llogbf64x = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_ilogbl = {
-    .nargs = 1,
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_ilogbf64x = {
-    .nargs = 1,
+    .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_sinhl = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_sinhf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llrintf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llrintf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextup = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextupf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextupf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cosf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cosf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32subf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fromfpf = {
     .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec___isinf = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fromfpf32 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_isinf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_catanhf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanhf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec___clog10 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clog10 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clog10f64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clog10f32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacoshl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacoshf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacoshf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacoshf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cproj = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cprojf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cprojf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_log2f = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_log2f32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmull = {
+    .nargs = 4,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmul = {
+static struct lind_marshal_spec spec_f32mulf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32mulf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_atanf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_atanf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fesetenv = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 28, .layout = &layout_30 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_frexpf = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32mulf64 = {
+static struct lind_marshal_spec spec_frexpf32 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32mulf32x = {
+static struct lind_marshal_spec spec_conjf = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_tanh = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tanhf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tanhf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llroundf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llroundf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64xdivf128 = {
+static struct lind_marshal_spec spec_conjf32 = {
     .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ufromfpxl = {
+    .nargs = 4,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpxf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cabsl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cabsf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fegetmode = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_INOUT, .size_kind = LIND_SIZE_CONST, .const_size = 8, .layout = &layout_35 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -2698,117 +3611,28 @@ static struct lind_marshal_spec spec_getpayloadf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32sqrtf128 = {
+static struct lind_marshal_spec spec_asinhf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaximum_numf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaxf = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaxf32 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fesetenv = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 28, .layout = &layout_30 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fsqrt = {
+static struct lind_marshal_spec spec_asinhf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32sqrtf64 = {
+static struct lind_marshal_spec spec___isnanf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32sqrtf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fdivl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32divf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fegetmode = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_INOUT, .size_kind = LIND_SIZE_CONST, .const_size = 8, .layout = &layout_35 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cbrtl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cbrtf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tan = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tanf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tanf32x = {
+static struct lind_marshal_spec spec_isnanf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -2831,13 +3655,6 @@ static struct lind_marshal_spec spec_fminimum_numf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f64xsqrtf128 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_coshf = {
     .nargs = 1,
     .args = {
@@ -2852,19 +3669,23 @@ static struct lind_marshal_spec spec_coshf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_tanhf = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_rintl = {
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_tanhf32 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_rintf64x = {
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_scalbln = {
     .nargs = 2,
@@ -2922,20 +3743,6 @@ static struct lind_marshal_spec spec_fmaximum_magf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_nearbyintl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nearbyintf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_fminimum_mag_numf = {
     .nargs = 2,
     .args = {
@@ -2952,46 +3759,23 @@ static struct lind_marshal_spec spec_fminimum_mag_numf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_remquo = {
+static struct lind_marshal_spec spec_nearbyintl = {
     .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_remquof64 = {
+static struct lind_marshal_spec spec_nearbyintf64x = {
     .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_remquof32x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_logbf = {
-    .nargs = 1,
-    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_logbf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_log1p = {
     .nargs = 1,
@@ -3014,59 +3798,104 @@ static struct lind_marshal_spec spec_log1pf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fadd = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32addf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32addf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_lroundf = {
+static struct lind_marshal_spec spec_roundevenf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_lroundf32 = {
+static struct lind_marshal_spec spec_roundevenf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fromfpx = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fromfpxf64 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fromfpxf32x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_asinhl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_asinhf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_remquof = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_remquof32 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_fminimuml = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fminimumf64x = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_sinhf = {
     .nargs = 1,
@@ -3082,33 +3911,109 @@ static struct lind_marshal_spec spec_sinhf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_cbrtf = {
+static struct lind_marshal_spec spec_ldexpf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ldexpf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_scalbnf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_scalbnf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fsub = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32subf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32subf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cbrt = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_cbrtf32 = {
+static struct lind_marshal_spec spec_cbrtf64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_lroundl = {
+static struct lind_marshal_spec spec_cbrtf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_lroundf64x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_cpow = {
+    .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cpowf64 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cpowf32x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fminimum_mag_num = {
     .nargs = 2,
@@ -3133,6 +4038,316 @@ static struct lind_marshal_spec spec_fminimum_mag_numf32x = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cos = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cosf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cosf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sin = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sinf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sinf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_frexpl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_frexpf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanhl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanhf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_setpayloadl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_setpayloadf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fminimum_magl = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fminimum_magf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ufromfp = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpf64 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpf32x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanhl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_tanhf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_feenableexcept = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fromfpxl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fromfpxf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmaximum_mag_num = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmaximum_mag_numf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmaximum_mag_numf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tgamma = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tgammaf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tgammaf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_modfl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_modff64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fetestexcept = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_rintf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_rintf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_nextdownl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_nextdownf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fma = {
     .nargs = 3,
@@ -3170,277 +4385,50 @@ static struct lind_marshal_spec spec_f32xfmaf64 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fromfpx = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fromfpxf64 = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fromfpxf32x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaxl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaxf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fminimum_magl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fminimum_magf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_setpayloadsigf = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_setpayloadsigf32 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_dsubl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xsubf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64subf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_feenableexcept = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llroundl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llroundf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaximum_mag_num = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaximum_mag_numf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaximum_mag_numf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalordermagf = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalordermagf32 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tgamma = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tgammaf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_tgammaf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fetestexcept = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sincosl = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_VOID },
-};
-static struct lind_marshal_spec spec_sincosf64x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_VOID },
-};
-static struct lind_marshal_spec spec_ffmal = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32fmaf64x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextdownl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextdownf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalorderl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_totalorderf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_fminimum_numl = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fminimum_numf64x = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_feraiseexcept = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_feraiseexcept = {
+static struct lind_marshal_spec spec_exp10 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_exp10f64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_exp10f32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3463,35 +4451,107 @@ static struct lind_marshal_spec spec_canonicalizef32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_tanl = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_fsubl = {
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_tanf64x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_f32subf128 = {
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32subf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_sqrtl = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_sqrtf64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_fmaximumf128 = {
+static struct lind_marshal_spec spec_sincosf = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_sincosf32 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cbrtl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cbrtf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanhl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanhf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fdim = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3499,32 +4559,21 @@ static struct lind_marshal_spec spec_fmaximumf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_sincos = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_fdimf64 = {
+    .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_VOID },
+    .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_sincosf64 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_fdimf32x = {
+    .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-    },
-    .ret = { .kind = LIND_RET_VOID },
-};
-static struct lind_marshal_spec spec_sincosf32x = {
-    .nargs = 3,
-    .args = {
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
-    .ret = { .kind = LIND_RET_VOID },
+    .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_fminimum_mag = {
     .nargs = 2,
@@ -3575,18 +4624,22 @@ static struct lind_marshal_spec spec_fminimumf32x = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_exp10l = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_exp10f64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fmaximum_num = {
     .nargs = 2,
@@ -3612,6 +4665,22 @@ static struct lind_marshal_spec spec_fmaximum_numf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_totalorderf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalorderf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
 static struct lind_marshal_spec spec___iseqsig = {
     .nargs = 2,
     .args = {
@@ -3620,28 +4689,70 @@ static struct lind_marshal_spec spec___iseqsig = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfp = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_f32xaddf64 = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpf64 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_getpayload = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_getpayloadf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_getpayloadf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_dsqrtl = {
+    .nargs = 2,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpf32x = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_f32xsqrtf128 = {
+    .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64sqrtf128 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xsqrtf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64sqrtf64x = {
+    .nargs = 2,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
@@ -3668,7 +4779,47 @@ static struct lind_marshal_spec spec_nanf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ddivl = {
+static struct lind_marshal_spec spec_conj = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_conjf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_conjf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clogf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clogf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmax = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3676,7 +4827,7 @@ static struct lind_marshal_spec spec_ddivl = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32xdivf64x = {
+static struct lind_marshal_spec spec_fmaxf64 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3684,7 +4835,7 @@ static struct lind_marshal_spec spec_f32xdivf64x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f64divf64x = {
+static struct lind_marshal_spec spec_fmaxf32x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3727,57 +4878,226 @@ static struct lind_marshal_spec spec_sinhf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpl = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_dfmal = {
+    .nargs = 6,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpf64x = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_f32xfmaf128 = {
+    .nargs = 6,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_tanhl = {
+static struct lind_marshal_spec spec_f64fmaf128 = {
+    .nargs = 6,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xfmaf64x = {
+    .nargs = 6,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64fmaf64x = {
+    .nargs = 6,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ddivl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xdivf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64divf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xdivf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64divf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_logbf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_tanhf64x = {
+static struct lind_marshal_spec spec_logbf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpxl = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_llround = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_ufromfpxf64x = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_llroundf64 = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_faddl = {
+static struct lind_marshal_spec spec_llroundf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cprojl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cprojf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_truncl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_truncf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinh = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinhf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinhf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccoshf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccoshf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_lroundl = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3785,7 +5105,7 @@ static struct lind_marshal_spec spec_faddl = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32addf64x = {
+static struct lind_marshal_spec spec_lroundf64x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3793,28 +5113,104 @@ static struct lind_marshal_spec spec_f32addf64x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_cbrt = {
+static struct lind_marshal_spec spec_cacos = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacosf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacosf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_exp2f = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_cbrtf64 = {
+static struct lind_marshal_spec spec_exp2f32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_cbrtf32x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_clogl = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clogf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fmaximum_numl = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmaximum_numf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fsqrt = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32sqrtf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32sqrtf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_nextafterf = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3822,13 +5218,37 @@ static struct lind_marshal_spec spec_fmaximum_numl = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaximum_numf64x = {
+static struct lind_marshal_spec spec_nextafterf32 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_catan = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_acos = {
     .nargs = 1,
@@ -3850,6 +5270,30 @@ static struct lind_marshal_spec spec_acosf32x = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_clog = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clogf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_clogf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fegetround = {
     .nargs = 0,
@@ -3879,44 +5323,21 @@ static struct lind_marshal_spec spec_gammaf = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fromfpxl = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_cacosl = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_fromfpxf64x = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_cacosf64x = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_rint = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_rintf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_rintf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_logf = {
     .nargs = 1,
@@ -3932,23 +5353,35 @@ static struct lind_marshal_spec spec_logf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_setpayloadl = {
-    .nargs = 2,
+static struct lind_marshal_spec spec___issignalingf = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_setpayloadf64x = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_fabs = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmodf = {
+static struct lind_marshal_spec spec_fabsf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fabsf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_copysign = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3956,7 +5389,15 @@ static struct lind_marshal_spec spec_fmodf = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmodf32 = {
+static struct lind_marshal_spec spec_copysignf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_copysignf32x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -3978,19 +5419,33 @@ static struct lind_marshal_spec spec_llogbf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_totalordermagl = {
+static struct lind_marshal_spec spec_hypotf = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_totalordermagf64x = {
+static struct lind_marshal_spec spec_hypotf32 = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cimagf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cimagf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -4001,7 +5456,7 @@ static struct lind_marshal_spec spec_fegetexcept = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f64subf128 = {
+static struct lind_marshal_spec spec_copysignf = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4009,13 +5464,45 @@ static struct lind_marshal_spec spec_f64subf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32xsubf128 = {
+static struct lind_marshal_spec spec_copysignf32 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lrintf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lrintf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cpowf = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cpowf32 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_ilogb = {
     .nargs = 1,
@@ -4038,7 +5525,76 @@ static struct lind_marshal_spec spec_ilogbf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_nextupl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_nextupf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_f64xdivf128 = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cpowl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cpowf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
 static struct lind_marshal_spec spec_fdiml = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fdimf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec___isinfl = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4046,7 +5602,69 @@ static struct lind_marshal_spec spec_fdiml = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fdimf64x = {
+static struct lind_marshal_spec spec_isinfl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___finite = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_finite = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ldexp = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ldexpf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ldexpf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_scalbn = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_scalbnf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_scalbnf32x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4062,56 +5680,102 @@ static struct lind_marshal_spec spec_fesetexceptflag = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_expl = {
+static struct lind_marshal_spec spec___isnan = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_isnan = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_expl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_expf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cargf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cargf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_expm1 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec___issignaling = {
+static struct lind_marshal_spec spec_expm1f64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_truncf = {
+static struct lind_marshal_spec spec_expm1f32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_truncf32 = {
+static struct lind_marshal_spec spec_asinh = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_llrint = {
+static struct lind_marshal_spec spec_asinhf64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_llrintf64 = {
+static struct lind_marshal_spec spec_asinhf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_llrintf32x = {
+static struct lind_marshal_spec spec_tanhf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanhf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4125,7 +5789,66 @@ static struct lind_marshal_spec spec_fegetenv = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f64divf128 = {
+static struct lind_marshal_spec spec___signbitf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_setpayloadsigl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_setpayloadsigf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_tanf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccoshl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccoshf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_llroundl = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4133,66 +5856,7 @@ static struct lind_marshal_spec spec_f64divf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32xdivf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec___fpclassifyl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sqrt = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sqrtf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sqrtf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xsqrtf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_dmull = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xmulf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64mulf64x = {
+static struct lind_marshal_spec spec_llroundf64x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4201,27 +5865,24 @@ static struct lind_marshal_spec spec_f64mulf64x = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_log2l = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_log2f64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_nextupl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextupf64x = {
+static struct lind_marshal_spec spec___fpclassifyf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4238,6 +5899,56 @@ static struct lind_marshal_spec spec_ilogbf = {
 static struct lind_marshal_spec spec_ilogbf32 = {
     .nargs = 1,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_creall = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_crealf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmaxf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmaxf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpf = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpf32 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
@@ -4266,24 +5977,6 @@ static struct lind_marshal_spec spec_fmaxmagf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmal = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaf64x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_log10f = {
     .nargs = 1,
     .args = {
@@ -4298,71 +5991,41 @@ static struct lind_marshal_spec spec_log10f32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminimumf128 = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_floorf = {
+    .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_floorf32 = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_hypotl = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_hypotf64x = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erff64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfcl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfcf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fabsl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fabsf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_scalblnf = {
     .nargs = 2,
@@ -4375,6 +6038,15 @@ static struct lind_marshal_spec spec_scalblnf = {
 static struct lind_marshal_spec spec_scalblnf32 = {
     .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_nexttowardf = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
@@ -4396,7 +6068,78 @@ static struct lind_marshal_spec spec_fminmagf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_hypotf = {
+static struct lind_marshal_spec spec_dsubl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xsubf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64subf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xsubf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64subf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_roundeven = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_roundevenf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_roundevenf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xdivf64 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4404,72 +6147,45 @@ static struct lind_marshal_spec spec_hypotf = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_hypotf32 = {
+static struct lind_marshal_spec spec_csin = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_fabs = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fabsf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fabsf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nexttowardf = {
+static struct lind_marshal_spec spec_csinf64 = {
     .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_tanf = {
+static struct lind_marshal_spec spec_csinf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_nextup = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_tanf32 = {
+static struct lind_marshal_spec spec_nextupf64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_trunc = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_truncf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_truncf32x = {
+static struct lind_marshal_spec spec_nextupf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4482,6 +6198,24 @@ static struct lind_marshal_spec spec_fesetround = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ceill = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ceilf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_lgamma_r = {
     .nargs = 2,
@@ -4507,6 +6241,76 @@ static struct lind_marshal_spec spec_lgammaf32x_r = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_csqrtl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_csqrtf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_llrintl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_llrintf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpxf = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpxf32 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sincosl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_INOUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_INOUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_sincosf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_INOUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_INOUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
 static struct lind_marshal_spec spec_fmaximumf = {
     .nargs = 2,
     .args = {
@@ -4523,6 +6327,30 @@ static struct lind_marshal_spec spec_fmaximumf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_cexp = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cexpf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cexpf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
 static struct lind_marshal_spec spec_fdimf = {
     .nargs = 2,
     .args = {
@@ -4534,6 +6362,26 @@ static struct lind_marshal_spec spec_fdimf = {
 static struct lind_marshal_spec spec_fdimf32 = {
     .nargs = 2,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ufromfpf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
@@ -4553,16 +6401,60 @@ static struct lind_marshal_spec spec_atanhf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f64xfmaf128 = {
+static struct lind_marshal_spec spec_cabsf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cabsf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_sinl = {
     .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_sinf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_exp = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminimum_numf128 = {
+static struct lind_marshal_spec spec_expf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_expf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_lrintl = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4570,28 +6462,7 @@ static struct lind_marshal_spec spec_fminimum_numf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_lrint = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_lrintf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_lrintf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xdivf64 = {
+static struct lind_marshal_spec spec_lrintf64x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4599,75 +6470,49 @@ static struct lind_marshal_spec spec_f32xdivf64 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_daddl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xaddf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64addf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cosl = {
+static struct lind_marshal_spec spec_lround = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_cosf64x = {
+static struct lind_marshal_spec spec_lroundf64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_setpayloadf = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_setpayloadf32 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_llround = {
+static struct lind_marshal_spec spec_lroundf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_llroundf64 = {
+static struct lind_marshal_spec spec_llroundf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_llroundf32x = {
+static struct lind_marshal_spec spec_llroundf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___isinff = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_isinff = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4694,6 +6539,67 @@ static struct lind_marshal_spec spec_atanhf32x = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmal = {
+    .nargs = 7,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmaf64x = {
+    .nargs = 7,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_f64xfmaf128 = {
+    .nargs = 7,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fminl = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fminf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_feholdexcept = {
     .nargs = 1,
@@ -4723,28 +6629,31 @@ static struct lind_marshal_spec spec_coshf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_atan = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_csinh = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_atanf64 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_csinhf64 = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_atanf32x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_csinhf32x = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_f64mulf128 = {
+static struct lind_marshal_spec spec_fsqrtl = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4752,7 +6661,7 @@ static struct lind_marshal_spec spec_f64mulf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32xmulf128 = {
+static struct lind_marshal_spec spec_f32sqrtf128 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4760,91 +6669,7 @@ static struct lind_marshal_spec spec_f32xmulf128 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec___issignalingl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erff64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erff32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfc = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfcf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_erfcf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_dsqrtl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xsqrtf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64sqrtf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nearbyintf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nearbyintf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32xmulf64 = {
+static struct lind_marshal_spec spec_f32sqrtf64x = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4852,110 +6677,146 @@ static struct lind_marshal_spec spec_f32xmulf64 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_asinh = {
+static struct lind_marshal_spec spec_totalordermag = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalordermagf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalordermagf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmodf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmodf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cprojf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cprojf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec___fpclassify = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_asinhf64 = {
+static struct lind_marshal_spec spec_catanh = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanhf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanhf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ceilf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_asinhf32x = {
+static struct lind_marshal_spec spec_ceilf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_exp2l = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_ldexpl = {
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_exp2f64x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_ldexpf64x = {
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_asinhl = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_scalbnl = {
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_asinhf64x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_scalbnf64x = {
+    .nargs = 4,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_lrintf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_lrintf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cos = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cosf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_cosf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sin = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sinf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_sinf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fromfpxf = {
     .nargs = 3,
@@ -4975,21 +6836,281 @@ static struct lind_marshal_spec spec_fromfpxf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_logb = {
+static struct lind_marshal_spec spec_ccosf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccosf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fromfpf = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fromfpf32 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cimag = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cimagf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cimagf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_csqrt = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_csqrtf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_csqrtf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_exp2l = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_exp2f64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fromfpl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fromfpf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cacosf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacosf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_sinf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_logbf64 = {
+static struct lind_marshal_spec spec_sinf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_logbf32x = {
+static struct lind_marshal_spec spec_csinhf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_csinhf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_daddl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xaddf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64addf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32xaddf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f64addf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_catanl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_catanf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_copysignl = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_copysignf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ctanf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_llrintf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_llrintf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -4997,18 +7118,22 @@ static struct lind_marshal_spec spec_logbf32x = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_asinl = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_asinf64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fesetmode = {
     .nargs = 1,
@@ -5017,26 +7142,29 @@ static struct lind_marshal_spec spec_fesetmode = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_getpayload = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_ccos = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_getpayloadf64 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_ccosf64 = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_getpayloadf32x = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_ccosf32x = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_atan2f = {
     .nargs = 2,
@@ -5054,28 +7182,122 @@ static struct lind_marshal_spec spec_atan2f32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_roundf = {
+static struct lind_marshal_spec spec_ffmal = {
+    .nargs = 6,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32fmaf128 = {
+    .nargs = 6,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32fmaf64x = {
+    .nargs = 6,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cabs = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cabsf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cabsf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalorderl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalorderf128 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalorderf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_remquo = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_remquof64 = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_remquof32x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_nextupf = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_roundf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_roundevenl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_roundevenf64x = {
+static struct lind_marshal_spec spec_nextupf32 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -5097,14 +7319,39 @@ static struct lind_marshal_spec spec_acoshf32 = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_remainderl = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_remainderf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_dreml = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_hypot = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -5112,13 +7359,63 @@ static struct lind_marshal_spec spec_remainderf64x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_dreml = {
+static struct lind_marshal_spec spec_hypotf64 = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_hypotf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_logbl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_logbf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacosh = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacoshf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cacoshf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fmaximum = {
     .nargs = 2,
@@ -5144,29 +7441,74 @@ static struct lind_marshal_spec spec_fmaximumf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_setpayload = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_f64xsubf128 = {
+    .nargs = 5,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_carg = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cargf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_cargf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_llrint = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_setpayloadf64 = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_llrintf64 = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_setpayloadf32x = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_llrintf32x = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_ccosl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ccosf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_j0f = {
     .nargs = 1,
@@ -5197,71 +7539,62 @@ static struct lind_marshal_spec spec_y0f32 = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_log10l = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_log10f64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cimagl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_cimagf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_ffma = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec___issignalingf = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_f32fmaf64 = {
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_atanf = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_f32fmaf32x = {
+    .nargs = 3,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_atanf32 = {
-    .nargs = 1,
-    .args = {
         { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_round = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_roundf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_roundf32x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_exp10f = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_exp10f32 = {
-    .nargs = 1,
-    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
@@ -5296,23 +7629,10 @@ static struct lind_marshal_spec spec_fminimum_magf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_nearbyint = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_f32xmulf64 = {
+    .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nearbyintf64 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nearbyintf32x = {
-    .nargs = 1,
-    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
@@ -5320,30 +7640,6 @@ static struct lind_marshal_spec spec_nearbyintf32x = {
 static struct lind_marshal_spec spec_fesetexcept = {
     .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fdiv = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32divf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f32divf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
@@ -5364,6 +7660,111 @@ static struct lind_marshal_spec spec_fmaximum_mag_numf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_round = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_roundf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_roundf32x = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fmaximum_magl = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fmaximum_magf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_faddl = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32addf128 = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_f32addf64x = {
+    .nargs = 4,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_nanl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CSTR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_nanf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CSTR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinhl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinhf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
 static struct lind_marshal_spec spec_fabsf = {
     .nargs = 1,
     .args = {
@@ -5378,255 +7779,152 @@ static struct lind_marshal_spec spec_fabsf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaximum_magl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaximum_magf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nanl = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CSTR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nanf64x = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CSTR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
 static struct lind_marshal_spec spec_fmaximum_mag_numl = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fmaximum_mag_numf64x = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_coshl = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_coshf64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextupf = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextupf32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_expm1f = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_expm1f32 = {
-    .nargs = 1,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_j1l = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_j1f64x = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_y1l = {
-    .nargs = 1,
+    .nargs = 3,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_y1f64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_tan = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fdim = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fdimf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fdimf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fromfpl = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fromfpf64x = {
-    .nargs = 3,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_setpayloadsigl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_setpayloadsigf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_hypot = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_hypotf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_hypotf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec___fpclassify = {
+static struct lind_marshal_spec spec_tanf64 = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fromfp = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_tanf32x = {
+    .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___issignalingl = {
+    .nargs = 2,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fromfpf64 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_totalorder = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fromfpf32x = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_totalorderf64 = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaf = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_totalorderf32x = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaf32 = {
+static struct lind_marshal_spec spec_roundevenl = {
     .nargs = 3,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_roundevenf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_fminmag = {
     .nargs = 2,
@@ -5652,44 +7950,67 @@ static struct lind_marshal_spec spec_fminmagf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_f32fmaf128 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec___iscanonicall = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_sinf = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_csinl = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_sinf32 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_csinf64x = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_remquof = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_cexpl = {
+    .nargs = 2,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_remquof32 = {
-    .nargs = 3,
+static struct lind_marshal_spec spec_cexpf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 32 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinf = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_casinf32 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec___fpclassifyl = {
+    .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -5709,6 +8030,30 @@ static struct lind_marshal_spec spec_fmaximum_numf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_setpayload = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_setpayloadf64 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_setpayloadf32x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 8 },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
 static struct lind_marshal_spec spec_sqrtf = {
     .nargs = 1,
     .args = {
@@ -5723,19 +8068,38 @@ static struct lind_marshal_spec spec_sqrtf32 = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_roundevenf = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_nextafterl = {
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
 };
-static struct lind_marshal_spec spec_roundevenf32 = {
-    .nargs = 1,
+static struct lind_marshal_spec spec_nextafterf64x = {
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
-    .ret = { .kind = LIND_RET_SCALAR },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_nexttowardl = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_lgammaf_r = {
     .nargs = 2,
@@ -5750,22 +8114,6 @@ static struct lind_marshal_spec spec_lgammaf32_r = {
     .args = {
         { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_INOUT, .size_kind = LIND_SIZE_CONST, .const_size = 4 },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_f64xaddf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fminimum_magf128 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
@@ -5794,20 +8142,72 @@ static struct lind_marshal_spec spec_dremf = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_fminmagl = {
-    .nargs = 2,
+    .nargs = 5,
     .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
         { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fminmagf64x = {
+    .nargs = 5,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_erff = {
+    .nargs = 1,
+    .args = {
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fminmagf64x = {
-    .nargs = 2,
+static struct lind_marshal_spec spec_erff32 = {
+    .nargs = 1,
     .args = {
-        { .kind = LIND_ARG_SCALAR },
         { .kind = LIND_ARG_SCALAR },
     },
     .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_erfcf = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_erfcf32 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_fabsl = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_fabsf64x = {
+    .nargs = 3,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_SCALAR },
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_VOID },
 };
 static struct lind_marshal_spec spec_lgamma = {
     .nargs = 1,
@@ -5831,6 +8231,34 @@ static struct lind_marshal_spec spec_lgammaf32x = {
     .ret = { .kind = LIND_RET_SCALAR },
 };
 static struct lind_marshal_spec spec_gamma = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec___signbit = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanh = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanhf64 = {
+    .nargs = 1,
+    .args = {
+        { .kind = LIND_ARG_SCALAR },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_tanhf32x = {
     .nargs = 1,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -5900,6 +8328,30 @@ static struct lind_marshal_spec spec_asinf32x = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
+static struct lind_marshal_spec spec_totalordermagl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalordermagf128 = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
+static struct lind_marshal_spec spec_totalordermagf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_SCALAR },
+};
 static struct lind_marshal_spec spec_fminimumf = {
     .nargs = 2,
     .args = {
@@ -5924,7 +8376,23 @@ static struct lind_marshal_spec spec___iseqsigf = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmax = {
+static struct lind_marshal_spec spec_getpayloadl = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec_getpayloadf64x = {
+    .nargs = 2,
+    .args = {
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_OUT, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+        { .kind = LIND_ARG_PTR, .ptr_direction = LIND_PTR_IN, .size_kind = LIND_SIZE_CONST, .const_size = 16 },
+    },
+    .ret = { .kind = LIND_RET_VOID },
+};
+static struct lind_marshal_spec spec___isnanl = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -5932,39 +8400,7 @@ static struct lind_marshal_spec spec_fmax = {
     },
     .ret = { .kind = LIND_RET_SCALAR },
 };
-static struct lind_marshal_spec spec_fmaxf64 = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_fmaxf32x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextafterl = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nextafterf64x = {
-    .nargs = 2,
-    .args = {
-        { .kind = LIND_ARG_SCALAR },
-        { .kind = LIND_ARG_SCALAR },
-    },
-    .ret = { .kind = LIND_RET_SCALAR },
-};
-static struct lind_marshal_spec spec_nexttowardl = {
+static struct lind_marshal_spec spec_isnanl = {
     .nargs = 2,
     .args = {
         { .kind = LIND_ARG_SCALAR },
@@ -5976,134 +8412,150 @@ static struct lind_marshal_spec spec_nexttowardl = {
 struct libctx { const struct lind_marshal_spec *spec; void *real_fn; };
 struct reg_entry { const char *name; struct libctx ctx; };
 static struct reg_entry g_table[] = {
-    { "roundl", { &spec_roundl, (void *)(uintptr_t)&roundl } },
-    { "roundf64x", { &spec_roundf64x, (void *)(uintptr_t)&roundf64x } },
+    { "casin", { &spec_casin, (void *)(uintptr_t)&casin } },
+    { "casinf64", { &spec_casinf64, (void *)(uintptr_t)&casinf64 } },
+    { "casinf32x", { &spec_casinf32x, (void *)(uintptr_t)&casinf32x } },
+    { "setpayloadf", { &spec_setpayloadf, (void *)(uintptr_t)&setpayloadf } },
+    { "setpayloadf32", { &spec_setpayloadf32, (void *)(uintptr_t)&setpayloadf32 } },
+    { "ccosh", { &spec_ccosh, (void *)(uintptr_t)&ccosh } },
+    { "ccoshf64", { &spec_ccoshf64, (void *)(uintptr_t)&ccoshf64 } },
+    { "ccoshf32x", { &spec_ccoshf32x, (void *)(uintptr_t)&ccoshf32x } },
     { "canonicalizel", { &spec_canonicalizel, (void *)(uintptr_t)&canonicalizel } },
     { "canonicalizef64x", { &spec_canonicalizef64x, (void *)(uintptr_t)&canonicalizef64x } },
-    { "f32divf128", { &spec_f32divf128, (void *)(uintptr_t)&f32divf128 } },
     { "atan2l", { &spec_atan2l, (void *)(uintptr_t)&atan2l } },
     { "atan2f64x", { &spec_atan2f64x, (void *)(uintptr_t)&atan2f64x } },
-    { "rintf", { &spec_rintf, (void *)(uintptr_t)&rintf } },
-    { "rintf32", { &spec_rintf32, (void *)(uintptr_t)&rintf32 } },
-    { "pow", { &spec_pow, (void *)(uintptr_t)&pow } },
-    { "powf64", { &spec_powf64, (void *)(uintptr_t)&powf64 } },
-    { "powf32x", { &spec_powf32x, (void *)(uintptr_t)&powf32x } },
-    { "f64addf128", { &spec_f64addf128, (void *)(uintptr_t)&f64addf128 } },
-    { "f32xaddf128", { &spec_f32xaddf128, (void *)(uintptr_t)&f32xaddf128 } },
     { "log", { &spec_log, (void *)(uintptr_t)&log } },
     { "logf64", { &spec_logf64, (void *)(uintptr_t)&logf64 } },
     { "logf32x", { &spec_logf32x, (void *)(uintptr_t)&logf32x } },
+    { "fmaxl", { &spec_fmaxl, (void *)(uintptr_t)&fmaxl } },
+    { "fmaxf64x", { &spec_fmaxf64x, (void *)(uintptr_t)&fmaxf64x } },
+    { "cosl", { &spec_cosl, (void *)(uintptr_t)&cosl } },
+    { "cosf64x", { &spec_cosf64x, (void *)(uintptr_t)&cosf64x } },
+    { "roundf", { &spec_roundf, (void *)(uintptr_t)&roundf } },
+    { "roundf32", { &spec_roundf32, (void *)(uintptr_t)&roundf32 } },
     { "__iseqsigl", { &spec___iseqsigl, (void *)(uintptr_t)&__iseqsigl } },
-    { "lrintl", { &spec_lrintl, (void *)(uintptr_t)&lrintl } },
-    { "lrintf64x", { &spec_lrintf64x, (void *)(uintptr_t)&lrintf64x } },
+    { "sincos", { &spec_sincos, (void *)(uintptr_t)&sincos } },
+    { "sincosf64", { &spec_sincosf64, (void *)(uintptr_t)&sincosf64 } },
+    { "sincosf32x", { &spec_sincosf32x, (void *)(uintptr_t)&sincosf32x } },
     { "fmaximum_magf", { &spec_fmaximum_magf, (void *)(uintptr_t)&fmaximum_magf } },
     { "fmaximum_magf32", { &spec_fmaximum_magf32, (void *)(uintptr_t)&fmaximum_magf32 } },
-    { "ffma", { &spec_ffma, (void *)(uintptr_t)&ffma } },
-    { "f32fmaf64", { &spec_f32fmaf64, (void *)(uintptr_t)&f32fmaf64 } },
-    { "f32fmaf32x", { &spec_f32fmaf32x, (void *)(uintptr_t)&f32fmaf32x } },
-    { "sincosf", { &spec_sincosf, (void *)(uintptr_t)&sincosf } },
-    { "sincosf32", { &spec_sincosf32, (void *)(uintptr_t)&sincosf32 } },
-    { "fminimum_mag_numf128", { &spec_fminimum_mag_numf128, (void *)(uintptr_t)&fminimum_mag_numf128 } },
+    { "cbrtf", { &spec_cbrtf, (void *)(uintptr_t)&cbrtf } },
+    { "cbrtf32", { &spec_cbrtf32, (void *)(uintptr_t)&cbrtf32 } },
+    { "logb", { &spec_logb, (void *)(uintptr_t)&logb } },
+    { "logbf64", { &spec_logbf64, (void *)(uintptr_t)&logbf64 } },
+    { "logbf32x", { &spec_logbf32x, (void *)(uintptr_t)&logbf32x } },
+    { "casinhf", { &spec_casinhf, (void *)(uintptr_t)&casinhf } },
+    { "casinhf32", { &spec_casinhf32, (void *)(uintptr_t)&casinhf32 } },
+    { "exp10f", { &spec_exp10f, (void *)(uintptr_t)&exp10f } },
+    { "exp10f32", { &spec_exp10f32, (void *)(uintptr_t)&exp10f32 } },
+    { "lrint", { &spec_lrint, (void *)(uintptr_t)&lrint } },
+    { "lrintf64", { &spec_lrintf64, (void *)(uintptr_t)&lrintf64 } },
+    { "lrintf32x", { &spec_lrintf32x, (void *)(uintptr_t)&lrintf32x } },
     { "expf", { &spec_expf, (void *)(uintptr_t)&expf } },
     { "expf32", { &spec_expf32, (void *)(uintptr_t)&expf32 } },
-    { "totalorderf", { &spec_totalorderf, (void *)(uintptr_t)&totalorderf } },
-    { "totalorderf32", { &spec_totalorderf32, (void *)(uintptr_t)&totalorderf32 } },
     { "nanf", { &spec_nanf, (void *)(uintptr_t)&nanf } },
     { "nanf32", { &spec_nanf32, (void *)(uintptr_t)&nanf32 } },
-    { "totalordermagf128", { &spec_totalordermagf128, (void *)(uintptr_t)&totalordermagf128 } },
-    { "powf", { &spec_powf, (void *)(uintptr_t)&powf } },
-    { "powf32", { &spec_powf32, (void *)(uintptr_t)&powf32 } },
-    { "exp10", { &spec_exp10, (void *)(uintptr_t)&exp10 } },
-    { "exp10f64", { &spec_exp10f64, (void *)(uintptr_t)&exp10f64 } },
-    { "exp10f32x", { &spec_exp10f32x, (void *)(uintptr_t)&exp10f32x } },
+    { "fmod", { &spec_fmod, (void *)(uintptr_t)&fmod } },
+    { "fmodf64", { &spec_fmodf64, (void *)(uintptr_t)&fmodf64 } },
+    { "fmodf32x", { &spec_fmodf32x, (void *)(uintptr_t)&fmodf32x } },
+    { "setpayloadsigf", { &spec_setpayloadsigf, (void *)(uintptr_t)&setpayloadsigf } },
+    { "setpayloadsigf32", { &spec_setpayloadsigf32, (void *)(uintptr_t)&setpayloadsigf32 } },
     { "fminimum_mag_numl", { &spec_fminimum_mag_numl, (void *)(uintptr_t)&fminimum_mag_numl } },
     { "fminimum_mag_numf64x", { &spec_fminimum_mag_numf64x, (void *)(uintptr_t)&fminimum_mag_numf64x } },
     { "j1f", { &spec_j1f, (void *)(uintptr_t)&j1f } },
     { "j1f32", { &spec_j1f32, (void *)(uintptr_t)&j1f32 } },
     { "y1f", { &spec_y1f, (void *)(uintptr_t)&y1f } },
     { "y1f32", { &spec_y1f32, (void *)(uintptr_t)&y1f32 } },
+    { "powf", { &spec_powf, (void *)(uintptr_t)&powf } },
+    { "powf32", { &spec_powf32, (void *)(uintptr_t)&powf32 } },
     { "log1pl", { &spec_log1pl, (void *)(uintptr_t)&log1pl } },
     { "log1pf64x", { &spec_log1pf64x, (void *)(uintptr_t)&log1pf64x } },
-    { "f64sqrtf128", { &spec_f64sqrtf128, (void *)(uintptr_t)&f64sqrtf128 } },
-    { "f32xsqrtf128", { &spec_f32xsqrtf128, (void *)(uintptr_t)&f32xsqrtf128 } },
     { "atanhl", { &spec_atanhl, (void *)(uintptr_t)&atanhl } },
     { "atanhf64x", { &spec_atanhf64x, (void *)(uintptr_t)&atanhf64x } },
-    { "fminl", { &spec_fminl, (void *)(uintptr_t)&fminl } },
-    { "fminf64x", { &spec_fminf64x, (void *)(uintptr_t)&fminf64x } },
-    { "getpayloadl", { &spec_getpayloadl, (void *)(uintptr_t)&getpayloadl } },
-    { "getpayloadf64x", { &spec_getpayloadf64x, (void *)(uintptr_t)&getpayloadf64x } },
-    { "dfmal", { &spec_dfmal, (void *)(uintptr_t)&dfmal } },
-    { "f32xfmaf64x", { &spec_f32xfmaf64x, (void *)(uintptr_t)&f32xfmaf64x } },
-    { "f64fmaf64x", { &spec_f64fmaf64x, (void *)(uintptr_t)&f64fmaf64x } },
+    { "modff", { &spec_modff, (void *)(uintptr_t)&modff } },
+    { "modff32", { &spec_modff32, (void *)(uintptr_t)&modff32 } },
     { "jnl", { &spec_jnl, (void *)(uintptr_t)&jnl } },
     { "jnf64x", { &spec_jnf64x, (void *)(uintptr_t)&jnf64x } },
     { "ynl", { &spec_ynl, (void *)(uintptr_t)&ynl } },
     { "ynf64x", { &spec_ynf64x, (void *)(uintptr_t)&ynf64x } },
-    { "totalorder", { &spec_totalorder, (void *)(uintptr_t)&totalorder } },
-    { "totalorderf64", { &spec_totalorderf64, (void *)(uintptr_t)&totalorderf64 } },
-    { "totalorderf32x", { &spec_totalorderf32x, (void *)(uintptr_t)&totalorderf32x } },
-    { "f64fmaf128", { &spec_f64fmaf128, (void *)(uintptr_t)&f64fmaf128 } },
-    { "f32xfmaf128", { &spec_f32xfmaf128, (void *)(uintptr_t)&f32xfmaf128 } },
+    { "ufromfpx", { &spec_ufromfpx, (void *)(uintptr_t)&ufromfpx } },
+    { "ufromfpxf64", { &spec_ufromfpxf64, (void *)(uintptr_t)&ufromfpxf64 } },
+    { "ufromfpxf32x", { &spec_ufromfpxf32x, (void *)(uintptr_t)&ufromfpxf32x } },
+    { "frexp", { &spec_frexp, (void *)(uintptr_t)&frexp } },
+    { "frexpf64", { &spec_frexpf64, (void *)(uintptr_t)&frexpf64 } },
+    { "frexpf32x", { &spec_frexpf32x, (void *)(uintptr_t)&frexpf32x } },
+    { "__signbitl", { &spec___signbitl, (void *)(uintptr_t)&__signbitl } },
+    { "cargl", { &spec_cargl, (void *)(uintptr_t)&cargl } },
+    { "cargf64x", { &spec_cargf64x, (void *)(uintptr_t)&cargf64x } },
+    { "modf", { &spec_modf, (void *)(uintptr_t)&modf } },
+    { "modff64", { &spec_modff64, (void *)(uintptr_t)&modff64 } },
+    { "modff32x", { &spec_modff32x, (void *)(uintptr_t)&modff32x } },
+    { "sqrt", { &spec_sqrt, (void *)(uintptr_t)&sqrt } },
+    { "sqrtf64", { &spec_sqrtf64, (void *)(uintptr_t)&sqrtf64 } },
+    { "sqrtf32x", { &spec_sqrtf32x, (void *)(uintptr_t)&sqrtf32x } },
+    { "f32xsqrtf64", { &spec_f32xsqrtf64, (void *)(uintptr_t)&f32xsqrtf64 } },
     { "j0l", { &spec_j0l, (void *)(uintptr_t)&j0l } },
     { "j0f64x", { &spec_j0f64x, (void *)(uintptr_t)&j0f64x } },
     { "y0l", { &spec_y0l, (void *)(uintptr_t)&y0l } },
     { "y0f64x", { &spec_y0f64x, (void *)(uintptr_t)&y0f64x } },
-    { "__iscanonicall", { &spec___iscanonicall, (void *)(uintptr_t)&__iscanonicall } },
-    { "totalordermag", { &spec_totalordermag, (void *)(uintptr_t)&totalordermag } },
-    { "totalordermagf64", { &spec_totalordermagf64, (void *)(uintptr_t)&totalordermagf64 } },
-    { "totalordermagf32x", { &spec_totalordermagf32x, (void *)(uintptr_t)&totalordermagf32x } },
-    { "fsub", { &spec_fsub, (void *)(uintptr_t)&fsub } },
-    { "f32subf64", { &spec_f32subf64, (void *)(uintptr_t)&f32subf64 } },
-    { "f32subf32x", { &spec_f32subf32x, (void *)(uintptr_t)&f32subf32x } },
-    { "lround", { &spec_lround, (void *)(uintptr_t)&lround } },
-    { "lroundf64", { &spec_lroundf64, (void *)(uintptr_t)&lroundf64 } },
-    { "lroundf32x", { &spec_lroundf32x, (void *)(uintptr_t)&lroundf32x } },
-    { "fmin", { &spec_fmin, (void *)(uintptr_t)&fmin } },
-    { "fminf64", { &spec_fminf64, (void *)(uintptr_t)&fminf64 } },
-    { "fminf32x", { &spec_fminf32x, (void *)(uintptr_t)&fminf32x } },
+    { "fdiv", { &spec_fdiv, (void *)(uintptr_t)&fdiv } },
+    { "f32divf64", { &spec_f32divf64, (void *)(uintptr_t)&f32divf64 } },
+    { "f32divf32x", { &spec_f32divf32x, (void *)(uintptr_t)&f32divf32x } },
+    { "f64xaddf128", { &spec_f64xaddf128, (void *)(uintptr_t)&f64xaddf128 } },
+    { "rint", { &spec_rint, (void *)(uintptr_t)&rint } },
+    { "rintf64", { &spec_rintf64, (void *)(uintptr_t)&rintf64 } },
+    { "rintf32x", { &spec_rintf32x, (void *)(uintptr_t)&rintf32x } },
+    { "atanl", { &spec_atanl, (void *)(uintptr_t)&atanl } },
+    { "atanf64x", { &spec_atanf64x, (void *)(uintptr_t)&atanf64x } },
+    { "fmul", { &spec_fmul, (void *)(uintptr_t)&fmul } },
+    { "f32mulf64", { &spec_f32mulf64, (void *)(uintptr_t)&f32mulf64 } },
+    { "f32mulf32x", { &spec_f32mulf32x, (void *)(uintptr_t)&f32mulf32x } },
+    { "ctanh", { &spec_ctanh, (void *)(uintptr_t)&ctanh } },
+    { "ctanhf64", { &spec_ctanhf64, (void *)(uintptr_t)&ctanhf64 } },
+    { "ctanhf32x", { &spec_ctanhf32x, (void *)(uintptr_t)&ctanhf32x } },
     { "logl", { &spec_logl, (void *)(uintptr_t)&logl } },
     { "logf64x", { &spec_logf64x, (void *)(uintptr_t)&logf64x } },
     { "feclearexcept", { &spec_feclearexcept, (void *)(uintptr_t)&feclearexcept } },
     { "nextdown", { &spec_nextdown, (void *)(uintptr_t)&nextdown } },
     { "nextdownf64", { &spec_nextdownf64, (void *)(uintptr_t)&nextdownf64 } },
     { "nextdownf32x", { &spec_nextdownf32x, (void *)(uintptr_t)&nextdownf32x } },
-    { "erff", { &spec_erff, (void *)(uintptr_t)&erff } },
-    { "erff32", { &spec_erff32, (void *)(uintptr_t)&erff32 } },
-    { "erfcf", { &spec_erfcf, (void *)(uintptr_t)&erfcf } },
-    { "erfcf32", { &spec_erfcf32, (void *)(uintptr_t)&erfcf32 } },
     { "acosh", { &spec_acosh, (void *)(uintptr_t)&acosh } },
     { "acoshf64", { &spec_acoshf64, (void *)(uintptr_t)&acoshf64 } },
     { "acoshf32x", { &spec_acoshf32x, (void *)(uintptr_t)&acoshf32x } },
-    { "log2f", { &spec_log2f, (void *)(uintptr_t)&log2f } },
-    { "log2f32", { &spec_log2f32, (void *)(uintptr_t)&log2f32 } },
-    { "floorf", { &spec_floorf, (void *)(uintptr_t)&floorf } },
-    { "floorf32", { &spec_floorf32, (void *)(uintptr_t)&floorf32 } },
-    { "fsubl", { &spec_fsubl, (void *)(uintptr_t)&fsubl } },
-    { "f32subf64x", { &spec_f32subf64x, (void *)(uintptr_t)&f32subf64x } },
+    { "floorl", { &spec_floorl, (void *)(uintptr_t)&floorl } },
+    { "floorf64x", { &spec_floorf64x, (void *)(uintptr_t)&floorf64x } },
     { "feupdateenv", { &spec_feupdateenv, (void *)(uintptr_t)&feupdateenv } },
+    { "conjl", { &spec_conjl, (void *)(uintptr_t)&conjl } },
+    { "conjf64x", { &spec_conjf64x, (void *)(uintptr_t)&conjf64x } },
+    { "fadd", { &spec_fadd, (void *)(uintptr_t)&fadd } },
+    { "f32addf64", { &spec_f32addf64, (void *)(uintptr_t)&f32addf64 } },
+    { "f32addf32x", { &spec_f32addf32x, (void *)(uintptr_t)&f32addf32x } },
     { "log1pf", { &spec_log1pf, (void *)(uintptr_t)&log1pf } },
     { "log1pf32", { &spec_log1pf32, (void *)(uintptr_t)&log1pf32 } },
+    { "cexpf", { &spec_cexpf, (void *)(uintptr_t)&cexpf } },
+    { "cexpf32", { &spec_cexpf32, (void *)(uintptr_t)&cexpf32 } },
     { "fegetexceptflag", { &spec_fegetexceptflag, (void *)(uintptr_t)&fegetexceptflag } },
     { "log2", { &spec_log2, (void *)(uintptr_t)&log2 } },
     { "log2f64", { &spec_log2f64, (void *)(uintptr_t)&log2f64 } },
     { "log2f32x", { &spec_log2f32x, (void *)(uintptr_t)&log2f32x } },
-    { "f64xmulf128", { &spec_f64xmulf128, (void *)(uintptr_t)&f64xmulf128 } },
-    { "exp2f", { &spec_exp2f, (void *)(uintptr_t)&exp2f } },
-    { "exp2f32", { &spec_exp2f32, (void *)(uintptr_t)&exp2f32 } },
+    { "totalordermagf", { &spec_totalordermagf, (void *)(uintptr_t)&totalordermagf } },
+    { "totalordermagf32", { &spec_totalordermagf32, (void *)(uintptr_t)&totalordermagf32 } },
     { "fmaximuml", { &spec_fmaximuml, (void *)(uintptr_t)&fmaximuml } },
     { "fmaximumf64x", { &spec_fmaximumf64x, (void *)(uintptr_t)&fmaximumf64x } },
-    { "floor", { &spec_floor, (void *)(uintptr_t)&floor } },
-    { "floorf64", { &spec_floorf64, (void *)(uintptr_t)&floorf64 } },
-    { "floorf32x", { &spec_floorf32x, (void *)(uintptr_t)&floorf32x } },
+    { "nearbyint", { &spec_nearbyint, (void *)(uintptr_t)&nearbyint } },
+    { "nearbyintf64", { &spec_nearbyintf64, (void *)(uintptr_t)&nearbyintf64 } },
+    { "nearbyintf32x", { &spec_nearbyintf32x, (void *)(uintptr_t)&nearbyintf32x } },
     { "scalblnl", { &spec_scalblnl, (void *)(uintptr_t)&scalblnl } },
     { "scalblnf64x", { &spec_scalblnf64x, (void *)(uintptr_t)&scalblnf64x } },
-    { "fmaximum_magf128", { &spec_fmaximum_magf128, (void *)(uintptr_t)&fmaximum_magf128 } },
-    { "nextafterf", { &spec_nextafterf, (void *)(uintptr_t)&nextafterf } },
-    { "nextafterf32", { &spec_nextafterf32, (void *)(uintptr_t)&nextafterf32 } },
-    { "asinhf", { &spec_asinhf, (void *)(uintptr_t)&asinhf } },
-    { "asinhf32", { &spec_asinhf32, (void *)(uintptr_t)&asinhf32 } },
-    { "fmull", { &spec_fmull, (void *)(uintptr_t)&fmull } },
-    { "f32mulf64x", { &spec_f32mulf64x, (void *)(uintptr_t)&f32mulf64x } },
+    { "fmin", { &spec_fmin, (void *)(uintptr_t)&fmin } },
+    { "fminf64", { &spec_fminf64, (void *)(uintptr_t)&fminf64 } },
+    { "fminf32x", { &spec_fminf32x, (void *)(uintptr_t)&fminf32x } },
+    { "expm1f", { &spec_expm1f, (void *)(uintptr_t)&expm1f } },
+    { "expm1f32", { &spec_expm1f32, (void *)(uintptr_t)&expm1f32 } },
+    { "cosf", { &spec_cosf, (void *)(uintptr_t)&cosf } },
+    { "cosf32", { &spec_cosf32, (void *)(uintptr_t)&cosf32 } },
+    { "expm1l", { &spec_expm1l, (void *)(uintptr_t)&expm1l } },
+    { "expm1f64x", { &spec_expm1f64x, (void *)(uintptr_t)&expm1f64x } },
     { "asinf", { &spec_asinf, (void *)(uintptr_t)&asinf } },
     { "asinf32", { &spec_asinf32, (void *)(uintptr_t)&asinf32 } },
     { "acoshl", { &spec_acoshl, (void *)(uintptr_t)&acoshl } },
@@ -6116,136 +8568,179 @@ static struct reg_entry g_table[] = {
     { "exp2", { &spec_exp2, (void *)(uintptr_t)&exp2 } },
     { "exp2f64", { &spec_exp2f64, (void *)(uintptr_t)&exp2f64 } },
     { "exp2f32x", { &spec_exp2f32x, (void *)(uintptr_t)&exp2f32x } },
-    { "f64xsubf128", { &spec_f64xsubf128, (void *)(uintptr_t)&f64xsubf128 } },
-    { "f32xaddf64", { &spec_f32xaddf64, (void *)(uintptr_t)&f32xaddf64 } },
-    { "f32mulf128", { &spec_f32mulf128, (void *)(uintptr_t)&f32mulf128 } },
+    { "setpayloadsig", { &spec_setpayloadsig, (void *)(uintptr_t)&setpayloadsig } },
+    { "setpayloadsigf64", { &spec_setpayloadsigf64, (void *)(uintptr_t)&setpayloadsigf64 } },
+    { "setpayloadsigf32x", { &spec_setpayloadsigf32x, (void *)(uintptr_t)&setpayloadsigf32x } },
     { "jnf", { &spec_jnf, (void *)(uintptr_t)&jnf } },
     { "jnf32", { &spec_jnf32, (void *)(uintptr_t)&jnf32 } },
     { "ynf", { &spec_ynf, (void *)(uintptr_t)&ynf } },
     { "ynf32", { &spec_ynf32, (void *)(uintptr_t)&ynf32 } },
-    { "fsqrtl", { &spec_fsqrtl, (void *)(uintptr_t)&fsqrtl } },
-    { "f32sqrtf64x", { &spec_f32sqrtf64x, (void *)(uintptr_t)&f32sqrtf64x } },
-    { "fminf", { &spec_fminf, (void *)(uintptr_t)&fminf } },
-    { "fminf32", { &spec_fminf32, (void *)(uintptr_t)&fminf32 } },
+    { "erf", { &spec_erf, (void *)(uintptr_t)&erf } },
+    { "erff64", { &spec_erff64, (void *)(uintptr_t)&erff64 } },
+    { "erff32x", { &spec_erff32x, (void *)(uintptr_t)&erff32x } },
+    { "erfc", { &spec_erfc, (void *)(uintptr_t)&erfc } },
+    { "erfcf64", { &spec_erfcf64, (void *)(uintptr_t)&erfcf64 } },
+    { "erfcf32x", { &spec_erfcf32x, (void *)(uintptr_t)&erfcf32x } },
+    { "pow", { &spec_pow, (void *)(uintptr_t)&pow } },
+    { "powf64", { &spec_powf64, (void *)(uintptr_t)&powf64 } },
+    { "powf32x", { &spec_powf32x, (void *)(uintptr_t)&powf32x } },
+    { "ceil", { &spec_ceil, (void *)(uintptr_t)&ceil } },
+    { "ceilf64", { &spec_ceilf64, (void *)(uintptr_t)&ceilf64 } },
+    { "ceilf32x", { &spec_ceilf32x, (void *)(uintptr_t)&ceilf32x } },
+    { "casinl", { &spec_casinl, (void *)(uintptr_t)&casinl } },
+    { "casinf64x", { &spec_casinf64x, (void *)(uintptr_t)&casinf64x } },
+    { "fmaf", { &spec_fmaf, (void *)(uintptr_t)&fmaf } },
+    { "fmaf32", { &spec_fmaf32, (void *)(uintptr_t)&fmaf32 } },
     { "fedisableexcept", { &spec_fedisableexcept, (void *)(uintptr_t)&fedisableexcept } },
-    { "fmod", { &spec_fmod, (void *)(uintptr_t)&fmod } },
-    { "fmodf64", { &spec_fmodf64, (void *)(uintptr_t)&fmodf64 } },
-    { "fmodf32x", { &spec_fmodf32x, (void *)(uintptr_t)&fmodf32x } },
-    { "sinl", { &spec_sinl, (void *)(uintptr_t)&sinl } },
-    { "sinf64x", { &spec_sinf64x, (void *)(uintptr_t)&sinf64x } },
+    { "csinf", { &spec_csinf, (void *)(uintptr_t)&csinf } },
+    { "csinf32", { &spec_csinf32, (void *)(uintptr_t)&csinf32 } },
+    { "fromfp", { &spec_fromfp, (void *)(uintptr_t)&fromfp } },
+    { "fromfpf64", { &spec_fromfpf64, (void *)(uintptr_t)&fromfpf64 } },
+    { "fromfpf32x", { &spec_fromfpf32x, (void *)(uintptr_t)&fromfpf32x } },
     { "fmaxmagl", { &spec_fmaxmagl, (void *)(uintptr_t)&fmaxmagl } },
     { "fmaxmagf64x", { &spec_fmaxmagf64x, (void *)(uintptr_t)&fmaxmagf64x } },
+    { "nearbyintf", { &spec_nearbyintf, (void *)(uintptr_t)&nearbyintf } },
+    { "nearbyintf32", { &spec_nearbyintf32, (void *)(uintptr_t)&nearbyintf32 } },
+    { "crealf", { &spec_crealf, (void *)(uintptr_t)&crealf } },
+    { "crealf32", { &spec_crealf32, (void *)(uintptr_t)&crealf32 } },
+    { "tanf", { &spec_tanf, (void *)(uintptr_t)&tanf } },
+    { "tanf32", { &spec_tanf32, (void *)(uintptr_t)&tanf32 } },
     { "atan2", { &spec_atan2, (void *)(uintptr_t)&atan2 } },
     { "atan2f64", { &spec_atan2f64, (void *)(uintptr_t)&atan2f64 } },
     { "atan2f32x", { &spec_atan2f32x, (void *)(uintptr_t)&atan2f32x } },
-    { "exp", { &spec_exp, (void *)(uintptr_t)&exp } },
-    { "expf64", { &spec_expf64, (void *)(uintptr_t)&expf64 } },
-    { "expf32x", { &spec_expf32x, (void *)(uintptr_t)&expf32x } },
+    { "__issignaling", { &spec___issignaling, (void *)(uintptr_t)&__issignaling } },
     { "jn", { &spec_jn, (void *)(uintptr_t)&jn } },
     { "jnf64", { &spec_jnf64, (void *)(uintptr_t)&jnf64 } },
     { "jnf32x", { &spec_jnf32x, (void *)(uintptr_t)&jnf32x } },
     { "yn", { &spec_yn, (void *)(uintptr_t)&yn } },
     { "ynf64", { &spec_ynf64, (void *)(uintptr_t)&ynf64 } },
     { "ynf32x", { &spec_ynf32x, (void *)(uintptr_t)&ynf32x } },
-    { "ceil", { &spec_ceil, (void *)(uintptr_t)&ceil } },
-    { "ceilf64", { &spec_ceilf64, (void *)(uintptr_t)&ceilf64 } },
-    { "ceilf32x", { &spec_ceilf32x, (void *)(uintptr_t)&ceilf32x } },
     { "nextafter", { &spec_nextafter, (void *)(uintptr_t)&nextafter } },
     { "nextafterf64", { &spec_nextafterf64, (void *)(uintptr_t)&nextafterf64 } },
     { "nextafterf32x", { &spec_nextafterf32x, (void *)(uintptr_t)&nextafterf32x } },
     { "canonicalize", { &spec_canonicalize, (void *)(uintptr_t)&canonicalize } },
     { "canonicalizef64", { &spec_canonicalizef64, (void *)(uintptr_t)&canonicalizef64 } },
     { "canonicalizef32x", { &spec_canonicalizef32x, (void *)(uintptr_t)&canonicalizef32x } },
-    { "llrintl", { &spec_llrintl, (void *)(uintptr_t)&llrintl } },
-    { "llrintf64x", { &spec_llrintf64x, (void *)(uintptr_t)&llrintf64x } },
     { "f32xsubf64", { &spec_f32xsubf64, (void *)(uintptr_t)&f32xsubf64 } },
+    { "ctan", { &spec_ctan, (void *)(uintptr_t)&ctan } },
+    { "ctanf64", { &spec_ctanf64, (void *)(uintptr_t)&ctanf64 } },
+    { "ctanf32x", { &spec_ctanf32x, (void *)(uintptr_t)&ctanf32x } },
+    { "nexttoward", { &spec_nexttoward, (void *)(uintptr_t)&nexttoward } },
+    { "floor", { &spec_floor, (void *)(uintptr_t)&floor } },
+    { "floorf64", { &spec_floorf64, (void *)(uintptr_t)&floorf64 } },
+    { "floorf32x", { &spec_floorf32x, (void *)(uintptr_t)&floorf32x } },
+    { "f64xmulf128", { &spec_f64xmulf128, (void *)(uintptr_t)&f64xmulf128 } },
+    { "atan", { &spec_atan, (void *)(uintptr_t)&atan } },
+    { "atanf64", { &spec_atanf64, (void *)(uintptr_t)&atanf64 } },
+    { "atanf32x", { &spec_atanf32x, (void *)(uintptr_t)&atanf32x } },
+    { "__finitel", { &spec___finitel, (void *)(uintptr_t)&__finitel } },
+    { "finitel", { &spec_finitel, (void *)(uintptr_t)&finitel } },
+    { "__clog10f", { &spec___clog10f, (void *)(uintptr_t)&__clog10f } },
+    { "clog10f", { &spec_clog10f, (void *)(uintptr_t)&clog10f } },
+    { "clog10f32", { &spec_clog10f32, (void *)(uintptr_t)&clog10f32 } },
     { "j0", { &spec_j0, (void *)(uintptr_t)&j0 } },
     { "j0f64", { &spec_j0f64, (void *)(uintptr_t)&j0f64 } },
     { "j0f32x", { &spec_j0f32x, (void *)(uintptr_t)&j0f32x } },
     { "y0", { &spec_y0, (void *)(uintptr_t)&y0 } },
     { "y0f64", { &spec_y0f64, (void *)(uintptr_t)&y0f64 } },
     { "y0f32x", { &spec_y0f32x, (void *)(uintptr_t)&y0f32x } },
-    { "fmaximum_mag_numf128", { &spec_fmaximum_mag_numf128, (void *)(uintptr_t)&fmaximum_mag_numf128 } },
-    { "roundeven", { &spec_roundeven, (void *)(uintptr_t)&roundeven } },
-    { "roundevenf64", { &spec_roundevenf64, (void *)(uintptr_t)&roundevenf64 } },
-    { "roundevenf32x", { &spec_roundevenf32x, (void *)(uintptr_t)&roundevenf32x } },
+    { "dmull", { &spec_dmull, (void *)(uintptr_t)&dmull } },
+    { "f32xmulf128", { &spec_f32xmulf128, (void *)(uintptr_t)&f32xmulf128 } },
+    { "f64mulf128", { &spec_f64mulf128, (void *)(uintptr_t)&f64mulf128 } },
+    { "f32xmulf64x", { &spec_f32xmulf64x, (void *)(uintptr_t)&f32xmulf64x } },
+    { "f64mulf64x", { &spec_f64mulf64x, (void *)(uintptr_t)&f64mulf64x } },
+    { "__clog10l", { &spec___clog10l, (void *)(uintptr_t)&__clog10l } },
+    { "clog10l", { &spec_clog10l, (void *)(uintptr_t)&clog10l } },
+    { "clog10f64x", { &spec_clog10f64x, (void *)(uintptr_t)&clog10f64x } },
+    { "truncf", { &spec_truncf, (void *)(uintptr_t)&truncf } },
+    { "truncf32", { &spec_truncf32, (void *)(uintptr_t)&truncf32 } },
+    { "csqrtf", { &spec_csqrtf, (void *)(uintptr_t)&csqrtf } },
+    { "csqrtf32", { &spec_csqrtf32, (void *)(uintptr_t)&csqrtf32 } },
+    { "ctanhf", { &spec_ctanhf, (void *)(uintptr_t)&ctanhf } },
+    { "ctanhf32", { &spec_ctanhf32, (void *)(uintptr_t)&ctanhf32 } },
     { "fminimum_num", { &spec_fminimum_num, (void *)(uintptr_t)&fminimum_num } },
     { "fminimum_numf64", { &spec_fminimum_numf64, (void *)(uintptr_t)&fminimum_numf64 } },
     { "fminimum_numf32x", { &spec_fminimum_numf32x, (void *)(uintptr_t)&fminimum_numf32x } },
+    { "fminf", { &spec_fminf, (void *)(uintptr_t)&fminf } },
+    { "fminf32", { &spec_fminf32, (void *)(uintptr_t)&fminf32 } },
     { "tgammaf", { &spec_tgammaf, (void *)(uintptr_t)&tgammaf } },
     { "tgammaf32", { &spec_tgammaf32, (void *)(uintptr_t)&tgammaf32 } },
-    { "ceilf", { &spec_ceilf, (void *)(uintptr_t)&ceilf } },
-    { "ceilf32", { &spec_ceilf32, (void *)(uintptr_t)&ceilf32 } },
-    { "expm1", { &spec_expm1, (void *)(uintptr_t)&expm1 } },
-    { "expm1f64", { &spec_expm1f64, (void *)(uintptr_t)&expm1f64 } },
-    { "expm1f32x", { &spec_expm1f32x, (void *)(uintptr_t)&expm1f32x } },
+    { "creal", { &spec_creal, (void *)(uintptr_t)&creal } },
+    { "crealf64", { &spec_crealf64, (void *)(uintptr_t)&crealf64 } },
+    { "crealf32x", { &spec_crealf32x, (void *)(uintptr_t)&crealf32x } },
     { "llogb", { &spec_llogb, (void *)(uintptr_t)&llogb } },
     { "llogbf64", { &spec_llogbf64, (void *)(uintptr_t)&llogbf64 } },
     { "llogbf32x", { &spec_llogbf32x, (void *)(uintptr_t)&llogbf32x } },
-    { "ufromfpxf", { &spec_ufromfpxf, (void *)(uintptr_t)&ufromfpxf } },
-    { "ufromfpxf32", { &spec_ufromfpxf32, (void *)(uintptr_t)&ufromfpxf32 } },
-    { "totalorderf128", { &spec_totalorderf128, (void *)(uintptr_t)&totalorderf128 } },
-    { "f32addf128", { &spec_f32addf128, (void *)(uintptr_t)&f32addf128 } },
-    { "nexttoward", { &spec_nexttoward, (void *)(uintptr_t)&nexttoward } },
-    { "__fpclassifyf", { &spec___fpclassifyf, (void *)(uintptr_t)&__fpclassifyf } },
-    { "ufromfpx", { &spec_ufromfpx, (void *)(uintptr_t)&ufromfpx } },
-    { "ufromfpxf64", { &spec_ufromfpxf64, (void *)(uintptr_t)&ufromfpxf64 } },
-    { "ufromfpxf32x", { &spec_ufromfpxf32x, (void *)(uintptr_t)&ufromfpxf32x } },
-    { "setpayloadsig", { &spec_setpayloadsig, (void *)(uintptr_t)&setpayloadsig } },
-    { "setpayloadsigf64", { &spec_setpayloadsigf64, (void *)(uintptr_t)&setpayloadsigf64 } },
-    { "setpayloadsigf32x", { &spec_setpayloadsigf32x, (void *)(uintptr_t)&setpayloadsigf32x } },
-    { "ufromfpf", { &spec_ufromfpf, (void *)(uintptr_t)&ufromfpf } },
-    { "ufromfpf32", { &spec_ufromfpf32, (void *)(uintptr_t)&ufromfpf32 } },
+    { "__finitef", { &spec___finitef, (void *)(uintptr_t)&__finitef } },
+    { "finitef", { &spec_finitef, (void *)(uintptr_t)&finitef } },
+    { "lroundf", { &spec_lroundf, (void *)(uintptr_t)&lroundf } },
+    { "lroundf32", { &spec_lroundf32, (void *)(uintptr_t)&lroundf32 } },
+    { "erfl", { &spec_erfl, (void *)(uintptr_t)&erfl } },
+    { "erff64x", { &spec_erff64x, (void *)(uintptr_t)&erff64x } },
+    { "erfcl", { &spec_erfcl, (void *)(uintptr_t)&erfcl } },
+    { "erfcf64x", { &spec_erfcf64x, (void *)(uintptr_t)&erfcf64x } },
+    { "roundl", { &spec_roundl, (void *)(uintptr_t)&roundl } },
+    { "roundf64x", { &spec_roundf64x, (void *)(uintptr_t)&roundf64x } },
     { "llogbl", { &spec_llogbl, (void *)(uintptr_t)&llogbl } },
     { "llogbf64x", { &spec_llogbf64x, (void *)(uintptr_t)&llogbf64x } },
+    { "fdivl", { &spec_fdivl, (void *)(uintptr_t)&fdivl } },
+    { "f32divf128", { &spec_f32divf128, (void *)(uintptr_t)&f32divf128 } },
+    { "f32divf64x", { &spec_f32divf64x, (void *)(uintptr_t)&f32divf64x } },
+    { "csinhl", { &spec_csinhl, (void *)(uintptr_t)&csinhl } },
+    { "csinhf64x", { &spec_csinhf64x, (void *)(uintptr_t)&csinhf64x } },
+    { "trunc", { &spec_trunc, (void *)(uintptr_t)&trunc } },
+    { "truncf64", { &spec_truncf64, (void *)(uintptr_t)&truncf64 } },
+    { "truncf32x", { &spec_truncf32x, (void *)(uintptr_t)&truncf32x } },
     { "ilogbl", { &spec_ilogbl, (void *)(uintptr_t)&ilogbl } },
     { "ilogbf64x", { &spec_ilogbf64x, (void *)(uintptr_t)&ilogbf64x } },
     { "sinhl", { &spec_sinhl, (void *)(uintptr_t)&sinhl } },
     { "sinhf64x", { &spec_sinhf64x, (void *)(uintptr_t)&sinhf64x } },
-    { "llrintf", { &spec_llrintf, (void *)(uintptr_t)&llrintf } },
-    { "llrintf32", { &spec_llrintf32, (void *)(uintptr_t)&llrintf32 } },
-    { "nextup", { &spec_nextup, (void *)(uintptr_t)&nextup } },
-    { "nextupf64", { &spec_nextupf64, (void *)(uintptr_t)&nextupf64 } },
-    { "nextupf32x", { &spec_nextupf32x, (void *)(uintptr_t)&nextupf32x } },
-    { "cosf", { &spec_cosf, (void *)(uintptr_t)&cosf } },
-    { "cosf32", { &spec_cosf32, (void *)(uintptr_t)&cosf32 } },
-    { "f32subf128", { &spec_f32subf128, (void *)(uintptr_t)&f32subf128 } },
-    { "fromfpf", { &spec_fromfpf, (void *)(uintptr_t)&fromfpf } },
-    { "fromfpf32", { &spec_fromfpf32, (void *)(uintptr_t)&fromfpf32 } },
-    { "fmul", { &spec_fmul, (void *)(uintptr_t)&fmul } },
-    { "f32mulf64", { &spec_f32mulf64, (void *)(uintptr_t)&f32mulf64 } },
-    { "f32mulf32x", { &spec_f32mulf32x, (void *)(uintptr_t)&f32mulf32x } },
-    { "tanh", { &spec_tanh, (void *)(uintptr_t)&tanh } },
-    { "tanhf64", { &spec_tanhf64, (void *)(uintptr_t)&tanhf64 } },
-    { "tanhf32x", { &spec_tanhf32x, (void *)(uintptr_t)&tanhf32x } },
-    { "llroundf", { &spec_llroundf, (void *)(uintptr_t)&llroundf } },
-    { "llroundf32", { &spec_llroundf32, (void *)(uintptr_t)&llroundf32 } },
-    { "f64xdivf128", { &spec_f64xdivf128, (void *)(uintptr_t)&f64xdivf128 } },
+    { "__isinf", { &spec___isinf, (void *)(uintptr_t)&__isinf } },
+    { "isinf", { &spec_isinf, (void *)(uintptr_t)&isinf } },
+    { "catanhf", { &spec_catanhf, (void *)(uintptr_t)&catanhf } },
+    { "catanhf32", { &spec_catanhf32, (void *)(uintptr_t)&catanhf32 } },
+    { "__clog10", { &spec___clog10, (void *)(uintptr_t)&__clog10 } },
+    { "clog10", { &spec_clog10, (void *)(uintptr_t)&clog10 } },
+    { "clog10f64", { &spec_clog10f64, (void *)(uintptr_t)&clog10f64 } },
+    { "clog10f32x", { &spec_clog10f32x, (void *)(uintptr_t)&clog10f32x } },
+    { "cacoshl", { &spec_cacoshl, (void *)(uintptr_t)&cacoshl } },
+    { "cacoshf64x", { &spec_cacoshf64x, (void *)(uintptr_t)&cacoshf64x } },
+    { "cacoshf", { &spec_cacoshf, (void *)(uintptr_t)&cacoshf } },
+    { "cacoshf32", { &spec_cacoshf32, (void *)(uintptr_t)&cacoshf32 } },
+    { "ctanf", { &spec_ctanf, (void *)(uintptr_t)&ctanf } },
+    { "ctanf32", { &spec_ctanf32, (void *)(uintptr_t)&ctanf32 } },
+    { "cproj", { &spec_cproj, (void *)(uintptr_t)&cproj } },
+    { "cprojf64", { &spec_cprojf64, (void *)(uintptr_t)&cprojf64 } },
+    { "cprojf32x", { &spec_cprojf32x, (void *)(uintptr_t)&cprojf32x } },
+    { "log2f", { &spec_log2f, (void *)(uintptr_t)&log2f } },
+    { "log2f32", { &spec_log2f32, (void *)(uintptr_t)&log2f32 } },
+    { "fmull", { &spec_fmull, (void *)(uintptr_t)&fmull } },
+    { "f32mulf128", { &spec_f32mulf128, (void *)(uintptr_t)&f32mulf128 } },
+    { "f32mulf64x", { &spec_f32mulf64x, (void *)(uintptr_t)&f32mulf64x } },
+    { "atanf", { &spec_atanf, (void *)(uintptr_t)&atanf } },
+    { "atanf32", { &spec_atanf32, (void *)(uintptr_t)&atanf32 } },
+    { "fesetenv", { &spec_fesetenv, (void *)(uintptr_t)&fesetenv } },
+    { "frexpf", { &spec_frexpf, (void *)(uintptr_t)&frexpf } },
+    { "frexpf32", { &spec_frexpf32, (void *)(uintptr_t)&frexpf32 } },
+    { "conjf", { &spec_conjf, (void *)(uintptr_t)&conjf } },
+    { "conjf32", { &spec_conjf32, (void *)(uintptr_t)&conjf32 } },
+    { "ufromfpxl", { &spec_ufromfpxl, (void *)(uintptr_t)&ufromfpxl } },
+    { "ufromfpxf64x", { &spec_ufromfpxf64x, (void *)(uintptr_t)&ufromfpxf64x } },
+    { "cabsl", { &spec_cabsl, (void *)(uintptr_t)&cabsl } },
+    { "cabsf64x", { &spec_cabsf64x, (void *)(uintptr_t)&cabsf64x } },
+    { "fegetmode", { &spec_fegetmode, (void *)(uintptr_t)&fegetmode } },
     { "getpayloadf", { &spec_getpayloadf, (void *)(uintptr_t)&getpayloadf } },
     { "getpayloadf32", { &spec_getpayloadf32, (void *)(uintptr_t)&getpayloadf32 } },
-    { "f32sqrtf128", { &spec_f32sqrtf128, (void *)(uintptr_t)&f32sqrtf128 } },
-    { "fmaximum_numf128", { &spec_fmaximum_numf128, (void *)(uintptr_t)&fmaximum_numf128 } },
-    { "fmaxf", { &spec_fmaxf, (void *)(uintptr_t)&fmaxf } },
-    { "fmaxf32", { &spec_fmaxf32, (void *)(uintptr_t)&fmaxf32 } },
-    { "fesetenv", { &spec_fesetenv, (void *)(uintptr_t)&fesetenv } },
-    { "fsqrt", { &spec_fsqrt, (void *)(uintptr_t)&fsqrt } },
-    { "f32sqrtf64", { &spec_f32sqrtf64, (void *)(uintptr_t)&f32sqrtf64 } },
-    { "f32sqrtf32x", { &spec_f32sqrtf32x, (void *)(uintptr_t)&f32sqrtf32x } },
-    { "fdivl", { &spec_fdivl, (void *)(uintptr_t)&fdivl } },
-    { "f32divf64x", { &spec_f32divf64x, (void *)(uintptr_t)&f32divf64x } },
-    { "fegetmode", { &spec_fegetmode, (void *)(uintptr_t)&fegetmode } },
-    { "cbrtl", { &spec_cbrtl, (void *)(uintptr_t)&cbrtl } },
-    { "cbrtf64x", { &spec_cbrtf64x, (void *)(uintptr_t)&cbrtf64x } },
-    { "tan", { &spec_tan, (void *)(uintptr_t)&tan } },
-    { "tanf64", { &spec_tanf64, (void *)(uintptr_t)&tanf64 } },
-    { "tanf32x", { &spec_tanf32x, (void *)(uintptr_t)&tanf32x } },
+    { "asinhf", { &spec_asinhf, (void *)(uintptr_t)&asinhf } },
+    { "asinhf32", { &spec_asinhf32, (void *)(uintptr_t)&asinhf32 } },
+    { "__isnanf", { &spec___isnanf, (void *)(uintptr_t)&__isnanf } },
+    { "isnanf", { &spec_isnanf, (void *)(uintptr_t)&isnanf } },
     { "fminimum_numf", { &spec_fminimum_numf, (void *)(uintptr_t)&fminimum_numf } },
     { "fminimum_numf32", { &spec_fminimum_numf32, (void *)(uintptr_t)&fminimum_numf32 } },
-    { "f64xsqrtf128", { &spec_f64xsqrtf128, (void *)(uintptr_t)&f64xsqrtf128 } },
     { "coshf", { &spec_coshf, (void *)(uintptr_t)&coshf } },
     { "coshf32", { &spec_coshf32, (void *)(uintptr_t)&coshf32 } },
-    { "tanhf", { &spec_tanhf, (void *)(uintptr_t)&tanhf } },
-    { "tanhf32", { &spec_tanhf32, (void *)(uintptr_t)&tanhf32 } },
+    { "rintl", { &spec_rintl, (void *)(uintptr_t)&rintl } },
+    { "rintf64x", { &spec_rintf64x, (void *)(uintptr_t)&rintf64x } },
     { "scalbln", { &spec_scalbln, (void *)(uintptr_t)&scalbln } },
     { "scalblnf64", { &spec_scalblnf64, (void *)(uintptr_t)&scalblnf64 } },
     { "scalblnf32x", { &spec_scalblnf32x, (void *)(uintptr_t)&scalblnf32x } },
@@ -6253,83 +8748,105 @@ static struct reg_entry g_table[] = {
     { "fmaximum_mag", { &spec_fmaximum_mag, (void *)(uintptr_t)&fmaximum_mag } },
     { "fmaximum_magf64", { &spec_fmaximum_magf64, (void *)(uintptr_t)&fmaximum_magf64 } },
     { "fmaximum_magf32x", { &spec_fmaximum_magf32x, (void *)(uintptr_t)&fmaximum_magf32x } },
-    { "nearbyintl", { &spec_nearbyintl, (void *)(uintptr_t)&nearbyintl } },
-    { "nearbyintf64x", { &spec_nearbyintf64x, (void *)(uintptr_t)&nearbyintf64x } },
     { "fminimum_mag_numf", { &spec_fminimum_mag_numf, (void *)(uintptr_t)&fminimum_mag_numf } },
     { "fminimum_mag_numf32", { &spec_fminimum_mag_numf32, (void *)(uintptr_t)&fminimum_mag_numf32 } },
-    { "remquo", { &spec_remquo, (void *)(uintptr_t)&remquo } },
-    { "remquof64", { &spec_remquof64, (void *)(uintptr_t)&remquof64 } },
-    { "remquof32x", { &spec_remquof32x, (void *)(uintptr_t)&remquof32x } },
-    { "logbf", { &spec_logbf, (void *)(uintptr_t)&logbf } },
-    { "logbf32", { &spec_logbf32, (void *)(uintptr_t)&logbf32 } },
+    { "nearbyintl", { &spec_nearbyintl, (void *)(uintptr_t)&nearbyintl } },
+    { "nearbyintf64x", { &spec_nearbyintf64x, (void *)(uintptr_t)&nearbyintf64x } },
     { "log1p", { &spec_log1p, (void *)(uintptr_t)&log1p } },
     { "log1pf64", { &spec_log1pf64, (void *)(uintptr_t)&log1pf64 } },
     { "log1pf32x", { &spec_log1pf32x, (void *)(uintptr_t)&log1pf32x } },
-    { "fadd", { &spec_fadd, (void *)(uintptr_t)&fadd } },
-    { "f32addf64", { &spec_f32addf64, (void *)(uintptr_t)&f32addf64 } },
-    { "f32addf32x", { &spec_f32addf32x, (void *)(uintptr_t)&f32addf32x } },
-    { "lroundf", { &spec_lroundf, (void *)(uintptr_t)&lroundf } },
-    { "lroundf32", { &spec_lroundf32, (void *)(uintptr_t)&lroundf32 } },
+    { "roundevenf", { &spec_roundevenf, (void *)(uintptr_t)&roundevenf } },
+    { "roundevenf32", { &spec_roundevenf32, (void *)(uintptr_t)&roundevenf32 } },
+    { "fromfpx", { &spec_fromfpx, (void *)(uintptr_t)&fromfpx } },
+    { "fromfpxf64", { &spec_fromfpxf64, (void *)(uintptr_t)&fromfpxf64 } },
+    { "fromfpxf32x", { &spec_fromfpxf32x, (void *)(uintptr_t)&fromfpxf32x } },
+    { "asinhl", { &spec_asinhl, (void *)(uintptr_t)&asinhl } },
+    { "asinhf64x", { &spec_asinhf64x, (void *)(uintptr_t)&asinhf64x } },
+    { "remquof", { &spec_remquof, (void *)(uintptr_t)&remquof } },
+    { "remquof32", { &spec_remquof32, (void *)(uintptr_t)&remquof32 } },
     { "fminimuml", { &spec_fminimuml, (void *)(uintptr_t)&fminimuml } },
     { "fminimumf64x", { &spec_fminimumf64x, (void *)(uintptr_t)&fminimumf64x } },
     { "sinhf", { &spec_sinhf, (void *)(uintptr_t)&sinhf } },
     { "sinhf32", { &spec_sinhf32, (void *)(uintptr_t)&sinhf32 } },
-    { "cbrtf", { &spec_cbrtf, (void *)(uintptr_t)&cbrtf } },
-    { "cbrtf32", { &spec_cbrtf32, (void *)(uintptr_t)&cbrtf32 } },
-    { "lroundl", { &spec_lroundl, (void *)(uintptr_t)&lroundl } },
-    { "lroundf64x", { &spec_lroundf64x, (void *)(uintptr_t)&lroundf64x } },
+    { "ldexpf", { &spec_ldexpf, (void *)(uintptr_t)&ldexpf } },
+    { "ldexpf32", { &spec_ldexpf32, (void *)(uintptr_t)&ldexpf32 } },
+    { "scalbnf", { &spec_scalbnf, (void *)(uintptr_t)&scalbnf } },
+    { "scalbnf32", { &spec_scalbnf32, (void *)(uintptr_t)&scalbnf32 } },
+    { "fsub", { &spec_fsub, (void *)(uintptr_t)&fsub } },
+    { "f32subf64", { &spec_f32subf64, (void *)(uintptr_t)&f32subf64 } },
+    { "f32subf32x", { &spec_f32subf32x, (void *)(uintptr_t)&f32subf32x } },
+    { "cbrt", { &spec_cbrt, (void *)(uintptr_t)&cbrt } },
+    { "cbrtf64", { &spec_cbrtf64, (void *)(uintptr_t)&cbrtf64 } },
+    { "cbrtf32x", { &spec_cbrtf32x, (void *)(uintptr_t)&cbrtf32x } },
+    { "cpow", { &spec_cpow, (void *)(uintptr_t)&cpow } },
+    { "cpowf64", { &spec_cpowf64, (void *)(uintptr_t)&cpowf64 } },
+    { "cpowf32x", { &spec_cpowf32x, (void *)(uintptr_t)&cpowf32x } },
     { "fminimum_mag_num", { &spec_fminimum_mag_num, (void *)(uintptr_t)&fminimum_mag_num } },
     { "fminimum_mag_numf64", { &spec_fminimum_mag_numf64, (void *)(uintptr_t)&fminimum_mag_numf64 } },
     { "fminimum_mag_numf32x", { &spec_fminimum_mag_numf32x, (void *)(uintptr_t)&fminimum_mag_numf32x } },
+    { "cos", { &spec_cos, (void *)(uintptr_t)&cos } },
+    { "cosf64", { &spec_cosf64, (void *)(uintptr_t)&cosf64 } },
+    { "cosf32x", { &spec_cosf32x, (void *)(uintptr_t)&cosf32x } },
+    { "sin", { &spec_sin, (void *)(uintptr_t)&sin } },
+    { "sinf64", { &spec_sinf64, (void *)(uintptr_t)&sinf64 } },
+    { "sinf32x", { &spec_sinf32x, (void *)(uintptr_t)&sinf32x } },
+    { "frexpl", { &spec_frexpl, (void *)(uintptr_t)&frexpl } },
+    { "frexpf64x", { &spec_frexpf64x, (void *)(uintptr_t)&frexpf64x } },
+    { "catanf", { &spec_catanf, (void *)(uintptr_t)&catanf } },
+    { "catanf32", { &spec_catanf32, (void *)(uintptr_t)&catanf32 } },
+    { "catanhl", { &spec_catanhl, (void *)(uintptr_t)&catanhl } },
+    { "catanhf64x", { &spec_catanhf64x, (void *)(uintptr_t)&catanhf64x } },
+    { "setpayloadl", { &spec_setpayloadl, (void *)(uintptr_t)&setpayloadl } },
+    { "setpayloadf64x", { &spec_setpayloadf64x, (void *)(uintptr_t)&setpayloadf64x } },
+    { "fminimum_magl", { &spec_fminimum_magl, (void *)(uintptr_t)&fminimum_magl } },
+    { "fminimum_magf64x", { &spec_fminimum_magf64x, (void *)(uintptr_t)&fminimum_magf64x } },
+    { "ufromfp", { &spec_ufromfp, (void *)(uintptr_t)&ufromfp } },
+    { "ufromfpf64", { &spec_ufromfpf64, (void *)(uintptr_t)&ufromfpf64 } },
+    { "ufromfpf32x", { &spec_ufromfpf32x, (void *)(uintptr_t)&ufromfpf32x } },
+    { "tanhl", { &spec_tanhl, (void *)(uintptr_t)&tanhl } },
+    { "tanhf64x", { &spec_tanhf64x, (void *)(uintptr_t)&tanhf64x } },
+    { "feenableexcept", { &spec_feenableexcept, (void *)(uintptr_t)&feenableexcept } },
+    { "fromfpxl", { &spec_fromfpxl, (void *)(uintptr_t)&fromfpxl } },
+    { "fromfpxf64x", { &spec_fromfpxf64x, (void *)(uintptr_t)&fromfpxf64x } },
+    { "fmaximum_mag_num", { &spec_fmaximum_mag_num, (void *)(uintptr_t)&fmaximum_mag_num } },
+    { "fmaximum_mag_numf64", { &spec_fmaximum_mag_numf64, (void *)(uintptr_t)&fmaximum_mag_numf64 } },
+    { "fmaximum_mag_numf32x", { &spec_fmaximum_mag_numf32x, (void *)(uintptr_t)&fmaximum_mag_numf32x } },
+    { "tgamma", { &spec_tgamma, (void *)(uintptr_t)&tgamma } },
+    { "tgammaf64", { &spec_tgammaf64, (void *)(uintptr_t)&tgammaf64 } },
+    { "tgammaf32x", { &spec_tgammaf32x, (void *)(uintptr_t)&tgammaf32x } },
+    { "modfl", { &spec_modfl, (void *)(uintptr_t)&modfl } },
+    { "modff64x", { &spec_modff64x, (void *)(uintptr_t)&modff64x } },
+    { "fetestexcept", { &spec_fetestexcept, (void *)(uintptr_t)&fetestexcept } },
+    { "rintf", { &spec_rintf, (void *)(uintptr_t)&rintf } },
+    { "rintf32", { &spec_rintf32, (void *)(uintptr_t)&rintf32 } },
+    { "nextdownl", { &spec_nextdownl, (void *)(uintptr_t)&nextdownl } },
+    { "nextdownf64x", { &spec_nextdownf64x, (void *)(uintptr_t)&nextdownf64x } },
     { "fma", { &spec_fma, (void *)(uintptr_t)&fma } },
     { "fmaf64", { &spec_fmaf64, (void *)(uintptr_t)&fmaf64 } },
     { "fmaf32x", { &spec_fmaf32x, (void *)(uintptr_t)&fmaf32x } },
     { "f32xfmaf64", { &spec_f32xfmaf64, (void *)(uintptr_t)&f32xfmaf64 } },
-    { "fromfpx", { &spec_fromfpx, (void *)(uintptr_t)&fromfpx } },
-    { "fromfpxf64", { &spec_fromfpxf64, (void *)(uintptr_t)&fromfpxf64 } },
-    { "fromfpxf32x", { &spec_fromfpxf32x, (void *)(uintptr_t)&fromfpxf32x } },
-    { "fmaxl", { &spec_fmaxl, (void *)(uintptr_t)&fmaxl } },
-    { "fmaxf64x", { &spec_fmaxf64x, (void *)(uintptr_t)&fmaxf64x } },
-    { "fminimum_magl", { &spec_fminimum_magl, (void *)(uintptr_t)&fminimum_magl } },
-    { "fminimum_magf64x", { &spec_fminimum_magf64x, (void *)(uintptr_t)&fminimum_magf64x } },
-    { "setpayloadsigf", { &spec_setpayloadsigf, (void *)(uintptr_t)&setpayloadsigf } },
-    { "setpayloadsigf32", { &spec_setpayloadsigf32, (void *)(uintptr_t)&setpayloadsigf32 } },
-    { "dsubl", { &spec_dsubl, (void *)(uintptr_t)&dsubl } },
-    { "f32xsubf64x", { &spec_f32xsubf64x, (void *)(uintptr_t)&f32xsubf64x } },
-    { "f64subf64x", { &spec_f64subf64x, (void *)(uintptr_t)&f64subf64x } },
-    { "feenableexcept", { &spec_feenableexcept, (void *)(uintptr_t)&feenableexcept } },
-    { "llroundl", { &spec_llroundl, (void *)(uintptr_t)&llroundl } },
-    { "llroundf64x", { &spec_llroundf64x, (void *)(uintptr_t)&llroundf64x } },
-    { "fmaximum_mag_num", { &spec_fmaximum_mag_num, (void *)(uintptr_t)&fmaximum_mag_num } },
-    { "fmaximum_mag_numf64", { &spec_fmaximum_mag_numf64, (void *)(uintptr_t)&fmaximum_mag_numf64 } },
-    { "fmaximum_mag_numf32x", { &spec_fmaximum_mag_numf32x, (void *)(uintptr_t)&fmaximum_mag_numf32x } },
-    { "totalordermagf", { &spec_totalordermagf, (void *)(uintptr_t)&totalordermagf } },
-    { "totalordermagf32", { &spec_totalordermagf32, (void *)(uintptr_t)&totalordermagf32 } },
-    { "tgamma", { &spec_tgamma, (void *)(uintptr_t)&tgamma } },
-    { "tgammaf64", { &spec_tgammaf64, (void *)(uintptr_t)&tgammaf64 } },
-    { "tgammaf32x", { &spec_tgammaf32x, (void *)(uintptr_t)&tgammaf32x } },
-    { "fetestexcept", { &spec_fetestexcept, (void *)(uintptr_t)&fetestexcept } },
-    { "sincosl", { &spec_sincosl, (void *)(uintptr_t)&sincosl } },
-    { "sincosf64x", { &spec_sincosf64x, (void *)(uintptr_t)&sincosf64x } },
-    { "ffmal", { &spec_ffmal, (void *)(uintptr_t)&ffmal } },
-    { "f32fmaf64x", { &spec_f32fmaf64x, (void *)(uintptr_t)&f32fmaf64x } },
-    { "nextdownl", { &spec_nextdownl, (void *)(uintptr_t)&nextdownl } },
-    { "nextdownf64x", { &spec_nextdownf64x, (void *)(uintptr_t)&nextdownf64x } },
-    { "totalorderl", { &spec_totalorderl, (void *)(uintptr_t)&totalorderl } },
-    { "totalorderf64x", { &spec_totalorderf64x, (void *)(uintptr_t)&totalorderf64x } },
     { "fminimum_numl", { &spec_fminimum_numl, (void *)(uintptr_t)&fminimum_numl } },
     { "fminimum_numf64x", { &spec_fminimum_numf64x, (void *)(uintptr_t)&fminimum_numf64x } },
     { "feraiseexcept", { &spec_feraiseexcept, (void *)(uintptr_t)&feraiseexcept } },
+    { "exp10", { &spec_exp10, (void *)(uintptr_t)&exp10 } },
+    { "exp10f64", { &spec_exp10f64, (void *)(uintptr_t)&exp10f64 } },
+    { "exp10f32x", { &spec_exp10f32x, (void *)(uintptr_t)&exp10f32x } },
     { "canonicalizef", { &spec_canonicalizef, (void *)(uintptr_t)&canonicalizef } },
     { "canonicalizef32", { &spec_canonicalizef32, (void *)(uintptr_t)&canonicalizef32 } },
-    { "tanl", { &spec_tanl, (void *)(uintptr_t)&tanl } },
-    { "tanf64x", { &spec_tanf64x, (void *)(uintptr_t)&tanf64x } },
+    { "fsubl", { &spec_fsubl, (void *)(uintptr_t)&fsubl } },
+    { "f32subf128", { &spec_f32subf128, (void *)(uintptr_t)&f32subf128 } },
+    { "f32subf64x", { &spec_f32subf64x, (void *)(uintptr_t)&f32subf64x } },
     { "sqrtl", { &spec_sqrtl, (void *)(uintptr_t)&sqrtl } },
     { "sqrtf64x", { &spec_sqrtf64x, (void *)(uintptr_t)&sqrtf64x } },
-    { "fmaximumf128", { &spec_fmaximumf128, (void *)(uintptr_t)&fmaximumf128 } },
-    { "sincos", { &spec_sincos, (void *)(uintptr_t)&sincos } },
-    { "sincosf64", { &spec_sincosf64, (void *)(uintptr_t)&sincosf64 } },
-    { "sincosf32x", { &spec_sincosf32x, (void *)(uintptr_t)&sincosf32x } },
+    { "sincosf", { &spec_sincosf, (void *)(uintptr_t)&sincosf } },
+    { "sincosf32", { &spec_sincosf32, (void *)(uintptr_t)&sincosf32 } },
+    { "cbrtl", { &spec_cbrtl, (void *)(uintptr_t)&cbrtl } },
+    { "cbrtf64x", { &spec_cbrtf64x, (void *)(uintptr_t)&cbrtf64x } },
+    { "ctanhl", { &spec_ctanhl, (void *)(uintptr_t)&ctanhl } },
+    { "ctanhf64x", { &spec_ctanhf64x, (void *)(uintptr_t)&ctanhf64x } },
+    { "fdim", { &spec_fdim, (void *)(uintptr_t)&fdim } },
+    { "fdimf64", { &spec_fdimf64, (void *)(uintptr_t)&fdimf64 } },
+    { "fdimf32x", { &spec_fdimf32x, (void *)(uintptr_t)&fdimf32x } },
     { "fminimum_mag", { &spec_fminimum_mag, (void *)(uintptr_t)&fminimum_mag } },
     { "fminimum_magf64", { &spec_fminimum_magf64, (void *)(uintptr_t)&fminimum_magf64 } },
     { "fminimum_magf32x", { &spec_fminimum_magf32x, (void *)(uintptr_t)&fminimum_magf32x } },
@@ -6341,303 +8858,446 @@ static struct reg_entry g_table[] = {
     { "fmaximum_num", { &spec_fmaximum_num, (void *)(uintptr_t)&fmaximum_num } },
     { "fmaximum_numf64", { &spec_fmaximum_numf64, (void *)(uintptr_t)&fmaximum_numf64 } },
     { "fmaximum_numf32x", { &spec_fmaximum_numf32x, (void *)(uintptr_t)&fmaximum_numf32x } },
+    { "totalorderf", { &spec_totalorderf, (void *)(uintptr_t)&totalorderf } },
+    { "totalorderf32", { &spec_totalorderf32, (void *)(uintptr_t)&totalorderf32 } },
     { "__iseqsig", { &spec___iseqsig, (void *)(uintptr_t)&__iseqsig } },
-    { "ufromfp", { &spec_ufromfp, (void *)(uintptr_t)&ufromfp } },
-    { "ufromfpf64", { &spec_ufromfpf64, (void *)(uintptr_t)&ufromfpf64 } },
-    { "ufromfpf32x", { &spec_ufromfpf32x, (void *)(uintptr_t)&ufromfpf32x } },
+    { "f32xaddf64", { &spec_f32xaddf64, (void *)(uintptr_t)&f32xaddf64 } },
+    { "getpayload", { &spec_getpayload, (void *)(uintptr_t)&getpayload } },
+    { "getpayloadf64", { &spec_getpayloadf64, (void *)(uintptr_t)&getpayloadf64 } },
+    { "getpayloadf32x", { &spec_getpayloadf32x, (void *)(uintptr_t)&getpayloadf32x } },
+    { "dsqrtl", { &spec_dsqrtl, (void *)(uintptr_t)&dsqrtl } },
+    { "f32xsqrtf128", { &spec_f32xsqrtf128, (void *)(uintptr_t)&f32xsqrtf128 } },
+    { "f64sqrtf128", { &spec_f64sqrtf128, (void *)(uintptr_t)&f64sqrtf128 } },
+    { "f32xsqrtf64x", { &spec_f32xsqrtf64x, (void *)(uintptr_t)&f32xsqrtf64x } },
+    { "f64sqrtf64x", { &spec_f64sqrtf64x, (void *)(uintptr_t)&f64sqrtf64x } },
     { "nan", { &spec_nan, (void *)(uintptr_t)&nan } },
     { "nanf64", { &spec_nanf64, (void *)(uintptr_t)&nanf64 } },
     { "nanf32x", { &spec_nanf32x, (void *)(uintptr_t)&nanf32x } },
-    { "ddivl", { &spec_ddivl, (void *)(uintptr_t)&ddivl } },
-    { "f32xdivf64x", { &spec_f32xdivf64x, (void *)(uintptr_t)&f32xdivf64x } },
-    { "f64divf64x", { &spec_f64divf64x, (void *)(uintptr_t)&f64divf64x } },
+    { "conj", { &spec_conj, (void *)(uintptr_t)&conj } },
+    { "conjf64", { &spec_conjf64, (void *)(uintptr_t)&conjf64 } },
+    { "conjf32x", { &spec_conjf32x, (void *)(uintptr_t)&conjf32x } },
+    { "clogf", { &spec_clogf, (void *)(uintptr_t)&clogf } },
+    { "clogf32", { &spec_clogf32, (void *)(uintptr_t)&clogf32 } },
+    { "fmax", { &spec_fmax, (void *)(uintptr_t)&fmax } },
+    { "fmaxf64", { &spec_fmaxf64, (void *)(uintptr_t)&fmaxf64 } },
+    { "fmaxf32x", { &spec_fmaxf32x, (void *)(uintptr_t)&fmaxf32x } },
     { "acosf", { &spec_acosf, (void *)(uintptr_t)&acosf } },
     { "acosf32", { &spec_acosf32, (void *)(uintptr_t)&acosf32 } },
     { "sinh", { &spec_sinh, (void *)(uintptr_t)&sinh } },
     { "sinhf64", { &spec_sinhf64, (void *)(uintptr_t)&sinhf64 } },
     { "sinhf32x", { &spec_sinhf32x, (void *)(uintptr_t)&sinhf32x } },
-    { "ufromfpl", { &spec_ufromfpl, (void *)(uintptr_t)&ufromfpl } },
-    { "ufromfpf64x", { &spec_ufromfpf64x, (void *)(uintptr_t)&ufromfpf64x } },
-    { "tanhl", { &spec_tanhl, (void *)(uintptr_t)&tanhl } },
-    { "tanhf64x", { &spec_tanhf64x, (void *)(uintptr_t)&tanhf64x } },
-    { "ufromfpxl", { &spec_ufromfpxl, (void *)(uintptr_t)&ufromfpxl } },
-    { "ufromfpxf64x", { &spec_ufromfpxf64x, (void *)(uintptr_t)&ufromfpxf64x } },
-    { "faddl", { &spec_faddl, (void *)(uintptr_t)&faddl } },
-    { "f32addf64x", { &spec_f32addf64x, (void *)(uintptr_t)&f32addf64x } },
-    { "cbrt", { &spec_cbrt, (void *)(uintptr_t)&cbrt } },
-    { "cbrtf64", { &spec_cbrtf64, (void *)(uintptr_t)&cbrtf64 } },
-    { "cbrtf32x", { &spec_cbrtf32x, (void *)(uintptr_t)&cbrtf32x } },
+    { "dfmal", { &spec_dfmal, (void *)(uintptr_t)&dfmal } },
+    { "f32xfmaf128", { &spec_f32xfmaf128, (void *)(uintptr_t)&f32xfmaf128 } },
+    { "f64fmaf128", { &spec_f64fmaf128, (void *)(uintptr_t)&f64fmaf128 } },
+    { "f32xfmaf64x", { &spec_f32xfmaf64x, (void *)(uintptr_t)&f32xfmaf64x } },
+    { "f64fmaf64x", { &spec_f64fmaf64x, (void *)(uintptr_t)&f64fmaf64x } },
+    { "ddivl", { &spec_ddivl, (void *)(uintptr_t)&ddivl } },
+    { "f32xdivf128", { &spec_f32xdivf128, (void *)(uintptr_t)&f32xdivf128 } },
+    { "f64divf128", { &spec_f64divf128, (void *)(uintptr_t)&f64divf128 } },
+    { "f32xdivf64x", { &spec_f32xdivf64x, (void *)(uintptr_t)&f32xdivf64x } },
+    { "f64divf64x", { &spec_f64divf64x, (void *)(uintptr_t)&f64divf64x } },
+    { "logbf", { &spec_logbf, (void *)(uintptr_t)&logbf } },
+    { "logbf32", { &spec_logbf32, (void *)(uintptr_t)&logbf32 } },
+    { "llround", { &spec_llround, (void *)(uintptr_t)&llround } },
+    { "llroundf64", { &spec_llroundf64, (void *)(uintptr_t)&llroundf64 } },
+    { "llroundf32x", { &spec_llroundf32x, (void *)(uintptr_t)&llroundf32x } },
+    { "cprojl", { &spec_cprojl, (void *)(uintptr_t)&cprojl } },
+    { "cprojf64x", { &spec_cprojf64x, (void *)(uintptr_t)&cprojf64x } },
+    { "truncl", { &spec_truncl, (void *)(uintptr_t)&truncl } },
+    { "truncf64x", { &spec_truncf64x, (void *)(uintptr_t)&truncf64x } },
+    { "casinh", { &spec_casinh, (void *)(uintptr_t)&casinh } },
+    { "casinhf64", { &spec_casinhf64, (void *)(uintptr_t)&casinhf64 } },
+    { "casinhf32x", { &spec_casinhf32x, (void *)(uintptr_t)&casinhf32x } },
+    { "ccoshf", { &spec_ccoshf, (void *)(uintptr_t)&ccoshf } },
+    { "ccoshf32", { &spec_ccoshf32, (void *)(uintptr_t)&ccoshf32 } },
+    { "lroundl", { &spec_lroundl, (void *)(uintptr_t)&lroundl } },
+    { "lroundf64x", { &spec_lroundf64x, (void *)(uintptr_t)&lroundf64x } },
+    { "cacos", { &spec_cacos, (void *)(uintptr_t)&cacos } },
+    { "cacosf64", { &spec_cacosf64, (void *)(uintptr_t)&cacosf64 } },
+    { "cacosf32x", { &spec_cacosf32x, (void *)(uintptr_t)&cacosf32x } },
+    { "exp2f", { &spec_exp2f, (void *)(uintptr_t)&exp2f } },
+    { "exp2f32", { &spec_exp2f32, (void *)(uintptr_t)&exp2f32 } },
+    { "clogl", { &spec_clogl, (void *)(uintptr_t)&clogl } },
+    { "clogf64x", { &spec_clogf64x, (void *)(uintptr_t)&clogf64x } },
     { "fmaximum_numl", { &spec_fmaximum_numl, (void *)(uintptr_t)&fmaximum_numl } },
     { "fmaximum_numf64x", { &spec_fmaximum_numf64x, (void *)(uintptr_t)&fmaximum_numf64x } },
+    { "fsqrt", { &spec_fsqrt, (void *)(uintptr_t)&fsqrt } },
+    { "f32sqrtf64", { &spec_f32sqrtf64, (void *)(uintptr_t)&f32sqrtf64 } },
+    { "f32sqrtf32x", { &spec_f32sqrtf32x, (void *)(uintptr_t)&f32sqrtf32x } },
+    { "nextafterf", { &spec_nextafterf, (void *)(uintptr_t)&nextafterf } },
+    { "nextafterf32", { &spec_nextafterf32, (void *)(uintptr_t)&nextafterf32 } },
+    { "catan", { &spec_catan, (void *)(uintptr_t)&catan } },
+    { "catanf64", { &spec_catanf64, (void *)(uintptr_t)&catanf64 } },
+    { "catanf32x", { &spec_catanf32x, (void *)(uintptr_t)&catanf32x } },
     { "acos", { &spec_acos, (void *)(uintptr_t)&acos } },
     { "acosf64", { &spec_acosf64, (void *)(uintptr_t)&acosf64 } },
     { "acosf32x", { &spec_acosf32x, (void *)(uintptr_t)&acosf32x } },
+    { "clog", { &spec_clog, (void *)(uintptr_t)&clog } },
+    { "clogf64", { &spec_clogf64, (void *)(uintptr_t)&clogf64 } },
+    { "clogf32x", { &spec_clogf32x, (void *)(uintptr_t)&clogf32x } },
     { "fegetround", { &spec_fegetround, (void *)(uintptr_t)&fegetround } },
     { "lgammaf", { &spec_lgammaf, (void *)(uintptr_t)&lgammaf } },
     { "lgammaf32", { &spec_lgammaf32, (void *)(uintptr_t)&lgammaf32 } },
     { "gammaf", { &spec_gammaf, (void *)(uintptr_t)&gammaf } },
-    { "fromfpxl", { &spec_fromfpxl, (void *)(uintptr_t)&fromfpxl } },
-    { "fromfpxf64x", { &spec_fromfpxf64x, (void *)(uintptr_t)&fromfpxf64x } },
-    { "rint", { &spec_rint, (void *)(uintptr_t)&rint } },
-    { "rintf64", { &spec_rintf64, (void *)(uintptr_t)&rintf64 } },
-    { "rintf32x", { &spec_rintf32x, (void *)(uintptr_t)&rintf32x } },
+    { "cacosl", { &spec_cacosl, (void *)(uintptr_t)&cacosl } },
+    { "cacosf64x", { &spec_cacosf64x, (void *)(uintptr_t)&cacosf64x } },
     { "logf", { &spec_logf, (void *)(uintptr_t)&logf } },
     { "logf32", { &spec_logf32, (void *)(uintptr_t)&logf32 } },
-    { "setpayloadl", { &spec_setpayloadl, (void *)(uintptr_t)&setpayloadl } },
-    { "setpayloadf64x", { &spec_setpayloadf64x, (void *)(uintptr_t)&setpayloadf64x } },
-    { "fmodf", { &spec_fmodf, (void *)(uintptr_t)&fmodf } },
-    { "fmodf32", { &spec_fmodf32, (void *)(uintptr_t)&fmodf32 } },
-    { "llogbf", { &spec_llogbf, (void *)(uintptr_t)&llogbf } },
-    { "llogbf32", { &spec_llogbf32, (void *)(uintptr_t)&llogbf32 } },
-    { "totalordermagl", { &spec_totalordermagl, (void *)(uintptr_t)&totalordermagl } },
-    { "totalordermagf64x", { &spec_totalordermagf64x, (void *)(uintptr_t)&totalordermagf64x } },
-    { "fegetexcept", { &spec_fegetexcept, (void *)(uintptr_t)&fegetexcept } },
-    { "f64subf128", { &spec_f64subf128, (void *)(uintptr_t)&f64subf128 } },
-    { "f32xsubf128", { &spec_f32xsubf128, (void *)(uintptr_t)&f32xsubf128 } },
-    { "ilogb", { &spec_ilogb, (void *)(uintptr_t)&ilogb } },
-    { "ilogbf64", { &spec_ilogbf64, (void *)(uintptr_t)&ilogbf64 } },
-    { "ilogbf32x", { &spec_ilogbf32x, (void *)(uintptr_t)&ilogbf32x } },
-    { "fdiml", { &spec_fdiml, (void *)(uintptr_t)&fdiml } },
-    { "fdimf64x", { &spec_fdimf64x, (void *)(uintptr_t)&fdimf64x } },
-    { "fesetexceptflag", { &spec_fesetexceptflag, (void *)(uintptr_t)&fesetexceptflag } },
-    { "expl", { &spec_expl, (void *)(uintptr_t)&expl } },
-    { "expf64x", { &spec_expf64x, (void *)(uintptr_t)&expf64x } },
-    { "__issignaling", { &spec___issignaling, (void *)(uintptr_t)&__issignaling } },
-    { "truncf", { &spec_truncf, (void *)(uintptr_t)&truncf } },
-    { "truncf32", { &spec_truncf32, (void *)(uintptr_t)&truncf32 } },
-    { "llrint", { &spec_llrint, (void *)(uintptr_t)&llrint } },
-    { "llrintf64", { &spec_llrintf64, (void *)(uintptr_t)&llrintf64 } },
-    { "llrintf32x", { &spec_llrintf32x, (void *)(uintptr_t)&llrintf32x } },
-    { "fegetenv", { &spec_fegetenv, (void *)(uintptr_t)&fegetenv } },
-    { "f64divf128", { &spec_f64divf128, (void *)(uintptr_t)&f64divf128 } },
-    { "f32xdivf128", { &spec_f32xdivf128, (void *)(uintptr_t)&f32xdivf128 } },
-    { "__fpclassifyl", { &spec___fpclassifyl, (void *)(uintptr_t)&__fpclassifyl } },
-    { "sqrt", { &spec_sqrt, (void *)(uintptr_t)&sqrt } },
-    { "sqrtf64", { &spec_sqrtf64, (void *)(uintptr_t)&sqrtf64 } },
-    { "sqrtf32x", { &spec_sqrtf32x, (void *)(uintptr_t)&sqrtf32x } },
-    { "f32xsqrtf64", { &spec_f32xsqrtf64, (void *)(uintptr_t)&f32xsqrtf64 } },
-    { "dmull", { &spec_dmull, (void *)(uintptr_t)&dmull } },
-    { "f32xmulf64x", { &spec_f32xmulf64x, (void *)(uintptr_t)&f32xmulf64x } },
-    { "f64mulf64x", { &spec_f64mulf64x, (void *)(uintptr_t)&f64mulf64x } },
-    { "log2l", { &spec_log2l, (void *)(uintptr_t)&log2l } },
-    { "log2f64x", { &spec_log2f64x, (void *)(uintptr_t)&log2f64x } },
-    { "nextupl", { &spec_nextupl, (void *)(uintptr_t)&nextupl } },
-    { "nextupf64x", { &spec_nextupf64x, (void *)(uintptr_t)&nextupf64x } },
-    { "ilogbf", { &spec_ilogbf, (void *)(uintptr_t)&ilogbf } },
-    { "ilogbf32", { &spec_ilogbf32, (void *)(uintptr_t)&ilogbf32 } },
-    { "fmaxmag", { &spec_fmaxmag, (void *)(uintptr_t)&fmaxmag } },
-    { "fmaxmagf64", { &spec_fmaxmagf64, (void *)(uintptr_t)&fmaxmagf64 } },
-    { "fmaxmagf32x", { &spec_fmaxmagf32x, (void *)(uintptr_t)&fmaxmagf32x } },
-    { "fmal", { &spec_fmal, (void *)(uintptr_t)&fmal } },
-    { "fmaf64x", { &spec_fmaf64x, (void *)(uintptr_t)&fmaf64x } },
-    { "log10f", { &spec_log10f, (void *)(uintptr_t)&log10f } },
-    { "log10f32", { &spec_log10f32, (void *)(uintptr_t)&log10f32 } },
-    { "fminimumf128", { &spec_fminimumf128, (void *)(uintptr_t)&fminimumf128 } },
-    { "hypotl", { &spec_hypotl, (void *)(uintptr_t)&hypotl } },
-    { "hypotf64x", { &spec_hypotf64x, (void *)(uintptr_t)&hypotf64x } },
-    { "erfl", { &spec_erfl, (void *)(uintptr_t)&erfl } },
-    { "erff64x", { &spec_erff64x, (void *)(uintptr_t)&erff64x } },
-    { "erfcl", { &spec_erfcl, (void *)(uintptr_t)&erfcl } },
-    { "erfcf64x", { &spec_erfcf64x, (void *)(uintptr_t)&erfcf64x } },
-    { "fabsl", { &spec_fabsl, (void *)(uintptr_t)&fabsl } },
-    { "fabsf64x", { &spec_fabsf64x, (void *)(uintptr_t)&fabsf64x } },
-    { "scalblnf", { &spec_scalblnf, (void *)(uintptr_t)&scalblnf } },
-    { "scalblnf32", { &spec_scalblnf32, (void *)(uintptr_t)&scalblnf32 } },
-    { "fminmagf", { &spec_fminmagf, (void *)(uintptr_t)&fminmagf } },
-    { "fminmagf32", { &spec_fminmagf32, (void *)(uintptr_t)&fminmagf32 } },
-    { "hypotf", { &spec_hypotf, (void *)(uintptr_t)&hypotf } },
-    { "hypotf32", { &spec_hypotf32, (void *)(uintptr_t)&hypotf32 } },
+    { "__issignalingf", { &spec___issignalingf, (void *)(uintptr_t)&__issignalingf } },
     { "fabs", { &spec_fabs, (void *)(uintptr_t)&fabs } },
     { "fabsf64", { &spec_fabsf64, (void *)(uintptr_t)&fabsf64 } },
     { "fabsf32x", { &spec_fabsf32x, (void *)(uintptr_t)&fabsf32x } },
+    { "copysign", { &spec_copysign, (void *)(uintptr_t)&copysign } },
+    { "copysignf64", { &spec_copysignf64, (void *)(uintptr_t)&copysignf64 } },
+    { "copysignf32x", { &spec_copysignf32x, (void *)(uintptr_t)&copysignf32x } },
+    { "llogbf", { &spec_llogbf, (void *)(uintptr_t)&llogbf } },
+    { "llogbf32", { &spec_llogbf32, (void *)(uintptr_t)&llogbf32 } },
+    { "hypotf", { &spec_hypotf, (void *)(uintptr_t)&hypotf } },
+    { "hypotf32", { &spec_hypotf32, (void *)(uintptr_t)&hypotf32 } },
+    { "cimagf", { &spec_cimagf, (void *)(uintptr_t)&cimagf } },
+    { "cimagf32", { &spec_cimagf32, (void *)(uintptr_t)&cimagf32 } },
+    { "fegetexcept", { &spec_fegetexcept, (void *)(uintptr_t)&fegetexcept } },
+    { "copysignf", { &spec_copysignf, (void *)(uintptr_t)&copysignf } },
+    { "copysignf32", { &spec_copysignf32, (void *)(uintptr_t)&copysignf32 } },
+    { "lrintf", { &spec_lrintf, (void *)(uintptr_t)&lrintf } },
+    { "lrintf32", { &spec_lrintf32, (void *)(uintptr_t)&lrintf32 } },
+    { "cpowf", { &spec_cpowf, (void *)(uintptr_t)&cpowf } },
+    { "cpowf32", { &spec_cpowf32, (void *)(uintptr_t)&cpowf32 } },
+    { "ilogb", { &spec_ilogb, (void *)(uintptr_t)&ilogb } },
+    { "ilogbf64", { &spec_ilogbf64, (void *)(uintptr_t)&ilogbf64 } },
+    { "ilogbf32x", { &spec_ilogbf32x, (void *)(uintptr_t)&ilogbf32x } },
+    { "nextupl", { &spec_nextupl, (void *)(uintptr_t)&nextupl } },
+    { "nextupf64x", { &spec_nextupf64x, (void *)(uintptr_t)&nextupf64x } },
+    { "f64xdivf128", { &spec_f64xdivf128, (void *)(uintptr_t)&f64xdivf128 } },
+    { "cpowl", { &spec_cpowl, (void *)(uintptr_t)&cpowl } },
+    { "cpowf64x", { &spec_cpowf64x, (void *)(uintptr_t)&cpowf64x } },
+    { "fdiml", { &spec_fdiml, (void *)(uintptr_t)&fdiml } },
+    { "fdimf64x", { &spec_fdimf64x, (void *)(uintptr_t)&fdimf64x } },
+    { "__isinfl", { &spec___isinfl, (void *)(uintptr_t)&__isinfl } },
+    { "isinfl", { &spec_isinfl, (void *)(uintptr_t)&isinfl } },
+    { "__finite", { &spec___finite, (void *)(uintptr_t)&__finite } },
+    { "finite", { &spec_finite, (void *)(uintptr_t)&finite } },
+    { "ldexp", { &spec_ldexp, (void *)(uintptr_t)&ldexp } },
+    { "ldexpf64", { &spec_ldexpf64, (void *)(uintptr_t)&ldexpf64 } },
+    { "ldexpf32x", { &spec_ldexpf32x, (void *)(uintptr_t)&ldexpf32x } },
+    { "scalbn", { &spec_scalbn, (void *)(uintptr_t)&scalbn } },
+    { "scalbnf64", { &spec_scalbnf64, (void *)(uintptr_t)&scalbnf64 } },
+    { "scalbnf32x", { &spec_scalbnf32x, (void *)(uintptr_t)&scalbnf32x } },
+    { "fesetexceptflag", { &spec_fesetexceptflag, (void *)(uintptr_t)&fesetexceptflag } },
+    { "__isnan", { &spec___isnan, (void *)(uintptr_t)&__isnan } },
+    { "isnan", { &spec_isnan, (void *)(uintptr_t)&isnan } },
+    { "expl", { &spec_expl, (void *)(uintptr_t)&expl } },
+    { "expf64x", { &spec_expf64x, (void *)(uintptr_t)&expf64x } },
+    { "cargf", { &spec_cargf, (void *)(uintptr_t)&cargf } },
+    { "cargf32", { &spec_cargf32, (void *)(uintptr_t)&cargf32 } },
+    { "expm1", { &spec_expm1, (void *)(uintptr_t)&expm1 } },
+    { "expm1f64", { &spec_expm1f64, (void *)(uintptr_t)&expm1f64 } },
+    { "expm1f32x", { &spec_expm1f32x, (void *)(uintptr_t)&expm1f32x } },
+    { "asinh", { &spec_asinh, (void *)(uintptr_t)&asinh } },
+    { "asinhf64", { &spec_asinhf64, (void *)(uintptr_t)&asinhf64 } },
+    { "asinhf32x", { &spec_asinhf32x, (void *)(uintptr_t)&asinhf32x } },
+    { "tanhf", { &spec_tanhf, (void *)(uintptr_t)&tanhf } },
+    { "tanhf32", { &spec_tanhf32, (void *)(uintptr_t)&tanhf32 } },
+    { "fegetenv", { &spec_fegetenv, (void *)(uintptr_t)&fegetenv } },
+    { "__signbitf", { &spec___signbitf, (void *)(uintptr_t)&__signbitf } },
+    { "setpayloadsigl", { &spec_setpayloadsigl, (void *)(uintptr_t)&setpayloadsigl } },
+    { "setpayloadsigf64x", { &spec_setpayloadsigf64x, (void *)(uintptr_t)&setpayloadsigf64x } },
+    { "tanl", { &spec_tanl, (void *)(uintptr_t)&tanl } },
+    { "tanf64x", { &spec_tanf64x, (void *)(uintptr_t)&tanf64x } },
+    { "ccoshl", { &spec_ccoshl, (void *)(uintptr_t)&ccoshl } },
+    { "ccoshf64x", { &spec_ccoshf64x, (void *)(uintptr_t)&ccoshf64x } },
+    { "llroundl", { &spec_llroundl, (void *)(uintptr_t)&llroundl } },
+    { "llroundf64x", { &spec_llroundf64x, (void *)(uintptr_t)&llroundf64x } },
+    { "log2l", { &spec_log2l, (void *)(uintptr_t)&log2l } },
+    { "log2f64x", { &spec_log2f64x, (void *)(uintptr_t)&log2f64x } },
+    { "__fpclassifyf", { &spec___fpclassifyf, (void *)(uintptr_t)&__fpclassifyf } },
+    { "ilogbf", { &spec_ilogbf, (void *)(uintptr_t)&ilogbf } },
+    { "ilogbf32", { &spec_ilogbf32, (void *)(uintptr_t)&ilogbf32 } },
+    { "creall", { &spec_creall, (void *)(uintptr_t)&creall } },
+    { "crealf64x", { &spec_crealf64x, (void *)(uintptr_t)&crealf64x } },
+    { "fmaxf", { &spec_fmaxf, (void *)(uintptr_t)&fmaxf } },
+    { "fmaxf32", { &spec_fmaxf32, (void *)(uintptr_t)&fmaxf32 } },
+    { "ufromfpf", { &spec_ufromfpf, (void *)(uintptr_t)&ufromfpf } },
+    { "ufromfpf32", { &spec_ufromfpf32, (void *)(uintptr_t)&ufromfpf32 } },
+    { "fmaxmag", { &spec_fmaxmag, (void *)(uintptr_t)&fmaxmag } },
+    { "fmaxmagf64", { &spec_fmaxmagf64, (void *)(uintptr_t)&fmaxmagf64 } },
+    { "fmaxmagf32x", { &spec_fmaxmagf32x, (void *)(uintptr_t)&fmaxmagf32x } },
+    { "log10f", { &spec_log10f, (void *)(uintptr_t)&log10f } },
+    { "log10f32", { &spec_log10f32, (void *)(uintptr_t)&log10f32 } },
+    { "floorf", { &spec_floorf, (void *)(uintptr_t)&floorf } },
+    { "floorf32", { &spec_floorf32, (void *)(uintptr_t)&floorf32 } },
+    { "hypotl", { &spec_hypotl, (void *)(uintptr_t)&hypotl } },
+    { "hypotf64x", { &spec_hypotf64x, (void *)(uintptr_t)&hypotf64x } },
+    { "scalblnf", { &spec_scalblnf, (void *)(uintptr_t)&scalblnf } },
+    { "scalblnf32", { &spec_scalblnf32, (void *)(uintptr_t)&scalblnf32 } },
     { "nexttowardf", { &spec_nexttowardf, (void *)(uintptr_t)&nexttowardf } },
-    { "tanf", { &spec_tanf, (void *)(uintptr_t)&tanf } },
-    { "tanf32", { &spec_tanf32, (void *)(uintptr_t)&tanf32 } },
-    { "trunc", { &spec_trunc, (void *)(uintptr_t)&trunc } },
-    { "truncf64", { &spec_truncf64, (void *)(uintptr_t)&truncf64 } },
-    { "truncf32x", { &spec_truncf32x, (void *)(uintptr_t)&truncf32x } },
+    { "fminmagf", { &spec_fminmagf, (void *)(uintptr_t)&fminmagf } },
+    { "fminmagf32", { &spec_fminmagf32, (void *)(uintptr_t)&fminmagf32 } },
+    { "dsubl", { &spec_dsubl, (void *)(uintptr_t)&dsubl } },
+    { "f32xsubf128", { &spec_f32xsubf128, (void *)(uintptr_t)&f32xsubf128 } },
+    { "f64subf128", { &spec_f64subf128, (void *)(uintptr_t)&f64subf128 } },
+    { "f32xsubf64x", { &spec_f32xsubf64x, (void *)(uintptr_t)&f32xsubf64x } },
+    { "f64subf64x", { &spec_f64subf64x, (void *)(uintptr_t)&f64subf64x } },
+    { "roundeven", { &spec_roundeven, (void *)(uintptr_t)&roundeven } },
+    { "roundevenf64", { &spec_roundevenf64, (void *)(uintptr_t)&roundevenf64 } },
+    { "roundevenf32x", { &spec_roundevenf32x, (void *)(uintptr_t)&roundevenf32x } },
+    { "f32xdivf64", { &spec_f32xdivf64, (void *)(uintptr_t)&f32xdivf64 } },
+    { "csin", { &spec_csin, (void *)(uintptr_t)&csin } },
+    { "csinf64", { &spec_csinf64, (void *)(uintptr_t)&csinf64 } },
+    { "csinf32x", { &spec_csinf32x, (void *)(uintptr_t)&csinf32x } },
+    { "nextup", { &spec_nextup, (void *)(uintptr_t)&nextup } },
+    { "nextupf64", { &spec_nextupf64, (void *)(uintptr_t)&nextupf64 } },
+    { "nextupf32x", { &spec_nextupf32x, (void *)(uintptr_t)&nextupf32x } },
     { "fesetround", { &spec_fesetround, (void *)(uintptr_t)&fesetround } },
+    { "ceill", { &spec_ceill, (void *)(uintptr_t)&ceill } },
+    { "ceilf64x", { &spec_ceilf64x, (void *)(uintptr_t)&ceilf64x } },
     { "lgamma_r", { &spec_lgamma_r, (void *)(uintptr_t)&lgamma_r } },
     { "lgammaf64_r", { &spec_lgammaf64_r, (void *)(uintptr_t)&lgammaf64_r } },
     { "lgammaf32x_r", { &spec_lgammaf32x_r, (void *)(uintptr_t)&lgammaf32x_r } },
+    { "csqrtl", { &spec_csqrtl, (void *)(uintptr_t)&csqrtl } },
+    { "csqrtf64x", { &spec_csqrtf64x, (void *)(uintptr_t)&csqrtf64x } },
+    { "llrintl", { &spec_llrintl, (void *)(uintptr_t)&llrintl } },
+    { "llrintf64x", { &spec_llrintf64x, (void *)(uintptr_t)&llrintf64x } },
+    { "ufromfpxf", { &spec_ufromfpxf, (void *)(uintptr_t)&ufromfpxf } },
+    { "ufromfpxf32", { &spec_ufromfpxf32, (void *)(uintptr_t)&ufromfpxf32 } },
+    { "sincosl", { &spec_sincosl, (void *)(uintptr_t)&sincosl } },
+    { "sincosf64x", { &spec_sincosf64x, (void *)(uintptr_t)&sincosf64x } },
     { "fmaximumf", { &spec_fmaximumf, (void *)(uintptr_t)&fmaximumf } },
     { "fmaximumf32", { &spec_fmaximumf32, (void *)(uintptr_t)&fmaximumf32 } },
+    { "cexp", { &spec_cexp, (void *)(uintptr_t)&cexp } },
+    { "cexpf64", { &spec_cexpf64, (void *)(uintptr_t)&cexpf64 } },
+    { "cexpf32x", { &spec_cexpf32x, (void *)(uintptr_t)&cexpf32x } },
     { "fdimf", { &spec_fdimf, (void *)(uintptr_t)&fdimf } },
     { "fdimf32", { &spec_fdimf32, (void *)(uintptr_t)&fdimf32 } },
+    { "ufromfpl", { &spec_ufromfpl, (void *)(uintptr_t)&ufromfpl } },
+    { "ufromfpf64x", { &spec_ufromfpf64x, (void *)(uintptr_t)&ufromfpf64x } },
     { "atanhf", { &spec_atanhf, (void *)(uintptr_t)&atanhf } },
     { "atanhf32", { &spec_atanhf32, (void *)(uintptr_t)&atanhf32 } },
-    { "f64xfmaf128", { &spec_f64xfmaf128, (void *)(uintptr_t)&f64xfmaf128 } },
-    { "fminimum_numf128", { &spec_fminimum_numf128, (void *)(uintptr_t)&fminimum_numf128 } },
-    { "lrint", { &spec_lrint, (void *)(uintptr_t)&lrint } },
-    { "lrintf64", { &spec_lrintf64, (void *)(uintptr_t)&lrintf64 } },
-    { "lrintf32x", { &spec_lrintf32x, (void *)(uintptr_t)&lrintf32x } },
-    { "f32xdivf64", { &spec_f32xdivf64, (void *)(uintptr_t)&f32xdivf64 } },
-    { "daddl", { &spec_daddl, (void *)(uintptr_t)&daddl } },
-    { "f32xaddf64x", { &spec_f32xaddf64x, (void *)(uintptr_t)&f32xaddf64x } },
-    { "f64addf64x", { &spec_f64addf64x, (void *)(uintptr_t)&f64addf64x } },
-    { "cosl", { &spec_cosl, (void *)(uintptr_t)&cosl } },
-    { "cosf64x", { &spec_cosf64x, (void *)(uintptr_t)&cosf64x } },
-    { "setpayloadf", { &spec_setpayloadf, (void *)(uintptr_t)&setpayloadf } },
-    { "setpayloadf32", { &spec_setpayloadf32, (void *)(uintptr_t)&setpayloadf32 } },
-    { "llround", { &spec_llround, (void *)(uintptr_t)&llround } },
-    { "llroundf64", { &spec_llroundf64, (void *)(uintptr_t)&llroundf64 } },
-    { "llroundf32x", { &spec_llroundf32x, (void *)(uintptr_t)&llroundf32x } },
+    { "cabsf", { &spec_cabsf, (void *)(uintptr_t)&cabsf } },
+    { "cabsf32", { &spec_cabsf32, (void *)(uintptr_t)&cabsf32 } },
+    { "sinl", { &spec_sinl, (void *)(uintptr_t)&sinl } },
+    { "sinf64x", { &spec_sinf64x, (void *)(uintptr_t)&sinf64x } },
+    { "exp", { &spec_exp, (void *)(uintptr_t)&exp } },
+    { "expf64", { &spec_expf64, (void *)(uintptr_t)&expf64 } },
+    { "expf32x", { &spec_expf32x, (void *)(uintptr_t)&expf32x } },
+    { "lrintl", { &spec_lrintl, (void *)(uintptr_t)&lrintl } },
+    { "lrintf64x", { &spec_lrintf64x, (void *)(uintptr_t)&lrintf64x } },
+    { "lround", { &spec_lround, (void *)(uintptr_t)&lround } },
+    { "lroundf64", { &spec_lroundf64, (void *)(uintptr_t)&lroundf64 } },
+    { "lroundf32x", { &spec_lroundf32x, (void *)(uintptr_t)&lroundf32x } },
+    { "llroundf", { &spec_llroundf, (void *)(uintptr_t)&llroundf } },
+    { "llroundf32", { &spec_llroundf32, (void *)(uintptr_t)&llroundf32 } },
+    { "__isinff", { &spec___isinff, (void *)(uintptr_t)&__isinff } },
+    { "isinff", { &spec_isinff, (void *)(uintptr_t)&isinff } },
     { "atanh", { &spec_atanh, (void *)(uintptr_t)&atanh } },
     { "atanhf64", { &spec_atanhf64, (void *)(uintptr_t)&atanhf64 } },
     { "atanhf32x", { &spec_atanhf32x, (void *)(uintptr_t)&atanhf32x } },
+    { "fmal", { &spec_fmal, (void *)(uintptr_t)&fmal } },
+    { "fmaf64x", { &spec_fmaf64x, (void *)(uintptr_t)&fmaf64x } },
+    { "f64xfmaf128", { &spec_f64xfmaf128, (void *)(uintptr_t)&f64xfmaf128 } },
+    { "fminl", { &spec_fminl, (void *)(uintptr_t)&fminl } },
+    { "fminf64x", { &spec_fminf64x, (void *)(uintptr_t)&fminf64x } },
     { "feholdexcept", { &spec_feholdexcept, (void *)(uintptr_t)&feholdexcept } },
     { "cosh", { &spec_cosh, (void *)(uintptr_t)&cosh } },
     { "coshf64", { &spec_coshf64, (void *)(uintptr_t)&coshf64 } },
     { "coshf32x", { &spec_coshf32x, (void *)(uintptr_t)&coshf32x } },
-    { "atan", { &spec_atan, (void *)(uintptr_t)&atan } },
-    { "atanf64", { &spec_atanf64, (void *)(uintptr_t)&atanf64 } },
-    { "atanf32x", { &spec_atanf32x, (void *)(uintptr_t)&atanf32x } },
-    { "f64mulf128", { &spec_f64mulf128, (void *)(uintptr_t)&f64mulf128 } },
-    { "f32xmulf128", { &spec_f32xmulf128, (void *)(uintptr_t)&f32xmulf128 } },
-    { "__issignalingl", { &spec___issignalingl, (void *)(uintptr_t)&__issignalingl } },
-    { "erf", { &spec_erf, (void *)(uintptr_t)&erf } },
-    { "erff64", { &spec_erff64, (void *)(uintptr_t)&erff64 } },
-    { "erff32x", { &spec_erff32x, (void *)(uintptr_t)&erff32x } },
-    { "erfc", { &spec_erfc, (void *)(uintptr_t)&erfc } },
-    { "erfcf64", { &spec_erfcf64, (void *)(uintptr_t)&erfcf64 } },
-    { "erfcf32x", { &spec_erfcf32x, (void *)(uintptr_t)&erfcf32x } },
-    { "dsqrtl", { &spec_dsqrtl, (void *)(uintptr_t)&dsqrtl } },
-    { "f32xsqrtf64x", { &spec_f32xsqrtf64x, (void *)(uintptr_t)&f32xsqrtf64x } },
-    { "f64sqrtf64x", { &spec_f64sqrtf64x, (void *)(uintptr_t)&f64sqrtf64x } },
-    { "nearbyintf", { &spec_nearbyintf, (void *)(uintptr_t)&nearbyintf } },
-    { "nearbyintf32", { &spec_nearbyintf32, (void *)(uintptr_t)&nearbyintf32 } },
-    { "f32xmulf64", { &spec_f32xmulf64, (void *)(uintptr_t)&f32xmulf64 } },
-    { "asinh", { &spec_asinh, (void *)(uintptr_t)&asinh } },
-    { "asinhf64", { &spec_asinhf64, (void *)(uintptr_t)&asinhf64 } },
-    { "asinhf32x", { &spec_asinhf32x, (void *)(uintptr_t)&asinhf32x } },
-    { "exp2l", { &spec_exp2l, (void *)(uintptr_t)&exp2l } },
-    { "exp2f64x", { &spec_exp2f64x, (void *)(uintptr_t)&exp2f64x } },
-    { "asinhl", { &spec_asinhl, (void *)(uintptr_t)&asinhl } },
-    { "asinhf64x", { &spec_asinhf64x, (void *)(uintptr_t)&asinhf64x } },
-    { "lrintf", { &spec_lrintf, (void *)(uintptr_t)&lrintf } },
-    { "lrintf32", { &spec_lrintf32, (void *)(uintptr_t)&lrintf32 } },
-    { "cos", { &spec_cos, (void *)(uintptr_t)&cos } },
-    { "cosf64", { &spec_cosf64, (void *)(uintptr_t)&cosf64 } },
-    { "cosf32x", { &spec_cosf32x, (void *)(uintptr_t)&cosf32x } },
-    { "sin", { &spec_sin, (void *)(uintptr_t)&sin } },
-    { "sinf64", { &spec_sinf64, (void *)(uintptr_t)&sinf64 } },
-    { "sinf32x", { &spec_sinf32x, (void *)(uintptr_t)&sinf32x } },
+    { "csinh", { &spec_csinh, (void *)(uintptr_t)&csinh } },
+    { "csinhf64", { &spec_csinhf64, (void *)(uintptr_t)&csinhf64 } },
+    { "csinhf32x", { &spec_csinhf32x, (void *)(uintptr_t)&csinhf32x } },
+    { "fsqrtl", { &spec_fsqrtl, (void *)(uintptr_t)&fsqrtl } },
+    { "f32sqrtf128", { &spec_f32sqrtf128, (void *)(uintptr_t)&f32sqrtf128 } },
+    { "f32sqrtf64x", { &spec_f32sqrtf64x, (void *)(uintptr_t)&f32sqrtf64x } },
+    { "totalordermag", { &spec_totalordermag, (void *)(uintptr_t)&totalordermag } },
+    { "totalordermagf64", { &spec_totalordermagf64, (void *)(uintptr_t)&totalordermagf64 } },
+    { "totalordermagf32x", { &spec_totalordermagf32x, (void *)(uintptr_t)&totalordermagf32x } },
+    { "fmodf", { &spec_fmodf, (void *)(uintptr_t)&fmodf } },
+    { "fmodf32", { &spec_fmodf32, (void *)(uintptr_t)&fmodf32 } },
+    { "cprojf", { &spec_cprojf, (void *)(uintptr_t)&cprojf } },
+    { "cprojf32", { &spec_cprojf32, (void *)(uintptr_t)&cprojf32 } },
+    { "__fpclassify", { &spec___fpclassify, (void *)(uintptr_t)&__fpclassify } },
+    { "catanh", { &spec_catanh, (void *)(uintptr_t)&catanh } },
+    { "catanhf64", { &spec_catanhf64, (void *)(uintptr_t)&catanhf64 } },
+    { "catanhf32x", { &spec_catanhf32x, (void *)(uintptr_t)&catanhf32x } },
+    { "ceilf", { &spec_ceilf, (void *)(uintptr_t)&ceilf } },
+    { "ceilf32", { &spec_ceilf32, (void *)(uintptr_t)&ceilf32 } },
+    { "ldexpl", { &spec_ldexpl, (void *)(uintptr_t)&ldexpl } },
+    { "ldexpf64x", { &spec_ldexpf64x, (void *)(uintptr_t)&ldexpf64x } },
+    { "scalbnl", { &spec_scalbnl, (void *)(uintptr_t)&scalbnl } },
+    { "scalbnf64x", { &spec_scalbnf64x, (void *)(uintptr_t)&scalbnf64x } },
     { "fromfpxf", { &spec_fromfpxf, (void *)(uintptr_t)&fromfpxf } },
     { "fromfpxf32", { &spec_fromfpxf32, (void *)(uintptr_t)&fromfpxf32 } },
-    { "logb", { &spec_logb, (void *)(uintptr_t)&logb } },
-    { "logbf64", { &spec_logbf64, (void *)(uintptr_t)&logbf64 } },
-    { "logbf32x", { &spec_logbf32x, (void *)(uintptr_t)&logbf32x } },
+    { "ccosf", { &spec_ccosf, (void *)(uintptr_t)&ccosf } },
+    { "ccosf32", { &spec_ccosf32, (void *)(uintptr_t)&ccosf32 } },
+    { "fromfpf", { &spec_fromfpf, (void *)(uintptr_t)&fromfpf } },
+    { "fromfpf32", { &spec_fromfpf32, (void *)(uintptr_t)&fromfpf32 } },
+    { "cimag", { &spec_cimag, (void *)(uintptr_t)&cimag } },
+    { "cimagf64", { &spec_cimagf64, (void *)(uintptr_t)&cimagf64 } },
+    { "cimagf32x", { &spec_cimagf32x, (void *)(uintptr_t)&cimagf32x } },
+    { "csqrt", { &spec_csqrt, (void *)(uintptr_t)&csqrt } },
+    { "csqrtf64", { &spec_csqrtf64, (void *)(uintptr_t)&csqrtf64 } },
+    { "csqrtf32x", { &spec_csqrtf32x, (void *)(uintptr_t)&csqrtf32x } },
+    { "exp2l", { &spec_exp2l, (void *)(uintptr_t)&exp2l } },
+    { "exp2f64x", { &spec_exp2f64x, (void *)(uintptr_t)&exp2f64x } },
+    { "fromfpl", { &spec_fromfpl, (void *)(uintptr_t)&fromfpl } },
+    { "fromfpf64x", { &spec_fromfpf64x, (void *)(uintptr_t)&fromfpf64x } },
+    { "cacosf", { &spec_cacosf, (void *)(uintptr_t)&cacosf } },
+    { "cacosf32", { &spec_cacosf32, (void *)(uintptr_t)&cacosf32 } },
+    { "sinf", { &spec_sinf, (void *)(uintptr_t)&sinf } },
+    { "sinf32", { &spec_sinf32, (void *)(uintptr_t)&sinf32 } },
+    { "csinhf", { &spec_csinhf, (void *)(uintptr_t)&csinhf } },
+    { "csinhf32", { &spec_csinhf32, (void *)(uintptr_t)&csinhf32 } },
+    { "daddl", { &spec_daddl, (void *)(uintptr_t)&daddl } },
+    { "f32xaddf128", { &spec_f32xaddf128, (void *)(uintptr_t)&f32xaddf128 } },
+    { "f64addf128", { &spec_f64addf128, (void *)(uintptr_t)&f64addf128 } },
+    { "f32xaddf64x", { &spec_f32xaddf64x, (void *)(uintptr_t)&f32xaddf64x } },
+    { "f64addf64x", { &spec_f64addf64x, (void *)(uintptr_t)&f64addf64x } },
+    { "catanl", { &spec_catanl, (void *)(uintptr_t)&catanl } },
+    { "catanf64x", { &spec_catanf64x, (void *)(uintptr_t)&catanf64x } },
+    { "copysignl", { &spec_copysignl, (void *)(uintptr_t)&copysignl } },
+    { "copysignf64x", { &spec_copysignf64x, (void *)(uintptr_t)&copysignf64x } },
+    { "ctanl", { &spec_ctanl, (void *)(uintptr_t)&ctanl } },
+    { "ctanf64x", { &spec_ctanf64x, (void *)(uintptr_t)&ctanf64x } },
+    { "llrintf", { &spec_llrintf, (void *)(uintptr_t)&llrintf } },
+    { "llrintf32", { &spec_llrintf32, (void *)(uintptr_t)&llrintf32 } },
     { "asinl", { &spec_asinl, (void *)(uintptr_t)&asinl } },
     { "asinf64x", { &spec_asinf64x, (void *)(uintptr_t)&asinf64x } },
     { "fesetmode", { &spec_fesetmode, (void *)(uintptr_t)&fesetmode } },
-    { "getpayload", { &spec_getpayload, (void *)(uintptr_t)&getpayload } },
-    { "getpayloadf64", { &spec_getpayloadf64, (void *)(uintptr_t)&getpayloadf64 } },
-    { "getpayloadf32x", { &spec_getpayloadf32x, (void *)(uintptr_t)&getpayloadf32x } },
+    { "ccos", { &spec_ccos, (void *)(uintptr_t)&ccos } },
+    { "ccosf64", { &spec_ccosf64, (void *)(uintptr_t)&ccosf64 } },
+    { "ccosf32x", { &spec_ccosf32x, (void *)(uintptr_t)&ccosf32x } },
     { "atan2f", { &spec_atan2f, (void *)(uintptr_t)&atan2f } },
     { "atan2f32", { &spec_atan2f32, (void *)(uintptr_t)&atan2f32 } },
-    { "roundf", { &spec_roundf, (void *)(uintptr_t)&roundf } },
-    { "roundf32", { &spec_roundf32, (void *)(uintptr_t)&roundf32 } },
-    { "roundevenl", { &spec_roundevenl, (void *)(uintptr_t)&roundevenl } },
-    { "roundevenf64x", { &spec_roundevenf64x, (void *)(uintptr_t)&roundevenf64x } },
+    { "ffmal", { &spec_ffmal, (void *)(uintptr_t)&ffmal } },
+    { "f32fmaf128", { &spec_f32fmaf128, (void *)(uintptr_t)&f32fmaf128 } },
+    { "f32fmaf64x", { &spec_f32fmaf64x, (void *)(uintptr_t)&f32fmaf64x } },
+    { "cabs", { &spec_cabs, (void *)(uintptr_t)&cabs } },
+    { "cabsf64", { &spec_cabsf64, (void *)(uintptr_t)&cabsf64 } },
+    { "cabsf32x", { &spec_cabsf32x, (void *)(uintptr_t)&cabsf32x } },
+    { "totalorderl", { &spec_totalorderl, (void *)(uintptr_t)&totalorderl } },
+    { "totalorderf128", { &spec_totalorderf128, (void *)(uintptr_t)&totalorderf128 } },
+    { "totalorderf64x", { &spec_totalorderf64x, (void *)(uintptr_t)&totalorderf64x } },
+    { "remquo", { &spec_remquo, (void *)(uintptr_t)&remquo } },
+    { "remquof64", { &spec_remquof64, (void *)(uintptr_t)&remquof64 } },
+    { "remquof32x", { &spec_remquof32x, (void *)(uintptr_t)&remquof32x } },
+    { "nextupf", { &spec_nextupf, (void *)(uintptr_t)&nextupf } },
+    { "nextupf32", { &spec_nextupf32, (void *)(uintptr_t)&nextupf32 } },
     { "acoshf", { &spec_acoshf, (void *)(uintptr_t)&acoshf } },
     { "acoshf32", { &spec_acoshf32, (void *)(uintptr_t)&acoshf32 } },
     { "remainderl", { &spec_remainderl, (void *)(uintptr_t)&remainderl } },
     { "remainderf64x", { &spec_remainderf64x, (void *)(uintptr_t)&remainderf64x } },
     { "dreml", { &spec_dreml, (void *)(uintptr_t)&dreml } },
+    { "hypot", { &spec_hypot, (void *)(uintptr_t)&hypot } },
+    { "hypotf64", { &spec_hypotf64, (void *)(uintptr_t)&hypotf64 } },
+    { "hypotf32x", { &spec_hypotf32x, (void *)(uintptr_t)&hypotf32x } },
+    { "logbl", { &spec_logbl, (void *)(uintptr_t)&logbl } },
+    { "logbf64x", { &spec_logbf64x, (void *)(uintptr_t)&logbf64x } },
+    { "cacosh", { &spec_cacosh, (void *)(uintptr_t)&cacosh } },
+    { "cacoshf64", { &spec_cacoshf64, (void *)(uintptr_t)&cacoshf64 } },
+    { "cacoshf32x", { &spec_cacoshf32x, (void *)(uintptr_t)&cacoshf32x } },
     { "fmaximum", { &spec_fmaximum, (void *)(uintptr_t)&fmaximum } },
     { "fmaximumf64", { &spec_fmaximumf64, (void *)(uintptr_t)&fmaximumf64 } },
     { "fmaximumf32x", { &spec_fmaximumf32x, (void *)(uintptr_t)&fmaximumf32x } },
-    { "setpayload", { &spec_setpayload, (void *)(uintptr_t)&setpayload } },
-    { "setpayloadf64", { &spec_setpayloadf64, (void *)(uintptr_t)&setpayloadf64 } },
-    { "setpayloadf32x", { &spec_setpayloadf32x, (void *)(uintptr_t)&setpayloadf32x } },
+    { "f64xsubf128", { &spec_f64xsubf128, (void *)(uintptr_t)&f64xsubf128 } },
+    { "carg", { &spec_carg, (void *)(uintptr_t)&carg } },
+    { "cargf64", { &spec_cargf64, (void *)(uintptr_t)&cargf64 } },
+    { "cargf32x", { &spec_cargf32x, (void *)(uintptr_t)&cargf32x } },
+    { "llrint", { &spec_llrint, (void *)(uintptr_t)&llrint } },
+    { "llrintf64", { &spec_llrintf64, (void *)(uintptr_t)&llrintf64 } },
+    { "llrintf32x", { &spec_llrintf32x, (void *)(uintptr_t)&llrintf32x } },
+    { "ccosl", { &spec_ccosl, (void *)(uintptr_t)&ccosl } },
+    { "ccosf64x", { &spec_ccosf64x, (void *)(uintptr_t)&ccosf64x } },
     { "j0f", { &spec_j0f, (void *)(uintptr_t)&j0f } },
     { "j0f32", { &spec_j0f32, (void *)(uintptr_t)&j0f32 } },
     { "y0f", { &spec_y0f, (void *)(uintptr_t)&y0f } },
     { "y0f32", { &spec_y0f32, (void *)(uintptr_t)&y0f32 } },
     { "log10l", { &spec_log10l, (void *)(uintptr_t)&log10l } },
     { "log10f64x", { &spec_log10f64x, (void *)(uintptr_t)&log10f64x } },
-    { "__issignalingf", { &spec___issignalingf, (void *)(uintptr_t)&__issignalingf } },
-    { "atanf", { &spec_atanf, (void *)(uintptr_t)&atanf } },
-    { "atanf32", { &spec_atanf32, (void *)(uintptr_t)&atanf32 } },
-    { "round", { &spec_round, (void *)(uintptr_t)&round } },
-    { "roundf64", { &spec_roundf64, (void *)(uintptr_t)&roundf64 } },
-    { "roundf32x", { &spec_roundf32x, (void *)(uintptr_t)&roundf32x } },
-    { "exp10f", { &spec_exp10f, (void *)(uintptr_t)&exp10f } },
-    { "exp10f32", { &spec_exp10f32, (void *)(uintptr_t)&exp10f32 } },
+    { "cimagl", { &spec_cimagl, (void *)(uintptr_t)&cimagl } },
+    { "cimagf64x", { &spec_cimagf64x, (void *)(uintptr_t)&cimagf64x } },
+    { "ffma", { &spec_ffma, (void *)(uintptr_t)&ffma } },
+    { "f32fmaf64", { &spec_f32fmaf64, (void *)(uintptr_t)&f32fmaf64 } },
+    { "f32fmaf32x", { &spec_f32fmaf32x, (void *)(uintptr_t)&f32fmaf32x } },
     { "nextdownf", { &spec_nextdownf, (void *)(uintptr_t)&nextdownf } },
     { "nextdownf32", { &spec_nextdownf32, (void *)(uintptr_t)&nextdownf32 } },
     { "fminimum_magf", { &spec_fminimum_magf, (void *)(uintptr_t)&fminimum_magf } },
     { "fminimum_magf32", { &spec_fminimum_magf32, (void *)(uintptr_t)&fminimum_magf32 } },
-    { "nearbyint", { &spec_nearbyint, (void *)(uintptr_t)&nearbyint } },
-    { "nearbyintf64", { &spec_nearbyintf64, (void *)(uintptr_t)&nearbyintf64 } },
-    { "nearbyintf32x", { &spec_nearbyintf32x, (void *)(uintptr_t)&nearbyintf32x } },
+    { "f32xmulf64", { &spec_f32xmulf64, (void *)(uintptr_t)&f32xmulf64 } },
     { "fesetexcept", { &spec_fesetexcept, (void *)(uintptr_t)&fesetexcept } },
-    { "fdiv", { &spec_fdiv, (void *)(uintptr_t)&fdiv } },
-    { "f32divf64", { &spec_f32divf64, (void *)(uintptr_t)&f32divf64 } },
-    { "f32divf32x", { &spec_f32divf32x, (void *)(uintptr_t)&f32divf32x } },
     { "fmaximum_mag_numf", { &spec_fmaximum_mag_numf, (void *)(uintptr_t)&fmaximum_mag_numf } },
     { "fmaximum_mag_numf32", { &spec_fmaximum_mag_numf32, (void *)(uintptr_t)&fmaximum_mag_numf32 } },
-    { "fabsf", { &spec_fabsf, (void *)(uintptr_t)&fabsf } },
-    { "fabsf32", { &spec_fabsf32, (void *)(uintptr_t)&fabsf32 } },
+    { "round", { &spec_round, (void *)(uintptr_t)&round } },
+    { "roundf64", { &spec_roundf64, (void *)(uintptr_t)&roundf64 } },
+    { "roundf32x", { &spec_roundf32x, (void *)(uintptr_t)&roundf32x } },
     { "fmaximum_magl", { &spec_fmaximum_magl, (void *)(uintptr_t)&fmaximum_magl } },
     { "fmaximum_magf64x", { &spec_fmaximum_magf64x, (void *)(uintptr_t)&fmaximum_magf64x } },
+    { "faddl", { &spec_faddl, (void *)(uintptr_t)&faddl } },
+    { "f32addf128", { &spec_f32addf128, (void *)(uintptr_t)&f32addf128 } },
+    { "f32addf64x", { &spec_f32addf64x, (void *)(uintptr_t)&f32addf64x } },
     { "nanl", { &spec_nanl, (void *)(uintptr_t)&nanl } },
     { "nanf64x", { &spec_nanf64x, (void *)(uintptr_t)&nanf64x } },
+    { "casinhl", { &spec_casinhl, (void *)(uintptr_t)&casinhl } },
+    { "casinhf64x", { &spec_casinhf64x, (void *)(uintptr_t)&casinhf64x } },
+    { "fabsf", { &spec_fabsf, (void *)(uintptr_t)&fabsf } },
+    { "fabsf32", { &spec_fabsf32, (void *)(uintptr_t)&fabsf32 } },
     { "fmaximum_mag_numl", { &spec_fmaximum_mag_numl, (void *)(uintptr_t)&fmaximum_mag_numl } },
     { "fmaximum_mag_numf64x", { &spec_fmaximum_mag_numf64x, (void *)(uintptr_t)&fmaximum_mag_numf64x } },
     { "coshl", { &spec_coshl, (void *)(uintptr_t)&coshl } },
     { "coshf64x", { &spec_coshf64x, (void *)(uintptr_t)&coshf64x } },
-    { "nextupf", { &spec_nextupf, (void *)(uintptr_t)&nextupf } },
-    { "nextupf32", { &spec_nextupf32, (void *)(uintptr_t)&nextupf32 } },
-    { "expm1f", { &spec_expm1f, (void *)(uintptr_t)&expm1f } },
-    { "expm1f32", { &spec_expm1f32, (void *)(uintptr_t)&expm1f32 } },
     { "j1l", { &spec_j1l, (void *)(uintptr_t)&j1l } },
     { "j1f64x", { &spec_j1f64x, (void *)(uintptr_t)&j1f64x } },
     { "y1l", { &spec_y1l, (void *)(uintptr_t)&y1l } },
     { "y1f64x", { &spec_y1f64x, (void *)(uintptr_t)&y1f64x } },
-    { "fdim", { &spec_fdim, (void *)(uintptr_t)&fdim } },
-    { "fdimf64", { &spec_fdimf64, (void *)(uintptr_t)&fdimf64 } },
-    { "fdimf32x", { &spec_fdimf32x, (void *)(uintptr_t)&fdimf32x } },
-    { "fromfpl", { &spec_fromfpl, (void *)(uintptr_t)&fromfpl } },
-    { "fromfpf64x", { &spec_fromfpf64x, (void *)(uintptr_t)&fromfpf64x } },
-    { "setpayloadsigl", { &spec_setpayloadsigl, (void *)(uintptr_t)&setpayloadsigl } },
-    { "setpayloadsigf64x", { &spec_setpayloadsigf64x, (void *)(uintptr_t)&setpayloadsigf64x } },
-    { "hypot", { &spec_hypot, (void *)(uintptr_t)&hypot } },
-    { "hypotf64", { &spec_hypotf64, (void *)(uintptr_t)&hypotf64 } },
-    { "hypotf32x", { &spec_hypotf32x, (void *)(uintptr_t)&hypotf32x } },
-    { "__fpclassify", { &spec___fpclassify, (void *)(uintptr_t)&__fpclassify } },
-    { "fromfp", { &spec_fromfp, (void *)(uintptr_t)&fromfp } },
-    { "fromfpf64", { &spec_fromfpf64, (void *)(uintptr_t)&fromfpf64 } },
-    { "fromfpf32x", { &spec_fromfpf32x, (void *)(uintptr_t)&fromfpf32x } },
-    { "fmaf", { &spec_fmaf, (void *)(uintptr_t)&fmaf } },
-    { "fmaf32", { &spec_fmaf32, (void *)(uintptr_t)&fmaf32 } },
+    { "tan", { &spec_tan, (void *)(uintptr_t)&tan } },
+    { "tanf64", { &spec_tanf64, (void *)(uintptr_t)&tanf64 } },
+    { "tanf32x", { &spec_tanf32x, (void *)(uintptr_t)&tanf32x } },
+    { "__issignalingl", { &spec___issignalingl, (void *)(uintptr_t)&__issignalingl } },
+    { "totalorder", { &spec_totalorder, (void *)(uintptr_t)&totalorder } },
+    { "totalorderf64", { &spec_totalorderf64, (void *)(uintptr_t)&totalorderf64 } },
+    { "totalorderf32x", { &spec_totalorderf32x, (void *)(uintptr_t)&totalorderf32x } },
+    { "roundevenl", { &spec_roundevenl, (void *)(uintptr_t)&roundevenl } },
+    { "roundevenf64x", { &spec_roundevenf64x, (void *)(uintptr_t)&roundevenf64x } },
     { "fminmag", { &spec_fminmag, (void *)(uintptr_t)&fminmag } },
     { "fminmagf64", { &spec_fminmagf64, (void *)(uintptr_t)&fminmagf64 } },
     { "fminmagf32x", { &spec_fminmagf32x, (void *)(uintptr_t)&fminmagf32x } },
-    { "f32fmaf128", { &spec_f32fmaf128, (void *)(uintptr_t)&f32fmaf128 } },
-    { "sinf", { &spec_sinf, (void *)(uintptr_t)&sinf } },
-    { "sinf32", { &spec_sinf32, (void *)(uintptr_t)&sinf32 } },
-    { "remquof", { &spec_remquof, (void *)(uintptr_t)&remquof } },
-    { "remquof32", { &spec_remquof32, (void *)(uintptr_t)&remquof32 } },
+    { "__iscanonicall", { &spec___iscanonicall, (void *)(uintptr_t)&__iscanonicall } },
+    { "csinl", { &spec_csinl, (void *)(uintptr_t)&csinl } },
+    { "csinf64x", { &spec_csinf64x, (void *)(uintptr_t)&csinf64x } },
+    { "cexpl", { &spec_cexpl, (void *)(uintptr_t)&cexpl } },
+    { "cexpf64x", { &spec_cexpf64x, (void *)(uintptr_t)&cexpf64x } },
+    { "casinf", { &spec_casinf, (void *)(uintptr_t)&casinf } },
+    { "casinf32", { &spec_casinf32, (void *)(uintptr_t)&casinf32 } },
+    { "__fpclassifyl", { &spec___fpclassifyl, (void *)(uintptr_t)&__fpclassifyl } },
     { "fmaximum_numf", { &spec_fmaximum_numf, (void *)(uintptr_t)&fmaximum_numf } },
     { "fmaximum_numf32", { &spec_fmaximum_numf32, (void *)(uintptr_t)&fmaximum_numf32 } },
+    { "setpayload", { &spec_setpayload, (void *)(uintptr_t)&setpayload } },
+    { "setpayloadf64", { &spec_setpayloadf64, (void *)(uintptr_t)&setpayloadf64 } },
+    { "setpayloadf32x", { &spec_setpayloadf32x, (void *)(uintptr_t)&setpayloadf32x } },
     { "sqrtf", { &spec_sqrtf, (void *)(uintptr_t)&sqrtf } },
     { "sqrtf32", { &spec_sqrtf32, (void *)(uintptr_t)&sqrtf32 } },
-    { "roundevenf", { &spec_roundevenf, (void *)(uintptr_t)&roundevenf } },
-    { "roundevenf32", { &spec_roundevenf32, (void *)(uintptr_t)&roundevenf32 } },
+    { "nextafterl", { &spec_nextafterl, (void *)(uintptr_t)&nextafterl } },
+    { "nextafterf64x", { &spec_nextafterf64x, (void *)(uintptr_t)&nextafterf64x } },
+    { "nexttowardl", { &spec_nexttowardl, (void *)(uintptr_t)&nexttowardl } },
     { "lgammaf_r", { &spec_lgammaf_r, (void *)(uintptr_t)&lgammaf_r } },
     { "lgammaf32_r", { &spec_lgammaf32_r, (void *)(uintptr_t)&lgammaf32_r } },
-    { "f64xaddf128", { &spec_f64xaddf128, (void *)(uintptr_t)&f64xaddf128 } },
-    { "fminimum_magf128", { &spec_fminimum_magf128, (void *)(uintptr_t)&fminimum_magf128 } },
     { "remainderf", { &spec_remainderf, (void *)(uintptr_t)&remainderf } },
     { "remainderf32", { &spec_remainderf32, (void *)(uintptr_t)&remainderf32 } },
     { "dremf", { &spec_dremf, (void *)(uintptr_t)&dremf } },
     { "fminmagl", { &spec_fminmagl, (void *)(uintptr_t)&fminmagl } },
     { "fminmagf64x", { &spec_fminmagf64x, (void *)(uintptr_t)&fminmagf64x } },
+    { "erff", { &spec_erff, (void *)(uintptr_t)&erff } },
+    { "erff32", { &spec_erff32, (void *)(uintptr_t)&erff32 } },
+    { "erfcf", { &spec_erfcf, (void *)(uintptr_t)&erfcf } },
+    { "erfcf32", { &spec_erfcf32, (void *)(uintptr_t)&erfcf32 } },
+    { "fabsl", { &spec_fabsl, (void *)(uintptr_t)&fabsl } },
+    { "fabsf64x", { &spec_fabsf64x, (void *)(uintptr_t)&fabsf64x } },
     { "lgamma", { &spec_lgamma, (void *)(uintptr_t)&lgamma } },
     { "lgammaf64", { &spec_lgammaf64, (void *)(uintptr_t)&lgammaf64 } },
     { "lgammaf32x", { &spec_lgammaf32x, (void *)(uintptr_t)&lgammaf32x } },
     { "gamma", { &spec_gamma, (void *)(uintptr_t)&gamma } },
+    { "__signbit", { &spec___signbit, (void *)(uintptr_t)&__signbit } },
+    { "tanh", { &spec_tanh, (void *)(uintptr_t)&tanh } },
+    { "tanhf64", { &spec_tanhf64, (void *)(uintptr_t)&tanhf64 } },
+    { "tanhf32x", { &spec_tanhf32x, (void *)(uintptr_t)&tanhf32x } },
     { "j1", { &spec_j1, (void *)(uintptr_t)&j1 } },
     { "j1f64", { &spec_j1f64, (void *)(uintptr_t)&j1f64 } },
     { "j1f32x", { &spec_j1f32x, (void *)(uintptr_t)&j1f32x } },
@@ -6647,15 +9307,16 @@ static struct reg_entry g_table[] = {
     { "asin", { &spec_asin, (void *)(uintptr_t)&asin } },
     { "asinf64", { &spec_asinf64, (void *)(uintptr_t)&asinf64 } },
     { "asinf32x", { &spec_asinf32x, (void *)(uintptr_t)&asinf32x } },
+    { "totalordermagl", { &spec_totalordermagl, (void *)(uintptr_t)&totalordermagl } },
+    { "totalordermagf128", { &spec_totalordermagf128, (void *)(uintptr_t)&totalordermagf128 } },
+    { "totalordermagf64x", { &spec_totalordermagf64x, (void *)(uintptr_t)&totalordermagf64x } },
     { "fminimumf", { &spec_fminimumf, (void *)(uintptr_t)&fminimumf } },
     { "fminimumf32", { &spec_fminimumf32, (void *)(uintptr_t)&fminimumf32 } },
     { "__iseqsigf", { &spec___iseqsigf, (void *)(uintptr_t)&__iseqsigf } },
-    { "fmax", { &spec_fmax, (void *)(uintptr_t)&fmax } },
-    { "fmaxf64", { &spec_fmaxf64, (void *)(uintptr_t)&fmaxf64 } },
-    { "fmaxf32x", { &spec_fmaxf32x, (void *)(uintptr_t)&fmaxf32x } },
-    { "nextafterl", { &spec_nextafterl, (void *)(uintptr_t)&nextafterl } },
-    { "nextafterf64x", { &spec_nextafterf64x, (void *)(uintptr_t)&nextafterf64x } },
-    { "nexttowardl", { &spec_nexttowardl, (void *)(uintptr_t)&nexttowardl } },
+    { "getpayloadl", { &spec_getpayloadl, (void *)(uintptr_t)&getpayloadl } },
+    { "getpayloadf64x", { &spec_getpayloadf64x, (void *)(uintptr_t)&getpayloadf64x } },
+    { "__isnanl", { &spec___isnanl, (void *)(uintptr_t)&__isnanl } },
+    { "isnanl", { &spec_isnanl, (void *)(uintptr_t)&isnanl } },
 };
 #define G_TABLE_N ((int)(sizeof(g_table)/sizeof(g_table[0])))
 

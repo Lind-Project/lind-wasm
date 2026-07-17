@@ -24,6 +24,15 @@ fi
 
 symbols=$($SCRIPTS_DIR/extract_glibc_symbols.sh $GLIBC $SCRIPTS_DIR/extract_versions.py --flags --paths-file $SCRIPTS_DIR/math-path.txt)
 
+# fp128 (long double, on this port -- see sysdeps/lind/Implies) arithmetic needs
+# compiler-rt soft-float helpers (__multf3, __divtf3, __lttf2, ...). wasm-ld is
+# invoked directly here (not via the clang driver), so it never auto-links
+# compiler-rt the way a normal clang link would -- link it explicitly (as a
+# plain, non-whole archive, so only the object files libm_pic.a actually
+# references get pulled in) so libm.so is self-sufficient for these rather than
+# leaving them as unresolved `env` imports no module ends up providing.
+CLANG_RT_BUILTINS="$($CC --target=wasm32-unknown-wasi -print-libgcc-file-name)"
+
 # --import-memory, --shared-memory: to make memory shared across wasm module
 # --export-dynamic, --experimental-pic, --unresolved-symbols=import-dynamic, -shared: flags for dynamic build of libraries
 # --export-if-defined: manually export the symbol if found. symbol in glibc has hidden visibility by default, we have to manually export it
@@ -37,6 +46,7 @@ wasm-ld \
     --whole-archive \
     "$SYSROOT/lib/wasm32-wasi/libm_pic.a" \
     --no-whole-archive \
+    "$CLANG_RT_BUILTINS" \
     $symbols \
     --export=__tls_base \
     -o "$SYSROOT/lib/wasm32-wasi/libm.so" $REPO_ROOT/src/glibc/build/csu/errno.o "$SYSROOT/lib/wasm32-wasi/lind_utils.o"

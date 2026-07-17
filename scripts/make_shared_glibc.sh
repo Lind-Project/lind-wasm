@@ -36,6 +36,15 @@ cp "$SYSROOT_ARCHIVE" "$SHARED_ARCHIVE"
 llvm-ar d "$SHARED_ARCHIVE" wasm_eh_c_longjmp_tag.o 2>/dev/null || true
 trap "rm -f $SHARED_ARCHIVE" EXIT
 
+# fp128 (long double, on this port -- see sysdeps/lind/Implies) arithmetic needs
+# compiler-rt soft-float helpers (__multf3, __divtf3, __lttf2, ...). wasm-ld is
+# invoked directly here (not via the clang driver), so it never auto-links
+# compiler-rt the way a normal clang link would -- link it explicitly (as a
+# plain, non-whole archive, so only the object files $SHARED_ARCHIVE actually
+# references get pulled in) so libc.so is self-sufficient for these rather than
+# leaving them as unresolved `env` imports no module ends up providing.
+CLANG_RT_BUILTINS="$($CC --target=wasm32-unknown-wasi -print-libgcc-file-name)"
+
 # --import-memory, --shared-memory: to make memory shared across wasm module
 # --export-dynamic, --experimental-pic, --unresolved-symbols=import-dynamic, -shared: flags for dynamic build of libraries
 # --export-if-defined: manually export the symbol if found. symbol in glibc has hidden visibility by default, we have to manually export it
@@ -49,6 +58,7 @@ wasm-ld \
     --whole-archive \
     "$SHARED_ARCHIVE" \
     --no-whole-archive \
+    "$CLANG_RT_BUILTINS" \
     $symbols \
     --export-if-defined=__libc_setup_tls \
     --export-if-defined=__wasi_init_tp \
