@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     // ISO-002 fd-lib inner test: two cages have independent fd tables, so one
-    // cage cannot reach another cage's descriptors. (Body to be filled in.)
+    // cage cannot reach another cage's descriptors
     fn cross_cage_fd_isolation() {
         let mut _thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
             refresh();
@@ -267,10 +267,14 @@ mod tests {
         assert_ne!(entry_a.underfd, entry_b.underfd);
 
         let fd_a2 = get_unused_virtual_fd(cage_a, 0, 333, false, 0).unwrap();
-
         assert_eq!(translate_virtual_fd(cage_a, fd_a2).unwrap().underfd, 333);
-
         assert!(translate_virtual_fd(cage_b, fd_a2).is_err());
+
+        const B_ONLY_FD: u64 = 900;
+        get_specific_virtual_fd(cage_b, B_ONLY_FD, 0, 555, false, 0).unwrap();
+        get_specific_virtual_fd(cage_b, B_ONLY_FD, 0, 555, false, 0).unwrap();
+
+        assert!(translate_virtual_fd(cage_a, B_ONLY_FD).is_err());
     }
 
     #[test]
