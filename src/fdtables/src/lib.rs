@@ -272,9 +272,11 @@ mod tests {
 
         const B_ONLY_FD: u64 = 900;
         get_specific_virtual_fd(cage_b, B_ONLY_FD, 0, 555, false, 0).unwrap();
-        get_specific_virtual_fd(cage_b, B_ONLY_FD, 0, 555, false, 0).unwrap();
 
-        assert!(translate_virtual_fd(cage_a, B_ONLY_FD).is_err());
+        assert_eq!(
+            translate_virtual_fd(cage_a, B_ONLY_FD).unwrap_err(),
+            threei::Errno::EBADF as u64
+        );
     }
 
     #[test]
