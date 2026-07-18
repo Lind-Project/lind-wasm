@@ -48,4 +48,21 @@ This monorepo combines various subprojects and dependencies that work together t
 |---------------|--------------------|----------------------------------------------------------------------------|
 | `binaryen`    | `tools/binaryen`   | Provides `wasm-opt` and other utilities used for optimizing wasm binaries |
 
----
+## Contributing and Community
+
+Contributions are welcome. See the repository-specific
+[contribution guide](CONTRIBUTING.md) for development setup, testing, and code
+style. Project-wide policies and community information are maintained in the
+[Lind community repository](https://github.com/Lind-Project/community):
+
+- [Governance](https://github.com/Lind-Project/community/blob/main/GOVERNANCE.md)
+- [Maintainers](https://github.com/Lind-Project/community/blob/main/MAINTAINER.md)
+- [Community channels and meetings](https://github.com/Lind-Project/community/blob/main/COMMUNITY.md)
+- [Code of Conduct](https://github.com/Lind-Project/community/blob/main/CODE_OF_CONDUCT.md)
+
+Please report vulnerabilities privately according to our
+[Security Policy](SECURITY.md).
+
+## License
+
+Lind-Wasm is licensed under the [Apache License 2.0](LICENSE).
