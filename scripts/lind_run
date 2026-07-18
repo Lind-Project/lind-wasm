@@ -6,6 +6,13 @@ set -Eeuo pipefail
 # Usage:
 #   lind_run /path/to/program.wasm
 #
+#   # require every libc/libm call to dispatch through a registered grate
+#   # handler or trap, instead of silently falling through to the real
+#   # implementation when unregistered -- see lind-boot's `--preload
+#   # NAME=PATH:interposed` mode.
+#   LIND_LIBC_MODE=interposed lind_run ...
+#   LIND_LIBM_MODE=interposed lind_run ...
+#
 # No assumption about current working directory.
 
 # --- repo root discovery (env var -> script dir -> git) ---
@@ -43,4 +50,6 @@ if [[ $EUID -ne 0 ]]; then
   exec sudo -E "$0" "$@"
 fi
 
-exec "${LINDBOOT_BIN}" --preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm "$@"
+LIBC_PRELOAD="env=/lib/libc.cwasm${LIND_LIBC_MODE:+:${LIND_LIBC_MODE}}"
+LIBM_PRELOAD="env=/lib/libm.cwasm${LIND_LIBM_MODE:+:${LIND_LIBM_MODE}}"
+exec "${LINDBOOT_BIN}" --preload "${LIBC_PRELOAD}" --preload "${LIBM_PRELOAD}" "$@"

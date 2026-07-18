@@ -3,12 +3,35 @@ use std::path::PathBuf;
 use anyhow::{Result, bail};
 use clap::*;
 
-fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
-    let parts: Vec<&str> = s.splitn(2, '=').collect();
+/// How a `--preload`ed library's un-interposed exports are linked.
+///
+/// `Mixed` (default) is today's behavior: a symbol with a registered grate
+/// handler is dispatched through the grate; anything else links straight to
+/// the library's own, real implementation.
+///
+/// `Interposed` gives a hard, address-space-isolation guarantee for that
+/// library: a symbol either dispatches through a grate, or -- if nothing
+/// registered a handler for it -- the call traps instead of ever running the
+/// library's real implementation locally. No per-symbol exceptions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreloadMode {
+    Mixed,
+    Interposed,
+}
+
+fn parse_preloads(s: &str) -> Result<(String, PathBuf, PreloadMode)> {
+    let (rest, mode) = if let Some(r) = s.strip_suffix(":interposed") {
+        (r, PreloadMode::Interposed)
+    } else if let Some(r) = s.strip_suffix(":mixed") {
+        (r, PreloadMode::Mixed)
+    } else {
+        (s, PreloadMode::Mixed)
+    };
+    let parts: Vec<&str> = rest.splitn(2, '=').collect();
     if parts.len() != 2 {
         bail!("must contain exactly one equals character ('=')");
     }
-    Ok((parts[0].into(), parts[1].into()))
+    Ok((parts[0].into(), parts[1].into(), mode))
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -64,14 +87,20 @@ pub struct CliOptions {
     #[arg(long = "env", number_of_values = 1, value_name = "NAME[=VAL]", value_parser = parse_env_var)]
     pub vars: Vec<(String, Option<String>)>,
 
-    /// Load the given WebAssembly module before the main module
+    /// Load the given WebAssembly module before the main module.
+    ///
+    /// Optionally suffix with `:interposed` to require every one of this
+    /// library's exports to either dispatch through a registered grate
+    /// handler or trap -- e.g. `--preload env=/lib/libm.cwasm:interposed`.
+    /// Defaults to `:mixed` (today's behavior: dispatch what's registered,
+    /// fall through to the real implementation otherwise).
     #[arg(
         long = "preload",
         number_of_values = 1,
-        value_name = "NAME=MODULE_PATH",
+        value_name = "NAME=MODULE_PATH[:mixed|:interposed]",
         value_parser = parse_preloads,
     )]
-    pub preloads: Vec<(String, PathBuf)>,
+    pub preloads: Vec<(String, PathBuf, PreloadMode)>,
 
     /// Host thread stack size in bytes for spawned cage/thread processes.
     /// Defaults to 64 MiB.

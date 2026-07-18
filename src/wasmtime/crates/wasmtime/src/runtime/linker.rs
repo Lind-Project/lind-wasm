@@ -54,6 +54,34 @@ pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
     )
 }
 
+/// Returns true if `name` is lind/glibc runtime-glue rather than real library
+/// API surface -- these are the extra symbols `scripts/make_shared_glibc.sh`
+/// force-exports with `--export-if-defined` beyond what `is_dylink_internal_symbol`
+/// already fully excludes from cross-module linking (startup/init hooks, the 3i
+/// primitives grates themselves are built on, and the wasm EH-based setjmp/
+/// longjmp support functions). No caller would ever legitimately register a
+/// grate handler for these, so `interposed` mode's "trap if unregistered" rule
+/// (see instance_dylink's force_interposed) exempts them and links straight to
+/// the real implementation instead, same as `mixed` mode always has.
+fn is_lind_runtime_glue(name: &str) -> bool {
+    matches!(
+        name,
+        "__libc_setup_tls"
+        | "__wasi_init_tp"
+        | "__ctype_init"
+        | "__lind_init_addr_translation"
+        | "copy_data_between_cages"
+        | "copy_handler_table_to_cage"
+        | "make_threei_call"
+        | "register_handler"
+        | "saveSetjmp"
+        | "testSetjmp"
+        | "getTempRet0"
+        | "setTempRet0"
+        | "__wasm_longjmp"
+    )
+}
+
 /// Symbols that may be exported by multiple shared libraries (e.g. as re-exports of
 /// an import they received from libc). The first definition wins; subsequent duplicates
 /// are silently ignored rather than causing a "defined twice" error.
@@ -1027,6 +1055,13 @@ impl<T> Linker<T> {
         // Optional GOT to update when a portal is installed (so GOT.func.X also
         // points to the portal rather than the real library function).
         got: Option<&LindGOT>,
+        // Guaranteed-isolation mode (CLI: `--preload NAME=PATH:interposed`): a
+        // symbol with no registered grate handler traps instead of linking to
+        // this library's own real implementation. `false` preserves today's
+        // "mixed" behavior everywhere except the CLI-driven top-level preload
+        // path -- fork/thread/dlopen child re-attachment call sites all pass
+        // `false` for now (out of scope for the first cut of this feature).
+        force_interposed: bool,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1148,6 +1183,32 @@ impl<T> Linker<T> {
                                 }
                             }
                             self.insert(key, Definition::new(store.0, Extern::Func(portal)))?;
+                            continue;
+                        }
+
+                        // No grate handler registered for this symbol. Under
+                        // `interposed` mode this library has a guaranteed
+                        // isolation contract -- every call either dispatches
+                        // through a grate or is rejected, with no exceptions --
+                        // so link a trap here instead of falling through to the
+                        // real, un-interposed implementation below. Lind's own
+                        // runtime-glue exports (startup hooks, 3i primitives,
+                        // setjmp/longjmp support) are exempt -- see
+                        // is_lind_runtime_glue's doc.
+                        if force_interposed && !is_lind_runtime_glue(&name) {
+                            let func_ty = original_func.ty(&store);
+                            let module_name_owned = module_name.to_string();
+                            let name_owned = name.clone();
+                            let trap = Func::new(&mut store, func_ty, move |_, _, _| {
+                                bail!(
+                                    "interposed mode: {}::{} has no registered grate \
+                                     handler -- rejecting the call instead of running \
+                                     it locally, un-interposed",
+                                    module_name_owned,
+                                    name_owned
+                                );
+                            });
+                            self.insert(key, Definition::new(store.0, Extern::Func(trap)))?;
                             continue;
                         }
                     }
@@ -1451,6 +1512,8 @@ impl<T> Linker<T> {
         table_base: i32,
         got: &LindGOT,
         path: String,
+        // See instance_dylink's force_interposed doc.
+        force_interposed: bool,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -1549,6 +1612,7 @@ impl<T> Linker<T> {
                     Some(cageid),
                     vec![],
                     Some(got),
+                    force_interposed,
                 )
             }
         }
@@ -1646,7 +1710,7 @@ impl<T> Linker<T> {
                     }
                 }
 
-                self.instance_dylink(store, module_name, instance, Some(cageid), vec![], None)
+                self.instance_dylink(store, module_name, instance, Some(cageid), vec![], None, false)
             }
         }
     }
@@ -1871,6 +1935,7 @@ impl<T> Linker<T> {
                         Some(cageid),
                         vec![],
                         Some(got),
+                        false,
                     );
                 }
 
