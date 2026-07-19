@@ -373,6 +373,9 @@ pub extern "C" fn mpk_exit_syscall_entry(
             mpk_debug(format!("mpk_exit: cage {} has no MPKRuntimeInfo", exiting_cageid));
         }
         
+        let is_last = cage::signal::lind_thread_exit(exiting_cageid, THREAD_START_ID as u64);
+        
+        
         cage::cage_finalize(exiting_cageid);
     } else {
         mpk_debug(format!("mpk_exit: cage {} not found", exiting_cageid));
