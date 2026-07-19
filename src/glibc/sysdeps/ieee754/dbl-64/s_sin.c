@@ -246,7 +246,10 @@ __sin (double x)
   else
     {
       if (k == 0x7ff00000 && u.i[LOW_HALF] == 0)
-	__set_errno (EDOM);
+	{
+	  __set_errno (EDOM);
+	  feraiseexcept (FE_INVALID);
+	}
       retval = x / x;
     }
 
@@ -311,7 +314,10 @@ __cos (double x)
   else
     {
       if (k == 0x7ff00000 && u.i[LOW_HALF] == 0)
-	__set_errno (EDOM);
+	{
+	  __set_errno (EDOM);
+	  feraiseexcept (FE_INVALID);
+	}
       retval = x / x;		/* |x| > 2^1024 */
     }
 
