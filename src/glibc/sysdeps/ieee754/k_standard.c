@@ -18,6 +18,7 @@ static char rcsid[] = "$NetBSD: k_standard.c,v 1.6 1995/05/10 20:46:35 jtc Exp $
 #include <math_private.h>
 #include <math-svid-compat.h>
 #include <errno.h>
+#include <fenv.h>
 
 #include <assert.h>
 
@@ -944,6 +945,24 @@ __kernel_standard(double x, double y, int type)
 
 	    default:
 		__builtin_unreachable ();
+	}
+
+	/* Every case above already computed errno from exc.type; raise the
+	   matching FE_* flag too (TLOSS/PLOSS have no IEEE exception
+	   equivalent, so they are left alone).  */
+	switch (exc.type) {
+	    case DOMAIN:
+		feraiseexcept (FE_INVALID);
+		break;
+	    case SING:
+		feraiseexcept (FE_DIVBYZERO);
+		break;
+	    case OVERFLOW:
+		feraiseexcept (FE_OVERFLOW);
+		break;
+	    case UNDERFLOW:
+		feraiseexcept (FE_UNDERFLOW);
+		break;
 	}
 	return exc.retval;
 }

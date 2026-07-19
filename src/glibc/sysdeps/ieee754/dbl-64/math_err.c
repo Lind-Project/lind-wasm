@@ -16,6 +16,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
+#include <fenv.h>
 #include <math-barriers.h>
 #include "math_config.h"
 
@@ -36,6 +37,7 @@ with_errno (double y, int e)
 attribute_hidden double
 __math_edom (double y)
 {
+  feraiseexcept (FE_INVALID);
   return with_errno (y, EDOM);
 }
 
@@ -50,6 +52,7 @@ xflow (uint32_t sign, double y)
 attribute_hidden double
 __math_uflow (uint32_t sign)
 {
+  feraiseexcept (FE_UNDERFLOW);
   return xflow (sign, 0x1p-767);
 }
 
@@ -59,6 +62,7 @@ __math_uflow (uint32_t sign)
 attribute_hidden double
 __math_may_uflow (uint32_t sign)
 {
+  feraiseexcept (FE_UNDERFLOW);
   return xflow (sign, 0x1.8p-538);
 }
 #endif
@@ -66,6 +70,7 @@ __math_may_uflow (uint32_t sign)
 attribute_hidden double
 __math_oflow (uint32_t sign)
 {
+  feraiseexcept (FE_OVERFLOW);
   return xflow (sign, 0x1p769);
 }
 
@@ -73,6 +78,7 @@ attribute_hidden double
 __math_divzero (uint32_t sign)
 {
   double y = math_opt_barrier (sign ? -1.0 : 1.0) / 0.0;
+  feraiseexcept (FE_DIVBYZERO);
   return with_errno (y, ERANGE);
 }
 
@@ -80,7 +86,10 @@ attribute_hidden double
 __math_invalid (double x)
 {
   double y = (x - x) / (x - x);
-  return isnan (x) ? y : with_errno (y, EDOM);
+  if (isnan (x))
+    return y;
+  feraiseexcept (FE_INVALID);
+  return with_errno (y, EDOM);
 }
 
 /* Check result and set errno if necessary.  */
@@ -88,11 +97,17 @@ __math_invalid (double x)
 attribute_hidden double
 __math_check_uflow (double y)
 {
-  return y == 0.0 ? with_errno (y, ERANGE) : y;
+  if (y != 0.0)
+    return y;
+  feraiseexcept (FE_UNDERFLOW);
+  return with_errno (y, ERANGE);
 }
 
 attribute_hidden double
 __math_check_oflow (double y)
 {
-  return isinf (y) ? with_errno (y, ERANGE) : y;
+  if (!isinf (y))
+    return y;
+  feraiseexcept (FE_OVERFLOW);
+  return with_errno (y, ERANGE);
 }

@@ -18,6 +18,7 @@
 #define NO_MATH_REDIRECT
 #define dsqrtl __hide_dsqrtl
 #define f32xsqrtf64 __hide_f32xsqrtf64
+#include <fenv.h>
 #include <math.h>
 #undef dsqrtl
 #undef f32xsqrtf64
@@ -33,7 +34,11 @@ double
 __sqrt (double x)
 {
   if (__builtin_expect (isless (x, 0.0), 0) && _LIB_VERSION != _IEEE_)
-    return __kernel_standard (x, x, 26); /* sqrt(negative) */
+    {
+      /* sqrt(negative) */
+      __feraiseexcept (FE_INVALID);
+      return __kernel_standard (x, x, 26);
+    }
 
   return __ieee754_sqrt (x);
 }
