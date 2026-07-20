@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <assert.h>
 
+#define FORK_SYSCALL_NUM 435 //lind's libc uses clone3 for fork
+
 // Dispatcher function
 int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
@@ -44,7 +46,7 @@ int fork_grate(uint64_t cageid,
          getpid(), cageid);
   int self_grate_id = getpid();
   int new_cageid = make_threei_call(
-    56, // syscallnum for clone
+    FORK_SYSCALL_NUM, // syscallnum for clone
     0,    // callname is not used in the trampoline, set to 0
     self_grate_id,    // self_grate_id is not used in the trampoline, set to 0
     arg1cage,    // target_cageid is not used in the trampoline, set to 0
@@ -88,7 +90,7 @@ int main(int argc, char *argv[]) {
         printf("[Grate|interpose-fork] Registering fork handler for cage %d in "
                 "grate %d with fn ptr addr: %llu\n",
                 cageid, grateid, fn_ptr_addr);
-        int ret = register_handler(cageid, 56, grateid, fn_ptr_addr);
+        int ret = register_handler(cageid, FORK_SYSCALL_NUM, grateid, fn_ptr_addr);
         if (ret != 0) {
             fprintf(stderr, "[Grate|interpose-fork] Failed to register handler for cage %d in "
                     "grate %d with fn ptr addr: %llu, ret: %d\n",
