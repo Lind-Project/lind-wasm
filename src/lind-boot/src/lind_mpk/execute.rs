@@ -6,9 +6,10 @@
 use crate::cli::CliOptions;
 use crate::lind_mpk::syscalls::{
     ENABLE_INTERPOSE_PTR, LIND_MANAGER,
-    mpk_clone_syscall_entry
+    mpk_clone_syscall_entry, mpk_exit_syscall_entry
 };
 use crate::lind_mpk::RuntimeInfo::MPKRuntimeInfo;
+use crate::shims::SyscallRuntime;
 use anyhow::{Context, bail};
 use cage::get_cage;
 use libc::{c_char, c_int, c_ulong, c_void};
@@ -49,6 +50,85 @@ fn mpk_debug(message: impl AsRef<str>) {
         eprintln!("[lind-mpk] {}", message.as_ref());
     }
 }
+
+// ── MPK SyscallRuntime implementation ────────────────────────────────────────
+
+/// MPK runtime implementation.
+pub struct MpkRuntime;
+
+impl SyscallRuntime for MpkRuntime {
+    fn handle_clone(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32 {
+        mpk_clone_syscall_entry(
+            cageid,
+            arg1, arg1_cageid,
+            arg2, arg2_cageid,
+            arg3, arg3_cageid,
+            arg4, arg4_cageid,
+            arg5, arg5_cageid,
+            arg6, arg6_cageid,
+        )
+    }
+
+    fn handle_exec(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32 {
+        // arg1 = path, arg1_cageid = execing_cageid
+        // arg2 = argv, arg2_cageid = envp (based on 3i convention)
+        let _ = (cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
+        
+        let execing_cageid = arg1_cageid;
+        let path_ptr = arg1 as *const c_char;
+        let argv_ptr = arg2 as *const *const c_char;
+        let envp_ptr = arg2_cageid as *const *const c_char;
+        
+        match exec_mpk_internal(execing_cageid, path_ptr, argv_ptr, envp_ptr, arg3) {
+            Ok(code) => code,
+            Err(e) => {
+                eprintln!("[lind-mpk] exec failed: {}", e);
+                -1
+            }
+        }
+    }
+
+    fn handle_exit(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32 {
+        mpk_exit_syscall_entry(
+            cageid,
+            arg1, arg1_cageid,
+            arg2, arg2_cageid,
+            arg3, arg3_cageid,
+            arg4, arg4_cageid,
+            arg5, arg5_cageid,
+            arg6, arg6_cageid,
+        )
+    }
+}
+
+// ── MPK syscall interposition and execution ──────────────────────────────────
 
 /// Syscall interposition handler: forwards every native syscall issued inside
 /// the isolated dlmopen namespace through 3i's dispatch table so it reaches

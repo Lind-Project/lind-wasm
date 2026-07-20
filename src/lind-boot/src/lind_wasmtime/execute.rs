@@ -4,6 +4,7 @@ use crate::lind_wasmtime::host::{
     unregister_grate_handler,
 };
 use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
+use crate::shims::SyscallRuntime;
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
 use cfg_if::cfg_if;
@@ -31,6 +32,78 @@ use wasmtime_lind_multi_process::{
 };
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
+
+// ── Wasmtime SyscallRuntime implementation ───────────────────────────────────
+
+/// Wasmtime runtime implementation.
+pub struct WasmtimeRuntime;
+
+impl SyscallRuntime for WasmtimeRuntime {
+    fn handle_clone(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32 {
+        clone_syscall_entry(
+            cageid,
+            arg1, arg1_cageid,
+            arg2, arg2_cageid,
+            arg3, arg3_cageid,
+            arg4, arg4_cageid,
+            arg5, arg5_cageid,
+            arg6, arg6_cageid,
+        )
+    }
+
+    fn handle_exec(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32 {
+        exec_syscall_entry(
+            cageid,
+            arg1, arg1_cageid,
+            arg2, arg2_cageid,
+            arg3, arg3_cageid,
+            arg4, arg4_cageid,
+            arg5, arg5_cageid,
+            arg6, arg6_cageid,
+        )
+    }
+
+    fn handle_exit(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32 {
+        exit_syscall_entry(
+            cageid,
+            arg1, arg1_cageid,
+            arg2, arg2_cageid,
+            arg3, arg3_cageid,
+            arg4, arg4_cageid,
+            arg5, arg5_cageid,
+            arg6, arg6_cageid,
+        )
+    }
+}
+
+// ── Wasmtime initialization and execution ────────────────────────────────────
 
 /// Initializes the Wasmtime runtime environment for Lind.
 ///

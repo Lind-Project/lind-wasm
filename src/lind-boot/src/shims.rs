@@ -2,7 +2,7 @@
 //!
 //! A single 3i handler is registered per syscall.  Each shim resolves the
 //! runtime type of the cage that originally issued the syscall, then
-//! delegates to the Wasmtime or MPK backend handler.
+//! delegates to the appropriate runtime implementation via the `SyscallRuntime` trait.
 //!
 //! Argument layout when a shim is invoked (matches `threei::RawCallFunc`):
 //!
@@ -33,10 +33,66 @@ use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, UNUSED_ARG, UNUSE
 use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use threei::threei_const;
 
-use crate::lind_mpk::syscalls::{mpk_clone_syscall_entry, mpk_exit_syscall_entry};
-use crate::lind_wasmtime::trampoline::{clone_syscall_entry, exec_syscall_entry, exit_syscall_entry};
+use crate::lind_mpk::execute::MpkRuntime;
+use crate::lind_wasmtime::execute::WasmtimeRuntime;
 
-// ── clone shim ───────────────────────────────────────────────────────────────
+// ── Runtime trait ────────────────────────────────────────────────────────────
+
+/// Trait for runtime-specific syscall handlers.
+///
+/// Each runtime (Wasmtime, MPK) implements this trait to provide its own
+/// handling logic for clone, exec, and exit syscalls. The trait uses the
+/// standard 3i calling convention: one cageid + six (arg, arg_cageid) pairs.
+pub trait SyscallRuntime {
+    /// Handle clone/fork syscall.
+    fn handle_clone(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32;
+
+    /// Handle exec syscall.
+    fn handle_exec(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32;
+
+    /// Handle exit syscall.
+    fn handle_exit(
+        &self,
+        cageid: u64,
+        arg1: u64, arg1_cageid: u64,
+        arg2: u64, arg2_cageid: u64,
+        arg3: u64, arg3_cageid: u64,
+        arg4: u64, arg4_cageid: u64,
+        arg5: u64, arg5_cageid: u64,
+        arg6: u64, arg6_cageid: u64,
+    ) -> i32;
+}
+
+// ── Runtime dispatch ─────────────────────────────────────────────────────────
+
+/// Resolve a runtime type constant to its corresponding trait implementation.
+fn get_runtime_handler(runtime_type: u64) -> &'static dyn SyscallRuntime {
+    match runtime_type {
+        threei_const::RUNTIME_TYPE_WASMTIME => &WasmtimeRuntime,
+        threei_const::RUNTIME_TYPE_MPK => &MpkRuntime,
+        _ => panic!("get_runtime_handler: unknown runtime_type={}", runtime_type),
+    }
+}
+
+// ── Syscall shims ────────────────────────────────────────────────────────────
 
 extern "C" fn shim_clone_handler(
     cageid: u64,
@@ -54,33 +110,25 @@ extern "C" fn shim_clone_handler(
     arg6_cageid: u64,
 ) -> i32 {
     let parent_cageid = arg2;
-    match threei::get_cage_runtime(parent_cageid) {
-        Some(rt) if rt == threei_const::RUNTIME_TYPE_WASMTIME => clone_syscall_entry(
-            cageid,
-            arg1, arg1_cageid,
-            arg2, arg2_cageid,
-            arg3, arg3_cageid,
-            arg4, arg4_cageid,
-            arg5, arg5_cageid,
-            arg6, arg6_cageid,
-        ),
-        Some(rt) if rt == threei_const::RUNTIME_TYPE_MPK => mpk_clone_syscall_entry(
-            cageid,
-            arg1, arg1_cageid,
-            arg2, arg2_cageid,
-            arg3, arg3_cageid,
-            arg4, arg4_cageid,
-            arg5, arg5_cageid,
-            arg6, arg6_cageid,
-        ),
-        other => panic!(
-            "shim_clone_handler: unrecognised runtime {:?} for parent_cageid={}",
-            other, parent_cageid
-        ),
-    }
-}
+    let runtime_type = threei::get_cage_runtime(parent_cageid)
+        .unwrap_or_else(|| {
+            panic!(
+                "shim_clone_handler: no runtime found for parent_cageid={}",
+                parent_cageid
+            )
+        });
 
-// ── exec shim ────────────────────────────────────────────────────────────────
+    let runtime = get_runtime_handler(runtime_type);
+    runtime.handle_clone(
+        cageid,
+        arg1, arg1_cageid,
+        arg2, arg2_cageid,
+        arg3, arg3_cageid,
+        arg4, arg4_cageid,
+        arg5, arg5_cageid,
+        arg6, arg6_cageid,
+    )
+}
 
 extern "C" fn shim_exec_handler(
     cageid: u64,
@@ -98,28 +146,25 @@ extern "C" fn shim_exec_handler(
     arg6_cageid: u64,
 ) -> i32 {
     let execing_cageid = arg1_cageid;
-    match threei::get_cage_runtime(execing_cageid) {
-        Some(rt) if rt == threei_const::RUNTIME_TYPE_WASMTIME => exec_syscall_entry(
-            cageid,
-            arg1, arg1_cageid,
-            arg2, arg2_cageid,
-            arg3, arg3_cageid,
-            arg4, arg4_cageid,
-            arg5, arg5_cageid,
-            arg6, arg6_cageid,
-        ),
-        Some(rt) if rt == threei_const::RUNTIME_TYPE_MPK => {
-            // MPK exec not yet implemented.
-            todo!("shim_exec_handler: MPK exec unimplemented")
-        }
-        other => panic!(
-            "shim_exec_handler: unrecognised runtime {:?} for execing_cageid={}",
-            other, execing_cageid
-        ),
-    }
-}
+    let runtime_type = threei::get_cage_runtime(execing_cageid)
+        .unwrap_or_else(|| {
+            panic!(
+                "shim_exec_handler: no runtime found for execing_cageid={}",
+                execing_cageid
+            )
+        });
 
-// ── exit shim ────────────────────────────────────────────────────────────────
+    let runtime = get_runtime_handler(runtime_type);
+    runtime.handle_exec(
+        cageid,
+        arg1, arg1_cageid,
+        arg2, arg2_cageid,
+        arg3, arg3_cageid,
+        arg4, arg4_cageid,
+        arg5, arg5_cageid,
+        arg6, arg6_cageid,
+    )
+}
 
 extern "C" fn shim_exit_handler(
     cageid: u64,
@@ -137,30 +182,24 @@ extern "C" fn shim_exit_handler(
     arg6_cageid: u64,
 ) -> i32 {
     let exiting_cageid = arg1_cageid;
-    match threei::get_cage_runtime(exiting_cageid) {
-        Some(rt) if rt == threei_const::RUNTIME_TYPE_WASMTIME => exit_syscall_entry(
-            cageid,
-            arg1, arg1_cageid,
-            arg2, arg2_cageid,
-            arg3, arg3_cageid,
-            arg4, arg4_cageid,
-            arg5, arg5_cageid,
-            arg6, arg6_cageid,
-        ),
-        Some(rt) if rt == threei_const::RUNTIME_TYPE_MPK => mpk_exit_syscall_entry(
-            cageid,
-            arg1, arg1_cageid,
-            arg2, arg2_cageid,
-            arg3, arg3_cageid,
-            arg4, arg4_cageid,
-            arg5, arg5_cageid,
-            arg6, arg6_cageid,
-        ),
-        other => panic!(
-            "shim_exit_handler: unrecognised runtime {:?} for exiting_cageid={}",
-            other, exiting_cageid
-        ),
-    }
+    let runtime_type = threei::get_cage_runtime(exiting_cageid)
+        .unwrap_or_else(|| {
+            panic!(
+                "shim_exit_handler: no runtime found for exiting_cageid={}",
+                exiting_cageid
+            )
+        });
+
+    let runtime = get_runtime_handler(runtime_type);
+    runtime.handle_exit(
+        cageid,
+        arg1, arg1_cageid,
+        arg2, arg2_cageid,
+        arg3, arg3_cageid,
+        arg4, arg4_cageid,
+        arg5, arg5_cageid,
+        arg6, arg6_cageid,
+    )
 }
 
 // ── registration ─────────────────────────────────────────────────────────────
