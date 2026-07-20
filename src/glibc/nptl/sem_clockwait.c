@@ -21,6 +21,7 @@
 #include <time.h>
 #include "semaphoreP.h"
 #include "sem_waitcommon.c"
+#include <lind_sem.h>		/* lind: pshared semaphores are paravirtualized.  */
 
 int
 ___sem_clockwait64 (sem_t *sem, clockid_t clockid,
@@ -39,6 +40,12 @@ ___sem_clockwait64 (sem_t *sem, clockid_t clockid,
       __set_errno (EINVAL);
       return -1;
     }
+
+  /* lind: route pshared semaphores to rawposix (see sem_wait.c).  */
+  if (((struct new_sem *) sem)->private == FUTEX_SHARED)
+    return __lind_sem_wait (sem, LIND_SEM_WAIT_TIMED,
+			    (int64_t) abstime->tv_sec,
+			    (int64_t) abstime->tv_nsec, clockid);
 
   if (__new_sem_wait_fast ((struct new_sem *) sem, 0) == 0)
     return 0;

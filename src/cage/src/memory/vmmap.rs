@@ -29,6 +29,12 @@ const DEFAULT_VMMAP_SIZE: u32 = 1 << (32 - PAGESHIFT);
 /// This enum represents different types of memory backing:
 /// - None: Used as a placeholder when no backing type is available
 /// - Anonymous: Memory not backed by any file (e.g. heap allocations)
+/// - SharedAnonymous: MAP_SHARED|MAP_ANONYMOUS memory, identified by a globally
+///   unique region id (see `next_shared_region_id`). The id is copied into the
+///   child's vmmap on fork, giving both cages a stable identity for the region
+///   even on platforms where the underlying pages cannot actually be aliased
+///   (e.g. SGX). Cross-cage sync objects (pshared semaphores) are keyed by
+///   (region id, offset) in rawposix.
 /// - SharedMemory: Memory backed by a shared memory segment, identified by shmid
 /// - FileDescriptor: Memory backed by a file, identified by file descriptor
 #[allow(dead_code)]
@@ -36,8 +42,19 @@ const DEFAULT_VMMAP_SIZE: u32 = 1 << (32 - PAGESHIFT);
 pub enum MemoryBackingType {
     None, // just a dummy value for places where it needs to be passed, but you dont have the value
     Anonymous,
-    SharedMemory(u64),   // stores shmid
-    FileDescriptor(u64), // stores file descriptor addr
+    SharedAnonymous(u64), // stores globally unique shared region id
+    SharedMemory(u64),    // stores shmid
+    FileDescriptor(u64),  // stores file descriptor addr
+}
+
+/// Global counter used to assign each MAP_SHARED|MAP_ANONYMOUS mapping a unique
+/// region id at creation time (in mmap_syscall). Fork copies vmmap entries
+/// verbatim, so parent and child automatically agree on the id.
+static NEXT_SHARED_REGION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Returns a fresh, globally unique id for a new MAP_SHARED|MAP_ANONYMOUS region.
+pub fn next_shared_region_id() -> u64 {
+    NEXT_SHARED_REGION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// An entry in the virtual memory map that contains fields such as page number, number of pages,

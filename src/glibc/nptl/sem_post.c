@@ -25,6 +25,7 @@
 #include <semaphore.h>
 
 #include <shlib-compat.h>
+#include <lind_sem.h>	/* lind: pshared semaphores are paravirtualized.  */
 
 
 /* See sem_wait for an explanation of the algorithm.  */
@@ -33,6 +34,10 @@ __new_sem_post (sem_t *sem)
 {
   struct new_sem *isem = (struct new_sem *) sem;
   int private = isem->private;
+
+  /* lind: route pshared semaphores to rawposix (see sem_wait.c).  */
+  if (private == FUTEX_SHARED)
+    return __lind_sem_post (sem);
 
 #if __HAVE_64B_ATOMICS
   /* Add a token to the semaphore.  We use release MO to make sure that a

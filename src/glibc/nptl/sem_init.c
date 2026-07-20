@@ -21,6 +21,7 @@
 #include "semaphoreP.h"
 #include <kernel-features.h>
 #include <futex-internal.h>
+#include <lind_sem.h>	/* lind: pshared semaphores are paravirtualized.  */
 
 
 int
@@ -57,6 +58,13 @@ __new_sem_init (sem_t *sem, int pshared, unsigned int value)
 
   isem->private = (pshared == PTHREAD_PROCESS_PRIVATE
 		   ? FUTEX_PRIVATE : FUTEX_SHARED);
+
+  /* lind: the in-memory fields above only serve as routing metadata for
+     pshared semaphores (the page they live in is not reliably shared
+     between cages, e.g. under SGX).  Register the authoritative state
+     with rawposix, keyed by the shared mapping this sem_t lives in.  */
+  if (pshared == PTHREAD_PROCESS_SHARED)
+    return __lind_sem_init (sem, value);
 
   return 0;
 }

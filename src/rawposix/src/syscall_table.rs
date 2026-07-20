@@ -20,6 +20,10 @@ use super::fs_calls::{
     utimensat_syscall, write_syscall, writev_syscall,
 };
 use super::init::RawCallFunc;
+use super::sem_calls::{
+    sem_destroy_syscall, sem_getvalue_syscall, sem_init_syscall, sem_post_syscall,
+    sem_wait_syscall,
+};
 use super::net_calls::{
     accept4_syscall, accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall,
     epoll_create_syscall, epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall,
@@ -145,6 +149,17 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (188 as u64, setxattr_syscall),
     (194 as u64, listxattr_syscall),
     (syscall_const::FUTEX_SYSCALL as u64, futex_syscall),
+    (syscall_const::SEM_INIT_SYSCALL as u64, sem_init_syscall),
+    (syscall_const::SEM_WAIT_SYSCALL as u64, sem_wait_syscall),
+    (syscall_const::SEM_POST_SYSCALL as u64, sem_post_syscall),
+    (
+        syscall_const::SEM_GETVALUE_SYSCALL as u64,
+        sem_getvalue_syscall,
+    ),
+    (
+        syscall_const::SEM_DESTROY_SYSCALL as u64,
+        sem_destroy_syscall,
+    ),
     (
         syscall_const::EPOLL_CREATE_SYSCALL as u64,
         epoll_create_syscall,

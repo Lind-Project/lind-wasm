@@ -19,12 +19,24 @@
 #include <shlib-compat.h>
 #include "semaphoreP.h"
 #include <atomic.h>
+#include <futex-internal.h>
+#include <lind_sem.h>	/* lind: pshared semaphores are paravirtualized.  */
 
 
 int
 __new_sem_getvalue (sem_t *sem, int *sval)
 {
   struct new_sem *isem = (struct new_sem *) sem;
+
+  /* lind: route pshared semaphores to rawposix (see sem_wait.c).  */
+  if (isem->private == FUTEX_SHARED)
+    {
+      int v = __lind_sem_getvalue (sem);
+      if (v < 0)
+	return -1;
+      *sval = v;
+      return 0;
+    }
 
   /* XXX Check for valid SEM parameter.  */
   /* FIXME This uses relaxed MO, even though POSIX specifies that this function

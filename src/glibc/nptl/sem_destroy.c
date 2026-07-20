@@ -18,12 +18,19 @@
 #include <semaphore.h>
 #include <shlib-compat.h>
 #include "semaphoreP.h"
+#include <internaltypes.h>
+#include <futex-internal.h>
+#include <lind_sem.h>	/* lind: pshared semaphores are paravirtualized.  */
 
 
 int
 __new_sem_destroy (sem_t *sem)
 {
   /* XXX Check for valid parameter.  */
+
+  /* lind: pshared semaphores hold state in rawposix that must be released.  */
+  if (((struct new_sem *) sem)->private == FUTEX_SHARED)
+    return __lind_sem_destroy (sem);
 
   /* Nothing to do.  */
   return 0;

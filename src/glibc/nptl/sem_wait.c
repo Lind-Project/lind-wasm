@@ -19,6 +19,7 @@
 #include <lowlevellock.h>	/* lll_futex* used by the old code.  */
 #include "semaphoreP.h"
 #include "sem_waitcommon.c"
+#include <lind_sem.h>		/* lind: pshared semaphores are paravirtualized.  */
 
 int
 __new_sem_wait (sem_t *sem)
@@ -35,6 +36,12 @@ __new_sem_wait (sem_t *sem)
      [2] http://austingroupbugs.net/view.php?id=1076 for thoughts on why this
    */
   __pthread_testcancel ();
+
+  /* lind: process-shared semaphores cannot use the in-memory fast path --
+     their authoritative state lives in rawposix (the sem_t page is not
+     reliably shared between cages, e.g. under SGX).  */
+  if (((struct new_sem *) sem)->private == FUTEX_SHARED)
+    return __lind_sem_wait (sem, LIND_SEM_WAIT_BLOCK, 0, 0, 0);
 
   if (__new_sem_wait_fast ((struct new_sem *) sem, 0) == 0)
     return 0;
@@ -76,6 +83,10 @@ compat_symbol (libpthread, __old_sem_wait, sem_wait, GLIBC_2_0);
 int
 __new_sem_trywait (sem_t *sem)
 {
+  /* lind: route pshared semaphores to rawposix (see __new_sem_wait).  */
+  if (((struct new_sem *) sem)->private == FUTEX_SHARED)
+    return __lind_sem_wait (sem, LIND_SEM_WAIT_TRY, 0, 0, 0);
+
   /* We must not fail spuriously, so require a definitive result even if this
      may lead to a long execution time.  */
   if (__new_sem_wait_fast ((struct new_sem *) sem, 1) == 0)

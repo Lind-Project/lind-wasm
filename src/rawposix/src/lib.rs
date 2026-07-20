@@ -6,6 +6,7 @@
 pub mod fs_calls;
 pub mod init;
 pub mod net_calls;
+pub mod sem_calls;
 pub mod sys_calls;
 pub mod syscall_table;
 

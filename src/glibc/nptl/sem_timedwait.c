@@ -19,6 +19,7 @@
 #include <time.h>
 #include "semaphoreP.h"
 #include "sem_waitcommon.c"
+#include <lind_sem.h>		/* lind: pshared semaphores are paravirtualized.  */
 
 /* This is in a separate file because because sem_timedwait is only provided
    if __USE_XOPEN2K is defined.  */
@@ -33,6 +34,12 @@ ___sem_timedwait64 (sem_t *sem, const struct __timespec64 *abstime)
 
   /* Check sem_wait.c for a more detailed explanation why it is required.  */
   __pthread_testcancel ();
+
+  /* lind: route pshared semaphores to rawposix (see sem_wait.c).  */
+  if (((struct new_sem *) sem)->private == FUTEX_SHARED)
+    return __lind_sem_wait (sem, LIND_SEM_WAIT_TIMED,
+			    (int64_t) abstime->tv_sec,
+			    (int64_t) abstime->tv_nsec, CLOCK_REALTIME);
 
   if (__new_sem_wait_fast ((struct new_sem *) sem, 0) == 0)
     return 0;

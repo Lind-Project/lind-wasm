@@ -120,3 +120,14 @@ pub const RENAMEAT2_SYSCALL: i32 = 316;
 pub const GETRANDOM_SYSCALL: i32 = 318;
 pub const STATX_SYSCALL: i32 = 332;
 pub const RT_SIGSUSPEND_SYSCALL: i32 = 130;
+
+// Lind paravirtualized pshared semaphores (350-354 are unused by the Linux
+// x86_64 syscall table). Cross-cage POSIX semaphores cannot rely on shared
+// memory + futex on platforms where pages cannot be aliased across cages
+// (e.g. SGX), so their state lives in rawposix instead.
+// Keep these in sync with glibc's lind_syscall_num.h.
+pub const SEM_INIT_SYSCALL: i32 = 350;
+pub const SEM_WAIT_SYSCALL: i32 = 351;
+pub const SEM_POST_SYSCALL: i32 = 352;
+pub const SEM_GETVALUE_SYSCALL: i32 = 353;
+pub const SEM_DESTROY_SYSCALL: i32 = 354;

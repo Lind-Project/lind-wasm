@@ -1036,7 +1036,16 @@ pub extern "C" fn mmap_syscall(
             let mut vmmap = cage.vmmap.write();
             let backing = {
                 if flags as u32 & MAP_ANONYMOUS > 0 {
-                    MemoryBackingType::Anonymous
+                    if flags as u32 & MAP_SHARED > 0 {
+                        // Give MAP_SHARED|MAP_ANONYMOUS regions a stable identity so
+                        // cross-cage sync objects (pshared semaphores) can be keyed by
+                        // (region id, offset) in rawposix even when the pages cannot be
+                        // aliased across cages (e.g. inside SGX). Fork copies this entry
+                        // into the child, so both cages agree on the id.
+                        MemoryBackingType::SharedAnonymous(cage::next_shared_region_id())
+                    } else {
+                        MemoryBackingType::Anonymous
+                    }
                 } else {
                     // if we are doing file-backed mapping, we need to set maxprot to the file permission
                     let flags = fcntl_syscall(

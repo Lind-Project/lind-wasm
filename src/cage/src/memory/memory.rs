@@ -216,6 +216,39 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                         parent_st,
                         child_st,
                     );
+
+                    // Aliasing the same physical page at two addresses is
+                    // impossible on some platforms (e.g. inside an SGX enclave,
+                    // where the EPCM binds each page to a single linear
+                    // address). Fall back to copying the parent's contents so
+                    // static metadata stored in the region (e.g. the `private`
+                    // field of a pshared sem_t) stays valid in the child. The
+                    // authoritative state of cross-cage sync objects does not
+                    // live in this page: it is kept in rawposix, keyed by
+                    // (shared region id, offset), so a stale copy of the value
+                    // here is harmless.
+                    let needs_write = entry.prot & PROT_WRITE == 0;
+                    if needs_write {
+                        let mret = libc::mprotect(
+                            child_st as *mut libc::c_void,
+                            addr_len,
+                            entry.prot | PROT_WRITE,
+                        );
+                        assert_eq!(mret, 0, "failed to make child shared mapping writable");
+                    }
+                    std::ptr::copy_nonoverlapping(
+                        parent_st as *const u8,
+                        child_st as *mut u8,
+                        addr_len,
+                    );
+                    if needs_write {
+                        let mret = libc::mprotect(
+                            child_st as *mut libc::c_void,
+                            addr_len,
+                            entry.prot,
+                        );
+                        assert_eq!(mret, 0, "failed to restore child shared mapping protection");
+                    }
                 }
             }
         } else {

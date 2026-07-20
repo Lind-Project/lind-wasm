@@ -142,6 +142,17 @@
 #define PRLIMIT64_SYSCALL 302
 #define GETRANDOM_SYSCALL 318
 
+/* Lind paravirtualized pshared semaphores (350-354 are unused by the Linux
+   x86_64 syscall table). Cross-cage POSIX semaphores cannot rely on shared
+   memory + futex on platforms where pages cannot be aliased across cages
+   (e.g. SGX), so their state lives in rawposix instead.
+   Keep these in sync with sysdefs' syscall_const.rs.  */
+#define SEM_INIT_SYSCALL 350
+#define SEM_WAIT_SYSCALL 351
+#define SEM_POST_SYSCALL 352
+#define SEM_GETVALUE_SYSCALL 353
+#define SEM_DESTROY_SYSCALL 354
+
 /* Lind-specific syscalls (not part of the Linux syscall table) */
 #define REGISTER_HANDLER_SYSCALL 1001
 #define COPY_DATA_BETWEEN_CAGES_SYSCALL 1002
