@@ -105,10 +105,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cage_id = CAGE_START_ID as u64;
     let result = match file_type {
-        BinaryFileType::Elf => execute_mpk(lindboot_cli, cage_id),
-        BinaryFileType::Wasm | BinaryFileType::Unknown => {
+        BinaryFileType::ElfSo => execute_mpk(lindboot_cli, cage_id),
+        BinaryFileType::Wasm | BinaryFileType::CWasm | BinaryFileType::Unknown => {
             exec_wasm(lindboot_cli, lind_manager, cage_id)
+        },
+        BinaryFileType::ElfExe => {
+            eprintln!("Error: Executable ELF binaries are not yet supported. Please use a shared object (.so) or Wasm binary (.wasm/.cwasm).");
+            std::process::exit(sysdefs::constants::EX_SOFTWARE);
         }
+
     };
     match result {
         Ok(code) => std::process::exit(code),

@@ -1,40 +1,62 @@
+use goblin::elf::header::{ET_DYN, ET_EXEC, ET_REL};
+use goblin::Object;
 use libc;
 use std::io;
 use std::path::Path;
 use sysdefs::data::fs_struct::{FSData, StatData};
 
-/// ELF magic: \x7fELF
-const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 /// Wasm magic: \0asm
 const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6d];
 
 /// The type of an executable binary as determined by its file header magic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryFileType {
-    Elf,
+    ElfExe,
+    ElfSo,
     Wasm,
+    CWasm,
     Unknown,
 }
 
-/// Reads the first four bytes of `path` and returns the corresponding
-/// [`BinaryFileType`] based on the ELF (`\x7fELF`) or Wasm (`\0asm`) magic.
+/// Reads the file at `path` and returns the corresponding [`BinaryFileType`].
+/// For ELF files, uses the e_type field to distinguish between:
+/// - ET_REL (relocatable) -> CWasm
+/// - ET_DYN (shared object) -> ElfSo
+/// - ET_EXEC (executable) -> ElfExe
+/// For Wasm files, checks the magic bytes (\0asm).
 ///
-/// Returns `BinaryFileType::Unknown` for any file whose magic does not match
-/// either format, and also on any I/O error (e.g. file not found).
+/// Returns `BinaryFileType::Unknown` for any file whose format is not recognized,
+/// and also on any I/O error (e.g. file not found).
 pub fn detect_binary_type(path: &Path) -> BinaryFileType {
-    let mut magic = [0u8; 4];
-    match read_magic(path, &mut magic) {
-        Ok(4) if magic == ELF_MAGIC => BinaryFileType::Elf,
-        Ok(4) if magic == WASM_MAGIC => BinaryFileType::Wasm,
-        _ => BinaryFileType::Unknown,
-    }
-}
+    // Read the file
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(_) => return BinaryFileType::Unknown,
+    };
 
-fn read_magic(path: &Path, buf: &mut [u8; 4]) -> io::Result<usize> {
-    use std::io::Read;
-    let mut f = std::fs::File::open(path)?;
-    let n = f.read(buf)?;
-    Ok(n)
+    // Try to parse with goblin
+    match Object::parse(&bytes) {
+        Ok(Object::Elf(elf)) => {
+            // Check the ELF type
+            match elf.header.e_type {
+                ET_REL => BinaryFileType::CWasm,
+                ET_EXEC => BinaryFileType::ElfExe,
+                ET_DYN => BinaryFileType::ElfSo,
+                _ => BinaryFileType::Unknown,
+            }
+        }
+        Ok(Object::Unknown(magic)) if magic == u64::from_le_bytes([
+            WASM_MAGIC[0], WASM_MAGIC[1], WASM_MAGIC[2], WASM_MAGIC[3], 0, 0, 0, 0
+        ]) => BinaryFileType::Wasm,
+        _ => {
+            // Fallback: check for wasm magic manually
+            if bytes.len() >= 4 && &bytes[0..4] == WASM_MAGIC {
+                BinaryFileType::Wasm
+            } else {
+                BinaryFileType::Unknown
+            }
+        }
+    }
 }
 
 // These conversion functions are necessary because:

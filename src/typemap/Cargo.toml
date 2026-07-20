@@ -8,6 +8,7 @@ libc = "0.2"
 fdtables = { path = "../fdtables", default-features = false }
 cage = { path = "../cage" }
 sysdefs = { path = "../sysdefs" }
+goblin = "0.10.7"
 
 [features]
 default = ["fast"]
