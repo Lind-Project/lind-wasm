@@ -174,6 +174,228 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
     mpk_debug("lind-mpk initialized successfully");
 }
 
+/// Internal helper for MPK exec: tears down the old namespace and loads a new program.
+///
+/// This is called by MpkRuntime::handle_exec when the guest issues an exec syscall.
+/// It performs the following steps:
+/// 1. Retrieves and tears down the existing MPKRuntimeInfo (closes dlmopen handles)
+/// 2. Parses the path, argv, and envp from the native pointers
+/// 3. Loads and executes the new .so using the same logic as execute_mpk
+fn exec_mpk_internal(
+    cage_id: u64,
+    path_ptr: *const c_char,
+    argv_ptr: *const *const c_char,
+    envp_ptr: *const *const c_char,
+    _flags: u64,
+) -> anyhow::Result<i32> {
+    mpk_debug(format!("exec_mpk_internal for cage {}", cage_id));
+
+    // Step 1: Tear down the existing namespace context
+    let cage = get_cage(cage_id)
+        .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
+    
+    {
+        let runtime_info = cage.runtime_info.read();
+        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+            mpk_debug("tearing down old namespace context");
+            // Close the old dlmopen handles
+            unsafe {
+                if !mpk_info.loader_libc_handle.is_null() {
+                    libc::dlclose(mpk_info.loader_libc_handle);
+                }
+                if !mpk_info.loader_cage_handle.is_null() {
+                    libc::dlclose(mpk_info.loader_cage_handle);
+                }
+            }
+            mpk_debug("old namespace context torn down");
+        }
+    }
+
+    // Step 2: Parse path from the native pointer
+    let so_path = unsafe { CStr::from_ptr(path_ptr) }
+        .to_str()
+        .context("invalid UTF-8 in path")?;
+    let c_so_path = CString::new(so_path).context("NUL byte in .so path")?;
+    
+    mpk_debug(format!("executing new program: {}", so_path));
+
+    // Step 3: Parse argv from the native pointer array
+    let mut args = Vec::new();
+    if !argv_ptr.is_null() {
+        let mut i = 0;
+        loop {
+            let arg_ptr = unsafe { *argv_ptr.offset(i) };
+            if arg_ptr.is_null() {
+                break;
+            }
+            let arg_str = unsafe { CStr::from_ptr(arg_ptr) }
+                .to_str()
+                .context("invalid UTF-8 in argv")?
+                .to_string();
+            args.push(arg_str);
+            i += 1;
+        }
+    }
+
+    // Step 4: Parse envp from the native pointer array
+    let mut vars = Vec::new();
+    if !envp_ptr.is_null() {
+        let mut i = 0;
+        loop {
+            let env_ptr = unsafe { *envp_ptr.offset(i) };
+            if env_ptr.is_null() {
+                break;
+            }
+            let env_str = unsafe { CStr::from_ptr(env_ptr) }
+                .to_str()
+                .context("invalid UTF-8 in envp")?;
+            
+            // Split "KEY=VALUE" into (KEY, Some(VALUE))
+            if let Some((key, val)) = env_str.split_once('=') {
+                vars.push((key.to_string(), Some(val.to_string())));
+            }
+            i += 1;
+        }
+    }
+
+    mpk_debug(format!("parsed {} args, {} env vars", args.len(), vars.len()));
+
+    // Step 5: Load the .so in a fresh dlmopen namespace
+    mpk_debug("calling dlmopen for new guest .so");
+    let handle = unsafe { libc::dlmopen(libc::LM_ID_NEWLM, c_so_path.as_ptr(), libc::RTLD_NOW) };
+    if handle.is_null() {
+        let err_msg = unsafe {
+            let p = libc::dlerror();
+            if p.is_null() {
+                "<unknown dlerror>"
+            } else {
+                CStr::from_ptr(p).to_str().unwrap_or("<utf8 error>")
+            }
+        };
+        bail!("dlmopen failed for {}: {}", so_path, err_msg);
+    }
+    mpk_debug(format!("dlmopen succeeded: handle={handle:p}"));
+
+    // Retrieve the namespace id
+    let mut lmid: libc::Lmid_t = 0;
+    unsafe {
+        libc::dlinfo(handle, RTLD_DI_LMID, &mut lmid as *mut _ as *mut c_void);
+    }
+    mpk_debug(format!("namespace id resolved: lmid={lmid}"));
+
+    // Step 6: Walk the link_map chain to find the custom libc
+    let mut lm: *mut LinkMap = std::ptr::null_mut();
+    if unsafe { libc::dlinfo(handle, RTLD_DI_LINKMAP, &mut lm as *mut _ as *mut c_void) } != 0 {
+        unsafe { libc::dlclose(handle) };
+        bail!("dlinfo RTLD_DI_LINKMAP failed");
+    }
+
+    let mut libc_name_ptr: *const c_char = std::ptr::null();
+    let mut current: *mut LinkMap = lm;
+    while !current.is_null() {
+        let name_ptr = unsafe { (*current).l_name };
+        if !name_ptr.is_null() {
+            let name = unsafe { CStr::from_ptr(name_ptr) }.to_str().unwrap_or("");
+            if name.contains("libc.so") {
+                libc_name_ptr = name_ptr;
+                mpk_debug(format!("found custom libc: {name}"));
+                break;
+            }
+        }
+        current = unsafe { (*current).l_next };
+    }
+
+    if libc_name_ptr.is_null() {
+        unsafe { libc::dlclose(handle) };
+        bail!("could not find custom libc in dlmopen namespace for {}", so_path);
+    }
+
+    // Step 7: Obtain handle to the custom libc
+    let libc_handle = unsafe {
+        libc::dlmopen(lmid, libc_name_ptr, libc::RTLD_NOW | libc::RTLD_NOLOAD)
+    };
+    if libc_handle.is_null() {
+        unsafe { libc::dlclose(handle) };
+        bail!("failed to obtain handle to custom libc");
+    }
+    mpk_debug(format!("custom libc handle acquired: {libc_handle:p}"));
+
+    // Step 8: Register syscall interposition handler
+    let sym_name = CString::new("__enable_syscall_interpose").unwrap();
+    let sym_ptr = unsafe { libc::dlsym(libc_handle, sym_name.as_ptr()) };
+    if sym_ptr.is_null() {
+        let err = unsafe {
+            let p = libc::dlerror();
+            if p.is_null() { "<unknown>" } else { CStr::from_ptr(p).to_str().unwrap_or("<utf8>") }
+        };
+        unsafe {
+            libc::dlclose(libc_handle);
+            libc::dlclose(handle);
+        }
+        bail!("__enable_syscall_interpose not found in custom libc: {}", err);
+    }
+
+    let enable_interpose: EnableInterposeF = unsafe { std::mem::transmute(sym_ptr) };
+    ENABLE_INTERPOSE_PTR.store(sym_ptr as u64, Ordering::Release);
+    let ret = unsafe { enable_interpose(Some(lind_syscall_handler)) };
+    if ret != 0 {
+        unsafe {
+            libc::dlclose(libc_handle);
+            libc::dlclose(handle);
+        }
+        bail!("__enable_syscall_interpose returned {}", ret);
+    }
+    mpk_debug("syscall interposition handler registered");
+
+    // Step 9: Update the cage's MPKRuntimeInfo with new handles
+    let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0);
+    *cage.runtime_info.write() = Box::new(mpk_info);
+    mpk_debug(format!("updated MPKRuntimeInfo for cage {}", cage_id));
+
+    // Step 10: Build argc/argv/envp and call main
+    let c_args: Vec<CString> = args.iter()
+        .map(|s| CString::new(s.as_str()).unwrap())
+        .collect();
+    let mut argv: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
+    argv.push(std::ptr::null());
+
+    let c_envs: Vec<CString> = vars.iter()
+        .map(|(k, v)| {
+            let val = v.as_deref().unwrap_or("");
+            CString::new(format!("{}={}", k, val)).unwrap()
+        })
+        .collect();
+    let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
+    envp.push(std::ptr::null());
+
+    let main_sym = CString::new("cage_main").unwrap();
+    let main_ptr = unsafe { libc::dlsym(handle, main_sym.as_ptr()) };
+    if main_ptr.is_null() {
+        unsafe {
+            libc::dlclose(libc_handle);
+            libc::dlclose(handle);
+        }
+        bail!("could not find 'cage_main' symbol in {}", so_path);
+    }
+    mpk_debug(format!("resolved cage_main at {main_ptr:p}"));
+
+    type MainFn = unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
+    let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
+    let argc = (argv.len() - 1) as c_int;
+    
+    mpk_debug(format!("calling cage_main with argc={argc}"));
+    let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) };
+    mpk_debug(format!("cage_main returned exit_code={exit_code}"));
+
+    // Step 11: Clean up (would normally be done by exit, but for completeness)
+    unsafe {
+        libc::dlclose(libc_handle);
+        libc::dlclose(handle);
+    }
+
+    Ok(exit_code as i32)
+}
+
 pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
     let so_path = lindboot_cli.wasm_file();
     let c_so_path = CString::new(so_path).context("NUL byte in .so path")?;
