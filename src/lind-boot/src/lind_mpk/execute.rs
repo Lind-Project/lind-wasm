@@ -90,20 +90,23 @@ impl SyscallRuntime for MpkRuntime {
     ) -> i32 {
         // arg1 = path, arg1_cageid = execing_cageid
         // arg2 = argv, arg2_cageid = envp (based on 3i convention)
-        let _ = (cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
+        //not yet implemented -> panic
+        panic!("MPK exec syscall is not yet implemented. Please use a Wasm binary (.wasm/.cwasm).");
+
+        // let _ = (cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
         
-        let execing_cageid = arg1_cageid;
-        let path_ptr = arg1 as *const c_char;
-        let argv_ptr = arg2 as *const *const c_char;
-        let envp_ptr = arg2_cageid as *const *const c_char;
+        // let execing_cageid = arg1_cageid;
+        // let path_ptr = arg1 as *const c_char;
+        // let argv_ptr = arg2 as *const *const c_char;
+        // let envp_ptr = arg2_cageid as *const *const c_char;
         
-        match exec_mpk_internal(execing_cageid, path_ptr, argv_ptr, envp_ptr, arg3) {
-            Ok(code) => code,
-            Err(e) => {
-                eprintln!("[lind-mpk] exec failed: {}", e);
-                -1
-            }
-        }
+        // match exec_mpk_internal(execing_cageid, path_ptr, argv_ptr, envp_ptr, arg3) {
+        //     Ok(code) => code,
+        //     Err(e) => {
+        //         eprintln!("[lind-mpk] exec failed: {}", e);
+        //         -1
+        //     }
+        // }
     }
 
     fn handle_exit(
