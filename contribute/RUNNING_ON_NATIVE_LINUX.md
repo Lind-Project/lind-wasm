@@ -3,16 +3,6 @@
 Docker is quick to use, but is not necessary for running Lind-Wasm. Lind-Wasm can be built and run directly inside an Ubuntu 22.04 WSL2
 distribution without using Docker.
 
-The native WSL toolchain consists of the following components:
-
-- *Clang/LLVM 18.1.8* with *WebAssembly System Interface* (WASI) support
-- Lind's patched WASI files from [`src/glibc/wasi`](../src/glibc/wasi)
-- A custom *glibc* and sysroot built by Lind-Wasm
-- The Lind runtime, including `lind-boot`, *RawPOSIX*, and *wasmtime*
-- *Rust* with the pinned `nightly-2026-02-11` toolchain
-- *WABT 1.0.38* for `wasm2wat`, `wat2wasm`, and `wasm-objdump`
-- The Lind helper commands `lind_compile`, `lind_run`, and
-  `cargo-lind_compile`
 
 This guide follows the dependency versions used by
 [`Dockerfile.dev`](../Docker/Dockerfile.dev), but installs them directly
