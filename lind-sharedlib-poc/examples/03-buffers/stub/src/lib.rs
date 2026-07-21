@@ -79,10 +79,49 @@ fn call_buf(name: &str, args: &mut [Arg]) -> i64 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn str_len(a0: *const c_char) -> usize {
+pub extern "C" fn to_upper(a0: *const c_char, a1: *mut c_char, a2: usize) -> usize {
     let in0 = unsafe { cstr_bytes(a0) };
+    let out1 = unsafe { core::slice::from_raw_parts_mut(a1 as *mut u8, a2 as usize) };
     let mut args = [
-        Arg::Buf(&in0)
+        Arg::Buf(&in0),
+        Arg::Out { dst: out1, len: OutLen::Ret },
+        Arg::USize(a2)
     ];
-    call_buf("str_len", &mut args) as usize
+    call_buf("to_upper", &mut args) as usize
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn greet(a0: *const c_char, a1: *mut c_char, a2: usize) {
+    let in0 = unsafe { cstr_bytes(a0) };
+    let out1 = unsafe { core::slice::from_raw_parts_mut(a1 as *mut u8, a2 as usize) };
+    let mut args = [
+        Arg::Buf(&in0),
+        Arg::Out { dst: out1, len: OutLen::Nul },
+        Arg::USize(a2)
+    ];
+    call_buf("greet", &mut args);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn fill_pattern(a0: *mut c_char, a1: usize) {
+    let out0 = unsafe { core::slice::from_raw_parts_mut(a0 as *mut u8, a1 as usize) };
+    let mut args = [
+        Arg::Out { dst: out0, len: OutLen::Cap },
+        Arg::USize(a1)
+    ];
+    call_buf("fill_pattern", &mut args);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn extract_word(a0: *const c_char, a1: *mut c_char, a2: usize, a3: *mut usize) {
+    let in0 = unsafe { cstr_bytes(a0) };
+    let out1 = unsafe { core::slice::from_raw_parts_mut(a1 as *mut u8, a2 as usize) };
+    let len3 = unsafe { &mut *a3 };
+    let mut args = [
+        Arg::Buf(&in0),
+        Arg::Out { dst: out1, len: OutLen::FromArg(3) },
+        Arg::USize(a2),
+        Arg::OutLen(len3)
+    ];
+    call_buf("extract_word", &mut args);
 }

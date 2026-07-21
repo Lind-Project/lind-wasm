@@ -30,18 +30,45 @@ use crate::cli::CliOptions;
 
 /// A host-side argument to a guest call.
 ///
-/// Scalars pass straight through (a wasm `i32` *is* a native `int`). A `Buf` is the
-/// first step of *marshalling*: its bytes are copied into fresh guest linear memory
-/// (via the guest allocator) and the call receives the resulting **guest offset**,
-/// because a host pointer is meaningless inside the guest's own address space. The
-/// copy is freed after the call returns.
+/// Scalars (`I32`/`USize`) pass straight through. A wasm `i32` *is* a native `int`,
+/// and wasm32 `size_t` is a 4-byte value. Everything else is *marshalled*: a host
+/// pointer is meaningless inside the guest's own linear-memory address space, so
+/// buffers are copied into guest memory (via the guest allocator) and the call
+/// receives the resulting **guest offset**. Allocations are freed after the call.
 ///
-/// For a C string, pass the bytes including the trailing NUL as a `Buf`.
+/// - `Buf` is an input buffer copied *into* the guest (e.g. a C string, incl. its NUL).
+/// - `Out` is a caller-allocated output buffer: the guest writes into it and the bytes
+///   are copied back out into `dst`. `dst.len()` is the buffer's capacity.
+/// - `OutLen` is a `size_t *` output parameter: the guest writes a length there, which
+///   is read back into `*dst` (and can drive an `Out` buffer's copy-back length).
 pub enum Arg<'a> {
     /// A scalar `i32`, passed by value.
     I32(i32),
-    /// A byte buffer copied into the guest; the call receives its guest offset.
+    /// A scalar `size_t`, passed by value (wasm32 `size_t` is 4 bytes).
+    USize(usize),
+    /// An input buffer copied into the guest; the call receives its guest offset.
     Buf(&'a [u8]),
+    /// A caller-allocated output buffer. The guest writes into it; after the call the
+    /// first `len`-determined bytes are copied back into `dst`. `dst.len()` = capacity.
+    Out { dst: &'a mut [u8], len: OutLen },
+    /// A `size_t *` output parameter. The guest writes a length; it is read back into
+    /// `*dst` and is available to resolve an [`OutLen::FromArg`] on an `Out` buffer.
+    OutLen(&'a mut usize),
+}
+
+/// How many bytes to copy back out of an [`Arg::Out`] buffer. A per-function contract
+/// that the C type alone can't express, so it is declared per call site.
+#[derive(Clone, Copy)]
+pub enum OutLen {
+    /// Bytes written = the function's return value (clamped to the capacity).
+    Ret,
+    /// The buffer is a C string: copy up to and including the first NUL.
+    Nul,
+    /// The whole buffer was filled: copy the full capacity.
+    Cap,
+    /// Bytes written = the value the guest wrote into the [`Arg::OutLen`] at this index
+    /// in the args slice (clamped to the capacity).
+    FromArg(usize),
 }
 
 /// A sandboxed wasm library: the live `Store` + `Instance`, kept alive together with
@@ -130,55 +157,118 @@ impl SandboxedLib {
 
     /// Call an exported function, marshalling pointer arguments through guest memory.
     ///
-    /// Each [`Arg::Buf`] is copied into freshly guest-`malloc`'d memory and passed as
-    /// its guest offset; the copies are freed after the call (even on failure).
-    /// Returns the first result widened to `i64` (covers `i32`/`usize`-shaped returns).
+    /// Input buffers ([`Arg::Buf`]) are copied into freshly guest-`malloc`'d memory;
+    /// output buffers ([`Arg::Out`]) and length out-params ([`Arg::OutLen`]) get guest
+    /// allocations too. After the call, out-lengths are read back, each out-buffer's
+    /// copy-back length is resolved (see [`OutLen`]), the bytes are copied into the
+    /// caller's slices, and all allocations are freed (even on failure). Returns the
+    /// first result widened to `i64` (`0` for a `void` return).
     ///
-    /// The guest module must export `guest_malloc`/`guest_free` and its linear memory
-    /// as `memory` (lind_compile exports `memory` by default).
-    pub fn call(&mut self, name: &str, args: &[Arg]) -> Result<i64> {
-        // Marshal in: copy each buffer arg into the guest, collecting offsets to free.
+    /// The guest must export `guest_malloc(i32)->i32` / `guest_free(i32)`.
+    pub fn call(&mut self, name: &str, args: &mut [Arg]) -> Result<i64> {
+        // Phase 1: allocate + copy inputs in; build wasm params; remember each arg's
+        // guest offset (for out-copy and freeing).
+        let mut ptrs: Vec<Option<u32>> = vec![None; args.len()];
         let mut to_free: Vec<u32> = Vec::new();
         let mut params: Vec<Val> = Vec::with_capacity(args.len());
-        for a in args {
+        for (i, a) in args.iter().enumerate() {
             match a {
                 Arg::I32(v) => params.push(Val::I32(*v)),
+                Arg::USize(v) => params.push(Val::I32(*v as i32)),
                 Arg::Buf(bytes) => {
                     let ptr = self.copy_in(bytes)?;
+                    ptrs[i] = Some(ptr);
+                    to_free.push(ptr);
+                    params.push(Val::I32(ptr as i32));
+                }
+                Arg::Out { dst, .. } => {
+                    let ptr = self.guest_malloc(dst.len())?;
+                    ptrs[i] = Some(ptr);
+                    to_free.push(ptr);
+                    params.push(Val::I32(ptr as i32));
+                }
+                Arg::OutLen(_) => {
+                    let ptr = self.guest_malloc(SIZE_T_BYTES)?;
+                    ptrs[i] = Some(ptr);
                     to_free.push(ptr);
                     params.push(Val::I32(ptr as i32));
                 }
             }
         }
 
+        // Phase 2: invoke.
         let func = self
             .instance
             .get_func(&mut self.store, name)
             .ok_or_else(|| anyhow!("exported function `{}` not found", name))?;
         let n_results = func.ty(&self.store).results().len();
         let mut results = vec![Val::null_func_ref(); n_results];
-
         let call_res = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
             func.call(&mut self.store, &params, &mut results)
         });
+        if let Err(e) = call_res {
+            for ptr in to_free {
+                let _ = self.guest_free(ptr);
+            }
+            return Err(anyhow::Error::from(e)).with_context(|| format!("failed to call `{}`", name));
+        }
+        let ret: i64 = match results.first() {
+            None => 0, // void
+            Some(Val::I32(v)) => *v as i64,
+            Some(Val::I64(v)) => *v,
+            other => {
+                for ptr in to_free {
+                    let _ = self.guest_free(ptr);
+                }
+                return Err(anyhow!(
+                    "expected an integer or void result from `{}`, got {:?}",
+                    name,
+                    other
+                ));
+            }
+        };
 
-        // Free the marshalled buffers regardless of whether the call succeeded.
+        // Phase 3: read out-length params, and write them back into the caller's slots.
+        let mut lengths: Vec<Option<usize>> = vec![None; args.len()];
+        for i in 0..args.len() {
+            if matches!(args[i], Arg::OutLen(_)) {
+                lengths[i] = Some(self.read_u32(ptrs[i].unwrap())? as usize);
+            }
+        }
+        for i in 0..args.len() {
+            if let Arg::OutLen(dst) = &mut args[i] {
+                **dst = lengths[i].unwrap();
+            }
+        }
+
+        // Phase 4: copy each out-buffer back into the caller's slice.
+        for i in 0..args.len() {
+            let (ptr, spec, cap) = match &args[i] {
+                Arg::Out { dst, len } => (ptrs[i].unwrap(), *len, dst.len()),
+                _ => continue,
+            };
+            let want = match spec {
+                OutLen::Cap => cap,
+                OutLen::Ret => (ret as usize).min(cap),
+                OutLen::FromArg(j) => lengths
+                    .get(j)
+                    .and_then(|l| *l)
+                    .ok_or_else(|| anyhow!("OutLen::FromArg({j}) does not refer to an OutLen arg"))?
+                    .min(cap),
+                // C string: copy up to and including the NUL (if it fits).
+                OutLen::Nul => (self.guest_cstr_len(ptr, cap)? + 1).min(cap),
+            };
+            let bytes = self.read_mem(ptr, want)?;
+            if let Arg::Out { dst, .. } = &mut args[i] {
+                dst[..bytes.len()].copy_from_slice(&bytes);
+            }
+        }
+
+        // Phase 5: free.
         for ptr in to_free {
             let _ = self.guest_free(ptr);
         }
-        call_res
-            .map_err(anyhow::Error::from)
-            .with_context(|| format!("failed to call `{}`", name))?;
-
-        match results.first() {
-            Some(Val::I32(v)) => Ok(*v as i64),
-            Some(Val::I64(v)) => Ok(*v),
-            other => Err(anyhow!(
-                "expected an integer result from `{}`, got {:?}",
-                name,
-                other
-            )),
-        }
+        Ok(ret)
     }
 
     /// `(host base pointer, byte length)` of the guest's linear memory.
@@ -241,26 +331,64 @@ impl SandboxedLib {
             .context("guest_free failed")
     }
 
-    /// Copy `bytes` into a fresh guest allocation; returns the guest offset.
-    fn copy_in(&mut self, bytes: &[u8]) -> Result<u32> {
-        let ptr = self.guest_malloc(bytes.len())?;
-        // Fetch base+size AFTER malloc, so a memory growth is reflected.
+    /// Write `bytes` into guest memory at offset `ptr` (bounds-checked).
+    fn write_mem(&mut self, ptr: u32, bytes: &[u8]) -> Result<()> {
+        // Fetch base+size on each access, so a memory growth is reflected.
         let (base, size) = self.guest_mem()?;
         let off = ptr as usize;
         let end = off
             .checked_add(bytes.len())
-            .ok_or_else(|| anyhow!("marshalled buffer length overflow"))?;
+            .ok_or_else(|| anyhow!("guest write length overflow"))?;
         if end > size {
-            return Err(anyhow!(
-                "marshalled buffer [{off}..{end}] exceeds guest memory size {size}"
-            ));
+            return Err(anyhow!("guest write [{off}..{end}] exceeds memory size {size}"));
         }
-        // SAFETY: `base` is the host address of the guest's linear memory (obtained
-        // the same way the lind syscall layer obtains it), `[off, end)` is bounds-
-        // checked against its current size, and `bytes` is a distinct host allocation.
+        // SAFETY: `base` is the host address of the guest's linear memory (obtained the
+        // same way the lind syscall layer obtains it), `[off, end)` is bounds-checked
+        // against its current size, and `bytes` is a distinct host allocation.
         unsafe {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), base.add(off), bytes.len());
         }
+        Ok(())
+    }
+
+    /// Read `len` bytes out of guest memory at offset `ptr` (bounds-checked).
+    fn read_mem(&mut self, ptr: u32, len: usize) -> Result<Vec<u8>> {
+        let (base, size) = self.guest_mem()?;
+        let off = ptr as usize;
+        let end = off
+            .checked_add(len)
+            .ok_or_else(|| anyhow!("guest read length overflow"))?;
+        if end > size {
+            return Err(anyhow!("guest read [{off}..{end}] exceeds memory size {size}"));
+        }
+        let mut out = vec![0u8; len];
+        // SAFETY: as write_mem, with the destination a fresh host allocation of `len`.
+        unsafe {
+            std::ptr::copy_nonoverlapping(base.add(off), out.as_mut_ptr(), len);
+        }
+        Ok(out)
+    }
+
+    /// Read a wasm32 `size_t` (4-byte little-endian) out of guest memory.
+    fn read_u32(&mut self, ptr: u32) -> Result<u32> {
+        let b = self.read_mem(ptr, SIZE_T_BYTES)?;
+        Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    }
+
+    /// Length (excluding NUL) of a C string in guest memory, scanning at most `max`
+    /// bytes; returns `max` if no NUL is found within the buffer.
+    fn guest_cstr_len(&mut self, ptr: u32, max: usize) -> Result<usize> {
+        let b = self.read_mem(ptr, max)?;
+        Ok(b.iter().position(|&c| c == 0).unwrap_or(max))
+    }
+
+    /// Copy `bytes` into a fresh guest allocation; returns the guest offset.
+    fn copy_in(&mut self, bytes: &[u8]) -> Result<u32> {
+        let ptr = self.guest_malloc(bytes.len())?;
+        self.write_mem(ptr, bytes)?;
         Ok(ptr)
     }
 }
+
+/// Size of a `size_t` in the wasm32 guest.
+const SIZE_T_BYTES: usize = 4;

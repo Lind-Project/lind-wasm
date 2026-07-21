@@ -1,0 +1,17 @@
+# Stub manifest for this example. One exported function per line:
+#
+#   <name> <ret-type> <arg-spec>...
+#
+# arg specs:
+#   i32 usize cstr                 scalars / input string
+#   outbuf,cap=C,len=X             caller-allocated output buffer:
+#                                    cap=C  capacity is arg #C (1-based)
+#                                    len=X  copy-back length: ret | nul | cap | arg<M>
+#   outlen                         size_t* out-param (guest writes a length)
+#
+# `make gen` turns this into stub/src/lib.rs.
+
+to_upper       usize  cstr  outbuf,cap=3,len=ret   usize
+greet          void   cstr  outbuf,cap=3,len=nul   usize
+fill_pattern   void   outbuf,cap=2,len=cap  usize
+extract_word   void   cstr  outbuf,cap=3,len=arg4  usize  outlen

@@ -6,25 +6,36 @@
 #
 # functions.txt format (one per line; '#' comments and blank lines ignored):
 #
-#   <name> <ret-type> <arg-type>...
+#   <name> <ret-type> <arg-spec>...
 #
-# Types understood so far:
-#   i32    a scalar int, passed by value (a wasm i32 IS a native int)
-#   usize  a size_t-shaped return (widened from the wasm i32/i64 result)
-#   cstr   a `const char*`: the host string is copied into guest memory and the
-#          call receives the resulting guest offset (this is *marshalling*)
+# Return types:  i32 | usize | void
 #
-# A function whose args and return are all `i32` gets a trivial pass-through stub.
-# Any `cstr` arg (or non-i32 return) makes it a *marshalled* stub that bounces the
-# buffer through the guest allocator. This is the seam where richer types (buffers,
-# structs, ...) get added later.
+# Argument specs:
+#   i32                     scalar int, passed by value
+#   usize                   scalar size_t, passed by value
+#   cstr                    const char* input — copied INTO the guest (marshalling)
+#   outbuf,cap=C,len=X      caller-allocated char* output buffer:
+#                             cap=C  capacity is the value of arg #C (1-based)
+#                             len=X  how many bytes to copy back out — one of:
+#                                      ret    = the function's return value
+#                                      nul    = up to & including the first NUL
+#                                      cap    = the whole buffer (capacity)
+#                                      arg<M> = the value the guest wrote into outlen arg #M
+#   outlen                  size_t* output param — the guest writes a length there,
+#                             read back into the caller's size_t and usable as len=arg<M>
+#
+# A function whose args + return are all `i32` gets a trivial pass-through stub.
+# Anything else is a *marshalled* stub built from an `Arg` array. This is the seam
+# where richer types get added later.
 set -euo pipefail
 
 funcs="${1:?usage: gen_stubs.sh <functions.txt>}"
 
 # --- pass 1: classify what helpers/imports we need -------------------------------
-has_scalar=0     # at least one all-i32 function -> emit the scalar `call` helper
-has_marshal=0    # at least one marshalled function -> emit Arg/cstr helpers + imports
+has_scalar=0   # an all-i32 function -> emit the scalar `call` helper
+has_marshal=0  # any marshalled function -> emit Arg-array helpers + imports
+has_cstr=0     # any cstr arg -> need CStr + cstr_bytes
+has_ptr=0      # any cstr/outbuf/outlen arg -> need c_char / pointer params
 while IFS= read -r line; do
     line="${line%%#*}"
     [ -z "${line// /}" ] && continue
@@ -34,7 +45,16 @@ while IFS= read -r line; do
     ret="$1"; shift
     marshal=0
     [ "$ret" != "i32" ] && marshal=1
-    for t in "$@"; do [ "$t" != "i32" ] && marshal=1; done
+    for t in "$@"; do
+        case "$t" in
+            i32) ;;
+            usize) marshal=1 ;;
+            cstr) marshal=1; has_cstr=1; has_ptr=1 ;;
+            outbuf,*) marshal=1; has_ptr=1 ;;
+            outlen) marshal=1; has_ptr=1 ;;
+            *) echo "gen_stubs.sh: unknown arg spec '$t'" >&2; exit 2 ;;
+        esac
+    done
     if [ "$marshal" -eq 1 ]; then has_marshal=1; else has_scalar=1; fi
 done < "$funcs"
 
@@ -53,9 +73,13 @@ use std::sync::{Mutex, OnceLock};
 HEADER
 
 # --- header: imports (marshalling pulls in a couple more) -------------------------
-if [ "$has_marshal" -eq 1 ]; then
+if [ "$has_cstr" -eq 1 ]; then
     printf '\nuse core::ffi::{CStr, c_char};\n'
-    printf '\nuse lind_boot::{Arg, CliOptions, SandboxedLib, init_sandboxed_lib};\n'
+elif [ "$has_ptr" -eq 1 ]; then
+    printf '\nuse core::ffi::c_char;\n'
+fi
+if [ "$has_marshal" -eq 1 ]; then
+    printf '\nuse lind_boot::{Arg, CliOptions, OutLen, SandboxedLib, init_sandboxed_lib};\n'
 else
     printf '\nuse lind_boot::{CliOptions, SandboxedLib, init_sandboxed_lib};\n'
 fi
@@ -127,8 +151,8 @@ SCALAR
 fi
 
 # --- header: the marshalling helpers (only if needed) -----------------------------
-if [ "$has_marshal" -eq 1 ]; then
-    cat <<'MARSHAL'
+if [ "$has_cstr" -eq 1 ]; then
+    cat <<'CSTR'
 
 /// Read a host C string into an owned buffer INCLUDING the trailing NUL, so that
 /// after it is copied into guest memory the guest still sees a valid C string.
@@ -138,8 +162,12 @@ unsafe fn cstr_bytes(p: *const c_char) -> Vec<u8> {
     }
     unsafe { CStr::from_ptr(p) }.to_bytes_with_nul().to_vec()
 }
+CSTR
+fi
+if [ "$has_marshal" -eq 1 ]; then
+    cat <<'MARSHAL'
 
-fn call_buf(name: &str, args: &[Arg]) -> i64 {
+fn call_buf(name: &str, args: &mut [Arg]) -> i64 {
     lib()
         .lock()
         .unwrap()
@@ -158,13 +186,12 @@ while IFS= read -r line; do
     name="$1"; shift
     ret="$1"; shift
 
-    # is this a plain scalar function (all i32 args + i32 return)?
+    # scalar fast path: all-i32 args + i32 return.
     scalar=1
     [ "$ret" != "i32" ] && scalar=0
     for t in "$@"; do [ "$t" != "i32" ] && scalar=0; done
 
     if [ "$scalar" -eq 1 ]; then
-        # trivial pass-through: extern "C" fn NAME(a0: i32, ...) -> i32
         params=""; slice=""; i=0
         for _ in "$@"; do
             [ "$i" -gt 0 ] && { params="$params, "; slice="$slice, "; }
@@ -174,40 +201,68 @@ while IFS= read -r line; do
         done
         printf '\n#[unsafe(no_mangle)]\npub extern "C" fn %s(%s) -> i32 {\n    call("%s", &[%s])\n}\n' \
             "$name" "$params" "$name" "$slice"
-    else
-        # marshalled: build the param list, any copy-in preamble, and the Arg list.
-        params=""; preamble=""; argexpr=""; i=0
-        for t in "$@"; do
-            [ "$i" -gt 0 ] && { params="$params, "; argexpr="$argexpr, "; }
-            case "$t" in
-                i32)
-                    params="${params}a${i}: i32"
-                    argexpr="${argexpr}Arg::I32(a${i})"
-                    ;;
-                cstr)
-                    params="${params}a${i}: *const c_char"
-                    preamble="${preamble}    let b${i} = unsafe { cstr_bytes(a${i}) };\n"
-                    argexpr="${argexpr}Arg::Buf(&b${i})"
-                    ;;
-                *)
-                    echo "gen_stubs.sh: unknown arg type '$t' for '$name'" >&2
-                    exit 2
-                    ;;
-            esac
-            i=$((i + 1))
-        done
-        case "$ret" in
-            i32)   rust_ret="i32";   ret_cast=" as i32" ;;
-            usize) rust_ret="usize"; ret_cast=" as usize" ;;
-            i64)   rust_ret="i64";   ret_cast="" ;;
-            *)
-                echo "gen_stubs.sh: unknown return type '$ret' for '$name'" >&2
-                exit 2
+        continue
+    fi
+
+    # marshalled path: build params, a copy-in/alloc preamble, and the Arg array.
+    params=""; preamble=""; argexpr=""; i=0
+    for t in "$@"; do
+        [ "$i" -gt 0 ] && { params="$params, "; argexpr="$argexpr,"; }
+        case "$t" in
+            i32)
+                params="${params}a${i}: i32"
+                argexpr="${argexpr}\n        Arg::I32(a${i})"
+                ;;
+            usize)
+                params="${params}a${i}: usize"
+                argexpr="${argexpr}\n        Arg::USize(a${i})"
+                ;;
+            cstr)
+                params="${params}a${i}: *const c_char"
+                preamble="${preamble}    let in${i} = unsafe { cstr_bytes(a${i}) };\n"
+                argexpr="${argexpr}\n        Arg::Buf(&in${i})"
+                ;;
+            outbuf,*)
+                # parse cap=C and len=X out of the comma-separated spec
+                cap=""; lenspec=""
+                IFS=, read -ra fields <<< "$t"
+                for f in "${fields[@]}"; do
+                    case "$f" in
+                        cap=*) cap="${f#cap=}" ;;
+                        len=*) lenspec="${f#len=}" ;;
+                    esac
+                done
+                [ -z "$cap" ] && { echo "gen_stubs.sh: outbuf missing cap= in '$t' ($name)" >&2; exit 2; }
+                capidx=$((cap - 1))   # 1-based arg # -> 0-based param name
+                case "$lenspec" in
+                    ret) outlen="OutLen::Ret" ;;
+                    nul) outlen="OutLen::Nul" ;;
+                    cap) outlen="OutLen::Cap" ;;
+                    arg*) outlen="OutLen::FromArg($(( ${lenspec#arg} - 1 )))" ;;
+                    *) echo "gen_stubs.sh: outbuf bad len='$lenspec' in '$t' ($name)" >&2; exit 2 ;;
+                esac
+                params="${params}a${i}: *mut c_char"
+                preamble="${preamble}    let out${i} = unsafe { core::slice::from_raw_parts_mut(a${i} as *mut u8, a${capidx} as usize) };\n"
+                argexpr="${argexpr}\n        Arg::Out { dst: out${i}, len: ${outlen} }"
+                ;;
+            outlen)
+                params="${params}a${i}: *mut usize"
+                preamble="${preamble}    let len${i} = unsafe { &mut *a${i} };\n"
+                argexpr="${argexpr}\n        Arg::OutLen(len${i})"
                 ;;
         esac
-        printf '\n#[unsafe(no_mangle)]\npub extern "C" fn %s(%s) -> %s {\n' \
-            "$name" "$params" "$rust_ret"
-        [ -n "$preamble" ] && printf '%b' "$preamble"
-        printf '    call_buf("%s", &[%s])%s\n}\n' "$name" "$argexpr" "$ret_cast"
-    fi
+        i=$((i + 1))
+    done
+
+    case "$ret" in
+        i32)   sig_ret=" -> i32";   ret_expr="    call_buf(\"$name\", &mut args) as i32\n" ;;
+        usize) sig_ret=" -> usize"; ret_expr="    call_buf(\"$name\", &mut args) as usize\n" ;;
+        void)  sig_ret="";          ret_expr="    call_buf(\"$name\", &mut args);\n" ;;
+        *)     echo "gen_stubs.sh: unknown return type '$ret' for '$name'" >&2; exit 2 ;;
+    esac
+
+    printf '\n#[unsafe(no_mangle)]\npub extern "C" fn %s(%s)%s {\n' "$name" "$params" "$sig_ret"
+    [ -n "$preamble" ] && printf '%b' "$preamble"
+    printf '    let mut args = [%b\n    ];\n' "$argexpr"
+    printf '%b}\n' "$ret_expr"
 done < "$funcs"
