@@ -1,2 +1,0 @@
-mod muthashmaxglobal;
-pub use crate::muthashmaxglobal::*;

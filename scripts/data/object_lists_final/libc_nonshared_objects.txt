@@ -1,3 +1,0 @@
-/home/lind/lind-wasm/src/glibc/build/stdlib/atexit.oS
-/home/lind/lind-wasm/src/glibc/build/nptl/pthread_atfork.oS
-/home/lind/lind-wasm/src/glibc/build/debug/stack_chk_fail_local.oS

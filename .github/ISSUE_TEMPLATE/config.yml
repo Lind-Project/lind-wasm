@@ -1,8 +1,0 @@
-blank_issues_enabled: true
-contact_links:
-  - name: Report a security vulnerability
-    url: https://github.com/Lind-Project/lind-wasm/security/advisories/new
-    about: Report vulnerabilities privately. Do not open a public issue.
-  - name: Lind community and governance
-    url: https://github.com/Lind-Project/community
-    about: Find project-wide policies, maintainers, Slack, and community meetings.

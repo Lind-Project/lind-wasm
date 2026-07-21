@@ -1,2 +1,0 @@
-mod dashmapvecglobal;
-pub use crate::dashmapvecglobal::*;
