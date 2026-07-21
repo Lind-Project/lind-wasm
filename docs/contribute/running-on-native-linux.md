@@ -1,12 +1,12 @@
 # Running on Native Linux
 
-Docker is quick to use, but is not necessary for running Lind-Wasm. Lind-Wasm can be built and run directly inside an Ubuntu 22.04 WSL2
-distribution without using Docker.
+Docker is quick to use, but is not necessary for running Lind-Wasm. Lind-Wasm can be built and run directly on Ubuntu 22.04, both in WSL2
+and on native Linux, without using Docker.
 
 
 This guide follows the dependency versions used by
 [`Dockerfile.dev`](https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.dev), but installs them directly
-inside WSL.
+in the WSL2 or native Linux environment.
 
 ## Tested environment
 
