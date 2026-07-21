@@ -5,7 +5,7 @@ distribution without using Docker.
 
 
 This guide follows the dependency versions used by
-[`Dockerfile.dev`](../Docker/Dockerfile.dev), but installs them directly
+[`Dockerfile.dev`](https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.dev), but installs them directly
 inside WSL.
 
 ## Tested environment
@@ -58,7 +58,7 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
    ```
 
    Install the development packages used by
-   [`Dockerfile.dev`](../Docker/Dockerfile.dev):
+   [`Dockerfile.dev`](https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.dev):
 
    ```bash
    sudo apt install -y \
@@ -251,7 +251,7 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
    make lind-debug
    ```
 
-   See the project [`Makefile`](../Makefile) for the individual build
+   See the project [`Makefile`](https://github.com/Lind-Project/lind-wasm/blob/main/Makefile) for the individual build
    targets.
 
 9. __Install the Lind helper commands__
