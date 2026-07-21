@@ -10,7 +10,7 @@ inside WSL.
 
 ## Tested environment
 
-The following configuration was used to verify these instructions:
+The following configuration was used to run lind on WSL2 and native Linux
 
 Environment #1:
 - Windows 10 Pro
