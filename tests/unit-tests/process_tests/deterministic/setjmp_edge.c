@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <setjmp.h>
 
 static int passed = 0;
@@ -182,6 +183,60 @@ static void test_rethrow_propagates(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Test 8: raw jmp_buf save/restore (unwind-protect style)            */
+/*                                                                     */
+/* A common idiom saves a jmp_buf's raw bytes before re-registering    */
+/* it, and restores those bytes before deliberately re-throwing to     */
+/* whoever owned the earlier registration (e.g. a cleanup handler that */
+/* catches once and then propagates the same condition outward). The   */
+/* restored longjmp must resolve in the OUTER frame that owns the      */
+/* restored bytes, not loop back into the inner frame that already     */
+/* caught it once and is done with it.                                 */
+/* ------------------------------------------------------------------ */
+static jmp_buf protect_buf;
+static int inner_catches;
+
+static void deep_throw(void) { longjmp(protect_buf, 1); }
+
+static void inner_frame_with_unwind_protect(void) {
+    char saved[sizeof(jmp_buf)];
+    memcpy(saved, protect_buf, sizeof(jmp_buf));
+
+    int val = setjmp(protect_buf);
+    if (val == 0) {
+        deep_throw();
+        return; /* unreachable */
+    }
+
+    inner_catches++;
+    if (inner_catches > 1) {
+        /* Would only happen if the inner frame kept re-matching its own
+         * stale registration instead of propagating outward — stop here
+         * rather than loop, and let the checks below report the failure. */
+        return;
+    }
+
+    /* Restore the outer frame's raw registration, then propagate. */
+    memcpy(protect_buf, saved, sizeof(jmp_buf));
+    longjmp(protect_buf, 2);
+}
+
+static void test_unwind_protect_rethrow(void) {
+    printf("\n[8] Raw jmp_buf save/restore re-throw resolves outward\n");
+    inner_catches = 0;
+
+    int val = setjmp(protect_buf);
+    if (val == 0) {
+        inner_frame_with_unwind_protect();
+        printf("  FAIL: inner_frame_with_unwind_protect returned normally\n");
+        failed++;
+    } else {
+        EXPECT_EQ("outer frame caught the propagated longjmp", val, 2);
+        EXPECT_EQ("inner frame caught exactly once", inner_catches, 1);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 int main(void) {
     test_nested();
     test_deep_stack();
@@ -190,6 +245,7 @@ int main(void) {
     test_one_val();
     test_funcptr();
     test_rethrow_propagates();
+    test_unwind_protect_rethrow();
 
     printf("\n=== Results: %d passed, %d failed ===\n", passed, failed);
     return failed > 0 ? 1 : 0;
