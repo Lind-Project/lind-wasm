@@ -46,8 +46,10 @@
 static __thread int g_tempRet0;
 
 /* Thread-local monotonic counter used to mint a unique, never-zero token for
- * each saveSetjmp() registration (see buf[0] discussion above). */
-static __thread int g_setjmp_token;
+ * each saveSetjmp() registration (see buf[0] discussion above).  Unsigned so
+ * wraparound is well-defined (wraps to 0, which is skipped) rather than
+ * signed overflow, which is undefined behavior in C. */
+static __thread uint32_t g_setjmp_token;
 
 __attribute__((visibility("default"))) void setTempRet0(int val)
 {
@@ -72,14 +74,14 @@ __attribute__((visibility("default"))) int getTempRet0(void)
  */
 __attribute__((visibility("default"))) int *saveSetjmp(int *buf, int label_id, int *table, int size)
 {
-    int token = ++g_setjmp_token;
+    uint32_t token = ++g_setjmp_token;
     if (token == 0) token = ++g_setjmp_token; /* skip the 0 sentinel on wraparound */
-    buf[0] = token;
+    buf[0] = (int)token;
 
     /* Find an empty slot. */
     for (int i = 0; i < size; i++) {
         if (table[2 * i] == 0) {
-            table[2 * i]     = token;
+            table[2 * i]     = (int)token;
             table[2 * i + 1] = label_id;
             setTempRet0(size);
             return table;
@@ -98,7 +100,7 @@ __attribute__((visibility("default"))) int *saveSetjmp(int *buf, int label_id, i
     /* Zero the freshly allocated half. */
     memset(new_table + size * 2, 0, (size_t)size * 2 * sizeof(int));
 
-    new_table[size * 2]     = token;
+    new_table[size * 2]     = (int)token;
     new_table[size * 2 + 1] = label_id;
 
     setTempRet0(new_size);
