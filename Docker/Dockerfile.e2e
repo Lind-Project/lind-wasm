@@ -91,9 +91,8 @@ ENV PATH="/${CLANG}/bin:${PATH}"
 ENV MATH_TEST_DIR="math_tests"
 
 # --- Install libtinfo5 ---
-RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
-
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.2_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.2_amd64.deb
 
 # Install rust
 # --profile minimal tells rustup to install only the essentials for the toolchain

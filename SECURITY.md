@@ -1,5 +1,9 @@
 # Security Policy
 
+Project-wide security reporting guidance is maintained in the
+[Lind community repository](https://github.com/Lind-Project/community/blob/main/SECURITY.md).
+The supported versions and response timeline below are specific to `lind-wasm`.
+
 ## Supported Versions
 
 We currently only support the latest code on our primary branch. Security fixes are not backported to older commits.
