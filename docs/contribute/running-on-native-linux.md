@@ -301,13 +301,13 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
 
 10. __Create the Lind filesystem compatibility link__
 
-    The helper commands use `$LIND_WASM_ROOT`, but the current runtime still
-    expects `lindfs` at `/home/lind/lind-wasm/lindfs`. Until the runtime path
-    is configurable, link that fixed location to `$LIND_WASM_ROOT`:
+    The current runtime expects `lindfs` at
+    `/home/lind/lind-wasm/lindfs`. When the WSL username is not `lind`,
+    create a compatibility symbolic link:
 
     ```bash
     sudo mkdir -p /home/lind
-    sudo ln -sfnT "$LIND_WASM_ROOT" /home/lind/lind-wasm
+    sudo ln -sfnT "$HOME/lind-wasm" /home/lind/lind-wasm
     ```
 
     Verify the path:
