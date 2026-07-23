@@ -1,0 +1,1615 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://lind-project.github.io/lind-wasm/contribute/running-on-native-linux/">
+      
+      
+        <link rel="prev" href="../dev-container/">
+      
+      
+        <link rel="next" href="../styleguide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Native Linux setup - Lind-Wasm Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/img.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#running-on-native-linux" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Lind-Wasm Docs" class="md-header__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Lind-Wasm Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Native Linux setup
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Lind-Wasm Docs" class="md-nav__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Lind-Wasm Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../internal/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Internal Documentation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Internal Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/libc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    libc
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/wasmtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Wasmtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/3i/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threei
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/grates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grates
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/clamping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Clamping
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/rawposix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RawPOSIX
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/multiprocess-support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-Processing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/signals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Signals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/setjmp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    setjmp / longjmp
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/libcpp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    C++ support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev-container/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native Linux setup
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native Linux setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tested-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tested environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step-guide-on-installing-without-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        step by step guide on installing without Docker
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../styleguide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust style guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../toolchain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lind toolchain
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../compile-with-rust/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compiling Rust programs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../debug-programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Debug programs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../add-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding to the docs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/Lind-Project/lind-wasm/security/policy" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security policy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-release-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Hub release workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../e2e-testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    End-to-End Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_12" id="__nav_4_12_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipelines
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipelines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipelines/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipelines/lind-wasm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    lind-wasm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tested-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tested environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step-guide-on-installing-without-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        step by step guide on installing without Docker
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/Lind-Project/lind-wasm/edit/main/docs/contribute/running-on-native-linux.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="running-on-native-linux">Running on Native Linux</h1>
+<p>Docker is quick to use, but is not necessary for running Lind-Wasm. Lind-Wasm can be built and run directly on Ubuntu 22.04, both in WSL2
+and on native Linux, without using Docker.</p>
+<p>This guide follows the dependency versions used by
+<a href="https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.dev"><code>Dockerfile.dev</code></a>, but installs them directly
+in the WSL2 or native Linux environment.</p>
+<h2 id="tested-environment">Tested environment</h2>
+<p>The following configuration was used to run lind on WSL2 and native Linux</p>
+<p>Environment #1:
+- Windows 10 Pro
+- WSL2
+- Ubuntu 22.04
+- x86-64/AMD64 processor(Ryzen 5 3600)
+- 16 GB RAM
+- 25 GB of free space</p>
+<p>Environment #2:
+- Native Linux
+- Ubuntu 22.04
+- x86-64/AMD64 processor(AMD Ryzen™ AI 9 HX 370)
+- 16 GB RAM
+- 46 GB of free space</p>
+<p>The exact minimum disk-space requirement has not been formally measured.
+The dependencies require a significant amount of storage so 15-20gb of free space is recomended to avoid any issues during installation.</p>
+<h2 id="step-by-step-guide-on-installing-without-docker">step by step guide on installing without Docker</h2>
+<ol>
+<li><strong>Install Ubuntu 22.04 on WSL2(SKIP IF YOU ARE ON NATIVE LINUX)</strong></li>
+</ol>
+<p>From Windows PowerShell, install Ubuntu 22.04 if it is not already
+   available:</p>
+<div class="highlight"><pre><span></span><code><span class="n">wsl</span> <span class="p">-</span><span class="n">-install</span> <span class="n">-d</span> <span class="n">Ubuntu</span><span class="p">-</span><span class="n">22</span><span class="p">.</span><span class="n">04</span>
+</code></pre></div>
+<p>Set it as the default WSL distribution:</p>
+<div class="highlight"><pre><span></span><code><span class="n">wsl</span> <span class="p">-</span><span class="n">-set-default</span> <span class="n">Ubuntu</span><span class="p">-</span><span class="n">22</span><span class="p">.</span><span class="n">04</span>
+</code></pre></div>
+<p>Launch Ubuntu 22.04 before continuing.</p>
+<ol start="2">
+<li><strong>Install system dependencies</strong></li>
+</ol>
+<p>Update the packages:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>update
+</code></pre></div>
+<p>Install the development packages used by
+   <a href="https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.dev"><code>Dockerfile.dev</code></a>:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>binutils<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>bison<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>cmake<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>flex<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>build-essential<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>ca-certificates<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>strace<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>curl<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>gawk<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>git<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>gnupg<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>libc6-dev-i386-cross<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>libxml2<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>make<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>python3<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>sed<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>sudo<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>unzip<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>zip<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>autoconf<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>rsync<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>libtool<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>automake<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>vim<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>wget<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>openssl<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>libssl-dev<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>golang<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>gdb<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>linux-tools-common<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>linux-tools-generic<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>tzdata<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>xz-utils
+</code></pre></div>
+<p>Install the pinned <code>libtinfo5</code> compatibility package:</p>
+<div class="highlight"><pre><span></span><code>wget<span class="w"> </span>http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.2_amd64.deb
+sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>./libtinfo5_6.3-2ubuntu0.2_amd64.deb
+rm<span class="w"> </span>libtinfo5_6.3-2ubuntu0.2_amd64.deb
+</code></pre></div>
+<ol start="3">
+<li><strong>Install Rust</strong></li>
+</ol>
+<p>Install Rust through <code>rustup</code> using the minimal profile:</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>--proto<span class="w"> </span><span class="s1">&#39;=https&#39;</span><span class="w"> </span>--tlsv1.2<span class="w"> </span>-sSf<span class="w"> </span>https://sh.rustup.rs<span class="w"> </span><span class="p">|</span>
+<span class="w">  </span>sh<span class="w"> </span>-s<span class="w"> </span>--<span class="w"> </span>-y<span class="w"> </span>--profile<span class="w"> </span>minimal
+</code></pre></div>
+<p>Load the Rust environment:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">source</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/.cargo/env&quot;</span>
+</code></pre></div>
+<p>Install the pinned nightly toolchain and <code>rust-src</code> component:</p>
+<div class="highlight"><pre><span></span><code>rustup<span class="w"> </span>toolchain<span class="w"> </span>install<span class="w"> </span>nightly-2026-02-11<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--profile<span class="w"> </span>minimal<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--component<span class="w"> </span>rust-src
+</code></pre></div>
+<p>Verify the installation:</p>
+<div class="highlight"><pre><span></span><code>rustc<span class="w"> </span>+nightly-2026-02-11<span class="w"> </span>--version
+</code></pre></div>
+<ol start="4">
+<li><strong>Install WABT 1.0.38</strong></li>
+</ol>
+<p>Download and build the pinned WABT release:</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-fsSL<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>https://github.com/WebAssembly/wabt/releases/download/1.0.38/wabt-1.0.38.tar.xz<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-o<span class="w"> </span>/tmp/wabt.tar.xz
+
+mkdir<span class="w"> </span>-p<span class="w"> </span>/tmp/wabt-src
+
+tar<span class="w"> </span>-xJf<span class="w"> </span>/tmp/wabt.tar.xz<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-C<span class="w"> </span>/tmp/wabt-src<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--strip-components<span class="o">=</span><span class="m">1</span>
+
+cmake<span class="w"> </span>-S<span class="w"> </span>/tmp/wabt-src<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-B<span class="w"> </span>/tmp/wabt-src/build<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-DBUILD_TESTS<span class="o">=</span>OFF
+
+cmake<span class="w"> </span>--build<span class="w"> </span>/tmp/wabt-src/build<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--target<span class="w"> </span>wasm2wat<span class="w"> </span>wat2wasm<span class="w"> </span>wasm-objdump<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--parallel<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>nproc<span class="k">)</span><span class="s2">&quot;</span>
+</code></pre></div>
+<p>Install the required programs:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0755</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/tmp/wabt-src/build/wasm2wat<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/wasm2wat
+
+sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0755</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/tmp/wabt-src/build/wat2wasm<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/wat2wasm
+
+sudo<span class="w"> </span>install<span class="w"> </span>-m<span class="w"> </span><span class="m">0755</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/tmp/wabt-src/build/wasm-objdump<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/wasm-objdump
+</code></pre></div>
+<p>Remove the temporary build files:</p>
+<div class="highlight"><pre><span></span><code>rm<span class="w"> </span>-rf<span class="w"> </span>/tmp/wabt.tar.xz<span class="w"> </span>/tmp/wabt-src
+</code></pre></div>
+<p>Verify the tools:</p>
+<div class="highlight"><pre><span></span><code>wasm2wat<span class="w"> </span>--version
+wat2wasm<span class="w"> </span>--version
+wasm-objdump<span class="w"> </span>--version
+</code></pre></div>
+<ol start="5">
+<li><strong>Clone Lind-Wasm</strong></li>
+</ol>
+<p>Clone the repository into the Linux filesystem rather than under <code>/mnt/c</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Lind-Project/lind-wasm.git
+<span class="nb">cd</span><span class="w"> </span>lind-wasm
+</code></pre></div>
+<ol start="6">
+<li><strong>Install Clang/LLVM 18.1.8</strong></li>
+</ol>
+<p>Download and extract the pinned LLVM package:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/lind-wasm
+
+curl<span class="w"> </span>-fsSL<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-o<span class="w"> </span>/tmp/llvm.tar.xz
+
+tar<span class="w"> </span>-xJf<span class="w"> </span>/tmp/llvm.tar.xz<span class="w"> </span>-C<span class="w"> </span>~/lind-wasm
+rm<span class="w"> </span>/tmp/llvm.tar.xz
+</code></pre></div>
+<ol start="7">
+<li><strong>Install Lind's WASI files and configure the environment</strong></li>
+</ol>
+<p>Copy Lind's WASI files into the Clang resource directory:</p>
+<div class="highlight"><pre><span></span><code>cp<span class="w"> </span>-r<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>~/lind-wasm/src/glibc/wasi<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>~/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/lib/
+</code></pre></div>
+<p>Add the Lind-Wasm root, LLVM, and Rust directories to the shell
+   environment:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;export LIND_WASM_ROOT=&quot;$HOME/lind-wasm&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+<span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;export CLANG=&quot;$LIND_WASM_ROOT/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+<span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;export PATH=&quot;$CLANG/bin:$HOME/.cargo/bin:$PATH&quot;&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+<span class="nb">source</span><span class="w"> </span>~/.bashrc
+</code></pre></div>
+<p>Verify LLVM:</p>
+<div class="highlight"><pre><span></span><code>clang<span class="w"> </span>--version
+wasm-ld<span class="w"> </span>--version
+</code></pre></div>
+<ol start="8">
+<li><strong>Build Lind-Wasm</strong></li>
+</ol>
+<p>From the repository root, build the development runtime, Lind filesystem,
+   custom glibc, and sysroot:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/lind-wasm
+make<span class="w"> </span>lind-debug
+</code></pre></div>
+<p>See the project <a href="https://github.com/Lind-Project/lind-wasm/blob/main/Makefile"><code>Makefile</code></a> for the individual build
+   targets.</p>
+<ol start="9">
+<li><strong>Install the Lind helper commands</strong></li>
+</ol>
+<p>Make the scripts executable:</p>
+<div class="highlight"><pre><span></span><code>chmod<span class="w"> </span>+x<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>scripts/bin/lind_compile<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>scripts/bin/lind_run<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>scripts/bin/cargo-lind_compile
+</code></pre></div>
+<p>Create commands in <code>/usr/local/bin</code>:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>ln<span class="w"> </span>-sfn<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/lind-wasm/scripts/bin/lind_compile&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/lind_compile
+
+sudo<span class="w"> </span>ln<span class="w"> </span>-sfn<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/lind-wasm/scripts/bin/lind_run&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/lind_run
+
+sudo<span class="w"> </span>ln<span class="w"> </span>-sfn<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/lind-wasm/scripts/bin/cargo-lind_compile&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/cargo-lind_compile
+</code></pre></div>
+<p>Add the alternate command names used by the development image:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>ln<span class="w"> </span>-sfn<span class="w"> </span>/usr/local/bin/lind_compile<span class="w"> </span>/usr/local/bin/lind-clang
+sudo<span class="w"> </span>ln<span class="w"> </span>-sfn<span class="w"> </span>/usr/local/bin/lind_run<span class="w"> </span>/usr/local/bin/lind-wasm
+sudo<span class="w"> </span>ln<span class="w"> </span>-sfn<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/cargo-lind_compile<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>/usr/local/bin/lind-cargo-build
+</code></pre></div>
+<p>Verify the commands:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>lind_compile
+<span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>lind_run
+<span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>cargo-lind_compile
+</code></pre></div>
+<ol start="10">
+<li>
+<p><strong>Create the Lind filesystem compatibility link</strong></p>
+<p>The current runtime expects <code>lindfs</code> at
+<code>/home/lind/lind-wasm/lindfs</code>. When the WSL username is not <code>lind</code>,
+create a compatibility symbolic link:</p>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/home/lind
+sudo<span class="w"> </span>ln<span class="w"> </span>-sfnT<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$HOME</span><span class="s2">/lind-wasm&quot;</span><span class="w"> </span>/home/lind/lind-wasm
+</code></pre></div>
+<p>Verify the path:</p>
+<div class="highlight"><pre><span></span><code>ls<span class="w"> </span>-ld<span class="w"> </span>/home/lind/lind-wasm/lindfs
+</code></pre></div>
+</li>
+<li>
+<p><strong>Compile and run a test program</strong></p>
+<p>Create <code>hello.c</code> in the repository root:</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;stdio.h&gt;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">printf</span><span class="p">(</span><span class="s">&quot;Hello, World!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Compile it:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>~/lind-wasm
+lind_compile<span class="w"> </span>-s<span class="w"> </span>hello.c
+</code></pre></div>
+<p>Run the compiled program using its path inside <code>lindfs</code>:</p>
+<div class="highlight"><pre><span></span><code>lind_run<span class="w"> </span>/hello.cwasm
+</code></pre></div>
+<p>The expected output is:</p>
+<div class="highlight"><pre><span></span><code>Hello, World!
+</code></pre></div>
+</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.action.edit"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
