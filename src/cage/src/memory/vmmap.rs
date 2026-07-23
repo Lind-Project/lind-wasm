@@ -1188,12 +1188,6 @@ impl VmmapOps for Vmmap {
 // Testing
 #[cfg(test)]
 mod tests {
-    fn test_vmmap() -> Vmmap {
-        let mut vmmap = Vmmap::new();
-        vmmap.base_address = Some(0);
-        vmmap
-    }
-
     use super::*;
 
     /// Test: Change protection on entire continuous region
@@ -1201,7 +1195,7 @@ mod tests {
     /// Verifies that changing protection on an entire region doesn't fragment it
     #[test]
     fn test_change_prot_entire_region() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region of 10 pages with READ|WRITE protection
         vmmap
@@ -1237,7 +1231,7 @@ mod tests {
     /// Confirms proper splitting into 3 parts when modifying middle pages
     #[test]
     fn test_change_prot_middle_of_region() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region of 10 pages
         vmmap
@@ -1279,7 +1273,7 @@ mod tests {
     /// Tests splitting into 2 parts when modifying start pages
     #[test]
     fn test_change_prot_beginning_of_region() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region of 10 pages
         vmmap
@@ -1317,7 +1311,7 @@ mod tests {
     /// Tests splitting into 2 parts when modifying end pages
     #[test]
     fn test_change_prot_end_of_region() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region of 10 pages
         vmmap
@@ -1355,7 +1349,7 @@ mod tests {
     /// Verifies correct handling across multiple non-contiguous regions
     #[test]
     fn test_change_prot_spanning_multiple_regions() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate three separate continuous regions
         vmmap
@@ -1435,7 +1429,7 @@ mod tests {
     /// Ensures no fragmentation when protection doesn't actually change on a subrange
     #[test]
     fn test_change_prot_to_same_value() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region
         vmmap
@@ -1473,7 +1467,7 @@ mod tests {
     /// Tests single-page modifications and precise boundary handling
     #[test]
     fn test_change_prot_exact_boundaries() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region
         vmmap
@@ -1513,7 +1507,7 @@ mod tests {
     /// Verifies correct state after successive protection changes
     #[test]
     fn test_change_prot_multiple_times() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region
         vmmap
@@ -1556,7 +1550,7 @@ mod tests {
     /// Verifies proper handling of PROT_NONE protection
     #[test]
     fn test_change_prot_to_none() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate a continuous region
         vmmap
@@ -1590,7 +1584,7 @@ mod tests {
     /// Confirms backing type (Anonymous, SharedMemory, etc.) is preserved
     #[test]
     fn test_change_prot_preserves_backing_type() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate anonymous region
         vmmap
@@ -1642,7 +1636,7 @@ mod tests {
     /// Verifies that maxprot is preserved during protection changes
     #[test]
     fn test_change_prot_preserves_maxprot() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Allocate with specific maxprot
         vmmap
@@ -1677,7 +1671,7 @@ mod tests {
     /// Clarifies: "overwrite" means existing overlapping entries are replaced, not merged
     #[test]
     fn test_add_entry_with_overwrite_replaces_existing_full_overlap() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Add initial entry with READ|WRITE protection
         vmmap
@@ -1728,7 +1722,7 @@ mod tests {
     /// Clarifies: Partial overlaps cause the old entry to be split/modified
     #[test]
     fn test_add_entry_with_overwrite_partial_overlap() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Add initial large entry: pages 100-119
         vmmap
@@ -1784,7 +1778,7 @@ mod tests {
     /// Clarifies: If new entry completely covers old entries, they are removed
     #[test]
     fn test_add_entry_with_overwrite_removes_completely_covered_entries() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Add three separate small entries
         vmmap
@@ -1859,7 +1853,7 @@ mod tests {
     /// Clarifies: Behavior when new entry exactly borders existing entries
     #[test]
     fn test_add_entry_with_overwrite_exact_boundaries() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Add entry at pages 100-109
         vmmap
@@ -1931,7 +1925,7 @@ mod tests {
     /// Confirms hint parameter is a PAGE NUMBER, not a byte address
     #[test]
     fn test_find_map_space_with_hint_uses_page_number() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -1968,7 +1962,7 @@ mod tests {
     /// Clarifies: Hint is the starting page for search, not an address
     #[test]
     fn test_find_map_space_with_hint_searches_from_hint_page() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2023,7 +2017,7 @@ mod tests {
     // Shows that hint=0 searches from the beginning
     #[test]
     fn test_find_map_space_with_hint_zero_hint() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2059,7 +2053,7 @@ mod tests {
     /// Clarifies: Confirms hint is page-based by using large page numbers
     #[test]
     fn test_find_map_space_with_hint_large_page_number() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 100000; // Large address space
 
@@ -2096,7 +2090,7 @@ mod tests {
     /// Clarifies: Both hint and result are in pages, alignment is also in pages
     #[test]
     fn test_find_map_space_with_hint_alignment_in_pages() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 10000;
 
@@ -2127,9 +2121,10 @@ mod tests {
             0,
             "Start should be aligned to 8-page boundary"
         );
-        assert!(
-            interval.end() - interval.start() >= 10,
-            "Interval should contain at least the requested number of pages"
+        assert_eq!(
+            (interval.end() + 1) % 8,
+            0,
+            "End should be aligned to 8-page boundary"
         );
     }
 
@@ -2141,7 +2136,7 @@ mod tests {
     /// Clarifies: add_entry is strict and won't overlap, unlike add_entry_with_overwrite
     #[test]
     fn test_add_entry_strict_no_overlap() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
 
         // Add entry at pages 100-109
         let entry1 = VmmapEntry::new(
@@ -2194,7 +2189,7 @@ mod tests {
     /// Clarifies: Return value behavior when search fails
     #[test]
     fn test_find_space_returns_none_when_full() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 100;
 
@@ -2225,7 +2220,8 @@ mod tests {
     /// Expected: Should return true when the entire range has PROT_READ
     #[test]
     fn test_check_addr_read_success() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2259,7 +2255,8 @@ mod tests {
     /// so we need to use PROT_NONE to test the failure case
     #[test]
     fn test_check_addr_read_failure_no_read_prot() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2290,7 +2287,8 @@ mod tests {
     /// Expected: Should return true when the entire range has PROT_WRITE
     #[test]
     fn test_check_addr_write_success() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2321,7 +2319,8 @@ mod tests {
     /// Expected: Should return false when region lacks PROT_WRITE
     #[test]
     fn test_check_addr_write_failure_no_write_prot() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2352,7 +2351,8 @@ mod tests {
     /// Expected: Should return true when the entire range has both PROT_READ and PROT_WRITE
     #[test]
     fn test_check_addr_rw_success() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2383,7 +2383,8 @@ mod tests {
     /// Expected: Should return false when region lacks PROT_WRITE
     #[test]
     fn test_check_addr_rw_failure_read_only() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2414,7 +2415,8 @@ mod tests {
     /// Expected: Should return false when address is not mapped
     #[test]
     fn test_check_addr_read_unmapped_region() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2431,7 +2433,7 @@ mod tests {
     /// Expected: Zero-length access should always succeed
     #[test]
     fn test_check_addr_zero_length() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2455,7 +2457,8 @@ mod tests {
     /// Expected: Should return false when request spans beyond mapped region
     #[test]
     fn test_check_addr_read_partial_coverage() {
-        let mut vmmap = test_vmmap();
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2487,8 +2490,8 @@ mod tests {
     /// Expected: Should correctly calculate page numbers from addresses
     #[test]
     fn test_calculate_page_range() {
-        let vmmap = test_vmmap();
-
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
         // Test basic calculation: 1 page
         let result = vmmap.calculate_page_range(0, PAGESIZE as usize);
         assert_eq!(result, Some((0, 1)), "Single page at start");
