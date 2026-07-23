@@ -10,7 +10,7 @@ in the WSL2 or native Linux environment.
 
 ## Tested environment
 
-The following configuration was used to run lind on WSL2 and native Linux
+The following configuration was used to run lind-wasm on WSL2 and native Linux
 
 Environment #1:
 - Windows 10 Pro
@@ -28,7 +28,7 @@ Environment #2:
 - 46 GB of free space
 
 The exact minimum disk-space requirement has not been formally measured.
-The dependencies require a significant amount of storage so 15-20gb of free space is recomended to avoid any issues during installation.
+The dependencies require a significant amount of storage so 15-20gb of free space is recommended to avoid any issues during installation.
 
 ## step by step guide on installing without Docker
 
@@ -346,4 +346,14 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
 
     ```text
     Hello, World!
+    ```
+
+12. __Run the full test suite__
+
+    From the repository root, run the full test suite. It can take a while, so
+    wait for it to finish:
+
+    ```bash
+    cd ~/lind-wasm
+    make test
     ```
