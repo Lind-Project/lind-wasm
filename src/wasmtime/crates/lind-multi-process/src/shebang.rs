@@ -1,7 +1,5 @@
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
-use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 
@@ -16,33 +14,23 @@ pub struct Shebang {
     pub arg: Option<OsString>,
 }
 
-/// Parse a Linux-style shebang from `path`.
+/// Parse a Linux-style shebang from a file prefix.
 ///
 /// Returns:
 /// - `Ok(Some(...))` if the file starts with a valid shebang
 /// - `Ok(None)` if there is no shebang
-/// - `Err(...)` on I/O errors
 ///
 /// Linux-like behavior:
 /// - reads only a small prefix of the file
 /// - requires first two bytes to be `#!`
 /// - interpreter is first non-whitespace token after `#!`
 /// - the remainder of the line, after leading spaces/tabs, is one optional arg
-pub fn parse_shebang(path: &Path) -> Result<Option<Shebang>> {
-    // A small fixed buffer is enough for shebang parsing.
-    // Linux uses a fixed-size exec buffer too.
-    // Linux's shebang limit is 255 chars, let's also use that
-    const BUF_SIZE: usize = 255;
+pub fn parse_shebang(bytes: &[u8]) -> Result<Option<Shebang>> {
+    let data = &bytes[..bytes.len().min(SHEBANG_BUF_SIZE)];
 
-    let mut file = File::open(path)?;
-    let mut buf = [0u8; BUF_SIZE];
-    let n = file.read(&mut buf)?;
-
-    if n < 2 || &buf[..2] != b"#!" {
+    if data.len() < 2 || &data[..2] != b"#!" {
         return Ok(None);
     }
-
-    let data = &buf[..n];
 
     // Find end of first line.
     let line_end = data.iter().position(|&b| b == b'\n').unwrap_or(data.len());
@@ -87,6 +75,11 @@ pub fn parse_shebang(path: &Path) -> Result<Option<Shebang>> {
     Ok(Some(Shebang { interpreter, arg }))
 }
 
+// A small fixed buffer is enough for shebang parsing.
+// Linux uses a fixed-size exec buffer too. Linux's shebang limit is 255 chars,
+// so keep the parser bounded the same way even when the caller has full bytes.
+const SHEBANG_BUF_SIZE: usize = 255;
+
 /// Build the argv that should be passed to the interpreter.
 ///
 /// Resulting argv is:
@@ -121,4 +114,35 @@ fn trim_start_spaces_tabs(mut s: &[u8]) -> &[u8] {
         }
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_interpreter_without_arg() {
+        let shebang = parse_shebang(b"#!/bin/sh\necho ok\n").unwrap().unwrap();
+
+        assert_eq!(shebang.interpreter.to_str(), Some("/bin/sh"));
+        assert_eq!(shebang.arg, None);
+    }
+
+    #[test]
+    fn parses_single_optional_arg() {
+        let shebang = parse_shebang(b"#!/usr/bin/env python3 -O\n")
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(shebang.interpreter.to_str(), Some("/usr/bin/env"));
+        assert_eq!(
+            shebang.arg.as_ref().and_then(|arg| arg.to_str()),
+            Some("python3 -O")
+        );
+    }
+
+    #[test]
+    fn returns_none_without_shebang() {
+        assert!(parse_shebang(b"\0asm").unwrap().is_none());
+    }
 }
