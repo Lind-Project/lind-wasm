@@ -19,8 +19,7 @@ security implications, or performance impact. Write "None" when not applicable.
 
 ## Checklist
 
-- [ ] I have read the
-      [contribution guidelines](https://github.com/Lind-Project/lind-wasm/blob/main/CONTRIBUTING.md).
+- [ ] I have read the [contribution guidelines](https://github.com/Lind-Project/lind-wasm/blob/main/CONTRIBUTING.md).
 - [ ] I added or updated tests where appropriate.
 - [ ] I ran the relevant tests locally and they pass.
 - [ ] I formatted the code and ran the relevant linters.
