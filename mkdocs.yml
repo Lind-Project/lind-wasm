@@ -33,6 +33,7 @@ nav:
     - Development setup: contribute/dev-container.md
     - Native Linux setup: contribute/running-on-native-linux.md
     - Rust style guide: contribute/styleguide.md
+    - Clippy / static analysis: contribute/clippy.md
     - Lind toolchain: contribute/toolchain.md
     - Compiling Rust programs: contribute/compile-with-rust.md
     - Testing: contribute/testing.md

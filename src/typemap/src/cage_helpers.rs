@@ -17,7 +17,7 @@ use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 /// true: both of them are valid
 /// false: one of them or neither of them are valid
 pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
-    if cageid_1 > MAX_CAGEID as u64 || cageid_2 > MAX_CAGEID as u64 || cageid_1 < 0 || cageid_2 < 0
+    if cageid_1 > MAX_CAGEID as u64 || cageid_2 > MAX_CAGEID as u64
     {
         return false;
     }

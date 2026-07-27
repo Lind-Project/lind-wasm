@@ -18,8 +18,16 @@ Workflow files are located under `.github/workflows/` in the repository.
 
 ### Workflows
 
-- **`lint.yml`** — Runs `cargo fmt --check` and `cargo clippy` for code formatting
-and static analysis.
+- **`lint.yml`** — Runs `cargo fmt --check` and Clippy via
+  [`scripts/clippy-ci.sh`](https://github.com/Lind-Project/lind-wasm/blob/main/scripts/clippy-ci.sh)
+  (see [Clippy / static analysis](../clippy.md)).
+
+  - Toolchain: `nightly-2025-06-08` + `clippy` ([#242](https://github.com/Lind-Project/lind-wasm/issues/242)).
+  - Scope: `src/lind-boot/Cargo.toml` with an explicit feature set (avoids enabling all
+    `fdtables-*` backends at once).
+  - Includes `--all-targets` (tests, examples, benches in the dependency graph).
+  - After `--`: `-A warnings`, `-A clippy::not_unsafe_ptr_arg_deref` (see
+    [clippy.md](../clippy.md) for rationale and roadmap).
 
 - **`e2e.yml`** — Builds and runs the full test suite inside a container. Uploads
 HTML and JSON test reports as artifacts and posts a summary comment to the PR. 
