@@ -210,10 +210,18 @@ pub fn register_handler_impl(
 ) -> i32 {
     // Case 1: Remove syscall mapping for a given (srccage, targetcallnum)
     if handlefunccage == threei_const::THREEI_DEREGISTER {
-        if let Some(self_entry) = HANDLERTABLE.get(&srccage) {
+        let remove_cage = if let Some(self_entry) = HANDLERTABLE.get(&srccage) {
             let call_map: &CallnumMap = self_entry.value();
             call_map.remove(&targetcallnum);
+            call_map.is_empty()
+        } else {
+            false
+        };
+
+        if remove_cage {
+            HANDLERTABLE.remove(&srccage);
         }
+
         return 0;
     }
 
