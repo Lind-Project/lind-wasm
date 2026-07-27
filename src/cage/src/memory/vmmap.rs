@@ -2503,4 +2503,48 @@ mod tests {
         let result = vmmap.calculate_page_range(0, 1);
         assert_eq!(result, Some((0, 1)), "1 byte should still be 1 page");
     }
+    #[test]
+    // ISO-003: a length large enough to overflow the range-arithmetic must be rejected
+    fn test_check_addr_write_negative_length_overflow_rejected() {
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        let addr = (10 << PAGESHIFT) as u64;
+        let huge_len = usize::MAX;
+
+        assert!(
+            !vmmap.check_addr_write(addr, huge_len),
+            "Should reject a length large enough to overflow range calculation"
+        );
+    }
+
+    #[test]
+    // Targeting calculate_page_range directly
+    fn test_calculate_page_range_overflow_returns_none() {
+        let mut vmmap = Vmmap::new();
+        vmmap.set_base_address(0);
+
+        let result = vmmap.calculate_page_range(0, usize::MAX);
+
+        assert_eq!(
+            result, None,
+            "Overflowing length should not produce a page range"
+        );
+    }
 }
