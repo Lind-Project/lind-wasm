@@ -11,6 +11,7 @@ use crate::lind_mpk::RuntimeInfo::MPKRuntimeInfo;
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
+use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL};
 
 // Stored by execute.rs after it resolves __enable_syscall_interpose so that
 // mpk_clone_syscall_entry can re-register a new handler in the child process.
@@ -109,6 +110,13 @@ unsafe extern "C" fn child_syscall_handler(
         "[child_syscall_handler] send failed: {}",
         std::io::Error::last_os_error()
     );
+
+    //don't expect return value for exec and exit, just loop and wait for kill signal from parent
+    if (number == EXIT_SYSCALL as i64) || (number == EXEC_SYSCALL as i64) {
+       loop {
+            std::thread::park();
+        }
+    }
 
     // Block until the parent's worker thread sends back the result.
     let mut resp = SyscallResp { retval: 0 };
