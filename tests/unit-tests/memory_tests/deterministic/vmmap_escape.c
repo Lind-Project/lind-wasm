@@ -41,6 +41,18 @@ int main() {
     assert(errno == EFAULT);
     assert_pipe_still_clean(fds[0], fds[1]);
 
+    /*
+    Tests 2 and 3 assume the host kernel rejects a write() whose
+    buffer straddles a valid/invalid page boundary with a full EFAULT,
+    touching nothing, rather than the POSIX-permitted alternative of 
+    a partial write covering just the valid prefix. 
+
+    This held on the kernel tested against, but POSIX doesn't guarantee it.
+    A kernel that does incremental copy-then-fault could return a short 
+    byte count instead. If this test starts failing on a different host, that's 
+    the first thing to check.
+    */
+
     // Test 2
     unsigned char *straddle_ptr = region+PAGESIZE-16;
     errno = 0;
@@ -60,10 +72,23 @@ int main() {
     assert(errno == EFAULT);
     assert_pipe_still_clean(fds[0], fds[1]);
 
+    // Test 4
+    char read_marker = 'R';
+    assert(write(fds[1], &read_marker, 1) == 1);
+
+    errno = 0;
+    ssize_t ret4 = read(fds[0], region+PAGESIZE, 1);
+    assert(ret4 == -1);
+    assert(errno == EFAULT);
+    
+    char read_received;
+    assert(read(fds[0], &read_received, 1) == 1);
+    assert(read_received == read_marker);
+
     assert(munmap(region, PAGESIZE) == 0);
     close(fds[0]);
     close(fds[1]);
 
-    printf("cross_cage_vmmap_escape test: PASS\n");
+    printf("vmmap_escape test: PASS\n");
     return 0;
 }
