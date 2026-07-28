@@ -102,6 +102,7 @@ pub const FCHOWNAT_SYSCALL: i32 = 260;
 pub const NEWFSTATAT_SYSCALL: i32 = 262;
 pub const UNLINKAT_SYSCALL: i32 = 263;
 pub const RENAMEAT_SYSCALL: i32 = 264;
+pub const LINKAT_SYSCALL: i32 = 265;
 pub const SYMLINKAT_SYSCALL: i32 = 266;
 pub const READLINKAT_SYSCALL: i32 = 267;
 pub const FCHMODAT_SYSCALL: i32 = 268;
