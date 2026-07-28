@@ -41,6 +41,10 @@ use crate::lind_mpk::RuntimeInfo::EnableInterposeF;
 const RTLD_DI_LMID: c_int = 1;
 const RTLD_DI_LINKMAP: c_int = 2;
 
+// 4 GB virtual address space reserved for each cage with MAP_NORESERVE
+// (no swap space is committed until pages are actually touched).
+const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
+
 fn mpk_debug_enabled() -> bool {
     env::var_os("LIND_MPK_DEBUG").is_some()
 }
@@ -260,6 +264,13 @@ fn exec_mpk_internal(
                     libc::dlclose(mpk_info.loader_cage_handle);
                 }
             }
+            // Unmap the old cage memory only when running in the same process
+            // (cage_pid == 0).  For forked children (cage_pid != 0) the memory
+            // lives in the child's address space and is reclaimed when we kill it.
+            if mpk_info.pid == 0 && !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
+                mpk_debug("unmapping old cage memory region");
+                unsafe { libc::munmap(mpk_info.memory_base, mpk_info.memory_size); }
+            }
             mpk_debug("old namespace context torn down");
             
             let my_pid = unsafe { libc::getpid() };
@@ -371,8 +382,28 @@ fn exec_mpk_internal(
     }
     mpk_debug("syscall interposition handler registered");
     
-    // Step 9: Update the cage's MPKRuntimeInfo with new handles
-    let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0);
+    // Step 9: Map fresh 4 GB for the new program, initialize vmmap, and update RuntimeInfo.
+    mpk_debug("mapping 4 GB cage memory for new program with MAP_NORESERVE");
+    let memory_base = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            MPK_MEMORY_SIZE,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
+            -1,
+            0,
+        )
+    };
+    if memory_base == libc::MAP_FAILED {
+        unsafe {
+            libc::dlclose(libc_handle);
+            libc::dlclose(handle);
+        }
+        bail!("mmap for new cage memory failed: {}", std::io::Error::last_os_error());
+    }
+    mpk_debug(format!("new cage memory mapped at {memory_base:p}"));
+    cage::init_vmmap(cage_id, memory_base as usize, None);
+    let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0, memory_base, MPK_MEMORY_SIZE);
     *cage.runtime_info.write() = Box::new(mpk_info);
     mpk_debug(format!("updated MPKRuntimeInfo for cage {}", cage_id));
 
@@ -581,13 +612,33 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     let clone_internal_ptr = unsafe { libc::dlsym(libc_handle, clone_internal_sym.as_ptr()) };
     mpk_debug(format!("resolved __clone_internal at {clone_internal_ptr:p}"));
 
-    // Step 4.2: Set up MPKRuntimeInfo and store it in the cage
-    mpk_debug("creating MPKRuntimeInfo for cage");
-    let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0);
-    
-    // Get the cage and update its runtime_info
+    // Step 4.2: Map 4 GB for the cage's virtual address space with MAP_NORESERVE,
+    // then set up MPKRuntimeInfo and store it in the cage.
+    mpk_debug("mapping 4 GB cage memory with MAP_NORESERVE");
+    let memory_base = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            MPK_MEMORY_SIZE,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
+            -1,
+            0,
+        )
+    };
+    if memory_base == libc::MAP_FAILED {
+        unsafe {
+            libc::dlclose(libc_handle);
+            libc::dlclose(handle);
+        }
+        bail!("mmap failed: {}", std::io::Error::last_os_error());
+    }
+    mpk_debug(format!("cage memory mapped at {memory_base:p}"));
+
+    // Get the cage, initialize its vmmap, and store MPKRuntimeInfo.
     let cage = get_cage(cage_id)
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
+    cage::init_vmmap(cage_id, memory_base as usize, None);
+    let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0, memory_base, MPK_MEMORY_SIZE);
     *cage.runtime_info.write() = Box::new(mpk_info);
     mpk_debug(format!("MPKRuntimeInfo stored in cage {}", cage_id));
 
@@ -596,15 +647,12 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     threei::set_cage_runtime(cage_id, threei_const::RUNTIME_TYPE_MPK);
 
 
-    // Step 6: Build argc / argv / envp from CliOptions and call main().
+    // Step 6: Build argc / argv / envp from CliOptions.
     let c_args: Vec<CString> = lindboot_cli
         .args
         .iter()
         .map(|s| CString::new(s.as_str()).unwrap())
         .collect();
-    let mut argv: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
-    argv.push(std::ptr::null());
-
     let c_envs: Vec<CString> = lindboot_cli
         .vars
         .iter()
@@ -613,8 +661,6 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
             CString::new(format!("{}={}", k, val)).unwrap()
         })
         .collect();
-    let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
-    envp.push(std::ptr::null());
 
     let main_sym = CString::new("cage_main").unwrap();
     mpk_debug("resolving cage_main");
@@ -631,28 +677,33 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     type MainFn =
         unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
     let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
-    let argc = (argv.len() - 1) as c_int;
-    mpk_debug(format!("calling cage_main with argc={argc}"));
-    let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) };
-    mpk_debug(format!("cage_main returned exit_code={exit_code}"));
+    let argc = c_args.len() as c_int;
 
-    //TODO: forward this to 3i::makesyscall(exitgroup)
-    let _ = threei::make_syscall(
-        cage_id,
-        EXIT_SYSCALL as u64,
-        0, // _syscall_name: unused for native
-        cage_id,
-        exit_code as u64,
-        cage_id,
-        0, UNUSED_ID, 0, UNUSED_ID, 0, UNUSED_ID, 0, UNUSED_ID, 0, UNUSED_ID
-    );
+    mpk_debug(format!("spawning cage_main thread with argc={argc}"));
 
-    // Step 7: Clean up dlmopen handles.
-    mpk_debug("closing dlmopen handles");
-    unsafe {
-        libc::dlclose(libc_handle);
-        libc::dlclose(handle);
-    }
+    // Step 7: Call cage_main inside a dedicated thread.
+    // c_args and c_envs are moved into the closure so the CString backing
+    // data outlives the raw pointer slices built from them inside the thread.
+    // main_fn and argc are Copy, so they are simply captured by value.
+    // let join_handle = std::thread::spawn(move || {
+    //     let mut argv: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
+    //     argv.push(std::ptr::null());
+    //     let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
+    //     envp.push(std::ptr::null());
+    //     unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) }
+    // });
+
+    let mut argv: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
+    argv.push(std::ptr::null());
+    let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
+    envp.push(std::ptr::null());
+    let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) }; 
+
+    // mpk_debug("waiting for cage_main thread to finish");
+    // let exit_code = join_handle.join().unwrap_or(-1);
+    // mpk_debug(format!("cage_main returned exit_code={exit_code}"));
+
+
 
     mpk_debug("execute_mpk completed successfully");
 

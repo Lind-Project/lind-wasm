@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::thread;
 
-use cage::{get_cage, lind_signal_init};
+use cage::{get_cage, init_vmmap, lind_signal_init};
 use crate::lind_mpk::RuntimeInfo::MPKRuntimeInfo;
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
@@ -232,7 +232,14 @@ pub extern "C" fn mpk_clone_syscall_entry(
                     parent_mpk.loader_libc_handle,
                     parent_mpk.enable_interpose_fn,
                     pid, // child's OS process ID
+                    parent_mpk.memory_base, // child inherits parent's address space on fork
+                    parent_mpk.memory_size,
                 );
+                // Initialize the child cage's vmmap so the parent can translate
+                // addresses when dispatching syscalls from the child via the socket.
+                if !parent_mpk.memory_base.is_null() {
+                    init_vmmap(child_cageid, parent_mpk.memory_base as usize, None);
+                }
                 *child_cage.runtime_info.write() = Box::new(child_mpk_info);
             }
         }
@@ -374,6 +381,11 @@ pub extern "C" fn mpk_exit_syscall_entry(
                 unsafe {
                     libc::dlclose(mpk_info.loader_libc_handle);
                     libc::dlclose(mpk_info.loader_cage_handle);
+                }
+                // Unmap the cage's 4 GB virtual address space.
+                if !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
+                    mpk_debug("mpk_exit: unmapping cage memory region");
+                    unsafe { libc::munmap(mpk_info.memory_base, mpk_info.memory_size); }
                 }
             }
             

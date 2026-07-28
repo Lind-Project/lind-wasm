@@ -27,6 +27,11 @@ pub struct MPKRuntimeInfo {
     /// This is relevant for forked off child cages that run in a different process
     /// this field is 0 if the cage runs in the main lind process
     pub pid: libc::pid_t,
+    /// Base address of the 4 GB MAP_NORESERVE region backing this cage's vmmap.
+    /// Null if no mapping has been established yet.
+    pub memory_base: *mut c_void,
+    /// Size (in bytes) of the memory region at memory_base.
+    pub memory_size: usize,
 }
 
 impl MPKRuntimeInfo {
@@ -37,12 +42,16 @@ impl MPKRuntimeInfo {
         libc_handle: *mut c_void,
         enable_interpose: EnableInterposeF,
         pid: libc::pid_t,
+        memory_base: *mut c_void,
+        memory_size: usize,
     ) -> Self {
         MPKRuntimeInfo {
             loader_cage_handle: cage_handle,
             loader_libc_handle: libc_handle,
             enable_interpose_fn: enable_interpose,
             pid,
+            memory_base,
+            memory_size,
         }
     }
 }

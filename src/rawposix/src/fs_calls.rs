@@ -859,6 +859,7 @@ pub extern "C" fn mmap_syscall(
         | MAP_SHARED as i32
         | MAP_PRIVATE as i32
         | MAP_ANONYMOUS as i32
+        | MAP_NORESERVE as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
         lind_debug_panic(&format!(
