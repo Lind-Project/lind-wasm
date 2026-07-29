@@ -1174,27 +1174,28 @@ pub extern "C" fn sigprocmask_syscall(
     let mut res = 0;
 
     if let Some(some_oldset) = oldset {
-        *some_oldset = cage.sigset.load(Relaxed);
+        some_oldset.write(cage.sigset.load(Relaxed));
     }
 
     if let Some(some_set) = set {
         let curr_sigset = cage.sigset.load(Relaxed);
+        let set_val = some_set.read();
         res = match how {
             SIG_BLOCK => {
                 // Block signals in set
-                cage.sigset.store(curr_sigset | *some_set, Relaxed);
+                cage.sigset.store(curr_sigset | set_val, Relaxed);
                 0
             }
             SIG_UNBLOCK => {
                 // Unblock signals in set
-                let newset = curr_sigset & !*some_set;
+                let newset = curr_sigset & !set_val;
                 cage.sigset.store(newset, Relaxed);
                 // check if any of the unblocked signals are in the pending signal list
                 // and trigger the epoch if it has
                 let pending_signals = cage.pending_signals.read();
                 if pending_signals
                     .iter()
-                    .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
+                    .any(|signo| (set_val & convert_signal_mask(*signo)) != 0)
                 {
                     cage::signal_epoch_trigger(cage.cageid);
                 }
@@ -1207,7 +1208,7 @@ pub extern "C" fn sigprocmask_syscall(
                 // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
                 // 2. perform an and operation to the old sigset, this further filtered masks and only
                 // left masks changed from 1 to 0
-                let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+                let unblocked_signals = (curr_sigset ^ set_val) & curr_sigset;
                 // check if any of the unblocked signals are in the pending signal list
                 // and trigger the epoch if it has
                 if pending_signals
@@ -1217,7 +1218,7 @@ pub extern "C" fn sigprocmask_syscall(
                     cage::signal_epoch_trigger(cage.cageid);
                 }
                 // Set sigset to set
-                cage.sigset.store(*some_set, Relaxed);
+                cage.sigset.store(set_val, Relaxed);
                 0
             }
             _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
@@ -1393,12 +1394,13 @@ pub extern "C" fn sigsuspend_syscall(
     let curr_sigset = cage.sigset.load(Relaxed);
 
     if let Some(some_oldset) = oldset {
-        *some_oldset = curr_sigset;
+        some_oldset.write(curr_sigset);
     }
 
     if let Some(some_set) = set {
+        let set_val = some_set.read();
         // Signals that transition from blocked to unblocked
-        let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+        let unblocked_signals = (curr_sigset ^ set_val) & curr_sigset;
         {
             let pending_signals = cage.pending_signals.read();
             if pending_signals
@@ -1408,7 +1410,7 @@ pub extern "C" fn sigsuspend_syscall(
                 cage::signal_epoch_trigger(cage.cageid);
             }
         }
-        cage.sigset.store(*some_set, Relaxed);
+        cage.sigset.store(set_val, Relaxed);
     }
 
     loop {

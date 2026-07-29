@@ -423,9 +423,9 @@ pub extern "C" fn select_syscall(
         match fdtables::prepare_bitmasks_for_select(
             cageid,
             nfds as u64,
-            readfds_ptr.map(|ptr| unsafe { *ptr }),
-            writefds_ptr.map(|ptr| unsafe { *ptr }),
-            exceptfds_ptr.map(|ptr| unsafe { *ptr }),
+            readfds_ptr.map(|ptr| unsafe { ptr.read_unaligned() }),
+            writefds_ptr.map(|ptr| unsafe { ptr.read_unaligned() }),
+            exceptfds_ptr.map(|ptr| unsafe { ptr.read_unaligned() }),
             &fdkindset,
         ) {
             Ok(result) => result,
@@ -462,7 +462,7 @@ pub extern "C" fn select_syscall(
     // Convert timeval pointer to milliseconds for consistency with poll/epoll_wait timeout handling
     // select takes a timeval* (tv_sec + tv_usec), but poll/epoll_wait use integer milliseconds
     let timeout_ms = if let Some(timeout_ptr) = timeout_ptr {
-        let t = unsafe { *timeout_ptr };
+        let t = unsafe { timeout_ptr.read_unaligned() };
         (t.tv_sec as i32 * 1000) + (t.tv_usec as i32 / 1000)
     } else {
         -1 // No timeout (infinite)
@@ -572,7 +572,7 @@ pub extern "C" fn select_syscall(
     // Write read FD results back to user memory
     if let Some(readfds_ptr) = readfds_ptr {
         if let Some(read_result) = read_result {
-            unsafe { *readfds_ptr = read_result };
+            unsafe { readfds_ptr.write_unaligned(read_result) };
         }
     }
 
@@ -587,7 +587,7 @@ pub extern "C" fn select_syscall(
     // Write write FD results back to user memory
     if let Some(writefds_ptr) = writefds_ptr {
         if let Some(write_result) = write_result {
-            unsafe { *writefds_ptr = write_result };
+            unsafe { writefds_ptr.write_unaligned(write_result) };
         }
     }
 
@@ -602,7 +602,7 @@ pub extern "C" fn select_syscall(
     // Write error FD results back to user memory
     if let Some(exceptfds_ptr) = exceptfds_ptr {
         if let Some(error_result) = error_result {
-            unsafe { *exceptfds_ptr = error_result };
+            unsafe { exceptfds_ptr.write_unaligned(error_result) };
         }
     }
 

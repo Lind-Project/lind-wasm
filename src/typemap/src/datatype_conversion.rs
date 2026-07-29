@@ -418,11 +418,38 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
 /// # Returns
 /// * `Some(&mut SigsetType)` if the pointer is nonzero and translation succeeds.
 /// * `None` if `set_arg == 0`.
+/// A proxy for a `SigsetType` that may reside at a misaligned address in Wasm
+/// linear memory.
+///
+/// Wasm32 stack frames only guarantee 4-byte alignment.  Creating a `&mut u64`
+/// from a 4-byte-aligned address (which is misaligned for `u64`) panics in
+/// recent Rust versions.  This proxy uses `read_unaligned` / `write_unaligned`
+/// so that signal-mask syscalls work regardless of the pointer's alignment.
+pub struct SigsetProxy {
+    ptr: *mut SigsetType,
+}
+
+// SAFETY: the pointer refers to Wasm linear memory that lives for the duration
+// of the syscall and is only accessed from the single syscall-handler thread.
+unsafe impl Send for SigsetProxy {}
+unsafe impl Sync for SigsetProxy {}
+
+impl SigsetProxy {
+    /// Read the current sigset value through the (possibly unaligned) pointer.
+    pub fn read(&self) -> SigsetType {
+        unsafe { self.ptr.read_unaligned() }
+    }
+    /// Write a sigset value back through the (possibly unaligned) pointer.
+    pub fn write(&self, val: SigsetType) {
+        unsafe { self.ptr.write_unaligned(val) };
+    }
+}
+
 pub fn sc_convert_sigset(
     set_arg: u64,
     set_cageid: u64,
     cageid: u64,
-) -> Option<&'static mut SigsetType> {
+) -> Option<SigsetProxy> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(set_cageid, cageid) {
@@ -431,17 +458,9 @@ pub fn sc_convert_sigset(
     }
 
     if set_arg == 0 {
-        return None; // If the argument is 0, return None
-    } else {
-        let ptr = set_arg as *mut SigsetType;
-        if !ptr.is_null() {
-            unsafe {
-                return Some(&mut *ptr);
-            }
-        } else {
-            panic!("Failed to get SigsetType from address");
-        }
+        return None;
     }
+    Some(SigsetProxy { ptr: set_arg as *mut SigsetType })
 }
 
 /// Convert a raw u64 address into a mutable reference to an `ITimerVal`.
@@ -698,7 +717,7 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
     arg: u64,
     arg_cageid: u64,
     cageid: u64,
-) -> Result<&'a mut ShmidsStruct, Errno> {
+) -> Option<&'a mut ShmidsStruct> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
@@ -707,7 +726,10 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
     }
 
     let pointer = arg as *mut ShmidsStruct;
-    Ok(unsafe { &mut *pointer })
+    if pointer.is_null() {
+        return None;
+    }
+    Some(unsafe { &mut *pointer })
 }
 
 /// Converts a raw `u64` argument into a nullity check.

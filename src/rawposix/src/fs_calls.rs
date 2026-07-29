@@ -5090,7 +5090,7 @@ pub extern "C" fn shmctl_syscall(
 ) -> i32 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid).unwrap();
+    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid);
 
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -5108,7 +5108,10 @@ pub extern "C" fn shmctl_syscall(
     if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
         match cmd {
             IPC_STAT => {
-                *buf = segment.shminfo;
+                match buf {
+                    Some(b) => *b = segment.shminfo,
+                    None => return syscall_error(Errno::EFAULT, "shmctl", "null buf for IPC_STAT"),
+                }
             }
             IPC_RMID => {
                 segment.rmid = true;
