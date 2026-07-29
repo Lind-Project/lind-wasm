@@ -10,7 +10,7 @@
 #define FORK_SYSCALL_NUM 435 //lind's libc uses clone3 for fork
 
 // Dispatcher function
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
                     uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
                     uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,

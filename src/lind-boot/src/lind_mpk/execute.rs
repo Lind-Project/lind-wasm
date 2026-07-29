@@ -173,7 +173,7 @@ extern "C" fn lind_syscall_handler(
         CAGE_START_ID as u64,
         a6 as u64,
         CAGE_START_ID as u64,
-    ) as i64
+    )
 }
 
 pub fn init_mpk(lind_manager: Arc<LindCageManager>) {

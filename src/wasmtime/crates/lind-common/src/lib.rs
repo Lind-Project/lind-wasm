@@ -208,7 +208,7 @@ fn add_syscall_to_linker<
                 // Save the grate-defined return value produced by the normal clone3 execution. 
                 // The guest-visible parent return is produced later during Asyncify rewind 
                 // replay, so this value must be carried across that boundary.
-                wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval).unwrap_or_else(|e| {
+                wasmtime_lind_multi_process::set_pending_clone_visible_retval(&mut caller, retval as i32).unwrap_or_else(|e| {
                     panic!("{}", format!(
                         "failed to set pending_clone_visible_retval for retval={retval} with error: {e}"
                     ));
@@ -220,8 +220,8 @@ fn add_syscall_to_linker<
             // we save the syscall return value so it can be restored on rewind.
             // Only negate `retval` if it falls within the valid errno range;
             // since negating `I32::MIN` would cause an overflow panic.
-            if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i32 {
-                caller.as_context_mut().append_syscall_asyncify_data(retval);
+            if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i64 {
+                caller.as_context_mut().append_syscall_asyncify_data(retval as i32);
                 if let Err(e) =
                     wasmtime_lind_multi_process::signal::signal_handler(&mut caller)
                 {
@@ -236,7 +236,7 @@ fn add_syscall_to_linker<
                 }
             }
 
-            Ok(retval)
+            Ok(retval as i32)
         },
     )?;
     Ok(())

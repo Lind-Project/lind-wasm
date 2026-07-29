@@ -285,7 +285,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
                     msg.a6, child_cageid,
                 );
 
-                let resp = SyscallResp { retval: retval as i64 };
+                let resp = SyscallResp { retval };
                 unsafe {
                     libc::send(
                         parent_fd,

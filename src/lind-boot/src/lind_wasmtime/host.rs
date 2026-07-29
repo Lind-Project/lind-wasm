@@ -205,7 +205,7 @@ fn get_grate_handler(grate_id: u64) -> anyhow::Result<Arc<GrateHandler<HostCtx>>
 /// the per-handler execution layer.
 ///
 /// This function is used on the trampoline path for all grate calls
-pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<i32> {
+pub fn submit_grate_request(grate_id: u64, req: GrateRequest) -> anyhow::Result<i64> {
     #[cfg(feature = "debug-grate-calls")]
     println!(
         "[lind-boot] Submitting grate request to cage {}, handler_addr: {:#x}",

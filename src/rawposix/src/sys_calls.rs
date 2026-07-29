@@ -210,7 +210,7 @@ pub extern "C" fn fork_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    ) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
@@ -305,7 +305,7 @@ pub extern "C" fn exec_syscall(
         // overwrite the stale entries in epoch_handler and main_threadid.
     }
 
-    ret
+    ret as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
@@ -372,7 +372,7 @@ pub extern "C" fn exit_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    ) as i32
 }
 
 /// Syscall 231 — exit_group: terminate all threads in the cage.
@@ -467,7 +467,7 @@ pub extern "C" fn exit_group_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    )
+    ) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/waitpid.3p.html
