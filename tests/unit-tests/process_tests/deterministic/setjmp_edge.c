@@ -148,7 +148,7 @@ static void test_funcptr(void) {
 /* and terminate the process (non-zero exit). We verify that the      */
 /* parent sees a non-zero exit code rather than a clean exit.         */
 /*                                                                     */
-/* In lind-wasm, subprocess fork/exec is not always available in      */
+/* In grateos-wasm, subprocess fork/exec is not always available in      */
 /* every test environment, so this test is marked informational if    */
 /* fork is unavailable.                                                */
 /* ------------------------------------------------------------------ */

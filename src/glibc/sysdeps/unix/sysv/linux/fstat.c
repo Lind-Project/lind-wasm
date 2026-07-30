@@ -21,7 +21,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 #if !XSTAT_IS_XSTAT64

@@ -18,7 +18,7 @@
 #include <sys/uio.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
@@ -27,7 +27,7 @@ ssize_t
 preadv (int fd, const struct iovec *vector, int count, off_t offset)
 {
   struct iovec host_iov[count];
-  __lind_translate_iov (vector, host_iov, count);
+  __grateos_translate_iov (vector, host_iov, count);
 
   return MAKE_LEGACY_SYSCALL (PREADV_SYSCALL, "syscall|preadv",
                (uint64_t) fd,

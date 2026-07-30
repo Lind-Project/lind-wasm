@@ -18,7 +18,7 @@
 #include <sys/socket.h>
 #include <socketcall.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 int
 __shutdown (int fd, int how)

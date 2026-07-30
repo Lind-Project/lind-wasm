@@ -61,7 +61,7 @@ futures = { workspace = true, features = ["alloc"], optional = true }
 bytes = { workspace = true, optional = true }
 sysdefs = { path = "../sysdefs" }
 rawposix = { path = "../rawposix" }
-wasmtime-lind-utils = { path = "../lind-utils" }
+wasmtime-grateos-utils = { path = "../grateos-utils" }
 cage.workspace = true
 threei = { path = "../threei" }
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
@@ -447,4 +447,4 @@ rr = [
 ]
 
 asyncify-setjmp = []
-lind-logging = ["sysdefs/lind-logging", "wasmtime-environ/lind-logging"]
+grateos-logging = ["sysdefs/grateos-logging", "wasmtime-environ/grateos-logging"]

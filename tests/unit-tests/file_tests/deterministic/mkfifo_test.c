@@ -16,7 +16,7 @@
  */
 
 #define FIFO_PATH "/tmp/test_fifo"
-#define MSG "Hello FIFO from lind-wasm"
+#define MSG "Hello FIFO from grateos-wasm"
 
 int main(void)
 {

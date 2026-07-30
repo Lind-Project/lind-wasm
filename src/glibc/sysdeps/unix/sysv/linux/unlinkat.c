@@ -20,7 +20,7 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Remove the link named NAME in the directory referred to by DIRFD, using FLAGS.  */

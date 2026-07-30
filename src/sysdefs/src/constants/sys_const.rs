@@ -7,7 +7,7 @@
 #![allow(unused_variables)]
 
 // ===== User and Group ID Constants =====
-// Lind-specific default values
+// GrateOS-specific default values
 pub const DEFAULT_UID: u32 = 1000; // Default user ID
 pub const DEFAULT_GID: u32 = 1000; // Default group ID
 

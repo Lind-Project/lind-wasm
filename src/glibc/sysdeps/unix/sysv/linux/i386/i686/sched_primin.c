@@ -1,10 +1,10 @@
 #include <unistd.h>
-#include <lind_debug.h>
+#include <grateos_debug.h>
 
 int
 __GI___sched_get_priority_min (int __algorithm)
 {
-  lind_debug_panic("sched_get_priority_min called but not supported!");
+  grateos_debug_panic("sched_get_priority_min called but not supported!");
   return 0;
 }
 

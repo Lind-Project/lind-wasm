@@ -24,7 +24,7 @@
 #include <linux/posix_types.h>  /* For __kernel_mode_t.  */
 
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* POSIX states ipc_perm mode should have type of mode_t.  */

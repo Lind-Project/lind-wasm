@@ -1,0 +1,32 @@
+[package]
+name = "wasmtime-grateos-multi-process"
+version.workspace = true
+authors.workspace = true
+description = "grateos multi-process implementation inside wasmtime"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+libc = { workspace = true }
+log = { workspace = true }
+rand = "0.8"
+wasi-common = { workspace = true, features = ["exit", "sync"]}
+wasmtime = { workspace = true, features = ['threads'] }
+wasmtime-environ = { workspace = true }
+wasmtime-grateos-utils = { path = "../grateos-utils" }
+wasmtime-grateos-3i = { path = "../grateos-3i" }
+rawposix = { path = "../rawposix" }
+typemap = { path = "../typemap" }
+sysdefs = { path = "../sysdefs" }
+threei = { path = "../threei" }
+cage = { path = "../cage" }
+cfg-if = { workspace = true }
+
+[features]
+default = []
+disable_signals = []
+asyncify-setjmp = []
+grateos-logging = ["sysdefs/grateos-logging"]

@@ -19,7 +19,7 @@
 #include <sysdep-cancel.h>
 #include <socketcall.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 ssize_t

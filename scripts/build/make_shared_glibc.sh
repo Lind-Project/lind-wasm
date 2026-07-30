@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Build glibc and generate a sysroot for clang to cross-compile lind programs
+# Build glibc and generate a sysroot for clang to cross-compile grateos programs
 #
 # IMPORTANT NOTES:
 # - call from source code repository root directory
@@ -55,7 +55,7 @@ wasm-ld \
     --export-if-defined=__libc_setup_tls \
     --export-if-defined=__wasi_init_tp \
     --export-if-defined=__ctype_init \
-    --export-if-defined=__lind_init_addr_translation \
+    --export-if-defined=__grateos_init_addr_translation \
     --export-if-defined=__wasm_init_tls \
     --export-if-defined=environ \
     --export=__tls_base \
@@ -63,24 +63,24 @@ wasm-ld \
     --export-if-defined=copy_handler_table_to_cage \
     --export-if-defined=make_threei_call \
     --export-if-defined=register_handler \
-    $([ -z "${LIND_ASYNCIFY_SETJMP:-}" ] && printf '%s\n' \
+    $([ -z "${GRATEOS_ASYNCIFY_SETJMP:-}" ] && printf '%s\n' \
         --export-if-defined=saveSetjmp \
         --export-if-defined=testSetjmp \
         --export-if-defined=getTempRet0 \
         --export-if-defined=setTempRet0 \
         --export-if-defined=__wasm_longjmp) \
-    -o "$SYSROOT/lib/wasm32-wasi/libc.so" "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
+    -o "$SYSROOT/lib/wasm32-wasi/libc.so" "$SYSROOT/lib/wasm32-wasi/grateos_utils.o"
 
-mkdir -p $REPO_ROOT/lindfs/lib
+mkdir -p $REPO_ROOT/grateosfs/lib
 
 # append `__wasm_apply_tls_relocs`, `__wasm_apply_global_relocs` and `__stack_pointer` export
-$REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/lindfs/lib/libc.so __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
-$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __wasm_apply_global_relocs func __wasm_apply_global_relocs
-$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/lindfs/lib/libc.so $REPO_ROOT/lindfs/lib/libc.so __stack_pointer global __stack_pointer
+$REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libc.so" $REPO_ROOT/grateosfs/lib/libc.so __wasm_apply_tls_relocs func __wasm_apply_tls_relocs
+$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/grateosfs/lib/libc.so $REPO_ROOT/grateosfs/lib/libc.so __wasm_apply_global_relocs func __wasm_apply_global_relocs
+$REPO_ROOT/tools/add-export-tool/add-export-tool $REPO_ROOT/grateosfs/lib/libc.so $REPO_ROOT/grateosfs/lib/libc.so __stack_pointer global __stack_pointer
 
 # apply wasm-opt (use --target=libc: libc owns signal_callback, so epoch-main-module must be omitted)
-$REPO_ROOT/scripts/bin/lind-wasm-opt --target=libc $FPCAST_FLAG $REPO_ROOT/lindfs/lib/libc.so -o $REPO_ROOT/lindfs/lib/libc.so
+$REPO_ROOT/scripts/bin/grateos-wasm-opt --target=libc $FPCAST_FLAG $REPO_ROOT/grateosfs/lib/libc.so -o $REPO_ROOT/grateosfs/lib/libc.so
 
-# do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
-rm -f $REPO_ROOT/lindfs/lib/libc.cwasm
-$REPO_ROOT/build/lind-boot --precompile $REPO_ROOT/lindfs/lib/libc.so
+# do precompile (call grateos-boot directly to avoid grateos_compile copying to grateosfs root)
+rm -f $REPO_ROOT/grateosfs/lib/libc.cwasm
+$REPO_ROOT/build/grateos-boot --precompile $REPO_ROOT/grateosfs/lib/libc.so

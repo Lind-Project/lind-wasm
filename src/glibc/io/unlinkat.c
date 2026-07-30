@@ -20,7 +20,7 @@
 #include <stddef.h>
 #include <unistd.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 
 /* Remove the link named NAME.  */

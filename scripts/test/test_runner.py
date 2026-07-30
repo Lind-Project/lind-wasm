@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Python test runner for Lind test harnesses.
+"""Unified Python test runner for GrateOS test harnesses.
 
 Behavior:
 - Discovers harness modules in scripts/test/harnesses/.
@@ -122,8 +122,8 @@ def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, 
     """
     output_lines: list[str] = []
     env = os.environ.copy()
-    env.setdefault("LIND_DEBUG_PANIC", "panic-and-exit")
-    env.setdefault("LIND_LOG_OUTPUT", "none")
+    env.setdefault("GRATEOS_DEBUG_PANIC", "panic-and-exit")
+    env.setdefault("GRATEOS_LOG_OUTPUT", "none")
 
     proc = subprocess.Popen(
         command,

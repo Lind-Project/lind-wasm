@@ -20,10 +20,10 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: route chown through 3i to RawPOSIX's chown_syscall.  */
+/* GrateOS: route chown through 3i to RawPOSIX's chown_syscall.  */
 int
 __chown (const char *file, uid_t owner, gid_t group)
 {

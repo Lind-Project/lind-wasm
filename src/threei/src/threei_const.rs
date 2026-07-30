@@ -9,11 +9,11 @@ pub const THREEI_DEREGISTER: u64 = 500;
 pub const THREEI_MATCHALL: u64 = 501;
 /// Generic error return code: API aborted.  
 /// See function-level comments for specific usage details.  
-pub const ELINDAPIABORTED: u64 = 0xE001_0001;
-/// ELINDESRCH: if either the source (targetcage) or destination
+pub const EGRATEOSAPIABORTED: u64 = 0xE001_0001;
+/// EGRATEOSESRCH: if either the source (targetcage) or destination
 // (handlefunccage) is in the EXITING state.
 /// See function-level comments for specific usage details.  
-pub const ELINDESRCH: u64 = 0xE001_0002;
+pub const EGRATEOSESRCH: u64 = 0xE001_0002;
 /// Indicates a successful Grate call.
 /// This value (0) is returned from functions that perform a Grate-side
 /// operation or callback through Wasmtime when the call completes
@@ -34,19 +34,19 @@ pub const GRATE_ERR: i32 = -0x1FFF_0003;
 pub const RUNTIME_TYPE_WASMTIME: u64 = 1;
 /// 3i-specific syscall number for `register_handler`.
 ///
-/// Match the definition in `glibc/lind_syscall_num.h`.
+/// Match the definition in `glibc/grateos_syscall_num.h`.
 /// TODO: When introducing a Rust-side unified syscall number table
 /// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const REGISTER_HANDLER_SYSCALL: u64 = 1001;
 /// 3i-specific syscall number for `copy_data_between_cages`.
 ///
-/// Match the definition in `glibc/lind_syscall_num.h`.
+/// Match the definition in `glibc/grateos_syscall_num.h`.
 /// TODO: When introducing a Rust-side unified syscall number table
 /// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const COPY_DATA_BETWEEN_CAGES_SYSCALL: u64 = 1002;
 /// 3i-specific syscall number for `copy_handler_table_to_cage`.
 ///
-/// Match the definition in `glibc/lind_syscall_num.h`.
+/// Match the definition in `glibc/grateos_syscall_num.h`.
 /// TODO: When introducing a Rust-side unified syscall number table
 /// (similar to glibc's `syscall_num` constants), move this constant there.
 pub const COPY_HANDLER_TABLE_TO_CAGE_SYSCALL: u64 = 1003;

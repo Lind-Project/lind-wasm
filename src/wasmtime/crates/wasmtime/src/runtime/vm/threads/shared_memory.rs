@@ -34,12 +34,12 @@ impl SharedMemory {
     pub fn new(plan: MemoryPlan) -> Result<Self> {
         let (minimum_bytes, maximum_bytes) = Memory::limit_new(&plan, None)?;
         let mut mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
-        // lind-wasm: we enable maximum use of memory at start
+        // grateos-wasm: we enable maximum use of memory at start
         let max_size = MAX_MEMORY_SIZE;
         if minimum_bytes < max_size {
             if let Err(e) = mmap_memory.grow_to(max_size) {
                 eprintln!(
-                    "[lind-wasm] SharedMemory::new: grow_to({:#x}) failed: {e}; \
+                    "[grateos-wasm] SharedMemory::new: grow_to({:#x}) failed: {e}; \
                      memory stays at {:#x} bytes",
                     max_size, minimum_bytes
                 );

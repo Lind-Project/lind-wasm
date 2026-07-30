@@ -21,17 +21,17 @@
 #include <shlib-compat.h>
 #include <dlerror.h>
 
-int __lind_dlclose(void* handle) __attribute__((
-    __import_module__("lind"),
+int __grateos_dlclose(void* handle) __attribute__((
+    __import_module__("grateos"),
     __import_name__("dlclose")
 ));
 
 int
 __dlclose (void *handle)
 {
-  int result = __lind_dlclose(handle);
+  int result = __grateos_dlclose(handle);
   if (result < 0) {
-    __lind_dlerror_result = -result;
+    __grateos_dlerror_result = -result;
     return -1;
   }
 

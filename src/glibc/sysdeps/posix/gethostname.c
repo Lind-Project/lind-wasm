@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/utsname.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Put the name of the current host in no more than LEN bytes of NAME.

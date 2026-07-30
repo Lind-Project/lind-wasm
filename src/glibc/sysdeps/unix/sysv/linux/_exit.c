@@ -22,5 +22,5 @@
 #include <abort-instr.h>
 
 // moved to stdlib/exit.c - Qianxi Chen
-// Lind-Wasm: Original glibc code removed for compatibility
+// GrateOS-Wasm: Original glibc code removed for compatibility
 // to find original source code refer to (2.39.9000) at (glibc/sysdeps/unix/sysv/linux/_exit.c):(LINE 25-39)

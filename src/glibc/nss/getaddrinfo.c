@@ -2549,7 +2549,7 @@ getaddrinfo (const char *name, const char *service,
 			 IPv6 and the request is for IPv4.  */
 		      struct sockaddr_in6 *sin6
 			= (struct sockaddr_in6 *) &results[i].source_addr;
-		      /* lind-wasm: replaced assert(IN6_IS_ADDR_V4MAPPED)
+		      /* grateos-wasm: replaced assert(IN6_IS_ADDR_V4MAPPED)
 			 with a runtime check.  In container/WASM
 			 environments getsockname() on a dual-stack
 			 AF_INET6 socket connected to an IPv4 destination

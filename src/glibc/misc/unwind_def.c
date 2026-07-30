@@ -1,4 +1,4 @@
-// lind-wasm: define these symbol as placeholder
+// grateos-wasm: define these symbol as placeholder
 
 #include <unwind.h>
 

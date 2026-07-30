@@ -26,7 +26,7 @@
 int
 __sendmmsg (int fd, struct mmsghdr *vmessages, unsigned int vlen, int flags)
 {
-  /* Lind-WASM: sendmmsg is not implemented.  Return ENOSYS so callers
+  /* GrateOS-WASM: sendmmsg is not implemented.  Return ENOSYS so callers
      (e.g. res_send.c) fall back to individual send() calls.  */
   __set_errno (ENOSYS);
   return -1;

@@ -1,4 +1,4 @@
-/* Test locale, langinfo, and basic time functionality in lind-wasm */
+/* Test locale, langinfo, and basic time functionality in grateos-wasm */
 
 #include <assert.h>
 #include <ctype.h>

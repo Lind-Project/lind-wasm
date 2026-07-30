@@ -10,8 +10,8 @@ use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 use std::error::Error;
 use std::os::raw::c_char;
-use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::grateos_platform_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::grateos_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
     FSData, ITimerVal, PipeArray, Rlimit, ShmidsStruct, SigactionStruct, SigsetType, StatData,

@@ -18,7 +18,7 @@
 
 #include <dirent.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 #if !_DIRENT_MATCHES_DIRENT64

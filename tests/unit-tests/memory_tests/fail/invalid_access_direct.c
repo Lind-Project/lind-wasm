@@ -1,6 +1,6 @@
 /*
  * Access an invalid (unmapped) address directly.
- * Exercises lind-wasm's PROT_NONE linear memory model: pages not explicitly
+ * Exercises grateos-wasm's PROT_NONE linear memory model: pages not explicitly
  * mapped by rawposix vmmap are inaccessible, and the access should trigger a
  * wasm trap (on wasm) or SIGSEGV (on native).
  */

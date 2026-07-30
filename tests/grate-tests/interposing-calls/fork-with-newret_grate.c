@@ -1,5 +1,5 @@
 #include <errno.h>
-#include <lind_syscall.h>
+#include <grateos_syscall.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>

@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <sys/stat.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 int
 fchmod (int fd, mode_t mode)

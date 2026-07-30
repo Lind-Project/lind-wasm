@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Build glibc and generate a sysroot for clang to cross-compile lind programs
+# Build glibc and generate a sysroot for clang to cross-compile grateos programs
 #
 # IMPORTANT NOTES:
 # - call from source code repository root directory
@@ -41,17 +41,17 @@ wasm-ld \
     --no-whole-archive \
     $symbols \
     --export=__tls_base \
-    -o "$SYSROOT/lib/wasm32-wasi/libm.so" $REPO_ROOT/src/glibc/build/csu/errno.o "$SYSROOT/lib/wasm32-wasi/lind_utils.o"
+    -o "$SYSROOT/lib/wasm32-wasi/libm.so" $REPO_ROOT/src/glibc/build/csu/errno.o "$SYSROOT/lib/wasm32-wasi/grateos_utils.o"
 
 # append `__wasm_apply_tls_relocs`, `__wasm_apply_global_relocs` and `__stack_pointer` export
 $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __wasm_apply_global_relocs func __wasm_apply_global_relocs
 $REPO_ROOT/tools/add-export-tool/add-export-tool "$SYSROOT/lib/wasm32-wasi/libm.so" "$SYSROOT/lib/wasm32-wasi/libm.so" __stack_pointer global __stack_pointer
 
-mkdir -p $REPO_ROOT/lindfs/lib
+mkdir -p $REPO_ROOT/grateosfs/lib
 
 # apply wasm-opt
-$REPO_ROOT/scripts/bin/lind-wasm-opt --target=library $FPCAST_FLAG $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/lindfs/lib/libm.so
+$REPO_ROOT/scripts/bin/grateos-wasm-opt --target=library $FPCAST_FLAG $SYSROOT/lib/wasm32-wasi/libm.so -o $REPO_ROOT/grateosfs/lib/libm.so
 
-# do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
-rm -f $REPO_ROOT/lindfs/lib/libm.cwasm
-$REPO_ROOT/build/lind-boot --precompile $REPO_ROOT/lindfs/lib/libm.so
+# do precompile (call grateos-boot directly to avoid grateos_compile copying to grateosfs root)
+rm -f $REPO_ROOT/grateosfs/lib/libm.cwasm
+$REPO_ROOT/build/grateos-boot --precompile $REPO_ROOT/grateosfs/lib/libm.so

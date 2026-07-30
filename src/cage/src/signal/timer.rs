@@ -10,7 +10,7 @@
 //! user-space timer gives us precise control over which Cage receives `SIGALRM`.
 //! All signal delivery in our system is mediated through the epoch-based mechanism.
 //! (See our online design doc for more details.)
-use super::lind_send_signal;
+use super::grateos_send_signal;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 pub use std::time::Duration;
@@ -101,7 +101,7 @@ impl IntervalTimer {
                         // Sends a SIGALRM signal to the cage when the timer expires.
                         // This struct/method is used exclusively by the setitimer and alarm syscall,
                         // which is expected to send a SIGALRM signal upon expiration.
-                        lind_send_signal(guard.cageid, SIGALRM);
+                        grateos_send_signal(guard.cageid, SIGALRM);
 
                         let new_curr_duration = guard.next_duration;
                         // Repeat the intervals until user cancel it

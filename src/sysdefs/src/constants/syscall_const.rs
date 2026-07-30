@@ -1,10 +1,10 @@
-//! Syscall number constants for the Lind platform.
+//! Syscall number constants for the GrateOS platform.
 //!
 //! Source of truth: Linux x86_64 syscall table
 //!   https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
 //! (Historical overview: https://filippo.io/linux-syscall-table/)
 //!
-//! Keep these in sync with glibc's lind_syscall_num.h and RawPOSIX dispatcher.
+//! Keep these in sync with glibc's grateos_syscall_num.h and RawPOSIX dispatcher.
 
 pub const READ_SYSCALL: i32 = 0;
 pub const WRITE_SYSCALL: i32 = 1;

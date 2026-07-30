@@ -40,7 +40,7 @@
 #include <clone3.h>
 #include <futex-internal.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <shlib-compat.h>
 #include <stap-probe.h>
 #include <addr_translation.h>
@@ -499,7 +499,7 @@ start_thread (void *arg)
   // BUG: thread local variable is a half-broken feature right now
   //      have to comment these out so that no error is raising - Qianxi Chen
   
-  // Lind-Wasm: Original glibc code removed for compatibility
+  // GrateOS-Wasm: Original glibc code removed for compatibility
   // to find original source code refer to (2.39.9000) at (nptl/pthread_create.c):(LINE 451-458)
 
   /* Report the death of the thread if this is wanted.  */
@@ -644,7 +644,7 @@ out:
   atomic_store_release (&pd->tid, 0);
   MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&pd->tid), (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0, TRANSLATE_ERRNO_ON);
   while (1)
-    // lind-wasm: use raw exit syscall (60) for thread-only exit.
+    // grateos-wasm: use raw exit syscall (60) for thread-only exit.
     // _exit() calls exit_group (231) which would kill all threads.
     MAKE_LEGACY_SYSCALL(EXIT_SYSCALL, "syscall|exit", 0, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 

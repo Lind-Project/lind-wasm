@@ -1101,13 +1101,13 @@ impl Module {
         })
     }
 
-    // lind-wasm: retrieve dynamic loading memory information
+    // grateos-wasm: retrieve dynamic loading memory information
     #[allow(missing_docs)]
     pub fn dylink_meminfo<'a>(&'a self) -> Option<&DylinkMemInfo> {
         self.compiled_module().dylink_mem_info()
     }
 
-    // lind-wasm: retrieve dynamic loading memory information
+    // grateos-wasm: retrieve dynamic loading memory information
     #[allow(missing_docs)]
     pub fn dylink_importinfo<'a>(&'a self) -> Option<&DylinkImportInfo> {
         self.compiled_module().dylink_import_info()

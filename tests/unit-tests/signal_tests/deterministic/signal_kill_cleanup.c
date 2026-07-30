@@ -10,8 +10,8 @@
  *   5. Parent's waitpid returns with WIFSIGNALED, WTERMSIG == SIGTERM
  *
  * Before the fix, thread_suicide() raised Trap::Interrupt which bypassed
- * all exit cleanup (no zombie, no SIGCHLD, no lind_manager.decrement),
- * causing waitpid to block forever and lind-boot to hang.
+ * all exit cleanup (no zombie, no SIGCHLD, no grateos_manager.decrement),
+ * causing waitpid to block forever and grateos-boot to hang.
  */
 
 #include <assert.h>

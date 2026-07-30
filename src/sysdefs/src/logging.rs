@@ -1,13 +1,13 @@
-//! Logging and diagnostic system for Lind.
+//! Logging and diagnostic system for GrateOS.
 //!
 //! # Two distinct APIs
 //!
-//! ## `lind_log!`
+//! ## `grateos_log!`
 //! General-purpose diagnostic output. Never panics. Always writes to the
-//! configured destination when the `lind-logging` Cargo feature is enabled
+//! configured destination when the `grateos-logging` Cargo feature is enabled
 //! and the message's category is in the active category set.
 //!
-//! ## `lind_debug_panic!`
+//! ## `grateos_debug_panic!`
 //! Soft panic for unexpected but potentially survivable conditions — use when
 //! something that *should never happen* is detected but continued execution
 //! may still be possible. Its behavior is controlled by [`PanicBehavior`].
@@ -17,12 +17,12 @@
 //!
 //! # Compile-time gating
 //!
-//! Both macros expand to nothing when the `lind-logging` Cargo feature is
+//! Both macros expand to nothing when the `grateos-logging` Cargo feature is
 //! absent. Formatting arguments are **not evaluated** in that case.
 //!
 //! ```bash
-//! # Logging present (default when using `make lind-boot`)
-//! cargo build --features lind-logging
+//! # Logging present (default when using `make grateos-boot`)
+//! cargo build --features grateos-logging
 //!
 //! # Maximum-performance / benchmark build — zero logging overhead
 //! cargo build --release --no-default-features
@@ -38,14 +38,14 @@ use std::sync::{Mutex, OnceLock};
 // Log categories
 // ---------------------------------------------------------------------------
 
-/// A log category used to route and filter [`lind_log!`] messages.
+/// A log category used to route and filter [`grateos_log!`] messages.
 ///
-/// `lind_debug_panic!` does not use categories — it always fires regardless
+/// `grateos_debug_panic!` does not use categories — it always fires regardless
 /// of the active category set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LogCategory {
-    /// Default category for uncategorized Lind diagnostics.
-    /// Used when `lind_log!` is called without an explicit category.
+    /// Default category for uncategorized GrateOS diagnostics.
+    /// Used when `grateos_log!` is called without an explicit category.
     Default,
     /// Dynamic linking: dlopen/dlsym/dlclose, GOT updates, symbol resolution,
     /// library replay, and related loader/runtime behavior.
@@ -104,7 +104,7 @@ impl LogCategorySet {
     /// any comma-separated combination of the individual names.
     ///
     /// Returns an error for unrecognised names.
-    pub fn from_csv(s: &str) -> Result<Self, LindLoggerInitError> {
+    pub fn from_csv(s: &str) -> Result<Self, GrateOSLoggerInitError> {
         let lower = s.trim().to_lowercase();
         if lower == "all" {
             return Ok(Self::all());
@@ -119,7 +119,7 @@ impl LogCategorySet {
                 "dylink" => bits |= BIT_DYLINK,
                 "threei" => bits |= BIT_THREEI,
                 other => {
-                    return Err(LindLoggerInitError::InvalidConfig(format!(
+                    return Err(GrateOSLoggerInitError::InvalidConfig(format!(
                         "unknown log category: '{}'",
                         other
                     )));
@@ -142,12 +142,12 @@ pub enum LogOutput {
     File(PathBuf),
     /// Discard ordinary log output.
     ///
-    /// Suppresses `lind_log!` output.  Does **not** by itself decide whether
-    /// `lind_debug_panic!` panics — that is controlled by [`PanicBehavior`].
+    /// Suppresses `grateos_log!` output.  Does **not** by itself decide whether
+    /// `grateos_debug_panic!` panics — that is controlled by [`PanicBehavior`].
     None,
 }
 
-/// Controls the behavior of `lind_debug_panic!`.
+/// Controls the behavior of `grateos_debug_panic!`.
 pub enum PanicBehavior {
     /// Log the message then call `panic!`. Default when uninitialized.
     PanicAndExit,
@@ -157,18 +157,18 @@ pub enum PanicBehavior {
     NoAction,
 }
 
-/// Runtime configuration for the Lind logger.
-pub struct LindLoggerConfig {
+/// Runtime configuration for the GrateOS logger.
+pub struct GrateOSLoggerConfig {
     pub output: LogOutput,
     pub panic_behavior: PanicBehavior,
     pub enabled_categories: LogCategorySet,
 }
 
-impl Default for LindLoggerConfig {
+impl Default for GrateOSLoggerConfig {
     fn default() -> Self {
-        let log_path = match std::env::var("LIND_WASM_ROOT") {
-            Ok(root) => PathBuf::from(root).join("LIND.log"),
-            Err(_) => PathBuf::from("/tmp/LIND.log"),
+        let log_path = match std::env::var("GRATEOS_WASM_ROOT") {
+            Ok(root) => PathBuf::from(root).join("GRATEOS.log"),
+            Err(_) => PathBuf::from("/tmp/GRATEOS.log"),
         };
         Self {
             output: LogOutput::File(log_path),
@@ -178,9 +178,9 @@ impl Default for LindLoggerConfig {
     }
 }
 
-/// Errors returned by [`init_lind_logger`].
-pub enum LindLoggerInitError {
-    /// `init_lind_logger` was already called; the first call wins.
+/// Errors returned by [`init_grateos_logger`].
+pub enum GrateOSLoggerInitError {
+    /// `init_grateos_logger` was already called; the first call wins.
     AlreadyInitialized,
     /// A file output destination could not be opened.
     Io(std::io::Error),
@@ -216,28 +216,28 @@ impl LogWriter {
     }
 }
 
-struct LindLogger {
+struct GrateOSLogger {
     writer: Mutex<LogWriter>,
     panic_behavior: PanicBehavior,
     enabled_categories: LogCategorySet,
 }
 
-static LIND_LOGGER: OnceLock<LindLogger> = OnceLock::new();
+static GRATEOS_LOGGER: OnceLock<GrateOSLogger> = OnceLock::new();
 
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 
-/// Initialize the global Lind logger.
+/// Initialize the global GrateOS logger.
 ///
 /// Must be called once at startup before any log output is emitted.
-/// **First call wins** — subsequent calls return [`LindLoggerInitError::AlreadyInitialized`]
+/// **First call wins** — subsequent calls return [`GrateOSLoggerInitError::AlreadyInitialized`]
 /// and leave the existing configuration unchanged.
 ///
-/// If this is never called and `lind-logging` is enabled, the defaults are:
-/// `$LIND_WASM_ROOT/LIND.log` (or `/tmp/LIND.log` if unset), `PanicAndExit` behavior,
+/// If this is never called and `grateos-logging` is enabled, the defaults are:
+/// `$GRATEOS_WASM_ROOT/GRATEOS.log` (or `/tmp/GRATEOS.log` if unset), `PanicAndExit` behavior,
 /// `Default` category only.
-pub fn init_lind_logger(config: LindLoggerConfig) -> Result<(), LindLoggerInitError> {
+pub fn init_grateos_logger(config: GrateOSLoggerConfig) -> Result<(), GrateOSLoggerInitError> {
     let writer = match config.output {
         LogOutput::Stdout => LogWriter::Stdout,
         LogOutput::Stderr => LogWriter::Stderr,
@@ -247,41 +247,41 @@ pub fn init_lind_logger(config: LindLoggerConfig) -> Result<(), LindLoggerInitEr
                 .create(true)
                 .append(true)
                 .open(&path)
-                .map_err(LindLoggerInitError::Io)?;
+                .map_err(GrateOSLoggerInitError::Io)?;
             LogWriter::File(file)
         }
     };
-    LIND_LOGGER
-        .set(LindLogger {
+    GRATEOS_LOGGER
+        .set(GrateOSLogger {
             writer: Mutex::new(writer),
             panic_behavior: config.panic_behavior,
             enabled_categories: config.enabled_categories,
         })
-        .map_err(|_| LindLoggerInitError::AlreadyInitialized)
+        .map_err(|_| GrateOSLoggerInitError::AlreadyInitialized)
 }
 
-/// Build a [`LindLoggerConfig`] from environment variables.
+/// Build a [`GrateOSLoggerConfig`] from environment variables.
 ///
 /// | Variable | Values | Default |
 /// |---|---|---|
-/// | `LIND_LOG_OUTPUT` | `stdout`, `stderr`, `none`, `file:/path`, `/path` | `stderr` |
-/// | `LIND_LOG_CATEGORIES` | `all`, `none`, `general`, `dylink`, `threei`, comma-separated | `all` |
-/// | `LIND_DEBUG_PANIC` | `panic`/`panic-and-exit`, `log`/`log-only`, `none`/`no-action` | `panic-and-exit` |
-pub fn config_from_env() -> Result<LindLoggerConfig, LindLoggerInitError> {
-    let mut config = LindLoggerConfig::default();
-    if let Ok(val) = std::env::var("LIND_LOG_OUTPUT") {
+/// | `GRATEOS_LOG_OUTPUT` | `stdout`, `stderr`, `none`, `file:/path`, `/path` | `stderr` |
+/// | `GRATEOS_LOG_CATEGORIES` | `all`, `none`, `general`, `dylink`, `threei`, comma-separated | `all` |
+/// | `GRATEOS_DEBUG_PANIC` | `panic`/`panic-and-exit`, `log`/`log-only`, `none`/`no-action` | `panic-and-exit` |
+pub fn config_from_env() -> Result<GrateOSLoggerConfig, GrateOSLoggerInitError> {
+    let mut config = GrateOSLoggerConfig::default();
+    if let Ok(val) = std::env::var("GRATEOS_LOG_OUTPUT") {
         config.output = parse_log_output(&val)?;
     }
-    if let Ok(val) = std::env::var("LIND_LOG_CATEGORIES") {
+    if let Ok(val) = std::env::var("GRATEOS_LOG_CATEGORIES") {
         config.enabled_categories = LogCategorySet::from_csv(&val)?;
     }
-    if let Ok(val) = std::env::var("LIND_DEBUG_PANIC") {
+    if let Ok(val) = std::env::var("GRATEOS_DEBUG_PANIC") {
         config.panic_behavior = parse_panic_behavior(&val)?;
     }
     Ok(config)
 }
 
-fn parse_log_output(s: &str) -> Result<LogOutput, LindLoggerInitError> {
+fn parse_log_output(s: &str) -> Result<LogOutput, GrateOSLoggerInitError> {
     match s.trim() {
         "stdout" => Ok(LogOutput::Stdout),
         "stderr" => Ok(LogOutput::Stderr),
@@ -293,13 +293,13 @@ fn parse_log_output(s: &str) -> Result<LogOutput, LindLoggerInitError> {
     }
 }
 
-fn parse_panic_behavior(s: &str) -> Result<PanicBehavior, LindLoggerInitError> {
+fn parse_panic_behavior(s: &str) -> Result<PanicBehavior, GrateOSLoggerInitError> {
     match s.trim() {
         "panic" | "panic-and-exit" => Ok(PanicBehavior::PanicAndExit),
         "log" | "log-only" => Ok(PanicBehavior::LogOnly),
         "none" | "no-action" => Ok(PanicBehavior::NoAction),
-        other => Err(LindLoggerInitError::InvalidConfig(format!(
-            "unknown LIND_DEBUG_PANIC value: '{}' (expected: panic, log, none)",
+        other => Err(GrateOSLoggerInitError::InvalidConfig(format!(
+            "unknown GRATEOS_DEBUG_PANIC value: '{}' (expected: panic, log, none)",
             other
         ))),
     }
@@ -310,7 +310,7 @@ fn parse_panic_behavior(s: &str) -> Result<PanicBehavior, LindLoggerInitError> {
 // ---------------------------------------------------------------------------
 
 fn write_to_logger(line: &str) {
-    match LIND_LOGGER.get() {
+    match GRATEOS_LOGGER.get() {
         Some(logger) => {
             if let Ok(mut w) = logger.writer.lock() {
                 w.write_line(line);
@@ -328,16 +328,16 @@ fn write_to_logger(line: &str) {
 /// Returns `true` if messages for `category` should be emitted.
 ///
 /// When the logger is uninitialized all categories are enabled (default).
-/// Called by the `lind_log!` and `lind_debug_panic!` macros before
+/// Called by the `grateos_log!` and `grateos_debug_panic!` macros before
 /// evaluating format arguments.
 pub fn category_enabled(category: LogCategory) -> bool {
-    match LIND_LOGGER.get() {
+    match GRATEOS_LOGGER.get() {
         Some(logger) => logger.enabled_categories.contains(category),
         None => true,
     }
 }
 
-/// Write a log line.  Called by the `lind_log!` macro.
+/// Write a log line.  Called by the `grateos_log!` macro.
 ///
 /// Output is skipped entirely when [`LogOutput::None`] is configured, but
 /// the category check in the macro already prevents reaching this function
@@ -349,7 +349,7 @@ pub fn log(
     line: u32,
     module: &'static str,
 ) {
-    match LIND_LOGGER.get() {
+    match GRATEOS_LOGGER.get() {
         Some(logger) => {
             if let Ok(writer) = logger.writer.lock() {
                 if writer.is_none() {
@@ -357,7 +357,7 @@ pub fn log(
                 }
             }
             let line_str = format!(
-                "[LIND][{}][{}:{} {}] {}",
+                "[GRATEOS][{}][{}:{} {}] {}",
                 category.as_str(),
                 file,
                 line,
@@ -369,7 +369,7 @@ pub fn log(
         None => {
             // Uninitialized: fall back to stderr
             eprintln!(
-                "[LIND][{}][{}:{} {}] {}",
+                "[GRATEOS][{}][{}:{} {}] {}",
                 category.as_str(),
                 file,
                 line,
@@ -380,9 +380,9 @@ pub fn log(
     }
 }
 
-/// Execute the soft-panic behavior.  Called by the `lind_debug_panic!` macro.
+/// Execute the soft-panic behavior.  Called by the `grateos_debug_panic!` macro.
 ///
-/// Does **not** use log categories — `lind_debug_panic!` always fires regardless
+/// Does **not** use log categories — `grateos_debug_panic!` always fires regardless
 /// of the active [`LogCategorySet`].  [`LogOutput::None`] suppresses the log
 /// line but does **not** suppress the `panic!` in `PanicAndExit` mode; this
 /// lets CI environments silence ordinary log noise while still detecting
@@ -400,7 +400,7 @@ pub fn log(
 /// (a `return`, a default value, etc.) because this function may return
 /// normally in `LogOnly` and `NoAction` modes.
 pub fn debug_panic(args: fmt::Arguments<'_>, file: &'static str, line: u32, module: &'static str) {
-    let behavior = LIND_LOGGER
+    let behavior = GRATEOS_LOGGER
         .get()
         .map(|l| match &l.panic_behavior {
             PanicBehavior::PanicAndExit => 0u8,
@@ -414,7 +414,7 @@ pub fn debug_panic(args: fmt::Arguments<'_>, file: &'static str, line: u32, modu
         1 => {
             // LogOnly: write and return
             let line_str = format!(
-                "[LIND][DEBUG PANIC continuing][{}:{} {}] {}",
+                "[GRATEOS][DEBUG PANIC continuing][{}:{} {}] {}",
                 file, line, module, args
             );
             write_to_logger(&line_str);
@@ -424,7 +424,7 @@ pub fn debug_panic(args: fmt::Arguments<'_>, file: &'static str, line: u32, modu
             // Note: write_to_logger is a no-op when LogOutput::None, but the
             // panic! still fires — intentional for CI environments.
             let msg = fmt::format(args);
-            let line_str = format!("[LIND][DEBUG PANIC][{}:{} {}] {}", file, line, module, msg);
+            let line_str = format!("[GRATEOS][DEBUG PANIC][{}:{} {}] {}", file, line, module, msg);
             write_to_logger(&line_str);
             panic!("{}", line_str);
         }
@@ -437,30 +437,30 @@ pub fn debug_panic(args: fmt::Arguments<'_>, file: &'static str, line: u32, modu
 
 /// Log a formatted diagnostic message to the configured output.
 ///
-/// Expands to nothing when the `lind-logging` Cargo feature is disabled.
+/// Expands to nothing when the `grateos-logging` Cargo feature is disabled.
 /// Formatting arguments are **not evaluated** in that case.
 ///
 /// # Usage
 ///
 /// ```rust
-/// use sysdefs::lind_log;
+/// use sysdefs::grateos_log;
 ///
 /// // Default category (General)
-/// lind_log!("cage {} started", 42u64);
+/// grateos_log!("cage {} started", 42u64);
 ///
 /// // Explicit category
-/// lind_log!(DYLINK, "resolved symbol {} at 0x{:x}", "malloc", 0x1000u64);
-/// lind_log!(THREEI, "registered handler for call {}", 7u32);
+/// grateos_log!(DYLINK, "resolved symbol {} at 0x{:x}", "malloc", 0x1000u64);
+/// grateos_log!(THREEI, "registered handler for call {}", 7u32);
 /// ```
 ///
-/// Unlike `lind_debug_panic!`, this macro never panics.
+/// Unlike `grateos_debug_panic!`, this macro never panics.
 #[macro_export]
-macro_rules! lind_log {
+macro_rules! grateos_log {
     // Internal implementation arm — must appear first to prevent the
     // catch-all arm from matching recursive @cat invocations.
     (@cat $category:expr, $($arg:tt)*) => {
         {
-            #[cfg(feature = "lind-logging")]
+            #[cfg(feature = "grateos-logging")]
             {
                 if $crate::logging::category_enabled($category) {
                     $crate::logging::log(
@@ -476,60 +476,60 @@ macro_rules! lind_log {
     };
     // Categorized variants
     (DYLINK, $($arg:tt)*) => {
-        $crate::lind_log!(@cat $crate::logging::LogCategory::DYLINK, $($arg)*)
+        $crate::grateos_log!(@cat $crate::logging::LogCategory::DYLINK, $($arg)*)
     };
     (THREEI, $($arg:tt)*) => {
-        $crate::lind_log!(@cat $crate::logging::LogCategory::THREEI, $($arg)*)
+        $crate::grateos_log!(@cat $crate::logging::LogCategory::THREEI, $($arg)*)
     };
     (Default, $($arg:tt)*) => {
-        $crate::lind_log!(@cat $crate::logging::LogCategory::Default, $($arg)*)
+        $crate::grateos_log!(@cat $crate::logging::LogCategory::Default, $($arg)*)
     };
     // Default: Default category — must be last
     ($($arg:tt)*) => {
-        $crate::lind_log!(@cat $crate::logging::LogCategory::Default, $($arg)*)
+        $crate::grateos_log!(@cat $crate::logging::LogCategory::Default, $($arg)*)
     };
 }
 
 /// Soft panic for unexpected but potentially survivable conditions.
 ///
 /// Does **not** accept a category — it always fires regardless of the active
-/// [`LogCategorySet`].  Use [`lind_log!`] for category-filtered diagnostics.
+/// [`LogCategorySet`].  Use [`grateos_log!`] for category-filtered diagnostics.
 ///
-/// Expands to nothing when the `lind-logging` Cargo feature is disabled.
+/// Expands to nothing when the `grateos-logging` Cargo feature is disabled.
 /// Formatting arguments are **not evaluated** in that case.
 ///
 /// # Usage
 ///
 /// ```rust
-/// use sysdefs::lind_debug_panic;
+/// use sysdefs::grateos_debug_panic;
 ///
-/// lind_debug_panic!("cage {} not found", 3u64);
+/// grateos_debug_panic!("cage {} not found", 3u64);
 /// ```
 ///
 /// # Important
 ///
 /// This macro **may return normally** in `LogOnly` or `NoAction` mode and
-/// when `lind-logging` is disabled.  Every call site **must** supply explicit
+/// when `grateos-logging` is disabled.  Every call site **must** supply explicit
 /// fallback control flow:
 ///
 /// ```rust
-/// use sysdefs::lind_debug_panic;
+/// use sysdefs::grateos_debug_panic;
 ///
 /// fn find_cage(id: u64) -> Option<u64> { None }
 ///
 /// let cage = match find_cage(3) {
 ///     Some(c) => c,
 ///     None => {
-///         lind_debug_panic!("cage {} not found", 3u64);
+///         grateos_debug_panic!("cage {} not found", 3u64);
 ///         return; // always needed — macro may return in non-panic modes
 ///     }
 /// };
 /// ```
 #[macro_export]
-macro_rules! lind_debug_panic {
+macro_rules! grateos_debug_panic {
     ($($arg:tt)*) => {
         {
-            #[cfg(feature = "lind-logging")]
+            #[cfg(feature = "grateos-logging")]
             {
                 $crate::logging::debug_panic(
                     ::core::format_args!($($arg)*),

@@ -25,7 +25,7 @@
 #include <internal-stat.h>
 #include <errno.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 int
@@ -43,7 +43,7 @@ hidden_def (__fstat64_time64)
       __set_errno (EBADF);
       return -1;
     }
-  // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
+  // Added MAKE_SYSCALL macro to interface with GrateOS - Qianxi Chen
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   return MAKE_LEGACY_SYSCALL (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
 		       host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);

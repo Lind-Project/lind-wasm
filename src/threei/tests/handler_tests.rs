@@ -123,13 +123,13 @@ fn exiting_table_blocks_registration() {
 
     EXITING_TABLE.insert(cage);
     let rc = register_simple(cage, callnum, dest_grate, addr, OP_ADD);
-    assert_eq!(rc, threei_const::ELINDESRCH as i32);
+    assert_eq!(rc, threei_const::EGRATEOSESRCH as i32);
 
     EXITING_TABLE.remove(&cage);
     EXITING_TABLE.insert(dest_grate);
 
     let rc2 = register_simple(cage, callnum, dest_grate, addr, OP_ADD);
-    assert_eq!(rc2, threei_const::ELINDESRCH as i32);
+    assert_eq!(rc2, threei_const::EGRATEOSESRCH as i32);
 
     assert!(mappings_for(cage, callnum).is_empty());
 }
@@ -286,7 +286,7 @@ fn copy_returns_error_if_src_missing_table() {
 
     let rc = cpy(dst, src);
 
-    assert_eq!(rc, threei_const::ELINDAPIABORTED as u64);
+    assert_eq!(rc, threei_const::EGRATEOSAPIABORTED as u64);
 
     #[cfg(feature = "hashmap")]
     {
@@ -301,7 +301,7 @@ fn copy_returns_error_if_src_missing_table() {
 
 #[test]
 #[serial]
-fn copy_returns_elindesrch_if_either_src_or_dst_exiting() {
+fn copy_returns_egrateosesrch_if_either_src_or_dst_exiting() {
     clear_globals();
 
     let src = 1006;
@@ -311,11 +311,11 @@ fn copy_returns_elindesrch_if_either_src_or_dst_exiting() {
 
     EXITING_TABLE.insert(src);
     let rc1 = cpy(dst, src);
-    assert_eq!(rc1, threei_const::ELINDESRCH as u64);
+    assert_eq!(rc1, threei_const::EGRATEOSESRCH as u64);
     EXITING_TABLE.remove(&src);
 
     EXITING_TABLE.insert(dst);
     let rc2 = cpy(dst, src);
-    assert_eq!(rc2, threei_const::ELINDESRCH as u64);
+    assert_eq!(rc2, threei_const::EGRATEOSESRCH as u64);
     EXITING_TABLE.remove(&dst);
 }

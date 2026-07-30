@@ -21,7 +21,7 @@
 #include <sysdep.h>
 #include <brk_call.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 /* This must be initialized data because commons can't have aliases.  */
 // This is the "virtual brk" exposed to the caller

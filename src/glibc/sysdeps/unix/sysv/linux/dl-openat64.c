@@ -20,10 +20,10 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: route the dynamic-loader's openat64 through the same
+/* GrateOS: route the dynamic-loader's openat64 through the same
    OPENAT_SYSCALL handler the rest of the libc uses, instead of the
    broken INLINE_SYSCALL stub.  */
 int

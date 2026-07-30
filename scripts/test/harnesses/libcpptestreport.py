@@ -24,9 +24,9 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
-LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
-LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
-LIND_TOOL_PATH = LIND_WASM_BASE / "scripts" / "bin"
+GRATEOS_WASM_BASE = Path(os.environ.get("GRATEOS_WASM_BASE", REPO_ROOT)).resolve()
+GRATEOSFS_ROOT = Path(os.environ.get("GRATEOSFS_ROOT", GRATEOS_WASM_BASE / "grateosfs")).resolve()
+GRATEOS_TOOL_PATH = GRATEOS_WASM_BASE / "scripts" / "bin"
 CXX = os.environ.get("CXX", "c++")
 DEFAULT_CPP_DIR = Path("tests/unit-tests/cpp")
 DEFAULT_NON_GRATE_TEST_WORKERS = "1"
@@ -193,20 +193,20 @@ def _discover_source_paths() -> list[Path]:
         if p.is_dir():
             return sorted(p.glob("*.cpp"))
         return [p]
-    return sorted((LIND_WASM_BASE / DEFAULT_CPP_DIR).glob("*.cpp"))
+    return sorted((GRATEOS_WASM_BASE / DEFAULT_CPP_DIR).glob("*.cpp"))
 
 
 def _cwasm_path_for_source(source: Path) -> Path:
     return source.parent / f"{source.name}.cwasm"
 
 
-def _run_lind_compile_cpp_full(source: Path) -> tuple[int, str, float]:
-    cmd = [str(LIND_TOOL_PATH / "lind_compile_cpp"), str(source)]
+def _run_grateos_compile_cpp_full(source: Path) -> tuple[int, str, float]:
+    cmd = [str(GRATEOS_TOOL_PATH / "grateos_compile_cpp"), str(source)]
     t0 = time.perf_counter()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(LIND_WASM_BASE))
+        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(GRATEOS_WASM_BASE))
     except OSError as exc:
-        return 127, f"Exception running lind_compile_cpp: {exc}", time.perf_counter() - t0
+        return 127, f"Exception running grateos_compile_cpp: {exc}", time.perf_counter() - t0
     out = proc.stdout or ""
     err = proc.stderr or ""
     return proc.returncode, out + (("\n" + err) if out and err else err), time.perf_counter() - t0
@@ -216,7 +216,7 @@ def _run_native_compile_cpp(source: Path, output_binary: Path) -> tuple[int, str
     cmd = [CXX, "-std=c++17", str(source), "-o", str(output_binary)]
     t0 = time.perf_counter()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(LIND_WASM_BASE))
+        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(GRATEOS_WASM_BASE))
     except OSError as exc:
         return 127, f"Exception running native C++ compiler ({CXX}): {exc}", time.perf_counter() - t0
     out = proc.stdout or ""
@@ -224,24 +224,24 @@ def _run_native_compile_cpp(source: Path, output_binary: Path) -> tuple[int, str
     return proc.returncode, out + (("\n" + err) if out and err else err), time.perf_counter() - t0
 
 
-def _run_wasm_with_lind(wasm_basename: str, timeout_sec: int) -> tuple[Any, str, float]:
-    cmd = [str(LIND_TOOL_PATH / "lind_run"), wasm_basename]
+def _run_wasm_with_grateos(wasm_basename: str, timeout_sec: int) -> tuple[Any, str, float]:
+    cmd = [str(GRATEOS_TOOL_PATH / "grateos_run"), wasm_basename]
     run_env = os.environ.copy()
-    run_env["LIND_GRATE_WORKERS"] = DEFAULT_NON_GRATE_TEST_WORKERS
+    run_env["GRATEOS_GRATE_WORKERS"] = DEFAULT_NON_GRATE_TEST_WORKERS
     t0 = time.perf_counter()
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=str(LIND_WASM_BASE),
+            cwd=str(GRATEOS_WASM_BASE),
             timeout=timeout_sec,
             env=run_env,
         )
     except subprocess.TimeoutExpired:
         return "timeout", f"Timed out after {timeout_sec}s", time.perf_counter() - t0
     except OSError as exc:
-        return "error", f"Exception running lind_run: {exc}", time.perf_counter() - t0
+        return "error", f"Exception running grateos_run: {exc}", time.perf_counter() - t0
 
     out = proc.stdout or ""
     err = proc.stderr or ""
@@ -274,9 +274,9 @@ def _cleanup_artifacts(wasm_path: Path, cwasm_path: Path, logger: logging.Logger
         except OSError as exc:
             logger.debug("[libcpp] Could not remove %s: %s", path, exc)
         try:
-            (LINDFS_ROOT / path.name).unlink(missing_ok=True)
+            (GRATEOSFS_ROOT / path.name).unlink(missing_ok=True)
         except OSError as exc:
-            logger.debug("[libcpp] Could not remove %s: %s", LINDFS_ROOT / path.name, exc)
+            logger.debug("[libcpp] Could not remove %s: %s", GRATEOSFS_ROOT / path.name, exc)
 
 
 def _cleanup_native_artifact(native_path: Path, logger: logging.Logger) -> None:
@@ -293,7 +293,7 @@ def _run_single_libcpp_test(
     logger: logging.Logger,
 ) -> None:
     try:
-        rel_name = str(src.relative_to(LIND_WASM_BASE))
+        rel_name = str(src.relative_to(GRATEOS_WASM_BASE))
     except ValueError:
         rel_name = str(src)
 
@@ -319,14 +319,14 @@ def _run_single_libcpp_test(
         )
         return
 
-    rc, compile_out, t_wasm_compile = _run_lind_compile_cpp_full(src)
+    rc, compile_out, t_wasm_compile = _run_grateos_compile_cpp_full(src)
     if rc != 0:
         _add_test_result(
             bucket,
             rel_name,
             "Failure",
             "Compile_Failure",
-            f"lind_compile_cpp failed (exit={rc})\n{compile_out}",
+            f"grateos_compile_cpp failed (exit={rc})\n{compile_out}",
             logger,
             native_compile_time_sec=t_native_compile,
             wasm_compile_time_sec=t_wasm_compile,
@@ -339,7 +339,7 @@ def _run_single_libcpp_test(
             rel_name,
             "Failure",
             "Compile_Failure",
-            f"lind_compile_cpp exited 0 but .cwasm missing: {cwasm_path}\n{compile_out}",
+            f"grateos_compile_cpp exited 0 but .cwasm missing: {cwasm_path}\n{compile_out}",
             logger,
             native_compile_time_sec=t_native_compile,
             wasm_compile_time_sec=t_wasm_compile,
@@ -348,7 +348,7 @@ def _run_single_libcpp_test(
         return
 
     native_rc, native_out, t_native_run = _run_native_binary(native_bin, timeout_sec)
-    run_rc, run_out, t_wasm_run = _run_wasm_with_lind(run_basename, timeout_sec)
+    run_rc, run_out, t_wasm_run = _run_wasm_with_grateos(run_basename, timeout_sec)
     try:
         if native_rc == "timeout":
             _add_test_result(

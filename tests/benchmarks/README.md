@@ -1,4 +1,4 @@
-# Lind Benchmarks
+# GrateOS Benchmarks
 
 This directory contains microbenchmarks used by `scripts/benchrunner.py`.
 Each benchmark prints results in a tab-delimited format so the runner can parse them.
@@ -6,10 +6,10 @@ Each benchmark prints results in a tab-delimited format so the runner can parse 
 Sample outputs:
 
 ```bash
-lind@232affd4dc4d:~/lind-wasm$ ./scripts/benchrunner.py fs_read imfs-grate.fs_read.grate
-Running:  /home/lind/lind-wasm/tests/benchmarks/fs_read.c
-Running:  /home/lind/lind-wasm/tests/benchmarks/imfs-grate.fs_read.grate
-TEST  PARAM  LINUX (ns)   LIND (ns)    GRATE (ns)    ITERATIONS  DESCRIPTION
+grateos@232affd4dc4d:~/grateos-wasm$ ./scripts/benchrunner.py fs_read imfs-grate.fs_read.grate
+Running:  /home/grateos/grateos-wasm/tests/benchmarks/fs_read.c
+Running:  /home/grateos/grateos-wasm/tests/benchmarks/imfs-grate.fs_read.grate
+TEST  PARAM  LINUX (ns)   GRATEOS (ns)    GRATE (ns)    ITERATIONS  DESCRIPTION
 ----  -----  -----------  -----------  ------------  ----------  ----------------------------------------
 Read  1      214 (1.000)  414 (1.935)  824 (3.850)   1000000     Issues pread() for buffer of size PARAM. / Grate used: In-Memory File System.
 Read  1024   226 (1.000)  436 (1.929)  855 (3.783)   1000000
@@ -18,10 +18,10 @@ Read  10240  359 (1.000)  532 (1.482)  1046 (2.914) 1000
 ```
 
 ```bash
-lind@232affd4dc4d:~/lind-wasm$ ./scripts/benchrunner.py -o results.csv fs_read imfs-grate.fs_read.grate
-Running:  /home/lind/lind-wasm/tests/benchmarks/fs_read.c
-Running:  /home/lind/lind-wasm/tests/benchmarks/imfs-grate.fs_read.grate
-TEST,PARAM,LINUX (ns),LIND (ns),GRATE (ns),ITERATIONS,DESCRIPTION
+grateos@232affd4dc4d:~/grateos-wasm$ ./scripts/benchrunner.py -o results.csv fs_read imfs-grate.fs_read.grate
+Running:  /home/grateos/grateos-wasm/tests/benchmarks/fs_read.c
+Running:  /home/grateos/grateos-wasm/tests/benchmarks/imfs-grate.fs_read.grate
+TEST,PARAM,LINUX (ns),GRATEOS (ns),GRATE (ns),ITERATIONS,DESCRIPTION
 Read,1,"214 (1.000)","414 (1.935)","824 (3.850)",1000000,"Issues pread() for buffer of size PARAM. / Grate used: In-Memory File System."
 Read,1024,"226 (1.000)","436 (1.929)","855 (3.783)",1000000,
 Read,4096,"244 (1.000)","433 (1.775)","930 (3.811)",1000000,
@@ -99,10 +99,10 @@ imfs-grate.fs_read.grate
 ```
 
 This means:
-- fetch `examples/imfs-grate/` from the [lind-wasm-example-grates](https://github.com/Lind-Project/lind-wasm-example-grates) repo  
+- fetch `examples/imfs-grate/` from the [grateos-wasm-example-grates](https://github.com/GrateOS-Project/grateos-wasm-example-grates) repo  
 - compile the grate via `compile_grate.sh`
 - compile `tests/benchmarks/fs_read.c` as a cage
-- run `lind_run imfs_grate fs_read` so the syscall is interposed by the grate
+- run `grateos_run imfs_grate fs_read` so the syscall is interposed by the grate
 
 The `.grate` tests files are used to encode the expected order to launch grates and cages,
 and can optionally include a `// DESCRIPTION:` line to describe the intended workflow being benchmarked. 
@@ -119,11 +119,11 @@ and can optionally include a `// DESCRIPTION:` line to describe the intended wor
 
 ### Grate tests
 Taking the example of adding a `geteuid_grate` test:
-1. Ensure that the grate exists in the `lind-wasm-example-grates` repo with a valid `compile_grate.sh` script.
-2. Add a file ending with `.grate`. The name of this file encodes the order of execution for this test. Name the file `geteuid-grate.geteuid.grate` which would run `lind-boot geteuid_grate.cwasm geteuid.cwasm`. You can add a `// DESCRIPTION:` line here for grate-specific context.
+1. Ensure that the grate exists in the `grateos-wasm-example-grates` repo with a valid `compile_grate.sh` script.
+2. Add a file ending with `.grate`. The name of this file encodes the order of execution for this test. Name the file `geteuid-grate.geteuid.grate` which would run `grateos-boot geteuid_grate.cwasm geteuid.cwasm`. You can add a `// DESCRIPTION:` line here for grate-specific context.
 3. For components that are not grates, these files must already be present in `tests/benchmarks/`. In this case, `geteuid.c` must already exist. 
 
 ### Aggregation:
 - Results are keyed by the `test` label and `param`.
-- If you have multiple binaries (linux/lind/grate) that emit the same `(label, param)` the
+- If you have multiple binaries (linux/grateos/grate) that emit the same `(label, param)` the
   results are grouped together in the final table.

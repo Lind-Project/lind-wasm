@@ -180,7 +180,7 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
     0
 }
 
-/// Raise the host process soft fd limit to the hard maximum. Lind supports up to 1024 cages
+/// Raise the host process soft fd limit to the hard maximum. GrateOS supports up to 1024 cages
 /// each with up to 1024 fds, so the default soft limit (typically 1024) is too low.
 fn init_fd_limit() {
     unsafe {
@@ -360,7 +360,7 @@ pub fn rawposix_shutdown() {
     }
 
     for cage in EXITING_TABLE.iter() {
-        sysdefs::constants::lind_platform_const::unset_stack_arena_base(*cage as usize);
+        sysdefs::constants::grateos_platform_const::unset_stack_arena_base(*cage as usize);
     }
 
     EXITING_TABLE.clear();

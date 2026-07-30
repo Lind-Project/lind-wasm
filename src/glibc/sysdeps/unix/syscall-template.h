@@ -1,9 +1,9 @@
 #include <sys/syscall.h>
 #include <stdint.h> // For uint64_t
 #include <unistd.h>
-#include <lind_syscall.h>
+#include <grateos_syscall.h>
 #include <addr_translation.h>
-#include <lind_constants.h>
+#include <grateos_constants.h>
 
 /*
  * MAKE_LEGACY_SYSCALL:
@@ -12,7 +12,7 @@
  * POSIX-style syscalls.  This macro wraps a syscall using the calling
  * convention expected by legacy threei code, and automatically assigns
  * both the `self_cageid` and `target_cageid` to the current cage
- * (`__lind_cageid`).
+ * (`__grateos_cageid`).
  *
  * Arguments (arg1..arg6) are paired with the caller's cage ID and forwarded
  * directly into make_threei_call, which performs the actual three-i style call.
@@ -23,7 +23,7 @@
  */
 #define MAKE_LEGACY_SYSCALL(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, translate_errno) \
     ({ \
-        uint64_t __self = __lind_cageid; \
+        uint64_t __self = __grateos_cageid; \
         make_threei_call( \
             (syscall_num), \
             (syscall_name), \

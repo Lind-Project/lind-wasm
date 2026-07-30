@@ -30,7 +30,7 @@ __nptl_free_tcb (struct pthread *pd)
       // BUG: Thread Local storage is not supported yet
       // so we do not need to free it - Qianxi Chen
       
-      // Lind-Wasm: Original glibc code removed for compatibility
+      // GrateOS-Wasm: Original glibc code removed for compatibility
       // to find original source code refer to (2.39.9000) at (nptl/nptl_free_tcb.c):(LINE 27-37)
 
       /* Queue the stack memory block for reuse and exit the process.  The

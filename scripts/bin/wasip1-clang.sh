@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # --- repo root discovery (env var -> script dir -> git) ---
-if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
-  REPO_ROOT="${LIND_WASM_ROOT}"
+if [[ -n "${GRATEOS_WASM_ROOT:-}" && -d "${GRATEOS_WASM_ROOT}" ]]; then
+  REPO_ROOT="${GRATEOS_WASM_ROOT}"
 else
   SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   if [[ -f "${SCRIPT_DIR}/../../Makefile" ]]; then
@@ -18,8 +18,8 @@ else
 fi
 
 if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
-  echo "ERROR: Could not locate lind-wasm repo root." >&2
-  echo "Hint: export LIND_WASM_ROOT=/path/to/lind-wasm" >&2
+  echo "ERROR: Could not locate grateos-wasm repo root." >&2
+  echo "Hint: export GRATEOS_WASM_ROOT=/path/to/grateos-wasm" >&2
   exit 2
 fi
 

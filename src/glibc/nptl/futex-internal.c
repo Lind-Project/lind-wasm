@@ -23,7 +23,7 @@
 #include <kernel-features.h>
 #include "libioP.h"
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 #ifndef __ASSUME_TIME64_SYSCALLS
@@ -45,7 +45,7 @@ __futex_abstimed_wait_common32 (unsigned int* futex_word,
     uint64_t host_futex_word = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
     uint64_t host_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(pts32);
 
-    // replace with lind syscall
+    // replace with grateos syscall
     return MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_timeout, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY, TRANSLATE_ERRNO_OFF);
 }
 #endif /* ! __ASSUME_TIME64_SYSCALLS */
@@ -57,7 +57,7 @@ __futex_abstimed_wait_common64 (unsigned int* futex_word,
                                 const struct __timespec64* abstime,
                                 int private, bool cancel)
 {
-    // replace with lind syscall
+    // replace with grateos syscall
     uint64_t host_futex_word = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
     uint64_t host_abstime = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
     return MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_abstime, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY, TRANSLATE_ERRNO_OFF);

@@ -490,7 +490,7 @@ pub struct Module {
     /// WebAssembly tables.
     pub tables: TryPrimaryMap<TableIndex, Table>,
 
-    /// lind-wasm: per-table plan metadata (written/non_null_zero flags).
+    /// grateos-wasm: per-table plan metadata (written/non_null_zero flags).
     pub table_plans: TryPrimaryMap<TableIndex, TablePlan>,
 
     /// WebAssembly linear memory plans.
@@ -512,7 +512,7 @@ pub struct Module {
     pub dylink_import_info: Option<DylinkImportInfo>,
 }
 
-/// lind-wasm addition: dylink memory information
+/// grateos-wasm addition: dylink memory information
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DylinkMemInfo {
     /// Size of memory segment required by this module.
@@ -525,7 +525,7 @@ pub struct DylinkMemInfo {
     pub table_alignment: u32,
 }
 
-/// lind-wasm addition: dylink import information
+/// grateos-wasm addition: dylink import information
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DylinkImport {
     /// Module name of the import.
@@ -536,7 +536,7 @@ pub struct DylinkImport {
     pub flags: u32,
 }
 
-/// lind-wasm addition: dylink import information
+/// grateos-wasm addition: dylink import information
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DylinkImportInfo {
     /// List of dylink imports.

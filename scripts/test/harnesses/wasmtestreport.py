@@ -12,10 +12,10 @@
 #   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
 #   (flags are collected until the next option starting with "--")
 #   "./wasmtestreport.py --grate grates/ipc-grate.cwasm" to run each test under a grate
-#   (the grate path is forwarded to lind_run before the test wasm)
+#   (the grate path is forwarded to grateos_run before the test wasm)
 #
-#   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
-#   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
+#   "./wasmtestreport.py --pre-test-only" to copy the testfiles to grateos fs root(does not run tests)
+#   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from grateos fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
 import contextlib
 import html
@@ -48,7 +48,7 @@ logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 30 # in seconds
 GRATE_DEFAULT_TIMEOUT = 90  # bumped default when running tests under a grate
-DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for lind_run on libc++ smoke .cwasm
+DEFAULT_LIBCPP_RUN_TIMEOUT = 30  # seconds for grateos_run on libc++ smoke .cwasm
 DEFAULT_NON_GRATE_TEST_WORKERS = "1"
 
 JSON_OUTPUT = "results.json"
@@ -58,14 +58,14 @@ RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
-LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
-LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
+GRATEOS_WASM_BASE = Path(os.environ.get("GRATEOS_WASM_BASE", REPO_ROOT)).resolve()
+GRATEOSFS_ROOT = Path(os.environ.get("GRATEOSFS_ROOT", GRATEOS_WASM_BASE / "grateosfs")).resolve()
 CC = os.environ.get("CC", "clang")  # C compiler, defaults to clang
 
-LIND_TOOL_PATH = LIND_WASM_BASE / "scripts" / "bin"
-TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
-TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
-TESTFILES_DST = LINDFS_ROOT / "testfiles"
+GRATEOS_TOOL_PATH = GRATEOS_WASM_BASE / "scripts" / "bin"
+TEST_FILE_BASE = GRATEOS_WASM_BASE / "tests" / "unit-tests"
+TESTFILES_SRC = GRATEOS_WASM_BASE / "tests" / "testfiles"
+TESTFILES_DST = GRATEOSFS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 FAIL_PARENT_NAME = "fail"
 LIBRARY_PARENT_NAME = "library"
@@ -77,7 +77,7 @@ DYLINK_NATIVE_LIB_CACHE: dict = {}
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 GLOBAL_COMPILE_FLAGS = []
-LIND_PRE_FLAGS = []
+GRATEOS_PRE_FLAGS = []
 DIR_FLAGS = []
 GRATE_PREFIX = None
 GRATE_ARGS = []
@@ -93,10 +93,10 @@ error_types = {
     "Failure_native_running": "Runtime Failure Native",
     "Native_Segmentation_Fault": "Segmentation Fault Native",
     "Native_Timeout": "Timeout During Native",
-    "Lind_wasm_compiling": "Lind Wasm Compile Failure",
-    "Lind_wasm_runtime": "Lind Wasm Runtime Failure",
-    "Lind_wasm_Segmentation_Fault": "Lind Wasm Segmentation Failure",
-    "Lind_wasm_Timeout": "Timeout During Lind Wasm run",
+    "GrateOS_wasm_compiling": "GrateOS Wasm Compile Failure",
+    "GrateOS_wasm_runtime": "GrateOS Wasm Runtime Failure",
+    "GrateOS_wasm_Segmentation_Fault": "GrateOS Wasm Segmentation Failure",
+    "GrateOS_wasm_Timeout": "Timeout During GrateOS Wasm run",
     "Unknown_Failure": "Unknown Failure",
     "Output_mismatch": "C Compiler and Wasm Output mismatch",
     "Fail_native_succeeded": "Fail Test: Native Succeeded (Should Fail)",
@@ -139,21 +139,21 @@ def load_dir_flags(flags_path: Path):
         if not isinstance(value, dict):
             raise ValueError(f"Directory flags entry for {key} must be an object.")
 
-        lind_flags = value.get("lind", [])
+        grateos_flags = value.get("grateos", [])
         native_flags = value.get("native", [])
 
-        if not isinstance(lind_flags, list) or not all(isinstance(f, str) for f in lind_flags):
-            raise ValueError(f"Directory flags 'lind' for {key} must be a list of strings.")
+        if not isinstance(grateos_flags, list) or not all(isinstance(f, str) for f in grateos_flags):
+            raise ValueError(f"Directory flags 'grateos' for {key} must be a list of strings.")
         if not isinstance(native_flags, list) or not all(isinstance(f, str) for f in native_flags):
             raise ValueError(f"Directory flags 'native' for {key} must be a list of strings.")
 
-        entries.append((Path(key), {"lind": lind_flags, "native": native_flags}))
+        entries.append((Path(key), {"grateos": grateos_flags, "native": native_flags}))
 
     entries.sort(key=lambda item: len(item[0].parts), reverse=True)
     return entries
 
 def resolve_compile_flags(source_file: Path, kind: str):
-    if kind not in ("lind", "native"):
+    if kind not in ("grateos", "native"):
         raise ValueError(f"Unknown compile flag kind: {kind}")
 
     base_flags = GLOBAL_COMPILE_FLAGS
@@ -186,8 +186,8 @@ def is_library_file(file_path: Path) -> bool:
     return False
 
 
-def resolve_lind_pre_flags(source_file: Path) -> list:
-    """Return extra pre-source flags for lind_compile (inserted before the source path)."""
+def resolve_grateos_pre_flags(source_file: Path) -> list:
+    """Return extra pre-source flags for grateos_compile (inserted before the source path)."""
     for parent in source_file.parents:
         if parent == TEST_FILE_BASE:
             break
@@ -216,10 +216,10 @@ def _find_library_source_files() -> list:
 
 
 def compile_dylink_libraries() -> None:
-    """Pre-compile library/ .c files as wasm (via lind_compile) and native .so.
+    """Pre-compile library/ .c files as wasm (via grateos_compile) and native .so.
 
-    The wasm .so is placed in LINDFS_ROOT by lind_compile automatically.
-    The native .so is stored in LINDFS_ROOT with a .native.so suffix and
+    The wasm .so is placed in GRATEOSFS_ROOT by grateos_compile automatically.
+    The native .so is stored in GRATEOSFS_ROOT with a .native.so suffix and
     cached in DYLINK_NATIVE_LIB_CACHE for use during native test runs.
     """
     library_files = _find_library_source_files()
@@ -231,16 +231,16 @@ def compile_dylink_libraries() -> None:
         stem = lib_c.stem
         so_name = f"{stem}.so"
 
-        # --- wasm build (output goes to LINDFS_ROOT/<stem>.so) ---
-        lind_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), "--compile-library", str(lib_c)]
+        # --- wasm build (output goes to GRATEOSFS_ROOT/<stem>.so) ---
+        grateos_cmd = [os.path.join(GRATEOS_TOOL_PATH, "grateos_compile"), "--compile-library", str(lib_c)]
         logger.info(f"  [wasm] {so_name}")
-        result = run_subprocess(lind_cmd, label="wasm lib compile", shell=False)
+        result = run_subprocess(grateos_cmd, label="wasm lib compile", shell=False)
         if result.returncode != 0:
             logger.error(f"Failed to compile wasm library {lib_c.name}: {result.stdout}{result.stderr}")
             continue
 
-        # --- native shared library build (stored as <stem>.native.so in LINDFS_ROOT) ---
-        native_out = LINDFS_ROOT / f"{stem}.native.so"
+        # --- native shared library build (stored as <stem>.native.so in GRATEOSFS_ROOT) ---
+        native_out = GRATEOSFS_ROOT / f"{stem}.native.so"
         native_cmd = [CC, "-shared", "-fPIC", str(lib_c), "-o", str(native_out)]
         logger.info(f"  [native] {native_out.name}")
         native_result = run_subprocess(native_cmd, label="native lib compile", shell=False)
@@ -256,9 +256,9 @@ def compile_dylink_libraries() -> None:
 
 @contextlib.contextmanager
 def _native_dylink_libs():
-    """Swap wasm .so -> native .so in LINDFS_ROOT and set LD_LIBRARY_PATH, restore on exit.
+    """Swap wasm .so -> native .so in GRATEOSFS_ROOT and set LD_LIBRARY_PATH, restore on exit.
 
-    Linux dlopen("lib.so") does not search cwd; LD_LIBRARY_PATH pointing at LINDFS_ROOT
+    Linux dlopen("lib.so") does not search cwd; LD_LIBRARY_PATH pointing at GRATEOSFS_ROOT
     is required. The wasm .so files are also replaced with native ELF .so so dlopen
     succeeds. Both are restored after the native run so the wasm test sees the wasm .so.
     """
@@ -267,12 +267,12 @@ def _native_dylink_libs():
         return
 
     old_ld = os.environ.get("LD_LIBRARY_PATH", "")
-    os.environ["LD_LIBRARY_PATH"] = f"{LINDFS_ROOT}:{old_ld}" if old_ld else str(LINDFS_ROOT)
+    os.environ["LD_LIBRARY_PATH"] = f"{GRATEOSFS_ROOT}:{old_ld}" if old_ld else str(GRATEOSFS_ROOT)
 
     backed_up: dict = {}
     try:
         for so_name, native_path in DYLINK_NATIVE_LIB_CACHE.items():
-            wasm_path = LINDFS_ROOT / so_name
+            wasm_path = GRATEOSFS_ROOT / so_name
             if wasm_path.exists():
                 backup = wasm_path.with_suffix(".wasm.bak")
                 shutil.copy2(str(wasm_path), str(backup))
@@ -290,7 +290,7 @@ def _native_dylink_libs():
             except Exception as exc:
                 logger.warning(f"Failed to restore {wasm_path}: {exc}")
         for so_name in DYLINK_NATIVE_LIB_CACHE:
-            wasm_path = LINDFS_ROOT / so_name
+            wasm_path = GRATEOSFS_ROOT / so_name
             if wasm_path not in backed_up and wasm_path.exists():
                 wasm_path.unlink(missing_ok=True)
 
@@ -442,19 +442,19 @@ class TestResultHandler:
         add_test_result(self.result, self.source_file, "Success", None, output, timing_info=timing_info)
     
     def add_compile_failure(self, error_msg, is_native=False, timing_info=None):
-        error_type = "Failure_native_compiling" if is_native else "Lind_wasm_compiling"
+        error_type = "Failure_native_compiling" if is_native else "GrateOS_wasm_compiling"
         add_test_result(self.result, self.source_file, "Failure", error_type, error_msg, timing_info=timing_info)
     
     def add_runtime_failure(self, error_msg, is_native=False, timing_info=None):
-        error_type = "Failure_native_running" if is_native else "Lind_wasm_runtime"
+        error_type = "Failure_native_running" if is_native else "GrateOS_wasm_runtime"
         add_test_result(self.result, self.source_file, "Failure", error_type, error_msg, timing_info=timing_info)
     
     def add_timeout(self, output, is_native=False, timing_info=None):
-        error_type = "Native_Timeout" if is_native else "Lind_wasm_Timeout"
+        error_type = "Native_Timeout" if is_native else "GrateOS_wasm_Timeout"
         add_test_result(self.result, self.source_file, "Failure", error_type, output, timing_info=timing_info)
     
     def add_segfault(self, output, is_native=False, timing_info=None):
-        error_type = "Native_Segmentation_Fault" if is_native else "Lind_wasm_Segmentation_Fault"
+        error_type = "Native_Segmentation_Fault" if is_native else "GrateOS_wasm_Segmentation_Fault"
         add_test_result(self.result, self.source_file, "Failure", error_type, output, timing_info=timing_info)
     
     def handle_return_code(self, returncode, output, is_native=False, timing_info=None):
@@ -492,7 +492,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     created_native_execs = set()
     native_dependencies = analyze_executable_dependencies([source_file])
     for exec_path, dependency_source in native_dependencies.items():
-        dest_path = (LINDFS_ROOT / exec_path).resolve()
+        dest_path = (GRATEOSFS_ROOT / exec_path).resolve()
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
         if dest_path.exists():
@@ -525,7 +525,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), *resolve_native_extra_flags(source_file), "-o", str(native_output)]
     try:
         compile_start = time.perf_counter()
-        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
+        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=GRATEOSFS_ROOT, shell=False)
         timing_info["native_compile_time_sec"] = round(time.perf_counter() - compile_start, 6)
         if proc.returncode != 0:
             return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling", timing_info
@@ -535,7 +535,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     # Run
     try:
         run_start = time.perf_counter()
-        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LINDFS_ROOT, shell=False, timeout=timeout_sec)
+        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=GRATEOSFS_ROOT, shell=False, timeout=timeout_sec)
         timing_info["native_run_time_sec"] = round(time.perf_counter() - run_start, 6)
         if proc.returncode == 0:
             return True, proc.stdout, 0, None, timing_info
@@ -597,7 +597,7 @@ def get_expected_output(source_file):
 # Function: compile_c_to_wasm
 #
 # Purpose:
-#   Given a path to a .c file, calls `lind_compile` to compile it into wasm.
+#   Given a path to a .c file, calls `grateos_compile` to compile it into wasm.
 #
 # Variables:
 # - Input: source_file - path to the .c file, allow_precompiled (bool) - if True, use a precompiled `.cwasm` binary.
@@ -609,16 +609,16 @@ def get_expected_output(source_file):
 #   Catches and returns exceptions as error strings
 #
 # Note:
-#   Dependancy on the script `lind_compile`.
+#   Dependancy on the script `grateos_compile`.
 # ----------------------------------------------------------------------
 def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    extra_pre_flags = resolve_lind_pre_flags(source_file)
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), *LIND_PRE_FLAGS, *extra_pre_flags, source_file, *resolve_compile_flags(source_file, "lind")]
+    extra_pre_flags = resolve_grateos_pre_flags(source_file)
+    compile_cmd = [os.path.join(GRATEOS_TOOL_PATH, "grateos_compile"), *GRATEOS_PRE_FLAGS, *extra_pre_flags, source_file, *resolve_compile_flags(source_file, "grateos")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
-    if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
+    if os.path.isfile(os.path.join(GRATEOS_TOOL_PATH, "grateos_compile")):
         logger.debug("File exists and is a regular file!")
     else:
         logger.debug("File not found or it's a directory!")
@@ -658,13 +658,13 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 #   Catches TimeoutExpired and other Exceptions.
 #
 # Note:
-#   Dependancy on the script "lind_run"
+#   Dependancy on the script "grateos_run"
 #   Since the script outputs the command being run, we ignore 
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     wasm_file = Path(wasm_file)
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run")]
+    run_cmd = [os.path.join(GRATEOS_TOOL_PATH, "grateos_run")]
     if GRATE_CHAIN:
         run_cmd.extend(GRATE_CHAIN)
     elif GRATE_PREFIX:
@@ -673,7 +673,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     run_cmd.append(wasm_file.name)
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
-    if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
+    if os.path.isfile(os.path.join(GRATEOS_TOOL_PATH, "grateos_run")):
         logger.debug("File exists and is a regular file!")
     else:
         logger.debug("File not found or it's a directory!")
@@ -682,7 +682,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     try:
         run_env = os.environ.copy()
         if not running_under_grate():
-            run_env["LIND_GRATE_WORKERS"] = DEFAULT_NON_GRATE_TEST_WORKERS
+            run_env["GRATEOS_GRATE_WORKERS"] = DEFAULT_NON_GRATE_TEST_WORKERS
 
         run_start = time.perf_counter()
         proc = run_subprocess(
@@ -733,7 +733,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
         if wasm_file is None:
             # Record this specifically as a fail-test WASM-compilation error so it is
             # counted alongside other `Fail_*` test categories instead of the generic
-            # Lind_wasm_compiling bucket used elsewhere.
+            # GrateOS_wasm_compiling bucket used elsewhere.
             failure_info = (
                 "=== FAILURE: Wasm compilation failed during fail-test (expected runtime failure) ===\n"
                 f"Wasm compile output:\n{wasm_compile_error}"
@@ -934,14 +934,14 @@ def analyze_executable_dependencies(tests_to_run):
 # Function: create_required_executables
 #
 # Purpose:
-#   Compiles required executables and places them in LINDFS_ROOT
+#   Compiles required executables and places them in GRATEOSFS_ROOT
 #
 # Variables:
 # - Input:
 #   executable_deps: Dictionary mapping executable paths to source files
 #   allow_precompiled (bool): If True, use `.cwasm`, use`.wasm` otherwise
 # - Output:
-#   None (creates executables in LINDFS_ROOT)
+#   None (creates executables in GRATEOSFS_ROOT)
 # ----------------------------------------------------------------------
 def create_required_executables(executable_deps, allow_precompiled=False):
     if not executable_deps:
@@ -958,8 +958,8 @@ def create_required_executables(executable_deps, allow_precompiled=False):
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
                 continue
             
-            # Create destination directory in LINDFS_ROOT
-            dest_path = LINDFS_ROOT / exec_path
+            # Create destination directory in GRATEOSFS_ROOT
+            dest_path = GRATEOSFS_ROOT / exec_path
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Copy the compiled WASM to the destination (preserves source for potential reuse)
@@ -973,7 +973,7 @@ def create_required_executables(executable_deps, allow_precompiled=False):
 # Function: pre_test
 #
 # Purpose:
-#   Creates lindfs/testfiles directory, 
+#   Creates grateosfs/testfiles directory, 
 #   Creates readlinkfile.txt file and a soft link to it as readlinkfile(for the purpose of readlinkfile tests)
 #   Copies the required test files from TESTFILES_SRC to TESTFILES_DST defined above
 #
@@ -985,9 +985,9 @@ def create_required_executables(executable_deps, allow_precompiled=False):
 #   None
 # ----------------------------------------------------------------------
 def pre_test(tests_to_run=None, allow_precompiled=False):
-    # Ensure LINDFS_ROOT exists with required subdirectories (For CI Environment)
-    os.makedirs(LINDFS_ROOT, exist_ok=True)
-    os.makedirs(LINDFS_ROOT / "automated_tests", exist_ok=True)
+    # Ensure GRATEOSFS_ROOT exists with required subdirectories (For CI Environment)
+    os.makedirs(GRATEOSFS_ROOT, exist_ok=True)
+    os.makedirs(GRATEOSFS_ROOT / "automated_tests", exist_ok=True)
 
     # If tests_to_run is provided, use selective copying
     if tests_to_run:
@@ -1379,22 +1379,22 @@ def parse_arguments(argv=None):
     parser.add_argument("--allow-pre-compiled", action="store_true", dest="allow_pre_compiled", help="Allow compiling/running precompiled .cwasm files (default: .wasm)")
     parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
-    parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
-    parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
-    parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
-    parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a single grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
+    parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both grateos_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
+    parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in grateos_compile invocations (static WASM build, no dynamic linking)")
+    parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to grateos/native flags")
+    parser.add_argument("--grate", default=None, help="Path (resolved inside grateosfs) to a single grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
     parser.add_argument("--grate-args", default="", help="Extra args passed to the grate, between the grate cwasm and the test wasm (shlex-split). Example: --grate-args '--chroot-dir /tmp'")
     parser.add_argument("--grate-prefix", default=None, help="Raw prefix string of grates and their args, prepended verbatim before the test wasm (shlex-split). Use for chaining multiple grates including any grate-side group syntax. Example: --grate-prefix 'grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm'")
     parser.add_argument(
         "--libcpp-timeout",
         type=check_timeout,
         default=DEFAULT_LIBCPP_RUN_TIMEOUT,
-        help="Timeout in seconds for libc++ smoke test lind_run (default: %(default)s)",
+        help="Timeout in seconds for libc++ smoke test grateos_run (default: %(default)s)",
     )
     parser.add_argument(
         "--skip-libcpp",
         action="store_true",
-        help="Skip libc++ integration smoke (full lind_compile_cpp + lind_run)",
+        help="Skip libc++ integration smoke (full grateos_compile_cpp + grateos_run)",
     )
 
     args = parser.parse_args(argv)
@@ -1712,8 +1712,8 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
-    global GLOBAL_COMPILE_FLAGS, LIND_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX, GRATE_ARGS, GRATE_CHAIN
-    os.chdir(LIND_WASM_BASE)
+    global GLOBAL_COMPILE_FLAGS, GRATEOS_PRE_FLAGS, DIR_FLAGS, GRATE_PREFIX, GRATE_ARGS, GRATE_CHAIN
+    os.chdir(GRATEOS_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
@@ -1726,7 +1726,7 @@ def main():
     artifacts_dir_arg = args.artifacts_dir
     keep_artifacts = args.keep_artifacts
     GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
-    LIND_PRE_FLAGS = ["--static"] if args.static_build else []
+    GRATEOS_PRE_FLAGS = ["--static"] if args.static_build else []
     GRATE_PREFIX = args.grate
     GRATE_ARGS = shlex.split(args.grate_args) if args.grate_args else []
     GRATE_CHAIN = shlex.split(args.grate_prefix) if args.grate_prefix else []
@@ -1736,15 +1736,15 @@ def main():
         return
 
     if GRATE_PREFIX:
-        grate_full = LINDFS_ROOT / GRATE_PREFIX.lstrip("/")
+        grate_full = GRATEOSFS_ROOT / GRATE_PREFIX.lstrip("/")
         if not grate_full.exists():
             grate_name = Path(GRATE_PREFIX).stem
             logger.error(
                 f"Grate not found at {grate_full}.\n"
-                f"  Build it in the lind-wasm-example-grates repo:\n"
-                f"      cd ../lind-wasm-example-grates && make rust/{grate_name}\n"
+                f"  Build it in the grateos-wasm-example-grates repo:\n"
+                f"      cd ../grateos-wasm-example-grates && make rust/{grate_name}\n"
                 f"  (or `make c/{grate_name}` for a C grate, `make list` to see available targets).\n"
-                f"  The build installs the cwasm into {LINDFS_ROOT}/grates/."
+                f"  The build installs the cwasm into {GRATEOSFS_ROOT}/grates/."
             )
             return
 
@@ -1752,7 +1752,7 @@ def main():
         missing = []
         for tok in GRATE_CHAIN:
             if tok.endswith(".cwasm") or tok.endswith(".wasm"):
-                full = LINDFS_ROOT / tok.lstrip("/")
+                full = GRATEOSFS_ROOT / tok.lstrip("/")
                 if not full.exists():
                     missing.append(full)
         if missing:
@@ -1760,9 +1760,9 @@ def main():
             logger.error(
                 f"Grate chain references missing cwasm/wasm files:\n"
                 f"    {paths}\n"
-                f"  Build them in the lind-wasm-example-grates repo (e.g. "
-                f"`cd ../lind-wasm-example-grates && make rust/<name>` per grate, "
-                f"or `make all`). Builds install into {LINDFS_ROOT}/grates/."
+                f"  Build them in the grateos-wasm-example-grates repo (e.g. "
+                f"`cd ../grateos-wasm-example-grates && make rust/<name>` per grate, "
+                f"or `make all`). Builds install into {GRATEOSFS_ROOT}/grates/."
             )
             return
 
@@ -1860,7 +1860,7 @@ def main():
                 results["libcpp"], None, args.libcpp_timeout, logger=logger
             )
 
-        os.chdir(LIND_WASM_BASE)
+        os.chdir(GRATEOS_WASM_BASE)
         with open(output_file, "w") as fp:
             json.dump(results, fp, indent=4)
 
@@ -1881,7 +1881,7 @@ def main():
         except (FileNotFoundError, PermissionError):
             pass
 
-        # Clean up native .so files staged in LINDFS_ROOT
+        # Clean up native .so files staged in GRATEOSFS_ROOT
         for so_name, native_path in DYLINK_NATIVE_LIB_CACHE.items():
             try:
                 native_path.unlink(missing_ok=True)

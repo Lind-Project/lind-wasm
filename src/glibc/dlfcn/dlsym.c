@@ -22,8 +22,8 @@
 #include <stddef.h>
 #include <dlerror.h>
 
-int __lind_dlsym(void* handle, char* symbol) __attribute__((
-    __import_module__("lind"),
+int __grateos_dlsym(void* handle, char* symbol) __attribute__((
+    __import_module__("grateos"),
     __import_name__("dlsym")
 ));
 
@@ -54,9 +54,9 @@ dlsym_implementation (void *handle, const char *name, void *dl_caller)
   args.handle = handle;
   args.name = name;
   
-  int result = __lind_dlsym(handle, name);
+  int result = __grateos_dlsym(handle, name);
   if (result < 0) {
-    __lind_dlerror_result = -result;
+    __grateos_dlerror_result = -result;
     return NULL;
   }
 

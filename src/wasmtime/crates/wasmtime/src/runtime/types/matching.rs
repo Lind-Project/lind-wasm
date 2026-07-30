@@ -149,7 +149,7 @@ fn memory_ty(expected: &Memory, actual: &Memory, actual_runtime_size: Option<u64
         "non-shared",
     )?;
     match_index(expected.idx_type, actual.idx_type, "memory")?;
-    // In lind-wasm, shared memory is always backed by a fixed 4 GiB physical
+    // In grateos-wasm, shared memory is always backed by a fixed 4 GiB physical
     // reservation regardless of the `max` declared in the wasm module.  Skip
     // the max-limit check for shared memories so that the runtime-enforced
     // 4 GiB can satisfy modules that declare a smaller `max`.

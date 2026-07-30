@@ -39,7 +39,7 @@ fn non_exit_syscall_falls_through_to_rawposix_path_when_not_interposed() {
         CAGE_A,
     );
 
-    assert_eq!(rc, threei_const::ELINDAPIABORTED as i32);
+    assert_eq!(rc, threei_const::EGRATEOSAPIABORTED as i32);
 }
 
 /// If there is an interposition entry for (self_cageid, syscall_num),

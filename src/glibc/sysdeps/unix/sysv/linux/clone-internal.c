@@ -24,7 +24,7 @@
 #include <libc-pointer-arith.h>	/* For cast_to_pointer.  */
 #include <stackinfo.h>		/* For _STACK_GROWS_{UP,DOWN}.  */
 
-#include <lind_debug.h>
+#include <grateos_debug.h>
 
 #define CLONE_ARGS_SIZE_VER0 64 /* sizeof first published struct */
 #define CLONE_ARGS_SIZE_VER1 80 /* sizeof second published struct */
@@ -49,7 +49,7 @@ int
 __clone_internal_fallback (struct clone_args *cl_args,
 			   int (*func) (void *arg), void *arg)
 {
-  lind_debug_panic("__clone_internal_fallback called unexpectedly");
+  grateos_debug_panic("__clone_internal_fallback called unexpectedly");
   return 0;
 }
 

@@ -8,17 +8,17 @@ from pathlib import Path
 
 
 def repo_root() -> Path:
-    """Return the root of the lind-wasm repo."""
+    """Return the root of the grateos-wasm repo."""
     return Path(__file__).resolve().parent.parent.parent
 
 
 ROOT = repo_root()
-LIND_TOOL_PATH = ROOT / "scripts" / "bin"
+GRATEOS_TOOL_PATH = ROOT / "scripts" / "bin"
 BENCH_DIR = ROOT / "tests" / "benchmarks"
-LIND_FS = ROOT / "lindfs"
+GRATEOS_FS = ROOT / "grateosfs"
 
-GRATES_REPO_URL = "https://github.com/Lind-Project/lind-wasm-example-grates"
-GRATES_LOCAL_REPO_DIR = ROOT.parent / "lind-wasm-example-grates"
+GRATES_REPO_URL = "https://github.com/GrateOS-Project/grateos-wasm-example-grates"
+GRATES_LOCAL_REPO_DIR = ROOT.parent / "grateos-wasm-example-grates"
 GRATES_CACHE_REPO_DIR = BENCH_DIR / "grates"
 GRATE_KIND_DIRS = ("rust-grates", "c-grates")
 
@@ -51,20 +51,20 @@ def bench_relpath(path: Path) -> Path:
     return path.resolve().relative_to(BENCH_DIR)
 
 
-def lindfs_path(rel: Path) -> Path:
-    """Return absolute path inside lindfs for a relative benchmark path."""
-    return LIND_FS / rel
+def grateosfs_path(rel: Path) -> Path:
+    """Return absolute path inside grateosfs for a relative benchmark path."""
+    return GRATEOS_FS / rel
 
 
-def compile_lind(c_file: Path) -> str:
-    """Compile a C benchmark to wasm using lind_compile."""
-    status = run_cmd([str(LIND_TOOL_PATH / "lind_compile"), str(c_file), str(BENCH_DIR / "bench.c")])
+def compile_grateos(c_file: Path) -> str:
+    """Compile a C benchmark to wasm using grateos_compile."""
+    status = run_cmd([str(GRATEOS_TOOL_PATH / "grateos_compile"), str(c_file), str(BENCH_DIR / "bench.c")])
 
     if not status:
         return None
 
     rel = bench_relpath(c_file).with_suffix(".cwasm")
-    # lind_compile places outputs inside lindfs; lind-boot is chrooted there.
+    # grateos_compile places outputs inside grateosfs; grateos-boot is chrooted there.
     return rel.as_posix()
 
 
@@ -82,9 +82,9 @@ def get_test_description(test_file: Path) -> str:
 
 
 def compile_native(c_file: Path) -> Path:
-    """Compile a C benchmark to a native binary and place it in lindfs."""
+    """Compile a C benchmark to a native binary and place it in grateosfs."""
     rel = bench_relpath(c_file).with_suffix("")
-    out_path = lindfs_path(rel)
+    out_path = grateosfs_path(rel)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     status = run_cmd(
@@ -167,13 +167,13 @@ def resolve_grate_dir(grate_name: str) -> Path:
 
 
 def compile_grate(grate_dir: Path) -> str:
-    """Compile a grate folder and return the output path inside lindfs."""
+    """Compile a grate folder and return the output path inside grateosfs."""
     compile_script = grate_dir / "compile_grate.sh"
     if compile_script.exists():
         status = run_cmd(["bash", "compile_grate.sh"], cwd=grate_dir)
     elif (grate_dir / "Cargo.toml").exists():
         status = run_cmd(
-            ["cargo", "lind_compile", "--release", "--output-dir", "grates"],
+            ["cargo", "grateos_compile", "--release", "--output-dir", "grates"],
             cwd=grate_dir,
         )
     else:
@@ -198,7 +198,7 @@ def parse_output(res, output, platform, description=None):
                 res[test] = {}
             if param not in res[test]:
                 res[test][param] = {"linux": -1,
-                                    "lind": -1, "grate": -1, "loops": -1}
+                                    "grateos": -1, "grate": -1, "loops": -1}
 
             if description:
                 res[test][param]["desc"] = description
@@ -209,9 +209,9 @@ def parse_output(res, output, platform, description=None):
         print("Invalid output from test: ", output.decode("utf-8"))
 
 
-def run_lind(wasm_paths, res, platform, description=None):
-    """Run lind-boot with one or more wasm paths."""
-    cmd = [str(LIND_TOOL_PATH / "lind_run")] + wasm_paths
+def run_grateos(wasm_paths, res, platform, description=None):
+    """Run grateos-boot with one or more wasm paths."""
+    cmd = [str(GRATEOS_TOOL_PATH / "grateos_run")] + wasm_paths
     status = run_cmd(cmd)
     if status:
         parse_output(res, status.stdout, platform, description)
@@ -243,9 +243,9 @@ def run_grate_test(grate_dir: Path, res, description=None):
             bins.append(grate_bin)
         else:
             c_file = BENCH_DIR / f"{part}.c"
-            bins.append(compile_lind(c_file))
+            bins.append(compile_grateos(c_file))
 
-    return run_lind(bins, res, "grate", description)
+    return run_grateos(bins, res, "grate", description)
 
 
 def to_int(value):
@@ -281,7 +281,7 @@ def build_display_rows(res):
     for test in res:
         for param in res[test]:
             linux = res[test][param]["linux"]
-            lind = res[test][param]["lind"]
+            grateos = res[test][param]["grateos"]
             grate = res[test][param]["grate"]
             loops = res[test][param]["loops"]
             desc = res[test][param].get("desc", "--")
@@ -291,7 +291,7 @@ def build_display_rows(res):
                     test,
                     param,
                     format_ratio(linux, linux),
-                    format_ratio(lind, linux),
+                    format_ratio(grateos, linux),
                     format_ratio(grate, linux),
                     loops,
                     desc,
@@ -320,7 +320,7 @@ def print_results(res):
         return
 
     headers = ("TEST", "PARAM", "LINUX (ns)",
-               "LIND (ns)", "GRATE (ns)", "ITERATIONS", "DESCRIPTION")
+               "GRATEOS (ns)", "GRATE (ns)", "ITERATIONS", "DESCRIPTION")
     widths = [len(h) for h in headers]
     for row in rows:
         for i, val in enumerate(row):
@@ -345,7 +345,7 @@ def write_csv(res, path: Path):
         "TEST",
         "PARAM",
         "LINUX (ns)",
-        "LIND (ns)",
+        "GRATEOS (ns)",
         "GRATE (ns)",
         "ITERATIONS",
         "DESCRIPTION",
@@ -360,7 +360,7 @@ def write_csv(res, path: Path):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Run lind-wasm microbenchmarks")
+        description="Run grateos-wasm microbenchmarks")
     parser.add_argument(
         "patterns",
         nargs="*",
@@ -419,12 +419,12 @@ def main():
         if test.suffix == ".c":
             print("Running: ", test)
             native_path = compile_native(test)
-            lind_path = compile_lind(test)
-            if not native_path or not lind_path:
+            grateos_path = compile_grateos(test)
+            if not native_path or not grateos_path:
                 print("Failed to compile. Skipping.")
                 continue
             desc = get_test_description(test)
-            run_lind([lind_path], res, "lind", desc)
+            run_grateos([grateos_path], res, "grateos", desc)
             run_native(native_path, res, desc)
         elif test.suffix == ".grate":
             print("Running: ", test)

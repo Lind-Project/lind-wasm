@@ -1,12 +1,12 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sched.h>
-#include <lind_debug.h>
+#include <grateos_debug.h>
 
 int
 __sched_getparam (pid_t pid, struct sched_param *param)
 {
-  lind_debug_panic("sched_getparam called but not supported!");
+  grateos_debug_panic("sched_getparam called but not supported!");
   return -1;
 }
 libc_hidden_def (__sched_getparam)

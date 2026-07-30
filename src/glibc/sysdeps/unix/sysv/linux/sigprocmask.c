@@ -18,7 +18,7 @@
 #include <signal.h>
 #include <pthreadP.h>              /* SIGCANCEL, SIGSETXID */
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Get and/or change the set of blocked signals.  */

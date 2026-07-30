@@ -26,7 +26,7 @@ use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
 use wasmtime_environ::{PanicOnOom as _, TableIndex, VMSharedTypeIndex};
-use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
+use wasmtime_grateos_utils::symbol_table::{SymbolMap, SymbolTable};
 
 /// A reference to the abstract `nofunc` heap value.
 ///
@@ -1033,7 +1033,7 @@ impl Func {
 
             // check if there is any callback set on wasm module exiting
             if let Some(callback) = store.0.on_called.take() {
-                // firstly invoke the callback, which is set under lind-multi-process after start unwind
+                // firstly invoke the callback, which is set under grateos-multi-process after start unwind
                 match callback(store) {
                     // InvokeAgain means we need to re-invoke this function (i.e. _start function)
                     // This is set when we finished the unwind and starts the rewind process

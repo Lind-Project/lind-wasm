@@ -1,6 +1,6 @@
 #include <unistd.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 int __GI___sched_yield (void)
 {

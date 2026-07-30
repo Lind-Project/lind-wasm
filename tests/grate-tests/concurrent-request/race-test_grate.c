@@ -1,4 +1,4 @@
-/* race-test-grate: Minimal grate to reproduce the get_cage() race in lind-wasm.
+/* race-test-grate: Minimal grate to reproduce the get_cage() race in grateos-wasm.
  *
  * The runtime race:
  *   Thread A (last thread of cage): exit_syscall → remove_cage(id) [line 391]
@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <lind_syscall.h>
+#include <grateos_syscall.h>
 
 #define MMAP_SYSCALL  9
 #define FUTEX_SYSCALL 202

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Run passed (optionally precompiled) wasm file in wasmtime.
+#
+# Usage:
+#   grateos_run /path/to/program.wasm
+#
+# No assumption about current working directory.
+
+# --- repo root discovery (env var -> script dir -> git) ---
+if [[ -n "${GRATEOS_WASM_ROOT:-}" && -d "${GRATEOS_WASM_ROOT}" ]]; then
+  REPO_ROOT="${GRATEOS_WASM_ROOT}"
+else
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+  else
+    if command -v git >/dev/null 2>&1; then
+      REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    else
+      REPO_ROOT=""
+    fi
+  fi
+fi
+
+if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
+  echo "ERROR: Could not locate grateos-wasm repo root." >&2
+  echo "Hint: export GRATEOS_WASM_ROOT=/path/to/grateos-wasm" >&2
+  exit 2
+fi
+
+GRATEOSBOOT_BIN="${REPO_ROOT}/build/grateos-boot"
+if [[ ! -x "${GRATEOSBOOT_BIN}" ]]; then
+  echo "ERROR: grateos-boot missing: ${GRATEOSBOOT_BIN}" >&2
+  exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
+fi
+[[ -x "${GRATEOSBOOT_BIN}" ]] || { echo "error: grateos-boot not found at ${GRATEOSBOOT_BIN}" >&2; exit 2; }
+
+# Check if we need to re-exec with sudo
+if [[ $EUID -ne 0 ]]; then
+  # Not running as root, re-exec with sudo
+  exec sudo -E "$0" "$@"
+fi
+
+exec "${GRATEOSBOOT_BIN}" --preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm "$@"

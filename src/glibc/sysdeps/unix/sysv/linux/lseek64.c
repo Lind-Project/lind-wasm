@@ -23,7 +23,7 @@
 #include <errno.h>
 #include <shlib-compat.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 off64_t
 __lseek64 (int fd, off64_t offset, int whence)

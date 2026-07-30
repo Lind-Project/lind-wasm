@@ -28,7 +28,7 @@ int main(void)
 	kill(getpid(), SIGUSR1);
 	assert(got_usr1 == 0);
 
-	/* sigpending not yet implemented in lind-wasm */
+	/* sigpending not yet implemented in grateos-wasm */
 
 	sigemptyset(&empty_set);
 	assert(sigprocmask(SIG_SETMASK, &empty_set, NULL) == 0);

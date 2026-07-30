@@ -1,11 +1,11 @@
-LINDFS_ROOT ?= lindfs
+GRATEOSFS_ROOT ?= grateosfs
 BUILD_DIR ?= build
 SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
 # Prebuilt libc++ headers/libs; merged into $(SYSROOT_DIR) by sync-sysroot when present.
 ARTIFACTS_DIR ?= artifacts
-LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
-LINDBOOT_DEBUG_BIN ?= $(BUILD_DIR)/lind-boot-debug
-LINDFS_DIRS := \
+GRATEOSBOOT_BIN ?= $(BUILD_DIR)/grateos-boot
+GRATEOSBOOT_DEBUG_BIN ?= $(BUILD_DIR)/grateos-boot-debug
+GRATEOSFS_DIRS := \
 	       bin \
 	       dev \
 	       etc \
@@ -25,7 +25,7 @@ LINDFS_DIRS := \
 WITH_FPCAST ?=
 
 .PHONY: build 
-build: lindfs lind-boot sysroot
+build: grateosfs grateos-boot sysroot
 	@echo "Build complete"
 
 .PHONY: all
@@ -41,67 +41,67 @@ sysroot: build-dir
 	$(MAKE) sync-sysroot
 
 # fdtables backend selector. One of: dashmaparray (default), dashmapvec,
-# muthashmax, vanilla. Threaded through lind-boot -> rawposix -> fdtables
+# muthashmax, vanilla. Threaded through grateos-boot -> rawposix -> fdtables
 # via Cargo features.
 #
 # Examples:
 #   make                                              # default (dashmaparray, EH setjmp)
 #   make build FDTABLES_IMPL=muthashmax               # full build with muthashmax
-#   make lind-boot FDTABLES_IMPL=vanilla              # rebuild only lind-boot with vanilla
+#   make grateos-boot FDTABLES_IMPL=vanilla              # rebuild only grateos-boot with vanilla
 #   make fpcast FDTABLES_IMPL=dashmapvec              # fpcast variant with dashmapvec
-#   make lind-debug FDTABLES_IMPL=muthashmax          # debug build with muthashmax
+#   make grateos-debug FDTABLES_IMPL=muthashmax          # debug build with muthashmax
 #   FDTABLES_IMPL=muthashmax make                     # also works via env var
-#   LIND_ASYNCIFY_SETJMP=1 make lind-boot             # asyncify-based setjmp/longjmp
+#   GRATEOS_ASYNCIFY_SETJMP=1 make grateos-boot             # asyncify-based setjmp/longjmp
 FDTABLES_IMPL ?= dashmaparray
 
-# When LIND_ASYNCIFY_SETJMP=1, build lind-boot with the asyncify-setjmp Cargo feature so the
+# When GRATEOS_ASYNCIFY_SETJMP=1, build grateos-boot with the asyncify-setjmp Cargo feature so the
 # runtime uses asyncify-unwind/rewind based setjmp/longjmp instead of the wasm-EH based one.
-LIND_BOOT_EXTRA_FEATURES ?= $(if $(filter 1,$(LIND_ASYNCIFY_SETJMP)),asyncify-setjmp,)
+GRATEOS_BOOT_EXTRA_FEATURES ?= $(if $(filter 1,$(GRATEOS_ASYNCIFY_SETJMP)),asyncify-setjmp,)
 
-# When NO_LOGGING=1, omit the lind-logging feature (e.g. make lind-boot NO_LOGGING=1).
-LIND_LOGGING_FEATURE ?= $(if $(filter 1,$(NO_LOGGING)),,lind-logging)
+# When NO_LOGGING=1, omit the grateos-logging feature (e.g. make grateos-boot NO_LOGGING=1).
+GRATEOS_LOGGING_FEATURE ?= $(if $(filter 1,$(NO_LOGGING)),,grateos-logging)
 
-.PHONY: lind-boot
-lind-boot: build-dir
-	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/lind-boot/Cargo.toml --release \
-	    --no-default-features --features "$(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL) $(LIND_BOOT_EXTRA_FEATURES)"
-	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
+.PHONY: grateos-boot
+grateos-boot: build-dir
+	# Build grateos-boot with `--release` flag for faster runtime (e.g. for tests)
+	cargo build --manifest-path src/grateos-boot/Cargo.toml --release \
+	    --no-default-features --features "$(GRATEOS_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL) $(GRATEOS_BOOT_EXTRA_FEATURES)"
+	cp src/grateos-boot/target/release/grateos-boot $(GRATEOSBOOT_BIN)
 
-.PHONY: lindfs
-lindfs:
-	@for d in $(LINDFS_DIRS); do \
-		mkdir -p $(LINDFS_ROOT)/$$d; \
+.PHONY: grateosfs
+grateosfs:
+	@for d in $(GRATEOSFS_DIRS); do \
+		mkdir -p $(GRATEOSFS_ROOT)/$$d; \
 	done
-	touch $(LINDFS_ROOT)/dev/null
-	cp -rT scripts/config/lindfs-conf/etc $(LINDFS_ROOT)/etc
-	cp -rT scripts/config/lindfs-conf/usr/lib/locale $(LINDFS_ROOT)/usr/lib/locale
-	cp -rT scripts/config/lindfs-conf/usr/share/zoneinfo $(LINDFS_ROOT)/usr/share/zoneinfo
+	touch $(GRATEOSFS_ROOT)/dev/null
+	cp -rT scripts/config/grateosfs-conf/etc $(GRATEOSFS_ROOT)/etc
+	cp -rT scripts/config/grateosfs-conf/usr/lib/locale $(GRATEOSFS_ROOT)/usr/lib/locale
+	cp -rT scripts/config/grateosfs-conf/usr/share/zoneinfo $(GRATEOSFS_ROOT)/usr/share/zoneinfo
 	@if [ -d /usr/share/zoneinfo ]; then \
-		cp -r /usr/share/zoneinfo/* $(LINDFS_ROOT)/usr/share/zoneinfo/; \
+		cp -r /usr/share/zoneinfo/* $(GRATEOSFS_ROOT)/usr/share/zoneinfo/; \
 	fi
 
-.PHONY: clean-lindfs
-clean-lindfs:
-	@# Remove user files from lindfs while preserving preloaded system files.
+.PHONY: clean-grateosfs
+clean-grateosfs:
+	@# Remove user files from grateosfs while preserving preloaded system files.
 	@# Keeps: lib/ (shared libs), etc/, usr/, dev/null, directory structure
-	find $(LINDFS_ROOT) -maxdepth 1 -type f -delete
-	rm -rf $(LINDFS_ROOT)/bin/* $(LINDFS_ROOT)/sbin/* $(LINDFS_ROOT)/tmp/*
-	rm -rf $(LINDFS_ROOT)/home $(LINDFS_ROOT)/testfiles
+	find $(GRATEOSFS_ROOT) -maxdepth 1 -type f -delete
+	rm -rf $(GRATEOSFS_ROOT)/bin/* $(GRATEOSFS_ROOT)/sbin/* $(GRATEOSFS_ROOT)/tmp/*
+	rm -rf $(GRATEOSFS_ROOT)/home $(GRATEOSFS_ROOT)/testfiles
 
-.PHONY: lind-debug
-lind-debug: lindfs build-dir
-	# Build lind-boot with the lind_debug feature enabled
-	cargo build --manifest-path src/lind-boot/Cargo.toml \
-	    --no-default-features --features "lind_debug $(LIND_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL)"
-	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
+.PHONY: grateos-debug
+grateos-debug: grateosfs build-dir
+	# Build grateos-boot with the grateos_debug feature enabled
+	cargo build --manifest-path src/grateos-boot/Cargo.toml \
+	    --no-default-features --features "grateos_debug $(GRATEOS_LOGGING_FEATURE) fdtables-$(FDTABLES_IMPL)"
+	cp src/grateos-boot/target/debug/grateos-boot $(GRATEOSBOOT_BIN)
 
-	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
-	$(MAKE) build_glibc LIND_DEBUG=1
+	# Build glibc with GRATEOS_DEBUG enabled (by setting the GRATEOS_DEBUG variable)
+	$(MAKE) build_glibc GRATEOS_DEBUG=1
 build_glibc:
-	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
-	if [ "$(LIND_DEBUG)" = "1" ]; then \
-		echo "Building glibc with LIND_DEBUG enabled"; \
+	# build sysroot passing -DGRATEOS_DEBUG if GRATEOS_DEBUG is set
+	if [ "$(GRATEOS_DEBUG)" = "1" ]; then \
+		echo "Building glibc with GRATEOS_DEBUG enabled"; \
 		./scripts/build/make_glibc_and_sysroot.sh; \
 		$(MAKE) sync-sysroot; \
 	fi
@@ -132,10 +132,10 @@ sync-sysroot:
 	fi
 
 .PHONY: test
-test: lindfs
+test: grateosfs
 	# Unified harness entry point (run all discovered harnesses for e2e signal)
-	alias_path='$(LIND_RUNTIME_LINDFS_ALIAS)'; \
-	prebuilt_lindfs_root='$(PREBUILT_LINDFS_ROOT)'; \
+	alias_path='$(GRATEOS_RUNTIME_GRATEOSFS_ALIAS)'; \
+	prebuilt_grateosfs_root='$(PREBUILT_GRATEOSFS_ROOT)'; \
 	cleanup() { \
 	  if [ -n "$$alias_path" ]; then \
 	    alias_parent="$$(dirname "$$alias_path")"; \
@@ -147,21 +147,21 @@ test: lindfs
 	if [ -n "$$alias_path" ]; then \
 	  mkdir -p "$$(dirname "$$alias_path")"; \
 	  rm -f "$$alias_path"; \
-	  case '$(LINDFS_ROOT)' in \
-	    /*) lindfs_root='$(LINDFS_ROOT)' ;; \
-	    *) lindfs_root="$$PWD/$(LINDFS_ROOT)" ;; \
+	  case '$(GRATEOSFS_ROOT)' in \
+	    /*) grateosfs_root='$(GRATEOSFS_ROOT)' ;; \
+	    *) grateosfs_root="$$PWD/$(GRATEOSFS_ROOT)" ;; \
 	  esac; \
-	  ln -s "$$lindfs_root" "$$alias_path"; \
+	  ln -s "$$grateosfs_root" "$$alias_path"; \
 	  trap cleanup EXIT; \
 	fi; \
-	if [ -n "$$prebuilt_lindfs_root" ] && [ -d "$$prebuilt_lindfs_root/lib" ]; then \
-	  mkdir -p "$(LINDFS_ROOT)/lib"; \
-	  cp -a "$$prebuilt_lindfs_root/lib/." "$(LINDFS_ROOT)/lib/"; \
+	if [ -n "$$prebuilt_grateosfs_root" ] && [ -d "$$prebuilt_grateosfs_root/lib" ]; then \
+	  mkdir -p "$(GRATEOSFS_ROOT)/lib"; \
+	  cp -a "$$prebuilt_grateosfs_root/lib/." "$(GRATEOSFS_ROOT)/lib/"; \
 	fi; \
-	if LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	if GRATEOS_WASM_BASE=. GRATEOSFS_ROOT=$(GRATEOSFS_ROOT) \
 	python3 ./scripts/test/test_runner.py --export-report report.html && \
 	find reports -maxdepth 1 -name '*.json' -print -exec cat {} \; && \
-	if [ "$(LIND_DEBUG)" = "1" ]; then \
+	if [ "$(GRATEOS_DEBUG)" = "1" ]; then \
 	  python3 ./scripts/test/check_reports.py --debug; \
 	else \
 	  python3 ./scripts/test/check_reports.py; \
@@ -188,7 +188,7 @@ test: lindfs
 # Grate chain (mutually exclusive with GRATE / GRATE_ARGS — the string is passed
 # verbatim before the test wasm, so any grate-side group syntax goes here too):
 #   make test-grate GRATE_PREFIX="grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm"
-# Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>
+# Build the grate(s) first:  cd ../grateos-wasm-example-grates && make rust/<name>
 # Run timeout defaults to 90s under any grate (vs 30s without), override with TIMEOUT=N.
 .PHONY: test-grate
 GRATE ?=
@@ -209,13 +209,13 @@ test-grate:
 		echo "  make test-grate GRATE=ipc-grate TESTFILES=tests/unit-tests/process_tests/deterministic/hello.c"; \
 		echo "  make test-grate GRATE_PREFIX=\"grates/fs-routing-clamp.cwasm --prefix /tmp grates/imfs-grate.cwasm\""; \
 		echo ""; \
-		echo "Build the grate(s) first:  cd ../lind-wasm-example-grates && make rust/<name>"; \
+		echo "Build the grate(s) first:  cd ../grateos-wasm-example-grates && make rust/<name>"; \
 		exit 1; \
 	fi
 	@if [ -n "$(GRATE)" ] && [ -n "$(GRATE_PREFIX)" ]; then \
 		echo "GRATE and GRATE_PREFIX are mutually exclusive"; exit 1; \
 	fi
-	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
+	GRATEOS_WASM_BASE=. GRATEOSFS_ROOT=$(GRATEOSFS_ROOT) \
 	python3 ./scripts/test/harnesses/wasmtestreport.py \
 		--allow-pre-compiled \
 		$(if $(GRATE),--grate grates/$(GRATE).cwasm) \
@@ -238,7 +238,7 @@ md_generation:
 .PHONY: lint
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
-	cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
+	cargo fmt --check --all --manifest-path src/grateos-boot/Cargo.toml
 	rustfmt --check src/fdtables/src/dashmaparrayglobal.rs \
 	    src/fdtables/src/dashmapvecglobal.rs \
 	    src/fdtables/src/muthashmaxglobal.rs \
@@ -248,8 +248,8 @@ lint:
 	# compile_error guard. Enumerate the non-fdtables features explicitly
 	# and pin to the default fdtables impl.
 	cargo clippy \
-	    --manifest-path src/lind-boot/Cargo.toml \
-	    --features "disable_signals secure lind_debug lind-logging debug-grate-calls fdtables-dashmaparray" \
+	    --manifest-path src/grateos-boot/Cargo.toml \
+	    --features "disable_signals secure grateos_debug grateos-logging debug-grate-calls fdtables-dashmaparray" \
 	    --keep-going \
 	    -- \
 	    -A warnings \
@@ -259,7 +259,7 @@ lint:
 .PHONY: format
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
-	cargo fmt --all --manifest-path src/lind-boot/Cargo.toml
+	cargo fmt --all --manifest-path src/grateos-boot/Cargo.toml
 	rustfmt src/fdtables/src/dashmaparrayglobal.rs \
 	    src/fdtables/src/dashmapvecglobal.rs \
 	    src/fdtables/src/muthashmaxglobal.rs \
@@ -278,8 +278,8 @@ clean:
 	$(RM) -r src/glibc/sysroot
 	@echo "removing build artifacts"
 	$(RM) -r $(BUILD_DIR)
-	@echo "removing lindfs root"
-	$(RM) -r $(LINDFS_ROOT)
+	@echo "removing grateosfs root"
+	$(RM) -r $(GRATEOSFS_ROOT)
 	@find src/glibc -type f -name '*.o' \
 	    ! -path 'src/glibc/csu/wasm32/wasi_thread_start.o' \
 	    ! -path 'src/glibc/target/lib/Mcrt1.o' \
@@ -291,13 +291,13 @@ clean:
 	    ! -path 'src/glibc/target/lib/grcrt1.o' \
 	    ! -path 'src/glibc/target/lib/rcrt1.o' \
 	    -exec rm -f {} +
-	@echo "cargo clean (lind-boot)"
-	cargo clean --manifest-path src/lind-boot/Cargo.toml
+	@echo "cargo clean (grateos-boot)"
+	cargo clean --manifest-path src/grateos-boot/Cargo.toml
 
 .PHONY: distclean
 distclean: clean
 	@echo "removing test outputs & temp files"
 	$(RM) -f results.json report.html e2e_status
 	$(RM) -r reports || true
-	$(RM) -r $(LINDFS_ROOT)/testfiles || true
+	$(RM) -r $(GRATEOSFS_ROOT)/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete

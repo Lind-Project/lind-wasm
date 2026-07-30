@@ -130,7 +130,7 @@ impl WasiCtx {
         let forked_ctx = WasiCtxInner {
             args: self.args.clone(), // we want to clone the entire args
             env: self.env.clone(),   // as well as environment variables
-            // below are currently not used by glibc in lind-wasm, so doesn't really matter how to handle them for now
+            // below are currently not used by glibc in grateos-wasm, so doesn't really matter how to handle them for now
             random: Mutex::new(random_ctx()),
             clocks: clocks_ctx(),
             sched: sched_ctx(),

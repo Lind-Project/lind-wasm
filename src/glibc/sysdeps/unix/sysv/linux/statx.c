@@ -21,7 +21,7 @@
 #include <sysdep.h>
 #include "statx_generic.c"
 
-/* Lind: there is no kernel statx wired through 3i, so always use the
+/* GrateOS: there is no kernel statx wired through 3i, so always use the
    fstatat-based generic fallback (which is in turn routed via 3i to
    NEWFSTATAT_SYSCALL).  Without this, the broken INLINE_SYSCALL_CALL
    path silently returns success with a zero-filled buffer.  */

@@ -8,9 +8,9 @@ use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use std::sync::RwLock;
 use sysdefs::constants::err_const::Errno;
-use sysdefs::constants::lind_platform_const;
+use sysdefs::constants::grateos_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
-use sysdefs::lind_log;
+use sysdefs::grateos_log;
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
 
 use crate::handler_table::{
@@ -115,12 +115,12 @@ lazy_static! {
     // The table is pre-allocated to `MAX_CAGEID` entries, all initialized to `None`.
     // <cageid, runtimeid>
     pub static ref GRATE_RUNTIME_TABLE: RwLock<Vec<Option<u64>>> =
-        RwLock::new(vec![None; lind_platform_const::MAX_CAGEID as usize]);
+        RwLock::new(vec![None; grateos_platform_const::MAX_CAGEID as usize]);
 }
 
 /// `set_cage_runtime` associates a cage with a runtime ID.
 ///
-/// This function is called from the [wasmtime/lind-3i] when a cage is created or initialized. At that
+/// This function is called from the [wasmtime/grateos-3i] when a cage is created or initialized. At that
 /// point, the runtime responsible for executing grate calls for the cage is known and recorded here.
 ///
 /// If a runtime is already set:
@@ -290,7 +290,7 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 ///
 /// ## Returns:
 /// 0 on success.
-/// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
+/// EGRATEOSESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub fn register_handler(
     _self_cageid: u64, // place holder to fit make_syscall's argument pattern, currently not used in the function
@@ -310,7 +310,7 @@ pub fn register_handler(
 ) -> i32 {
     // Make sure that both the cage that registers the handler and the cage being registered are valid (not in exited state)
     if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&handlefunccage) {
-        return threei_const::ELINDESRCH as i32;
+        return threei_const::EGRATEOSESRCH as i32;
     }
 
     // Actual implementation is in handler_table module according to feature flag
@@ -335,8 +335,8 @@ pub fn register_handler(
 ///
 /// ## Returns:
 /// - 0 on success.
-/// - `ELINDESRCH` if either source or target cage is in the EXITING state.
-/// - `ELINDAPIABORTED` if srccage has no existing handler table.
+/// - `EGRATEOSESRCH` if either source or target cage is in the EXITING state.
+/// - `EGRATEOSAPIABORTED` if srccage has no existing handler table.
 pub fn copy_handler_table_to_cage(
     _thiscage: u64,
     _targetcage: u64,
@@ -356,7 +356,7 @@ pub fn copy_handler_table_to_cage(
     // Verifies that neither srccage nor targetcage are in the EXITING state to avoid
     // copying from or to a cage that may be invalid.
     if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&srccage) {
-        return threei_const::ELINDESRCH as u64;
+        return threei_const::EGRATEOSESRCH as u64;
     }
 
     // Actual implementation is in handler_table module according to feature flag
@@ -381,7 +381,7 @@ pub fn copy_handler_table_to_cage(
 ///
 /// ## Behavior:
 /// If the target_cageid is in the process of exiting and the syscall is not `EXIT_SYSCALL`,
-/// the call is aborted early with `ELINDESRCH`
+/// the call is aborted early with `EGRATEOSESRCH`
 ///
 /// If the calling self_cageid has any handlers registered, the call is redirected to the
 /// corresponding grate closure
@@ -404,8 +404,8 @@ pub fn copy_handler_table_to_cage(
 ///
 /// Returns:
 /// - `i32` syscall result.
-/// - Returns `ELINDESRCH` if the target cage is in `EXITING_TABLE` and the syscall is not an exit.
-/// - Returns `ELINDAPIABORTED` if the syscall number does not exist in the known syscall table.
+/// - Returns `EGRATEOSESRCH` if the target cage is in `EXITING_TABLE` and the syscall is not an exit.
+/// - Returns `EGRATEOSAPIABORTED` if the syscall number does not exist in the known syscall table.
 /// - Returns the result of the interposed or rawposix syscall if executed successfully.
 /// - Panics if the syscall was routed to a grate, but the corresponding exported function could
 /// not be resolved.
@@ -449,8 +449,8 @@ pub fn make_syscall(
         _get_handler(self_cageid, syscall_num, target_cageid)
     {
         // RawPOSIX special case: directly call the function pointer
-        if grateid == lind_platform_const::RAWPOSIX_CAGEID
-            || grateid == lind_platform_const::WASMTIME_CAGEID
+        if grateid == grateos_platform_const::RAWPOSIX_CAGEID
+            || grateid == grateos_platform_const::WASMTIME_CAGEID
         {
             // Second check: catch in-flight grate-forwarded calls that
             // passed the initial check before is_dead was set or the cage
@@ -481,7 +481,7 @@ pub fn make_syscall(
             );
         }
         // Threei special case: if the call is an interposed 3i call
-        if grateid == lind_platform_const::THREEI_CAGEID {
+        if grateid == grateos_platform_const::THREEI_CAGEID {
             // threei special case: directly call the function pointer
             let func: GrateTrampolineFn =
                 unsafe { std::mem::transmute::<u64, GrateTrampolineFn>(in_grate_fn_ptr_u64) };
@@ -724,7 +724,7 @@ impl TryFrom<u64> for CopyType {
 #[inline]
 fn _validate_len(len: u64, max: u64) -> Result<(), u64> {
     if len > max {
-        return Err(threei_const::ELINDAPIABORTED);
+        return Err(threei_const::EGRATEOSAPIABORTED);
     }
     Ok(())
 }
@@ -738,14 +738,14 @@ fn _validate_range_read(cage: u64, addr: u64, len: usize, what: &str) -> Result<
     match check_addr_read(cage, addr, len) {
         Ok(_) => Ok(()),
         Err(_) => {
-            lind_log!(
+            grateos_log!(
                 THREEI,
                 "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
                 addr,
                 len,
                 what
             );
-            Err(threei_const::ELINDAPIABORTED)
+            Err(threei_const::EGRATEOSAPIABORTED)
         }
     }
 }
@@ -759,14 +759,14 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
     match check_addr_rw(cage, addr, len) {
         Ok(_) => Ok(()),
         Err(_) => {
-            lind_log!(
+            grateos_log!(
                 THREEI,
                 "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
                 addr,
                 len,
                 what
             );
-            Err(threei_const::ELINDAPIABORTED)
+            Err(threei_const::EGRATEOSAPIABORTED)
         }
     }
 }
@@ -839,7 +839,7 @@ fn _strlen_in_cage(cageid: u64, srcaddr: u64, max_len: usize) -> Option<usize> {
 ///
 /// ### Scope & constraints
 /// - Cross-cage only: `srccage` and `destcage` must be different. Calls with
-///   the same cage for source and destination are rejected with `ELINDAPIABORTED`.
+///   the same cage for source and destination are rejected with `EGRATEOSAPIABORTED`.
 /// - No shared memory is assumed between cages; overlapping regions across cages
 ///   are therefore impossible since wasm linear memory module.
 /// - For intra-cage copies, callers should use a local memcpy/memmove path
@@ -857,7 +857,7 @@ fn _strlen_in_cage(cageid: u64, srcaddr: u64, max_len: usize) -> Option<usize> {
 ///
 /// ## Returns:
 /// - `destaddr` (the destination address where data was written) on success.
-/// - `ELINDAPIABORTED` on failure, due to:
+/// - `EGRATEOSAPIABORTED` on failure, due to:
 ///     - Invalid memory ranges or permission checks,
 ///     - Failed string validation (e.g., missing null terminator).
 ///     - Invalid copytype.
@@ -879,18 +879,18 @@ pub fn copy_data_between_cages(
 ) -> u64 {
     // Disallow same-cage copies. This API is for cross-cage transfer only.
     if srccage == destcage {
-        lind_log!(
+        grateos_log!(
             THREEI,
             "[3i|copy] src and dest cage cannot be the same: {}",
             srccage
         );
-        return threei_const::ELINDAPIABORTED;
+        return threei_const::EGRATEOSAPIABORTED;
     }
 
     // Reject requests where `len` exceeds the maximum allowed linear memory size
-    // (`MAX_LIND_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
-    if let Err(code) = _validate_len(len, lind_platform_const::MAX_LINEAR_MEMORY_SIZE) {
-        lind_log!(THREEI, "[3i|copy] length too large or zero: {}", len);
+    // (`MAX_GRATEOS_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
+    if let Err(code) = _validate_len(len, grateos_platform_const::MAX_LINEAR_MEMORY_SIZE) {
+        grateos_log!(THREEI, "[3i|copy] length too large or zero: {}", len);
         return code;
     }
     // destaddr must be provided (no dynamic allocation support)
@@ -924,19 +924,19 @@ pub fn copy_data_between_cages(
         // strncpy: copy until '\0'
         Ok(CopyType::Strncpy) => {
             if srcaddr == 0 {
-                lind_log!(THREEI, "[3i|copy] src null");
-                return threei_const::ELINDAPIABORTED;
+                grateos_log!(THREEI, "[3i|copy] src null");
+                return threei_const::EGRATEOSAPIABORTED;
             }
 
             // To safely determine the length of the string to copy, we need to scan for the null terminator.
             let actual_len = match _strlen_in_cage(srccage, srcaddr, len as usize) {
                 Some(n) => n + 1, // include '\0'
                 None => {
-                    lind_log!(THREEI,
+                    grateos_log!(THREEI,
                         "[3i|copy] null terminator not found within max length: cage={}, addr={:x}, max_len={}",
                         srccage, srcaddr, len
                     );
-                    return threei_const::ELINDAPIABORTED;
+                    return threei_const::EGRATEOSAPIABORTED;
                 }
             };
 
@@ -944,8 +944,8 @@ pub fn copy_data_between_cages(
         }
         // Reject invalid copytype values
         Err(other) => {
-            lind_log!(THREEI, "[3i|copy] invalid copy type: {}", other);
-            return threei_const::ELINDAPIABORTED;
+            grateos_log!(THREEI, "[3i|copy] invalid copy type: {}", other);
+            return threei_const::EGRATEOSAPIABORTED;
         }
     };
 
@@ -962,22 +962,22 @@ pub fn copy_data_between_cages(
     let host_dest_addr = destaddr;
     if host_src_addr == 0 || host_dest_addr == 0 {
         // src addr or dest addr is null
-        lind_log!(THREEI, "[3i|copy] host addr translate failed");
-        return threei_const::ELINDAPIABORTED;
+        grateos_log!(THREEI, "[3i|copy] host addr translate failed");
+        return threei_const::EGRATEOSAPIABORTED;
     }
 
     // Check for arithmetic overflow before doing pointer arithmetic
     if host_src_addr.checked_add(copy_len as u64).is_none()
         || host_dest_addr.checked_add(copy_len as u64).is_none()
     {
-        lind_log!(
+        grateos_log!(
             THREEI,
             "[3i|copy] address overflow: src={:#x} len={} dest={:#x}",
             srcaddr,
             copy_len,
             destaddr
         );
-        return threei_const::ELINDAPIABORTED;
+        return threei_const::EGRATEOSAPIABORTED;
     }
 
     // Actually perform the copy

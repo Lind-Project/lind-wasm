@@ -1,5 +1,5 @@
 /*
- * sigsetjmp / siglongjmp tests for lind-wasm EH mode.
+ * sigsetjmp / siglongjmp tests for grateos-wasm EH mode.
  *
  * In EH mode, siglongjmp throws __c_longjmp (same tag as longjmp).  The
  * exception must propagate through any pure-wasm call chain back to the
@@ -64,7 +64,7 @@ static void test_basic(void)
 /* Test 2: siglongjmp from signal handler via kill + pause            */
 /*                                                                     */
 /* kill(getpid(), SIGUSR1) immediately queues the signal; pause()     */
-/* delivers it via lind-take-next-signal + signal_callback (pure      */
+/* delivers it via grateos-take-next-signal + signal_callback (pure      */
 /* wasm, no Rust boundary).  siglongjmp throws __c_longjmp which      */
 /* unwinds through signal_callback / pause() to the sigsetjmp site.  */
 /* ------------------------------------------------------------------ */

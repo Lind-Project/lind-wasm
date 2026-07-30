@@ -1,9 +1,9 @@
 //! System syscalls implementation
 //!
-//! This module contains all system calls that are being emulated/faked in Lind.
+//! This module contains all system calls that are being emulated/faked in GrateOS.
 use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
-use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
+use cage::signal::signal::{convert_signal_mask, grateos_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
 use cage::{add_cage, encode_wait_status, get_cage, remove_cage, Cage, ExitStatus, Zombie};
 use dashmap::DashMap;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use sysdefs::constants::lind_platform_const::{
+use sysdefs::constants::grateos_platform_const::{
     MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
     WASMTIME_CAGEID,
 };
@@ -29,7 +29,7 @@ use sysdefs::constants::sys_const::{
 };
 use sysdefs::constants::syscall_const;
 use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
-use sysdefs::lind_debug_panic;
+use sysdefs::grateos_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
@@ -297,8 +297,8 @@ pub extern "C" fn exec_syscall(
         // Do NOT clear epoch_handler or main_threadid here.
         // If exec-ed module crashes, the thread is still running and needs its
         // epoch_handler entry for proper exit tracking.  On success,
-        // wasmtime re-instantiates and lind_signal_init (called from
-        // lind-multi-process/src/lib.rs during new instance setup) will
+        // wasmtime re-instantiates and grateos_signal_init (called from
+        // grateos-multi-process/src/lib.rs during new instance setup) will
         // overwrite the stale entries in epoch_handler and main_threadid.
     }
 
@@ -351,7 +351,7 @@ pub extern "C" fn exit_syscall(
     // causing the cage to exit with code 0 instead of 1.
 
     // Call wasmtime to trigger asyncify unwind for this thread.
-    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
+    // OnCalledAction handles grateos_thread_exit + cage_finalize if last.
     threei::make_syscall(
         RAWPOSIX_CAGEID,
         syscall_const::EXIT_SYSCALL as u64,
@@ -446,7 +446,7 @@ pub extern "C" fn exit_group_syscall(
         .unwrap_or(status_arg as u64);
 
     // Call wasmtime to trigger asyncify unwind.
-    // OnCalledAction handles lind_thread_exit + cage_finalize if last.
+    // OnCalledAction handles grateos_thread_exit + cage_finalize if last.
     threei::make_syscall(
         RAWPOSIX_CAGEID,
         60, // reuse exit trampoline in wasmtime
@@ -533,7 +533,7 @@ pub extern "C" fn waitpid_syscall(
 
     // cageid <= 0 means wait for ANY child
     // cageid < 0 actually refers to wait for any child process whose process group ID equals -pid
-    // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
+    // but we do not have the concept of process group in grateos, so let's just treat it as cageid == 0
     if cage_id_to_wait <= 0 {
         loop {
             if zombies.len() == 0 && (options & WNOHANG > 0) {
@@ -697,7 +697,7 @@ pub extern "C" fn getpid_syscall(
 /// Returns the process group ID of the process specified by pid.
 /// If pid is 0, returns the process group ID of the calling process.
 ///
-/// Lind does not implement process groups. The default RawPOSIX behavior
+/// GrateOS does not implement process groups. The default RawPOSIX behavior
 /// always returns the cage's own cageid. A grate can interpose on this
 /// syscall to provide different process group semantics.
 ///
@@ -730,7 +730,7 @@ pub extern "C" fn getpgid_syscall(
         );
     }
 
-    // Lind doesn't implement process groups. Return own cageid regardless
+    // GrateOS doesn't implement process groups. Return own cageid regardless
     // of the pid argument (matching the behavior of getpid).
     let cage = get_cage(cageid).unwrap();
     cage.cageid as i32
@@ -1082,10 +1082,10 @@ pub extern "C" fn kill_syscall(
     // Optionally, you could verify that certain signals (e.g., SIGKILL, SIGSTOP)
     // are handled with special semantics; however, in this implementation we assume they are valid.
 
-    // Attempt to send the signal using a helper function such as lind_send_signal.
+    // Attempt to send the signal using a helper function such as grateos_send_signal.
     // This helper returns a boolean indicating whether the operation was successful.
     // The caller's cage id is not directly used to send the signal; instead, the target cage id is used.
-    if !lind_send_signal(target_cage as u64, sig) {
+    if !grateos_send_signal(target_cage as u64, sig) {
         return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
     }
 
@@ -1233,7 +1233,7 @@ pub extern "C" fn prlimit64_syscall(
     //pid has to be zero
     let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
     if pid != 0 {
-        lind_debug_panic!("prlimit64: unsupported pid {}", pid);
+        grateos_debug_panic!("prlimit64: unsupported pid {}", pid);
         return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
     }
 
@@ -1248,7 +1248,7 @@ pub extern "C" fn prlimit64_syscall(
 
     // setrlimit unsupported
     if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
-        lind_debug_panic!("prlimit64: setrlimit not supported");
+        grateos_debug_panic!("prlimit64: setrlimit not supported");
         return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
     }
 
@@ -1281,7 +1281,7 @@ pub extern "C" fn prlimit64_syscall(
                 old_limit.rlim_max = 0;
             }
             _ => {
-                lind_debug_panic!("prlimit64: unsupported resource {}", resource);
+                grateos_debug_panic!("prlimit64: unsupported resource {}", resource);
                 old_limit.rlim_cur = 0;
                 old_limit.rlim_max = 0;
             }

@@ -21,7 +21,7 @@
 #include <sysdep.h>
 #include <shlib-compat.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Add this redirection so the strong_alias for __RLIM_T_MATCHES_RLIM64_T

@@ -1,6 +1,6 @@
 use cage::{
     get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
-    shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
+    shmdt_helper, signal::signal::grateos_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
     SHM_METADATA,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
@@ -15,9 +15,9 @@ use sysdefs::constants::fs_const::{
     STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
 
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::grateos_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, SIGPIPE};
-use sysdefs::lind_debug_panic;
+use sysdefs::grateos_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
@@ -25,8 +25,8 @@ use typemap::path_conversion::*;
 
 /// Helper function for close_syscall
 ///
-/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds
-/// shouldn't be closed in Lind-WASM execution, which preventing issues where other threads might
+/// GrateOS-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds
+/// shouldn't be closed in GrateOS-WASM execution, which preventing issues where other threads might
 /// reassign these ds, causing unintended behavior or errors.
 ///
 /// This function is registered in `fdtables` when creating the cage
@@ -446,7 +446,7 @@ pub extern "C" fn write_syscall(
         let errno = get_errno();
         // Linux delivers SIGPIPE before returning EPIPE on broken pipe writes
         if errno == Errno::EPIPE as i32 {
-            lind_send_signal(cageid, SIGPIPE);
+            grateos_send_signal(cageid, SIGPIPE);
         }
         return handle_errno(errno, "write");
     }
@@ -861,7 +861,7 @@ pub extern "C" fn mmap_syscall(
         | MAP_ANONYMOUS as i32
         | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        lind_debug_panic!(
+        grateos_debug_panic!(
             "mmap: unsupported flags {:#x} (allowed: {:#x})",
             flags,
             allowed_flags
@@ -869,7 +869,7 @@ pub extern "C" fn mmap_syscall(
     }
 
     if prot & PROT_EXEC > 0 {
-        lind_debug_panic!("mmap protection flag PROT_EXEC is not allowed in Lind");
+        grateos_debug_panic!("mmap protection flag PROT_EXEC is not allowed in GrateOS");
     }
 
     // check if the provided address is multiple of pages
@@ -1156,7 +1156,7 @@ pub extern "C" fn munmap_syscall(
             ) as usize
         };
         if result != act_start_addr {
-            lind_debug_panic!(
+            grateos_debug_panic!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
                 result as *const c_void,
                 act_start_addr as *const c_void
@@ -4561,7 +4561,7 @@ pub extern "C" fn mprotect_syscall(
         return syscall_error(Errno::EINVAL, "mprotect", "Invalid protection flags");
     }
 
-    // For security, we don't allow PROT_EXEC in lind-wasm
+    // For security, we don't allow PROT_EXEC in grateos-wasm
     if prot & PROT_EXEC != 0 {
         return syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC is not allowed");
     }
@@ -4657,7 +4657,7 @@ pub extern "C" fn ioctl_syscall(
     // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, FIONREAD, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
     if req != FIONBIO && req != FIOASYNC && req != FIONREAD && req != TIOCGWINSZ {
-        lind_debug_panic!("Lind unsupported ioctl request");
+        grateos_debug_panic!("GrateOS unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -4827,7 +4827,7 @@ pub extern "C" fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        lind_debug_panic!("shmget key IPC_PRIVATE is not allowed in Lind");
+        grateos_debug_panic!("shmget key IPC_PRIVATE is not allowed in GrateOS");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;

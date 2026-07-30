@@ -254,7 +254,7 @@ impl Instance {
     }
 
     /// Get the raw store pointer and instance id from a VMContext pointer.
-    /// Used by lind-wasm to reconstruct a Caller from a raw VMContext.
+    /// Used by grateos-wasm to reconstruct a Caller from a raw VMContext.
     ///
     /// # Safety
     ///

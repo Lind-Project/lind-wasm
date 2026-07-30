@@ -20,10 +20,10 @@ use log::warn;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
-use sysdefs::lind_log;
+use sysdefs::grateos_log;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
-use wasmtime_lind_utils::LindGOT;
-use wasmtime_lind_utils::symbol_table::SymbolMap;
+use wasmtime_grateos_utils::GrateOSGOT;
+use wasmtime_grateos_utils::symbol_table::SymbolMap;
 
 use super::{InstanceId, InstantiateType};
 
@@ -48,7 +48,7 @@ pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
         | "asyncify_start_rewind"
         | "asyncify_stop_rewind"
         | "asyncify_get_state"
-        // lind-specific
+        // grateos-specific
         | "__get_aligned_tls_size"
     )
 }
@@ -320,7 +320,7 @@ impl<T> Linker<T> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
-                    lind_log!(
+                    grateos_log!(
                         DYLINK,
                         "[debug] Warning: link undefined symbol \"{}\" to trap",
                         import.name()
@@ -360,7 +360,7 @@ impl<T> Linker<T> {
                     if !weak_imports.is_weak_symbol(import.module(), import.name()) {
                         continue;
                     }
-                    lind_log!(
+                    grateos_log!(
                         DYLINK,
                         "[debug] define weak symbol {}.{} into trap",
                         import.module(),
@@ -385,14 +385,14 @@ impl<T> Linker<T> {
         &mut self,
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
-        got: &mut LindGOT,
+        got: &mut GrateOSGOT,
     ) -> Result<()>
     where
         T: 'static,
     {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
-                lind_log!(
+                grateos_log!(
                     DYLINK,
                     "[debug]: define_GOT_dispatcher: import module: {}, name: {}",
                     import.module(),
@@ -421,7 +421,7 @@ impl<T> Linker<T> {
                     .unwrap();
                     self.define(&mut store, import.module(), import.name(), got_placeholder);
 
-                    // Record the backing address of the placeholder slot in LindGOT so
+                    // Record the backing address of the placeholder slot in GrateOSGOT so
                     // the dynamic loader can update it later when the symbol is resolved.
                     let handler = got_placeholder.get_handler_as_u32(&mut store);
                     got.new_entry(import.name().to_string(), handler);
@@ -464,7 +464,7 @@ impl<T> Linker<T> {
                                || (module == "env" && name == "__table_base") // main module table base
                                || module == "lib.memory_base" // library __memory_base
                                || (module == "env" && name == "__stack_pointer") // stack pointer
-                               || (module == "lind" && name == "epoch")
+                               || (module == "grateos" && name == "epoch")
                             // signal epoch
                             {
                                 // NOTE: asyncify state is intentionally not copied
@@ -489,12 +489,12 @@ impl<T> Linker<T> {
                             // indirect_table is handled explicitly by the fork logic
                         }
                         Extern::Memory(memory) => {
-                            // lind wasm instance shouldn't have any Memory
+                            // grateos wasm instance shouldn't have any Memory
                             // (They are all SharedMemory instead)
                             unreachable!()
                         }
                         Extern::Tag(_) => {
-                            // no-op: tags are not used in lind-wasm
+                            // no-op: tags are not used in grateos-wasm
                         }
                         Extern::SharedMemory(shared_memory) => {
                             if share_memory {
@@ -531,7 +531,7 @@ impl<T> Linker<T> {
     pub fn new_child_linker(
         mut store: impl AsContextMut<Data = T>,
         engine: &Engine,
-        got_table: &mut Option<LindGOT>,
+        got_table: &mut Option<GrateOSGOT>,
         globals: &Vec<(String, String, GlobalType, Val)>,
         hostfuncs: &Vec<(String, String, Arc<HostFunc>)>,
         shared_memory: &Option<(String, String, ClonedMemory)>,
@@ -564,7 +564,7 @@ impl<T> Linker<T> {
                 memory_base_table.insert(name.clone(), memory_base);
             }
 
-            if module == "lind" && name == "epoch" {
+            if module == "grateos" && name == "epoch" {
                 epoch_handler = Some(cloned_global.get_handler_as_u64(&mut store));
             }
 
@@ -597,7 +597,7 @@ impl<T> Linker<T> {
                     }
                     let base = mem.get_memory_base();
                     memory_base = Some(base);
-                    // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
+                    // grateos-wasm: reset the child's fresh 4 GiB to PROT_NONE before
                     // rawposix takes ownership via init_vmmap + fork_vmmap.
                     unsafe {
                         libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE);
@@ -881,7 +881,7 @@ impl<T> Linker<T> {
     /// # let engine = Engine::default();
     /// let mut linker = Linker::new(&engine);
     /// linker.func_wrap("host", "double", |x: i32| x * 2)?;
-    /// linker.func_wrap("host", "log_i32", |x: i32| lind_log!(DYLINK, "{}", x))?;
+    /// linker.func_wrap("host", "log_i32", |x: i32| grateos_log!(DYLINK, "{}", x))?;
     /// linker.func_wrap("host", "log_str", |caller: Caller<'_, ()>, ptr: i32, len: i32| {
     ///     // ...
     /// })?;
@@ -1246,7 +1246,7 @@ impl<T> Linker<T> {
         module: &Module,
         table: &mut Table,
         table_base: i32,
-        got: &LindGOT,
+        got: &GrateOSGOT,
         path: String,
     ) -> Result<&mut Self>
     where
@@ -1273,11 +1273,11 @@ impl<T> Linker<T> {
                 module_linker.allow_shadowing(true);
                 // Create a placeholder for `__memory_base` for library instantiation.
                 //
-                // In Lind, the final linear-memory base address is only known after the
+                // In GrateOS, the final linear-memory base address is only known after the
                 // main module's shared memory is created and `vmmap` is initialized.
                 // We therefore link a dummy `__memory_base` global (initialized to 0)
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
-                // `instantiate_with_lind` can patch the global once the real base is known.
+                // `instantiate_with_grateos` can patch the global once the real base is known.
                 let memory_base = module_linker.attach_memory_base(&mut store, 0)?;
                 // keep a recording of this memory base in main linker as well
                 self.define(
@@ -1298,9 +1298,9 @@ impl<T> Linker<T> {
                 // TODO: we probably want to remove this in the future
                 module_linker.define_unknown_imports_as_traps(module);
 
-                // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
+                // Instantiate the library module. `InstantiateLib(handler)` tells the GrateOS instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
-                let (instance, _, instance_id) = module_linker.instantiate_with_lind(
+                let (instance, _, instance_id) = module_linker.instantiate_with_grateos(
                     &mut store,
                     &module,
                     InstantiateType::InstantiateLib {
@@ -1381,11 +1381,11 @@ impl<T> Linker<T> {
                 module_linker.allow_shadowing(true);
                 // Create a placeholder for `__memory_base` for library instantiation.
                 //
-                // In Lind, the final linear-memory base address is only known after the
+                // In GrateOS, the final linear-memory base address is only known after the
                 // main module's shared memory is created and `vmmap` is initialized.
                 // We therefore link a dummy `__memory_base` global (initialized to 0)
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
-                // `instantiate_with_lind` can patch the global once the real base is known.
+                // `instantiate_with_grateos` can patch the global once the real base is known.
                 let memory_base = module_linker.attach_memory_base(&mut store, memory_base)?;
                 let handler = memory_base.get_handler_as_u32(&mut store);
                 // NOTE: we do not create a record in main linker like in `module_with_preload`
@@ -1402,7 +1402,7 @@ impl<T> Linker<T> {
                 // Instantiate the library module. Do not need to do any initialization for the module
                 // since all the state are already copied from parent
                 let (instance, _stack_arena_size, instance_id) =
-                    module_linker.instantiate_with_lind_thread(&mut store, &module, true)?;
+                    module_linker.instantiate_with_grateos_thread(&mut store, &module, true)?;
 
                 if let Some(wasm_name) = module.name() {
                     store
@@ -1455,7 +1455,7 @@ impl<T> Linker<T> {
         module_name: &str,
         module: &Module,
         table_base: i32,
-        got: &LindGOT,
+        got: &GrateOSGOT,
         mut symbol_map: SymbolMap,
         path: String,
     ) -> Result<u64>
@@ -1483,11 +1483,11 @@ impl<T> Linker<T> {
                 module_linker.allow_shadowing(true);
                 // Create a placeholder for `__memory_base` for library instantiation.
                 //
-                // In Lind, the final linear-memory base address is only known after the
+                // In GrateOS, the final linear-memory base address is only known after the
                 // main module's shared memory is created and `vmmap` is initialized.
                 // We therefore link a dummy `__memory_base` global (initialized to 0)
                 // and pass its backing slot (`handler`) into `InstantiateLib`, so
-                // `instantiate_with_lind` can patch the global once the real base is known.
+                // `instantiate_with_grateos` can patch the global once the real base is known.
                 let memory_base = module_linker.attach_memory_base(&mut store, 0)?;
                 // keep a recording of this memory base in main linker as well
                 self.define(
@@ -1507,10 +1507,10 @@ impl<T> Linker<T> {
                 // instantiate even when it has optional/unused imports.
                 module_linker.define_unknown_imports_as_traps(module);
 
-                // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
+                // Instantiate the library module. `InstantiateLib(handler)` tells the GrateOS instantiation
                 // path where to patch the `__memory_base` placeholder once the shared-memory base is known.
                 let (instance, _stack_arena_size, instance_id) = module_linker
-                    .instantiate_with_lind(
+                    .instantiate_with_grateos(
                         &mut store,
                         &module,
                         InstantiateType::InstantiateLib {
@@ -1595,7 +1595,7 @@ impl<T> Linker<T> {
 
                         // Cache the resolved table index; also updates the GOT cell if it exists.
                         if got.cache_symbol(final_name, index) {
-                            lind_log!(
+                            grateos_log!(
                                 DYLINK,
                                 "[debug] update GOT.func.{} to {}",
                                 final_name,
@@ -1611,7 +1611,7 @@ impl<T> Linker<T> {
                     let val = global.get(&mut store);
                     // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                     let Some(raw) = val.i32() else {
-                        lind_log!(
+                        grateos_log!(
                             DYLINK,
                             "Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
                             name,
@@ -1623,13 +1623,13 @@ impl<T> Linker<T> {
                     let val = match (raw as u32).checked_add(memory_base) {
                         Some(val) => val,
                         None => {
-                            lind_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
+                            grateos_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
                             continue;
                         }
                     };
                     // Cache the resolved address; also updates the GOT cell if it already exists.
                     if got.cache_symbol(&name, val) {
-                        lind_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
+                        grateos_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
                     }
                     // Only expose as dlsym-resolvable if it's a known GOT data symbol.
                     if got.has_entry(&name) {
@@ -1846,14 +1846,14 @@ impl<T> Linker<T> {
                 None => bail!("import of `{module}` defined twice"),
             }
         }
-        #[cfg(feature = "lind-logging")]
+        #[cfg(feature = "grateos-logging")]
         if self.map.contains_key(&key) {
             let module = &self.pool[key.module];
             let desc = match key.name.and_then(|n| self.pool.get(n)) {
                 Some(name) => format!("{}::{}", module, name),
                 None => module.to_string(),
             };
-            sysdefs::lind_log!(DYLINK, "warning: {:?} definition overwrite", desc);
+            sysdefs::grateos_log!(DYLINK, "warning: {:?} definition overwrite", desc);
         }
 
         self.map.insert(key, item)?;
@@ -1929,19 +1929,19 @@ impl<T> Linker<T> {
             .instantiate(store)
     }
 
-    /// Instantiates a Wasm module as a new lind-wasm thread and returns both the created instance
+    /// Instantiates a Wasm module as a new grateos-wasm thread and returns both the created instance
     /// and its `InstanceId`. This function is used when creating a new thread within an existing cage.
-    /// Unlike cage creation, thread instantiation does not require any lind-specific memory initialization
+    /// Unlike cage creation, thread instantiation does not require any grateos-specific memory initialization
     /// or vmmap manipulation, because the thread executes within an already-established address space.
     ///
     /// The primary difference from Wasmtime’s standard instantiation path is that this function returns
-    /// the `InstanceId`. Lind-3i relies on the `InstanceId` to later recover the `VMContext` pointer
+    /// the `InstanceId`. GrateOS-3i relies on the `InstanceId` to later recover the `VMContext` pointer
     /// associated with this thread, enabling cross-cage and cross-grate runtime transfers.
     ///
     /// Internally, this function reuses Wasmtime’s pre-instantiation logic and delegates the actual
-    /// instantiation to `instantiate_with_lind_thread` on the prepared instance, minimizing
+    /// instantiation to `instantiate_with_grateos_thread` on the prepared instance, minimizing
     /// divergence from upstream Wasmtime behavior.
-    pub fn instantiate_with_lind_thread(
+    pub fn instantiate_with_grateos_thread(
         &self,
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
@@ -1951,26 +1951,26 @@ impl<T> Linker<T> {
         T: 'static,
     {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
-            .instantiate_with_lind_thread(store, no_start)
+            .instantiate_with_grateos_thread(store, no_start)
     }
 
-    /// Instantiates a Wasm module as a new lind-wasm cage and returns both the created instance and
+    /// Instantiates a Wasm module as a new grateos-wasm cage and returns both the created instance and
     /// its `InstanceId`.
     ///
-    /// This function extends Wasmtime’s standard instantiation path with lind-wasm–specific initialization
+    /// This function extends Wasmtime’s standard instantiation path with grateos-wasm–specific initialization
     /// logic required for correct RawPOSIX semantics. Depending on `InstantiateType`, this may involve
     /// initializing the first cage’s linear memory, setting up vmmap state, or cloning an existing cage’s
     /// memory when implementing `fork` semantics.
     ///
-    /// As with thread instantiation, this function returns the `InstanceId` so that lind-3i can later obtain
+    /// As with thread instantiation, this function returns the `InstanceId` so that grateos-3i can later obtain
     /// the corresponding `VMContext` pointer and re-enter the correct Wasmtime runtime state during cross-cage
     /// or cross-grate execution.
     ///
-    /// The separation between `instantiate_with_lind` and `instantiate_with_lind_thread` is intentional:
-    /// cage creation and thread creation have different memory semantics in lind-wasm, and keeping them
+    /// The separation between `instantiate_with_grateos` and `instantiate_with_grateos_thread` is intentional:
+    /// cage creation and thread creation have different memory semantics in grateos-wasm, and keeping them
     /// as distinct entry points minimizes changes to upstream Wasmtime code while making the required
-    /// lind-specific behavior explicit.
-    pub fn instantiate_with_lind(
+    /// grateos-specific behavior explicit.
+    pub fn instantiate_with_grateos(
         &self,
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
@@ -1980,7 +1980,7 @@ impl<T> Linker<T> {
         T: 'static,
     {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
-            .instantiate_with_lind(store, instantiate_type)
+            .instantiate_with_grateos(store, instantiate_type)
     }
 
     /// Attempts to instantiate the `module` provided. This is the same as
@@ -2247,7 +2247,7 @@ impl<T> Linker<T> {
     }
 }
 
-/// Additional APIs for attaching common imports used by the Lind runtime and toolchain.
+/// Additional APIs for attaching common imports used by the GrateOS runtime and toolchain.
 #[allow(missing_docs)]
 impl<T: 'static> Linker<T> {
     // attach the asyncify imports used by the asyncify transform.
@@ -2267,20 +2267,20 @@ impl<T: 'static> Linker<T> {
         Ok(())
     }
 
-    // attach the epoch global used by the Lind runtime for signal usage
+    // attach the epoch global used by the GrateOS runtime for signal usage
     pub fn attach_epoch(&mut self, mut store: impl AsContextMut<Data = T>) -> Result<u64> {
-        let lind_epoch = Global::new(
+        let grateos_epoch = Global::new(
             &mut store,
             GlobalType::new(ValType::I64, crate::Mutability::Var),
             Val::I64(0),
         )?;
 
-        self.define(&mut store, "lind", "epoch", lind_epoch)?;
+        self.define(&mut store, "grateos", "epoch", grateos_epoch)?;
 
-        Ok(lind_epoch.get_handler_as_u64(&mut store) as u64)
+        Ok(grateos_epoch.get_handler_as_u64(&mut store) as u64)
     }
 
-    // attach the `__indirect_function_table` used by the Lind runtime for dynamic loading
+    // attach the `__indirect_function_table` used by the GrateOS runtime for dynamic loading
     pub fn attach_function_table(
         &mut self,
         mut store: impl AsContextMut<Data = T>,
@@ -2293,7 +2293,7 @@ impl<T: 'static> Linker<T> {
         Ok(table)
     }
 
-    // attach the `__stack_low`, `__stack_high`, and `__stack_pointer` globals used by the Lind runtime for stack management.
+    // attach the `__stack_low`, `__stack_high`, and `__stack_pointer` globals used by the GrateOS runtime for stack management.
     pub fn attach_stack_imports(
         &mut self,
         mut store: impl AsContextMut<Data = T>,
@@ -2326,7 +2326,7 @@ impl<T: 'static> Linker<T> {
         Ok(())
     }
 
-    // attach the `__memory_base` global used by the Lind runtime for dynamic loading.
+    // attach the `__memory_base` global used by the GrateOS runtime for dynamic loading.
     pub fn attach_memory_base(
         &mut self,
         mut store: impl AsContextMut<Data = T>,
@@ -2343,7 +2343,7 @@ impl<T: 'static> Linker<T> {
         Ok(memory_base)
     }
 
-    // attach the `__table_base` global used by the Lind runtime for dynamic loading.
+    // attach the `__table_base` global used by the GrateOS runtime for dynamic loading.
     pub fn attach_table_base(
         &mut self,
         mut store: impl AsContextMut<Data = T>,

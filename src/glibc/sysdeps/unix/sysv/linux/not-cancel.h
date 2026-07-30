@@ -83,7 +83,7 @@ __writev_nocancel_nostatus (int fd, const struct iovec *iov, int iovcnt)
   INTERNAL_SYSCALL_CALL (writev, fd, iov, iovcnt);
 }
 
-/* lind-wasm: route through __getrandom which uses MAKE_LEGACY_SYSCALL
+/* grateos-wasm: route through __getrandom which uses MAKE_LEGACY_SYSCALL
    to reach RawPOSIX. INLINE_SYSCALL_CALL bypasses 3i and fails in WASM. */
 extern ssize_t __getrandom (void *__buffer, size_t __length, unsigned int __flags);
 

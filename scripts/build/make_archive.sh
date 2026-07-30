@@ -105,7 +105,7 @@ for file in "$DATA_DIR/object_lists/"*; do
     fi
 done
 
-#libpthread.a is created as a placeholder since -pthread flag is used for lind_compile
+#libpthread.a is created as a placeholder since -pthread flag is used for grateos_compile
 llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded

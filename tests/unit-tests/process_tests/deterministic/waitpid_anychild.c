@@ -7,7 +7,7 @@
 
 /*
 Test waitpid() with pid=-1 (wait for any child)
-This is a regression test for bug: https://github.com/Lind-Project/lind-wasm/issues/543
+This is a regression test for bug: https://github.com/GrateOS-Project/grateos-wasm/issues/543
 */
 int main()
 {

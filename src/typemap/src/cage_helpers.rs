@@ -5,7 +5,7 @@
 //! cage isolation.
 use fdtables;
 use sysdefs::constants::err_const::Errno;
-use sysdefs::constants::lind_platform_const::MAX_CAGEID;
+use sysdefs::constants::grateos_platform_const::MAX_CAGEID;
 /// Validate whether two cage ids are in valid range. This is used for security mode in
 /// type conversion.
 ///

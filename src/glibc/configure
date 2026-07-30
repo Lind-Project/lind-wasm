@@ -6179,7 +6179,7 @@ done
 
 
 # Find what sysdep directories exist.
-sysnames="sysdeps/lind lind_syscall "
+sysnames="sysdeps/grateos grateos_syscall "
 for b in $base ''; do
   for m0 in $mach ''; do
     for v in /$vendor ''; do

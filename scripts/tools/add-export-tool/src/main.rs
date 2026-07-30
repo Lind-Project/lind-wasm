@@ -47,7 +47,7 @@ fn main() -> Result<()> {
     };
 
     let rewritten = add_export(&wasm, &export_name, kind, target_index)?;
-    // lind-wasm-opt runs --translate-to-exnref which converts legacy EH (try/catch) to standard
+    // grateos-wasm-opt runs --translate-to-exnref which converts legacy EH (try/catch) to standard
     // EH (try_table); enable both forms so add-export-tool works on files from either pipeline.
     let mut validator = wasmparser::Validator::new_with_features(
         wasmparser::WasmFeatures::default()

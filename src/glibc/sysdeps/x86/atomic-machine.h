@@ -52,7 +52,7 @@
   (! __sync_bool_compare_and_swap (mem, oldval, newval))
 
 
-/* lind-wasm: use compiler builtins instead of stripped x86 inline asm */
+/* grateos-wasm: use compiler builtins instead of stripped x86 inline asm */
 #define __arch_c_compare_and_exchange_val_8_acq(mem, newval, oldval) \
   __sync_val_compare_and_swap (mem, oldval, newval)
 
@@ -115,12 +115,12 @@
 #endif
 
 
-/* lind-wasm: use compiler builtin for atomic exchange */
+/* grateos-wasm: use compiler builtin for atomic exchange */
 #define atomic_exchange_acq(mem, newvalue) \
   __sync_lock_test_and_set (mem, newvalue)
 
 
-/* lind-wasm: use compiler builtin for fetch-and-add */
+/* grateos-wasm: use compiler builtin for fetch-and-add */
 #define atomic_exchange_and_add(mem, value) \
   __sync_fetch_and_add (mem, value)
 
@@ -128,7 +128,7 @@
   __sync_fetch_and_add (mem, value)
 
 
-/* lind-wasm: use compiler builtins for all atomic add/increment/decrement */
+/* grateos-wasm: use compiler builtins for all atomic add/increment/decrement */
 #define atomic_add(mem, value) \
   (void) __sync_fetch_and_add (mem, value)
 
@@ -160,7 +160,7 @@
   (__sync_sub_and_fetch (mem, 1) == 0)
 
 
-/* lind-wasm: use compiler builtins for bit/and/or atomics */
+/* grateos-wasm: use compiler builtins for bit/and/or atomics */
 #define atomic_bit_set(mem, bit) \
   (void) __sync_fetch_and_or (mem, (__typeof (*(mem))) 1 << (bit))
 

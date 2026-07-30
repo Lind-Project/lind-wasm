@@ -294,7 +294,7 @@ impl SSABuilder {
     /// but we need to look at the predecessor to see if a block parameter might be needed there.
     /// That holds transitively across any chain of sealed blocks with exactly one predecessor each.
     ///
-    /// This runs into a problem, though, if such a chain has a cycle: Blindly following a cyclic
+    /// This runs into a problem, though, if such a chain has a cycle: Bgrateosly following a cyclic
     /// chain that never defines this variable would lead to an infinite loop in the compiler. It
     /// doesn't really matter what code we generate in that case. Since each block in the cycle has
     /// exactly one predecessor, there's no way to enter the cycle from the function's entry block;

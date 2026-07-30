@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
-#include <lind_syscall.h>
+#include <grateos_syscall.h>
 #include <sys/wait.h>
 
 // This is grate-2. It spawns a child cage and tries to interpose the child's

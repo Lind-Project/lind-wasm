@@ -2,7 +2,7 @@
 //! Source of truth for syscall numbers: Linux x86_64 syscall table
 //! https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
 //! https://filippo.io/linux-syscall-table/
-//! Keep these in sync with glibc's lind_syscall_num.h
+//! Keep these in sync with glibc's grateos_syscall_num.h
 use super::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, chown_syscall,
     clock_gettime_syscall, close_syscall, copy_file_range_syscall, dup2_syscall, dup3_syscall,

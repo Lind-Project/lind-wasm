@@ -71,7 +71,7 @@ void test_zombie_reaping() {
     assert(WIFEXITED(status));
 }
 
-/* ---------- TEST 5: Multiple children (Lind-safe) ---------- */
+/* ---------- TEST 5: Multiple children (GrateOS-safe) ---------- */
 void test_multiple_children() {
     const int N = 3;
 

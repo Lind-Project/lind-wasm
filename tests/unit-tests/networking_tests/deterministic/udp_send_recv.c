@@ -1,5 +1,5 @@
 /*
- * UDP unit test for lind-wasm.
+ * UDP unit test for grateos-wasm.
  *
  * Tests are ordered to isolate failures incrementally:
  *   1. socket creation
@@ -22,7 +22,7 @@
 #include <sys/wait.h>
 
 #define PORT 19876
-#define MSG "Hello UDP from lind-wasm"
+#define MSG "Hello UDP from grateos-wasm"
 #define BUFSIZE 256
 
 int main(void)

@@ -21,7 +21,7 @@
 #include <socketcall.h>
 #include <socket-constants-time64.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 static int

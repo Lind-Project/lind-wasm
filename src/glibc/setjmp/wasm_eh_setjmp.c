@@ -1,5 +1,5 @@
 /*
- * Wasm EH-based setjmp/longjmp runtime support for lind-wasm.
+ * Wasm EH-based setjmp/longjmp runtime support for grateos-wasm.
  *
  * When user code is compiled with -fwasm-exceptions -mllvm -wasm-enable-sjlj,
  * clang 18 transforms each setjmp()/longjmp() call site into:
@@ -38,7 +38,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <lind_debug.h>
+#include <grateos_debug.h>
 
 
 /* Thread-local "second return value" communicated between saveSetjmp and its
@@ -92,7 +92,7 @@ __attribute__((visibility("default"))) int *saveSetjmp(int *buf, int label_id, i
     int new_size = size * 2;
     int *new_table = (int *)realloc(table, (size_t)new_size * 2 * sizeof(int));
     if (!new_table) {
-        lind_debug_panic("saveSetjmp: OOM growing setjmp table");
+        grateos_debug_panic("saveSetjmp: OOM growing setjmp table");
         setTempRet0(size);
         return table;
     }

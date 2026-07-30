@@ -1,6 +1,6 @@
-# File Descriptor Table Library For Lind
+# File Descriptor Table Library For GrateOS
 
-This library is meant to be used by implementers of a grate or microvisor for the Lind project.  The purpose of this library is to make it easy
+This library is meant to be used by implementers of a grate or microvisor for the GrateOS project.  The purpose of this library is to make it easy
 for implementers to manage virtual -> real file descriptor mappings.  This library handles most of the complexity of that management so that
 the grate / microvisor implementer can focus on functionality specific to their use case.
 

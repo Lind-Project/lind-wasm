@@ -19,8 +19,8 @@ criterion = "0.5"
 
 [features]
 disable_signals = []
-lind_debug = []
-lind-logging = ["sysdefs/lind-logging"]
+grateos_debug = []
+grateos-logging = ["sysdefs/grateos-logging"]
 
 [[bench]]
 name = "cage_map_bench"

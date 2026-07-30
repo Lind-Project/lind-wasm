@@ -21,7 +21,7 @@
 #include <sysdep-cancel.h>
 #include <addr_translation.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <errno.h>
 #include <stdlib.h>
 
@@ -29,7 +29,7 @@ ssize_t
 __readv (int fd, const struct iovec *iov, int iovcnt)
 {
   struct iovec host_iov[iovcnt];
-  __lind_translate_iov (iov, host_iov, iovcnt);
+  __grateos_translate_iov (iov, host_iov, iovcnt);
 
   ssize_t ret = MAKE_LEGACY_SYSCALL (READV_SYSCALL, "syscall|readv", (uint64_t) fd,
 			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST((uintptr_t) host_iov),

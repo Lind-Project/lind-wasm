@@ -1,0 +1,19 @@
+[package]
+name = "wasmtime-grateos-utils"
+version.workspace = true
+authors.workspace = true
+description = "grateos utils"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+dashmap = { version = "5.1", features=["serde"] }
+skiplist = "0.6.0"
+sysdefs = { path = "../sysdefs" }
+
+[features]
+grateos-logging = ["sysdefs/grateos-logging"]

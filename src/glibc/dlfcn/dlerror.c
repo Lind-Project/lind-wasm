@@ -28,10 +28,10 @@
 #include <assert.h>
 #include <dlerror.h>
 
-// error message for lind dynamic loader
+// error message for grateos dynamic loader
 // dylink errno returned from host is served as the index to the array
-// should match sysdefs/lind_platform_const.rs
-static const char *__lind_dylink_error_msg[] = {
+// should match sysdefs/grateos_platform_const.rs
+static const char *__grateos_dylink_error_msg[] = {
     "UNUSED", // 0
     "cannot open shared object file",
     "Invalid library file type: expects wasm file",
@@ -50,12 +50,12 @@ static const char *__lind_dylink_error_msg[] = {
 char *
 __dlerror (void)
 {
-  if (__lind_dlerror_result != 0) {
-    size_t len = sizeof(__lind_dylink_error_msg) / sizeof(__lind_dylink_error_msg[0]);
-    assert(__lind_dlerror_result < len);
+  if (__grateos_dlerror_result != 0) {
+    size_t len = sizeof(__grateos_dylink_error_msg) / sizeof(__grateos_dylink_error_msg[0]);
+    assert(__grateos_dlerror_result < len);
     
-    char* msg = __lind_dylink_error_msg[__lind_dlerror_result];
-    __lind_dlerror_result = 0; // clear the error message
+    char* msg = __grateos_dylink_error_msg[__grateos_dlerror_result];
+    __grateos_dlerror_result = 0; // clear the error message
 
     return msg;
   }

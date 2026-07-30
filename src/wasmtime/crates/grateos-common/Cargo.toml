@@ -1,0 +1,30 @@
+[package]
+name = "wasmtime-grateos-common"
+version.workspace = true
+authors.workspace = true
+description = "grateos interface within wasmtime"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+rand = "0.8"
+wasmtime = { workspace = true, features = ['threads'] }
+wasmtime-environ = { workspace = true }
+rawposix = { path = "../rawposix" }
+threei = { path = "../threei" }
+wasmtime-grateos-dylink = { path = "../grateos-dylink" }
+wasmtime-grateos-multi-process = { path = "../grateos-multi-process" }
+wasmtime-grateos-utils = { path = "../grateos-utils" }
+sysdefs = { path = "../sysdefs" }
+wasmtime-grateos-3i = { path = "../grateos-3i" }
+cage = { path = "../cage" }
+typemap = { path = "../typemap" }
+
+[features]
+grateos_debug = []
+grateos-logging = ["sysdefs/grateos-logging"]
+asyncify-setjmp = ["wasmtime-grateos-multi-process/asyncify-setjmp"]

@@ -24,17 +24,17 @@ use wasmtime::{
 use wasmtime::{Caller, Instance};
 
 use sysdefs::constants::syscall_const::EXIT_SYSCALL;
-use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, LindHost, THREAD_START_ID};
+use wasmtime_grateos_multi_process::{CAGE_START_ID, GrateOSCtx, GrateOSHost, THREAD_START_ID};
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i::{VmCtxWrapper, get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx};
-use wasmtime_lind_utils::LindCageManager;
+use wasmtime_grateos_3i::{VmCtxWrapper, get_vmctx, init_vmctx_pool, rm_vmctx, set_vmctx};
+use wasmtime_grateos_utils::GrateOSCageManager;
 
-use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
+use cage::signal::{grateos_signal_init, grateos_thread_exit, signal_may_trigger};
 use core::ffi::c_void;
 use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
 use std::ptr::NonNull;
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::grateos_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::{make_syscall, threei_const};
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 
@@ -59,7 +59,7 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
 /// function as the single re-entry point into the Wasm executable.
 ///
 /// When invoked, this function first uses the provided grateid to
-/// retrieve the corresponding `VMContext` pointer from lind-3i’s global
+/// retrieve the corresponding `VMContext` pointer from grateos-3i’s global
 /// runtime-state table. The `VMContext` identifies the Wasmtime store and
 /// instance associated with the target grate and allows execution to
 /// re-enter the correct runtime context.
@@ -77,7 +77,7 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
 /// This function is called by 3i when a syscall is routed to a grate.
 ///
 /// todo: Currently this function is sent to 3i from [run::execute] function.
-/// This will be updated to be sent from lind-boot in the future.
+/// This will be updated to be sent from grateos-boot in the future.
 pub extern "C" fn grate_callback_trampoline(
     in_grate_fn_ptr_u64: u64,
     cageid: u64,
@@ -259,8 +259,8 @@ impl RunCommand {
 
         let host = Host::default();
         let mut store = Store::new(&engine, host);
-        let lind_manager = Arc::new(LindCageManager::new(0));
-        self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), None)?;
+        let grateos_manager = Arc::new(GrateOSCageManager::new(0));
+        self.populate_with_wasi(&mut linker, &mut store, &main, grateos_manager.clone(), None)?;
 
         store.data_mut().limits = self.run.store_limits();
         store.limiter(|t| &mut t.limits);
@@ -306,15 +306,15 @@ impl RunCommand {
             }
         }
 
-        // Initialize Lind here
+        // Initialize GrateOS here
         rawposix_start(0);
         // new cage is created
-        lind_manager.increment();
+        grateos_manager.increment();
         // initialize vmctx pool
         init_vmctx_pool();
 
         // initialize trampoline entry function pointer for wasmtime runtime.
-        // todo: will remove to lind-boot in the future
+        // todo: will remove to grateos-boot in the future
         threei::register_trampoline(
             threei_const::RUNTIME_TYPE_WASMTIME,
             grate_callback_trampoline,
@@ -353,7 +353,7 @@ impl RunCommand {
                     code = *res;
                 }
                 // exit the thread
-                if lind_thread_exit(CAGE_START_ID as u64, THREAD_START_ID as u64) {
+                if grateos_thread_exit(CAGE_START_ID as u64, THREAD_START_ID as u64) {
                     // Clean up the context from the global table
                     if !rm_vmctx(CAGE_START_ID as u64) {
                         panic!(
@@ -386,12 +386,12 @@ impl RunCommand {
                     );
 
                     // main cage exits
-                    lind_manager.decrement();
+                    grateos_manager.decrement();
                 }
 
                 // we wait until all other cage exits
-                lind_manager.wait();
-                // after all cage exits, finalize the lind
+                grateos_manager.wait();
+                // after all cage exits, finalize the grateos
                 rawposix_shutdown();
             }
             Err(e) => {
@@ -430,9 +430,9 @@ impl RunCommand {
 
     // similar to `execute`` function above, except that this function is used by exec_syscall to execute a wasm module given the path
     // the only big difference from `execute` function above is that cageid and next_cageid are passed as argument instead of hard-coded
-    fn execute_with_lind(
+    fn execute_with_grateos(
         mut self,
-        lind_manager: Arc<LindCageManager>,
+        grateos_manager: Arc<GrateOSCageManager>,
         cageid: i32,
     ) -> Result<Vec<Val>> {
         let mut config = self.run.common.config(None, None)?;
@@ -490,7 +490,7 @@ impl RunCommand {
             &mut linker,
             &mut store,
             &main,
-            lind_manager.clone(),
+            grateos_manager.clone(),
             Some(cageid),
         )?;
 
@@ -727,7 +727,7 @@ impl RunCommand {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
                 let (instance, cage_instanceid) = linker
-                    .instantiate_with_lind(
+                    .instantiate_with_grateos(
                         &mut *store,
                         &module,
                         InstantiateType::InstantiateFirst(cageid),
@@ -741,7 +741,7 @@ impl RunCommand {
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
                 // instance boundaries particularly difficult. To overcome this, the design employs low-level context
                 // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-                // structures. See more details in [lind-3i/src/lib.rs]
+                // structures. See more details in [grateos-3i/src/lib.rs]
                 // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                 let cage_storeopaque = store.inner_mut();
                 let cage_instancehandler = cage_storeopaque.instance(cage_instanceid);
@@ -769,10 +769,10 @@ impl RunCommand {
                 threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
                 // 5) Create backup instances to populate the vmctx pool
-                // See more comments in lind-3i/lib.rs
+                // See more comments in grateos-3i/lib.rs
                 for _ in 0..9 {
                     let (_, backup_cage_instanceid) = linker
-                        .instantiate_with_lind_thread(&mut *store, &module)
+                        .instantiate_with_grateos_thread(&mut *store, &module)
                         .context(format!(
                             "failed to instantiate {:?}",
                             self.module_and_args[0]
@@ -820,25 +820,25 @@ impl RunCommand {
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
                 cfg_if! {
-                    // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                    // The disable_signals feature allows Wasmtime to run GrateOS binaries without inserting an epoch.
                     // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
                     // This is intended for debugging only and should not be used in production.
                     if #[cfg(feature = "disable_signals")] {
                         let pointer = 0;
                     } else {
                         // retrieve the epoch global
-                        let lind_epoch = instance
+                        let grateos_epoch = instance
                             .get_export(&mut *store, "epoch")
                             .and_then(|export| export.into_global())
                             .expect("Failed to find epoch global export!");
 
                         // retrieve the handler (underlying pointer) for the epoch global
-                        let pointer = lind_epoch.get_handler(&mut *store);
+                        let pointer = grateos_epoch.get_handler(&mut *store);
                     }
                 }
 
                 // initialize the signal for the main thread of the cage
-                lind_signal_init(
+                grateos_signal_init(
                     cageid,
                     pointer as *mut u64,
                     THREAD_START_ID,
@@ -972,7 +972,7 @@ impl RunCommand {
         linker: &mut CliLinker,
         store: &mut Store<Host>,
         module: &RunTarget,
-        lind_manager: Arc<LindCageManager>,
+        grateos_manager: Arc<GrateOSCageManager>,
         cageid: Option<i32>,
     ) -> Result<()> {
         let mut cli = self.run.common.wasi.cli;
@@ -1096,32 +1096,32 @@ impl RunCommand {
             }
         }
 
-        // attach Lind common APIs to the linker
+        // attach GrateOS common APIs to the linker
         {
             let linker = match linker {
                 CliLinker::Core(linker) => linker,
-                _ => bail!("lind does not support components yet"),
+                _ => bail!("grateos does not support components yet"),
             };
-            wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker)?;
+            wasmtime_grateos_common::add_to_linker::<Host, RunCommand>(linker)?;
         }
 
-        // attach Lind-Multi-Process-Context to the host
+        // attach GrateOS-Multi-Process-Context to the host
         {
             let linker = match linker {
                 CliLinker::Core(linker) => linker,
-                _ => bail!("lind-multi-process does not support components yet"),
+                _ => bail!("grateos-multi-process does not support components yet"),
             };
             let module = module.unwrap_core();
 
-            store.data_mut().lind_fork_ctx = Some(LindCtx::new(
+            store.data_mut().grateos_fork_ctx = Some(GrateOSCtx::new(
                 module.clone(),
                 linker.clone(),
-                lind_manager,
+                grateos_manager,
                 self.clone(),
                 cageid,
-                |host| host.lind_fork_ctx.as_mut().unwrap(),
+                |host| host.grateos_fork_ctx.as_mut().unwrap(),
                 |host| host.fork(),
-                |run_command, path, args, cageid, lind_manager, envs| {
+                |run_command, path, args, cageid, grateos_manager, envs| {
                     let mut new_run_command = run_command.clone();
                     new_run_command.module_and_args = vec![OsString::from(path)];
                     if let Some(envs) = envs {
@@ -1130,7 +1130,7 @@ impl RunCommand {
                     for arg in args.iter().skip(1) {
                         new_run_command.module_and_args.push(OsString::from(arg));
                     }
-                    new_run_command.execute_with_lind(lind_manager.clone(), cageid)
+                    new_run_command.execute_with_grateos(grateos_manager.clone(), cageid)
                 },
             )?);
         }
@@ -1239,7 +1239,7 @@ struct Host {
     // access.
     preview2_ctx: Option<Arc<Mutex<wasmtime_wasi::preview1::WasiP1Ctx>>>,
 
-    lind_fork_ctx: Option<LindCtx<Host, RunCommand>>,
+    grateos_fork_ctx: Option<GrateOSCtx<Host, RunCommand>>,
 
     #[cfg(feature = "wasi-nn")]
     wasi_nn: Option<Arc<WasiNnCtx>>,
@@ -1274,19 +1274,19 @@ impl Host {
             None => None,
         };
 
-        // and we also want to fork the lind-common context and lind-multi-process context
-        let forked_lind_fork_ctx = match &self.lind_fork_ctx {
+        // and we also want to fork the grateos-common context and grateos-multi-process context
+        let forked_grateos_fork_ctx = match &self.grateos_fork_ctx {
             Some(ctx) => Some(ctx.fork()),
             None => None,
         };
 
-        // besides preview1_ctx, lind_common_ctx and forked_lind_fork_ctx, we do not
+        // besides preview1_ctx, grateos_common_ctx and forked_grateos_fork_ctx, we do not
         // care about other context since they are not used by glibc so we can just share
         // them between processes
         let forked_host = Self {
             preview1_ctx: forked_preview1_ctx,
             preview2_ctx: self.preview2_ctx.clone(),
-            lind_fork_ctx: forked_lind_fork_ctx,
+            grateos_fork_ctx: forked_grateos_fork_ctx,
             #[cfg(feature = "wasi-nn")]
             wasi_nn: self.wasi_nn.clone(),
             #[cfg(feature = "wasi-threads")]
@@ -1312,9 +1312,9 @@ impl WasiView for Host {
     }
 }
 
-impl LindHost<Host, RunCommand> for Host {
-    fn get_ctx(&self) -> LindCtx<Host, RunCommand> {
-        self.lind_fork_ctx.clone().unwrap()
+impl GrateOSHost<Host, RunCommand> for Host {
+    fn get_ctx(&self) -> GrateOSCtx<Host, RunCommand> {
+        self.grateos_fork_ctx.clone().unwrap()
     }
 }
 

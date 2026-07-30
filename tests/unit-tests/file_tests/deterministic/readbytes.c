@@ -9,7 +9,7 @@ int main()
     char buf = 0;
 
     int fd = open("test.txt", O_RDWR | O_CREAT, 0777);
-    char writebuf[] = "This is a test of the wonderful fork call in lind.";
+    char writebuf[] = "This is a test of the wonderful fork call in grateos.";
     write(fd, writebuf, sizeof(writebuf));
     close(fd);
 

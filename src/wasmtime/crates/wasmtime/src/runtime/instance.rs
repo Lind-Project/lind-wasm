@@ -23,19 +23,19 @@ use sysdefs::constants::fs_const::{
 };
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use sysdefs::constants::{
-    DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE, lind_platform_const,
+    DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE, grateos_platform_const,
 };
-use sysdefs::lind_log;
+use sysdefs::grateos_log;
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, TableIndex, TagIndex, TypeTrace,
 };
-use wasmtime_lind_utils::{LindGOT, round_up_size};
+use wasmtime_grateos_utils::{GrateOSGOT, round_up_size};
 
 use super::Val;
 
-/// Describes how a Lind-Wasm instance is being instantiated.
+/// Describes how a GrateOS-Wasm instance is being instantiated.
 ///
 /// - `InstantiateFirst`:
 ///     The first (root) Wasm instance in a process.  
@@ -316,22 +316,22 @@ impl Instance {
         Ok(instance)
     }
 
-    /// This is a lind-wasm helper for thread creation that mirrors `new_started_impl`, but also returns the `InstanceId`.
+    /// This is a grateos-wasm helper for thread creation that mirrors `new_started_impl`, but also returns the `InstanceId`.
     ///
-    /// Thread creation in lind-wasm does not require the cage-level linear-memory initialization performed by
-    /// `new_started_impl_with_lind`: threads are created within an already-established cage address space, so no vmmap
+    /// Thread creation in grateos-wasm does not require the cage-level linear-memory initialization performed by
+    /// `new_started_impl_with_grateos`: threads are created within an already-established cage address space, so no vmmap
     /// initialization, mmap setup, or fork-based memory cloning is needed here, but one thread still needs to create
-    /// a new instance and store. Moreover, lind-3i still requires access to the `InstanceId` so it can later obtain
+    /// a new instance and store. Moreover, grateos-3i still requires access to the `InstanceId` so it can later obtain
     /// the corresponding `VMContext` pointer and recover the correct store/instance runtime state for that
-    /// `(cage_id, thread_id)` entry. See more details in [lind-3i/src/lib.rs].
+    /// `(cage_id, thread_id)` entry. See more details in [grateos-3i/src/lib.rs].
     ///
     /// We introduce this separate function to minimize the surface area of changes to upstream Wasmtime code: modifying
-    /// `new_started_impl` would require touching additional Wasmtime paths that lind-wasm does not need. Instead, this
-    /// helper provides the exact behavior required for lind thread instantiation with minimal disruption.
+    /// `new_started_impl` would require touching additional Wasmtime paths that grateos-wasm does not need. Instead, this
+    /// helper provides the exact behavior required for grateos thread instantiation with minimal disruption.
     ///
     /// This function creates the instance, runs the start function if present, and returns `(Instance, InstanceId)` for
     /// `VMContext` registration and later lookup.
-    pub(crate) async unsafe fn new_started_impl_with_lind_thread<T>(
+    pub(crate) async unsafe fn new_started_impl_with_grateos_thread<T>(
         store: &mut StoreContextMut<'_, T>,
         module: &Module,
         imports: Imports<'_>,
@@ -352,21 +352,21 @@ impl Instance {
         Ok((instance, 0, instanceid))
     }
 
-    /// This is a lind-wasm extension of Wasmtime’s internal instance-creation path.
+    /// This is a grateos-wasm extension of Wasmtime’s internal instance-creation path.
     ///
-    /// Unlike upstream `new_started_impl`, this function performs lind-specific
+    /// Unlike upstream `new_started_impl`, this function performs grateos-specific
     /// linear-memory initialization so that newly created cages obey RawPOSIX /
-    /// microvisor-managed memory semantics. In lind-wasm, linear memory must be
+    /// microvisor-managed memory semantics. In grateos-wasm, linear memory must be
     /// established inside the microvisor layer rather than through Wasmtime’s
     /// default memory-initialization path, so the upstream behavior is
-    /// intentionally bypassed and replaced with lind-specific setup logic.
+    /// intentionally bypassed and replaced with grateos-specific setup logic.
     ///
     /// This function returns `(Instance, stack_arena_base, InstanceId)` rather than
     /// only `Instance`.
     ///
     /// - `InstanceId` is needed later to recover the corresponding `VMContext` and
     ///   re-enter the correct runtime state during continuation-sensitive or
-    ///   cross-cage / cross-grate execution transfers. See `lind-3i/src/lib.rs`
+    ///   cross-cage / cross-grate execution transfers. See `grateos-3i/src/lib.rs`
     ///   for more details.
     /// - `stack_arena_base` records the base of the grate-worker stack arena
     ///   reserved inside linear memory for this instance.
@@ -383,13 +383,13 @@ impl Instance {
     ///
     ///   The stack-arena setup is required because multiple Wasmtime stores may be
     ///   attached to the same underlying linear memory. As a result, different
-    ///   grate workers cannot share one stack region. Instead, lind-wasm reserves
+    ///   grate workers cannot share one stack region. Instead, grateos-wasm reserves
     ///   a stack arena and later partitions it into per-worker stack slots, so
     ///   each worker executes with its own independent Wasm stack range even
     ///   though workers share the same linear-memory object.
     ///
     /// - `InstantiateChild { parent_cageid, child_cageid }` corresponds to fork
-    ///   semantics. After discovering the child instance’s memory base, lind-wasm
+    ///   semantics. After discovering the child instance’s memory base, grateos-wasm
     ///   clones the parent’s memory mappings / state into the child via
     ///   `fork_vmmap`, so the child begins with the same address-space contents as
     ///   the parent.
@@ -399,12 +399,12 @@ impl Instance {
     ///   through RawPOSIX and publishing the resolved base address through
     ///   `memory_base`.
     ///
-    /// After lind-specific memory setup is complete, the function creates the raw
+    /// After grateos-specific memory setup is complete, the function creates the raw
     /// instance, runs the module start function when required, performs dylink
     /// relocation / constructor steps when applicable, and returns the created
     /// `Instance`, the computed `stack_arena_base`, and the associated
     /// `InstanceId`.
-    pub(crate) async unsafe fn new_started_impl_with_lind<T>(
+    pub(crate) async unsafe fn new_started_impl_with_grateos<T>(
         store: &mut StoreContextMut<'_, T>,
         module: &Module,
         imports: Imports<'_>,
@@ -458,7 +458,7 @@ impl Instance {
                     let stack_size = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
                     let rounded_stack_size = round_up_size(stack_size, PAGESIZE);
 
-                    lind_log!(
+                    grateos_log!(
                         DYLINK,
                         "[debug] main module allocate {} + {} bytes",
                         rounded_stack_size,
@@ -534,7 +534,7 @@ impl Instance {
                     // constants.
                     //
                     // In other words, the worker-pool width and the per-worker stack layout are
-                    // not instance-specific; they are part of the global lind-wasm platform
+                    // not instance-specific; they are part of the global grateos-wasm platform
                     // configuration. As a result, every grate-enabled instance reserves the same
                     // total amount of stack-arena space, and worker `i` always maps to the same
                     // slot formula relative to `stack_arena_base`.
@@ -545,11 +545,11 @@ impl Instance {
                     // one a disjoint stack slot inside this shared arena.
                     stack_arena_base = round_up_size(minimal_size as u32, PAGESIZE) as u32;
 
-                    let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
-                        * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
-                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                    let stack_arena_size = grateos_platform_const::MAX_GRATE_WORKERS as usize
+                        * (grateos_platform_const::GRATE_STACK_GUARD_SIZE as usize
+                            + grateos_platform_const::GRATE_STACK_SLOT_SIZE as usize);
 
-                    lind_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
+                    grateos_platform_const::init_stack_arena_base(cageid as usize, stack_arena_base)
                         .unwrap_or_else(|e| {
                             panic!(
                                 "failed to initialize stack arena base for cageid {}: {}",
@@ -622,7 +622,7 @@ impl Instance {
                 // For child instances, the stack arena is inherited from the parent cage, and grate calls
                 // only works at static build, so we only need to fork the stack arena base if dylink is not enabled.
                 if !dylink_enabled {
-                    lind_platform_const::fork_stack_arena_base_for_child(parent_cageid as usize, child_cageid as usize)
+                    grateos_platform_const::fork_stack_arena_base_for_child(parent_cageid as usize, child_cageid as usize)
                         .unwrap_or_else(|e| {
                             panic!(
                                 "failed to fork stack arena base from parent cageid {} to child cageid {}: {}",
@@ -640,7 +640,7 @@ impl Instance {
                 let rounded_size =
                     round_up_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
                 let rounded_size = round_up_size(rounded_size, PAGESIZE);
-                lind_log!(DYLINK, "library size round to {}", rounded_size);
+                grateos_log!(DYLINK, "library size round to {}", rounded_size);
 
                 let mut addr = make_syscall(
                     cageid,                // self cageid
@@ -670,7 +670,7 @@ impl Instance {
                     *memory_base = addr;
                 }
 
-                lind_log!(DYLINK, "library memory starts at {}", addr);
+                grateos_log!(DYLINK, "library memory starts at {}", addr);
             }
         }
 
@@ -694,14 +694,14 @@ impl Instance {
                             "__wasm_apply_data_relocs",
                         )
                         .unwrap();
-                    lind_log!(DYLINK, "main module start reloc func");
+                    grateos_log!(DYLINK, "main module start reloc func");
                     let _ = reloc.call(store.as_context_mut(), ()).unwrap();
 
                     // apply tls relocations if any
                     if let Ok(init) = instance
                         .get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs")
                     {
-                        lind_log!(DYLINK, "main module start __wasm_apply_tls_relocs");
+                        grateos_log!(DYLINK, "main module start __wasm_apply_tls_relocs");
                         let _ = init.call(store.as_context_mut(), ()).unwrap();
                     }
 
@@ -1220,7 +1220,7 @@ impl Instance {
     pub fn apply_GOT_relocs<'a>(
         &'a self,
         mut store: impl AsContextMut,
-        got: Option<&LindGOT>,
+        got: Option<&GrateOSGOT>,
         table: &Table,
         memory_base: Option<u32>,
         fpcast_enabled: bool,
@@ -1282,7 +1282,7 @@ impl Instance {
                     // Cache the resolved table index; also updates the GOT cell if it exists.
                     let got_inner = got.as_ref().unwrap();
                     if got_inner.cache_symbol(final_name, index as u32) {
-                        lind_log!(
+                        grateos_log!(
                             DYLINK,
                             "[debug] update GOT.func.{} to {}",
                             final_name,
@@ -1295,7 +1295,7 @@ impl Instance {
 
         // Patch GOT memory entries for exported globals.
         // The exported global value is treated as a module-relative offset; we relocate it by
-        // adding the resolved shared-memory base, producing an absolute address in Lind.
+        // adding the resolved shared-memory base, producing an absolute address in GrateOS.
         // We cache every i32 global unconditionally so that a later-loaded consumer (dlopen)
         // whose GOT cell is created after this module was loaded can still be resolved.
         if need_update_got {
@@ -1305,7 +1305,7 @@ impl Instance {
                 let val = global.get(&mut store);
                 // GOT.mem entries are always i32 in the Wasm PIC ABI; skip any other type.
                 let Some(raw) = val.i32() else {
-                    lind_log!(
+                    grateos_log!(
                         DYLINK,
                         "Warning: GOT.mem symbol {:?} has unexpected type {:?}; expected i32",
                         name,
@@ -1317,13 +1317,13 @@ impl Instance {
                 let val = match (raw as u32).checked_add(memory_base) {
                     Some(val) => val,
                     None => {
-                        lind_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
+                        grateos_log!(DYLINK, "Warning: GOT entry {} overflow u32", name);
                         continue;
                     }
                 };
                 // Cache the resolved address; also updates the GOT cell if it already exists.
                 if got_inner.cache_symbol(&name, val) {
-                    lind_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
+                    grateos_log!(DYLINK, "update GOT.mem.{} to {}", name, val);
                 }
             }
         }
@@ -1641,7 +1641,7 @@ impl<T: 'static> InstancePre<T> {
     }
 
     #[allow(missing_docs)]
-    pub fn instantiate_with_lind_thread(
+    pub fn instantiate_with_grateos_thread(
         &self,
         mut store: impl AsContextMut<Data = T>,
         no_start: bool,
@@ -1660,7 +1660,7 @@ impl<T: 'static> InstancePre<T> {
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
         vm::assert_ready(unsafe {
-            Instance::new_started_impl_with_lind_thread(
+            Instance::new_started_impl_with_grateos_thread(
                 &mut store,
                 &self.module,
                 imports.as_ref(),
@@ -1670,7 +1670,7 @@ impl<T: 'static> InstancePre<T> {
     }
 
     #[allow(missing_docs)]
-    pub fn instantiate_with_lind(
+    pub fn instantiate_with_grateos(
         &self,
         mut store: impl AsContextMut<Data = T>,
         instantiate_type: InstantiateType,
@@ -1689,7 +1689,7 @@ impl<T: 'static> InstancePre<T> {
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
         vm::assert_ready(unsafe {
-            Instance::new_started_impl_with_lind(
+            Instance::new_started_impl_with_grateos(
                 &mut store,
                 &self.module,
                 imports.as_ref(),

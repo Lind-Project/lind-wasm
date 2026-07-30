@@ -19,7 +19,7 @@
 #include <sys/epoll.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 libc_hidden_proto (epoll_create1)
 

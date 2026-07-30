@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 int
 __dup2 (int fd, int fd2)

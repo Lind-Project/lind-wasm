@@ -169,7 +169,7 @@ __libc_setup_tls (void)
   tlsblock = (void *) (((uintptr_t) tlsblock + max_align - 1)
 		       & ~(max_align - 1));
 
-  // lind-wasm: remove DTV related logic since lind do not use DTV
+  // grateos-wasm: remove DTV related logic since grateos do not use DTV
 
   /* Update the executable's link map with enough information to make
      the TLS routines happy.  */

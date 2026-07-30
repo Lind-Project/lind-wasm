@@ -127,7 +127,7 @@ make_request (int fd, pid_t pid)
 #endif
   char buf[buf_size];
 
-  /* Lind: use designated initializers — struct iovec has padding fields
+  /* GrateOS: use designated initializers — struct iovec has padding fields
      for wasm32-to-host layout matching, so positional init is wrong.  */
   struct iovec iov = { .iov_base = buf, .iov_len = buf_size };
 

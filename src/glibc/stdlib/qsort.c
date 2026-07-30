@@ -686,7 +686,7 @@ __qsort_internal (void *const pbase, size_t total_elems, size_t size,
 }
 
 /*
- * lind-wasm:
+ * grateos-wasm:
  * In C, it's legal to cast a function pointer to another type (even with fewer
  * parameters) and call it with the "wrong" number of arguments. glibc's qsort
  * implementation relies on this trick.

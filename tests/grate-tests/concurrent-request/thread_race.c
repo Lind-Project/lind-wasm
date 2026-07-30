@@ -3,7 +3,7 @@
  * Spawns NUM_THREADS threads and each performs CALLS_PER_THREAD geteuid() calls. 
  *
  * Pair with: thread_race_grate.c
- * Run: lind-wasm thread_race_grate.cwasm thread_race.cwasm
+ * Run: grateos-wasm thread_race_grate.cwasm thread_race.cwasm
  */
 #include <stdio.h>
 #include <stdlib.h>

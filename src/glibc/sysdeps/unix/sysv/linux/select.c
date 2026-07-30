@@ -22,7 +22,7 @@
 #include <errno.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Check the first NFDS descriptors each in READFDS (if not NULL) for read
@@ -42,9 +42,9 @@ __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (timeout),
 		       NOTUSED, TRANSLATE_ERRNO_ON);
 
-  // Lind-Wasm: Original glibc code removed for compatibility
+  // GrateOS-Wasm: Original glibc code removed for compatibility
   // to find original source code refer to (2.39.9000) at
-  // (/home/lind-wasm/glibc/sysdeps/unix/sysv/linux/select.c):(35-138)
+  // (/home/grateos-wasm/glibc/sysdeps/unix/sysv/linux/select.c):(35-138)
 }
 
 #if __TIMESIZE != 64

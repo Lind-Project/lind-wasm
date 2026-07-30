@@ -24,9 +24,9 @@
 
 # We should be able to find the translation right at the beginning.
 TEXTDOMAIN=libc
-TEXTDOMAINDIR=/home/dennis/Documents/lind-wasm/glibc/target/share/locale
+TEXTDOMAINDIR=/home/dennis/Documents/grateos-wasm/glibc/target/share/locale
 
-RTLDLIST=/home/dennis/Documents/lind-wasm/glibc/target/lib/ld-linux.so.2
+RTLDLIST=/home/dennis/Documents/grateos-wasm/glibc/target/lib/ld-linux.so.2
 warn=
 bind_now=
 verbose=

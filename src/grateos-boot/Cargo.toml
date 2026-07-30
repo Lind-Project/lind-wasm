@@ -1,0 +1,49 @@
+[package]
+name = "grateos-boot"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["fdtables-dashmaparray"]
+disable_signals = ["cage/disable_signals", "wasmtime-grateos-multi-process/disable_signals"]
+secure = ["typemap/secure"]
+grateos_debug = ["wasmtime-grateos-common/grateos_debug", "cage/grateos_debug" ]
+grateos-logging = [
+    "cage/grateos-logging",
+    "rawposix/grateos-logging",
+    "wasmtime-grateos-common/grateos-logging",
+    "wasmtime-grateos-multi-process/grateos-logging",
+    "wasmtime-grateos-dylink/grateos-logging",
+    "wasmtime-grateos-utils/grateos-logging",
+    "threei/grateos-logging",
+    "wasmtime/grateos-logging",
+]
+debug-grate-calls = ["wasmtime-grateos-3i/debug-grate-calls"]
+# Use the old asyncify-unwind/rewind based setjmp/longjmp instead of the default wasm-EH
+# based one. Requires glibc and user programs compiled without -fwasm-exceptions
+# (set GRATEOS_ASYNCIFY_SETJMP=1 when running the build scripts).
+asyncify-setjmp = ["wasmtime/asyncify-setjmp", "wasmtime-grateos-common/asyncify-setjmp"]
+# Pass-through selectors for the fdtables backend. Pick exactly one.
+fdtables-dashmaparray = ["rawposix/fdtables-dashmaparray"]
+fdtables-dashmapvec = ["rawposix/fdtables-dashmapvec"]
+fdtables-muthashmax = ["rawposix/fdtables-muthashmax"]
+fdtables-vanilla = ["rawposix/fdtables-vanilla"]
+
+[dependencies]
+wasmtime-grateos-common = { path = "../wasmtime/crates/grateos-common" }
+wasmtime-grateos-dylink = { path = "../wasmtime/crates/grateos-dylink" }
+wasmtime-grateos-multi-process = { path = "../wasmtime/crates/grateos-multi-process" }
+wasmtime-grateos-utils = { path = "../wasmtime/crates/grateos-utils" }
+rawposix = { path = "../wasmtime/crates/rawposix" }
+cage = { path = "../wasmtime/crates/cage" }
+threei = { path = "../wasmtime/crates/threei" }
+sysdefs = { path = "../wasmtime/crates/sysdefs" }
+typemap = { path = "../wasmtime/crates/typemap" }
+wasmtime-grateos-3i = { path = "../wasmtime/crates/grateos-3i" }
+wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc-null", "threads", "demangle", "addr2line", "cache", "anyhow"], default-features = false }
+wasmtime-wasi = { version = "23.0.0", features = ["preview1"] , default-features = false }
+
+anyhow = { version = "1.0.66", default-features = false }
+clap = { version = "4", features = ["derive"] }
+cfg-if = "1.0"
+libc = "0.2"

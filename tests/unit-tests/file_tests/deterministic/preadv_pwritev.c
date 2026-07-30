@@ -39,7 +39,7 @@ int main(void) {
     assert(memcmp(rbuf2, "world", 5) == 0);
 
     /* pwritev at non-zero offset */
-    char buf3[] = "LIND";
+    char buf3[] = "GRATEOS";
     struct iovec wv2;
     wv2.iov_base = buf3;
     wv2.iov_len = strlen(buf3);
@@ -58,7 +58,7 @@ int main(void) {
     fv.iov_len = 11;
     nr = preadv(fd, &fv, 1, 0);
     assert(nr == 11);
-    assert(memcmp(full, "hello LINDd", 11) == 0);
+    assert(memcmp(full, "hello GRATEOSd", 11) == 0);
 
     close(fd);
     unlink(path);

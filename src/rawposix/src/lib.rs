@@ -1,7 +1,7 @@
-// RawPOSIX Library - Core POSIX system call implementations for Lind-WASM
+// RawPOSIX Library - Core POSIX system call implementations for GrateOS-WASM
 //
 // This library provides POSIX-compliant system call implementations that operate
-// within the Lind-WASM sandbox environment using the 3i (Three Interposition) system.
+// within the GrateOS-WASM sandbox environment using the 3i (Three Interposition) system.
 
 pub mod fs_calls;
 pub mod init;

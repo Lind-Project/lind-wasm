@@ -330,7 +330,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
       size_t reported_guardsize;
       size_t reqsize;
       void *mem;
-      // lind-wasm: deleted PROT_EXEC since lind disallows PROT_EXEC mapping
+      // grateos-wasm: deleted PROT_EXEC since grateos disallows PROT_EXEC mapping
       const int prot = (PROT_READ | PROT_WRITE);
 
       /* Adjust the stack size for alignment.  */
@@ -437,7 +437,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  /* Don't allow setxid until cloned.  */
 	  pd->setxid_futex = -1;
 
-    // lind-wasm: glibc's original TLS initialization depends on ELF header
+    // grateos-wasm: glibc's original TLS initialization depends on ELF header
     // but wasm file does not have any ELF header for them to parse
     // original code removed here due to this reason
 

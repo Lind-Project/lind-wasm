@@ -27,7 +27,7 @@
 
 #ifndef _ASM
 
-// lind-wasm: see coments at glibc/target/include/bits/setjmp.h for more info
+// grateos-wasm: see coments at glibc/target/include/bits/setjmp.h for more info
 typedef long int __jmp_buf[8];
 
 #endif

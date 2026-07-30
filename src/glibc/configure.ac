@@ -877,7 +877,7 @@ dnl We are done with glob and regexp uses of [ and ]; return to autoconf.
 changequote([,])dnl
 
 # Find what sysdep directories exist.
-sysnames="sysdeps/lind "
+sysnames="sysdeps/grateos "
 for b in $base ''; do
   for m0 in $mach ''; do
     for v in /$vendor ''; do

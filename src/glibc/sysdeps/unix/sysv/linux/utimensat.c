@@ -22,12 +22,12 @@
 #include <time.h>
 #include <kernel-features.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Helper function defined for easy reusage of the code which calls utimensat.
 
-   Lind-specific: route through MAKE_LEGACY_SYSCALL with translated guest
+   GrateOS-specific: route through MAKE_LEGACY_SYSCALL with translated guest
    pointers so the host (rawposix or a forwarding grate) sees host
    addresses for both `file` and the times buffer.  Both pointers may be
    NULL — `file == NULL` means "operate on `fd` itself" (the futimens

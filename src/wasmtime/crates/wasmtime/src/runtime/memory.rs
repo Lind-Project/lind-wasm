@@ -1044,7 +1044,7 @@ impl SharedMemory {
         SharedMemory { vm, engine }
     }
 
-    /// lind-wasm: get the base address of this VM linear memory as a raw `u64`.
+    /// grateos-wasm: get the base address of this VM linear memory as a raw `u64`.
     pub fn get_memory_base(&self) -> u64 {
         let ptr = self.vm.vmmemory_ptr();
         // SAFETY: ptr is a valid VMMemoryDefinition pointer owned by this SharedMemory

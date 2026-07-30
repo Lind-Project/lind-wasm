@@ -123,10 +123,10 @@ use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::hash::DefaultHasher;
-use sysdefs::lind_debug_panic;
+use sysdefs::grateos_debug_panic;
 use wasmtime_environ::GlobalIndex;
 use wasmtime_environ::{DefinedGlobalIndex, DefinedTableIndex, EntityRef, TripleExt};
-use wasmtime_lind_utils::symbol_table::{SymbolMap, SymbolTable};
+use wasmtime_grateos_utils::symbol_table::{SymbolMap, SymbolTable};
 
 mod context;
 pub use self::context::*;
@@ -909,7 +909,7 @@ impl<T> Store<T> {
     /// Creates a new [`StoreOpaque`] to be associated with the given [`Engine`],
     /// accepting an explicit [`SymbolTable`] for preloaded library symbols.
     ///
-    /// This is a lind-specific constructor used when a cage already has a
+    /// This is a grateos-specific constructor used when a cage already has a
     /// symbol table that should be shared with the store (e.g., after fork or
     /// when creating a thread store).
     pub fn new_inner(engine: &Engine, symbol_table: SymbolTable) -> Result<StoreOpaque> {
@@ -972,7 +972,7 @@ impl<T> Store<T> {
     /// Creates a new [`Store`] to be associated with the given [`Engine`] and
     /// `data` provided, using a pre-built [`StoreOpaque`].
     ///
-    /// This is used by lind after `new_inner` to wrap the opaque store with
+    /// This is used by grateos after `new_inner` to wrap the opaque store with
     /// the user's `T` data.
     pub fn new_with_inner(engine: &Engine, data: T, store_inner: StoreOpaque) -> Result<Self> {
         let mut inner = try_new::<Box<_>>(StoreInner {
@@ -1754,7 +1754,7 @@ impl<'a, T> StoreContextMut<'a, T> {
             .iter()
             .find(|(n, _)| n == &name)
         {
-            lind_debug_panic!(
+            grateos_debug_panic!(
                 "[register_named_instance] wasm module with same name \"{}\" detected, currently not supported",
                 name
             );

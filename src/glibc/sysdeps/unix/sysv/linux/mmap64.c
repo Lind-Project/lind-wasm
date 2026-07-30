@@ -22,7 +22,7 @@
 #include <sysdep.h>
 #include <mmap_internal.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 // Fix: Do NOT translate addr - it's a guest virtual address, not a data pointer.

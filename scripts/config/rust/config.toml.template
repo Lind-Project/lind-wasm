@@ -2,7 +2,7 @@
 target = "wasm32-wasip1"
 
 [target.wasm32-wasip1]
-linker = "/home/lind-wasm/scripts/wasip1-clang.sh"
+linker = "/home/grateos-wasm/scripts/wasip1-clang.sh"
 rustflags = [
   "-C", "link-self-contained=no",
 

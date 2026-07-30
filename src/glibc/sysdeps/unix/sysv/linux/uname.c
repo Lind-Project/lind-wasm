@@ -2,7 +2,7 @@
 #include <sysdep-cancel.h>
 #include <sys/utsname.h>
 
-/* Hardcoded uname values for Lind-Wasm environment
+/* Hardcoded uname values for GrateOS-Wasm environment
    TODO: These should eventually be retrieved from the runtime environment */
 #define UNAME_SYSNAME "Linux"
 #define UNAME_RELEASE "unknown"
@@ -12,7 +12,7 @@
 int
 __GI___uname (struct utsname *name)
 {
-  // lind-wasm: copied from posix/uname.c
+  // grateos-wasm: copied from posix/uname.c
   int save;
 
   if (name == NULL)

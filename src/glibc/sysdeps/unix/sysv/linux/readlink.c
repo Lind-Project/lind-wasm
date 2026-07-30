@@ -21,7 +21,7 @@
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
 #include <errno.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Read the contents of the symbolic link PATH into no more than
@@ -31,7 +31,7 @@
 * Edit Note:
 * Linux kernel has two different implementations for `readlink` and `readlinkat` syscall.
 * In original glibc implementaion, there was only one entry point and `readlinkat` will be redirected through `readlink`, 
-* and kernel has different callnums for them so in lind-wasm, we have separately implemented `readlink` and `readlinkat`.
+* and kernel has different callnums for them so in grateos-wasm, we have separately implemented `readlink` and `readlinkat`.
 */
 ssize_t
 __readlink (const char *path, char *buf, size_t len)

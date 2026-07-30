@@ -22,7 +22,7 @@
 #include <socketcall.h>
 #include <shlib-compat.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 ssize_t
@@ -32,7 +32,7 @@ __libc_sendmsg (int fd, const struct msghdr *msg, int flags)
 
   /* Build host iov array with translated iov_base pointers.  */
   struct iovec host_iov[iovcnt];
-  __lind_translate_iov (msg->msg_iov, host_iov, iovcnt);
+  __grateos_translate_iov (msg->msg_iov, host_iov, iovcnt);
 
   /* Build host msghdr with translated pointers using split-pointer trick.  */
   struct msghdr host_msg;

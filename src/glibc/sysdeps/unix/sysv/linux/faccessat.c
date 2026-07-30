@@ -23,10 +23,10 @@
 #include <sys/stat.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: route faccessat through 3i to RawPOSIX's faccessat_syscall.
+/* GrateOS: route faccessat through 3i to RawPOSIX's faccessat_syscall.
    The kernel faccessat doesn't accept any flags except 0; the userspace
    AT_EACCESS / AT_SYMLINK_NOFOLLOW emulation done in upstream glibc via
    stat+euid is left to the host's libc::faccessat.  */

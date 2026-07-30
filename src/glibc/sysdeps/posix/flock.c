@@ -24,7 +24,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 /* Apply or remove an advisory lock, according to OPERATION,
    on the file FD refers to.  */

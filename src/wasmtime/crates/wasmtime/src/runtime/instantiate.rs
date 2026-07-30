@@ -95,12 +95,12 @@ impl CompiledModule {
         self.module.module_index
     }
 
-    /// lind-wasm: retrieve dynamic loading information
+    /// grateos-wasm: retrieve dynamic loading information
     pub fn dylink_mem_info(&self) -> Option<&DylinkMemInfo> {
         self.module.dylink_mem_info.as_ref()
     }
 
-    /// lind-wasm: retrieve dynamic loading information
+    /// grateos-wasm: retrieve dynamic loading information
     pub fn dylink_import_info(&self) -> Option<&DylinkImportInfo> {
         self.module.dylink_import_info.as_ref()
     }

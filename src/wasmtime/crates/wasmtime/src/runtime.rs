@@ -121,7 +121,7 @@ pub use vm::{PoolConcurrencyLimitError, PoolingAllocatorMetrics};
 #[allow(missing_docs)]
 pub use vm::{VMContext, VMOpaqueContext};
 
-// lind-wasm: asyncify state machine for setjmp/longjmp and signal handling
+// grateos-wasm: asyncify state machine for setjmp/longjmp and signal handling
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AsyncifyState {
@@ -130,7 +130,7 @@ pub enum AsyncifyState {
     Rewind(i32),
 }
 
-// lind-wasm: action to take after returning from wasm
+// grateos-wasm: action to take after returning from wasm
 #[allow(missing_docs)]
 pub enum OnCalledAction {
     InvokeAgain,
@@ -138,7 +138,7 @@ pub enum OnCalledAction {
     Trap(crate::Error),
 }
 
-// lind-wasm: per-signal asyncify callstack data
+// grateos-wasm: per-signal asyncify callstack data
 #[allow(missing_docs)]
 #[derive(Clone)]
 pub struct SignalAsyncifyData {

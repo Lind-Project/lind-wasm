@@ -12,7 +12,7 @@ pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
 use sysdefs::constants::err_const::Errno;
-pub use sysdefs::constants::lind_platform_const::PATH_MAX;
+pub use sysdefs::constants::grateos_platform_const::PATH_MAX;
 pub use sysdefs::constants::{err_const, fs_const};
 
 /// Convert data type from `&str` to `PathBuf`

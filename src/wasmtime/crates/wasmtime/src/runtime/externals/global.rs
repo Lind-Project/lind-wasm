@@ -425,14 +425,14 @@ impl Global {
         self.definition(store).as_ptr().addr()
     }
 
-    /// lind-wasm: retrieve a raw mutable pointer to this global's storage as u64.
+    /// grateos-wasm: retrieve a raw mutable pointer to this global's storage as u64.
     pub fn get_handler_as_u64(&self, mut store: impl AsContextMut) -> *mut u64 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
         let mut def = self.definition(&store);
         unsafe { def.as_mut().as_u64_mut() as *mut u64 }
     }
 
-    /// lind-wasm: retrieve a raw mutable pointer to this global's storage as u32.
+    /// grateos-wasm: retrieve a raw mutable pointer to this global's storage as u32.
     pub fn get_handler_as_u32(&self, mut store: impl AsContextMut) -> *mut u32 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
         let mut def = self.definition(&store);

@@ -90,7 +90,7 @@ __check_native (uint32_t a1_index, int *a1_native,
   memset (&nladdr, '\0', sizeof (nladdr));
   nladdr.nl_family = AF_NETLINK;
 
-  /* Lind: use designated initializers — struct iovec has padding fields
+  /* GrateOS: use designated initializers — struct iovec has padding fields
      for wasm32-to-host layout matching, so positional init is wrong.  */
   struct iovec iov = { .iov_base = buf, .iov_len = buf_size };
 

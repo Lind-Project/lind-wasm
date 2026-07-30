@@ -1,10 +1,10 @@
 /*
 * Before running this test:
 *   1. Make sure to compile the target program (hello) using your desired toolchain.
-*   2. Copy the compiled binary to $LIND_FS_ROOT.
+*   2. Copy the compiled binary to $GRATEOS_FS_ROOT.
 *   3. IMPORTANT: Rename the binary to "hello" (no .wasm or other extensions).
 *
-* The executable must be accessible at: $LIND_FS_ROOT/hello
+* The executable must be accessible at: $GRATEOS_FS_ROOT/hello
 */
 
 #include <sys/types.h>

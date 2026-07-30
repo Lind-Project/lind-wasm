@@ -21,10 +21,10 @@
 #include <sysdep.h>
 #include <errno.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: route renameat through 3i to RawPOSIX's renameat_syscall.  */
+/* GrateOS: route renameat through 3i to RawPOSIX's renameat_syscall.  */
 int
 __renameat (int oldfd, const char *old, int newfd, const char *new)
 {

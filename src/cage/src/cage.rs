@@ -11,11 +11,11 @@ pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
 pub use std::sync::{Arc, LazyLock};
-use sysdefs::constants::lind_platform_const::MAX_CAGEID;
+use sysdefs::constants::grateos_platform_const::MAX_CAGEID;
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
 use sysdefs::constants::SIGCHLD;
 use sysdefs::data::fs_struct::SigactionStruct;
-use sysdefs::lind_log;
+use sysdefs::grateos_log;
 
 /// Represents how a cage terminated, mirroring the two primary POSIX
 /// process termination modes.
@@ -28,7 +28,7 @@ use sysdefs::lind_log;
 /// before it is encoded into the traditional POSIX wait status returned
 /// by `waitpid`.
 ///
-/// TODO: Currently, Lind-Wasm only supports normal exit and signal
+/// TODO: Currently, GrateOS-Wasm only supports normal exit and signal
 /// termination. Job-control states such as `Stopped` and `Continued`
 /// are not yet implemented.
 #[derive(Debug, Clone, Copy)]
@@ -120,7 +120,7 @@ pub fn cage_record_exit_status(cageid: u64, status: ExitStatus) {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
-            lind_log!("cage_record_exit_status: cage {} not found", cageid);
+            grateos_log!("cage_record_exit_status: cage {} not found", cageid);
 
             return;
         }
@@ -156,7 +156,7 @@ pub struct Cage {
     pub sigset: AtomicU64,
     // pending_signals are signals that are pending to be handled
     pub pending_signals: RwLock<Vec<i32>>,
-    // epoch_handler maps Lind thread IDs (key: i32) to raw pointers of
+    // epoch_handler maps GrateOS thread IDs (key: i32) to raw pointers of
     // each thread's Wasmtime epoch interruption state (value:
     // AtomicPtr<u64>). It is used by epoch_kill_all during cage-wide
     // termination, such as exit_group or signal-triggered exits, to mark
@@ -166,7 +166,7 @@ pub struct Cage {
     // together with os_tid_map, which interrupts threads blocked in host
     // syscalls so they can re-enter Wasm and observe the epoch update.
     pub epoch_handler: DashMap<i32, AtomicPtr<u64>>,
-    // os_tid_map maps Lind thread IDs (key: i32) to OS thread IDs from
+    // os_tid_map maps GrateOS thread IDs (key: i32) to OS thread IDs from
     // gettid (value: i64). Used by epoch_kill_all to send SIGUSR2 to
     // threads blocked in host syscalls, interrupting them so they can
     // re-enter wasm and see the epoch kill.
@@ -177,7 +177,7 @@ pub struct Cage {
     // The interval_timer can serve as a source for triggering signals and works together with signalhandler
     // and sigset to manage and handle signals. The design of the interval_timer supports periodic triggering,
     // simulating operations in Linux that need to run at regular intervals. It assists in implementing setitimer()
-    // in RawPOSIX, and by triggering lind_kill_from_id when the interval_timer expires
+    // in RawPOSIX, and by triggering grateos_kill_from_id when the interval_timer expires
     // (implemented in src/interface/timer.rs), it facilitates the implementation of signal handling in rawposix
     // for the corresponding Cage.
     pub interval_timer: IntervalTimer,
@@ -248,7 +248,7 @@ pub struct Cage {
     /// (backup VMContexts) when the main instance exits, rather than
     /// just waiting for in-flight calls to drain.  This would likely
     /// require epoch-based interruption of backup VMContext instances.
-    /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
+    /// Could also be moved to wasmtime/crate/grateos-3i if grate_inflight
     /// tracking is considered a VMContext-level concern.
     pub grate_inflight: AtomicU64,
 }
@@ -394,7 +394,7 @@ pub fn cage_finalize(cageid: u64) {
                     exit_code: zombie_status,
                 });
             }
-            crate::signal::signal::lind_send_signal(cage.parent, SIGCHLD);
+            crate::signal::signal::grateos_send_signal(cage.parent, SIGCHLD);
         }
     }
 

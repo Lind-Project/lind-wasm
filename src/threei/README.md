@@ -1,7 +1,7 @@
 # 3i (ThreeI) Interface 
 
 ## Overview
-This module describes the intercage interposition interface -- 3i (also pronounced "Three eye"), the means by which system calls and other inter-cage calls are routed for the Lind project.  3i enables call customization and system call filtering without modifying the source code of kernels or microkernels. It achieves this by providing a syscall table with customized jump endpoints for each cage/grate.
+This module describes the intercage interposition interface -- 3i (also pronounced "Three eye"), the means by which system calls and other inter-cage calls are routed for the GrateOS project.  3i enables call customization and system call filtering without modifying the source code of kernels or microkernels. It achieves this by providing a syscall table with customized jump endpoints for each cage/grate.
 
 To motivate the need for 3i, consider the desire to add functionality like a new file system, perform system call tracing, or filter system calls in a fine grained manner.   In traditional Linux, to perform these actions one needs to either modify the kernel, use a mechanism like ptrace (which relays calls through the kernel), or similar.  3i enables the call dispatcher to directly route calls between grates or the underlying microvisor, providing increased speed, performance, and functionality.   Importantly, newly added functionality is all external to the microvisor.
 

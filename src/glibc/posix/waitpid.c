@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Wait for a child matching PID to die.

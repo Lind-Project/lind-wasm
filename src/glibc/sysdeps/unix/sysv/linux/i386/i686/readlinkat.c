@@ -3,7 +3,7 @@
 #include <errno.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Read the contents of the symbolic link PATH into no more than
@@ -11,7 +11,7 @@
    Returns the number of characters read, or -1 for errors.  */
 /*
  * Edit Note:
- * In lind-wasm, we have separately implemented readlink and readlinkat, so we
+ * In grateos-wasm, we have separately implemented readlink and readlinkat, so we
  * modified this part of the code to handle them individually.
  */
 ssize_t

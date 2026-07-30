@@ -33,11 +33,11 @@ HTML_OUTPUT = "grate_report.html"
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
 GRATE_TEST_BASE = REPO_ROOT / "tests" / "grate-tests"
-LIND_TOOL_PATH = REPO_ROOT / "scripts" / "bin"
-LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", REPO_ROOT / "lindfs")).resolve()
+GRATEOS_TOOL_PATH = REPO_ROOT / "scripts" / "bin"
+GRATEOSFS_ROOT = Path(os.environ.get("GRATEOSFS_ROOT", REPO_ROOT / "grateosfs")).resolve()
 
-GRATE_CLANG = os.environ.get("GRATE_CLANG", "lind-clang")
-GRATE_RUNNER = os.environ.get("GRATE_RUNNER", "lind-wasm")
+GRATE_CLANG = os.environ.get("GRATE_CLANG", "grateos-clang")
+GRATE_RUNNER = os.environ.get("GRATE_RUNNER", "grateos-wasm")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 
 error_types = {
@@ -137,9 +137,9 @@ class GrateTestCase:
 
 
 def resolve_module_output(source_file: Path, cwd: Path) -> Path:
-    """Resolve expected runtime module output across lind-clang modes.
+    """Resolve expected runtime module output across grateos-clang modes.
 
-    `lind-clang` (lind_compile) defaults to full mode and typically produces a
+    `grateos-clang` (grateos_compile) defaults to full mode and typically produces a
     precompiled `.cwasm` artifact. In some environments/tests a plain `.wasm`
     is executed instead. Support both and prefer the artifact that exists.
     """
@@ -278,12 +278,12 @@ def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
 
 
 def build_grate_run_cmd(grate_wasm: Path, cage_wasm: Path) -> list[str]:
-    """Build grate run command with lind_run wrapper when available.
+    """Build grate run command with grateos_run wrapper when available.
 
-    Using scripts/lind_run matches wasm harness behavior and provides the
+    Using scripts/grateos_run matches wasm harness behavior and provides the
     same sudo escalation flow in environments that require privilege.
     """
-    lind_run_wrapper = LIND_TOOL_PATH / "lind_run"
+    grateos_run_wrapper = GRATEOS_TOOL_PATH / "grateos_run"
 
     grate_wasm = Path(grate_wasm)
     cage_wasm = Path(cage_wasm)
@@ -294,8 +294,8 @@ def build_grate_run_cmd(grate_wasm: Path, cage_wasm: Path) -> list[str]:
     if "GRATE_RUNNER" in os.environ:
         return [GRATE_RUNNER, grate_arg, str(cage_wasm.name)]
 
-    if lind_run_wrapper.is_file():
-        return [str(lind_run_wrapper), grate_arg, str(cage_wasm.name)]
+    if grateos_run_wrapper.is_file():
+        return [str(grateos_run_wrapper), grate_arg, str(cage_wasm.name)]
 
     return [GRATE_RUNNER, grate_arg, str(cage_wasm.name)]
 
@@ -304,13 +304,13 @@ def run_grate_test(test: GrateTestCase, timeout_sec: int) -> tuple[str, str, int
     grate_module = resolve_module_output(test.grate_source, test.grate_source.parent)
     cage_module = resolve_module_output(test.cage_source, test.cage_source.parent)
 
-    # lind_run/lind-boot resolves inputs from lindfs. lind_compile copies the
-    # build artifact into LINDFS_ROOT, so run from that location rather than
+    # grateos_run/grateos-boot resolves inputs from grateosfs. grateos_compile copies the
+    # build artifact into GRATEOSFS_ROOT, so run from that location rather than
     # source-tree absolute paths.
-    grate_runtime_module = (LINDFS_ROOT / "grates" / grate_module.name).resolve()
-    cage_runtime_module = (LINDFS_ROOT / cage_module.name).resolve()
+    grate_runtime_module = (GRATEOSFS_ROOT / "grates" / grate_module.name).resolve()
+    cage_runtime_module = (GRATEOSFS_ROOT / cage_module.name).resolve()
 
-    # Fall back to direct module paths when lindfs copy is unavailable.
+    # Fall back to direct module paths when grateosfs copy is unavailable.
     if not grate_runtime_module.exists():
         grate_runtime_module = grate_module.resolve()
     if not cage_runtime_module.exists():

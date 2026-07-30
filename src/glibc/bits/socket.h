@@ -201,7 +201,7 @@ enum
 /* Structure describing messages sent by
    `sendmsg' and received by `recvmsg'.
 
-   Lind: padded so wasm32 layout (56 bytes) matches x86-64 host
+   GrateOS: padded so wasm32 layout (56 bytes) matches x86-64 host
    byte-for-byte on little-endian.  Pointer fields use the split-pointer
    trick (low32 + high32 padding) like struct iovec.  */
 struct msghdr

@@ -42,7 +42,7 @@ __nl_langinfo_l (nl_item item, locale_t l)
   if (index == _NL_ITEM_INDEX (_NL_LOCALE_NAME (category)))
     return (char *) l->__names[category];
 
-  /* Lind-WASM: use locale parameter directly instead of NL_CURRENT_INDIRECT
+  /* GrateOS-WASM: use locale parameter directly instead of NL_CURRENT_INDIRECT
      TLS pointers.  wasm-ld cannot handle TLS relocations against category
      symbols that may not be linked.  Using l->__locales is also more correct
      for the _l variant which takes an explicit locale parameter.  */

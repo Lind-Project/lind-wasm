@@ -24,7 +24,7 @@
 #include <sysdep-cancel.h>
 #include <not-cancel.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
@@ -42,7 +42,7 @@ __open_nocancel (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
+  // Added MAKE_SYSCALL macro to interface with GrateOS - Qianxi Chen
   return MAKE_LEGACY_SYSCALL (OPEN_SYSCALL, "syscall|open",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
 		       (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED,

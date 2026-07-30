@@ -23,10 +23,10 @@
 #include <kernel_stat.h>
 #include <stat_t64_cp.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: route via NEWFSTATAT_SYSCALL so we get true lstat (don't-follow-symlink)
+/* GrateOS: route via NEWFSTATAT_SYSCALL so we get true lstat (don't-follow-symlink)
    semantics.  Previously this used XSTAT_SYSCALL (regular stat), which followed
    symlinks — wrong, but unavoidable until fstatat existed in rawposix.  */
 int

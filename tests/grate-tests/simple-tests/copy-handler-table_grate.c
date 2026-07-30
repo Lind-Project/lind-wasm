@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <errno.h>
-#include <lind_syscall.h>
+#include <grateos_syscall.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

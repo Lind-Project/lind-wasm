@@ -21,11 +21,11 @@ WASMTESTREPORT = SCRIPT_DIR / "wasmtestreport.py"
 
 # Flags forwarded to wasmtestreport for static builds:
 #   --run static_tests            : only run tests under static_tests/
-#   --static                      : pass --static before source file in lind_compile
+#   --static                      : pass --static before source file in grateos_compile
 #   --allow-pre-compiled          : use .cwasm AOT binaries (consistent with dynamic harness)
 #   --compile-flags -pthread -lpthread : link pthread for thread/TLS tests
 #   --skip-libcpp                 : libc++ smoke runs in the dynamic wasm harness only (same
-#                                   lind_compile_cpp path either way; avoids duplicate work/HTML)
+#                                   grateos_compile_cpp path either way; avoids duplicate work/HTML)
 _STATIC_HARNESS_ARGS = [
     "--run", "static_tests",
     "--static",

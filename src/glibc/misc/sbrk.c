@@ -46,7 +46,7 @@ __sbrk (intptr_t increment)
      the kernel.  */
   bool update_brk = __curbrk == NULL;
 
-// lind-wasm: disabling this for now but may be necessary once dyn-loading is enabled?
+// grateos-wasm: disabling this for now but may be necessary once dyn-loading is enabled?
 //
 // #if defined (SHARED) && ! IS_IN (rtld)
 //   if (!__libc_initial)

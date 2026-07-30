@@ -10,7 +10,7 @@ clang+llvm-*
 #Ignore Build artifacts
 src/glibc/build/
 build/
-lindfs/
+grateosfs/
 scripts/object_lists_final/
 
 #Ignore testing results
@@ -30,5 +30,5 @@ target/
 #Ignore lockfile
 Cargo.lock
 
-#Ignore Lind runtime log file
-LIND.log
+#Ignore GrateOS runtime log file
+GRATEOS.log

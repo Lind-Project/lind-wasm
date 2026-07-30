@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::grateos_platform_const::{UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
@@ -42,7 +42,7 @@ lazy_static! {
 /// 4. **Result Conversion**: Convert kernel poll results back to virtual FDs using fdtables mapping
 /// 5. **Update User Array**: Use O(1) lookups to update original user array with results
 ///
-/// This maintains POSIX poll semantics while handling Lind's FD virtualization efficiently.
+/// This maintains POSIX poll semantics while handling GrateOS's FD virtualization efficiently.
 ///
 /// ## Arguments:
 ///     - cageid: current cage identifier.
@@ -1206,7 +1206,7 @@ pub extern "C" fn connect_syscall(
 /// The Linux `bind()` syscall assigns a local address to a socket, which is required before a socket
 /// can accept incoming connections. This implementation first converts the virtual file descriptor and
 /// socket address from the calling cage into kernel-visible forms. If the address is a UNIX domain
-/// socket (AF_UNIX), the path is rewritten to include a sandbox root (`LIND_ROOT`) to enforce proper
+/// socket (AF_UNIX), the path is rewritten to include a sandbox root (`GRATEOS_ROOT`) to enforce proper
 /// isolation within the namespace.
 ///
 /// ## Input:

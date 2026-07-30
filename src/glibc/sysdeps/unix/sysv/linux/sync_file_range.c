@@ -19,7 +19,7 @@
 #include <fcntl.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 int
 sync_file_range (int fd, __off64_t offset, __off64_t len, unsigned int flags)

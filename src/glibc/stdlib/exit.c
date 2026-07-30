@@ -23,9 +23,9 @@
 #include <set-freeres.h>
 #include "exit.h"
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
-void __lind_exit(int status) {
+void __grateos_exit(int status) {
 	MAKE_LEGACY_SYSCALL(EXIT_SYSCALL, "syscall|exit", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
@@ -34,9 +34,9 @@ _exit (int status)
 {
   while (1)
     {
-      /* lind-wasm: use exit_group (syscall 231) to match Linux _exit()
+      /* grateos-wasm: use exit_group (syscall 231) to match Linux _exit()
          semantics — terminates all threads in the process.  Thread-only
-         exit (syscall 60) is done via __lind_exit() in start_thread. */
+         exit (syscall 60) is done via __grateos_exit() in start_thread. */
       MAKE_LEGACY_SYSCALL(EXIT_GROUP_SYSCALL, "syscall|exit_group", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 
 #ifdef ABORT_INSTRUCTION

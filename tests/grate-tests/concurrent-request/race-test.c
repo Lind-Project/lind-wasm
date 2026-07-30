@@ -10,7 +10,7 @@
  *   - get_cage() returns None → unwrap() panics in signal.rs / fs_calls.rs
  *
  * Run with the race-test grate:
- *   lind-wasm race_test_grate.cwasm race_test.cwasm
+ *   grateos-wasm race_test_grate.cwasm race_test.cwasm
  *
  * Without the runtime fix, this should panic intermittently.
  */

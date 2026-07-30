@@ -20,7 +20,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 int
 __kill (__pid_t a,  int b)

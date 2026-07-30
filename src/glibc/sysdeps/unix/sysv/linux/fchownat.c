@@ -23,10 +23,10 @@
 #include <sys/types.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: route fchownat through 3i to RawPOSIX's fchownat_syscall.  */
+/* GrateOS: route fchownat through 3i to RawPOSIX's fchownat_syscall.  */
 int
 fchownat (int fd, const char *file, uid_t owner, gid_t group, int flag)
 {

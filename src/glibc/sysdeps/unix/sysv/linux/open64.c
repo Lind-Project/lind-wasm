@@ -23,7 +23,7 @@
 #include <sysdep-cancel.h>
 #include <shlib-compat.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
@@ -41,7 +41,7 @@ __libc_open64 (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
+  // Added MAKE_SYSCALL macro to interface with GrateOS - Qianxi Chen
   uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
   
   return MAKE_LEGACY_SYSCALL(OPEN_SYSCALL, "syscall|open", host_file, (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);

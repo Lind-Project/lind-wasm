@@ -427,7 +427,7 @@ where
 {
     let caller = store.0.default_caller();
 
-    // Lind-WASM: the previous implementation special-cased Trap::Interrupt
+    // GrateOS-WASM: the previous implementation special-cased Trap::Interrupt
     // (epoch interrupts) by printing "Terminated" and returning Ok(()).
     // That is removed because thread/process termination is now handled via
     // asyncify-based exit (exit_call + OnCalledAction), so epoch interrupts

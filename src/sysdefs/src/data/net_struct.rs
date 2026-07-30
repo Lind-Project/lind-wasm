@@ -9,7 +9,7 @@
 //! `AF_UNIX` (`sun_path[108]`) as well as for the byte payloads of `AF_INET`/`AF_INET6`.
 //!
 //! Critically, we do not operate directly on the original cage pointer/buffer when parsing or normalizing
-//! contents, because `AF_UNIX` often requires path conversion (e.g., adding or removing the lind_root
+//! contents, because `AF_UNIX` often requires path conversion (e.g., adding or removing the grateos_root
 //! prefix). Such rewrites can change length, require shifting bytes, and must respect Linux abstract-namespace
 //! vs pathname rules; doing this in the caller’s cage linear memory is risky (partial writes, aliasing,
 //! out-of-bounds on error, or subtle TOCTOU-style races if other code can observe the buffer). Instead

@@ -4,7 +4,7 @@
 unsigned int
 alarm (unsigned int seconds)
 {
-  // lind-wasm: implementation copied from sysdeps/posix/alarm.c
+  // grateos-wasm: implementation copied from sysdeps/posix/alarm.c
   struct itimerval old, new;
   unsigned int retval;
 

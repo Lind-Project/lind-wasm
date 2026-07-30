@@ -54,11 +54,11 @@ impl MmapMemory {
         minimum: usize,
         mut maximum: Option<usize>,
     ) -> Result<Self> {
-        const LIND_INTERNAL_MEMORY_RESERVATION: u64 = 10 * 1024 * 1024;
+        const GRATEOS_INTERNAL_MEMORY_RESERVATION: u64 = 10 * 1024 * 1024;
 
-        let is_lind_guest_memory = ty.shared;
-        // lind-wasm: we enable maximum use of memory at start
-        if is_lind_guest_memory {
+        let is_grateos_guest_memory = ty.shared;
+        // grateos-wasm: we enable maximum use of memory at start
+        if is_grateos_guest_memory {
             maximum = Some(super::MAX_MEMORY_SIZE);
         }
 
@@ -86,13 +86,13 @@ impl MmapMemory {
         // to reserve any extra for growth.
         //
         // If the minimum size doesn't fit within this linear memory.
-        let mut alloc_bytes = if is_lind_guest_memory {
+        let mut alloc_bytes = if is_grateos_guest_memory {
             tunables.memory_reservation
         } else {
-            tunables.lind_internal_memory_reservation
+            tunables.grateos_internal_memory_reservation
         };
 
-        let mut extra_to_reserve_on_growth = if is_lind_guest_memory {
+        let mut extra_to_reserve_on_growth = if is_grateos_guest_memory {
             tunables.memory_reservation_for_growth
         } else {
             0
@@ -122,11 +122,11 @@ impl MmapMemory {
             .and_then(|i| i.checked_add(offset_guard_bytes))
             .with_context(|| format!("cannot allocate {minimum} with guard regions"))?;
 
-        // lind-wasm: make_accessible is a no-op because rawposix manages wasm memory
+        // grateos-wasm: make_accessible is a no-op because rawposix manages wasm memory
         // permissions. Pre-allocate the entire region (including guards) as
         // PROT_READ|PROT_WRITE so both wasm memories and host-internal allocations
         // like the GC heap are accessible from the start. Guard regions being
-        // host-accessible is safe because lind-wasm relies on explicit bounds checks,
+        // host-accessible is safe because grateos-wasm relies on explicit bounds checks,
         // not SIGSEGV-on-PROT_NONE, for out-of-bounds detection.
         let mmap = Mmap::accessible_reserved(request_bytes, request_bytes)?;
 

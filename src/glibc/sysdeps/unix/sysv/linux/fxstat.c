@@ -26,7 +26,7 @@
 # include <xstatconv.h>
 # include <xstatover.h>
 # include <shlib-compat.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 # if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 

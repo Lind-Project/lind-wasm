@@ -26,7 +26,7 @@
 #include <sysdep.h>
 #include <sys/syscall.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 /* If we compile the file for use in ld.so we don't need the feature

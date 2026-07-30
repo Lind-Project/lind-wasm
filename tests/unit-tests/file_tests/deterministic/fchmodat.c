@@ -11,7 +11,7 @@
  * Note: lchmod (which routes through fchmodat with AT_SYMLINK_NOFOLLOW)
  * is intentionally NOT tested here.  On Linux the kernel returns
  * EOPNOTSUPP for fchmodat(AT_SYMLINK_NOFOLLOW) on regular files unless
- * glibc's userspace O_PATH+/proc fallback is used, which this lind glibc
+ * glibc's userspace O_PATH+/proc fallback is used, which this grateos glibc
  * port doesn't include yet.
  */
 

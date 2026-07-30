@@ -9,7 +9,7 @@ use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
 };
-use sysdefs::{lind_debug_panic, lind_log};
+use sysdefs::{grateos_debug_panic, grateos_log};
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -56,7 +56,7 @@ pub fn is_mmap_error(ret: usize) -> bool {
     }
 
     // Unaligned but not in errno range - this should never happen
-    lind_debug_panic!(
+    grateos_debug_panic!(
         "mmap returned unaligned address outside errno range: 0x{:x}",
         ret
     );
@@ -137,7 +137,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 };
                 let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
                 if ret < 0 {
-                    lind_log!(
+                    grateos_log!(
                         Default,
                         "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={}), falling back to copy_nonoverlapping",
                         get_errno(),

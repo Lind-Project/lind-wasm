@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Build glibc and generate a sysroot for clang to cross-compile lind programs
+# Build glibc and generate a sysroot for clang to cross-compile grateos programs
 #
 # IMPORTANT NOTES:
 # - call from source code repository root directory
@@ -31,8 +31,8 @@ INCLUDE_PATHS="
     -I../include
     -I$BUILD/nptl
     -I$BUILD
-    -I../sysdeps/lind
-    -I../lind_syscall
+    -I../sysdeps/grateos
+    -I../grateos_syscall
     -I../sysdeps/unix/sysv/linux/i386/i686
     -I../sysdeps/unix/sysv/linux/i386
     -I../sysdeps/unix/sysv/linux/x86/include
@@ -75,9 +75,9 @@ SYS_INCLUDE="-nostdinc -isystem ${RESOURCE_DIR}/include -isystem /usr/i686-linux
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
-# Check if LIND_DEBUG is defined (set by build.rs when `lind_debug` is enabled)
-if [ "$LIND_DEBUG" ]; then
-  DEFINES="$DEFINES -DLIND_DEBUG"
+# Check if GRATEOS_DEBUG is defined (set by build.rs when `grateos_debug` is enabled)
+if [ "$GRATEOS_DEBUG" ]; then
+  DEFINES="$DEFINES -DGRATEOS_DEBUG"
 fi
 
 # Build glibc
@@ -85,15 +85,15 @@ rm -rf $BUILD
 mkdir -p $BUILD
 cd $BUILD
 
-# In EH-based setjmp mode (default), compile glibc with -DLIND_EH_SETJMP so
+# In EH-based setjmp mode (default), compile glibc with -DGRATEOS_EH_SETJMP so
 # that __longjmp (used by setjmp/longjmp) uses __wasm_longjmp (EH-based) and
 # __libc_siglongjmp (used by sigsetjmp/siglongjmp) uses the asyncify
-# lind.lind-longjmp import — signal handlers are invoked through a Rust host
+# grateos.grateos-longjmp import — signal handlers are invoked through a Rust host
 # boundary where EH exceptions cannot propagate back, so asyncify is required
-# for sigsetjmp/siglongjmp.  Skipped when LIND_ASYNCIFY_SETJMP is set.
+# for sigsetjmp/siglongjmp.  Skipped when GRATEOS_ASYNCIFY_SETJMP is set.
 GLIBC_SETJMP_CFLAGS=""
-if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
-    GLIBC_SETJMP_CFLAGS="-DLIND_EH_SETJMP"
+if [[ -z "${GRATEOS_ASYNCIFY_SETJMP:-}" ]]; then
+    GLIBC_SETJMP_CFLAGS="-DGRATEOS_EH_SETJMP"
 fi
 
 # do configure, we enable fPIC by default for dynamic build
@@ -120,51 +120,51 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -c pthread_create.c -MD -MP -MF $BUILD/nptl/pthread_create.o.dt \
     -MT $BUILD/nptl/pthread_create.o
 
-# Compile lind_syscall.c, which contains the make_threei, register_handler, 
+# Compile grateos_syscall.c, which contains the make_threei, register_handler, 
 # and copy_data_between_cages functions
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $BUILD/lind_syscall.o \
-    -c $GLIBC/lind_syscall/lind_syscall.c
+    -o $BUILD/grateos_syscall.o \
+    -c $GLIBC/grateos_syscall/grateos_syscall.c
 
 # Compile address translation module
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/addr_translation.o \
-    -c $GLIBC/lind_syscall/addr_translation.c
+    -c $GLIBC/grateos_syscall/addr_translation.c
     
-# Compile lind debug module
+# Compile grateos debug module
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $BUILD/lind_debug.o \
-    -c $GLIBC/lind_syscall/lind_debug.c
+    -o $BUILD/grateos_debug.o \
+    -c $GLIBC/grateos_syscall/grateos_debug.c
 
-# Compile lind utils module
+# Compile grateos utils module
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $BUILD/lind_utils.o \
-    -c $GLIBC/lind_syscall/lind_utils.c
+    -o $BUILD/grateos_utils.o \
+    -c $GLIBC/grateos_syscall/grateos_utils.c
 
 # Compile crt1.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $GLIBC/lind_syscall/crt1.o \
-    -c $GLIBC/lind_syscall/crt1/crt1.c \
+    -o $GLIBC/grateos_syscall/crt1.o \
+    -c $GLIBC/grateos_syscall/crt1/crt1.c \
  || { echo "ERROR: clang failed compiling crt1.c"; exit 1; }
- [ -f "$GLIBC/lind_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/lind_syscall/crt1.o not produced"; exit 1; }
+ [ -f "$GLIBC/grateos_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/grateos_syscall/crt1.o not produced"; exit 1; }
 
 # Compile crt1.c for shared target
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -DLIND_DYLINK \
-    -o $GLIBC/lind_syscall/crt1_shared.o \
-    -c $GLIBC/lind_syscall/crt1/crt1.c \
+    -DGRATEOS_DYLINK \
+    -o $GLIBC/grateos_syscall/crt1_shared.o \
+    -c $GLIBC/grateos_syscall/crt1/crt1.c \
  || { echo "ERROR: clang failed compiling crt1.c"; exit 1; }
- [ -f "$GLIBC/lind_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/lind_syscall/crt1.o not produced"; exit 1; }
+ [ -f "$GLIBC/grateos_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/grateos_syscall/crt1.o not produced"; exit 1; }
 
 # Compile wasm EH setjmp/longjmp runtime (needs -fwasm-exceptions for __builtin_wasm_throw).
-# Skipped when LIND_ASYNCIFY_SETJMP is set (asyncify-based setjmp is used instead).
-if [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]]; then
+# Skipped when GRATEOS_ASYNCIFY_SETJMP is set (asyncify-based setjmp is used instead).
+if [[ -z "${GRATEOS_ASYNCIFY_SETJMP:-}" ]]; then
     mkdir -p $BUILD/setjmp
     $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
         $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
@@ -215,8 +215,8 @@ rm -rf "$SYSROOT"
 
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
-cp "$BUILD/lind_utils.o" "$SYSROOT/lib/wasm32-wasi/"
-cp "$BUILD/lind_debug.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$BUILD/grateos_utils.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$BUILD/grateos_debug.o" "$SYSROOT/lib/wasm32-wasi/"
 
 "$SCRIPT_DIR/make_archive.sh"
 cd $SCRIPT_DIR
@@ -228,6 +228,6 @@ cd ../../
 cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
-cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
-cp "$GLIBC/lind_syscall/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/"
-cp "$GLIBC/lind_syscall/lind_syscall.h" "$SYSROOT/include/wasm32-wasi/"
+cp "$GLIBC/grateos_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$GLIBC/grateos_syscall/crt1_shared.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$GLIBC/grateos_syscall/grateos_syscall.h" "$SYSROOT/include/wasm32-wasi/"

@@ -1,13 +1,13 @@
-For setting up Lind testing environment, see [Testing](../../docs/contribute/testing.md)
+For setting up GrateOS testing environment, see [Testing](../../docs/contribute/testing.md)
 
 ## Running Unit Tests
 
 Unit tests can be run using the test harness:
 
 ```bash
-/home/lind/lind-wasm/scripts/test/harnesses/wasmtestreport.py
+/home/grateos/grateos-wasm/scripts/test/harnesses/wasmtestreport.py
 ```
 To see available options:
 ```bash 
-/home/lind/lind-wasm/scripts/test/harnesses/wasmtestreport.py --help
+/home/grateos/grateos-wasm/scripts/test/harnesses/wasmtestreport.py --help
 ```

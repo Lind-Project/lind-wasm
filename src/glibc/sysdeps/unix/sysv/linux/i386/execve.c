@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <syscall-template.h>
 #include <stdlib.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
 int __execve (const char *__path, char *const __argv[], char *const __envp[])

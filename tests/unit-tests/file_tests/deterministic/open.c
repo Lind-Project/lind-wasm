@@ -1,6 +1,6 @@
 /*
 * Before running this test:
-*   1. Create a file named "testfile.txt" in the $LIND_FS_ROOT directory.
+*   1. Create a file named "testfile.txt" in the $GRATEOS_FS_ROOT directory.
 */
 
 #include <fcntl.h>

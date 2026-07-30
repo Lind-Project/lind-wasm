@@ -7,7 +7,7 @@
  * Pair with: thread_race.c
  */
 #include <errno.h>
-#include <lind_syscall.h>
+#include <grateos_syscall.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>

@@ -7,7 +7,7 @@
  *     trip via fstat.
  *   - UTIME_NOW / UTIME_OMIT semantics (atime advances, mtime preserved).
  *   - utimes (legacy μs API) funnels through the same __utimensat64_helper
- *     in lind-wasm glibc — exercising one legacy variant covers the funnel.
+ *     in grateos-wasm glibc — exercising one legacy variant covers the funnel.
  *
  * Catches utimensat being unimplemented (round-trips read 0) and
  * convert_statdata_to_user not copying st_atim / st_mtim / st_ctim.

@@ -1,6 +1,6 @@
 #include <setjmp.h>
 
-#ifdef LIND_EH_SETJMP
+#ifdef GRATEOS_EH_SETJMP
 
 /* EH-based setjmp mode: throw a __c_longjmp wasm exception via __wasm_longjmp
    (defined in wasm_eh_setjmp.c, compiled with -fwasm-exceptions).
@@ -15,14 +15,14 @@ void __longjmp (__jmp_buf env, int val)
 
 #else /* asyncify-based setjmp mode */
 
-int __imported_wasi_lind_longjmp(unsigned int jmp_buf, unsigned int retval) __attribute__((
-    __import_module__("lind"),
-    __import_name__("lind-longjmp")
+int __imported_wasi_grateos_longjmp(unsigned int jmp_buf, unsigned int retval) __attribute__((
+    __import_module__("grateos"),
+    __import_name__("grateos-longjmp")
 ));
 
 void __longjmp (__jmp_buf env, int val)
 {
-    __imported_wasi_lind_longjmp ((unsigned int) env, (unsigned int) val);
+    __imported_wasi_grateos_longjmp ((unsigned int) env, (unsigned int) val);
 }
 
 #endif

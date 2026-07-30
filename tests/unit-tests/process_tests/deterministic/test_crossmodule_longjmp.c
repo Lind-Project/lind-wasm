@@ -1,9 +1,9 @@
 /*
- * Cross-module longjmp/setjmp test for lind-wasm dynamic builds.
+ * Cross-module longjmp/setjmp test for grateos-wasm dynamic builds.
  *
  * Design rationale
  * ----------------
- * In the dynamic build (lind-clang without -s), __wasm_longjmp lives in
+ * In the dynamic build (grateos-clang without -s), __wasm_longjmp lives in
  * libc.so while the LLVM SjLj try_table catch blocks live in user code.
  * Both modules import __c_longjmp from the wasmtime host linker, so they
  * share the same runtime tag identity.  A throw in libc.so is caught by a
@@ -83,8 +83,8 @@ static void test_basic(void)
 /*                                                                     */
 /* The EH path here:                                                   */
 /*   user code: setjmp(buf) -> kill(getpid(), SIGUSR1) -> pause()     */
-/*   kill() immediately queues SIGUSR1 in lind's signal queue         */
-/*   pause() calls lind-take-next-signal (Rust, returns before throw) */
+/*   kill() immediately queues SIGUSR1 in grateos's signal queue         */
+/*   pause() calls grateos-take-next-signal (Rust, returns before throw) */
 /*   pause() calls signal_callback(handler, signo)  [pure wasm]       */
 /*   signal_callback calls our handler               [pure wasm]       */
 /*   handler calls longjmp(buf, 99)                                    */
@@ -95,7 +95,7 @@ static void test_basic(void)
 /*   caught by try_table at setjmp call site in user code             */
 /*                                                                     */
 /* Note: kill(getpid(), sig) queues the signal synchronously before   */
-/* pause() is called, so lind-take-next-signal finds it immediately   */
+/* pause() is called, so grateos-take-next-signal finds it immediately   */
 /* without needing to block.                                           */
 /* ------------------------------------------------------------------ */
 static jmp_buf g_sigbuf;

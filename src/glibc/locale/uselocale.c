@@ -36,7 +36,7 @@ __uselocale (locale_t newloc)
 	= newloc == LC_GLOBAL_LOCALE ? &_nl_global_locale : newloc;
       __libc_tsd_set (locale_t, LOCALE, locobj);
 
-      /* Lind-WASM: NL_CURRENT_INDIRECT per-category TLS pointer update
+      /* GrateOS-WASM: NL_CURRENT_INDIRECT per-category TLS pointer update
 	 skipped.  wasm-ld cannot handle weak TLS references
 	 (R_WASM_MEMORY_ADDR_TLS_SLEB against undefined/weak symbols).
 	 The TSD update above is sufficient — _NL_CURRENT_LOCALE reads

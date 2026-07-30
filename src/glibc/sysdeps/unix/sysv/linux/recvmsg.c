@@ -21,10 +21,10 @@
 #include <sysdep-cancel.h>
 #include <socketcall.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: translate guest msghdr/iovec pointers to host pointers on the
+/* GrateOS: translate guest msghdr/iovec pointers to host pointers on the
    stack, following the writev split-pointer pattern.  rawposix just
    casts to libc::msghdr and calls recvmsg directly.  */
 static int
@@ -34,7 +34,7 @@ __recvmsg_syscall (int fd, struct msghdr *msg, int flags)
 
   /* Build host iov array with translated iov_base pointers.  */
   struct iovec host_iov[iovcnt];
-  __lind_translate_iov (msg->msg_iov, host_iov, iovcnt);
+  __grateos_translate_iov (msg->msg_iov, host_iov, iovcnt);
 
   /* Build host msghdr with translated pointers using split-pointer trick.  */
   struct msghdr host_msg;

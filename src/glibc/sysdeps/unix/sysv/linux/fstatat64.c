@@ -26,12 +26,12 @@
 #include <sys/sysmacros.h>
 #include <internal-stat.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 #include <addr_translation.h>
 
-/* Lind: route the modern 64-bit-time fstatat through the host runtime.
+/* GrateOS: route the modern 64-bit-time fstatat through the host runtime.
    The handler fills the buffer with the cage's StatData layout, which
-   matches both `struct stat` and `struct __stat64_t64` on wasm32 lind.  */
+   matches both `struct stat` and `struct __stat64_t64` on wasm32 grateos.  */
 int
 __fstatat64_time64 (int fd, const char *file, struct __stat64_t64 *buf,
 		    int flag)

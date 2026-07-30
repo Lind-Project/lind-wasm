@@ -24,8 +24,8 @@
 #include <shlib-compat.h>
 #include <dlerror.h>
 
-int __lind_dlopen(char* filename, int mode) __attribute__((
-    __import_module__("lind"),
+int __grateos_dlopen(char* filename, int mode) __attribute__((
+    __import_module__("grateos"),
     __import_name__("dlopen")
 ));
 
@@ -74,9 +74,9 @@ dlopen_implementation (const char *file, int mode, void *dl_caller)
   args.mode = mode;
   args.caller = dl_caller;
 
-  int result = __lind_dlopen(file, mode);
+  int result = __grateos_dlopen(file, mode);
   if (result < 0) {
-    __lind_dlerror_result = -result;
+    __grateos_dlerror_result = -result;
     return NULL;
   }
 

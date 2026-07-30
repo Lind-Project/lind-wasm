@@ -4,7 +4,7 @@
  * socket syscalls internally.
  *
  * Requires /etc/hosts with "127.0.0.1 localhost" and
- * /etc/nsswitch.conf with "hosts: files" in lindfs.
+ * /etc/nsswitch.conf with "hosts: files" in grateosfs.
  */
 #include <stdio.h>
 #include <stdlib.h>

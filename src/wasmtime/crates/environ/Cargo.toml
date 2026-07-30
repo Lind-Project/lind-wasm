@@ -83,7 +83,7 @@ compile = [
   "dep:wasm-encoder",
   "dep:wasmprinter",
 ]
-lind-logging = ["sysdefs/lind-logging"]
+grateos-logging = ["sysdefs/grateos-logging"]
 stack-switching = []
 threads = ['std']
 wmemcheck = ['std']

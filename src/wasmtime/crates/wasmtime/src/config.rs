@@ -193,7 +193,7 @@ pub struct Config {
     pub(crate) x86_float_abi_ok: Option<bool>,
     pub(crate) shared_memory: bool,
     pub(crate) rr_config: RRConfig,
-    // lind-wasm: enable function pointer cast emulation
+    // grateos-wasm: enable function pointer cast emulation
     pub(crate) fpcast_enabled: bool,
 }
 
@@ -1546,7 +1546,7 @@ impl Config {
         self
     }
 
-    /// Enable or disable function pointer cast emulation (lind-wasm extension).
+    /// Enable or disable function pointer cast emulation (grateos-wasm extension).
     #[allow(missing_docs)]
     pub fn fpcast_enabled(&mut self, enable: bool) -> &mut Self {
         self.fpcast_enabled = enable;
@@ -1791,11 +1791,11 @@ impl Config {
         self
     }
 
-    /// lind-wasm:
-    /// Configures the reservation size for lind-wasm internal memories,
-    /// such as Wasmtime GC heap. This does not affect Lind guest shared memory.
-    pub fn lind_internal_memory_reservation(&mut self, bytes: u64) -> &mut Self {
-        self.tunables.lind_internal_memory_reservation = Some(bytes);
+    /// grateos-wasm:
+    /// Configures the reservation size for grateos-wasm internal memories,
+    /// such as Wasmtime GC heap. This does not affect GrateOS guest shared memory.
+    pub fn grateos_internal_memory_reservation(&mut self, bytes: u64) -> &mut Self {
+        self.tunables.grateos_internal_memory_reservation = Some(bytes);
         self
     }
 

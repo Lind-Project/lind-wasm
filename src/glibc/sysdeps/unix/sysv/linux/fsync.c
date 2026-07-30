@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
-#include <lind_syscall_num.h>
+#include <grateos_syscall_num.h>
 
 /* Make all changes done to FD actually appear on disk.  */
 int
