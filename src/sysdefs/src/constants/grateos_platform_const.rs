@@ -7,7 +7,7 @@
 pub const PATH_MAX: usize = 4096;
 
 /// Root directory for grateos filesystem used for chroot-based isolation.
-pub const GRATEOSFS_ROOT: &str = "/home/grateos/grateos-wasm/grateosfs";
+pub const GRATEOSFS_ROOT: &str = "../grateosfs";
 
 /// ===== GrateOS specific =====
 ///
