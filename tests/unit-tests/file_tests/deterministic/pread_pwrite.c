@@ -14,7 +14,7 @@ int main()
     int fd, nr, nr2, nw, nw2;
     char filename[]={"pwrite.txt"};
     char buf_wr[]={"GrateOS is amazing!\n"};
-    char buf_wr2[]={"NYU is amazing!\n"};
+    char buf_wr2[]={"pwrite is amazing!\n"};
     char buf_rd[120]={0};
     char buf_rd2[120]={0};
  

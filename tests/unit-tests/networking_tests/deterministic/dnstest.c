@@ -27,7 +27,7 @@ int main(void) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     assert(sockfd >= 0);
 
-    char *hostname = "\13engineering\03nyu\03edu\0";
+    char *hostname = "\07example\03com\0";
     uint16_t dnstype = htons(1);
     uint16_t dnsclass = htons(1);
 
@@ -57,8 +57,8 @@ int main(void) {
     static const unsigned char canned[] = {
         /* Header: xid=0x1234, flags=0x8180, qd=1, an=1, ns=0, ar=0 */
         0x12, 0x34, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-        /* Question: \x0b engineering \x03 nyu \x03 edu \x00 */
-        0x0b, 'e','n','g','i','n','e','e','r','i','n','g', 0x03, 'n','y','u', 0x03, 'e','d','u', 0x00,
+        /* Question: \x07 example \x03 com \x00 */
+        0x07, 'e','x','a','m','p','l','e', 0x03, 'c','o','m', 0x00,
         /* qtype=1, qclass=1 */
         0x00, 0x01, 0x00, 0x01,
         /* Answer: ptr to 12, type A, class IN, ttl=60, rdlength=4, 192.0.2.1 */
