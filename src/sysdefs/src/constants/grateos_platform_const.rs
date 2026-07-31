@@ -7,7 +7,27 @@
 pub const PATH_MAX: usize = 4096;
 
 /// Root directory for grateos filesystem used for chroot-based isolation.
-pub const GRATEOSFS_ROOT: &str = "../grateosfs";
+///
+/// Resolved at first use, in order:
+/// 1. the `GRATEOSFS_ROOT` environment variable, if set (same override the
+///    Makefile and test harnesses honor);
+/// 2. `<repo>/grateosfs`, derived from the running executable's location
+///    (`grateos-boot` is installed at `<repo>/build/grateos-boot`);
+/// 3. `grateosfs` relative to the current working directory, as a last resort.
+///
+/// A compile-time path cannot work here: cwd at launch is arbitrary, and the
+/// repo checkout location differs across hosts and containers.
+pub static GRATEOSFS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
+    if let Ok(root) = std::env::var("GRATEOSFS_ROOT") {
+        return PathBuf::from(root);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(repo_root) = exe.parent().and_then(|build_dir| build_dir.parent()) {
+            return repo_root.join("grateosfs");
+        }
+    }
+    PathBuf::from("grateosfs")
+});
 
 /// ===== GrateOS specific =====
 ///
@@ -157,7 +177,8 @@ pub const GRATE_STACK_SLOT_SIZE: u32 = 8 * 1024 * 1024;
 pub const GRATE_STACK_GUARD_SIZE: u32 = 4 * 1024;
 
 /// ------------------------------------------------------------------
-use std::sync::{OnceLock, RwLock};
+use std::path::PathBuf;
+use std::sync::{LazyLock, OnceLock, RwLock};
 
 /// Global base address of the grate stack arena in linear memory.
 ///
