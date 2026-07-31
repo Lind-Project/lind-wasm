@@ -9,7 +9,7 @@ use crate::{
 use clap::Parser;
 use libc;
 use std::ffi::CString;
-use std::path::Path;
+use std::os::unix::ffi::OsStrExt;
 
 use rawposix::init::{rawposix_shutdown, rawposix_start};
 use sysdefs::constants::GRATEOSFS_ROOT;
@@ -22,17 +22,20 @@ use sysdefs::logging::{config_from_env, init_grateos_logger};
 /// - chdir to new '/'
 fn chroot_to_grateosfs() {
     unsafe {
-        let grateosfs_path = CString::new(GRATEOSFS_ROOT).unwrap();
+        let grateosfs_path = CString::new(GRATEOSFS_ROOT.as_os_str().as_bytes()).unwrap();
 
-        if !Path::new(GRATEOSFS_ROOT).is_dir() {
-            panic!("The configured grateosfs does not exist: {}", GRATEOSFS_ROOT);
+        if !GRATEOSFS_ROOT.is_dir() {
+            panic!(
+                "The configured grateosfs does not exist: {}",
+                GRATEOSFS_ROOT.display()
+            );
         }
 
         let ret = libc::chroot(grateosfs_path.as_ptr());
         if ret != 0 {
             panic!(
                 "Failed to chroot to {}: {}",
-                GRATEOSFS_ROOT,
+                GRATEOSFS_ROOT.display(),
                 std::io::Error::last_os_error()
             );
         }

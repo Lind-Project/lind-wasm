@@ -8,7 +8,7 @@
 
 /* POSIX.1b structure for a time value.  This is like a `struct timeval' but
    has nanoseconds instead of microseconds.  */
-  // Lind-Wasm: Original glibc code removed for compatibility
+  // GrateOS-Wasm: Original glibc code removed for compatibility
   // to find original source code refer to (2.39.9000) at (time/bits/types/struct_timespec.h):(LINE 11-33)
 
 struct timespec
