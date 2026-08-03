@@ -13,3 +13,7 @@ sysdefs = { path = "../sysdefs" }
 default = ["fast"]
 fast = []
 secure = []
+
+[dev-dependencies]
+dashmap = "5.1"
+parking_lot = "0.12"
