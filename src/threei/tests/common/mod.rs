@@ -50,26 +50,32 @@ pub fn register_simple(
     targetcallnum: u64,
     handlefunccage: u64,
     in_grate_fn_ptr_u64: u64,
-    op_flag: u64,
+    _op_flag: u64,
 ) -> i32 {
     register_handler(
-        0,              // _self_cageid placeholder
-        0,              // _target_cageid placeholder
-        targetcage,     // targetcage (srccage in impl)
-        targetcallnum,  // syscall number
-        0,              // _runtime_id placeholder
-        op_flag,        // is_register: 0 for deregister, otherwise register
-        handlefunccage, // dest grate/cage id, or THREEI_DEREGISTER
+        0, // _self_cageid
+        0, // _target_cageid
+        targetcage,
+        targetcallnum,
+        0, // _runtime_id
+        handlefunccage,
         in_grate_fn_ptr_u64,
-        0,
-        0, // _arg4, _arg4cageid
-        0,
-        0, // _arg5, _arg5cageid
-        0,
-        0, // _arg6, _arg6cageid
+        0, // _arg3cageid
+        0, // _arg4
+        0, // _arg4cageid
+        0, // _arg5
+        0, // _arg5cageid
+        0, // _arg6
+        0, // _arg6cageid
     )
 }
 
 pub fn cpy(target: u64, src: u64) -> u64 {
-    copy_handler_table_to_cage(0, target, src, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    copy_handler_table_to_cage(
+        0,      // _thiscage
+        0,      // _targetcage
+        src,    // srccage
+        target, // targetcage
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    )
 }
