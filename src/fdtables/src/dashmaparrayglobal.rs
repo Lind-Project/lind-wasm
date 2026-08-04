@@ -211,7 +211,13 @@ pub fn get_specific_virtual_fd(
     // Note that, I need to use the FD_PER_PROCESS_MAX setting because this
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
-    if requested_virtualfd > FD_PER_PROCESS_MAX {
+    //
+    // Valid virtual fds are 0..FD_PER_PROCESS_MAX (exclusive of the max,
+    // since the backing array below is indexed 0..FD_PER_PROCESS_MAX).
+    // requested_virtualfd == FD_PER_PROCESS_MAX previously passed this
+    // guard and indexed the array out of bounds, panicking the host
+    // instead of returning EBADF (e.g. dup2(x, FD_PER_PROCESS_MAX)).
+    if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }
 
@@ -297,14 +303,25 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
 
     // Insert a copy and ensure it didn't exist...
     // I've checked this should be a copy, not a ref to the same thing.
-    let hmcopy = *FDTABLE.get(&srccageid).unwrap();
-
-    // Increment copied items
-    for entry in FDTABLE.get(&srccageid).unwrap().iter() {
-        if entry.is_some() {
-            _increment_fdcount(entry.unwrap());
+    //
+    // Snapshot the source row and do the refcount increments under a
+    // single guard, rather than two separate FDTABLE.get(&srccageid)
+    // calls. With two separate reads, a close_virtualfd() landing between
+    // them could leave the child holding an entry that was never
+    // incremented (later double-release / underflow panic), and a
+    // get_unused_virtual_fd() landing between them could increment a key
+    // whose entry never makes it into the child (permanent refcount
+    // leak -- the underlying fd is never actually closed). The guard is
+    // dropped before FDTABLE.insert() below, since srccageid and
+    // newcageid may hash to the same shard.
+    let hmcopy = {
+        let srcrow = FDTABLE.get(&srccageid).unwrap();
+        let copy = *srcrow;
+        for entry in copy.iter().flatten() {
+            _increment_fdcount(*entry);
         }
-    }
+        copy
+    };
 
     assert!(FDTABLE.insert(newcageid, hmcopy).is_none());
 
@@ -522,12 +539,15 @@ fn _decrement_fdcount(entry: FDTableEntry) -> Result<(), i32> {
 fn _increment_fdcount(entry: FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
 
-    // Get a mutable reference to the entry so we can update it.
-    if let Some(mut count) = FDCOUNT.get_mut(&mytuple) {
-        *count += 1;
-    } else {
-        FDCOUNT.insert(mytuple, 1);
-    }
+    // Use entry() so the shard lock is held across the whole read-modify-
+    // write. The previous get_mut()/else-insert() pair released the lock
+    // between the check and the write, so two threads racing to be the
+    // first referencer of the same (fdkind,underfd) could both observe
+    // "missing" and both insert(1), undercounting the refcount by one per
+    // extra racer. That causes the `last` close handler to fire while
+    // another cage still holds the fd. _decrement_fdcount (above) already
+    // uses this entry() pattern; this makes the two symmetric.
+    *FDCOUNT.entry(mytuple).or_insert(0) += 1;
 }
 
 /***************   Code for handling select() ****************/

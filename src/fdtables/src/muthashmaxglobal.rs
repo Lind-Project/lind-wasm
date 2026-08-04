@@ -254,7 +254,12 @@ pub fn get_specific_virtual_fd(
     // Note that, I need to use the FD_PER_PROCESS_MAX setting because this
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
-    if requested_virtualfd > FD_PER_PROCESS_MAX {
+    //
+    // Valid virtual fds are 0..FD_PER_PROCESS_MAX (exclusive of the max).
+    // requested_virtualfd == FD_PER_PROCESS_MAX previously passed this
+    // guard (e.g. dup2(x, FD_PER_PROCESS_MAX)), which is inconsistent
+    // with every other entry point's bound in this file.
+    if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }
 
