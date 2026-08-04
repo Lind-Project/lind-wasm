@@ -1318,7 +1318,7 @@ pub extern "C" fn sched_yield_syscall(
         );
     }
 
-    (unsafe { sched_yield() }) as i32
+    (unsafe { sched_yield() }) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/rt_sigsuspend.2.html
