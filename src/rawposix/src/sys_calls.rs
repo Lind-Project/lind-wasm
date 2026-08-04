@@ -88,7 +88,7 @@ pub extern "C" fn fork_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Extract the ABI-level clone argument structure
     let args = unsafe { &mut *(clone_arg as *mut sys_struct::CloneArgStruct) };
     // would check when `secure` flag has been set during compilation,
@@ -238,7 +238,7 @@ pub extern "C" fn exec_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -329,7 +329,7 @@ pub extern "C" fn exit_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -393,7 +393,7 @@ pub extern "C" fn exit_group_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -490,7 +490,7 @@ pub extern "C" fn waitpid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let status = {
         if status_arg == 0 {
             None
@@ -692,7 +692,7 @@ pub extern "C" fn getpid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
@@ -738,7 +738,7 @@ pub extern "C" fn getpgid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -777,7 +777,7 @@ pub extern "C" fn getppid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
@@ -815,7 +815,7 @@ pub extern "C" fn getgid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate that unused arguments are indeed unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -853,7 +853,7 @@ pub extern "C" fn getegid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate that all extra arguments are unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -891,7 +891,7 @@ pub extern "C" fn getuid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused arguments.
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -929,7 +929,7 @@ pub extern "C" fn geteuid_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate that each extra argument is unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -980,7 +980,7 @@ pub extern "C" fn sigaction_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
     let act = sc_convert_sigactionStruct(act_arg, act_arg_cageid, cageid);
     let oact = sc_convert_sigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
@@ -1061,7 +1061,7 @@ pub extern "C" fn kill_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Convert target cage id and signal value.
     let target_cage = sc_convert_sysarg_to_i32(target_cage_arg, target_cage_arg_cageid, cageid);
     let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
@@ -1155,7 +1155,7 @@ pub extern "C" fn sigprocmask_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
     let set = sc_convert_sigset(set_arg, set_cageid, cageid);
     let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
@@ -1250,7 +1250,7 @@ pub extern "C" fn prlimit64_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     //pid has to be zero
     let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
     if pid != 0 {
@@ -1333,7 +1333,7 @@ pub extern "C" fn sched_yield_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate that each extra argument is unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -1375,7 +1375,7 @@ pub extern "C" fn sigsuspend_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let set = sc_convert_sigset(set_arg, set_cageid, cageid);
     let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -1458,7 +1458,7 @@ pub extern "C" fn setitimer_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let which = sc_convert_sysarg_to_i32(which_arg, which_arg_cageid, cageid);
     let new_value = sc_convert_itimerval(new_value_arg, new_value_arg_cageid, cageid);
     let old_value = sc_convert_itimerval_mut(old_value_arg, old_value_arg_cageid, cageid);
