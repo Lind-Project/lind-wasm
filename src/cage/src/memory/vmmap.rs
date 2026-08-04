@@ -21,7 +21,7 @@ use sysdefs::constants::fs_const::{
 /// addressable in a 32-bit virtual address space given the page size.
 /// For example, with a 4 KB page size (PAGESHIFT = 12), this equals 1 MB of pages,
 /// covering the full 4 GB virtual address space.
-const DEFAULT_VMMAP_SIZE: u32 = 1 << (32 - PAGESHIFT);
+const DEFAULT_VMMAP_SIZE: usize = 1 << (32 - PAGESHIFT);
 
 /// Used to identify whether the vmmap entry is backed anonymously,
 /// by an fd, or by a shared memory segment
@@ -44,8 +44,8 @@ pub enum MemoryBackingType {
 /// permissions, file offset, file size, shared memory ID, and backing fields to distinguish memory types.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct VmmapEntry {
-    pub page_num: u32,    // Base virtual address shifted right by NACL_PAGESHIFT
-    pub npages: u32,      // Number of pages in this mapping
+    pub page_num: usize,    // Base virtual address shifted right by NACL_PAGESHIFT
+    pub npages: usize,      // Number of pages in this mapping
     pub prot: i32,        // Current memory protection flags (read/write/execute)
     pub maxprot: i32,     // Maximum allowed protection flags
     pub flags: i32,       // Memory mapping flags (shared/private/fixed/anonymous)
@@ -76,8 +76,8 @@ impl VmmapEntry {
     ///
     /// Returns a new VmmapEntry instance initialized with the provided values
     pub fn new(
-        page_num: u32,
-        npages: u32,
+        page_num: usize,
+        npages: usize,
         prot: i32,
         maxprot: i32,
         flags: i32,
@@ -140,8 +140,8 @@ pub trait VmmapOps {
     // Method to update a memory map entry
     fn update(
         &mut self,
-        page_num: u32,
-        npages: u32,
+        page_num: usize,
+        npages: usize,
         prot: i32,
         maxprot: i32,
         flags: i32,
@@ -158,8 +158,8 @@ pub trait VmmapOps {
     // Method to add an entry with override
     fn add_entry_with_overwrite(
         &mut self,
-        page_num: u32,
-        npages: u32,
+        page_num: usize,
+        npages: usize,
         prot: i32,
         maxprot: i32,
         flags: i32,
@@ -173,76 +173,76 @@ pub trait VmmapOps {
     // Modifies protection for existing pages in the region
     // Should be able to handle splitting of existing pages when necessary
     // Should maintain mapping consistency while changing protections
-    fn change_prot(&mut self, page_num: u32, npages: u32, new_prot: i32);
+    fn change_prot(&mut self, page_num: usize, npages: usize, new_prot: i32);
 
     // Method to remove an entry from the memory map
-    fn remove_entry(&mut self, page_num: u32, npages: u32) -> Result<(), io::Error>;
+    fn remove_entry(&mut self, page_num: usize, npages: usize) -> Result<(), io::Error>;
 
     // Method to check if requested pages exist with proper permissions
     // NaCl code enforces PROT_READ when any protection exists
     // Returns end page number if mapping is found and has proper permissions
-    fn check_existing_mapping(&self, page_num: u32, npages: u32, prot: i32) -> bool;
+    fn check_existing_mapping(&self, page_num: usize, npages: usize, prot: i32) -> bool;
 
     // Method to check address mapping
-    fn check_addr_mapping(&mut self, page_num: u32, npages: u32, prot: i32) -> Option<u32>;
+    fn check_addr_mapping(&mut self, page_num: usize, npages: usize, prot: i32) -> Option<usize>;
 
     // Method to find a page in the memory map
-    fn find_page(&self, page_num: u32) -> Option<&VmmapEntry>;
+    fn find_page(&self, page_num: usize) -> Option<&VmmapEntry>;
 
     // Method to find a mutable page in the memory map
-    fn find_page_mut(&mut self, page_num: u32) -> Option<&mut VmmapEntry>;
+    fn find_page_mut(&mut self, page_num: usize) -> Option<&mut VmmapEntry>;
 
     // Method to iterate over pages
     fn find_page_iter(
         &self,
-        page_num: u32,
-    ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &VmmapEntry)>;
+        page_num: usize,
+    ) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &VmmapEntry)>;
 
     // Method to iterate over mutable pages
     fn find_page_iter_mut(
         &mut self,
-        page_num: u32,
-    ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &mut VmmapEntry)>;
+        page_num: usize,
+    ) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &mut VmmapEntry)>;
 
     // Finds anonymous page ranges overlapping [req_start, req_end) for munmap.
     // Returns Vec of (start_page, end_page) pairs for pages that can be unmapped.
     // Excludes SharedMemory-backed entries (those are handled by shmdt).
-    fn find_unmappable_ranges(&self, req_start: u32, req_end: u32) -> Vec<(u32, u32)>;
+    fn find_unmappable_ranges(&self, req_start: usize, req_end: usize) -> Vec<(usize, usize)>;
 
     // Method to get the first entry in the memory map
-    fn first_entry(&self) -> Option<(&Interval<u32>, &VmmapEntry)>;
+    fn first_entry(&self) -> Option<(&Interval<usize>, &VmmapEntry)>;
 
     // Method to get the last entry in the memory map
-    fn last_entry(&self) -> Option<(&Interval<u32>, &VmmapEntry)>;
+    fn last_entry(&self) -> Option<(&Interval<usize>, &VmmapEntry)>;
 
     // Method to iterate over entries in both directions
-    fn double_ended_iter(&self) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &VmmapEntry)>;
+    fn double_ended_iter(&self) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &VmmapEntry)>;
 
     // Method to iterate over mutable entries in both directions
     fn double_ended_iter_mut(
         &mut self,
-    ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &mut VmmapEntry)>;
+    ) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &mut VmmapEntry)>;
 
     // Method to find space in the memory map
     // Searches for a contiguous region of at least 'n' free pages
     // Returns the interval of the free space
-    fn find_space(&self, npages: u32) -> Option<Interval<u32>>;
+    fn find_space(&self, npages: usize) -> Option<Interval<usize>>;
 
     // Method to find space above a hint
-    fn find_space_above_hint(&self, npages: u32, hint: u32) -> Option<Interval<u32>>;
+    fn find_space_above_hint(&self, npages: usize, hint: usize) -> Option<Interval<usize>>;
 
     // Method to find space for memory mappings with alignment requirements
     // Rounds page numbers up to the nearest multiple of pages_per_map
     // Returns the interval of the free space
-    fn find_map_space(&self, num_pages: u32, pages_per_map: u32) -> Option<Interval<u32>>;
+    fn find_map_space(&self, num_pages: usize, pages_per_map: usize) -> Option<Interval<usize>>;
 
     // Method to find map space with a hint
     fn find_map_space_with_hint(
         &self,
-        num_pages: u32,
-        pages_per_map: u32,
-        hint: u32,
-    ) -> Option<Interval<u32>>;
+        num_pages: usize,
+        pages_per_map: usize,
+        hint: usize,
+    ) -> Option<Interval<usize>>;
 }
 
 /// Represents a virtual memory map that manages memory regions and their attributes
@@ -253,14 +253,14 @@ pub trait VmmapOps {
 /// - base_address: Optional base address for WASM memory
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Vmmap {
-    pub entries: NoditMap<u32, Interval<u32>, VmmapEntry>, // Keyed by `page_num`
+    pub entries: NoditMap<usize, Interval<usize>, VmmapEntry>, // Keyed by `page_num`
     pub cached_entry: Option<VmmapEntry>,                  // TODO: is this still needed?
     // Use Option for safety
     pub base_address: Option<usize>, // wasm base address. None means uninitialized yet
 
-    pub start_address: u32, // start address of valid vmmap address range
-    pub end_address: u32,   // end address of valid vmmap address range
-    pub heap_start: u32,    // start of heap memory
+    pub start_address: usize, // start address of valid vmmap address range
+    pub end_address: usize,   // end address of valid vmmap address range
+    pub heap_start: usize,    // start of heap memory
 }
 
 #[allow(dead_code)]
@@ -299,7 +299,7 @@ impl Vmmap {
     /// - pages_per_map: Alignment requirement in pages
     ///
     /// Returns the rounded up page number
-    fn round_page_num_up_to_map_multiple(&self, npages: u32, pages_per_map: u32) -> u32 {
+    fn round_page_num_up_to_map_multiple(&self, npages: usize, pages_per_map: usize) -> usize {
         // Add (pages_per_map - 1) to npages and mask off lower bits to round up
         (npages + pages_per_map - 1) & !(pages_per_map - 1)
     }
@@ -311,7 +311,7 @@ impl Vmmap {
     /// - pages_per_map: Alignment requirement in pages
     ///
     /// Returns the truncated page number
-    fn trunc_page_num_down_to_map_multiple(&self, npages: u32, pages_per_map: u32) -> u32 {
+    fn trunc_page_num_down_to_map_multiple(&self, npages: usize, pages_per_map: usize) -> usize {
         // Mask off lower bits to truncate down to multiple
         npages & !(pages_per_map - 1)
     }
@@ -329,7 +329,7 @@ impl Vmmap {
     ///
     /// Arguments:
     /// - heap_start: The page number at which the heap begins
-    pub fn set_heap_start(&mut self, heap_start: u32) {
+    pub fn set_heap_start(&mut self, heap_start: usize) {
         self.heap_start = heap_start;
     }
 
@@ -339,7 +339,7 @@ impl Vmmap {
     /// - address: User space address to convert
     ///
     /// Returns the corresponding system address
-    pub fn user_to_sys(&self, address: u32) -> usize {
+    pub fn user_to_sys(&self, address: usize) -> usize {
         // Add base address to user address to get system address
         address as usize + self.base_address.unwrap()
     }
@@ -350,9 +350,9 @@ impl Vmmap {
     /// - address: System address to convert
     ///
     /// Returns the corresponding user space address
-    pub fn sys_to_user(&self, address: usize) -> u32 {
+    pub fn sys_to_user(&self, address: usize) -> usize {
         // Subtract base address from system address to get user address
-        (address as usize - self.base_address.unwrap()) as u32
+        address as usize - self.base_address.unwrap()
     }
 
     // Visits each entry in the vmmap, applying a visitor function to each entry
@@ -387,15 +387,13 @@ impl Vmmap {
     /// # Returns
     /// * `Some((page_num, npages))` - The starting page number and number of pages
     /// * `None` - If the calculation would overflow
-    fn calculate_page_range(&self, addr: u64, length: usize) -> Option<(u32, u32)> {
-        let base_addr = self.base_address.unwrap() as u64;
+    fn calculate_page_range(&self, addr: usize, length: usize) -> Option<(usize, usize)> {
+        let base_addr = self.base_address.unwrap();
         let uaddr = addr - base_addr;
 
-        let page_num = (uaddr >> PAGESHIFT) as u32;
-        let end_addr = uaddr
-            .checked_add(length as u64)?
-            .checked_add(PAGESIZE as u64 - 1)?;
-        let end_page = (end_addr >> PAGESHIFT) as u32;
+        let page_num = uaddr >> PAGESHIFT;
+        let end_addr = uaddr.checked_add(length)?.checked_add(PAGESIZE as usize - 1)?;
+        let end_page = end_addr >> PAGESHIFT;
         let npages = end_page.checked_sub(page_num)?;
         Some((page_num, npages))
     }
@@ -413,7 +411,7 @@ impl Vmmap {
     /// # Returns
     /// * `true` - If the entire range is mapped and readable, or if length is 0
     /// * `false` - If any part of the range is unmapped, not readable, or if overflow occurs
-    pub fn check_addr_read(&mut self, addr: u64, length: usize) -> bool {
+    pub fn check_addr_read(&mut self, addr: usize, length: usize) -> bool {
         // Zero-length check is trivially true
         if length == 0 {
             return true;
@@ -440,7 +438,7 @@ impl Vmmap {
     /// # Returns
     /// * `true` - If the entire range is mapped and writable, or if length is 0
     /// * `false` - If any part of the range is unmapped, not writable, or if overflow occurs
-    pub fn check_addr_write(&mut self, addr: u64, length: usize) -> bool {
+    pub fn check_addr_write(&mut self, addr: usize, length: usize) -> bool {
         // Zero-length check is trivially true
         if length == 0 {
             return true;
@@ -467,7 +465,7 @@ impl Vmmap {
     /// # Returns
     /// * `true` - If the entire range is mapped with both read and write permissions, or if length is 0
     /// * `false` - If any part of the range is unmapped, lacks read/write permissions, or if overflow occurs
-    pub fn check_addr_rw(&mut self, addr: u64, length: usize) -> bool {
+    pub fn check_addr_rw(&mut self, addr: usize, length: usize) -> bool {
         // Zero-length check is trivially true
         if length == 0 {
             return true;
@@ -499,8 +497,8 @@ impl VmmapOps for Vmmap {
         let _ = self.entries.insert_strict(
             // pages x to y, y included
             ie(
-                vmmap_entry_ref.page_num,
-                vmmap_entry_ref.page_num + vmmap_entry_ref.npages,
+                vmmap_entry_ref.page_num as usize,
+                (vmmap_entry_ref.page_num + vmmap_entry_ref.npages) as usize,
             ),
             vmmap_entry_ref,
         );
@@ -527,8 +525,8 @@ impl VmmapOps for Vmmap {
     /// - Err(io::Error) on failure
     fn add_entry_with_overwrite(
         &mut self,
-        page_num: u32,
-        npages: u32,
+        page_num: usize,
+        npages: usize,
         prot: i32,
         maxprot: i32,
         flags: i32,
@@ -568,7 +566,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - Ok(()) on success
     /// - Err(io::Error) on failure
-    fn remove_entry(&mut self, page_num: u32, npages: u32) -> Result<(), io::Error> {
+    fn remove_entry(&mut self, page_num: usize, npages: usize) -> Result<(), io::Error> {
         // Call update() with remove flag set to true
         self.update(
             page_num,
@@ -606,8 +604,8 @@ impl VmmapOps for Vmmap {
     /// - Err(io::Error) if npages is 0 or other error occurs
     fn update(
         &mut self,
-        page_num: u32,
-        npages: u32,
+        page_num: usize,
+        npages: usize,
         prot: i32,
         maxprot: i32,
         flags: i32,
@@ -673,7 +671,7 @@ impl VmmapOps for Vmmap {
     /// - Handles partial overlaps by splitting entries
     /// - Maintains mapping consistency during protection changes
     /// - Updates protection flags for fully contained pages
-    fn change_prot(&mut self, page_num: u32, npages: u32, new_prot: i32) {
+    fn change_prot(&mut self, page_num: usize, npages: usize, new_prot: i32) {
         // Calculate page range
         let new_region_end_page = page_num + npages;
         let new_region_start_page = page_num;
@@ -776,7 +774,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - true if mapping exists with compatible protection
     /// - false if mapping doesn't exist or protection is incompatible
-    fn check_existing_mapping(&self, page_num: u32, npages: u32, prot: i32) -> bool {
+    fn check_existing_mapping(&self, page_num: usize, npages: usize, prot: i32) -> bool {
         // Calculate end page and create interval for region
         let region_end_page = page_num + npages;
         let region_interval = ie(page_num, region_end_page);
@@ -833,7 +831,7 @@ impl VmmapOps for Vmmap {
     /// - Uses cached entry for quick lookups
     /// - Enforces PROT_READ when other protections are set
     /// - Handles partial overlaps and gaps
-    fn check_addr_mapping(&mut self, page_num: u32, npages: u32, prot: i32) -> Option<u32> {
+    fn check_addr_mapping(&mut self, page_num: usize, npages: usize, prot: i32) -> Option<usize> {
         // Calculate end page of region
         let region_end_page = page_num + npages;
 
@@ -898,7 +896,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - Some(&VmmapEntry) if page exists
     /// - None if page not found
-    fn find_page(&self, page_num: u32) -> Option<&VmmapEntry> {
+    fn find_page(&self, page_num: usize) -> Option<&VmmapEntry> {
         // Look up entry containing the specified page number
         self.entries.get_at_point(page_num)
     }
@@ -911,7 +909,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - Some(&mut VmmapEntry) if page exists
     /// - None if page not found
-    fn find_page_mut(&mut self, page_num: u32) -> Option<&mut VmmapEntry> {
+    fn find_page_mut(&mut self, page_num: usize) -> Option<&mut VmmapEntry> {
         // Look up mutable entry containing the specified page number
         self.entries.get_at_point_mut(page_num)
     }
@@ -921,7 +919,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - Some((interval, entry)) containing the last mapping
     /// - None if map is empty
-    fn last_entry(&self) -> Option<(&Interval<u32>, &VmmapEntry)> {
+    fn last_entry(&self) -> Option<(&Interval<usize>, &VmmapEntry)> {
         // Return the last key-value pair in the map
         self.entries.last_key_value()
     }
@@ -931,7 +929,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - Some((interval, entry)) containing the first mapping
     /// - None if map is empty
-    fn first_entry(&self) -> Option<(&Interval<u32>, &VmmapEntry)> {
+    fn first_entry(&self) -> Option<(&Interval<usize>, &VmmapEntry)> {
         // Return the first key-value pair in the map
         self.entries.first_key_value()
     }
@@ -939,7 +937,7 @@ impl VmmapOps for Vmmap {
     /// Creates a double-ended iterator over all entries
     ///
     /// Returns an iterator that can traverse entries in both directions
-    fn double_ended_iter(&self) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &VmmapEntry)> {
+    fn double_ended_iter(&self) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &VmmapEntry)> {
         // Return iterator over all entries
         self.entries.iter()
     }
@@ -950,7 +948,7 @@ impl VmmapOps for Vmmap {
     /// and modify the entries
     fn double_ended_iter_mut(
         &mut self,
-    ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &mut VmmapEntry)> {
+    ) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &mut VmmapEntry)> {
         // Return mutable iterator over all entries
         self.entries.iter_mut()
     }
@@ -965,8 +963,8 @@ impl VmmapOps for Vmmap {
     /// - Empty iterator if map is empty
     fn find_page_iter(
         &self,
-        page_num: u32,
-    ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &VmmapEntry)> {
+        page_num: usize,
+    ) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &VmmapEntry)> {
         if let Some(last_entry) = self.last_entry() {
             if page_num > last_entry.0.end() {
                 self.entries.overlapping(ie(page_num, page_num))
@@ -988,8 +986,8 @@ impl VmmapOps for Vmmap {
     /// - Empty iterator if map is empty
     fn find_page_iter_mut(
         &mut self,
-        page_num: u32,
-    ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &mut VmmapEntry)> {
+        page_num: usize,
+    ) -> impl DoubleEndedIterator<Item = (&Interval<usize>, &mut VmmapEntry)> {
         if let Some(last_entry) = self.last_entry() {
             self.entries
                 .overlapping_mut(ie(page_num, last_entry.0.end()))
@@ -1001,7 +999,7 @@ impl VmmapOps for Vmmap {
 
     /// Finds anonymous page ranges overlapping [req_start, req_end) for munmap.
     /// SharedMemory-backed entries are excluded (handled by shmdt instead).
-    fn find_unmappable_ranges(&self, req_start: u32, req_end: u32) -> Vec<(u32, u32)> {
+    fn find_unmappable_ranges(&self, req_start: usize, req_end: usize) -> Vec<(usize, usize)> {
         if req_start >= req_end {
             return Vec::new();
         }
@@ -1028,7 +1026,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - Some(Interval) containing the found space
     /// - None if no suitable space found
-    fn find_space(&self, npages: u32) -> Option<Interval<u32>> {
+    fn find_space(&self, npages: usize) -> Option<Interval<usize>> {
         let start = self.start_address;
         let end = self.end_address;
 
@@ -1055,7 +1053,7 @@ impl VmmapOps for Vmmap {
     /// Returns:
     /// - Some(Interval) containing the found space
     /// - None if no suitable space found
-    fn find_space_above_hint(&self, npages: u32, hint: u32) -> Option<Interval<u32>> {
+    fn find_space_above_hint(&self, npages: usize, hint: usize) -> Option<Interval<usize>> {
         let start = hint;
         let end = self.end_address;
 
@@ -1086,7 +1084,7 @@ impl VmmapOps for Vmmap {
     /// Implementation details:
     /// - Rounds page numbers up to alignment boundaries
     /// - Handles alignment constraints for start and end addresses
-    fn find_map_space(&self, num_pages: u32, pages_per_map: u32) -> Option<Interval<u32>> {
+    fn find_map_space(&self, num_pages: usize, pages_per_map: usize) -> Option<Interval<usize>> {
         let start = self.start_address;
         let end = self.end_address;
 
@@ -1126,10 +1124,10 @@ impl VmmapOps for Vmmap {
     /// - Searches only above the hint address
     fn find_map_space_with_hint(
         &self,
-        num_pages: u32,
-        pages_per_map: u32,
-        hint: u32,
-    ) -> Option<Interval<u32>> {
+        num_pages: usize,
+        pages_per_map: usize,
+        hint: usize,
+    ) -> Option<Interval<usize>> {
         let start = hint;
         let end = self.end_address;
 
@@ -2212,7 +2210,7 @@ mod tests {
             .unwrap();
 
         // Check read access within the region (address in bytes: page 10 = 10 << 12 = 40960)
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize; // 5 pages
         assert!(
             vmmap.check_addr_read(addr, length),
@@ -2245,7 +2243,7 @@ mod tests {
             )
             .unwrap();
 
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize;
         assert!(
             !vmmap.check_addr_read(addr, length),
@@ -2276,7 +2274,7 @@ mod tests {
             )
             .unwrap();
 
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize;
         assert!(
             vmmap.check_addr_write(addr, length),
@@ -2307,7 +2305,7 @@ mod tests {
             )
             .unwrap();
 
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize;
         assert!(
             !vmmap.check_addr_write(addr, length),
@@ -2338,7 +2336,7 @@ mod tests {
             )
             .unwrap();
 
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize;
         assert!(
             vmmap.check_addr_rw(addr, length),
@@ -2369,7 +2367,7 @@ mod tests {
             )
             .unwrap();
 
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize;
         assert!(
             !vmmap.check_addr_rw(addr, length),
@@ -2386,7 +2384,7 @@ mod tests {
         vmmap.end_address = 1000;
 
         // Don't add any entries - region is unmapped
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize;
         assert!(
             !vmmap.check_addr_read(addr, length),
@@ -2403,7 +2401,7 @@ mod tests {
         vmmap.end_address = 1000;
 
         // Even with no mappings, zero-length should succeed
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         assert!(
             vmmap.check_addr_read(addr, 0),
             "Zero-length read check should return true"
@@ -2442,7 +2440,7 @@ mod tests {
             .unwrap();
 
         // Try to read 10 pages starting from page 10 (spans into unmapped area)
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (10 << PAGESHIFT) as usize;
         assert!(
             !vmmap.check_addr_read(addr, length),
@@ -2461,7 +2459,7 @@ mod tests {
         assert_eq!(result, Some((0, 1)), "Single page at start");
 
         // Test calculation spanning multiple pages
-        let addr = (10 << PAGESHIFT) as u64;
+        let addr = (10 << PAGESHIFT) as usize;
         let length = (5 << PAGESHIFT) as usize;
         let result = vmmap.calculate_page_range(addr, length);
         assert_eq!(result, Some((10, 5)), "5 pages starting at page 10");

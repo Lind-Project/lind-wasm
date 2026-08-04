@@ -873,8 +873,8 @@ pub extern "C" fn mmap_syscall(
     }
 
     // check if the provided address is multiple of pages
-    let rounded_addr = round_up_page(addr as u64);
-    if rounded_addr != addr as u64 {
+    let rounded_addr = round_up_page(addr as usize);
+    if rounded_addr != addr as usize {
         return syscall_error(Errno::EINVAL, "mmap", "address it not aligned") as i64;
     }
 
@@ -882,15 +882,15 @@ pub extern "C" fn mmap_syscall(
     if off < 0 {
         return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative") as i64;
     }
-    let rounded_off = round_up_page(off as u64);
-    if rounded_off != off as u64 {
+    let rounded_off = round_up_page(off as usize);
+    if rounded_off != off as usize {
         return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned") as i64;
     }
 
     // round up length to be multiple of pages
-    let rounded_length = round_up_page(len as u64);
+    let rounded_length = round_up_page(len);
 
-    let mut useraddr = addr as u32;
+    let mut useraddr = addr as usize;
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
         let vmmap = cage.vmmap.write();
@@ -898,13 +898,13 @@ pub extern "C" fn mmap_syscall(
 
         // pick an address of appropriate size, anywhere
         if useraddr == 0 {
-            result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
+            result = vmmap.find_map_space(rounded_length >> PAGESHIFT, 1);
         } else {
             // use address user provided as hint to find address
             result = vmmap.find_map_space_with_hint(
-                rounded_length as u32 >> PAGESHIFT,
+                rounded_length >> PAGESHIFT,
                 1,
-                addr as u32 >> PAGESHIFT,
+                addr as usize >> PAGESHIFT,
             );
         }
 
@@ -914,7 +914,7 @@ pub extern "C" fn mmap_syscall(
         }
 
         let space = result.unwrap();
-        useraddr = (space.start() << PAGESHIFT) as u32;
+        useraddr = (space.start() << PAGESHIFT) as usize;
     }
 
     flags |= MAP_FIXED as i32;
@@ -994,7 +994,7 @@ pub extern "C" fn mmap_syscall(
             // update vmmap entry
             let _ = vmmap.add_entry_with_overwrite(
                 useraddr >> PAGESHIFT,
-                (rounded_length >> PAGESHIFT) as u32,
+                rounded_length >> PAGESHIFT,
                 prot,
                 maxprot,
                 flags,
@@ -1109,23 +1109,22 @@ pub extern "C" fn munmap_syscall(
     let cage = get_cage(cageid).unwrap();
 
     // check if the provided address is multiple of pages
-    let rounded_addr = round_up_page(addr as u64) as usize;
+    let rounded_addr = round_up_page(addr as usize);
     if rounded_addr != addr as usize {
         return (syscall_error(Errno::EINVAL, "munmap", "address it not aligned")) as i64;
     }
 
-    let rounded_length = round_up_page(len as u64) as usize;
+    let rounded_length = round_up_page(len) as usize;
 
     let mut vmmap = cage.vmmap.write();
 
-    let req_start: u32 = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
-    let req_end: u32 = req_start + (rounded_length as u32 >> PAGESHIFT);
+    let req_start = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
+    let req_end  = req_start + (rounded_length >> PAGESHIFT);
 
     let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
 
     for (act_start, act_end) in overlaps {
-        let (act_start, act_end) = (act_start as usize, act_end as usize);
-        let act_start_addr = vmmap.user_to_sys((act_start as u32) << PAGESHIFT);
+        let act_start_addr = vmmap.user_to_sys(act_start << PAGESHIFT);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
         let result = unsafe {
             libc::mmap(
@@ -1189,7 +1188,7 @@ pub extern "C" fn brk_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
-    let brk = sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid);
+    let brk = sc_convert_sysarg_to_usize(brk_arg, brk_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -1232,10 +1231,10 @@ pub extern "C" fn brk_syscall(
 
     // passing 0 to brk will always return the current brk
     if brk == 0 {
-        return ((PAGESIZE * old_brk_page) as i64);
+        return (PAGESIZE as usize * old_brk_page) as i64;
     }
     // round up the break to multiple of pages
-    let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
+    let brk_page = round_up_page(brk) >> PAGESHIFT;
 
     // shrink heap below heap start is not allowed
     if brk_page < vmmap.heap_start {
@@ -1265,10 +1264,10 @@ pub extern "C" fn brk_syscall(
         heap.cage_id,
     );
 
-    let old_heap_end_usr = (old_brk_page * PAGESIZE) as u32;
+    let old_heap_end_usr = old_brk_page * PAGESIZE as usize;
     let old_heap_end_sys = vmmap.user_to_sys(old_heap_end_usr) as *mut u8;
 
-    let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
+    let new_heap_end_usr = brk_page * PAGESIZE as usize;
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
 
     drop(vmmap);
@@ -1279,7 +1278,7 @@ pub extern "C" fn brk_syscall(
         let ret = mmap_inner(
             cageid,
             old_heap_end_sys,
-            ((brk_page - old_brk_page) * PAGESIZE) as usize,
+            ((brk_page - old_brk_page) * PAGESIZE as usize),
             heap.prot,
             (heap.flags as u32 | MAP_FIXED) as i32,
             -1,
@@ -1299,7 +1298,7 @@ pub extern "C" fn brk_syscall(
         let ret = mmap_inner(
             cageid,
             new_heap_end_sys,
-            ((old_brk_page - brk_page) * PAGESIZE) as usize,
+            ((old_brk_page - brk_page) * PAGESIZE as usize),
             PROT_NONE,
             (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
             -1,
@@ -1314,7 +1313,7 @@ pub extern "C" fn brk_syscall(
     }
 
     // return brk address
-    ((PAGESIZE * brk_page) as i64)
+    (PAGESIZE as usize * brk_page) as i64
 }
 
 //------------------------------------FCNTL SYSCALL------------------------------------
@@ -4470,7 +4469,7 @@ pub extern "C" fn mprotect_syscall(
     }
 
     // Round length up to page boundary (mprotect operates on whole pages)
-    let rounded_length = round_up_page(len as u64) as usize;
+    let rounded_length = round_up_page(len as usize) as usize;
 
     // Call the kernel mprotect
     let ret = unsafe { libc::mprotect(addr as *mut c_void, rounded_length, prot) };
@@ -4484,10 +4483,10 @@ pub extern "C" fn mprotect_syscall(
     if rounded_length > 0 {
         let cage = get_cage(cageid).unwrap();
         let mut vmmap = cage.vmmap.write();
-        let user_addr = vmmap.sys_to_user(addr as usize) as u32;
+        let user_addr = vmmap.sys_to_user(addr as usize);
         vmmap.change_prot(
             user_addr >> PAGESHIFT,
-            (rounded_length >> PAGESHIFT) as u32,
+            rounded_length >> PAGESHIFT as usize,
             prot,
         );
     }
@@ -4736,7 +4735,7 @@ pub extern "C" fn shmget_syscall(
     let metadata = &SHM_METADATA;
 
     // The size of the segment should be rounded up to a multiple of pages
-    let rounded_size = round_up_page(size as u64) as usize;
+    let rounded_size = round_up_page(size);
 
     match metadata.shmkeyidtable.entry(key) {
         Occupied(occupied) => {
@@ -4843,9 +4842,9 @@ pub extern "C" fn shmat_syscall(
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
     let mut useraddr = {
         if shmaddr_arg == 0 {
-            0 as u32
+            0
         } else {
-            sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid)
+            sc_convert_sysarg_to_usize(shmaddr_arg, shmaddr_cageid, cageid)
         }
     };
     let shmflag = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
@@ -4877,13 +4876,13 @@ pub extern "C" fn shmat_syscall(
     };
 
     // Check that the provided address is page aligned.
-    let rounded_addr = round_up_page(useraddr as u64);
-    if rounded_addr != useraddr as u64 {
+    let rounded_addr = round_up_page(useraddr);
+    if rounded_addr != useraddr {
         return (syscall_error(Errno::EINVAL, "shmat", "address is not aligned")) as i64;
     }
 
     // Round up the length to a multiple of the page size.
-    let rounded_length = round_up_page(len as u64);
+    let rounded_length = round_up_page(len);
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
@@ -4892,14 +4891,14 @@ pub extern "C" fn shmat_syscall(
     if useraddr == 0 {
         // Allocate a suitable space in the virtual memory map for the shared memory segment
         // based on the rounded length of the segment.
-        result = vmmap.find_map_space((rounded_length >> PAGESHIFT) as u32, 1);
+        result = vmmap.find_map_space(rounded_length >> PAGESHIFT as usize, 1);
     } else {
         // Use the user-specified address as a hint to find an appropriate memory address
         // for the shared memory segment.
         result = vmmap.find_map_space_with_hint(
-            rounded_length as u32 >> PAGESHIFT,
+            rounded_length >> PAGESHIFT as usize,
             1,
-            useraddr as u32 >> PAGESHIFT,
+            useraddr >> PAGESHIFT as usize,
         );
     }
     // drop the write lock of vmmap to avoid deadlock
@@ -4911,7 +4910,7 @@ pub extern "C" fn shmat_syscall(
     }
     let space = result.unwrap();
     // Update the user address to the start of the allocated memory space.
-    useraddr = (space.start() << PAGESHIFT) as u32;
+    useraddr = space.start() << PAGESHIFT as usize;
 
     // Convert the user address into a system address.
     // Read the virtual memory map to access the user address space.
@@ -4934,7 +4933,7 @@ pub extern "C" fn shmat_syscall(
     let result = vmmap.sys_to_user(result);
     drop(vmmap);
 
-    if result as u32 != useraddr {
+    if result != useraddr {
         panic!("shmat did not attach at the expected address");
     }
     let mut vmmap = cage.vmmap.write();
@@ -4943,7 +4942,7 @@ pub extern "C" fn shmat_syscall(
     vmmap
         .add_entry_with_overwrite(
             useraddr >> PAGESHIFT,
-            (rounded_length >> PAGESHIFT) as u32,
+            rounded_length >> PAGESHIFT as usize,
             prot,
             maxprot,
             0,
@@ -5034,7 +5033,7 @@ pub extern "C" fn shmdt_syscall(
     let mut vmmap = cage.vmmap.write();
     let useraddr = vmmap.sys_to_user(sysaddr);
     vmmap
-        .remove_entry(useraddr >> PAGESHIFT, (length as u32) >> PAGESHIFT)
+        .remove_entry(useraddr >> PAGESHIFT, (length as usize) >> PAGESHIFT as usize)
         .expect("shmdt: remove_entry failed");
 
     0

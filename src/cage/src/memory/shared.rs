@@ -371,8 +371,8 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
 /// # Returns
 /// * On success – the length (in bytes) of the detached segment.
 /// * On error – a negative errno value.
-pub fn shmdt_helper(cageid: u64, shmaddr: *mut u8) -> i32 {
-    let metadata = &SHM_METADATA;
+pub fn shmdt_helper(cageid: u64, shmaddr: *mut u8) -> i64 {
+    let metadata: &LazyLock<Arc<ShmMetadata>> = &SHM_METADATA;
     let mut rm = false;
     let cage = get_cage(cageid).unwrap();
     let mut rev_shm = cage.rev_shm.lock();
@@ -386,7 +386,7 @@ pub fn shmdt_helper(cageid: u64, shmaddr: *mut u8) -> i32 {
                 // Retrieve the length before shmdt_syscall since the segment will be cleaned up after
                 // the syscall completes, making the length field unavailable. We need this length
                 // value later to remove the correct number of pages from vmmap.
-                let length = segment.size as i32;
+                let length = segment.size as i64;
 
                 segment.unmap_shm(shmaddr, cageid);
 
@@ -411,6 +411,6 @@ pub fn shmdt_helper(cageid: u64, shmaddr: *mut u8) -> i32 {
             Errno::EINVAL,
             "shmdt",
             "No shared memory segment at shmaddr",
-        );
+        ) as i64;
     }
 }

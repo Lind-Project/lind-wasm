@@ -21,11 +21,11 @@ pub const HEAP_ENTRY_INDEX: u32 = 0;
 ///
 /// # Returns
 /// * `u64` - rounded up length
-pub fn round_up_page(length: u64) -> u64 {
-    if length % PAGESIZE as u64 == 0 {
+pub fn round_up_page(length: usize) -> usize {
+    if length % PAGESIZE as usize == 0 {
         length
     } else {
-        ((length / PAGESIZE as u64) + 1) * PAGESIZE as u64
+        ((length / PAGESIZE as usize) + 1) * PAGESIZE as usize
     }
 }
 
@@ -97,7 +97,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
         }
 
         // translate page number to user address
-        let addr_st = (entry.page_num << PAGESHIFT) as u32;
+        let addr_st = (entry.page_num << PAGESHIFT) as usize;
         let addr_len = (entry.npages << PAGESHIFT) as usize;
 
         // translate user address to system address
@@ -158,7 +158,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
 }
 
 // set the wasm linear memory base address to vmmap
-pub fn init_vmmap(cageid: u64, base_address: usize, heap_start: Option<u32>) {
+pub fn init_vmmap(cageid: u64, base_address: usize, heap_start: Option<usize>) {
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
@@ -202,8 +202,8 @@ pub fn check_and_convert_addr_ext(
     let mut vmmap = cage.vmmap.write();
 
     // Calculate page numbers for start and end of region
-    let page_num = (arg >> PAGESHIFT) as u32; // Starting page number
-    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32; // Ending page number (rounded up)
+    let page_num = (arg >> PAGESHIFT) as usize; // Starting page number
+    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as usize; // Ending page number (rounded up)
     let npages = end_page - page_num; // Total number of pages spanned
 
     // Validate memory mapping and permissions
@@ -252,7 +252,7 @@ pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Er
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
-    if vmmap.check_addr_read(addr, length) {
+    if vmmap.check_addr_read(addr as usize, length) {
         Ok(true)
     } else {
         Err(Errno::EFAULT)
@@ -277,7 +277,7 @@ pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, E
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
-    if vmmap.check_addr_write(addr, length) {
+    if vmmap.check_addr_write(addr as usize, length) {
         Ok(true)
     } else {
         Err(Errno::EFAULT)
@@ -302,7 +302,7 @@ pub fn check_addr_rw(cageid: u64, addr: u64, length: usize) -> Result<bool, Errn
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
-    if vmmap.check_addr_rw(addr, length) {
+    if vmmap.check_addr_rw(addr as usize, length) {
         Ok(true)
     } else {
         Err(Errno::EFAULT)
