@@ -981,7 +981,7 @@ pub extern "C" fn mmap_syscall(
                         0,
                         0,
                         0,
-                    );
+                    ) as i32;
                     if flags < 0 {
                         return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor")
                             as i64;
@@ -2551,13 +2551,13 @@ fn renameat_inner(
     let old_kernel_fd = if olddirfd == AT_FDCWD {
         c_oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
             Ok(path) => path,
-            Err(e) => return syscall_error(e, label, "old path conversion failed"),
+            Err(e) => return syscall_error(e, label, "old path conversion failed") as i64,
         };
         AT_FDCWD
     } else {
         let wrappedvfd = fdtables::translate_virtual_fd(cageid, olddirfd as u64);
         if wrappedvfd.is_err() {
-            return syscall_error(Errno::EBADF, label, "Bad olddirfd");
+            return syscall_error(Errno::EBADF, label, "Bad olddirfd") as i64;
         }
         let vfd = wrappedvfd.unwrap();
         let tmp_cstr = get_cstr(oldpath_arg).unwrap();
@@ -2569,13 +2569,13 @@ fn renameat_inner(
     let new_kernel_fd = if newdirfd == AT_FDCWD {
         c_newpath = match sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid) {
             Ok(path) => path,
-            Err(e) => return syscall_error(e, label, "new path conversion failed"),
+            Err(e) => return syscall_error(e, label, "new path conversion failed") as i64,
         };
         AT_FDCWD
     } else {
         let wrappedvfd = fdtables::translate_virtual_fd(cageid, newdirfd as u64);
         if wrappedvfd.is_err() {
-            return syscall_error(Errno::EBADF, label, "Bad newdirfd");
+            return syscall_error(Errno::EBADF, label, "Bad newdirfd") as i64;
         }
         let vfd = wrappedvfd.unwrap();
         let tmp_cstr = get_cstr(newpath_arg).unwrap();
@@ -2603,9 +2603,9 @@ fn renameat_inner(
     };
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, label);
+        return handle_errno(errno, label) as i64;
     }
-    ret
+    ret as i64
 }
 
 pub extern "C" fn renameat_syscall(
