@@ -71,7 +71,7 @@ pub extern "C" fn poll_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused arguments
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
@@ -267,7 +267,7 @@ pub extern "C" fn ppoll_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
@@ -379,7 +379,7 @@ pub extern "C" fn select_syscall(
     timeout_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused arguments
     if !sc_unusedarg(arg6, arg6_cageid) {
         return syscall_error(Errno::EFAULT, "select_syscall", "Invalid Cage ID");
@@ -643,7 +643,7 @@ pub extern "C" fn epoll_create_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused arguments
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -712,7 +712,7 @@ pub extern "C" fn epoll_create1_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused arguments
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -789,7 +789,7 @@ pub extern "C" fn epoll_ctl_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Convert arguments
     let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
     // Validate unused arguments
@@ -940,7 +940,7 @@ pub extern "C" fn epoll_wait_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused arguments
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid Cage ID");
@@ -1100,7 +1100,7 @@ pub extern "C" fn socket_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let domain = sc_convert_sysarg_to_i32(domain_arg, domain_cageid, cageid);
     let socktype = sc_convert_sysarg_to_i32(socktype_arg, socktype_cageid, cageid);
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
@@ -1174,7 +1174,7 @@ pub extern "C" fn connect_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
@@ -1231,7 +1231,7 @@ pub extern "C" fn bind_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
@@ -1286,7 +1286,7 @@ pub extern "C" fn listen_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let backlog = sc_convert_sysarg_to_i32(backlog_arg, backlog_cageid, cageid);
 
@@ -1343,7 +1343,7 @@ pub extern "C" fn accept_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
@@ -1396,7 +1396,7 @@ pub extern "C" fn accept4_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
 
@@ -1468,7 +1468,7 @@ pub extern "C" fn setsockopt_syscall(
     optlen_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
@@ -1522,7 +1522,7 @@ pub extern "C" fn shutdown_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
 
@@ -1583,7 +1583,7 @@ pub extern "C" fn getsockname_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let user_addr = addr_arg as *mut SockAddr;
     let lenp = addrlen_arg as *mut socklen_t;
@@ -1666,7 +1666,7 @@ pub extern "C" fn sendto_syscall(
     sockaddr_cageid: u64,
     addrlen_arg: u64,
     addrlen_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
@@ -1733,7 +1733,7 @@ pub extern "C" fn recvfrom_syscall(
     addr_cageid: u64,
     addrlen_arg: u64,
     addrlen_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
@@ -1819,7 +1819,7 @@ pub extern "C" fn recvmsg_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -1864,7 +1864,7 @@ pub extern "C" fn sendmsg_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -1918,7 +1918,7 @@ pub extern "C" fn gethostname_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let name = name_arg as *mut u8;
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
 
@@ -1974,7 +1974,7 @@ pub extern "C" fn getsockopt_syscall(
     _optlen_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
@@ -2031,7 +2031,7 @@ pub extern "C" fn getpeername_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let user_addr = addr_arg as *mut SockAddr;
     let lenp = addrlen_arg as *mut socklen_t;
@@ -2109,7 +2109,7 @@ pub extern "C" fn socketpair_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let domain = sc_convert_sysarg_to_i32(domain_arg, domain_cageid, cageid);
     let typ = sc_convert_sysarg_to_i32(type_arg, type_cageid, cageid);
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);

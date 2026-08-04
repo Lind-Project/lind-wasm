@@ -78,7 +78,7 @@ pub extern "C" fn openat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -187,7 +187,7 @@ pub extern "C" fn open_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -268,7 +268,7 @@ pub extern "C" fn read_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Convert the virtual fd to the underlying kernel file descriptor.
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
@@ -328,7 +328,7 @@ pub extern "C" fn close_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -388,7 +388,7 @@ pub extern "C" fn futex_syscall(
     _uaddr2_cageid: u64,
     val3_arg: u64,
     val3_cageid: u64,
-) -> i32 {
+) -> i64 {
     let uaddr = uaddr_arg;
     let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
     let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
@@ -434,7 +434,7 @@ pub extern "C" fn write_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -495,7 +495,7 @@ pub extern "C" fn mkdir_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_arg_cageid, cageid) {
         Ok(path) => path,
@@ -554,7 +554,7 @@ pub extern "C" fn mknod_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let path = match sc_convert_path_to_host(path_arg, path_arg_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "mknod", "path conversion failed"),
@@ -607,7 +607,7 @@ pub extern "C" fn pipe_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -718,7 +718,7 @@ pub extern "C" fn pipe2_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
     // Validate flags (only O_NONBLOCK and O_CLOEXEC are allowed)
@@ -842,7 +842,7 @@ pub extern "C" fn mmap_syscall(
     vfd_cageid: u64,
     off_arg: u64,
     off_cageid: u64,
-) -> i32 {
+) -> i64 {
     let addr = {
         if addr_arg == 0 {
             0 as *mut u8
@@ -863,7 +863,7 @@ pub extern "C" fn mmap_syscall(
     // MAP_HUGETLB (and its size encoding in bits 26-31) is not supported.
     // Return EINVAL to match Linux behavior on systems without huge page support.
     if flags & libc::MAP_HUGETLB != 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "MAP_HUGETLB not supported");
+        return syscall_error(Errno::EINVAL, "mmap", "MAP_HUGETLB not supported") as i64;
     }
 
     // Validate flags - only these flags are supported.
@@ -889,16 +889,16 @@ pub extern "C" fn mmap_syscall(
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64);
     if rounded_addr != addr as u64 {
-        return syscall_error(Errno::EINVAL, "mmap", "address it not aligned");
+        return syscall_error(Errno::EINVAL, "mmap", "address it not aligned") as i64;
     }
 
     // offset should be non-negative and multiple of pages
     if off < 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative");
+        return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative") as i64;
     }
     let rounded_off = round_up_page(off as u64);
     if rounded_off != off as u64 {
-        return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned");
+        return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned") as i64;
     }
 
     // round up length to be multiple of pages
@@ -924,7 +924,7 @@ pub extern "C" fn mmap_syscall(
 
         // did not find desired memory region
         if result.is_none() {
-            return syscall_error(Errno::ENOMEM, "mmap", "no memory");
+            return syscall_error(Errno::ENOMEM, "mmap", "no memory") as i64;
         }
 
         let space = result.unwrap();
@@ -943,7 +943,7 @@ pub extern "C" fn mmap_syscall(
 
     // either MAP_PRIVATE or MAP_SHARED should be set, but not both
     if (flags & MAP_PRIVATE as i32 == 0) == (flags & MAP_SHARED as i32 == 0) {
-        return syscall_error(Errno::EINVAL, "mmap", "invalid flags");
+        return syscall_error(Errno::EINVAL, "mmap", "invalid flags") as i64;
     }
 
     let vmmap = cage.vmmap.read();
@@ -1006,7 +1006,7 @@ pub extern "C" fn mmap_syscall(
                     );
                     if flags < 0 {
                         return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor")
-                            as i32;
+                            as i64;
                     }
                     maxprot &= flags;
                     MemoryBackingType::FileDescriptor(fildes as u64)
@@ -1028,7 +1028,7 @@ pub extern "C" fn mmap_syscall(
         }
     }
 
-    useraddr as i32
+    useraddr as i64
 }
 
 /// Helper function for `mmap` / `munmap`
@@ -1109,7 +1109,7 @@ pub extern "C" fn munmap_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
@@ -1221,7 +1221,7 @@ pub extern "C" fn brk_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let brk = sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
@@ -1444,7 +1444,7 @@ pub extern "C" fn fcntl_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
 
     // Convert int value only, we handle the pointer args if it's a lock operation
@@ -1601,7 +1601,7 @@ pub extern "C" fn link_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused args
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -1782,7 +1782,7 @@ pub extern "C" fn stat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -1848,7 +1848,7 @@ pub extern "C" fn lstat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "lstat", "path conversion failed"),
@@ -1918,7 +1918,7 @@ pub extern "C" fn statfs_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -1985,7 +1985,7 @@ pub extern "C" fn fsync_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
 
@@ -2047,7 +2047,7 @@ pub extern "C" fn fdatasync_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
 
@@ -2112,7 +2112,7 @@ pub extern "C" fn sync_file_range_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
@@ -2186,7 +2186,7 @@ pub extern "C" fn readlink_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -2253,7 +2253,7 @@ pub extern "C" fn readlinkat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
@@ -2335,7 +2335,7 @@ pub extern "C" fn rename_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
         Ok(path) => path,
@@ -2396,7 +2396,7 @@ pub extern "C" fn unlink_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -2466,7 +2466,7 @@ pub extern "C" fn unlinkat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
@@ -2537,7 +2537,7 @@ pub extern "C" fn fchmodat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -2593,7 +2593,7 @@ pub extern "C" fn faccessat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let mode = sc_convert_sysarg_to_i32(mode_arg, mode_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -2650,7 +2650,7 @@ pub extern "C" fn fstatat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
@@ -2707,7 +2707,7 @@ fn renameat_inner(
     flags: u32,
     use_renameat2: bool,
     label: &'static str,
-) -> i32 {
+) -> i64 {
     let c_oldpath;
     let old_kernel_fd = if olddirfd == AT_FDCWD {
         c_oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
@@ -2784,7 +2784,7 @@ pub extern "C" fn renameat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let olddirfd = sc_convert_sysarg_to_i32(olddirfd_arg, olddirfd_cageid, cageid);
     let newdirfd = sc_convert_sysarg_to_i32(newdirfd_arg, newdirfd_cageid, cageid);
 
@@ -2823,7 +2823,7 @@ pub extern "C" fn renameat2_syscall(
     flags_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let olddirfd = sc_convert_sysarg_to_i32(olddirfd_arg, olddirfd_cageid, cageid);
     let newdirfd = sc_convert_sysarg_to_i32(newdirfd_arg, newdirfd_cageid, cageid);
     let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
@@ -2868,7 +2868,7 @@ pub extern "C" fn fchownat_syscall(
     flags_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let owner = sc_convert_sysarg_to_u32(owner_arg, owner_cageid, cageid);
     let group = sc_convert_sysarg_to_u32(group_arg, group_cageid, cageid);
@@ -2921,7 +2921,7 @@ pub extern "C" fn chown_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "chown", "path conversion failed"),
@@ -2961,7 +2961,7 @@ pub extern "C" fn lchown_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
         Err(e) => return syscall_error(e, "lchown", "path conversion failed"),
@@ -3014,7 +3014,7 @@ pub extern "C" fn access_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -3081,7 +3081,7 @@ pub extern "C" fn clock_gettime_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
     let tp = tp_arg as *mut u8;
     // would sometimes check, sometimes be a no-op depending on the compiler settings
@@ -3132,7 +3132,7 @@ pub extern "C" fn dup_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -3191,7 +3191,7 @@ pub extern "C" fn dup2_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -3269,7 +3269,7 @@ pub extern "C" fn dup3_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -3351,7 +3351,7 @@ pub extern "C" fn fchdir_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -3424,7 +3424,7 @@ pub extern "C" fn writev_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -3483,7 +3483,7 @@ pub extern "C" fn readv_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd < 0 {
         return handle_errno(-kernel_fd, "readv");
@@ -3537,7 +3537,7 @@ pub extern "C" fn preadv_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd < 0 {
         return handle_errno(-kernel_fd, "preadv");
@@ -3590,7 +3590,7 @@ pub extern "C" fn pwritev_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd < 0 {
         return handle_errno(-kernel_fd, "pwritev");
@@ -3646,7 +3646,7 @@ pub extern "C" fn fstat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -3712,7 +3712,7 @@ pub extern "C" fn ftruncate_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -3771,7 +3771,7 @@ pub extern "C" fn fstatfs_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -3839,7 +3839,7 @@ pub extern "C" fn getdents_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -3898,7 +3898,7 @@ pub extern "C" fn lseek_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -3960,7 +3960,7 @@ pub extern "C" fn pread_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -4020,7 +4020,7 @@ pub extern "C" fn pwrite_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -4142,7 +4142,7 @@ pub extern "C" fn chdir_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -4212,7 +4212,7 @@ pub extern "C" fn rmdir_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -4276,7 +4276,7 @@ pub extern "C" fn chmod_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -4340,7 +4340,7 @@ pub extern "C" fn fchmod_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -4403,7 +4403,7 @@ pub extern "C" fn utimensat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
@@ -4495,7 +4495,7 @@ pub extern "C" fn getcwd_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let buf = buf_arg as *mut u8;
 
     let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
@@ -4560,7 +4560,7 @@ pub extern "C" fn truncate_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Validate unused arguments
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -4628,7 +4628,7 @@ pub extern "C" fn nanosleep_time64_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -4683,7 +4683,7 @@ pub extern "C" fn mprotect_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let addr = addr_arg as *mut u8;
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
@@ -4773,7 +4773,7 @@ pub extern "C" fn ioctl_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion
     let ptrunion = ptrunion_arg as *mut u8;
     let req = sc_convert_sysarg_to_u32(req_arg, req_cageid, cageid);
@@ -4862,7 +4862,7 @@ pub extern "C" fn flock_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     // Return error
     if kernel_fd < 0 {
@@ -4956,7 +4956,7 @@ pub extern "C" fn shmget_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let key = sc_convert_sysarg_to_i32(key_arg, key_cageid, cageid);
     let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
     let shmflg = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
@@ -5081,7 +5081,7 @@ pub extern "C" fn shmat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
     let mut useraddr = {
         if shmaddr_arg == 0 {
@@ -5246,7 +5246,7 @@ pub extern "C" fn shmdt_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // NOTE: glibc's shmdt wrapper already calls TRANSLATE_GUEST_POINTER_TO_HOST,
     // so shmaddr_arg is already a host/system pointer. Do NOT translate again.
     // This avoids dependency on vmmap.base_address which can change after fork/exec.
@@ -5337,7 +5337,7 @@ pub extern "C" fn shmctl_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
     let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid).unwrap();
@@ -5440,7 +5440,7 @@ pub extern "C" fn getrandom_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     let buf = buf_arg;
     let buflen = sc_convert_sysarg_to_u32(buflen_arg, buflen_arg_cageid, cageid);
     let flags = sc_convert_sysarg_to_u32(flags_arg, flags_arg_cageid, cageid);
@@ -5494,7 +5494,7 @@ pub extern "C" fn symlink_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // The symlink target is stored as-is and should NOT be path-normalized.
     // Normalizing would resolve relative paths against cwd, but relative symlink
     // targets are meant to resolve relative to the symlink's location at dereference
@@ -5566,7 +5566,7 @@ pub extern "C" fn symlinkat_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // The symlink target is stored as-is and should NOT be path-normalized.
     // Normalizing would resolve relative paths against cwd, but relative symlink
     // targets are meant to resolve relative to the symlink's location at dereference
@@ -5663,7 +5663,7 @@ pub extern "C" fn setxattr_syscall(
     flags_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion for path
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
@@ -5735,7 +5735,7 @@ pub extern "C" fn listxattr_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32 {
+) -> i64 {
     // Type conversion for path
     let path = match sc_convert_path_to_host(path_arg, path_cageid, cageid) {
         Ok(path) => path,
