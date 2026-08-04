@@ -77,12 +77,12 @@ pub extern "C" fn poll_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "poll_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "poll_syscall", "Invalid Cage ID")) as i64;
     }
 
     // Basic bounds checking - validate arguments before conversion - FD_PER_PROCESS_MAX is defined in fdtables constants
     if nfds_arg > fdtables::FD_PER_PROCESS_MAX {
-        return syscall_error(Errno::EINVAL, "poll_syscall", "Too many file descriptors");
+        return (syscall_error(Errno::EINVAL, "poll_syscall", "Too many file descriptors")) as i64;
     }
 
     if nfds_arg == 0 {
@@ -133,7 +133,7 @@ pub extern "C" fn poll_syscall(
     // Process kernel-backed FDs and handle invalid FDs
     let mut all_kernel_pollfds: Vec<libc::pollfd> = Vec::new();
     let mut kernel_to_vfd_mapping: HashMap<usize, u64> = HashMap::new();
-    let mut total_ready = 0i32;
+    let mut total_ready = 0i64;
 
     for (fdkind, fd_set) in poll_data_by_fdkind {
         match fdkind {
@@ -164,7 +164,7 @@ pub extern "C" fn poll_syscall(
             }
             _ => {
                 // Handle non-kernel FDs
-                return syscall_error(Errno::EBADFD, "poll_syscall", "Invalid fdkind");
+                return (syscall_error(Errno::EBADFD, "poll_syscall", "Invalid fdkind")) as i64;
             }
         }
     }
@@ -196,7 +196,7 @@ pub extern "C" fn poll_syscall(
 
             if poll_ret < 0 {
                 let errno = get_errno();
-                return handle_errno(errno, "poll_syscall");
+                return (handle_errno(errno, "poll_syscall")) as i64;
             }
 
             // Check for ready FDs or time elapsed is greater than the total duration of the timeout
@@ -210,7 +210,7 @@ pub extern "C" fn poll_syscall(
             // if interrupted by a signal before any file descriptors become ready or timeout occurs.
             // The signal checking happens in the retry loop to ensure we don't block indefinitely
             if signal_check_trigger(cageid) {
-                return syscall_error(Errno::EINTR, "poll_syscall", "interrupted");
+                return (syscall_error(Errno::EINTR, "poll_syscall", "interrupted")) as i64;
             }
         }
 
@@ -382,7 +382,7 @@ pub extern "C" fn select_syscall(
 ) -> i64 {
     // Validate unused arguments
     if !sc_unusedarg(arg6, arg6_cageid) {
-        return syscall_error(Errno::EFAULT, "select_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "select_syscall", "Invalid Cage ID")) as i64;
     }
 
     // Convert arguments
@@ -430,11 +430,11 @@ pub extern "C" fn select_syscall(
         ) {
             Ok(result) => result,
             Err(_) => {
-                return syscall_error(
+                return (syscall_error(
                     Errno::EINVAL,
                     "select_syscall",
                     "Failed to prepare bitmasks",
-                )
+                )) as i64
             }
         };
 
@@ -529,7 +529,7 @@ pub extern "C" fn select_syscall(
 
         if ret < 0 {
             let errno = get_errno();
-            return handle_errno(errno, "select_syscall");
+            return (handle_errno(errno, "select_syscall")) as i64;
         }
 
         // Check for valid return or time elapsed is greater than the total duration of the timeout
@@ -546,7 +546,7 @@ pub extern "C" fn select_syscall(
         // if interrupted by a signal before any file descriptors become ready or timeout occurs.
         // The signal checking happens in the retry loop to ensure we don't block indefinitely
         if signal_check_trigger(cageid) {
-            return syscall_error(Errno::EINTR, "select_syscall", "interrupted");
+            return (syscall_error(Errno::EINTR, "select_syscall", "interrupted")) as i64;
         }
     }
 
@@ -607,7 +607,7 @@ pub extern "C" fn select_syscall(
     }
 
     // The total number of descriptors ready
-    (read_flags + write_flags + error_flags) as i32
+    ((read_flags + write_flags + error_flags) as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
@@ -651,7 +651,7 @@ pub extern "C" fn epoll_create_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "epoll_create_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "epoll_create_syscall", "Invalid Cage ID")) as i64;
     }
 
     // Convert size argument
@@ -662,7 +662,7 @@ pub extern "C" fn epoll_create_syscall(
 
     if kernel_fd < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "epoll_create_syscall");
+        return (handle_errno(errno, "epoll_create_syscall")) as i64;
     }
 
     // Get the virtual epfd and register to fdtables
@@ -670,7 +670,7 @@ pub extern "C" fn epoll_create_syscall(
     fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
 
     // Return virtual epfd
-    virtual_epfd as i32
+    (virtual_epfd as i32) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
@@ -720,7 +720,7 @@ pub extern "C" fn epoll_create1_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "epoll_create1_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "epoll_create1_syscall", "Invalid Cage ID")) as i64;
     }
 
     // Convert size argument
@@ -729,14 +729,14 @@ pub extern "C" fn epoll_create1_syscall(
     //Validates that the flags argument contains only allowed bits (EPOLL_CLOEXEC),
     //returning EINVAL if any unknown flags are detected.
     if (flags & !EPOLL_CLOEXEC) != 0 {
-        return syscall_error(Errno::EINVAL, "epoll_create1_syscall", "Invalid flags");
+        return (syscall_error(Errno::EINVAL, "epoll_create1_syscall", "Invalid flags")) as i64;
     }
     // Create the kernel epoll instance
     let kernel_fd = unsafe { libc::epoll_create1(flags) };
 
     if kernel_fd < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "epoll_create1_syscall");
+        return (handle_errno(errno, "epoll_create1_syscall")) as i64;
     }
 
     //Checks if `EPOLL_CLOEXEC` is set
@@ -747,7 +747,7 @@ pub extern "C" fn epoll_create1_syscall(
     fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
 
     // Return virtual epfd
-    virtual_epfd as i32
+    (virtual_epfd as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
@@ -794,7 +794,7 @@ pub extern "C" fn epoll_ctl_syscall(
     let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
     // Validate unused arguments
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID")) as i64;
     }
 
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
@@ -806,14 +806,14 @@ pub extern "C" fn epoll_ctl_syscall(
 
     // Validate operation
     if op != EPOLL_CTL_ADD && op != EPOLL_CTL_MOD && op != EPOLL_CTL_DEL {
-        return syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation");
+        return (syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation")) as i64;
     }
 
     // Translate virtual FDs to kernel FDs. We only need to translate this since this is a
     // normal fd, not epfd
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, fd_arg);
     if wrappedvfd.is_err() {
-        return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
+        return (syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor")) as i64;
     }
 
     let vfd = wrappedvfd.unwrap();
@@ -825,7 +825,7 @@ pub extern "C" fn epoll_ctl_syscall(
             if op == EPOLL_CTL_DEL {
                 None
             } else {
-                return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid address");
+                return (syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid address")) as i64;
             }
         }
     };
@@ -857,7 +857,7 @@ pub extern "C" fn epoll_ctl_syscall(
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "epoll_ctl_syscall");
+        return (handle_errno(errno, "epoll_ctl_syscall")) as i64;
     }
 
     // Update the virtual list -- but we only handle the non-real fd case
@@ -873,7 +873,7 @@ pub extern "C" fn epoll_ctl_syscall(
                 if fdmap.is_empty() {
                     epollmapping.remove(&(epfd));
                 }
-                return ret;
+                return (ret) as i64;
             }
         }
     } else {
@@ -882,10 +882,10 @@ pub extern "C" fn epoll_ctl_syscall(
             .entry(epfd)
             .or_insert_with(HashMap::new)
             .insert(vfd.underfd as i32, fd_arg);
-        return ret;
+        return (ret) as i64;
     }
 
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_wait.2.html
@@ -943,7 +943,7 @@ pub extern "C" fn epoll_wait_syscall(
 ) -> i64 {
     // Validate unused arguments
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid Cage ID")) as i64;
     }
 
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
@@ -951,18 +951,18 @@ pub extern "C" fn epoll_wait_syscall(
     let fd_map = match fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg) {
         Ok(map) => map,
         Err(_) => {
-            return syscall_error(Errno::EBADF, "epoll_wait_syscall", "invalid epoll fd");
+            return (syscall_error(Errno::EBADF, "epoll_wait_syscall", "invalid epoll fd")) as i64;
         }
     };
 
     let epfd = match fd_map.get(&FDKIND_KERNEL) {
         Some(fd) => *fd,
         None => {
-            return syscall_error(
+            return (syscall_error(
                 Errno::EBADF,
                 "epoll_wait_syscall",
                 "missing kernel epoll fd",
-            );
+            )) as i64;
         }
     };
 
@@ -972,17 +972,17 @@ pub extern "C" fn epoll_wait_syscall(
 
     // Validate maxevents
     if maxevents <= 0 {
-        return syscall_error(
+        return (syscall_error(
             Errno::EINVAL,
             "epoll_wait_syscall",
             "maxevents must be positive",
-        );
+        )) as i64;
     }
 
     // Convert events array from user space
     let events_ptr = match sc_convert_addr_to_epollevent(events_arg, events_cageid, cageid) {
         Ok(p) => p,
-        Err(_e) => return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address"),
+        Err(_e) => return (syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address")) as i64,
     };
 
     // We do not let the kernel write epoll events directly into the guest's
@@ -1023,7 +1023,7 @@ pub extern "C" fn epoll_wait_syscall(
 
             if ret < 0 {
                 let errno = get_errno();
-                return handle_errno(errno, "epoll");
+                return (handle_errno(errno, "epoll")) as i64;
             }
 
             // check for timeout against total duration or if epoll_wait returned successfully.
@@ -1036,7 +1036,7 @@ pub extern "C" fn epoll_wait_syscall(
             // if interrupted by a signal before any file descriptors become ready or timeout occurs.
             // The signal checking happens in the retry loop to ensure we don't block indefinitely
             if signal_check_trigger(cageid) {
-                return syscall_error(Errno::EINTR, "epoll", "interrupted");
+                return (syscall_error(Errno::EINTR, "epoll", "interrupted")) as i64;
             }
         }
         // Convert back to user's data structure
@@ -1052,18 +1052,18 @@ pub extern "C" fn epoll_wait_syscall(
             {
                 Some(vfd) => vfd,
                 None => {
-                    return syscall_error(
+                    return (syscall_error(
                         Errno::EBADF,
                         "epoll",
                         "could not translate kernel fd to virtual fd",
-                    );
+                    )) as i64;
                 }
             };
 
             events[i].u64 = ret_virtualfd as u64;
             events[i].events = kernel_events[i].events;
         }
-        return ret;
+        return (ret) as i64;
     }
 
     return 0; // Should never reach
@@ -1121,7 +1121,7 @@ pub extern "C" fn socket_syscall(
 
     if kernel_fd < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "socket");
+        return (handle_errno(errno, "socket")) as i64;
     }
 
     // We need to register this new kernel fd in fdtables
@@ -1134,8 +1134,8 @@ pub extern "C" fn socket_syscall(
     // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
     // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
     // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
-    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0).unwrap()
-        as i32
+    (fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0).unwrap()
+        as i32) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/connect.2.html
@@ -1196,9 +1196,9 @@ pub extern "C" fn connect_syscall(
     let ret = unsafe { libc::connect(fd, finalsockaddr, addrlen) };
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "connect");
+        return (handle_errno(errno, "connect")) as i64;
     }
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/bind.2.html
@@ -1253,9 +1253,9 @@ pub extern "C" fn bind_syscall(
     let ret = unsafe { libc::bind(fd, finalsockaddr, addrlen) };
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "bind");
+        return (handle_errno(errno, "bind")) as i64;
     }
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/listen.2.html
@@ -1307,9 +1307,9 @@ pub extern "C" fn listen_syscall(
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "listen");
+        return (handle_errno(errno, "listen")) as i64;
     }
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/accept.2.html
@@ -1365,7 +1365,7 @@ pub extern "C" fn accept_syscall(
 
     if ret_kernelfd < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "accept");
+        return (handle_errno(errno, "accept")) as i64;
     }
 
     // We need to register this new kernel fd in fdtables
@@ -1373,7 +1373,7 @@ pub extern "C" fn accept_syscall(
         fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, false, 0)
             .unwrap();
 
-    ret_virtualfd as i32
+    (ret_virtualfd as i64)
 }
 
 /// The Linux `accept4()` syscall is similar to `accept()` but allows setting flags
@@ -1420,7 +1420,7 @@ pub extern "C" fn accept4_syscall(
 
     if ret_kernelfd < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "accept4");
+        return (handle_errno(errno, "accept4")) as i64;
     }
 
     let should_cloexec = (flags & libc::SOCK_CLOEXEC) != 0;
@@ -1434,7 +1434,7 @@ pub extern "C" fn accept4_syscall(
     )
     .unwrap();
 
-    ret_virtualfd as i32
+    (ret_virtualfd as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/setsockopt.2.html
@@ -1488,10 +1488,10 @@ pub extern "C" fn setsockopt_syscall(
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "setsockopt");
+        return (handle_errno(errno, "setsockopt")) as i64;
     }
 
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/shutdown.2.html
@@ -1543,10 +1543,10 @@ pub extern "C" fn shutdown_syscall(
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "shutdown");
+        return (handle_errno(errno, "shutdown")) as i64;
     }
 
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockname.2.html
@@ -1601,7 +1601,7 @@ pub extern "C" fn getsockname_syscall(
     }
 
     if lenp.is_null() {
-        return syscall_error(Errno::EFAULT, "getsockname_syscall", "len is null");
+        return (syscall_error(Errno::EFAULT, "getsockname_syscall", "len is null")) as i64;
     }
 
     // Read initial length and clamp to storage size
@@ -1623,7 +1623,7 @@ pub extern "C" fn getsockname_syscall(
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "getsockname");
+        return (handle_errno(errno, "getsockname")) as i64;
     }
 
     // Copy into guest-visible SockAddr wrapper + write back len
@@ -1631,7 +1631,7 @@ pub extern "C" fn getsockname_syscall(
         copy_out_sockaddr(user_addr, lenp, &storage);
     }
 
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sendto.2.html
@@ -1689,12 +1689,12 @@ pub extern "C" fn sendto_syscall(
             flag,
             finalsockaddr,
             addrlen,
-        ) as i32
+        ) as i64
     };
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "sendto");
+        return (handle_errno(errno, "sendto")) as i64;
     }
 
     ret
@@ -1755,12 +1755,12 @@ pub extern "C" fn recvfrom_syscall(
                 flag,
                 ptr::null_mut(),
                 ptr::null_mut(),
-            ) as i32
+            ) as i64
         };
 
         if ret < 0 {
             let errno = get_errno();
-            return handle_errno(errno, "recvfrom");
+            return (handle_errno(errno, "recvfrom")) as i64;
         }
 
         return ret;
@@ -1779,12 +1779,12 @@ pub extern "C" fn recvfrom_syscall(
                 flag,
                 &mut src_storage as *mut _ as *mut sockaddr,
                 &mut src_len as *mut socklen_t,
-            ) as i32
+            ) as i64
         };
 
         if ret < 0 {
             let errno = get_errno();
-            return handle_errno(errno, "recvfrom");
+            return (handle_errno(errno, "recvfrom")) as i64;
         }
 
         // Copy peer address back to user’s src_addr / addrlen
@@ -1824,12 +1824,12 @@ pub extern "C" fn recvmsg_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "recvmsg_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "recvmsg_syscall", "Invalid Cage ID")) as i64;
     }
 
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     if fd < 0 {
-        return handle_errno(-fd, "recvmsg");
+        return (handle_errno(-fd, "recvmsg")) as i64;
     }
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
@@ -1838,9 +1838,9 @@ pub extern "C" fn recvmsg_syscall(
     // to a host-layout msghdr ready for libc::recvmsg.
     let msg_ptr = sc_convert_buf(msg_arg, msg_cageid, cageid) as *mut libc::msghdr;
 
-    let ret = unsafe { libc::recvmsg(fd, msg_ptr, flags) as i32 };
+    let ret = unsafe { libc::recvmsg(fd, msg_ptr, flags) as i64 };
     if ret < 0 {
-        return handle_errno(get_errno(), "recvmsg");
+        return (handle_errno(get_errno(), "recvmsg")) as i64;
     }
     ret
 }
@@ -1869,12 +1869,12 @@ pub extern "C" fn sendmsg_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sendmsg_syscall", "Invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "sendmsg_syscall", "Invalid Cage ID")) as i64;
     }
 
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     if fd < 0 {
-        return handle_errno(-fd, "sendmsg");
+        return (handle_errno(-fd, "sendmsg")) as i64;
     }
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
@@ -1883,9 +1883,9 @@ pub extern "C" fn sendmsg_syscall(
     // to a host-layout msghdr ready for libc::sendmsg.
     let msg_ptr = sc_convert_buf(msg_arg, msg_cageid, cageid) as *const libc::msghdr;
 
-    let ret = unsafe { libc::sendmsg(fd, msg_ptr, flags) as i32 };
+    let ret = unsafe { libc::sendmsg(fd, msg_ptr, flags) as i64 };
     if ret < 0 {
-        return handle_errno(get_errno(), "sendmsg");
+        return (handle_errno(get_errno(), "sendmsg")) as i64;
     }
     ret
 }
@@ -1938,10 +1938,10 @@ pub extern "C" fn gethostname_syscall(
     let ret = unsafe { libc::gethostname(name as *mut i8, len) };
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "gethostname");
+        return (handle_errno(errno, "gethostname")) as i64;
     }
 
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockopt.2.html
@@ -1997,10 +1997,10 @@ pub extern "C" fn getsockopt_syscall(
     let ret = unsafe { libc::getsockopt(fd, level, optname, optval, optlen) };
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "getsockopt");
+        return (handle_errno(errno, "getsockopt")) as i64;
     }
 
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getpeername.2.html
@@ -2049,7 +2049,7 @@ pub extern "C" fn getpeername_syscall(
     }
 
     if lenp.is_null() {
-        return syscall_error(Errno::EFAULT, "getpeername_syscall", "len is null");
+        return (syscall_error(Errno::EFAULT, "getpeername_syscall", "len is null")) as i64;
     }
 
     let mut len: socklen_t = unsafe { *lenp };
@@ -2069,14 +2069,14 @@ pub extern "C" fn getpeername_syscall(
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "getpeername");
+        return (handle_errno(errno, "getpeername")) as i64;
     }
 
     unsafe {
         copy_out_sockaddr(user_addr, lenp, &storage);
     }
 
-    ret
+    (ret) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/socketpair.2.html
@@ -2134,7 +2134,7 @@ pub extern "C" fn socketpair_syscall(
     let ret = unsafe { libc::socketpair(domain, typ, protocol, kernel_socket_vector.as_mut_ptr()) };
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "sockpair");
+        return (handle_errno(errno, "sockpair")) as i64;
     }
 
     let ksv_1 = kernel_socket_vector[0];
