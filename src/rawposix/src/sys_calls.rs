@@ -210,7 +210,7 @@ pub extern "C" fn fork_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    ) as i32
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
@@ -305,7 +305,7 @@ pub extern "C" fn exec_syscall(
         // overwrite the stale entries in epoch_handler and main_threadid.
     }
 
-    ret as i32
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
@@ -372,7 +372,7 @@ pub extern "C" fn exit_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    ) as i32
+    )
 }
 
 /// Syscall 231 — exit_group: terminate all threads in the cage.
@@ -467,7 +467,7 @@ pub extern "C" fn exit_group_syscall(
         UNUSED_ID,
         UNUSED_ARG,
         UNUSED_ID,
-    ) as i32
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/waitpid.3p.html
@@ -525,11 +525,11 @@ pub extern "C" fn waitpid_syscall(
 
     // if there is no pending zombies to wait, and there is no active child, return ECHILD
     if zombies.len() == 0 && child_num == 0 {
-        return syscall_error(
+        return (syscall_error(
             Errno::ECHILD,
             "waitpid",
             "no existing unwaited-for child processes",
-        );
+        )) as i64;
     }
 
     let mut zombie_opt: Option<Zombie> = None;
@@ -563,7 +563,7 @@ pub extern "C" fn waitpid_syscall(
                 let cage_runtime = threei::get_cage_runtime(cageid);
                 if cage_runtime == Some(threei_const::RUNTIME_TYPE_WASMTIME) {
                     if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                        return (syscall_error(Errno::EINTR, "waitpid", "interrupted by signal")) as i64;
                     }
                 }
                 else if cage_runtime == Some(threei_const::RUNTIME_TYPE_MPK) {
@@ -600,15 +600,15 @@ pub extern "C" fn waitpid_syscall(
             if let Some(child_cage) = child {
                 // make sure the child's parent is correct
                 if child_cage.parent != cage.cageid {
-                    return syscall_error(
+                    return (syscall_error(
                         Errno::ECHILD,
                         "waitpid",
                         "waited cage is not the child of the cage",
-                    );
+                    )) as i64;
                 }
             } else {
                 // cage does not exist
-                return syscall_error(Errno::ECHILD, "waitpid", "cage does not exist");
+                return (syscall_error(Errno::ECHILD, "waitpid", "cage does not exist")) as i64;
             }
 
             // now we have verified that the cage exists and is the child of the cage
@@ -642,7 +642,7 @@ pub extern "C" fn waitpid_syscall(
                 let cage_runtime = threei::get_cage_runtime(cageid);
                 if cage_runtime == Some(threei_const::RUNTIME_TYPE_WASMTIME) {
                     if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
-                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                        return (syscall_error(Errno::EINTR, "waitpid", "interrupted by signal")) as i64;
                     }
                 }
                 else if cage_runtime == Some(threei_const::RUNTIME_TYPE_MPK) {
@@ -665,7 +665,7 @@ pub extern "C" fn waitpid_syscall(
     }
 
     // return child's cageid
-    zombie.cageid as i32
+    (zombie.cageid as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getpid.2.html
@@ -710,7 +710,7 @@ pub extern "C" fn getpid_syscall(
 
     let cage = get_cage(cageid).unwrap();
 
-    return cage.cageid as i32;
+    return (cage.cageid as i64);
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getpgid.2.html
@@ -754,7 +754,7 @@ pub extern "C" fn getpgid_syscall(
     // Lind doesn't implement process groups. Return own cageid regardless
     // of the pid argument (matching the behavior of getpid).
     let cage = get_cage(cageid).unwrap();
-    cage.cageid as i32
+    (cage.cageid as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/getppid.3p.html
@@ -787,12 +787,12 @@ pub extern "C" fn getppid_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getppid", "invalid Cage ID");
+        return (syscall_error(Errno::EFAULT, "getppid", "invalid Cage ID")) as i64;
     }
 
     let cage = get_cage(cageid).unwrap();
 
-    return cage.parent as i32;
+    return (cage.parent as i64);
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getgid.2.html
@@ -830,7 +830,7 @@ pub extern "C" fn getgid_syscall(
         );
     }
 
-    (unsafe { libc::getgid() }) as i32
+    (unsafe { libc::getgid() } as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getegid.2.html
@@ -868,7 +868,7 @@ pub extern "C" fn getegid_syscall(
         );
     }
 
-    (unsafe { libc::getegid() }) as i32
+    (unsafe { libc::getegid() } as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getuid.2.html
@@ -906,7 +906,7 @@ pub extern "C" fn getuid_syscall(
         );
     }
 
-    (unsafe { libc::getuid() }) as i32
+    (unsafe { libc::getuid() } as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/geteuid.2.html
@@ -944,7 +944,7 @@ pub extern "C" fn geteuid_syscall(
         );
     }
 
-    (unsafe { libc::geteuid() }) as i32
+    (unsafe { libc::geteuid() } as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sigaction.2.html
@@ -998,7 +998,7 @@ pub extern "C" fn sigaction_syscall(
     // Retrieve the cage.
     let cage = match get_cage(cageid) {
         Some(c) => c,
-        None => return syscall_error(Errno::ECHILD, "sigaction", "Cage not found"),
+        None => return (syscall_error(Errno::ECHILD, "sigaction", "Cage not found")) as i64,
     };
 
     // If oact (old action pointer) is provided, fill it with the current action.
@@ -1016,11 +1016,11 @@ pub extern "C" fn sigaction_syscall(
     if let Some(new_act) = act {
         // Disallow modification for SIGKILL and SIGSTOP.
         if sig == SIGKILL || sig == SIGSTOP {
-            return syscall_error(
+            return (syscall_error(
                 Errno::EINVAL,
                 "sigaction",
                 "Cannot modify SIGKILL or SIGSTOP",
-            );
+            )) as i64;
         }
         // Insert the new signal action into the cage’s signal handler table.
         cage.signalhandler.insert(sig, new_act.clone());
@@ -1080,12 +1080,12 @@ pub extern "C" fn kill_syscall(
 
     // Validate the target cage id: it must not be negative and typically within a system-defined maximum.
     if target_cage < 0 {
-        return syscall_error(Errno::EINVAL, "kill", "Invalid target cage id");
+        return (syscall_error(Errno::EINVAL, "kill", "Invalid target cage id")) as i64;
     }
 
     // Validate the signal number: for example, it should typically be in the range 1..32.
     if sig <= 0 || sig >= 32 {
-        return syscall_error(Errno::EINVAL, "kill", "Invalid signal number");
+        return (syscall_error(Errno::EINVAL, "kill", "Invalid signal number")) as i64;
     }
 
     // If pid equals 0, then sig is sent to every process in the process
@@ -1107,7 +1107,7 @@ pub extern "C" fn kill_syscall(
     // This helper returns a boolean indicating whether the operation was successful.
     // The caller's cage id is not directly used to send the signal; instead, the target cage id is used.
     if !lind_send_signal(target_cage as u64, sig) {
-        return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
+        return (syscall_error(Errno::ESRCH, "kill", "Target cage does not exist")) as i64;
     }
 
     0
@@ -1223,7 +1223,7 @@ pub extern "C" fn sigprocmask_syscall(
             _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
         }
     }
-    res
+    (res) as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/prlimit.2.html
@@ -1255,7 +1255,7 @@ pub extern "C" fn prlimit64_syscall(
     let pid = sc_convert_sysarg_to_i32(arg1, arg1_cageid, cageid);
     if pid != 0 {
         lind_debug_panic(&format!("prlimit64: unsupported pid {}", pid));
-        return syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0");
+        return (syscall_error(Errno::ESRCH, "prlimit64", "Only supports pid = 0")) as i64;
     }
 
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
@@ -1270,7 +1270,7 @@ pub extern "C" fn prlimit64_syscall(
     // setrlimit unsupported
     if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
         lind_debug_panic("prlimit64: setrlimit not supported");
-        return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
+        return (syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported")) as i64;
     }
 
     // handle getrlimit calls
@@ -1278,7 +1278,7 @@ pub extern "C" fn prlimit64_syscall(
     if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
         let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid) {
             Ok(rlim) => rlim,
-            Err(e) => return syscall_error(e, "prlimit64", "bad address"),
+            Err(e) => return (syscall_error(e, "prlimit64", "bad address")) as i64,
         };
         match resource {
             RLIMIT_STACK => {
@@ -1348,7 +1348,7 @@ pub extern "C" fn sched_yield_syscall(
         );
     }
 
-    (unsafe { sched_yield() }) as i32
+    (unsafe { sched_yield() }) as i64)
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/rt_sigsuspend.2.html
@@ -1413,7 +1413,7 @@ pub extern "C" fn sigsuspend_syscall(
 
     loop {
         if signal_check_trigger(cageid) {
-            return syscall_error(Errno::EINTR, "sigsuspend", "interrupted by signal");
+            return (syscall_error(Errno::EINTR, "sigsuspend", "interrupted by signal")) as i64;
         }
         unsafe { sched_yield() };
     }
