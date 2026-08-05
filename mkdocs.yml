@@ -41,6 +41,7 @@ nav:
     - Security policy: https://github.com/Lind-Project/lind-wasm/security/policy
     - Docker Hub release workflow: contribute/docker-release-workflow.md
     - End-to-End Testing: contribute/e2e-testing.md
+    - Releasing lind-wasm: contribute/releasing-lind-wasm.md
     - Pipelines:
       - Overview: contribute/pipelines/overview.md
       - lind-wasm: contribute/pipelines/lind-wasm.md
