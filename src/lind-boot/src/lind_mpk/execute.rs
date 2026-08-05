@@ -11,7 +11,7 @@ use crate::lind_mpk::syscalls::{
 use crate::lind_mpk::RuntimeInfo::MPKRuntimeInfo;
 use crate::shims::SyscallRuntime;
 use anyhow::{Context, bail};
-use cage::get_cage;
+use cage::{VmmapBitWidth, get_cage};
 use libc::{c_char, c_int, c_ulong, c_void};
 use std::sync::atomic::Ordering;
 use std::env;
@@ -402,7 +402,7 @@ fn exec_mpk_internal(
         bail!("mmap for new cage memory failed: {}", std::io::Error::last_os_error());
     }
     mpk_debug(format!("new cage memory mapped at {memory_base:p}"));
-    cage::init_vmmap(cage_id, memory_base as usize, None);
+    cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
     let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0, memory_base, MPK_MEMORY_SIZE);
     *cage.runtime_info.write() = Box::new(mpk_info);
     mpk_debug(format!("updated MPKRuntimeInfo for cage {}", cage_id));
@@ -637,7 +637,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     // Get the cage, initialize its vmmap, and store MPKRuntimeInfo.
     let cage = get_cage(cage_id)
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
-    cage::init_vmmap(cage_id, memory_base as usize, None);
+    cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
     let mpk_info = MPKRuntimeInfo::new(handle, libc_handle, enable_interpose, 0, memory_base, MPK_MEMORY_SIZE);
     *cage.runtime_info.write() = Box::new(mpk_info);
     mpk_debug(format!("MPKRuntimeInfo stored in cage {}", cage_id));

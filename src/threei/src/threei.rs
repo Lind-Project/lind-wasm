@@ -35,7 +35,7 @@ pub type RawCallFunc = extern "C" fn(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32;
+) -> i64;
 
 /// In the 3i library, a trampoline function is a runtime-provided function pointer used
 /// to execute grate calls. Each runtime that integrates with 3i supplies its own trampoline
@@ -477,7 +477,7 @@ pub fn make_syscall(
                 arg5_cageid,
                 arg6,
                 arg6_cageid,
-            ) as i64;
+            );
         }
         // Threei special case: if the call is an interposed 3i call
         if grateid == lind_platform_const::THREEI_CAGEID {

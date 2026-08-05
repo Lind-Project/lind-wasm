@@ -23,6 +23,12 @@ use sysdefs::constants::fs_const::{
 /// covering the full 4 GB virtual address space.
 const DEFAULT_VMMAP_SIZE: usize = 1 << (32 - PAGESHIFT);
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum VmmapBitWidth {
+    Vmmap32Bit,
+    Vmmap64Bit,
+}
+
 /// Used to identify whether the vmmap entry is backed anonymously,
 /// by an fd, or by a shared memory segment
 ///
@@ -261,6 +267,7 @@ pub struct Vmmap {
     pub start_address: usize, // start address of valid vmmap address range
     pub end_address: usize,   // end address of valid vmmap address range
     pub heap_start: usize,    // start of heap memory
+    pub user_addr_bit_width: VmmapBitWidth, // Indicates the bit width of the user address space (32-bit or 64-bit)
 }
 
 #[allow(dead_code)]
@@ -275,6 +282,7 @@ impl Vmmap {
             start_address: 0,
             end_address: DEFAULT_VMMAP_SIZE,
             heap_start: 0,
+            user_addr_bit_width: VmmapBitWidth::Vmmap32Bit,
         }
     }
 
@@ -290,6 +298,7 @@ impl Vmmap {
         self.start_address = 0;
         self.end_address = DEFAULT_VMMAP_SIZE;
         self.heap_start = 0;
+        self.user_addr_bit_width = VmmapBitWidth::Vmmap32Bit;
     }
 
     /// Rounds up a page number to the nearest multiple of pages_per_map
@@ -341,7 +350,16 @@ impl Vmmap {
     /// Returns the corresponding system address
     pub fn user_to_sys(&self, address: usize) -> usize {
         // Add base address to user address to get system address
-        address as usize + self.base_address.unwrap()
+        match self.user_addr_bit_width {
+            VmmapBitWidth::Vmmap32Bit => {
+                //TODO: do we need to check here whether address is > u32::MAX? 
+                address + self.base_address.unwrap()
+            }
+            VmmapBitWidth::Vmmap64Bit => {
+                // For 64-bit, user and system addresses are the same. user_to_sys is supported for generality.
+                address
+            }
+        }
     }
 
     /// Converts a system address to a user address
@@ -352,7 +370,46 @@ impl Vmmap {
     /// Returns the corresponding user space address
     pub fn sys_to_user(&self, address: usize) -> usize {
         // Subtract base address from system address to get user address
-        address as usize - self.base_address.unwrap()
+        match self.user_addr_bit_width {
+            VmmapBitWidth::Vmmap32Bit => {
+                address - self.base_address.unwrap()
+            }
+            VmmapBitWidth::Vmmap64Bit => {
+                // For 64-bit, user and system addresses are the same. sys_to_user is supported for generality.
+                address
+            }
+        }
+    }
+
+
+    pub fn page_num_to_user(&self, page_num: usize) -> usize {
+        match self.user_addr_bit_width {
+            VmmapBitWidth::Vmmap32Bit => {
+                page_num << PAGESHIFT
+            }
+            VmmapBitWidth::Vmmap64Bit => {
+                (page_num << PAGESHIFT) + self.base_address.unwrap()
+            }
+        }
+    }
+
+    pub fn user_to_page_num(&self, user_addr: usize) -> usize {
+        match self.user_addr_bit_width {
+            VmmapBitWidth::Vmmap32Bit => {
+                user_addr >> PAGESHIFT
+            }
+            VmmapBitWidth::Vmmap64Bit => {
+                (user_addr - self.base_address.unwrap()) >> PAGESHIFT
+            }
+        }
+    }
+
+    pub fn sys_to_page_num(&self, sys_addr: usize) -> usize {
+        (sys_addr - self.base_address.unwrap()) >> PAGESHIFT
+    }
+
+    pub fn page_num_to_sys(&self, page_num: usize) -> usize {
+        (page_num << PAGESHIFT) + self.base_address.unwrap()
     }
 
     // Visits each entry in the vmmap, applying a visitor function to each entry
@@ -388,12 +445,11 @@ impl Vmmap {
     /// * `Some((page_num, npages))` - The starting page number and number of pages
     /// * `None` - If the calculation would overflow
     fn calculate_page_range(&self, addr: usize, length: usize) -> Option<(usize, usize)> {
-        let base_addr = self.base_address.unwrap();
-        let uaddr = addr - base_addr;
+        let page_num = self.sys_to_page_num(addr);
+        
+        let sys_end_addr = addr.checked_add(length)?.checked_add(PAGESIZE as usize - 1)?;
+        let end_page = self.sys_to_page_num(sys_end_addr);
 
-        let page_num = uaddr >> PAGESHIFT;
-        let end_addr = uaddr.checked_add(length)?.checked_add(PAGESIZE as usize - 1)?;
-        let end_page = end_addr >> PAGESHIFT;
         let npages = end_page.checked_sub(page_num)?;
         Some((page_num, npages))
     }

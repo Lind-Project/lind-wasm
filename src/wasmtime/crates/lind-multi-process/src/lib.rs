@@ -28,7 +28,7 @@ use wasmtime::{
     VMContext, VMOpaqueContext, Val, ValRaw, ValType,
 };
 
-use cage::alloc_cage_id;
+use cage::{VmmapBitWidth, alloc_cage_id};
 use cage::signal::{lind_signal_init, lind_thread_exit};
 use wasmtime_environ::MemoryIndex;
 
@@ -456,7 +456,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         .expect("failed to create child linker");
 
                     // early init vmmap
-                    cage::init_vmmap(child_cageid, child_memory_base.unwrap() as usize, None);
+                    cage::init_vmmap(child_cageid, child_memory_base.unwrap() as usize, None, VmmapBitWidth::Vmmap32Bit);
 
                     // update the linker for the child instance, since new linker contains some child-specific defines
                     // e.g. __stack_pointer, __indirect_function_table, etc.
@@ -2440,7 +2440,7 @@ pub fn attach_shared_memory<
             );
         }
 
-        cage::init_vmmap(cageid as u64, memory_base as usize, None);
+        cage::init_vmmap(cageid as u64, memory_base as usize, None, VmmapBitWidth::Vmmap32Bit);
     }
     linker.define(&store, import_module_name, import_name, mem.clone())?;
 

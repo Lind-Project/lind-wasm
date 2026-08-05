@@ -904,7 +904,7 @@ pub extern "C" fn mmap_syscall(
             result = vmmap.find_map_space_with_hint(
                 rounded_length >> PAGESHIFT,
                 1,
-                addr as usize >> PAGESHIFT,
+                vmmap.user_to_page_num(useraddr),
             );
         }
 
@@ -914,7 +914,7 @@ pub extern "C" fn mmap_syscall(
         }
 
         let space = result.unwrap();
-        useraddr = (space.start() << PAGESHIFT) as usize;
+        useraddr = vmmap.page_num_to_user(space.start());
     }
 
     flags |= MAP_FIXED as i32;
@@ -991,9 +991,10 @@ pub extern "C" fn mmap_syscall(
                 }
             };
 
+            let page_num = vmmap.user_to_page_num(useraddr);
             // update vmmap entry
             let _ = vmmap.add_entry_with_overwrite(
-                useraddr >> PAGESHIFT,
+                page_num,
                 rounded_length >> PAGESHIFT,
                 prot,
                 maxprot,
@@ -1118,13 +1119,13 @@ pub extern "C" fn munmap_syscall(
 
     let mut vmmap = cage.vmmap.write();
 
-    let req_start = vmmap.sys_to_user(rounded_addr) >> PAGESHIFT;
+    let req_start = vmmap.sys_to_page_num(rounded_addr);
     let req_end  = req_start + (rounded_length >> PAGESHIFT);
 
     let overlaps = vmmap.find_unmappable_ranges(req_start, req_end);
 
     for (act_start, act_end) in overlaps {
-        let act_start_addr = vmmap.user_to_sys(act_start << PAGESHIFT);
+        let act_start_addr = vmmap.page_num_to_sys(act_start);
         let act_len = ((act_end - act_start) as usize) << PAGESHIFT;
         let result = unsafe {
             libc::mmap(
@@ -1234,7 +1235,7 @@ pub extern "C" fn brk_syscall(
         return (PAGESIZE as usize * old_brk_page) as i64;
     }
     // round up the break to multiple of pages
-    let brk_page = round_up_page(brk) >> PAGESHIFT;
+    let brk_page = vmmap.user_to_page_num(round_up_page(brk));
 
     // shrink heap below heap start is not allowed
     if brk_page < vmmap.heap_start {
@@ -4483,9 +4484,9 @@ pub extern "C" fn mprotect_syscall(
     if rounded_length > 0 {
         let cage = get_cage(cageid).unwrap();
         let mut vmmap = cage.vmmap.write();
-        let user_addr = vmmap.sys_to_user(addr as usize);
+        let page = vmmap.sys_to_page_num(addr as usize);
         vmmap.change_prot(
-            user_addr >> PAGESHIFT,
+            page,
             rounded_length >> PAGESHIFT as usize,
             prot,
         );
@@ -4898,7 +4899,7 @@ pub extern "C" fn shmat_syscall(
         result = vmmap.find_map_space_with_hint(
             rounded_length >> PAGESHIFT as usize,
             1,
-            useraddr >> PAGESHIFT as usize,
+            vmmap.user_to_page_num(useraddr),
         );
     }
     // drop the write lock of vmmap to avoid deadlock
@@ -4909,12 +4910,14 @@ pub extern "C" fn shmat_syscall(
         return (syscall_error(Errno::ENOMEM, "shmat", "no memory") as i32) as i64;
     }
     let space = result.unwrap();
-    // Update the user address to the start of the allocated memory space.
-    useraddr = space.start() << PAGESHIFT as usize;
-
+    
     // Convert the user address into a system address.
     // Read the virtual memory map to access the user address space.
     let vmmap = cage.vmmap.read();
+    
+    // Update the user address to the start of the allocated memory space.
+    useraddr = vmmap.page_num_to_user(space.start());
+
     // Convert the user address to the corresponding system address for the shared memory segment.
     let sysaddr = vmmap.user_to_sys(useraddr);
     // Release the lock on the virtual memory map as we no longer need it.
@@ -4939,9 +4942,10 @@ pub extern "C" fn shmat_syscall(
     let mut vmmap = cage.vmmap.write();
     let backing = MemoryBackingType::SharedMemory(shmid as u64);
     let maxprot = prot;
+    let page_num = vmmap.user_to_page_num(useraddr);
     vmmap
         .add_entry_with_overwrite(
-            useraddr >> PAGESHIFT,
+            page_num,
             rounded_length >> PAGESHIFT as usize,
             prot,
             maxprot,
@@ -5031,9 +5035,9 @@ pub extern "C" fn shmdt_syscall(
     // Remove the mapping from the vmmap.
     // Convert sys address back to user address for vmmap bookkeeping.
     let mut vmmap = cage.vmmap.write();
-    let useraddr = vmmap.sys_to_user(sysaddr);
+    let page_num = vmmap.sys_to_page_num(sysaddr);
     vmmap
-        .remove_entry(useraddr >> PAGESHIFT, (length as usize) >> PAGESHIFT as usize)
+        .remove_entry(page_num, (length as usize) >> PAGESHIFT as usize)
         .expect("shmdt: remove_entry failed");
 
     0

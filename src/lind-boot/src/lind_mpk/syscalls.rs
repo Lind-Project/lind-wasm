@@ -235,10 +235,11 @@ pub extern "C" fn mpk_clone_syscall_entry(
                     parent_mpk.memory_base, // child inherits parent's address space on fork
                     parent_mpk.memory_size,
                 );
-                // Initialize the child cage's vmmap so the parent can translate
+                // duplicate the child cage's vmmap so the parent can translate
                 // addresses when dispatching syscalls from the child via the socket.
                 if !parent_mpk.memory_base.is_null() {
-                    init_vmmap(child_cageid, parent_mpk.memory_base as usize, None);
+                    let child_vmmap = parent_cage.vmmap.read().clone();
+                    *child_cage.vmmap.write() = child_vmmap;
                 }
                 *child_cage.runtime_info.write() = Box::new(child_mpk_info);
             }

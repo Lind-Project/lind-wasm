@@ -4,7 +4,7 @@
 //! initializing vmmap, helper functions for handling vmmap during a fork syscall, and
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
-use crate::memory::VmmapOps;
+use crate::memory::{VmmapOps, VmmapBitWidth};
 use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
@@ -97,7 +97,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
         }
 
         // translate page number to user address
-        let addr_st = (entry.page_num << PAGESHIFT) as usize;
+        let addr_st = parent_vmmap.page_num_to_user(entry.page_num);
         let addr_len = (entry.npages << PAGESHIFT) as usize;
 
         // translate user address to system address
@@ -158,13 +158,14 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
 }
 
 // set the wasm linear memory base address to vmmap
-pub fn init_vmmap(cageid: u64, base_address: usize, heap_start: Option<usize>) {
+pub fn init_vmmap(cageid: u64, base_address: usize, heap_start: Option<usize>, user_addr_bit_width: VmmapBitWidth) {
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
     if heap_start.is_some() {
         vmmap.set_heap_start(heap_start.unwrap());
     }
+    vmmap.user_addr_bit_width = user_addr_bit_width;
 }
 
 /// Validates and converts a virtual memory address to a physical address with protection checks
@@ -202,8 +203,9 @@ pub fn check_and_convert_addr_ext(
     let mut vmmap = cage.vmmap.write();
 
     // Calculate page numbers for start and end of region
-    let page_num = (arg >> PAGESHIFT) as usize; // Starting page number
-    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as usize; // Ending page number (rounded up)
+    let page_num = vmmap.user_to_page_num(arg as usize); // Starting page number
+    let end_addr_rounded = round_up_page(arg as usize + length); // Round up end address to page boundary
+    let end_page = vmmap.user_to_page_num(end_addr_rounded);
     let npages = end_page - page_num; // Total number of pages spanned
 
     // Validate memory mapping and permissions

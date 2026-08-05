@@ -565,7 +565,7 @@ impl Instance {
 
                 let required_memory_page = (start_addr + required_memory_size) >> PAGESHIFT;
 
-                init_vmmap(cageid, memory_base, Some(required_memory_page as usize));
+                init_vmmap(cageid, memory_base, Some(required_memory_page as usize), cage::VmmapBitWidth::Vmmap32Bit);
                 // Allocated memory should include stack AND constant data region
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
