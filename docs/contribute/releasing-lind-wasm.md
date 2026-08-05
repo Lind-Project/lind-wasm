@@ -1,36 +1,75 @@
 # Releasing lind-wasm
 
-This document describes how lind-wasm releases are tagged and how GitHub
-Release tags are aligned with Docker Hub image tags.
+This document describes how lind-wasm releases are versioned, where to find them,
+and how a new release is created.
 
-## 1. Versioning Policy
+## 1. Releases
+
+### 1.1 Current release
+
+**v0.1.0**
+
+| Property | Value |
+| --- | --- |
+| Release page | [v0.1.0](https://github.com/Lind-Project/lind-wasm/releases/tag/v0.1.0) |
+| Target commit | `02cbc3e76` |
+| Docker image | `securesystemslab/lind-wasm:v0.1.0` |
+| Digest | `sha256:97ec75e99295c924971de249925ac7a3dd136ceb002b198a9e5b30e440ad7e28` |
+
+This is a pre-release. lind-wasm has not reached `v1.0.0` yet.
+
+### 1.2 Where to find releases
+
+- **GitHub Releases** — [all releases](https://github.com/Lind-Project/lind-wasm/releases),
+- **Docker Hub** — [securesystemslab/lind-wasm](https://hub.docker.com/r/securesystemslab/lind-wasm/tags)
+
+Pull a version tag to get a fixed, reproducible image:
+
+```bash
+docker pull securesystemslab/lind-wasm:v0.1.0
+```
+
+The `latest` tag tracks the most recent commit on `main`, not the most recent release. Use a version tag if you need a stable image.
+
+
+
+## 2. Docker Images
+
+The release image is built and pushed to Docker Hub as `securesystemslab/lind-wasm` on every push to `main`. Version tags (`vX.Y.Z`) are applied on top of those builds when a release is created.
+
+See [Pipelines — lind-wasm](https://lind-project.github.io/lind-wasm/contribute/pipelines/lind-wasm/)
+for full pipeline details.
+
+## 3. Versioning Policy
 
 We use [Semantic Versioning](https://semver.org/) (`vMAJOR.MINOR.PATCH`).
 
-lind-wasm is currently in `0.x.x`. This is because the project is still
-under development and the release process is still being set up.
+lind-wasm is currently in `0.x.x`. This is because the project is still under development and the release process is still being set up.
 
-Criteria for `v1.0.0` are still under discussion. This section will be
-updated once those criteria are finalized.
+Criteria for `v1.0.0` are still under discussion. This section will be updated once those criteria are finalized.
 
-## 2. Tag Strategy
+## 4. Release Plan
+
+There is no fixed release schedule yet. Minor versions (`v0.x.0`) are created manually using the process below.
+
+Once the criteria for `v1.0.0` are agreed on, official releases will begin from that point.
+
+## 5. Tag Strategy
 
 | Tag | Purpose | How it's created |
-|---|---|---|
+| --- | --- | --- |
 | `sha-<hash>` | Traceable to a specific commit | Pushed automatically on every push to `main` |
 | `vX.Y.Z` | Official release | Currently manual |
 
-`vX.Y.Z` images are not rebuilt at release time. They are re-tagged from an
-existing `sha-<hash>` image that was already built and pushed from `main`.
-This guarantees the release image matches what was already tested.
+`vX.Y.Z` images are not rebuilt at release time. They are re-tagged from an existing `sha-<hash>` image that was already built and pushed from `main`. This guarantees the release image matches what was already tested.
 
-## 3. How to Set a Release
+## 6. How to Set a Release
 
-### 3.1 Decide the version number
+### 6.1 Decide the version number
 
 Pick a version number following SemVer.
 
-### 3.2 Confirm the target commit
+### 6.2 Confirm the target commit
 
 Check that the commit on `main` you want to release has a passing CI run.
 
@@ -39,7 +78,7 @@ git log -1 --oneline main
 gh run list --branch main --limit 5
 ```
 
-### 3.3 Confirm the image exists
+### 6.3 Confirm the image exists
 
 `release.yml` pushes a `sha-<hash>` image on every push to `main`.
 
@@ -55,11 +94,9 @@ If it doesn't exist, trigger the workflow manually:
 gh workflow run release.yml --ref main
 ```
 
-### 3.4 Create the GitHub Release
+### 6.4 Create the GitHub Release
 
-Use `--target main` if the commit is the current `main` HEAD. Use a full
-40-character SHA otherwise — short SHAs are not accepted by the GitHub
-Release API.
+Use `--target main` if the commit is the current `main` HEAD. Use a full 40-character SHA otherwise — short SHAs are not accepted by the GitHub Release API.
 
 ```bash
 gh release create vX.Y.Z \
@@ -71,7 +108,7 @@ gh release create vX.Y.Z \
 
 Use `--prerelease` while the version is below `v1.0.0`.
 
-### 3.5 Re-tag and push the Docker image
+### 6.5 Re-tag and push the Docker image
 
 Do not rebuild. Reuse the existing `sha-<hash>` image.
 
@@ -80,7 +117,7 @@ docker tag securesystemslab/lind-wasm:sha-<short-sha> securesystemslab/lind-wasm
 docker push securesystemslab/lind-wasm:vX.Y.Z
 ```
 
-### 3.6 Verify the digest and update release notes
+### 6.6 Verify the digest and update release notes
 
 Confirm the `sha-<hash>` image and the `vX.Y.Z` image have the same digest.
 
@@ -95,10 +132,3 @@ Add the digest to the GitHub Release notes:
 Docker image: securesystemslab/lind-wasm:vX.Y.Z
 Digest: sha256:<digest>
 ```
-
-## 4. v0.1.0 Release Record (Current status)
-
-- [v0.1.0 Release](https://github.com/Lind-Project/lind-wasm/releases/tag/v0.1.0)
-- Target commit: `02cbc3e76`
-- Docker image: `securesystemslab/lind-wasm:v0.1.0`
-- Digest: `sha256:97ec75e99295c924971de249925ac7a3dd136ceb002b198a9e5b30e440ad7e28`
