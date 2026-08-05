@@ -77,3 +77,12 @@ jobs:
       # which pins an older nightly for clippy compatibility (see #242).
       - name: Cage crate unit tests
         run: cargo test --manifest-path src/cage/Cargo.toml -- --test-threads=1
+
+      # --test-threads=1 is mandatory: fdtables' tests share process-global
+      # state (FDTABLE / FDCOUNT / CLOSEHANDLERTABLE) and serialize on a
+      # hand-rolled TESTMUTEX that several tests take only after calling
+      # refresh(), which wipes that same state. This runs against the
+      # default `dashmaparray` feature only, which is what the rest of the
+      # build uses (see FDTABLES_IMPL in the top-level Makefile).
+      - name: fdtables crate unit tests
+        run: cargo test --manifest-path src/fdtables/Cargo.toml -- --test-threads=1

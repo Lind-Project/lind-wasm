@@ -188,6 +188,10 @@ mod tests {
 
     use std::collections::HashSet;
 
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use std::sync::{Arc, Barrier};
+
     // I'm having a global testing mutex because otherwise the tests will
     // run concurrently.  This messes up some tests, especially testing
     // that tries to get all FDs, etc.
@@ -1712,5 +1716,739 @@ mod tests {
             },
             translate_virtual_fd(threei::TESTING_CAGEID, my_virt_fd2).unwrap()
         );
+    }
+
+    // =====================================================================
+    // CONC-002 -- fd-table concurrency stress.
+    //
+    // This block also carries regression coverage for three bugs found
+    // and fixed while implementing CONC-002 (see dashmaparrayglobal.rs and
+    // its siblings):
+    //   (a) _increment_fdcount was a non-atomic get_mut()/else-insert(), so
+    //       two cages first-referencing the same (fdkind,underfd) could
+    //       both take the "missing" branch and both insert(1), undercounting
+    //       the refcount.
+    //   (b) get_specific_virtual_fd used `> FD_PER_PROCESS_MAX` instead of
+    //       `>=`, so requested_virtualfd == FD_PER_PROCESS_MAX indexed the
+    //       backing table out of bounds instead of returning EBADF.
+    //   (c) copy_fdtable_for_cage read the source row twice (once for the
+    //       snapshot, once more for the refcount increments), so a
+    //       concurrent close/allocate landing between the two reads could
+    //       desync the child's refcounts from its fd-table contents.
+    // =====================================================================
+
+    /// Reserved cage-id block for CONC-002. Disjoint from
+    /// threei::TESTING_CAGEID0..15 (0xffff_ffff_ffff_ffe0..=...ffef) and
+    /// from any id another test in this module uses. 0xC0C2 == "CONC-002".
+    const C2_BASE: u64 = 0x0000_0000_C0C2_0000; // workers, +0..C2_WORKERS
+    const C2_CHILD: u64 = 0x0000_0000_C0C2_0020; // fork copies, +0..C2_WORKERS
+    const C2_STABLE: u64 = 0x0000_0000_C0C2_0040;
+    const C2_VICTIM: u64 = 0x0000_0000_C0C2_0050; // +0..4, cycled by Test 2
+    // 0xC0C2_0060..0xC0C2_00FF left free for the other CONC/ISO rows of #1304.
+
+    const C2_WORKERS: usize = 8;
+
+    /// A dedicated fdkind plus a disjoint underfd window guarantees no
+    /// FDCOUNT key ever aliases with another test's leftovers. This matters
+    /// more here than it would elsewhere: refresh() clears FDTABLE and
+    /// CLOSEHANDLERTABLE but never clears FDCOUNT, so refcount state leaks
+    /// across every test in this binary. These tests prove their own
+    /// accounting with close handlers rather than assuming a clean FDCOUNT.
+    const C2_FDKIND: u32 = 0x7E57_0002;
+    const C2_UNDERFD_BASE: u64 = 0x2000_0000;
+
+    /// Hands out a globally unique underfd, so that (except where a test
+    /// deliberately wants a shared key, e.g. Test 3) no two allocations
+    /// anywhere in this test file ever share an FDCOUNT key.
+    static C2_UNDERFD_SEQ: AtomicU64 = AtomicU64::new(0);
+    fn c2_next_underfd() -> u64 {
+        C2_UNDERFD_BASE + C2_UNDERFD_SEQ.fetch_add(1, Ordering::SeqCst)
+    }
+
+    static C2_LAST: AtomicU64 = AtomicU64::new(0);
+    static C2_MID: AtomicU64 = AtomicU64::new(0);
+    static C2_HANDLER_ERRS: AtomicU64 = AtomicU64::new(0);
+    lazy_static! {
+        /// underfd -> number of *last* closes seen. Every value must end at 1.
+        static ref C2_RELEASED: Mutex<std::collections::HashMap<u64, u64>> =
+            Mutex::new(std::collections::HashMap::new());
+    }
+
+    // Close handlers are plain `fn` pointers and cannot capture, so all
+    // bookkeeping lives in the statics above. They never panic: a panic
+    // inside fdtables' own teardown path is nearly impossible to attribute,
+    // so a violated expectation is recorded for the main thread to assert
+    // on instead.
+    fn c2_last_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        if entry.fdkind != C2_FDKIND || remaining != 0 {
+            C2_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        *C2_RELEASED.lock().unwrap().entry(entry.underfd).or_insert(0) += 1;
+        C2_LAST.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+    fn c2_intermediate_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        if entry.fdkind != C2_FDKIND || remaining == 0 {
+            C2_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        C2_MID.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    /// Factors out the two copy-pasted TESTMUTEX idioms used elsewhere in
+    /// this module. A mutex poisoned by one of the #[should_panic] tests is
+    /// recovered rather than cascading a PoisonError into every later test.
+    fn c2_test_guard() -> MutexGuard<'static, bool> {
+        loop {
+            match TESTMUTEX.lock() {
+                Ok(g) => return g,
+                Err(_) => TESTMUTEX.clear_poison(),
+            }
+        }
+    }
+
+    /// Must be called *after* refresh(): refresh() clears
+    /// CLOSEHANDLERTABLE, so a one-time (e.g. std::sync::Once) handler
+    /// registration would silently lose the handlers on the next test that
+    /// calls refresh().
+    fn c2_setup() {
+        register_close_handlers(C2_FDKIND, c2_intermediate_close, c2_last_close);
+        C2_LAST.store(0, Ordering::SeqCst);
+        C2_MID.store(0, Ordering::SeqCst);
+        C2_HANDLER_ERRS.store(0, Ordering::SeqCst);
+        C2_RELEASED.lock().unwrap().clear();
+    }
+
+    fn c2_iters() -> usize {
+        std::env::var("LIND_CONC002_ITERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(200)
+    }
+
+    #[derive(Default)]
+    struct C2Errs {
+        alloc: AtomicU64,
+        xlate: AtomicU64,
+        dup_vfd: AtomicU64,
+        close: AtomicU64,
+        copy: AtomicU64,
+        copied_entries: AtomicU64,
+        allocs: AtomicU64,
+    }
+
+    #[test]
+    /// Mixes all five operations the roadmap asks for: allocation,
+    /// translation, fd-table copying, close, and cage removal. Each of the
+    /// C2_WORKERS threads owns one cage end-to-end, so this test is not
+    /// exercising bugs (a)/(c) (those need two cages racing on the SAME
+    /// underfd or the SAME cage's fd-table copy, which is exactly what
+    /// Tests 3 and 4 below do) -- it is instead the "does the whole
+    /// lifecycle hang together under concurrency" smoke test the roadmap's
+    /// C test mirrors on the syscall side.
+    fn conc_002_fd_lifecycle_multicage_stress() {
+        let _lock = c2_test_guard();
+        refresh();
+        c2_setup();
+
+        let iters = c2_iters();
+        // Each worker retains 1 of every 4 allocated fds; FD_PER_PROCESS_MAX
+        // is 1024, so keep the retained set well under that.
+        assert!(
+            iters <= 900,
+            "LIND_CONC002_ITERS too large for FD_PER_PROCESS_MAX"
+        );
+
+        for w in 0..C2_WORKERS as u64 {
+            init_empty_cage(C2_BASE + w);
+        }
+
+        let errs: Arc<Vec<C2Errs>> =
+            Arc::new((0..C2_WORKERS).map(|_| C2Errs::default()).collect());
+        let start = Arc::new(Barrier::new(C2_WORKERS));
+
+        let handles: Vec<_> = (0..C2_WORKERS)
+            .map(|w| {
+                let errs = Arc::clone(&errs);
+                let start = Arc::clone(&start);
+                thread::spawn(move || {
+                    let cage = C2_BASE + w as u64;
+                    let child = C2_CHILD + w as u64;
+                    let e = &errs[w];
+                    let mut live: Vec<(u64, u64)> = Vec::new();
+
+                    start.wait();
+                    for i in 0..iters {
+                        // --- allocation: 4 fds, all with globally unique underfds
+                        let mut batch: Vec<(u64, u64)> = Vec::with_capacity(4);
+                        let mut seen: HashSet<u64> = HashSet::new();
+                        for _ in 0..4 {
+                            let u = c2_next_underfd();
+                            match get_unused_virtual_fd(cage, C2_FDKIND, u, i % 2 == 0, u) {
+                                Ok(vfd) => {
+                                    if !seen.insert(vfd) || vfd >= FD_PER_PROCESS_MAX {
+                                        e.dup_vfd.fetch_add(1, Ordering::SeqCst);
+                                    }
+                                    e.allocs.fetch_add(1, Ordering::SeqCst);
+                                    batch.push((vfd, u));
+                                }
+                                Err(_) => {
+                                    e.alloc.fetch_add(1, Ordering::SeqCst);
+                                }
+                            }
+                        }
+
+                        // --- translation: exact round-trip of everything installed
+                        for &(vfd, u) in &batch {
+                            match translate_virtual_fd(cage, vfd) {
+                                Ok(ent) => {
+                                    if ent.fdkind != C2_FDKIND
+                                        || ent.underfd != u
+                                        || ent.perfdinfo != u
+                                        || ent.should_cloexec != (i % 2 == 0)
+                                    {
+                                        e.xlate.fetch_add(1, Ordering::SeqCst);
+                                    }
+                                }
+                                Err(_) => {
+                                    e.xlate.fetch_add(1, Ordering::SeqCst);
+                                }
+                            }
+                        }
+
+                        // --- attribute mutation, on an fd no other thread can see
+                        if let Some(&(vfd, u)) = batch.first() {
+                            let _ = set_cloexec(cage, vfd, true);
+                            let _ = set_perfdinfo(cage, vfd, u ^ 0xff);
+                            let ok = translate_virtual_fd(cage, vfd)
+                                .map(|x| x.should_cloexec && x.perfdinfo == (u ^ 0xff))
+                                .unwrap_or(false);
+                            if !ok {
+                                e.xlate.fetch_add(1, Ordering::SeqCst);
+                            }
+                        }
+
+                        // --- close 3 of 4, retain 1
+                        for &(vfd, _) in batch.iter().skip(1) {
+                            if close_virtualfd(cage, vfd).is_err() {
+                                e.close.fetch_add(1, Ordering::SeqCst);
+                            }
+                        }
+                        if let Some(&first) = batch.first() {
+                            live.push(first);
+                        }
+
+                        // --- fd-table copy + cage removal, every 16th iteration
+                        if i % 16 == 0 {
+                            let src = return_fdtable_copy(cage);
+                            if copy_fdtable_for_cage(cage, child).is_err() {
+                                e.copy.fetch_add(1, Ordering::SeqCst);
+                            } else {
+                                let dst = return_fdtable_copy(child);
+                                if dst != src {
+                                    e.copy.fetch_add(1, Ordering::SeqCst);
+                                }
+                                for (&vfd, ent) in &src {
+                                    if translate_virtual_fd(child, vfd).as_ref() != Ok(ent) {
+                                        e.copy.fetch_add(1, Ordering::SeqCst);
+                                    }
+                                }
+                                e.copied_entries
+                                    .fetch_add(src.len() as u64, Ordering::SeqCst);
+                                remove_cage_from_fdtable(child);
+                                if check_cage_exists(child) {
+                                    e.copy.fetch_add(1, Ordering::SeqCst);
+                                }
+                            }
+                        }
+                    }
+
+                    // Teardown: half the workers drain explicitly, half leave
+                    // their fds for remove_cage_from_fdtable. Both paths must
+                    // release every underfd exactly once.
+                    if w % 2 == 0 {
+                        for &(vfd, _) in &live {
+                            if close_virtualfd(cage, vfd).is_err() {
+                                e.close.fetch_add(1, Ordering::SeqCst);
+                            }
+                        }
+                    }
+                    remove_cage_from_fdtable(cage);
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join().expect("a CONC-002 worker panicked");
+        }
+
+        for (w, e) in errs.iter().enumerate() {
+            assert_eq!(
+                e.alloc.load(Ordering::SeqCst),
+                0,
+                "worker {w}: get_unused_virtual_fd failed"
+            );
+            assert_eq!(
+                e.xlate.load(Ordering::SeqCst),
+                0,
+                "worker {w}: translate returned the wrong entry"
+            );
+            assert_eq!(
+                e.dup_vfd.load(Ordering::SeqCst),
+                0,
+                "worker {w}: concurrent allocation handed out a duplicate/OOB vfd"
+            );
+            assert_eq!(
+                e.close.load(Ordering::SeqCst),
+                0,
+                "worker {w}: close_virtualfd failed"
+            );
+            assert_eq!(
+                e.copy.load(Ordering::SeqCst),
+                0,
+                "worker {w}: fd-table copy was not an exact snapshot"
+            );
+        }
+
+        let total_allocs: u64 = errs.iter().map(|e| e.allocs.load(Ordering::SeqCst)).sum();
+        let total_copied: u64 = errs
+            .iter()
+            .map(|e| e.copied_entries.load(Ordering::SeqCst))
+            .sum();
+
+        {
+            let released = C2_RELEASED.lock().unwrap();
+            assert_eq!(
+                released.len() as u64,
+                total_allocs,
+                "not every allocated underfd fired exactly one last-close"
+            );
+            for (u, n) in released.iter() {
+                assert_eq!(
+                    *n, 1,
+                    "underfd {u:#x} was released {n} times (expected exactly 1)"
+                );
+            }
+        }
+        assert_eq!(C2_LAST.load(Ordering::SeqCst), total_allocs);
+        // Every entry present at copy time is released twice: once when the
+        // child cage is removed (intermediate, refcount 2->1) and once at
+        // final teardown (last, 1->0).
+        assert_eq!(
+            C2_MID.load(Ordering::SeqCst),
+            total_copied,
+            "intermediate-close count does not match the number of copied entries"
+        );
+        assert_eq!(
+            C2_HANDLER_ERRS.load(Ordering::SeqCst),
+            0,
+            "a close handler saw the wrong fdkind or refcount polarity"
+        );
+
+        for w in 0..C2_WORKERS as u64 {
+            assert!(!check_cage_exists(C2_BASE + w));
+            assert!(!check_cage_exists(C2_CHILD + w));
+        }
+        refresh();
+    }
+
+    #[test]
+    /// A stable cage with a known fd-table, plus victim cages the main
+    /// thread creates and destroys underneath 4 reader threads. Readers
+    /// translate only in the stable cage and observe victims exclusively
+    /// through check_cage_exists() -- the one entry point that does not
+    /// assert!(check_cage_exists(..)) and then separately .unwrap() a
+    /// FDTABLE.get() (a pattern that is a known panic-on-race elsewhere;
+    /// see Test 4, which drives the analogous race in
+    /// copy_fdtable_for_cage specifically).
+    fn conc_002_translate_isolation_under_cage_removal() {
+        let _lock = c2_test_guard();
+        refresh();
+        c2_setup();
+
+        const C2_READERS: usize = 4;
+        const VICTIM_ITERS: usize = 400;
+        const SPIN_BUDGET: u64 = 2_000_000;
+
+        init_empty_cage(C2_STABLE);
+        let stable: Vec<(u64, u64)> = (0..16)
+            .map(|_| {
+                let u = c2_next_underfd();
+                (
+                    get_unused_virtual_fd(C2_STABLE, C2_FDKIND, u, false, u).unwrap(),
+                    u,
+                )
+            })
+            .collect();
+        let snapshot = return_fdtable_copy(C2_STABLE);
+
+        #[derive(Default)]
+        struct ReaderErrs {
+            bad_entry: AtomicU64,
+            spin_exhausted: AtomicU64,
+            saw_live: AtomicU64,
+            saw_gone: AtomicU64,
+        }
+
+        let errs: Arc<Vec<ReaderErrs>> =
+            Arc::new((0..C2_READERS).map(|_| ReaderErrs::default()).collect());
+        let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let victim_cycle = Arc::new(AtomicU64::new(0));
+
+        let handles: Vec<_> = (0..C2_READERS)
+            .map(|r| {
+                let errs = Arc::clone(&errs);
+                let running = Arc::clone(&running);
+                let victim_cycle = Arc::clone(&victim_cycle);
+                let stable = stable.clone();
+                thread::spawn(move || {
+                    let e = &errs[r];
+                    let mut last_cycle = u64::MAX;
+                    let mut budget = SPIN_BUDGET;
+                    while running.load(Ordering::SeqCst) {
+                        for &(vfd, u) in &stable {
+                            match translate_virtual_fd(C2_STABLE, vfd) {
+                                Ok(ent)
+                                    if ent.fdkind == C2_FDKIND
+                                        && ent.underfd == u
+                                        && ent.perfdinfo == u => {}
+                                _ => {
+                                    e.bad_entry.fetch_add(1, Ordering::SeqCst);
+                                }
+                            }
+                        }
+
+                        let victim = C2_VICTIM + (r as u64 % 4);
+                        if check_cage_exists(victim) {
+                            e.saw_live.fetch_add(1, Ordering::SeqCst);
+                        } else {
+                            e.saw_gone.fetch_add(1, Ordering::SeqCst);
+                        }
+
+                        let cur = victim_cycle.load(Ordering::SeqCst);
+                        if cur != last_cycle {
+                            last_cycle = cur;
+                            budget = SPIN_BUDGET;
+                        } else if budget == 0 {
+                            e.spin_exhausted.fetch_add(1, Ordering::SeqCst);
+                            budget = SPIN_BUDGET; // don't spam if genuinely stalled
+                        } else {
+                            budget -= 1;
+                        }
+                        thread::yield_now();
+                    }
+                })
+            })
+            .collect();
+
+        for i in 0..VICTIM_ITERS {
+            let victim = C2_VICTIM + (i as u64 % 4);
+            init_empty_cage(victim);
+            for _ in 0..3 {
+                let u = c2_next_underfd();
+                get_unused_virtual_fd(victim, C2_FDKIND, u, false, u).unwrap();
+            }
+            remove_cage_from_fdtable(victim);
+            victim_cycle.fetch_add(1, Ordering::SeqCst);
+        }
+
+        running.store(false, Ordering::SeqCst);
+        for h in handles {
+            h.join().expect("a CONC-002 reader panicked");
+        }
+
+        let mut total_live = 0u64;
+        let mut total_gone = 0u64;
+        for (r, e) in errs.iter().enumerate() {
+            assert_eq!(
+                e.bad_entry.load(Ordering::SeqCst),
+                0,
+                "reader {r}: saw a wrong entry in the stable cage"
+            );
+            assert_eq!(
+                e.spin_exhausted.load(Ordering::SeqCst),
+                0,
+                "reader {r}: exhausted its spin budget waiting for a victim-cycle change"
+            );
+            total_live += e.saw_live.load(Ordering::SeqCst);
+            total_gone += e.saw_gone.load(Ordering::SeqCst);
+        }
+        assert!(
+            total_live > 0,
+            "no reader ever observed a victim cage while it existed"
+        );
+        assert!(
+            total_gone > 0,
+            "no reader ever observed a victim cage after removal"
+        );
+
+        assert_eq!(return_fdtable_copy(C2_STABLE), snapshot);
+        remove_cage_from_fdtable(C2_STABLE);
+
+        {
+            let released = C2_RELEASED.lock().unwrap();
+            for (u, n) in released.iter() {
+                assert_eq!(
+                    *n, 1,
+                    "underfd {u:#x} was released {n} times (expected exactly 1)"
+                );
+            }
+        }
+        assert_eq!(C2_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+        refresh();
+    }
+
+    #[test]
+    /// Regression test for a fixed defect: _increment_fdcount in
+    /// dashmaparrayglobal.rs (and dashmapvecglobal.rs) used to be a
+    /// non-atomic get_mut()/else-insert(), so two cages first-referencing
+    /// the same (fdkind,underfd) concurrently could both take the
+    /// "missing" branch and both insert(1), undercounting the refcount by
+    /// up to N-1. The symptom was a premature `last` close (the underlying
+    /// fd released while another cage still held it), or a "FDCOUNT
+    /// missing key" / "FDCOUNT underflow for key" panic inside
+    /// _decrement_fdcount.
+    ///
+    /// This race is NOT reachable between two threads in the *same* cage:
+    /// get_unused_virtual_fd holds the FDTABLE row guard across both the
+    /// slot scan and _increment_fdcount. Every worker below therefore lives
+    /// in its own cage, and all workers race on ONE shared underfd per
+    /// round -- the same underfd, deliberately, unlike every other test in
+    /// this file.
+    fn conc_002_shared_underfd_refcount_race() {
+        let _lock = c2_test_guard();
+        refresh();
+        c2_setup();
+
+        const ROUNDS: usize = 500;
+
+        for w in 0..C2_WORKERS as u64 {
+            init_empty_cage(C2_BASE + w);
+        }
+
+        let alloc_errs = Arc::new(AtomicU64::new(0));
+        let close_errs = Arc::new(AtomicU64::new(0));
+        let start = Arc::new(Barrier::new(C2_WORKERS));
+        let allocated = Arc::new(Barrier::new(C2_WORKERS));
+
+        let handles: Vec<_> = (0..C2_WORKERS)
+            .map(|w| {
+                let alloc_errs = Arc::clone(&alloc_errs);
+                let close_errs = Arc::clone(&close_errs);
+                let start = Arc::clone(&start);
+                let allocated = Arc::clone(&allocated);
+                thread::spawn(move || {
+                    let cage = C2_BASE + w as u64;
+                    for round in 0..ROUNDS {
+                        // Deliberately the SAME underfd across all
+                        // C2_WORKERS threads this round -- the exact race
+                        // window for bug (a). Distinct across rounds so
+                        // C2_RELEASED can count "one last-close per round".
+                        let shared_underfd = 0x1000_0000u64 + round as u64;
+                        start.wait();
+                        let vfd = get_unused_virtual_fd(
+                            cage,
+                            C2_FDKIND,
+                            shared_underfd,
+                            false,
+                            shared_underfd,
+                        );
+                        allocated.wait();
+                        match vfd {
+                            Ok(vfd) => {
+                                if close_virtualfd(cage, vfd).is_err() {
+                                    close_errs.fetch_add(1, Ordering::SeqCst);
+                                }
+                            }
+                            Err(_) => {
+                                alloc_errs.fetch_add(1, Ordering::SeqCst);
+                            }
+                        }
+                    }
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join()
+                .expect("a CONC-002 worker panicked (this is what bug 1a used to reproduce)");
+        }
+
+        assert_eq!(alloc_errs.load(Ordering::SeqCst), 0);
+        assert_eq!(close_errs.load(Ordering::SeqCst), 0);
+
+        {
+            let released = C2_RELEASED.lock().unwrap();
+            assert_eq!(
+                released.len(),
+                ROUNDS,
+                "expected exactly one distinct shared underfd per round to be released"
+            );
+            for (u, n) in released.iter() {
+                assert_eq!(
+                    *n, 1,
+                    "underfd {u:#x} was released {n} times (expected exactly 1 -- \
+                     a refcount race would show 0 or >1)"
+                );
+            }
+        }
+        assert_eq!(C2_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+        for w in 0..C2_WORKERS as u64 {
+            remove_cage_from_fdtable(C2_BASE + w);
+        }
+        for w in 0..C2_WORKERS as u64 {
+            assert!(!check_cage_exists(C2_BASE + w));
+        }
+        refresh();
+    }
+
+    #[test]
+    /// Regression test for a fixed defect: copy_fdtable_for_cage in
+    /// dashmaparrayglobal.rs (and dashmapvecglobal.rs) used to read the
+    /// source cage's fd row twice -- once via `*FDTABLE.get(&src)` for the
+    /// snapshot, once more via a separate `FDTABLE.get(&src).iter()` for
+    /// the refcount increments. A close_virtualfd() landing between the two
+    /// reads could leave the child cage holding an entry that was never
+    /// incremented (later double-release / underflow panic); a
+    /// get_unused_virtual_fd() landing between them could increment a key
+    /// whose entry never made it into the child (a permanent refcount leak
+    /// -- the underlying fd would never actually be released).
+    ///
+    /// This is the in-crate mirror of what
+    /// tests/unit-tests/process_tests/deterministic/conc_002_cage_fd_fs_stress.c
+    /// drives from the C side: fork() interleaved with concurrent fd-table
+    /// churn in the forking cage.
+    fn conc_002_copy_fdtable_vs_concurrent_churn() {
+        let _lock = c2_test_guard();
+        refresh();
+        c2_setup();
+
+        const CHURNERS: usize = 4;
+        const COPIES: usize = 300;
+        // Bounded independently of `running`: if copy_fdtable_for_cage ever
+        // desyncs a child's refcounts from its contents (the bug this test
+        // pins), later bookkeeping calls degrade toward a full linear scan
+        // of FDCOUNT (see _decrement_fdcount's panic-message path), and 4
+        // churner threads hammering the table in a tight, unyielding loop
+        // can starve that scan indefinitely under parking_lot's fair-ish
+        // shard locks. A hard cap plus a periodic yield keeps this test's
+        // own failure mode a fast, clean assertion instead of a livelock.
+        const CHURN_MAX: u64 = 200_000;
+
+        let src_cage = C2_BASE;
+        let child_cage = C2_CHILD;
+        init_empty_cage(src_cage);
+
+        let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let churn_errs = Arc::new(AtomicU64::new(0));
+        let churn_allocs = Arc::new(AtomicU64::new(0));
+
+        let handles: Vec<_> = (0..CHURNERS)
+            .map(|_| {
+                let running = Arc::clone(&running);
+                let churn_errs = Arc::clone(&churn_errs);
+                let churn_allocs = Arc::clone(&churn_allocs);
+                thread::spawn(move || {
+                    let mut n = 0u64;
+                    while running.load(Ordering::SeqCst) && n < CHURN_MAX {
+                        let u = c2_next_underfd();
+                        // A short-lived fd: opened and immediately closed,
+                        // so it is likely to straddle a concurrent copy's
+                        // two source reads.
+                        match get_unused_virtual_fd(src_cage, C2_FDKIND, u, false, u) {
+                            Ok(vfd) => {
+                                churn_allocs.fetch_add(1, Ordering::SeqCst);
+                                if close_virtualfd(src_cage, vfd).is_err() {
+                                    churn_errs.fetch_add(1, Ordering::SeqCst);
+                                }
+                            }
+                            Err(_) => {
+                                churn_errs.fetch_add(1, Ordering::SeqCst);
+                            }
+                        }
+                        n += 1;
+                        if n % 64 == 0 {
+                            thread::yield_now();
+                        }
+                    }
+                })
+            })
+            .collect();
+
+        let mut copy_errs = 0u64;
+        for _ in 0..COPIES {
+            if copy_fdtable_for_cage(src_cage, child_cage).is_err() {
+                copy_errs += 1;
+                continue;
+            }
+            let child_snapshot = return_fdtable_copy(child_cage);
+            // Self-consistency only: every entry the child claims to hold
+            // must translate back to itself. Deliberately NOT compared
+            // against a snapshot of the source taken before the copy --
+            // the churner threads keep mutating src_cage throughout, so a
+            // "before" snapshot can legitimately differ from what an
+            // in-flight copy actually captured. The real oracle for bug 1c
+            // is the exactly-once release accounting below: an
+            // under-incremented entry either panics in _decrement_fdcount
+            // or shows up there as a leaked/double-released underfd.
+            for (&vfd, ent) in &child_snapshot {
+                if translate_virtual_fd(child_cage, vfd).as_ref() != Ok(ent) {
+                    copy_errs += 1;
+                }
+            }
+            remove_cage_from_fdtable(child_cage);
+        }
+
+        running.store(false, Ordering::SeqCst);
+        for h in handles {
+            h.join().expect("a CONC-002 churner panicked");
+        }
+
+        assert_eq!(churn_errs.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            copy_errs, 0,
+            "copy_fdtable_for_cage produced a child with an internally \
+             inconsistent entry (translate_virtual_fd disagreed with \
+             return_fdtable_copy)"
+        );
+
+        remove_cage_from_fdtable(src_cage);
+
+        {
+            let released = C2_RELEASED.lock().unwrap();
+            assert_eq!(
+                released.len() as u64,
+                churn_allocs.load(Ordering::SeqCst),
+                "not every underfd the churners allocated fired exactly one \
+                 last-close -- a leak or a double-release would show up here"
+            );
+            for (u, n) in released.iter() {
+                assert_eq!(
+                    *n, 1,
+                    "underfd {u:#x} was released {n} times (expected exactly 1)"
+                );
+            }
+        }
+        assert_eq!(C2_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+        refresh();
+    }
+
+    #[test]
+    /// Regression test for a fixed defect: get_specific_virtual_fd used
+    /// `> FD_PER_PROCESS_MAX` instead of `>=`, so requested_virtualfd ==
+    /// FD_PER_PROCESS_MAX passed the bounds check and indexed the backing
+    /// table out of bounds (a host panic, e.g. from dup2(x,
+    /// FD_PER_PROCESS_MAX)) instead of returning EBADF.
+    fn get_specific_virtual_fd_rejects_fd_at_max() {
+        let _lock = c2_test_guard();
+        refresh();
+
+        let cage = C2_STABLE;
+        init_empty_cage(cage);
+        let result = get_specific_virtual_fd(cage, FD_PER_PROCESS_MAX, C2_FDKIND, 0, false, 0);
+        assert_eq!(result, Err(threei::Errno::EBADF as u64));
+        remove_cage_from_fdtable(cage);
+        refresh();
     }
 }
