@@ -16,7 +16,6 @@ and how a new release is created.
 | Docker image | `securesystemslab/lind-wasm:v0.1.0` |
 | Digest | `sha256:97ec75e99295c924971de249925ac7a3dd136ceb002b198a9e5b30e440ad7e28` |
 
-This is a pre-release. lind-wasm has not reached `v1.0.0` yet.
 
 ### 1.2 Where to find releases
 
@@ -44,15 +43,12 @@ for full pipeline details.
 
 We use [Semantic Versioning](https://semver.org/) (`vMAJOR.MINOR.PATCH`).
 
-lind-wasm is currently in `0.x.x`. This is because the project is still under development and the release process is still being set up.
-
-Criteria for `v1.0.0` are still under discussion. This section will be updated once those criteria are finalized.
 
 ## 4. Release Plan
 
 There is no fixed release schedule yet. Minor versions (`v0.x.0`) are created manually using the process below.
 
-Once the criteria for `v1.0.0` are agreed on, official releases will begin from that point.
+Criteria for `v1.0.0` are still under discussion. Once the criteria for `v1.0.0` are agreed on, official releases will begin from that point.
 
 ## 5. Tag Strategy
 
