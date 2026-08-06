@@ -234,11 +234,19 @@ pub fn get_specific_virtual_fd(
     // This is before the FDTABLE action, so if I decrement the same fd, it
     // calls the intermediate handler instead of the last one.
     _increment_fdcount(myentry);
-    let myoptionentry = FDTABLE.get(&cageid).unwrap()[requested_virtualfd as usize];
-    // always add the new entry.  I'm doing this first, before I close
-    // the old one because I need to ensure I've cleaned up state correctly
-    // before calling the close handlers...
-    FDTABLE.get_mut(&cageid).unwrap()[requested_virtualfd as usize] = Some(myentry);
+    // Read the old entry and write the new one under a SINGLE guard
+    // acquisition (via replace()), not two separate ones. Two guards let
+    // two concurrent calls targeting the same requested_virtualfd both
+    // read the same old entry and both decrement it (an FDCOUNT
+    // underflow panic, or a double release of a still-live host fd), or
+    // let one call's write overwrite a concurrent get_unused_virtual_fd's
+    // insert into the same slot (a permanent refcount leak). The guard
+    // is dropped before the close handler below runs, since a handler
+    // may re-enter this module (see the recursion tests).
+    let myoptionentry = {
+        let mut row = FDTABLE.get_mut(&cageid).unwrap();
+        row[requested_virtualfd as usize].replace(myentry)
+    };
 
     // Update the fdcount / close the old entry, if existed
     if let Some(entry) = myoptionentry {

@@ -1735,6 +1735,10 @@ mod tests {
     //       snapshot, once more for the refcount increments), so a
     //       concurrent close/allocate landing between the two reads could
     //       desync the child's refcounts from its fd-table contents.
+    //
+    // A fourth bug in the same family, bug (d), was found later while
+    // designing CONC-003; it is documented and fixed in the CONC-003 block
+    // below.
     // =====================================================================
 
     /// Reserved cage-id block for CONC-002. Disjoint from
@@ -1744,7 +1748,8 @@ mod tests {
     const C2_CHILD: u64 = 0x0000_0000_C0C2_0020; // fork copies, +0..C2_WORKERS
     const C2_STABLE: u64 = 0x0000_0000_C0C2_0040;
     const C2_VICTIM: u64 = 0x0000_0000_C0C2_0050; // +0..4, cycled by Test 2
-    // 0xC0C2_0060..0xC0C2_00FF left free for the other CONC/ISO rows of #1304.
+                                                  // 0xC0C2_0060..0xC0C2_00FF left free; later rows of #1304 use their own
+                                                  // 0xC0Cn_0000 blocks instead (see the CONC-003 block below).
 
     const C2_WORKERS: usize = 8;
 
@@ -1783,7 +1788,11 @@ mod tests {
         if entry.fdkind != C2_FDKIND || remaining != 0 {
             C2_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
         }
-        *C2_RELEASED.lock().unwrap().entry(entry.underfd).or_insert(0) += 1;
+        *C2_RELEASED
+            .lock()
+            .unwrap()
+            .entry(entry.underfd)
+            .or_insert(0) += 1;
         C2_LAST.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -1863,8 +1872,7 @@ mod tests {
             init_empty_cage(C2_BASE + w);
         }
 
-        let errs: Arc<Vec<C2Errs>> =
-            Arc::new((0..C2_WORKERS).map(|_| C2Errs::default()).collect());
+        let errs: Arc<Vec<C2Errs>> = Arc::new((0..C2_WORKERS).map(|_| C2Errs::default()).collect());
         let start = Arc::new(Barrier::new(C2_WORKERS));
 
         let handles: Vec<_> = (0..C2_WORKERS)
@@ -2449,6 +2457,632 @@ mod tests {
         let result = get_specific_virtual_fd(cage, FD_PER_PROCESS_MAX, C2_FDKIND, 0, false, 0);
         assert_eq!(result, Err(threei::Errno::EBADF as u64));
         remove_cage_from_fdtable(cage);
+        refresh();
+    }
+
+    // =====================================================================
+    // CONC-003 -- cage-table and fd-refcount operations.
+    //
+    // Oracle: all interleavings preserve the fdtables refcount invariants:
+    //   (i)   sum of live references to a (fdkind, underfd) == FDCOUNT[key]
+    //   (ii)  the `last` close handler fires exactly once per key, and only
+    //         once no cage holds a reference to it any longer
+    //   (iii) the `intermediate` close handler fires once per non-final
+    //         release
+    // A decrement fires `last` iff it is the one that takes the count to 0,
+    // and the count is a pure function of how many increments/decrements
+    // have happened so far, not their order -- so the totals asserted below
+    // are exact equalities, not bounds, regardless of thread interleaving.
+    //
+    // This is the in-crate mirror of
+    // tests/unit-tests/process_tests/deterministic/conc_003_cage_fd_refcounts.c,
+    // which drives the same invariant from the C/POSIX side using pipe EOF
+    // as an external oracle (the public interface cannot inspect FDCOUNT
+    // directly).
+    //
+    // While designing this block, a bug in the same family as CONC-002's
+    // (a)-(c) above was found and fixed in dashmaparrayglobal.rs and
+    // dashmapvecglobal.rs. Continuing that list as bug (d):
+    //   (d) get_specific_virtual_fd used to read the target virtual-fd slot
+    //       under one DashMap guard (`FDTABLE.get(&cageid)`) and then write
+    //       it under a second, separately acquired guard
+    //       (`FDTABLE.get_mut(&cageid)`). Two concurrent calls racing to
+    //       overwrite the same slot (e.g. two dup2()s onto the same target,
+    //       or a dup2() racing a close()/allocate() that lands on the same
+    //       slot) could both observe the same "old" entry and both
+    //       decrement it -- an FDCOUNT underflow panic, or a double release
+    //       of a still-live host fd -- or have one call's write overwrite a
+    //       concurrent get_unused_virtual_fd()'s insert into the same slot,
+    //       permanently leaking that entry's reference. vanillaglobal.rs
+    //       and muthashmaxglobal.rs use HashMap::insert, which returns the
+    //       old value atomically under one guard, and were not affected.
+    //       conc_003_dup2_overwrite_refcount_conservation below is the
+    //       regression test.
+    // =====================================================================
+
+    /// Reserved cage-id block for CONC-003. 0xC0C3 == "CONC-003". Disjoint
+    /// from threei::TESTING_CAGEID0..15 and from every other block used in
+    /// this module.
+    const C3_A: u64 = 0x0000_0000_C0C3_0000; // primary cage
+    const C3_CHILD: u64 = 0x0000_0000_C0C3_0010; // fork copies, +0..C3_CHILDREN
+                                                 // (+8..8+C3_WORKERS reserved as scratch copy
+                                                 // targets by Test 4)
+    const C3_HOLDER: u64 = 0x0000_0000_C0C3_0030; // permanent reference holder (Test 4)
+    const C3_WORKER: u64 = 0x0000_0000_C0C3_0040; // +0..C3_WORKERS
+
+    const C3_CHILDREN: usize = 3;
+    const C3_WORKERS: usize = 8;
+
+    /// A dedicated fdkind plus a disjoint underfd window guarantees no
+    /// FDCOUNT key ever aliases with another test's leftovers -- refresh()
+    /// clears FDTABLE and CLOSEHANDLERTABLE but never FDCOUNT, so refcount
+    /// state leaks across every test in this binary.
+    const C3_FDKIND: u32 = 0x7E57_0003;
+    const C3_UNDERFD_BASE: u64 = 0x3000_0000;
+
+    /// Hands out a globally unique underfd, so that no two allocations
+    /// anywhere in this block ever share an FDCOUNT key unless a test
+    /// deliberately wants that (Test 2 phase 2, Test 4).
+    static C3_UNDERFD_SEQ: AtomicU64 = AtomicU64::new(0);
+    fn c3_next_underfd() -> u64 {
+        C3_UNDERFD_BASE + C3_UNDERFD_SEQ.fetch_add(1, Ordering::SeqCst)
+    }
+
+    static C3_LAST: AtomicU64 = AtomicU64::new(0);
+    static C3_MID: AtomicU64 = AtomicU64::new(0);
+    static C3_HANDLER_ERRS: AtomicU64 = AtomicU64::new(0);
+    /// Set while a cage is known to hold a reference on the key(s) under
+    /// test; a `last` close observed while this is true is an invariant
+    /// violation recorded at the instant it happens, rather than inferred
+    /// after the fact from a final tally (used by Test 4).
+    static C3_HOLDER_ACTIVE: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+    lazy_static! {
+        /// underfd -> number of `last` closes seen. Every value must end at 1.
+        static ref C3_RELEASED: Mutex<std::collections::HashMap<u64, u64>> =
+            Mutex::new(std::collections::HashMap::new());
+        /// underfd -> each `remaining` value reported by an `intermediate`
+        /// close, in arrival order. Lets a test assert the exact multiset
+        /// of remaining-counts observed, not just how many fired.
+        static ref C3_INTERMEDIATE_REMAINING: Mutex<std::collections::HashMap<u64, Vec<u64>>> =
+            Mutex::new(std::collections::HashMap::new());
+    }
+
+    // Close handlers are plain `fn` pointers and cannot capture, so all
+    // bookkeeping lives in the statics above. They never panic: a panic
+    // inside fdtables' own teardown path is nearly impossible to attribute,
+    // so a violated expectation is recorded for the main thread to assert
+    // on instead.
+    fn c3_last_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        if entry.fdkind != C3_FDKIND || remaining != 0 || C3_HOLDER_ACTIVE.load(Ordering::SeqCst) {
+            C3_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        *C3_RELEASED
+            .lock()
+            .unwrap()
+            .entry(entry.underfd)
+            .or_insert(0) += 1;
+        C3_LAST.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+    fn c3_intermediate_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        if entry.fdkind != C3_FDKIND || remaining == 0 {
+            C3_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        C3_INTERMEDIATE_REMAINING
+            .lock()
+            .unwrap()
+            .entry(entry.underfd)
+            .or_default()
+            .push(remaining);
+        C3_MID.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    /// Must be called *after* refresh(): refresh() clears
+    /// CLOSEHANDLERTABLE, so a registration that ran only once would
+    /// silently lose the handlers on the next test that calls refresh().
+    fn c3_setup() {
+        register_close_handlers(C3_FDKIND, c3_intermediate_close, c3_last_close);
+        C3_LAST.store(0, Ordering::SeqCst);
+        C3_MID.store(0, Ordering::SeqCst);
+        C3_HANDLER_ERRS.store(0, Ordering::SeqCst);
+        C3_HOLDER_ACTIVE.store(false, Ordering::SeqCst);
+        C3_RELEASED.lock().unwrap().clear();
+        C3_INTERMEDIATE_REMAINING.lock().unwrap().clear();
+    }
+
+    fn c3_iters() -> usize {
+        std::env::var("LIND_CONC003_ITERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(50)
+    }
+
+    #[test]
+    /// The roadmap's CONC-003 test. Per iteration: a cage with 4 virtual
+    /// fds aliasing one underfd is copied into 3 child cages (count 16),
+    /// then 15 of those 16 references are dropped through three different
+    /// decrement paths (explicit close, cage removal, and explicit-close-
+    /// then-removal) running concurrently, while the primary cage's one
+    /// retained reference must survive untouched -- no `last` close, and
+    /// translate_virtual_fd must keep working.
+    fn conc_003_refcount_conservation_across_cages() {
+        let _lock = c2_test_guard();
+        refresh();
+        c3_setup();
+
+        for _ in 0..c3_iters() {
+            let u = c3_next_underfd();
+
+            init_empty_cage(C3_A);
+            let mut v = [0u64; 4];
+            for slot in &mut v {
+                *slot = get_unused_virtual_fd(C3_A, C3_FDKIND, u, false, u).unwrap();
+            }
+            // Count 4.
+
+            for c in 0..C3_CHILDREN as u64 {
+                copy_fdtable_for_cage(C3_A, C3_CHILD + c).unwrap();
+            }
+            // Count 16.
+
+            let start = Arc::new(Barrier::new(4));
+            let handles: Vec<_> = (0..4u64)
+                .map(|t| {
+                    let start = Arc::clone(&start);
+                    thread::spawn(move || {
+                        start.wait();
+                        match t {
+                            0 => {
+                                // C3_A keeps v[0]; drop its other 3 references.
+                                for &vfd in &v[1..] {
+                                    close_virtualfd(C3_A, vfd).unwrap();
+                                }
+                            }
+                            1 => remove_cage_from_fdtable(C3_CHILD),
+                            2 => remove_cage_from_fdtable(C3_CHILD + 1),
+                            _ => {
+                                // Explicit-close path, rather than cage
+                                // teardown, for the third child -- races
+                                // the other two decrement paths against
+                                // this one.
+                                for &vfd in &v {
+                                    close_virtualfd(C3_CHILD + 2, vfd).unwrap();
+                                }
+                                remove_cage_from_fdtable(C3_CHILD + 2);
+                            }
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
+
+            // 15 of the 16 references are gone; C3_A's v[0] is the last one.
+            assert_eq!(
+                C3_LAST.load(Ordering::SeqCst),
+                0,
+                "last-close fired while C3_A still holds a reference"
+            );
+            assert_eq!(C3_MID.load(Ordering::SeqCst), 15);
+            assert!(!C3_RELEASED.lock().unwrap().contains_key(&u));
+            let entry = translate_virtual_fd(C3_A, v[0]).unwrap();
+            assert_eq!((entry.fdkind, entry.underfd), (C3_FDKIND, u));
+            for c in 0..C3_CHILDREN as u64 {
+                assert!(!check_cage_exists(C3_CHILD + c));
+            }
+            {
+                let mut remaining: Vec<u64> = C3_INTERMEDIATE_REMAINING
+                    .lock()
+                    .unwrap()
+                    .get(&u)
+                    .cloned()
+                    .unwrap_or_default();
+                remaining.sort_unstable_by(|a, b| b.cmp(a));
+                assert_eq!(remaining, (1..=15).rev().collect::<Vec<u64>>());
+            }
+
+            close_virtualfd(C3_A, v[0]).unwrap();
+            assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
+            assert_eq!(C3_MID.load(Ordering::SeqCst), 15);
+            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+
+            // Key-removal oracle, portable across all four backends since
+            // it never touches a private map directly: _increment_fdcount
+            // is `or_insert(0) += 1` and _decrement_fdcount removes the key
+            // on reaching 0, so a 0-valued FDCOUNT entry is unrepresentable.
+            // If the (C3_FDKIND, u) entry had NOT actually been removed
+            // above, it would have to be sitting at some count >= 1, and a
+            // fresh allocation on the same key followed by a close would
+            // drive it from that count down by one and fire `intermediate`,
+            // not `last`. So re-allocating and closing here must produce
+            // exactly one more `last` and leave C3_MID unchanged.
+            let v2 = get_unused_virtual_fd(C3_A, C3_FDKIND, u, false, u).unwrap();
+            close_virtualfd(C3_A, v2).unwrap();
+            assert_eq!(C3_LAST.load(Ordering::SeqCst), 2);
+            assert_eq!(
+                C3_MID.load(Ordering::SeqCst),
+                15,
+                "a stale FDCOUNT entry for {u:#x} survived the previous last-close"
+            );
+            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 2);
+
+            remove_cage_from_fdtable(C3_A);
+            assert!(!check_cage_exists(C3_A));
+
+            c3_setup();
+        }
+
+        refresh();
+    }
+
+    #[test]
+    /// Regression test for CONC-003 bug (d) (see the block header above):
+    /// get_specific_virtual_fd's non-atomic read-then-write of the target
+    /// virtual-fd slot.
+    fn conc_003_dup2_overwrite_refcount_conservation() {
+        let _lock = c2_test_guard();
+        refresh();
+        c3_setup();
+
+        // --- Phase 1: self-dup2 (deterministic, single-threaded). POSIX's
+        // dup2(fd, fd) is a no-op at the syscall layer, but the underlying
+        // fdtables primitive still runs a full get_specific_virtual_fd onto
+        // its own slot -- this pins that primitive's self-overwrite path,
+        // which must fire `intermediate`, never `last`.
+        {
+            init_empty_cage(C3_A);
+            let u = c3_next_underfd();
+            let v = get_unused_virtual_fd(C3_A, C3_FDKIND, u, false, u).unwrap();
+
+            get_specific_virtual_fd(C3_A, v, C3_FDKIND, u, true, u ^ 0xff).unwrap();
+
+            assert_eq!(C3_MID.load(Ordering::SeqCst), 1);
+            assert_eq!(C3_LAST.load(Ordering::SeqCst), 0);
+            assert_eq!(
+                C3_INTERMEDIATE_REMAINING.lock().unwrap().get(&u).cloned(),
+                Some(vec![1])
+            );
+            let entry = translate_virtual_fd(C3_A, v).unwrap();
+            assert!(entry.should_cloexec);
+            assert_eq!(entry.perfdinfo, u ^ 0xff);
+
+            close_virtualfd(C3_A, v).unwrap();
+            assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
+            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+
+            remove_cage_from_fdtable(C3_A);
+            c3_setup();
+        }
+
+        // --- Phase 2: concurrent overwrite conservation. C3_WORKERS
+        // threads race to overwrite the SAME target virtual-fd slot with
+        // fresh underfds, one after another, while a separate churner
+        // thread hammers unrelated slots in the same cage. Every underfd
+        // that is ever installed at the target slot has exactly one live
+        // reference to it at any moment (nothing else ever aliases a fresh
+        // underfd), so its eventual overwrite/close is always a `last`
+        // close: the oracle is simply "every underfd installed is released
+        // exactly once, and nothing panics" -- a panic here is bug (d)'s
+        // loud failure mode (an FDCOUNT underflow).
+        {
+            const DUP_ROUNDS: usize = 300;
+
+            init_empty_cage(C3_A);
+            let u0 = c3_next_underfd();
+            let target = get_unused_virtual_fd(C3_A, C3_FDKIND, u0, false, u0).unwrap();
+
+            let start = Arc::new(Barrier::new(C3_WORKERS + 2));
+
+            let handles: Vec<_> = (0..C3_WORKERS)
+                .map(|_| {
+                    let start = Arc::clone(&start);
+                    thread::spawn(move || {
+                        start.wait();
+                        let mut installed = Vec::with_capacity(DUP_ROUNDS);
+                        for _ in 0..DUP_ROUNDS {
+                            let nu = c3_next_underfd();
+                            get_specific_virtual_fd(C3_A, target, C3_FDKIND, nu, false, nu)
+                                .unwrap();
+                            installed.push(nu);
+                        }
+                        installed
+                    })
+                })
+                .collect();
+
+            let churner = {
+                let start = Arc::clone(&start);
+                thread::spawn(move || {
+                    start.wait();
+                    let mut installed = Vec::with_capacity(DUP_ROUNDS);
+                    for _ in 0..DUP_ROUNDS {
+                        let u = c3_next_underfd();
+                        let vfd = get_unused_virtual_fd(C3_A, C3_FDKIND, u, false, u).unwrap();
+                        close_virtualfd(C3_A, vfd).unwrap();
+                        installed.push(u);
+                    }
+                    installed
+                })
+            };
+
+            start.wait();
+
+            let mut expected: std::collections::HashSet<u64> = std::collections::HashSet::new();
+            expected.insert(u0);
+            for h in handles {
+                let installed = h.join().expect(
+                    "a CONC-003 dup2-overwrite worker panicked \
+                     (this is what bug (d) used to reproduce)",
+                );
+                expected.extend(installed);
+            }
+            let churn_installed = churner
+                .join()
+                .expect("the CONC-003 dup2-overwrite churner panicked");
+            expected.extend(churn_installed);
+
+            // Final occupant of `target` still needs its own explicit close.
+            let final_entry = translate_virtual_fd(C3_A, target).unwrap();
+            assert_eq!(final_entry.fdkind, C3_FDKIND);
+            close_virtualfd(C3_A, target).unwrap();
+
+            assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+            {
+                let released = C3_RELEASED.lock().unwrap();
+                assert_eq!(
+                    released.len(),
+                    expected.len(),
+                    "not every underfd installed during the race was released exactly once"
+                );
+                for u in &expected {
+                    assert_eq!(
+                        released.get(u).copied(),
+                        Some(1),
+                        "underfd {u:#x} was released a number of times other than 1"
+                    );
+                }
+            }
+
+            remove_cage_from_fdtable(C3_A);
+            c3_setup();
+        }
+
+        refresh();
+    }
+
+    #[test]
+    /// Refcount conservation for the exec (empty_fds_for_exec, drops only
+    /// cloexec entries) and cage-exit (remove_cage_from_fdtable, drops
+    /// everything) decrement paths, racing against each other and against
+    /// copy_fdtable_for_cage.
+    fn conc_003_exec_and_exit_refcount_conservation() {
+        let _lock = c2_test_guard();
+        refresh();
+        c3_setup();
+
+        for _ in 0..c3_iters() {
+            // --- Sub-phase 1: does the COUNT conserve across a 3-way race
+            // between two execs and one cage removal, all decrementing the
+            // SAME shared underfd?
+            let u = c3_next_underfd();
+            init_empty_cage(C3_A);
+            let mut v = [0u64; 6];
+            for (i, slot) in v.iter_mut().enumerate() {
+                *slot = get_unused_virtual_fd(C3_A, C3_FDKIND, u, i % 2 == 0, u).unwrap();
+            }
+            // Count 6 (3 cloexec, 3 not).
+
+            copy_fdtable_for_cage(C3_A, C3_CHILD).unwrap();
+            copy_fdtable_for_cage(C3_A, C3_CHILD + 1).unwrap();
+            // Count 18.
+
+            let start = Arc::new(Barrier::new(3));
+            let handles: Vec<_> = (0..3u64)
+                .map(|t| {
+                    let start = Arc::clone(&start);
+                    thread::spawn(move || {
+                        start.wait();
+                        match t {
+                            0 => empty_fds_for_exec(C3_A),               // drops 3 cloexec
+                            1 => empty_fds_for_exec(C3_CHILD),           // drops 3 cloexec
+                            _ => remove_cage_from_fdtable(C3_CHILD + 1), // drops all 6
+                        }
+                    })
+                })
+                .collect();
+            for h in handles {
+                h.join().unwrap();
+            }
+            // 18 - 3 - 3 - 6 = 6 left: the 3 non-cloexec survivors in each
+            // of C3_A and C3_CHILD. None of these 12 decrements reached 0.
+            assert_eq!(C3_LAST.load(Ordering::SeqCst), 0);
+            assert_eq!(C3_MID.load(Ordering::SeqCst), 12);
+            assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+            for cage in [C3_A, C3_CHILD] {
+                let survivors = return_fdtable_copy(cage);
+                assert_eq!(survivors.len(), 3);
+                for ent in survivors.values() {
+                    assert!(!ent.should_cloexec);
+                    assert_eq!(ent.underfd, u);
+                }
+            }
+            assert!(!check_cage_exists(C3_CHILD + 1));
+
+            // Remove the two survivors concurrently -- the 6th and final
+            // decrement, whichever thread performs it, is the sole `last`.
+            let start2 = Arc::new(Barrier::new(2));
+            let h_a = {
+                let start2 = Arc::clone(&start2);
+                thread::spawn(move || {
+                    start2.wait();
+                    remove_cage_from_fdtable(C3_A);
+                })
+            };
+            let h_c = {
+                let start2 = Arc::clone(&start2);
+                thread::spawn(move || {
+                    start2.wait();
+                    remove_cage_from_fdtable(C3_CHILD);
+                })
+            };
+            h_a.join().unwrap();
+            h_c.join().unwrap();
+
+            assert_eq!(C3_MID.load(Ordering::SeqCst), 17);
+            assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
+            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+            {
+                let mut remaining: Vec<u64> = C3_INTERMEDIATE_REMAINING
+                    .lock()
+                    .unwrap()
+                    .get(&u)
+                    .cloned()
+                    .unwrap_or_default();
+                remaining.sort_unstable_by(|a, b| b.cmp(a));
+                assert_eq!(remaining, (1..=17).rev().collect::<Vec<u64>>());
+            }
+            assert!(!check_cage_exists(C3_A));
+            assert!(!check_cage_exists(C3_CHILD));
+
+            c3_setup();
+
+            // --- Sub-phase 2: does the RIGHT set of entries get dropped,
+            // not just the right count? Two disjoint underfds -- cloexec
+            // entries all on u_cx, non-cloexec all on u_keep -- so a bug
+            // that drops (or spares) the wrong kind shows up as an early or
+            // missing release on the wrong key, not just a miscount.
+            let u_cx = c3_next_underfd();
+            let u_keep = c3_next_underfd();
+            init_empty_cage(C3_A);
+            for _ in 0..3 {
+                get_unused_virtual_fd(C3_A, C3_FDKIND, u_cx, true, u_cx).unwrap();
+                get_unused_virtual_fd(C3_A, C3_FDKIND, u_keep, false, u_keep).unwrap();
+            }
+            copy_fdtable_for_cage(C3_A, C3_CHILD).unwrap();
+            // count(u_cx) = 6, count(u_keep) = 6.
+
+            empty_fds_for_exec(C3_CHILD); // drops C3_CHILD's 3 cloexec (u_cx) entries
+            assert!(!C3_RELEASED.lock().unwrap().contains_key(&u_cx));
+            assert!(!C3_RELEASED.lock().unwrap().contains_key(&u_keep));
+            for ent in return_fdtable_copy(C3_CHILD).values() {
+                assert!(!ent.should_cloexec);
+                assert_eq!(ent.underfd, u_keep);
+            }
+
+            let start3 = Arc::new(Barrier::new(2));
+            let h_a = {
+                let start3 = Arc::clone(&start3);
+                thread::spawn(move || {
+                    start3.wait();
+                    remove_cage_from_fdtable(C3_A); // drops 3x u_cx + 3x u_keep
+                })
+            };
+            let h_c = {
+                let start3 = Arc::clone(&start3);
+                thread::spawn(move || {
+                    start3.wait();
+                    remove_cage_from_fdtable(C3_CHILD); // drops remaining 3x u_keep
+                })
+            };
+            h_a.join().unwrap();
+            h_c.join().unwrap();
+
+            assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+            {
+                let released = C3_RELEASED.lock().unwrap();
+                assert_eq!(released.get(&u_cx).copied(), Some(1));
+                assert_eq!(released.get(&u_keep).copied(), Some(1));
+            }
+            assert!(!check_cage_exists(C3_A));
+            assert!(!check_cage_exists(C3_CHILD));
+
+            c3_setup();
+        }
+
+        refresh();
+    }
+
+    #[test]
+    /// Mirrors the C test's pipe-EOF oracle inside the crate: the `last`
+    /// close handler must not fire for a key while ANY cage still holds a
+    /// reference to it, regardless of how many other cages concurrently
+    /// allocate and release references to that very same key. Distinct
+    /// from conc_002_shared_underfd_refcount_race, which has every worker
+    /// release its reference by the end of each round and so cannot
+    /// express "no last close while a reference exists" -- there is no
+    /// permanent holder there to violate.
+    fn conc_003_no_last_close_while_referenced() {
+        let _lock = c2_test_guard();
+        refresh();
+        c3_setup();
+
+        const ROUNDS: usize = 4000;
+
+        let u = c3_next_underfd();
+        init_empty_cage(C3_HOLDER);
+        let holder_vfd = get_unused_virtual_fd(C3_HOLDER, C3_FDKIND, u, false, u).unwrap();
+        C3_HOLDER_ACTIVE.store(true, Ordering::SeqCst);
+
+        let mut worker_vfd = vec![0u64; C3_WORKERS];
+        for w in 0..C3_WORKERS as u64 {
+            init_empty_cage(C3_WORKER + w);
+            worker_vfd[w as usize] =
+                get_unused_virtual_fd(C3_WORKER + w, C3_FDKIND, u, false, u).unwrap();
+        }
+        // count = 1 (holder) + C3_WORKERS, and never drops below 1 (the
+        // holder's own reference) for the rest of this test.
+
+        let start = Arc::new(Barrier::new(C3_WORKERS));
+        let handles: Vec<_> = (0..C3_WORKERS as u64)
+            .map(|w| {
+                let start = Arc::clone(&start);
+                let mut vfd = worker_vfd[w as usize];
+                thread::spawn(move || {
+                    let cage = C3_WORKER + w;
+                    start.wait();
+                    for r in 0..ROUNDS {
+                        if r % 32 == 0 {
+                            // Fold copy_fdtable_for_cage/remove_cage_from_fdtable
+                            // into the mix without touching this worker's own
+                            // reference. C3_CHILD + 8 + w is disjoint from
+                            // every id Tests 1-3 use.
+                            let tmp = C3_CHILD + 8 + w;
+                            copy_fdtable_for_cage(cage, tmp).unwrap();
+                            remove_cage_from_fdtable(tmp);
+                        } else {
+                            close_virtualfd(cage, vfd).unwrap();
+                            vfd = get_unused_virtual_fd(cage, C3_FDKIND, u, false, u).unwrap();
+                        }
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        assert_eq!(
+            C3_LAST.load(Ordering::SeqCst),
+            0,
+            "last-close fired while C3_HOLDER still held a reference"
+        );
+        assert!(C3_RELEASED.lock().unwrap().is_empty());
+        assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+        for w in 0..C3_WORKERS as u64 {
+            remove_cage_from_fdtable(C3_WORKER + w);
+        }
+        C3_HOLDER_ACTIVE.store(false, Ordering::SeqCst);
+        close_virtualfd(C3_HOLDER, holder_vfd).unwrap();
+
+        assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
+        assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+        assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+        remove_cage_from_fdtable(C3_HOLDER);
         refresh();
     }
 }
