@@ -3085,4 +3085,645 @@ mod tests {
         remove_cage_from_fdtable(C3_HOLDER);
         refresh();
     }
+
+    // =====================================================================
+    // CONC-004 -- refcount conservation under dup/close/fork.
+    //
+    // The narrowly-controlled counterpart to CONC-003. Where CONC-003 races
+    // many different decrement paths at once and asks "did the count
+    // survive?", CONC-004 pins down ONE lifecycle --
+    //
+    //     allocate -> duplicate -> fork -> concurrent close -> final close
+    //
+    // -- and sweeps it across the full matrix of shapes under a strict
+    // ownership model: every reference is released exactly once, by exactly
+    // one owner, and no two owners ever touch the same virtual fd in the
+    // same cage. That removes every source of schedule-dependence from the
+    // *application* side, so every quantity asserted below is an exact
+    // equality derived from the config alone, not a bound.
+    //
+    // The primitives here model rawposix's three POSIX duplication calls,
+    // which are POSIX-equivalent but take different paths inside lind
+    // (see src/rawposix/src/fs_calls.rs):
+    //
+    //   DupKind::Dup     dup(): rawposix calls libc::dup(underfd), yielding
+    //                    a FRESH host fd registered as a NEW key at count 1.
+    //                    The original key is untouched -- the refcounting is
+    //                    delegated to the host kernel. Modelled here as
+    //                    get_unused_virtual_fd on a freshly-minted underfd.
+    //   DupKind::Dup2    dup2(): get_specific_virtual_fd with the SOURCE's
+    //                    underfd -- shared key, count += 1.
+    //   DupKind::Fdupfd  fcntl(F_DUPFD): get_unused_virtual_fd_from_startfd
+    //                    with the SOURCE's underfd -- shared key, like dup2
+    //                    and NOT like dup.
+    //
+    // Sweeping all three matters because the asymmetry is easy to break in
+    // one direction only: a change that made dup() share the key, or dup2()
+    // mint a fresh one, would still pass a test that only exercised one of
+    // them. In the Dup rows the fresh keys must reach zero and fire `last`
+    // WHILE the shared sentinel key is still held -- an independence
+    // property CONC-003 has no analogue for.
+    //
+    // This is the in-crate mirror of
+    // tests/unit-tests/process_tests/deterministic/conc_004_dup_close_fork_refcounts.c,
+    // which drives the same lifecycle from the C/POSIX side using pipe EOF
+    // as its oracle. The roadmap's headline assertion -- last_close_count
+    // == 1 after every copy and duplicate is gone -- is far more precise
+    // here than "the C program did not crash", because the count is read
+    // directly out of a registered final-close handler.
+    // =====================================================================
+
+    /// Reserved cage-id block for CONC-004. 0xC0C4 == "CONC-004". Disjoint
+    /// from threei::TESTING_CAGEID0..15 and from every other block used in
+    /// this module.
+    const C4_A: u64 = 0x0000_0000_C0C4_0000; // primary (sentinel-holding) cage
+    const C4_CHILD: u64 = 0x0000_0000_C0C4_0010; // fork copies, +0..C4_MAX_CHILD
+
+    const C4_MAX_DUP: usize = 4;
+    const C4_MAX_CHILD: usize = 3;
+    const C4_MAX_THREAD: usize = 2;
+
+    /// Virtual-fd slot base for the Dup2 path. get_specific_virtual_fd
+    /// installs at a caller-chosen slot, so these must be slots nothing
+    /// else in a round allocates: the sentinel and the Dup/Fdupfd
+    /// duplicates all come from the low end of the table, and
+    /// FD_PER_PROCESS_MAX is 1024.
+    const C4_DUP2_SLOT: u64 = 100;
+    /// Start-fd handed to get_unused_virtual_fd_from_startfd for the
+    /// Fdupfd path -- a nonzero start exercises the argument that
+    /// distinguishes it from plain get_unused_virtual_fd.
+    const C4_FDUPFD_START: u64 = 50;
+
+    /// A dedicated fdkind plus a disjoint underfd window guarantees no
+    /// FDCOUNT key ever aliases with another test's leftovers -- refresh()
+    /// clears FDTABLE and CLOSEHANDLERTABLE but never FDCOUNT, so refcount
+    /// state leaks across every test in this binary.
+    const C4_FDKIND: u32 = 0x7E57_0004;
+    const C4_UNDERFD_BASE: u64 = 0x4000_0000;
+
+    static C4_UNDERFD_SEQ: AtomicU64 = AtomicU64::new(0);
+    fn c4_next_underfd() -> u64 {
+        C4_UNDERFD_BASE + C4_UNDERFD_SEQ.fetch_add(1, Ordering::SeqCst)
+    }
+
+    static C4_LAST: AtomicU64 = AtomicU64::new(0);
+    static C4_MID: AtomicU64 = AtomicU64::new(0);
+    static C4_HANDLER_ERRS: AtomicU64 = AtomicU64::new(0);
+    /// The underfd currently acting as the sentinel, and whether it is
+    /// still held. A `last` close on THAT key while the flag is set is an
+    /// invariant violation recorded at the instant it happens, rather than
+    /// inferred after the fact from a final tally. It is keyed on the
+    /// underfd because in the Dup rows a `last` close on a *fresh* key
+    /// during the same window is expected and correct.
+    static C4_SENTINEL_UNDERFD: AtomicU64 = AtomicU64::new(u64::MAX);
+    static C4_SENTINEL_ACTIVE: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+    lazy_static! {
+        /// underfd -> number of `last` closes seen. Every key must end at 1.
+        static ref C4_RELEASED: Mutex<std::collections::HashMap<u64, u64>> =
+            Mutex::new(std::collections::HashMap::new());
+        /// underfd -> each `remaining` value reported by an `intermediate`
+        /// close, in arrival order.
+        static ref C4_INTERMEDIATE_REMAINING: Mutex<std::collections::HashMap<u64, Vec<u64>>> =
+            Mutex::new(std::collections::HashMap::new());
+    }
+
+    // Close handlers are plain `fn` pointers and cannot capture, so all
+    // bookkeeping lives in the statics above. They never panic: a panic
+    // inside fdtables' own teardown path is nearly impossible to attribute,
+    // so a violated expectation is recorded for the main thread to assert
+    // on instead.
+    fn c4_last_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        let sentinel_violation = C4_SENTINEL_ACTIVE.load(Ordering::SeqCst)
+            && entry.underfd == C4_SENTINEL_UNDERFD.load(Ordering::SeqCst);
+        if entry.fdkind != C4_FDKIND || remaining != 0 || sentinel_violation {
+            C4_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        *C4_RELEASED
+            .lock()
+            .unwrap()
+            .entry(entry.underfd)
+            .or_insert(0) += 1;
+        C4_LAST.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+    fn c4_intermediate_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        if entry.fdkind != C4_FDKIND || remaining == 0 {
+            C4_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        C4_INTERMEDIATE_REMAINING
+            .lock()
+            .unwrap()
+            .entry(entry.underfd)
+            .or_default()
+            .push(remaining);
+        C4_MID.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    /// Must be called *after* refresh(): refresh() clears
+    /// CLOSEHANDLERTABLE, so a registration that ran only once would
+    /// silently lose the handlers on the next test that calls refresh().
+    fn c4_setup() {
+        register_close_handlers(C4_FDKIND, c4_intermediate_close, c4_last_close);
+        C4_LAST.store(0, Ordering::SeqCst);
+        C4_MID.store(0, Ordering::SeqCst);
+        C4_HANDLER_ERRS.store(0, Ordering::SeqCst);
+        C4_SENTINEL_ACTIVE.store(false, Ordering::SeqCst);
+        C4_SENTINEL_UNDERFD.store(u64::MAX, Ordering::SeqCst);
+        C4_RELEASED.lock().unwrap().clear();
+        C4_INTERMEDIATE_REMAINING.lock().unwrap().clear();
+    }
+
+    /// The whole config matrix below is 432 shapes, so a single iteration
+    /// already covers far more ground than CONC-003's one fixed shape --
+    /// hence a smaller default than c3_iters()'s 50. Raise it with
+    /// LIND_CONC004_ITERS for a soak run.
+    fn c4_iters() -> usize {
+        std::env::var("LIND_CONC004_ITERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(4)
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    enum DupKind {
+        /// dup(): fresh underfd, brand-new key at count 1.
+        Dup,
+        /// dup2(): shared underfd installed at a caller-chosen slot.
+        Dup2,
+        /// fcntl(F_DUPFD): shared underfd at the lowest free slot >= start.
+        Fdupfd,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct C4Cfg {
+        ndup: usize,
+        nchild: usize,
+        nthread: usize,
+        kind: DupKind,
+        /// Duplicates created after the forks, so the children inherit only
+        /// the sentinel (pure fork-then-teardown pressure on its key).
+        dup_after: bool,
+        /// Children explicitly close their assigned inherited duplicates
+        /// before cage teardown, instead of leaving everything to teardown.
+        child_close: bool,
+    }
+
+    /// Creates `n` duplicates of `src_underfd` in `cage`, per `kind`, and
+    /// returns (virtual fds, the underfd behind each). For Dup the underfds
+    /// are all distinct and fresh; for Dup2/Fdupfd they all equal
+    /// `src_underfd`.
+    fn c4_make_dups(
+        cage: u64,
+        src_underfd: u64,
+        kind: DupKind,
+        from: usize,
+        to: usize,
+        vfds: &mut Vec<u64>,
+        underfds: &mut Vec<u64>,
+    ) {
+        for i in from..to {
+            match kind {
+                DupKind::Dup => {
+                    let nu = c4_next_underfd();
+                    let v = get_unused_virtual_fd(cage, C4_FDKIND, nu, false, nu).unwrap();
+                    vfds.push(v);
+                    underfds.push(nu);
+                }
+                DupKind::Dup2 => {
+                    let slot = C4_DUP2_SLOT + i as u64;
+                    get_specific_virtual_fd(cage, slot, C4_FDKIND, src_underfd, false, src_underfd)
+                        .unwrap();
+                    vfds.push(slot);
+                    underfds.push(src_underfd);
+                }
+                DupKind::Fdupfd => {
+                    let v = get_unused_virtual_fd_from_startfd(
+                        cage,
+                        C4_FDKIND,
+                        src_underfd,
+                        false,
+                        src_underfd,
+                        C4_FDUPFD_START,
+                    )
+                    .unwrap();
+                    vfds.push(v);
+                    underfds.push(src_underfd);
+                }
+            }
+        }
+    }
+
+    /// One round of the swept lifecycle. Returns nothing; every check is an
+    /// assertion. Callers must have just run c4_setup().
+    fn c4_run_round(cfg: C4Cfg) {
+        let u_sent = c4_next_underfd();
+        C4_SENTINEL_UNDERFD.store(u_sent, Ordering::SeqCst);
+        C4_SENTINEL_ACTIVE.store(true, Ordering::SeqCst);
+
+        init_empty_cage(C4_A);
+        let v_sent = get_unused_virtual_fd(C4_A, C4_FDKIND, u_sent, false, u_sent).unwrap();
+
+        // --- Duplicate (before the forks, unless dup_after).
+        let mut dup_vfds: Vec<u64> = Vec::with_capacity(cfg.ndup);
+        let mut dup_underfds: Vec<u64> = Vec::with_capacity(cfg.ndup);
+        let ninherited = if cfg.dup_after { 0 } else { cfg.ndup };
+        c4_make_dups(
+            C4_A,
+            u_sent,
+            cfg.kind,
+            0,
+            ninherited,
+            &mut dup_vfds,
+            &mut dup_underfds,
+        );
+
+        // --- Fork. Every child is created BEFORE any release, so each one
+        // deterministically inherits exactly the `ninherited` duplicates
+        // plus the sentinel -- there is no "did this child get it or not?"
+        // ambiguity for an owner to trip over.
+        for c in 0..cfg.nchild as u64 {
+            copy_fdtable_for_cage(C4_A, C4_CHILD + c).unwrap();
+        }
+
+        // --- Duplicates created after the forks live only in C4_A.
+        if cfg.dup_after {
+            c4_make_dups(
+                C4_A,
+                u_sent,
+                cfg.kind,
+                0,
+                cfg.ndup,
+                &mut dup_vfds,
+                &mut dup_underfds,
+            );
+        }
+
+        // --- Reference accounting, derived from the config alone.
+        let shared = cfg.kind != DupKind::Dup;
+        // References on the sentinel key, counting every cage.
+        let refs_sent: u64 = if shared {
+            if cfg.dup_after {
+                (1 + cfg.nchild as u64) + cfg.ndup as u64
+            } else {
+                (1 + cfg.ndup as u64) * (1 + cfg.nchild as u64)
+            }
+        } else {
+            1 + cfg.nchild as u64
+        };
+        // References on each fresh key (Dup only).
+        let refs_fresh: u64 = if cfg.dup_after {
+            1
+        } else {
+            1 + cfg.nchild as u64
+        };
+        let nfresh: u64 = if shared { 0 } else { cfg.ndup as u64 };
+
+        // --- Release every owner at once.
+        //
+        // Owners partition the work: parent thread t releases C4_A's
+        // duplicates at indices t, t+nthread, ...; child c releases its own
+        // inherited copies at indices c, c+nchild, ... and then drops its
+        // cage. The parent's and the children's copies are distinct entries
+        // in distinct cages, so the only thing they contend on is the
+        // shared FDCOUNT key -- which is exactly the contention under test.
+        let parties = cfg.nchild + cfg.nthread + 1;
+        let start = Arc::new(Barrier::new(parties));
+
+        let mut handles = Vec::with_capacity(cfg.nchild + cfg.nthread);
+
+        for c in 0..cfg.nchild {
+            let start = Arc::clone(&start);
+            let inherited: Vec<u64> = dup_vfds[..ninherited]
+                .iter()
+                .skip(c)
+                .step_by(cfg.nchild.max(1))
+                .copied()
+                .collect();
+            let child_close = cfg.child_close;
+            handles.push(thread::spawn(move || {
+                let cage = C4_CHILD + c as u64;
+                start.wait();
+                if child_close {
+                    for vfd in inherited {
+                        close_virtualfd(cage, vfd).unwrap();
+                    }
+                }
+                // Everything still open in this cage -- the sentinel copy,
+                // the duplicates this child does not own, and (when
+                // !child_close) all of them -- must be released here.
+                remove_cage_from_fdtable(cage);
+            }));
+        }
+
+        for t in 0..cfg.nthread {
+            let start = Arc::clone(&start);
+            let owned: Vec<u64> = dup_vfds
+                .iter()
+                .skip(t)
+                .step_by(cfg.nthread.max(1))
+                .copied()
+                .collect();
+            handles.push(thread::spawn(move || {
+                start.wait();
+                for vfd in owned {
+                    close_virtualfd(C4_A, vfd).unwrap();
+                }
+            }));
+        }
+
+        start.wait();
+        if cfg.nthread == 0 {
+            // No closer threads: the main thread is the sole owner of every
+            // duplicate, still exactly-once and still concurrent with the
+            // children's closes and cage teardowns.
+            for &vfd in &dup_vfds {
+                close_virtualfd(C4_A, vfd).unwrap();
+            }
+        }
+        for h in handles {
+            h.join().expect("a CONC-004 owner thread panicked");
+        }
+
+        // --- Everything is gone except C4_A's sentinel reference.
+        assert!(
+            !C4_RELEASED.lock().unwrap().contains_key(&u_sent),
+            "the sentinel key was released while C4_A still held it ({cfg:?})"
+        );
+        assert_eq!(
+            C4_LAST.load(Ordering::SeqCst),
+            nfresh,
+            "wrong number of last-closes before the final close ({cfg:?})"
+        );
+        assert_eq!(
+            C4_MID.load(Ordering::SeqCst),
+            (refs_sent - 1) + nfresh * (refs_fresh - 1),
+            "wrong number of intermediate closes ({cfg:?})"
+        );
+
+        // The sentinel key was decremented refs_sent-1 times, from
+        // refs_sent down to 1, so the `remaining` values reported must be
+        // exactly {refs_sent-1, ..., 1}. Sorting first makes this an
+        // equality that holds under any interleaving.
+        {
+            let mut remaining: Vec<u64> = C4_INTERMEDIATE_REMAINING
+                .lock()
+                .unwrap()
+                .get(&u_sent)
+                .cloned()
+                .unwrap_or_default();
+            remaining.sort_unstable_by(|a, b| b.cmp(a));
+            assert_eq!(
+                remaining,
+                (1..refs_sent).rev().collect::<Vec<u64>>(),
+                "sentinel key decrement sequence was not conserved ({cfg:?})"
+            );
+        }
+
+        // Every fresh (dup()-style) key must be fully released ALREADY --
+        // independently of the still-held sentinel key.
+        {
+            let released = C4_RELEASED.lock().unwrap();
+            for u in &dup_underfds {
+                if *u == u_sent {
+                    continue; // shared-key mode
+                }
+                assert_eq!(
+                    released.get(u).copied(),
+                    Some(1),
+                    "fresh key {u:#x} was not released exactly once ({cfg:?})"
+                );
+            }
+        }
+
+        // The retained reference is not merely counted; it still resolves.
+        let entry = translate_virtual_fd(C4_A, v_sent).unwrap();
+        assert_eq!((entry.fdkind, entry.underfd), (C4_FDKIND, u_sent));
+        for c in 0..cfg.nchild as u64 {
+            assert!(!check_cage_exists(C4_CHILD + c));
+        }
+        assert_eq!(C4_HANDLER_ERRS.load(Ordering::SeqCst), 0, "{cfg:?}");
+
+        // --- The final close: the roadmap's headline invariant.
+        C4_SENTINEL_ACTIVE.store(false, Ordering::SeqCst);
+        close_virtualfd(C4_A, v_sent).unwrap();
+        assert_eq!(
+            *C4_RELEASED.lock().unwrap().get(&u_sent).unwrap(),
+            1,
+            "last_close_count != 1 for the sentinel key ({cfg:?})"
+        );
+        assert_eq!(C4_LAST.load(Ordering::SeqCst), nfresh + 1, "{cfg:?}");
+        assert_eq!(
+            C4_MID.load(Ordering::SeqCst),
+            (refs_sent - 1) + nfresh * (refs_fresh - 1),
+            "the final close was counted as intermediate ({cfg:?})"
+        );
+
+        // --- Key-removal oracle, portable across all four backends since
+        // it never touches a private map directly: _increment_fdcount is
+        // `or_insert(0) += 1` and _decrement_fdcount removes the key on
+        // reaching 0, so a 0-valued FDCOUNT entry is unrepresentable. If
+        // the (C4_FDKIND, u_sent) entry had NOT actually been removed
+        // above, it would be sitting at some count >= 1, and a fresh
+        // allocation on the same key followed by a close would drive it
+        // down by one and fire `intermediate`, not `last`.
+        let mid_before = C4_MID.load(Ordering::SeqCst);
+        let v2 = get_unused_virtual_fd(C4_A, C4_FDKIND, u_sent, false, u_sent).unwrap();
+        close_virtualfd(C4_A, v2).unwrap();
+        assert_eq!(
+            *C4_RELEASED.lock().unwrap().get(&u_sent).unwrap(),
+            2,
+            "{cfg:?}"
+        );
+        assert_eq!(
+            C4_MID.load(Ordering::SeqCst),
+            mid_before,
+            "a stale FDCOUNT entry for {u_sent:#x} survived the last-close ({cfg:?})"
+        );
+
+        remove_cage_from_fdtable(C4_A);
+        assert!(!check_cage_exists(C4_A));
+        assert_eq!(C4_HANDLER_ERRS.load(Ordering::SeqCst), 0, "{cfg:?}");
+    }
+
+    #[test]
+    /// The roadmap's CONC-004 test: open -> dup/dup2 -> fork -> concurrent
+    /// close -> final close, swept over the full matrix of duplicate
+    /// counts, child counts, parent-thread counts, duplication calls,
+    /// before/after-fork duplication, and explicit-close vs cage-teardown
+    /// child exits. Every reference has exactly one owner, so each round's
+    /// expected close tallies are a pure function of the config.
+    fn conc_004_owned_close_refcount_conservation() {
+        let _lock = c2_test_guard();
+
+        for _ in 0..c4_iters() {
+            for &ndup in &[1usize, 2, C4_MAX_DUP] {
+                for nchild in 0..=C4_MAX_CHILD {
+                    for nthread in 0..=C4_MAX_THREAD {
+                        for &kind in &[DupKind::Dup, DupKind::Dup2, DupKind::Fdupfd] {
+                            for &dup_after in &[false, true] {
+                                for &child_close in &[false, true] {
+                                    refresh();
+                                    c4_setup();
+                                    c4_run_round(C4Cfg {
+                                        ndup,
+                                        nchild,
+                                        nthread,
+                                        kind,
+                                        dup_after,
+                                        child_close,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        refresh();
+    }
+
+    #[test]
+    /// The case CONC-003 has no analogue for: ONE cage holding shared-key
+    /// duplicates (dup2/F_DUPFD) and fresh-key duplicates (dup) at the same
+    /// time, forked and torn down concurrently.
+    ///
+    /// The point is independence. Releasing every dup()-style reference
+    /// must drive each of those keys to zero and fire `last` for each --
+    /// while the sentinel key, aliased by the dup2/F_DUPFD duplicates, must
+    /// not fire `last` at all. A bug that conflated the two (e.g. dup()
+    /// sharing the source's key, or dup2() minting a fresh one) shows up
+    /// here as a missing or premature release on a specific key, not as a
+    /// mere miscount that a single-mode test could absorb.
+    fn conc_004_mixed_shared_and_fresh_underfds() {
+        let _lock = c2_test_guard();
+
+        const NSHARED: usize = 3;
+        const NFRESH: usize = 3;
+        const NCHILD: usize = 3;
+
+        for _ in 0..c4_iters() {
+            refresh();
+            c4_setup();
+
+            let u_sent = c4_next_underfd();
+            C4_SENTINEL_UNDERFD.store(u_sent, Ordering::SeqCst);
+            C4_SENTINEL_ACTIVE.store(true, Ordering::SeqCst);
+
+            init_empty_cage(C4_A);
+            let v_sent = get_unused_virtual_fd(C4_A, C4_FDKIND, u_sent, false, u_sent).unwrap();
+
+            // Shared-key duplicates: alternate dup2 and F_DUPFD so both
+            // shared-key primitives are live on the same key at once.
+            let mut shared_vfds = Vec::new();
+            let mut ignored = Vec::new();
+            for i in 0..NSHARED {
+                let kind = if i % 2 == 0 {
+                    DupKind::Dup2
+                } else {
+                    DupKind::Fdupfd
+                };
+                c4_make_dups(C4_A, u_sent, kind, i, i + 1, &mut shared_vfds, &mut ignored);
+            }
+
+            // Fresh-key duplicates, interleaved into the same cage.
+            let mut fresh_vfds = Vec::new();
+            let mut fresh_underfds = Vec::new();
+            c4_make_dups(
+                C4_A,
+                u_sent,
+                DupKind::Dup,
+                0,
+                NFRESH,
+                &mut fresh_vfds,
+                &mut fresh_underfds,
+            );
+
+            for c in 0..NCHILD as u64 {
+                copy_fdtable_for_cage(C4_A, C4_CHILD + c).unwrap();
+            }
+
+            // count(u_sent)  = (1 + NSHARED) * (1 + NCHILD)
+            // count(fresh_i) = 1 * (1 + NCHILD), for each of NFRESH keys
+            let refs_sent = (1 + NSHARED as u64) * (1 + NCHILD as u64);
+            let refs_fresh = 1 + NCHILD as u64;
+
+            // Owners: one thread per child cage (teardown), one thread for
+            // the parent's shared duplicates, one for the parent's fresh
+            // duplicates. Disjoint sets, released together.
+            let start = Arc::new(Barrier::new(NCHILD + 2));
+            let mut handles = Vec::new();
+
+            for c in 0..NCHILD as u64 {
+                let start = Arc::clone(&start);
+                handles.push(thread::spawn(move || {
+                    start.wait();
+                    remove_cage_from_fdtable(C4_CHILD + c);
+                }));
+            }
+            {
+                let start = Arc::clone(&start);
+                let vfds = shared_vfds.clone();
+                handles.push(thread::spawn(move || {
+                    start.wait();
+                    for vfd in vfds {
+                        close_virtualfd(C4_A, vfd).unwrap();
+                    }
+                }));
+            }
+            {
+                let start = Arc::clone(&start);
+                let vfds = fresh_vfds.clone();
+                handles.push(thread::spawn(move || {
+                    start.wait();
+                    for vfd in vfds {
+                        close_virtualfd(C4_A, vfd).unwrap();
+                    }
+                }));
+            }
+            for h in handles {
+                h.join()
+                    .expect("a CONC-004 mixed-mode owner thread panicked");
+            }
+
+            // Independence, in both directions:
+            {
+                let released = C4_RELEASED.lock().unwrap();
+                assert!(
+                    !released.contains_key(&u_sent),
+                    "the shared sentinel key fired `last` while C4_A still held it"
+                );
+                for u in &fresh_underfds {
+                    assert_eq!(
+                        released.get(u).copied(),
+                        Some(1),
+                        "fresh key {u:#x} was not released exactly once, \
+                         even though every reference to it is gone"
+                    );
+                }
+                assert_eq!(released.len(), NFRESH);
+            }
+            assert_eq!(C4_LAST.load(Ordering::SeqCst), NFRESH as u64);
+            assert_eq!(
+                C4_MID.load(Ordering::SeqCst),
+                (refs_sent - 1) + NFRESH as u64 * (refs_fresh - 1)
+            );
+            assert_eq!(C4_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+            let entry = translate_virtual_fd(C4_A, v_sent).unwrap();
+            assert_eq!((entry.fdkind, entry.underfd), (C4_FDKIND, u_sent));
+
+            C4_SENTINEL_ACTIVE.store(false, Ordering::SeqCst);
+            close_virtualfd(C4_A, v_sent).unwrap();
+            assert_eq!(*C4_RELEASED.lock().unwrap().get(&u_sent).unwrap(), 1);
+            assert_eq!(C4_LAST.load(Ordering::SeqCst), NFRESH as u64 + 1);
+            assert_eq!(C4_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+            remove_cage_from_fdtable(C4_A);
+        }
+
+        refresh();
+    }
 }
