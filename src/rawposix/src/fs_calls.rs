@@ -3021,9 +3021,26 @@ pub extern "C" fn dup_syscall(
     }
     let vfd = wrappedvfd.unwrap();
     let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
-    let ret_vfd =
-        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
-    return ret_vfd as i32;
+    // libc::dup() can genuinely fail (EMFILE/ENFILE on host fd exhaustion, or
+    // EBADF if the underfd went stale). Registering an unchecked -1 here would
+    // install `underfd = 0xffff_ffff_ffff_ffff` as a live entry and hand back a
+    // valid-looking virtual fd, so every later read/write/close on it would
+    // operate on a bogus host fd.
+    if ret_kernelfd < 0 {
+        return handle_errno(get_errno(), "dup");
+    }
+    // A full virtual fd table (FD_PER_PROCESS_MAX) is an EMFILE condition, not a
+    // reason to panic inside a syscall. Close the host fd we just created so the
+    // failure path does not leak it.
+    match fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0) {
+        Ok(ret_vfd) => ret_vfd as i32,
+        Err(_) => {
+            unsafe {
+                libc::close(ret_kernelfd);
+            }
+            syscall_error(Errno::EMFILE, "dup", "Too many open files")
+        }
+    }
 }
 
 /// dup2() performs the same task as dup(), so we utilize dup() here and mapping underlying kernel
@@ -3066,36 +3083,45 @@ pub extern "C" fn dup2_syscall(
     // Validate both virtual fds
     if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
         return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
-    } else if old_vfd_arg == new_vfd_arg {
-        // Does nothing
+    }
+
+    // `oldfd` must be validated BEFORE the `oldfd == newfd` fast path, not after.
+    // POSIX: "If oldfd is not a valid file descriptor, then the call fails, and
+    // newfd is not closed" -- dup2() only returns newfd unchanged when oldfd is
+    // *valid* and equal to it. Checking equality first made dup2(badfd, badfd)
+    // report success and hand back a virtual fd number that was never open.
+    let old_vfd = match fdtables::translate_virtual_fd(cageid, old_vfd_arg) {
+        Ok(entry) => entry,
+        Err(_e) => return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor"),
+    };
+
+    if old_vfd_arg == new_vfd_arg {
+        // oldfd is valid and equals newfd: no-op, newfd is NOT closed.
         return new_vfd_arg as i32;
     }
 
     // If the file descriptor newfd was previously open, it is closed before being reused; the
     // close is performed silently (i.e., any errors during the close are not reported by dup2()).
     // This step is handled inside `fdtables`
-    match fdtables::translate_virtual_fd(cageid, old_vfd_arg) {
-        Ok(old_vfd) => {
-            // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
-            // from input.
-            // The two file descriptors do not share file descriptor flags (the
-            // close-on-exec flag).  The close-on-exec flag (FD_CLOEXEC; see fcntl_syscall())
-            // for the duplicate descriptor is off
-            let _ = fdtables::get_specific_virtual_fd(
-                cageid,
-                new_vfd_arg,
-                old_vfd.fdkind,
-                old_vfd.underfd,
-                false,
-                old_vfd.perfdinfo,
-            )
-            .unwrap();
-
-            return new_vfd_arg as i32;
-        }
-        Err(_e) => {
-            return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
-        }
+    //
+    // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
+    // from input.
+    // The two file descriptors do not share file descriptor flags (the
+    // close-on-exec flag).  The close-on-exec flag (FD_CLOEXEC; see fcntl_syscall())
+    // for the duplicate descriptor is off
+    match fdtables::get_specific_virtual_fd(
+        cageid,
+        new_vfd_arg,
+        old_vfd.fdkind,
+        old_vfd.underfd,
+        false,
+        old_vfd.perfdinfo,
+    ) {
+        Ok(()) => new_vfd_arg as i32,
+        // The only failure mode here is newfd being out of range for the cage's
+        // table; an EBADF return is the POSIX-correct answer and is in any case
+        // preferable to an `.unwrap()` panic inside a syscall.
+        Err(_) => syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor"),
     }
 }
 
