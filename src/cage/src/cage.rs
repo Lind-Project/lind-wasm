@@ -11,6 +11,7 @@ pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
 pub use std::sync::{Arc, LazyLock};
+use sysdefs::constants::fs_const::PAGESHIFT;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
 use sysdefs::constants::SIGCHLD;
@@ -195,6 +196,21 @@ pub struct Cage {
     pub child_num: AtomicU64,
     // vmmap represents the virtual memory mapping for this cage. More details on `memory::vmmap`
     pub vmmap: RwLock<Vmmap>,
+    // mem_limit is this cage's memory quota, in BYTES. `u64::MAX` means unlimited,
+    // which is the default and preserves the historical behaviour of no cap at all.
+    //
+    // Lind gives every cage a linear memory reserved at the full wasm32 ceiling
+    // (4 GiB) and pre-grown to its maximum, so wasmtime's own StoreLimits /
+    // ResourceLimiter never sees a growth request and cannot bound a cage --
+    // SharedMemory::grow passes `None` for the limiter. All real commitment
+    // happens instead through rawposix's mmap/brk/shmat, against this cage's
+    // vmmap. That makes the vmmap the only place a per-cage cap can be enforced,
+    // and this field the natural place to keep the bound.
+    //
+    // Usage is NOT cached here: it is derived from `vmmap` under the same lock
+    // that mutates it (see Vmmap::charged_pages), so the limit and the usage
+    // cannot drift apart.
+    pub mem_limit: AtomicU64,
     // final_exit_status stores the terminal status of the cage once a
     // termination condition has been determined.
     //
@@ -251,6 +267,31 @@ pub struct Cage {
     /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
     /// tracking is considered a VMContext-level concern.
     pub grate_inflight: AtomicU64,
+}
+
+impl Cage {
+    /// Admission check for a mapping that would consume `additional_pages`
+    /// pages this cage is not already charged for.
+    ///
+    /// Returns true when the request must be refused with ENOMEM.
+    ///
+    /// The caller passes the `Vmmap` guard it is already holding rather than
+    /// taking one here, so that the check and the mutation it guards happen
+    /// inside a single critical section. Re-acquiring the lock would reopen
+    /// the check-then-act window between threads of the same cage and,
+    /// because vmmap is an RwLock rather than a reentrant one, would also
+    /// deadlock the callers that hold it for writing across the whole call.
+    pub fn mem_limit_would_exceed(&self, vmmap: &Vmmap, additional_pages: u64) -> bool {
+        let limit = self.mem_limit.load(Ordering::Relaxed);
+        if limit == u64::MAX {
+            return false; // unlimited: the default
+        }
+        let limit_pages = limit >> PAGESHIFT;
+        vmmap
+            .charged_pages()
+            .saturating_add(additional_pages)
+            > limit_pages
+    }
 }
 
 /// Global cage table indexed by cage ID.
@@ -450,6 +491,7 @@ mod tests {
             zombies: RwLock::new(vec![]),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
+            mem_limit: AtomicU64::new(u64::MAX),
             final_exit_status: RwLock::new(None),
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),

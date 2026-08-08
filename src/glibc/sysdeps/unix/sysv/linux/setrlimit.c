@@ -19,6 +19,9 @@
 #include <sys/resource.h>
 #include <sysdep.h>
 #include <shlib-compat.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #if !__RLIM_T_MATCHES_RLIM64_T
 
@@ -33,18 +36,24 @@
 int
 __setrlimit (enum __rlimit_resource resource, const struct rlimit *rlim)
 {
-  struct rlimit64 rlim64;
+  /* Route through the lind syscall path, exactly as getrlimit.c does.
 
-  if (rlim->rlim_cur == RLIM_INFINITY)
-    rlim64.rlim_cur = RLIM64_INFINITY;
-  else
-    rlim64.rlim_cur = rlim->rlim_cur;
-  if (rlim->rlim_max == RLIM_INFINITY)
-    rlim64.rlim_max = RLIM64_INFINITY;
-  else
-    rlim64.rlim_max = rlim->rlim_max;
+     The generic implementation used INLINE_SYSCALL_CALL(prlimit64, ...),
+     which is not wired up in this port: it never reached rawposix and simply
+     returned 0.  A guest that lowered a limit was therefore told it had
+     succeeded while nothing changed -- a silent success, which is worse than
+     a refusal because the caller has no way to detect it.
 
-  return INLINE_SYSCALL_CALL (prlimit64, 0, resource, &rlim64, NULL);
+     Pass the 32-bit `struct rlimit` straight through rather than converting
+     to `struct rlimit64` first.  rawposix reads this argument as sysdefs'
+     `Rlimit { rlim_cur: u32, rlim_max: u32 }`, which is precisely the layout
+     of `struct rlimit` on wasm32; handing it a `struct rlimit64` would make
+     it read the high half of rlim_cur as rlim_max.  */
+  uint64_t pnew = rlim ? TRANSLATE_GUEST_POINTER_TO_HOST(rlim) : 0;
+  return MAKE_LEGACY_SYSCALL(PRLIMIT64_SYSCALL, "syscall|prlimit64",
+      0, (uint64_t) resource,
+      pnew, 0,
+      NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 libc_hidden_def (__setrlimit)

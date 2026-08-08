@@ -41,7 +41,26 @@ weak_alias (__curbrk, ___brk_addr)
 int
 __brk (void *addr)
 {
-   __curbrk = MAKE_LEGACY_SYSCALL(BRK_SYSCALL, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   /* Keep the raw return in an int and check it BEFORE publishing it as the
+      new break.
+
+      With TRANSLATE_ERRNO_ON the wrapper already set errno and returned -1
+      when the syscall failed (brk_syscall returns -ENOMEM when the requested
+      growth is not available).  Assigning that -1 straight into __curbrk
+      stored 0xffffffff on wasm32, and since pointer comparison is unsigned
+      the `__curbrk < addr` guard below then read as SUCCESS: __brk returned
+      0, __sbrk handed malloc a break it had never been granted, and the
+      first write to it faulted on memory that is still PROT_NONE.  __curbrk
+      was also left permanently corrupted, poisoning every later sbrk().
+
+      A successful brk_syscall returns a page-aligned address, so it can
+      never itself be -1 -- the same aliasing argument make_threei_call
+      already relies on for mmap.  */
+   int ret = MAKE_LEGACY_SYSCALL(BRK_SYSCALL, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   if (ret == -1)
+      return -1;   /* errno already set by the translation layer */
+
+   __curbrk = (void *) ret;
    if (__curbrk < addr)
    {
       __set_errno (ENOMEM);

@@ -224,6 +224,26 @@ extern "C" fn noop_signal_handler(_sig: libc::c_int) {}
 /// - STDIN/STDOUT/STDERR are force-initialized to avoid undefined behavior
 ///   in guest programs.
 ///
+/// Per-cage memory quota, in bytes, that the initial cage is created with and
+/// that every cage forked from it inherits. `u64::MAX` means unlimited, which
+/// is the historical behaviour and remains the default: nothing changes for a
+/// caller that never sets it.
+static DEFAULT_MEM_LIMIT: AtomicU64 = AtomicU64::new(u64::MAX);
+
+/// Set the quota every cage starts with.
+///
+/// Must be called before `rawposix_start`, which is what builds the initial
+/// cage. Kept as a setter rather than a `rawposix_start` parameter so the
+/// other embedder of that function (`src/wasmtime/src/commands/run.rs`) is not
+/// forced to care about a knob only lind-boot exposes.
+pub fn set_default_mem_limit(bytes: u64) {
+    DEFAULT_MEM_LIMIT.store(bytes, Relaxed);
+}
+
+fn default_mem_limit() -> u64 {
+    DEFAULT_MEM_LIMIT.load(Relaxed)
+}
+
 /// Parameters:
 /// - `verbosity`: controls runtime logging verbosity.
 pub fn rawposix_start(verbosity: isize) {
@@ -283,6 +303,9 @@ pub fn rawposix_start(verbosity: isize) {
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),
+        // The initial cage seeds the quota every later cage inherits through
+        // fork, so setting it here sets it process-wide.
+        mem_limit: AtomicU64::new(default_mem_limit()),
         final_exit_status: RwLock::new(None),
         exit_group_initiated: AtomicBool::new(false),
         is_dead: AtomicBool::new(false),

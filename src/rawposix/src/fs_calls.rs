@@ -143,7 +143,16 @@ pub extern "C" fn openat_syscall(
             0,
         ) {
             Ok(vfd) => vfd as i32,
-            Err(_) => syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened"),
+            // The host openat() already succeeded, so the kernel fd must be closed before
+            // we report EMFILE -- otherwise every exhausted-table openat permanently leaks
+            // one host fd, and the host is the shared resource across all cages. Mirrors
+            // the cleanup `pipe_syscall`/`dup_syscall` already do on this path.
+            Err(_) => {
+                unsafe {
+                    libc::close(kernel_fd);
+                }
+                syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened")
+            }
         }
     }
 }
@@ -220,7 +229,16 @@ pub extern "C" fn open_syscall(
         0,
     ) {
         Ok(vfd) => vfd as i32,
-        Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
+        // The host open() already succeeded, so the kernel fd must be closed before we
+        // report EMFILE -- otherwise every exhausted-table open permanently leaks one
+        // host fd, and the host is the shared resource across all cages. Mirrors the
+        // cleanup `pipe_syscall`/`dup_syscall` already do on this path.
+        Err(_) => {
+            unsafe {
+                libc::close(kernel_fd);
+            }
+            syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened")
+        }
     }
 }
 
@@ -934,6 +952,31 @@ pub extern "C" fn mmap_syscall(
 
     let vmmap = cage.vmmap.read();
 
+    // Per-cage memory quota. Checked before mmap_inner, because once the host
+    // mmap has run the memory is committed and refusing it would mean undoing
+    // a mapping the cage may already have been handed.
+    //
+    // Only pages not already mapped in this range are charged: with MAP_FIXED
+    // set (it is forced on above) a request can legitimately overwrite the
+    // cage's own existing mapping, which replaces rather than consumes.
+    //
+    // Note this check and the vmmap update below are not one atomic section --
+    // the lock is released across mmap_inner. Two threads of the same cage can
+    // therefore both pass a check that only one of them should have. That
+    // window is pre-existing and wider than the quota: find_map_space already
+    // hands both threads the same address (see the write lock taken and
+    // dropped above). Closing it properly means holding the write lock across
+    // mmap_inner, which is a separate change; the quota is at worst overshot
+    // by one concurrent request, never by an unbounded amount.
+    if rounded_length > 0
+        && cage.mem_limit_would_exceed(
+            &vmmap,
+            vmmap.additional_pages_for(useraddr >> PAGESHIFT, (rounded_length >> PAGESHIFT) as u32),
+        )
+    {
+        return syscall_error(Errno::ENOMEM, "mmap", "memory limit exceeded");
+    }
+
     let sysaddr = vmmap.user_to_sys(useraddr);
 
     drop(vmmap);
@@ -1266,6 +1309,17 @@ pub extern "C" fn brk_syscall(
         if vmmap.check_existing_mapping(old_brk_page, brk_page - old_brk_page, 0) {
             return syscall_error(Errno::ENOMEM, "brk", "no memory");
         }
+        // Per-cage memory quota. Checked here, while the vmmap write lock is
+        // still held and before any of the mutations below, so the decision
+        // cannot race another thread of this cage growing the same heap.
+        //
+        // Only the newly claimed pages are charged: the heap entry is
+        // rewritten in full below, so charging the whole new span would
+        // re-charge everything the cage already holds.
+        let growth_pages = (brk_page - old_brk_page) as u64;
+        if cage.mem_limit_would_exceed(&vmmap, growth_pages) {
+            return syscall_error(Errno::ENOMEM, "brk", "memory limit exceeded");
+        }
     }
 
     // remove the old entries since new entry is overlapping with it.
@@ -1464,7 +1518,11 @@ pub extern "C" fn fcntl_syscall(
                 arg as u64,
             ) {
                 Ok(new_vfd) => return new_vfd as i32,
-                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+                // `vfd_arg` was already validated by `_fcntl_helper` above, so the only
+                // way this allocation fails is a full virtual fd table -- that is EMFILE,
+                // not EBADF. Reporting EBADF here made an exhausted cage look like it had
+                // been handed a bad descriptor.
+                Err(_) => return syscall_error(Errno::EMFILE, "fcntl", "Too many open files"),
             }
         }
         // As for `F_DUPFD`, but additionally set the close-on-exec flag
@@ -1486,7 +1544,8 @@ pub extern "C" fn fcntl_syscall(
                 arg as u64,
             ) {
                 Ok(new_vfd) => return new_vfd as i32,
-                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+                // See the `F_DUPFD` arm: a full virtual fd table is EMFILE, not EBADF.
+                Err(_) => return syscall_error(Errno::EMFILE, "fcntl", "Too many open files"),
             }
         }
         // Return (as the function result) the file descriptor flags.
@@ -5047,6 +5106,19 @@ pub extern "C" fn shmat_syscall(
     // Convert the user address into a system address.
     // Read the virtual memory map to access the user address space.
     let vmmap = cage.vmmap.read();
+
+    // Per-cage memory quota, checked before the attach commits anything. A
+    // shared segment is charged to every cage that attaches it: the quota
+    // bounds a cage's own address space, and each attachment occupies pages in
+    // that cage's vmmap independently of how many other cages share the
+    // underlying segment.
+    if cage.mem_limit_would_exceed(
+        &vmmap,
+        vmmap.additional_pages_for(useraddr >> PAGESHIFT, (rounded_length >> PAGESHIFT) as u32),
+    ) {
+        return syscall_error(Errno::ENOMEM, "shmat", "memory limit exceeded") as i32;
+    }
+
     // Convert the user address to the corresponding system address for the shared memory segment.
     let sysaddr = vmmap.user_to_sys(useraddr);
     // Release the lock on the virtual memory map as we no longer need it.

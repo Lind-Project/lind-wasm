@@ -17,7 +17,8 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
-use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+use fdtables::FD_PER_PROCESS_MAX;
+use sysdefs::constants::fs_const::{PAGESHIFT, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
     MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
     WASMTIME_CAGEID,
@@ -144,6 +145,11 @@ pub extern "C" fn fork_syscall(
             zombies: RwLock::new(vec![]),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(new_vmmap),
+            // The child inherits the parent's quota, matching how RLIMIT_*
+            // crosses fork on Linux. It also inherits the parent's footprint
+            // (fork_vmmap replicates every mapping), so a child of a cage that
+            // is already at its limit starts out at its limit too.
+            mem_limit: AtomicU64::new(selfcage.mem_limit.load(Relaxed)),
             final_exit_status: RwLock::new(None),
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
@@ -1246,14 +1252,24 @@ pub extern "C" fn prlimit64_syscall(
     // get resource numeber from arg2
     let resource = sc_convert_sysarg_to_u32(arg2, arg2_cageid, cageid);
 
-    // setrlimit unsupported
-    if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
-        lind_debug_panic!("prlimit64: setrlimit not supported");
-        return syscall_error(Errno::EPERM, "prlimit64", "setrlimit not supported");
-    }
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => return syscall_error(Errno::ESRCH, "prlimit64", "no such cage"),
+    };
 
-    // handle getrlimit calls
-    // default to 1024.
+    // The cage's memory quota as it stands right now. `u64::MAX` is the
+    // "no quota" default and is reported as the wasm32 ceiling, since that is
+    // what an unbounded cage can actually reach.
+    let cur_mem_limit = cage.mem_limit.load(Relaxed);
+    let effective_mem_limit = if cur_mem_limit == u64::MAX {
+        MAX_LINEAR_MEMORY_SIZE
+    } else {
+        cur_mem_limit.min(MAX_LINEAR_MEMORY_SIZE)
+    };
+
+    // Fill the caller's "old limit" buffer BEFORE applying any new limit:
+    // prlimit64 reports the value as it was prior to the change, and a single
+    // call may legitimately do both at once.
     if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
         let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid) {
             Ok(rlim) => rlim,
@@ -1265,11 +1281,13 @@ pub extern "C" fn prlimit64_syscall(
                 old_limit.rlim_max = 8 * 1024 * 1024;
             }
             RLIMIT_NOFILE => {
-                old_limit.rlim_cur = 1024;
-                old_limit.rlim_max = 1024;
+                old_limit.rlim_cur = FD_PER_PROCESS_MAX as u32;
+                old_limit.rlim_max = FD_PER_PROCESS_MAX as u32;
             }
             RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => {
-                old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
+                // Report this cage's real quota rather than a constant, so a
+                // guest can discover the bound it is actually running under.
+                old_limit.rlim_cur = effective_mem_limit as u32;
                 old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
             }
             RLIMIT_NPROC => {
@@ -1284,6 +1302,65 @@ pub extern "C" fn prlimit64_syscall(
                 lind_debug_panic!("prlimit64: unsupported resource {}", resource);
                 old_limit.rlim_cur = 0;
                 old_limit.rlim_max = 0;
+            }
+        }
+    }
+
+    // setrlimit: supported only for the memory resources, and only downward.
+    //
+    // Lowering is safe to honour because rawposix enforces the memory quota
+    // itself, in mmap/brk/shmat against the cage's own vmmap. Raising is not:
+    // the ceiling comes from the runtime's configuration (--max-cage-memory),
+    // and letting a cage lift its own bound would make the quota advisory.
+    // That matches Linux, where an unprivileged process may lower a soft limit
+    // but not raise it back above the hard limit.
+    //
+    // Every other resource is still refused -- but with a plain EPERM, never a
+    // `lind_debug_panic!`. `lind-logging` is on by default (Makefile
+    // LIND_LOGGING_FEATURE) and the default PanicBehavior is PanicAndExit, so
+    // a debug panic here would let any guest abort the whole runtime, and with
+    // it every other cage, just by calling setrlimit().
+    if !sc_convert_arg_nullity(arg3, arg3_cageid, cageid) {
+        let new_limit = match sc_convert_addr_to_rlimit(arg3, arg3_cageid, cageid) {
+            Ok(rlim) => rlim,
+            Err(e) => return syscall_error(e, "prlimit64", "bad address"),
+        };
+        match resource {
+            RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => {
+                let requested = new_limit.rlim_cur as u64;
+                if requested > effective_mem_limit {
+                    return syscall_error(
+                        Errno::EPERM,
+                        "prlimit64",
+                        "may not raise a memory limit",
+                    );
+                }
+                if requested < effective_mem_limit {
+                    // Refuse a limit the cage is already over: the quota is
+                    // enforced on new mappings only, so accepting it would
+                    // leave the cage permanently in violation with no way to
+                    // signal that, and every later mmap would fail for a
+                    // reason the guest never caused.
+                    let in_use =
+                        (cage.vmmap.read().charged_pages()) << PAGESHIFT;
+                    if requested < in_use {
+                        return syscall_error(
+                            Errno::EINVAL,
+                            "prlimit64",
+                            "limit below current usage",
+                        );
+                    }
+                    cage.mem_limit.store(requested, Relaxed);
+                }
+                // requested == effective_mem_limit is a no-op, which makes the
+                // common "read it, write it back unchanged" idiom succeed.
+            }
+            _ => {
+                return syscall_error(
+                    Errno::EPERM,
+                    "prlimit64",
+                    "setrlimit not supported for this resource",
+                )
             }
         }
     }

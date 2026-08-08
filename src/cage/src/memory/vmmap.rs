@@ -292,6 +292,50 @@ impl Vmmap {
         self.heap_start = 0;
     }
 
+    /// Total number of pages currently mapped in this cage.
+    ///
+    /// Derived from `entries` on demand rather than kept as a running
+    /// counter. `update()` inserts with overwrite semantics and NoditMap
+    /// splits and merges intervals as it goes, so an incrementally
+    /// maintained total would have to reproduce those rules exactly to stay
+    /// correct -- and any drift would be silent, permanent, and would
+    /// eventually deny a cage memory it is not actually using. A cage holds
+    /// tens of entries, and every caller of this already does O(entries)
+    /// work (find_map_space, check_existing_mapping), so the sum is not the
+    /// expensive part of the path.
+    pub fn charged_pages(&self) -> u64 {
+        self.entries
+            .iter()
+            .map(|(interval, _)| (interval.end() as u64 + 1) - (interval.start() as u64))
+            .sum()
+    }
+
+    /// Pages this cage would be charged ON TOP of what it already holds, to
+    /// map `npages` at `page_num`.
+    ///
+    /// Whatever is already mapped inside the requested span is a
+    /// replacement rather than new consumption -- MAP_FIXED over a live
+    /// mapping and brk() rewriting its own heap entry both land here.
+    /// Charging the whole span instead would let a cage's accounted usage
+    /// climb while its real footprint stayed flat, and it would eventually
+    /// refuse a request that frees as much as it takes.
+    pub fn additional_pages_for(&self, page_num: u32, npages: u32) -> u64 {
+        let req_end = page_num.saturating_add(npages);
+        if req_end <= page_num {
+            return 0;
+        }
+        let already: u64 = self
+            .entries
+            .overlapping(ie(page_num, req_end))
+            .map(|(interval, _)| {
+                let act_start = interval.start().max(page_num);
+                let act_end = interval.end().saturating_add(1).min(req_end);
+                (act_end.saturating_sub(act_start)) as u64
+            })
+            .sum();
+        (npages as u64).saturating_sub(already)
+    }
+
     /// Rounds up a page number to the nearest multiple of pages_per_map
     ///
     /// Arguments:

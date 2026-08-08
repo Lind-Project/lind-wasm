@@ -81,6 +81,22 @@ pub struct CliOptions {
     /// Internal memory reservation for Lind's own use (e.g., GC Heap) in bytes.
     #[arg(long = "lind-internal-memory-reservation", default_value_t = 10 * 1024 * 1024)]
     pub lind_internal_memory_reservation: u64,
+
+    /// Per-cage memory quota in bytes. 0 (the default) means unlimited.
+    ///
+    /// This is a quota on memory a cage actually commits through
+    /// mmap/brk/shmat, tracked in its vmmap -- not a reservation. It is
+    /// unrelated to --lind-internal-memory-reservation, which sizes Lind's
+    /// own non-guest memories and does not affect guest memory at all.
+    ///
+    /// Every cage's linear memory is reserved at the wasm32 ceiling of 4 GiB
+    /// regardless; without this quota a single cage can commit all of it, and
+    /// nothing bounds the aggregate across cages.
+    ///
+    /// A cage may lower its own quota with setrlimit(RLIMIT_AS/RLIMIT_DATA),
+    /// but never raise it.
+    #[arg(long = "max-cage-memory", default_value_t = 0)]
+    pub max_cage_memory: u64,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {

@@ -11,7 +11,7 @@ use libc;
 use std::ffi::CString;
 use std::path::Path;
 
-use rawposix::init::{rawposix_shutdown, rawposix_start};
+use rawposix::init::{rawposix_shutdown, rawposix_start, set_default_mem_limit};
 use sysdefs::constants::LINDFS_ROOT;
 use sysdefs::logging::{config_from_env, init_lind_logger};
 
@@ -72,6 +72,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Not a precompile command, chroot to lindfs
     chroot_to_lindfs();
+
+    // Seed the per-cage memory quota before rawposix_start, which is what
+    // builds the initial cage that every later cage inherits from. 0 on the
+    // command line means "no quota", which is the default.
+    if lindboot_cli.max_cage_memory > 0 {
+        set_default_mem_limit(lindboot_cli.max_cage_memory);
+    }
 
     // Initialize RawPOSIX and register RawPOSIX syscalls with 3i
     rawposix_start(0);
