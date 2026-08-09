@@ -3726,4 +3726,266 @@ mod tests {
 
         refresh();
     }
+
+    // ================================================================
+    // CONC-005a -- per-cage fd exhaustion isolation.
+    //
+    // Black-box counterpart:
+    //   tests/unit-tests/process_tests/deterministic/
+    //       conc_005_fd_exhaustion_isolation.c
+    //
+    // The C test can only observe errno from a saturated cage. These
+    // pin down the properties underneath it: that the cap is per-cage
+    // rather than global, that both allocators report EMFILE (and not
+    // EBADF, which rawposix's fcntl(F_DUPFD) used to translate it to),
+    // and that saturation is fully reversible with no refcount residue.
+    // ================================================================
+
+    /// Reserved cage-id block for CONC-005. 0xC0C5 == "CONC-005".
+    /// Disjoint from threei::TESTING_CAGEID0..15 and from every other
+    /// block used in this module.
+    const C5_A: u64 = 0x0000_0000_C0C5_0000; // the cage driven to its cap
+    const C5_B: u64 = 0x0000_0000_C0C5_0001; // the bystander
+    const C5_CHILD: u64 = 0x0000_0000_C0C5_0010; // fork copy of C5_A
+
+    /// A dedicated fdkind plus a disjoint underfd window guarantees no
+    /// FDCOUNT key ever aliases with another test's leftovers -- refresh()
+    /// clears FDTABLE and CLOSEHANDLERTABLE but never FDCOUNT, so refcount
+    /// state leaks across every test in this binary.
+    const C5_FDKIND: u32 = 0x7E57_0005;
+    const C5_UNDERFD_BASE: u64 = 0x5000_0000;
+
+    static C5_UNDERFD_SEQ: AtomicU64 = AtomicU64::new(0);
+    fn c5_next_underfd() -> u64 {
+        C5_UNDERFD_BASE + C5_UNDERFD_SEQ.fetch_add(1, Ordering::SeqCst)
+    }
+
+    static C5_LAST: AtomicU64 = AtomicU64::new(0);
+    static C5_HANDLER_ERRS: AtomicU64 = AtomicU64::new(0);
+
+    // Close handlers are plain `fn` pointers and cannot capture, so all
+    // bookkeeping lives in the statics above. They never panic: a panic
+    // inside fdtables' own teardown path is nearly impossible to
+    // attribute, so a violated expectation is recorded for the main
+    // thread to assert on instead.
+    fn c5_last_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        if entry.fdkind != C5_FDKIND || remaining != 0 {
+            C5_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        C5_LAST.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+    fn c5_intermediate_close(entry: FDTableEntry, remaining: u64) -> Result<(), i32> {
+        if entry.fdkind != C5_FDKIND || remaining == 0 {
+            C5_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
+        }
+        Ok(())
+    }
+
+    /// Must be called *after* refresh(): refresh() clears
+    /// CLOSEHANDLERTABLE, so a registration that ran only once would
+    /// silently lose the handlers on the next test that calls refresh().
+    fn c5_setup() {
+        register_close_handlers(C5_FDKIND, c5_intermediate_close, c5_last_close);
+        C5_LAST.store(0, Ordering::SeqCst);
+        C5_HANDLER_ERRS.store(0, Ordering::SeqCst);
+    }
+
+    /// Fills `cageid` to FD_PER_PROCESS_MAX with fresh underfds and
+    /// returns the virtual fds in allocation order. Asserts the table is
+    /// exactly full, never over or under.
+    fn c5_fill(cageid: u64) -> Vec<u64> {
+        let mut vfds = Vec::with_capacity(FD_PER_PROCESS_MAX as usize);
+        for expected in 0..FD_PER_PROCESS_MAX {
+            let v = get_unused_virtual_fd(cageid, C5_FDKIND, c5_next_underfd(), false, 0).unwrap();
+            // Allocation is lowest-available, so a full sweep from an
+            // empty table must hand back 0, 1, 2, ... in order. This is
+            // what lets the C test reason about fd numbers without ever
+            // printing one.
+            assert_eq!(v, expected);
+            vfds.push(v);
+        }
+        vfds
+    }
+
+    #[test]
+    /// The core CONC-005a claim: the fd cap belongs to the cage, not the
+    /// system. A saturated cage A must not consume any of B's budget, and
+    /// B must be able to fill its own table completely while A is still
+    /// holding all 1024 of its own.
+    ///
+    /// A global cap (which is what TOTAL_FD_MAX would introduce if it were
+    /// ever wired up -- see the ENFILE note at the top of this file) shows
+    /// up here as B failing partway through its own fill.
+    fn conc_005_fd_limit_is_per_cage() {
+        let _lock = c2_test_guard();
+        refresh();
+        c5_setup();
+
+        init_empty_cage(C5_A);
+        init_empty_cage(C5_B);
+
+        // A takes its entire budget.
+        let a_vfds = c5_fill(C5_A);
+        assert_eq!(
+            get_unused_virtual_fd(C5_A, C5_FDKIND, c5_next_underfd(), false, 0),
+            Err(threei::Errno::EMFILE as u64)
+        );
+
+        // B, whose table has not been touched, is unaffected -- it can
+        // still allocate a full 1024 of its own.
+        let b_vfds = c5_fill(C5_B);
+        assert_eq!(
+            get_unused_virtual_fd(C5_B, C5_FDKIND, c5_next_underfd(), false, 0),
+            Err(threei::Errno::EMFILE as u64)
+        );
+
+        // Exhaustion is reversible, and only for the cage that cleans up.
+        for v in &a_vfds {
+            close_virtualfd(C5_A, *v).unwrap();
+        }
+        // A allocates again, and gets slot 0 back: releasing the table
+        // restores lowest-available allocation rather than leaving a
+        // high-water mark behind.
+        assert_eq!(
+            get_unused_virtual_fd(C5_A, C5_FDKIND, c5_next_underfd(), false, 0),
+            Ok(0)
+        );
+        // B is still exactly as full as it was -- A's cleanup did not
+        // hand B any headroom either.
+        assert_eq!(
+            get_unused_virtual_fd(C5_B, C5_FDKIND, c5_next_underfd(), false, 0),
+            Err(threei::Errno::EMFILE as u64)
+        );
+
+        for v in &b_vfds {
+            close_virtualfd(C5_B, *v).unwrap();
+        }
+
+        remove_cage_from_fdtable(C5_A);
+        remove_cage_from_fdtable(C5_B);
+        assert_eq!(C5_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+        refresh();
+    }
+
+    #[test]
+    /// Both allocators must report EMFILE on a full table, and neither
+    /// may report anything else.
+    ///
+    /// The start-fd variant is the one that matters most here: it backs
+    /// fcntl(F_DUPFD)/F_DUPFD_CLOEXEC, and rawposix used to translate its
+    /// error into EBADF, which makes "your table is full" indistinguishable
+    /// from "you passed a bad descriptor". Every start offset must give
+    /// EMFILE, including 0 (where it aliases plain allocation) and
+    /// FD_PER_PROCESS_MAX - 1 (where only one slot could ever satisfy it).
+    fn conc_005_exhausted_allocators_report_emfile() {
+        let _lock = c2_test_guard();
+        refresh();
+        c5_setup();
+
+        init_empty_cage(C5_A);
+        let vfds = c5_fill(C5_A);
+
+        assert_eq!(
+            get_unused_virtual_fd(C5_A, C5_FDKIND, c5_next_underfd(), false, 0),
+            Err(threei::Errno::EMFILE as u64)
+        );
+        for start in [0u64, 1, 50, FD_PER_PROCESS_MAX / 2, FD_PER_PROCESS_MAX - 1] {
+            assert_eq!(
+                get_unused_virtual_fd_from_startfd(
+                    C5_A,
+                    C5_FDKIND,
+                    c5_next_underfd(),
+                    false,
+                    0,
+                    start
+                ),
+                Err(threei::Errno::EMFILE as u64),
+                "start={start}"
+            );
+        }
+
+        // Free exactly one slot in the middle. Lowest-available then makes
+        // the outcome a pure function of the start offset: a request at or
+        // below the hole is satisfied by it, one above it still fails.
+        let hole = FD_PER_PROCESS_MAX / 2;
+        close_virtualfd(C5_A, hole).unwrap();
+        assert_eq!(
+            get_unused_virtual_fd_from_startfd(
+                C5_A,
+                C5_FDKIND,
+                c5_next_underfd(),
+                false,
+                0,
+                hole + 1
+            ),
+            Err(threei::Errno::EMFILE as u64)
+        );
+        assert_eq!(
+            get_unused_virtual_fd_from_startfd(C5_A, C5_FDKIND, c5_next_underfd(), false, 0, hole),
+            Ok(hole)
+        );
+
+        for v in &vfds {
+            close_virtualfd(C5_A, *v).unwrap();
+        }
+        remove_cage_from_fdtable(C5_A);
+        assert_eq!(C5_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+        refresh();
+    }
+
+    #[test]
+    /// Cage lifecycle still works while a cage is saturated -- the case
+    /// the C test covers by forking B only after A has already hit its
+    /// cap.
+    ///
+    /// A fork from a full cage produces a child that is itself immediately
+    /// full (fork copies the whole table, so the child inherits the
+    /// saturation, not a fresh budget), every inherited entry is a second
+    /// reference rather than a new one, and tearing the child down
+    /// releases exactly the child's share -- leaving the parent's 1024
+    /// references intact.
+    fn conc_005_fork_and_teardown_from_exhausted_cage() {
+        let _lock = c2_test_guard();
+        refresh();
+        c5_setup();
+
+        init_empty_cage(C5_A);
+        let vfds = c5_fill(C5_A);
+
+        // Forking a saturated cage succeeds: there is no aggregate check
+        // (copy_fdtable_for_cage's ENFILE case is documented but
+        // unimplemented), so this pins current behaviour deliberately.
+        copy_fdtable_for_cage(C5_A, C5_CHILD).unwrap();
+
+        // The child inherited the saturation, not a fresh budget.
+        assert_eq!(
+            get_unused_virtual_fd(C5_CHILD, C5_FDKIND, c5_next_underfd(), false, 0),
+            Err(threei::Errno::EMFILE as u64)
+        );
+
+        // Every entry is now doubly referenced, so tearing the child down
+        // fires no `last` close at all.
+        remove_cage_from_fdtable(C5_CHILD);
+        assert_eq!(C5_LAST.load(Ordering::SeqCst), 0);
+
+        // ...and the parent is untouched: still exactly full, still able
+        // to translate every one of its descriptors.
+        assert_eq!(
+            get_unused_virtual_fd(C5_A, C5_FDKIND, c5_next_underfd(), false, 0),
+            Err(threei::Errno::EMFILE as u64)
+        );
+        for v in &vfds {
+            translate_virtual_fd(C5_A, *v).unwrap();
+        }
+
+        // Dropping the last cage releases every key exactly once.
+        remove_cage_from_fdtable(C5_A);
+        assert_eq!(C5_LAST.load(Ordering::SeqCst), FD_PER_PROCESS_MAX);
+        assert_eq!(C5_HANDLER_ERRS.load(Ordering::SeqCst), 0);
+
+        refresh();
+    }
 }
