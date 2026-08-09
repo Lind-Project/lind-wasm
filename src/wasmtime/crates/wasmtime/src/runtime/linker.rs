@@ -1103,10 +1103,22 @@ impl<T> Linker<T> {
                             let name_for_got = name.clone();
                             let func_ty = original_func.ty(&store);
                             let func_ty_for_portal = func_ty.clone();
+                            // Resolved once here (like handler_cage_id/fn_ptr above)
+                            // rather than via Caller::get_export inside the portal:
+                            // __errno_location lives on libc.so's own dylink'd
+                            // instance, not on whichever instance happens to call
+                            // through this portal, so Caller::get_export (which only
+                            // sees the *calling* instance's own exports) can't find
+                            // it. This cage's "env" namespace is shared by every
+                            // dylink'd library, so the linker's own lookup does.
+                            let errno_location_func = self
+                                .get(&mut store, "env", "__errno_location")
+                                .ok()
+                                .and_then(|e| if let Extern::Func(f) = e { Some(f) } else { None });
                             let portal = Func::new(
                                 &mut store,
                                 func_ty,
-                                move |_caller, params, results| {
+                                move |mut caller, params, results| {
                                     let mut raw = [0u64; 6];
                                     for (i, v) in params.iter().enumerate().take(6) {
                                         raw[i] = match v {
@@ -1117,6 +1129,60 @@ impl<T> Linker<T> {
                                             _ => 0,
                                         };
                                     }
+
+                                    // Seed the grate's errno with this cage's own
+                                    // current value before dispatching. The grate's
+                                    // errno is a separate value that persists across
+                                    // calls independently of this cage's own resets
+                                    // (e.g. a test's `errno = 0;` right before the
+                                    // call) -- without seeding, a stale value left by
+                                    // an earlier, unrelated interposed call would leak
+                                    // into every later call that doesn't itself touch
+                                    // errno. See threei::set_next_grate_errno_seed's
+                                    // doc. Best-effort, same as the post-call relay
+                                    // below.
+                                    if let Some(errno_loc) = errno_location_func {
+                                        if let Ok(typed) = errno_loc.typed::<(), i32>(&caller) {
+                                            if let Ok(addr) = typed.call(&mut caller, ()) {
+                                                let addr = addr as u32 as usize;
+                                                let mem = {
+                                                    let mut it =
+                                                        caller.as_context_mut().0.all_memories();
+                                                    let m = it.next();
+                                                    drop(it);
+                                                    m
+                                                };
+                                                let seed = match mem {
+                                                    Some(crate::runtime::vm::ExportMemory::Unshared(mem)) => {
+                                                        let mut buf = [0u8; 4];
+                                                        mem.read(&caller, addr, &mut buf)
+                                                            .ok()
+                                                            .map(|_| i32::from_le_bytes(buf))
+                                                    }
+                                                    Some(crate::runtime::vm::ExportMemory::Shared(vm_shared, _)) => {
+                                                        let def = unsafe { vm_shared.vmmemory_ptr().as_ref() };
+                                                        let len = def.current_length.load(
+                                                            core::sync::atomic::Ordering::Relaxed,
+                                                        );
+                                                        (addr + 4 <= len).then(|| {
+                                                            let mut buf = [0u8; 4];
+                                                            unsafe {
+                                                                core::ptr::copy_nonoverlapping(
+                                                                    def.base.as_ptr().add(addr),
+                                                                    buf.as_mut_ptr(),
+                                                                    4,
+                                                                );
+                                                            }
+                                                            i32::from_le_bytes(buf)
+                                                        })
+                                                    }
+                                                    None => None,
+                                                };
+                                                threei::set_next_grate_errno_seed(seed);
+                                            }
+                                        }
+                                    }
+
                                     let ret = threei::dispatch_lib_call(
                                         handler_cage_id,
                                         fn_ptr,
@@ -1133,6 +1199,80 @@ impl<T> Linker<T> {
                                         raw[5],
                                         cid,
                                     );
+
+                                    // errno is ambient, per-cage TLS state that
+                                    // dispatch_lib_call's arg/return marshalling never
+                                    // sees -- the real call just ran inside the grate's
+                                    // own address space, so its errno write is invisible
+                                    // to this (caller's) cage. Relay the grate's
+                                    // post-call errno (captured by the grate worker,
+                                    // see threei::take_last_grate_errno's doc) into this
+                                    // cage's own errno slot, via the errno_location_func
+                                    // resolved above. Best-effort: a callee without
+                                    // __errno_location, or a cage whose libc doesn't
+                                    // export it, just skips this.
+                                    if let Some(errno_val) = threei::take_last_grate_errno() {
+                                        if let Some(errno_loc) = errno_location_func {
+                                            if let Ok(typed) =
+                                                errno_loc.typed::<(), i32>(&caller)
+                                            {
+                                                if let Ok(addr) = typed.call(&mut caller, ()) {
+                                                    // addr is a wasm32 pointer; zero-extend through u32
+                                                    // first, since `i32 as usize` sign-extends and a high
+                                                    // address (top bit set) would otherwise become a
+                                                    // bogus, huge 64-bit offset (see the identical fix in
+                                                    // lind-3i's run()).
+                                                    let addr = addr as u32 as usize;
+                                                    // dylink modules import (not export)
+                                                    // memory, so get_export("memory") is
+                                                    // always None here -- use
+                                                    // all_memories() on the StoreOpaque
+                                                    // directly, matching the remote-lib
+                                                    // wrapper's memory lookup above.
+                                                    let mem = {
+                                                        let mut it =
+                                                            caller.as_context_mut().0.all_memories();
+                                                        let m = it.next();
+                                                        drop(it);
+                                                        m
+                                                    };
+                                                                    match mem {
+                                                        Some(crate::runtime::vm::ExportMemory::Unshared(mem)) => {
+                                                            let _ = mem.write(
+                                                                &mut caller,
+                                                                addr,
+                                                                &errno_val.to_le_bytes(),
+                                                            );
+                                                        }
+                                                        // A `-pthread` caller exports memory as
+                                                        // shared rather than unshared; the public
+                                                        // `Memory` handle is tied to a specific
+                                                        // store+instance index and can't be
+                                                        // constructed from a bare SharedMemory, so
+                                                        // write through its raw VM definition
+                                                        // instead (bounds-checked by hand).
+                                                        Some(crate::runtime::vm::ExportMemory::Shared(vm_shared, _)) => {
+                                                            let def = unsafe { vm_shared.vmmemory_ptr().as_ref() };
+                                                            let len = def.current_length.load(
+                                                                core::sync::atomic::Ordering::Relaxed,
+                                                            );
+                                                            if addr + 4 <= len {
+                                                                unsafe {
+                                                                    core::ptr::copy_nonoverlapping(
+                                                                        errno_val.to_le_bytes().as_ptr(),
+                                                                        def.base.as_ptr().add(addr),
+                                                                        4,
+                                                                    );
+                                                                }
+                                                            }
+                                                        }
+                                                        None => {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // ret now carries the callee's real return value at
                                     // full 64-bit width (see threei::dispatch_lib_call /
                                     // pass_fptr_to_wt). I32/F32 take the low 32 bits;

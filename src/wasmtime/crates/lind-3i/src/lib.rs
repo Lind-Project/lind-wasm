@@ -80,7 +80,7 @@ use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
 use wasmtime::error::Context as WasmtimeContext;
-use wasmtime::{Engine, Global, Linker, Module, Store, TypedFunc, Val};
+use wasmtime::{Engine, Extern, Global, Linker, Module, Store, TypedFunc, Val};
 
 type PassFptrTyped = TypedFunc<
     (
@@ -250,6 +250,22 @@ struct GrateWorker<T: 'static> {
     /// resets the worker stack, so resolving the export on each call adds fixed
     /// overhead to even trivial grate calls.
     stack_pointer: Global,
+
+    /// Typed handle to the grate's own `__errno_location` export, if present.
+    ///
+    /// Read right after the grate call returns, so its value can be relayed
+    /// back to the calling cage's own errno slot (see
+    /// `threei::take_last_grate_errno`'s doc). Grates that don't link libc's
+    /// errno support (e.g. non-libc freestanding grates) simply have `None`
+    /// here, and no propagation is attempted.
+    errno_location_func: Option<TypedFunc<(), i32>>,
+
+    /// This worker's own linear memory export, cached for the same reason as
+    /// `errno_location_func` -- both are resolved once here rather than
+    /// looked up on every call. Kept as the raw `Extern` since a `-pthread`
+    /// grate build exports `memory` as `SharedMemory` rather than `Memory`
+    /// (see the read logic in `run`, which handles both).
+    memory: Option<Extern>,
 
     /// Base address of this worker’s assigned stack slot in the stack arena.
     ///
@@ -612,6 +628,43 @@ impl<T: 'static> GrateWorker<T> {
 
         self.reset_worker_stack();
 
+        // Reset before the call so a grate lacking __errno_location (or a
+        // failed resolve below) never leaks a stale value from a previous
+        // call into this one's dispatch_lib_call.
+        threei::set_last_grate_errno(None);
+
+        // Seed this worker's own errno with the caller's pre-call value (see
+        // threei::take_next_grate_errno_seed's doc) before invoking the real
+        // function. Without this, the grate's errno -- a separate value that
+        // outlives any single call -- would carry over whatever an earlier,
+        // unrelated dispatch happened to leave it at, leaking into every
+        // later call that doesn't itself touch errno.
+        if let Some(seed) = threei::take_next_grate_errno_seed() {
+            if let (Some(errno_func), Some(mem)) =
+                (self.errno_location_func.as_ref(), self.memory.as_ref())
+            {
+                if let Ok(addr) = errno_func.call(&mut self.store, ()) {
+                    let addr = addr as u32 as usize;
+                    match mem {
+                        Extern::Memory(m) => {
+                            let _ = m.write(&mut self.store, addr, &seed.to_le_bytes());
+                        }
+                        Extern::SharedMemory(sm) => {
+                            let data = sm.data();
+                            if addr + 4 <= data.len() {
+                                for (i, b) in seed.to_le_bytes().into_iter().enumerate() {
+                                    unsafe {
+                                        *data[addr + i].get() = b;
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         let func = self.pass_fptr_func.as_ref().ok_or_else(|| {
             anyhow::anyhow!("no pass_fptr_func found in worker {}", self.worker_id)
         })?;
@@ -649,6 +702,49 @@ impl<T: 'static> GrateWorker<T> {
             "Worker {} got result {} from pass_fptr_to_wt",
             self.worker_id, ret
         );
+
+        // Relay this worker's own errno (as set by whatever the grate just
+        // ran, inside its own address space) out to the caller-side portal
+        // via the thread-local in `threei`. Best-effort: a grate without
+        // __errno_location or without linear memory just leaves this unset.
+        if let (Some(errno_func), Some(mem)) =
+            (self.errno_location_func.as_ref(), self.memory.as_ref())
+        {
+            if let Ok(addr) = errno_func.call(&mut self.store, ()) {
+                // addr is a wasm32 pointer; zero-extend through u32 first, since
+                // `i32 as usize` sign-extends and a high address (top bit set)
+                // would otherwise become a bogus, huge 64-bit offset.
+                let addr = addr as u32 as usize;
+                let value = match mem {
+                    Extern::Memory(m) => {
+                        let mut buf = [0u8; 4];
+                        m.read(&self.store, addr, &mut buf)
+                            .ok()
+                            .map(|_| i32::from_le_bytes(buf))
+                    }
+                    // A `-pthread` grate build exports `memory` as shared
+                    // rather than unshared; SharedMemory has no `read`/`write`
+                    // (concurrent access must go through its UnsafeCell
+                    // `data()`, matching how threaded wasm code itself would
+                    // touch this memory).
+                    Extern::SharedMemory(sm) => {
+                        let data = sm.data();
+                        (addr + 4 <= data.len()).then(|| {
+                            let mut buf = [0u8; 4];
+                            for i in 0..4 {
+                                buf[i] = unsafe { *data[addr + i].get() };
+                            }
+                            i32::from_le_bytes(buf)
+                        })
+                    }
+                    _ => None,
+                };
+                if let Some(value) = value {
+                    threei::set_last_grate_errno(Some(value));
+                }
+            }
+        }
+
         Ok(ret)
     }
 }
@@ -709,6 +805,14 @@ where
         None => None,
     };
 
+    let errno_location_func = match instance.get_export(&mut store, "__errno_location") {
+        Some(_) => instance
+            .get_typed_func::<(), i32>(&mut store, "__errno_location")
+            .ok(),
+        None => None,
+    };
+    let memory = instance.get_export(&mut store, "memory");
+
     let stack_base = worker_stack_base(cageid, worker_id);
     let stack_top = worker_stack_top(cageid, worker_id);
     let stack_pointer = instance
@@ -720,6 +824,8 @@ where
         store,
         pass_fptr_func,
         stack_pointer,
+        errno_location_func,
+        memory,
         stack_base,
         stack_top,
     })
