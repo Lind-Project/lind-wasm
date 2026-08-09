@@ -30,8 +30,11 @@ FLOAT
 M_DECL_FUNC (__acosh) (FLOAT x)
 {
   if (__glibc_unlikely (isless (x,  M_LIT (1.0))))
-    /* Domain error: acosh(x<1).  */
-    __set_errno (EDOM);
+    {
+      /* Domain error: acosh(x<1).  */
+      __set_errno (EDOM);
+      __feraiseexcept (FE_INVALID);
+    }
   return M_SUF (__ieee754_acosh) (x);
 }
 declare_mgen_alias (__acosh, acosh)

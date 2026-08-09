@@ -22,6 +22,7 @@
 #if __USE_WRAPPER_TEMPLATE
 
 # include <errno.h>
+# include <fenv.h>
 # include <math.h>
 # include <math_private.h>
 
@@ -30,8 +31,11 @@ M_DECL_FUNC (__atan2) (FLOAT y, FLOAT x)
 {
   FLOAT z = M_SUF (__ieee754_atan2) (y, x);
   if (__glibc_unlikely (z == 0 && y != 0 && isfinite (x)))
-    /* Underflow.  */
-    __set_errno (ERANGE);
+    {
+      /* Underflow.  */
+      __set_errno (ERANGE);
+      __feraiseexcept (FE_UNDERFLOW);
+    }
   return z;
 }
 declare_mgen_alias (__atan2, atan2)

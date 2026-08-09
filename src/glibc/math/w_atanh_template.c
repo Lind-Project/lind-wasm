@@ -32,11 +32,17 @@ M_DECL_FUNC (__atanh) (FLOAT x)
   if (__glibc_unlikely (isgreaterequal (M_FABS (x), M_LIT (1.0))))
     {
       if (M_FABS (x) == 1)
-	/* Pole error: atanh(|x|==1).  */
-	__set_errno (ERANGE);
+	{
+	  /* Pole error: atanh(|x|==1).  */
+	  __set_errno (ERANGE);
+	  __feraiseexcept (FE_DIVBYZERO);
+	}
       else
-	/* Domain error: atanh(|x|>1).  */
-	__set_errno (EDOM);
+	{
+	  /* Domain error: atanh(|x|>1).  */
+	  __set_errno (EDOM);
+	  __feraiseexcept (FE_INVALID);
+	}
     }
   return M_SUF (__ieee754_atanh) (x);
 }

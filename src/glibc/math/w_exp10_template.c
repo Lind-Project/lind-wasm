@@ -31,8 +31,11 @@ M_DECL_FUNC (__exp10) (FLOAT x)
 {
   FLOAT z = M_SUF (__ieee754_exp10) (x);
   if (__glibc_unlikely (!isfinite (z) || z == 0) && isfinite (x))
-    /* Overflow or underflow.  */
-    __set_errno (ERANGE);
+    {
+      /* Overflow or underflow.  */
+      __set_errno (ERANGE);
+      __feraiseexcept (isinf (z) ? FE_OVERFLOW : FE_UNDERFLOW);
+    }
   return z;
 }
 declare_mgen_alias (__exp10, exp10)

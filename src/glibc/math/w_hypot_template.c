@@ -31,8 +31,11 @@ M_DECL_FUNC (__hypot) (FLOAT x, FLOAT y)
 {
   FLOAT z = M_SUF (__ieee754_hypot) (x, y);
   if (__glibc_unlikely (!isfinite (z)) && isfinite (x) && isfinite (y))
-    /* Overflow.  */
-    __set_errno (ERANGE);
+    {
+      /* Overflow.  */
+      __set_errno (ERANGE);
+      __feraiseexcept (FE_OVERFLOW);
+    }
   return z;
 }
 declare_mgen_alias (__hypot, hypot)

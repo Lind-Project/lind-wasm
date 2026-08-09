@@ -32,11 +32,17 @@ M_DECL_FUNC (__log) (FLOAT x)
   if (__glibc_unlikely (islessequal (x, M_LIT (0.0))))
     {
       if (x == 0)
-	/* Pole error: log(0).  */
-	__set_errno (ERANGE);
+	{
+	  /* Pole error: log(0).  */
+	  __set_errno (ERANGE);
+	  __feraiseexcept (FE_DIVBYZERO);
+	}
       else
-	/* Domain error: log(<0).  */
-	__set_errno (EDOM);
+	{
+	  /* Domain error: log(<0).  */
+	  __set_errno (EDOM);
+	  __feraiseexcept (FE_INVALID);
+	}
     }
   return M_SUF (__ieee754_log) (x);
 }

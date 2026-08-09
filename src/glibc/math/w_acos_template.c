@@ -30,8 +30,11 @@ FLOAT
 M_DECL_FUNC (__acos) (FLOAT x)
 {
   if (__glibc_unlikely (isgreater (M_FABS (x), M_LIT (1.0))))
-    /* Domain error: acos(|x|>1).  */
-    __set_errno (EDOM);
+    {
+      /* Domain error: acos(|x|>1).  */
+      __set_errno (EDOM);
+      __feraiseexcept (FE_INVALID);
+    }
   return M_SUF (__ieee754_acos) (x);
 }
 declare_mgen_alias (__acos, acos)

@@ -17,6 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 FLOAT
@@ -28,7 +29,12 @@ M_DECL_FUNC (__w_scalbln) (FLOAT x, long int n)
   x = M_SUF (__scalbln) (x, n);
 
   if (!isfinite (x) || x == 0)
-    __set_errno (ERANGE);
+    {
+      /* Overflow (x became inf) or underflow (x flushed to 0), matching
+	 the same split used for scalb (see w_scalb_template.c).  */
+      __set_errno (ERANGE);
+      __feraiseexcept (isinf (x) ? FE_OVERFLOW : FE_UNDERFLOW);
+    }
 
   return x;
 }

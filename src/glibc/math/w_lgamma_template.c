@@ -34,8 +34,14 @@ M_DECL_FUNC (__lgamma) (FLOAT x)
 {
   FLOAT y = M_CALL_FUNC (M_SUF (__ieee754_lgamma)) (x, &__signgam);
   if (__glibc_unlikely (!isfinite (y)) && isfinite (x))
-    /* Pole error: lgamma(integer x<0).  Or overflow.  */
-    __set_errno (ERANGE);
+    {
+      /* Pole error: lgamma(integer x<=0).  Or overflow.  Distinguished the
+	 same way as w_lgamma_r_compat.c's __kernel_standard type 14 vs 15
+	 selection.  */
+      __set_errno (ERANGE);
+      __feraiseexcept (M_SUF (floor) (x) == x && x <= 0
+			? FE_DIVBYZERO : FE_OVERFLOW);
+    }
   return y;
 }
 declare_mgen_alias (__lgamma, lgamma)

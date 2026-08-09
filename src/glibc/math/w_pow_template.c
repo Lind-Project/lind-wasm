@@ -35,16 +35,33 @@ M_DECL_FUNC (__pow) (FLOAT x, FLOAT y)
       if (isfinite (x) && isfinite (y))
 	{
 	  if (isnan (z))
-	    /* Domain error: pow(x<0,y=non-integer).  */
-	    __set_errno (EDOM);
+	    {
+	      /* Domain error: pow(x<0,y=non-integer).  */
+	      __set_errno (EDOM);
+	      __feraiseexcept (FE_INVALID);
+	    }
+	  else if (x == 0)
+	    {
+	      /* Pole error: pow(x=0,y<0).  Classified DOMAIN, not SING,
+		 matching k_standard.c's case 23/123/223/43/143/243
+		 ("(+-)0**neg").  */
+	      __set_errno (ERANGE);
+	      __feraiseexcept (FE_INVALID);
+	    }
 	  else
-	    /* Pole error: pow(x=0,y<0).  Or overflow.  */
-	    __set_errno (ERANGE);
+	    {
+	      /* Overflow.  */
+	      __set_errno (ERANGE);
+	      __feraiseexcept (FE_OVERFLOW);
+	    }
 	}
     }
   else if (__glibc_unlikely (z == 0) && isfinite (x) && x != 0 && isfinite (y))
-    /* Underflow.  */
-    __set_errno (ERANGE);
+    {
+      /* Underflow.  */
+      __set_errno (ERANGE);
+      __feraiseexcept (FE_UNDERFLOW);
+    }
   return z;
 }
 declare_mgen_alias (__pow, pow)

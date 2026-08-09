@@ -38,8 +38,11 @@ FLOAT
 M_DECL_FUNC (__sqrt) (FLOAT x)
 {
   if (__glibc_unlikely (isless (x, M_LIT (0.0))))
-    /* Domain error: sqrt(x<-0).  */
-    __set_errno (EDOM);
+    {
+      /* Domain error: sqrt(x<-0).  */
+      __set_errno (EDOM);
+      __feraiseexcept (FE_INVALID);
+    }
   return M_SUF (__ieee754_sqrt) (x);
 }
 declare_mgen_alias (__sqrt, sqrt)

@@ -31,8 +31,11 @@ M_DECL_FUNC (__exp) (FLOAT x)
 {
   FLOAT z = M_SUF (__ieee754_exp) (x);
   if (__glibc_unlikely (!isfinite (z) || z == 0) && isfinite (x))
-    /* Overflow or underflow.  */
-    __set_errno (ERANGE);
+    {
+      /* Overflow or underflow.  */
+      __set_errno (ERANGE);
+      __feraiseexcept (isinf (z) ? FE_OVERFLOW : FE_UNDERFLOW);
+    }
   return z;
 }
 libm_hidden_def (M_SUF (__exp))

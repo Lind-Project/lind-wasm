@@ -39,11 +39,20 @@ M_DECL_FUNC (__y0) (FLOAT x)
   if (__glibc_unlikely (islessequal (x, M_LIT (0.0))))
     {
       if (x < 0)
-	/* Domain error: y0(x<0).  */
-	__set_errno (EDOM);
+	{
+	  /* Domain error: y0(x<0).  */
+	  __set_errno (EDOM);
+	  __feraiseexcept (FE_INVALID);
+	}
       else if (x == 0)
-	/* Pole error: y0(0).  */
-	__set_errno (ERANGE);
+	{
+	  /* Pole error: y0(0).  Classified DOMAIN, not SING, matching
+	     k_standard.c's case 108/208 ("y0(0) = -inf" -- its own comment
+	     says "should be SING for IEEE" but the actual behavior used
+	     is DOMAIN).  */
+	  __set_errno (ERANGE);
+	  __feraiseexcept (FE_INVALID);
+	}
     }
   return M_SUF (__ieee754_y0) (x);
 }

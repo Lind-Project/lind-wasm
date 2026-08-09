@@ -39,14 +39,25 @@ M_DECL_FUNC (__tgamma) (FLOAT x)
       && (isfinite (x) || (isinf (x) && x < 0)))
     {
       if (x == 0)
-	/* Pole error: tgamma(x=0).  */
-	__set_errno (ERANGE);
+	{
+	  /* Pole error: tgamma(x=0).  */
+	  __set_errno (ERANGE);
+	  __feraiseexcept (FE_DIVBYZERO);
+	}
       else if (M_SUF (floor) (x) == x && x < 0)
-	/* Domain error: tgamma(integer x<0).  */
-	__set_errno (EDOM);
+	{
+	  /* tgamma(integer x<0) is also a pole (SING, not DOMAIN, matching
+	     k_standard.c's case 141 "tgamma(-integer)" -- despite this
+	     branch's own preexisting comment saying "Domain error").  */
+	  __set_errno (EDOM);
+	  __feraiseexcept (FE_DIVBYZERO);
+	}
       else
-	/* Overflow or underflow.  */
-	__set_errno (ERANGE);
+	{
+	  /* Overflow or underflow.  */
+	  __set_errno (ERANGE);
+	  __feraiseexcept (isinf (y) ? FE_OVERFLOW : FE_UNDERFLOW);
+	}
     }
   return local_signgam < 0 ? -y : y;
 }

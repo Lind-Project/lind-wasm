@@ -31,8 +31,11 @@ M_DECL_FUNC (__sinh) (FLOAT x)
 {
   FLOAT z = M_SUF (__ieee754_sinh) (x);
   if (__glibc_unlikely (!isfinite (z)) && isfinite (x))
-    /* Overflow.  */
-    __set_errno (ERANGE);
+    {
+      /* Overflow.  */
+      __set_errno (ERANGE);
+      __feraiseexcept (FE_OVERFLOW);
+    }
   return z;
 }
 declare_mgen_alias (__sinh, sinh)

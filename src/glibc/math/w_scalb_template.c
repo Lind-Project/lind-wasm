@@ -22,6 +22,7 @@
 #if __USE_WRAPPER_TEMPLATE
 
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 #include <math_private.h>
 
@@ -35,18 +36,29 @@ FLOAT M_DECL_FUNC (__scalb) (FLOAT x, FLOAT fn)
       if (isnan (z))
 	{
 	  if (!isnan (x) && !isnan (fn))
-	    __set_errno (EDOM);
+	    {
+	      __set_errno (EDOM);
+	      __feraiseexcept (FE_INVALID);
+	    }
 	}
       else if (isinf (z))
 	{
 	  if (!isinf (x) && !isinf (fn))
-	    __set_errno (ERANGE);
+	    {
+	      /* scalb overflow, matching k_standard.c's case 132.  */
+	      __set_errno (ERANGE);
+	      __feraiseexcept (FE_OVERFLOW);
+	    }
 	}
       else
 	{
 	  /* z == 0.  */
 	  if (x != M_LIT (0.0) && !isinf (fn))
-	    __set_errno (ERANGE);
+	    {
+	      /* scalb underflow, matching k_standard.c's case 133.  */
+	      __set_errno (ERANGE);
+	      __feraiseexcept (FE_UNDERFLOW);
+	    }
 	}
     }
   return z;

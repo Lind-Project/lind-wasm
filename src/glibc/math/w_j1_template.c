@@ -39,11 +39,18 @@ M_DECL_FUNC (__y1) (FLOAT x)
   if (__glibc_unlikely (islessequal (x, M_LIT (0.0))))
     {
       if (x < 0)
-	/* Domain error: y1(x<0).  */
-	__set_errno (EDOM);
+	{
+	  /* Domain error: y1(x<0).  */
+	  __set_errno (EDOM);
+	  __feraiseexcept (FE_INVALID);
+	}
       else if (x == 0)
-	/* Pole error: y1(0).  */
-	__set_errno (ERANGE);
+	{
+	  /* Pole error: y1(0).  Classified DOMAIN, not SING -- see the
+	     matching comment in w_j0_template.c.  */
+	  __set_errno (ERANGE);
+	  __feraiseexcept (FE_INVALID);
+	}
     }
   return M_SUF (__ieee754_y1) (x);
 }

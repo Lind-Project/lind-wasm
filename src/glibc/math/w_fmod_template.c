@@ -30,9 +30,12 @@ FLOAT
 M_DECL_FUNC (__fmod) (FLOAT x, FLOAT y)
 {
   if (__builtin_expect (isinf (x) || y == 0, 0) && !isnan (y) && !isnan (x))
-    /* Domain error: fmod(+-Inf,y) or fmod(x,0).
-       If x or y are nan, these conditions should not be considered.  */
-    __set_errno (EDOM);
+    {
+      /* Domain error: fmod(+-Inf,y) or fmod(x,0).
+	 If x or y are nan, these conditions should not be considered.  */
+      __set_errno (EDOM);
+      __feraiseexcept (FE_INVALID);
+    }
   return M_SUF (__ieee754_fmod) (x, y);
 }
 declare_mgen_alias (__fmod, fmod)

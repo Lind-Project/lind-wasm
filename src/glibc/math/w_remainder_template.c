@@ -30,9 +30,12 @@ FLOAT
 M_DECL_FUNC (__remainder) (FLOAT x, FLOAT y)
 {
   if (__glibc_unlikely (isinf (x) || y == 0) && !isnan (y) && !isnan (x))
-    /* Domain error: remainder(+-Inf,y) or remainder(x,0).
-       If x or y are nan, these conditions should not be considered.  */
-    __set_errno (EDOM);
+    {
+      /* Domain error: remainder(+-Inf,y) or remainder(x,0).
+	 If x or y are nan, these conditions should not be considered.  */
+      __set_errno (EDOM);
+      __feraiseexcept (FE_INVALID);
+    }
   return M_SUF (__ieee754_remainder) (x, y);
 }
 declare_mgen_alias (__remainder, remainder)

@@ -17,6 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 FLOAT
@@ -25,9 +26,17 @@ M_DECL_FUNC (__w_log1p) (FLOAT x)
   if (__glibc_unlikely (islessequal (x, M_LIT (-1.0))))
     {
       if (x == -1)
-	__set_errno (ERANGE);
+	{
+	  /* Pole error: log1p(-1) == log(0).  Matches log(0)'s SING
+	     classification (see w_log_template.c).  */
+	  __set_errno (ERANGE);
+	  __feraiseexcept (FE_DIVBYZERO);
+	}
       else
-	__set_errno (EDOM);
+	{
+	  __set_errno (EDOM);
+	  __feraiseexcept (FE_INVALID);
+	}
     }
 
   return M_SUF (__log1p) (x);
