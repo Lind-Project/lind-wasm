@@ -1565,12 +1565,9 @@ pub extern "C" fn fcntl_syscall(
 ///  - `arg3`–`arg6` and their corresponding `_cageid`: Reserved arguments (must be unused).
 ///
 /// ## Implementation Details:
-///  - The path arguments are translated from the RawPOSIX perspective into host kernel paths
-///    using `sc_convert_path_to_host`, which applies path normalization relative to the cage's CWD.
-///  - The unused arguments are validated with `sc_unusedarg`; any unexpected values are treated
-///    as a security violation.
-///  - The underlying `libc::link()` is invoked with the translated paths.
-///  - On failure, `errno` is retrieved via `get_errno()` and normalized through `handle_errno()`.
+///  - `link(oldpath, newpath)` is equivalent to `linkat(AT_FDCWD, oldpath, AT_FDCWD,
+///    newpath, 0)`, so this call delegates to `linkat_syscall`, which handles path
+///    translation, unused-argument validation, and errno normalization.
 ///
 /// ## Return Value:
 ///  - `0` on success.
@@ -1590,16 +1587,6 @@ pub extern "C" fn link_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Type conversion
-    let oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
-        Ok(oldpath) => oldpath,
-        Err(e) => return syscall_error(e, "link", "path conversion failed"),
-    };
-    let newpath = match sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid) {
-        Ok(newpath) => newpath,
-        Err(e) => return syscall_error(e, "link", "path conversion failed"),
-    };
-
     // Validate unused args
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -1612,13 +1599,22 @@ pub extern "C" fn link_syscall(
         );
     }
 
-    let ret = unsafe { libc::link(oldpath.as_ptr(), newpath.as_ptr()) };
-
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "link");
-    }
-    ret
+    // Delegate to linkat_syscall with both dirfds set to AT_FDCWD and no flags
+    linkat_syscall(
+        cageid,
+        AT_FDCWD as u64,
+        cageid,
+        oldpath_arg,
+        oldpath_cageid,
+        AT_FDCWD as u64,
+        cageid,
+        newpath_arg,
+        newpath_cageid,
+        0,
+        cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
 }
 
 //------------------------------------LINKAT SYSCALL------------------------------------
