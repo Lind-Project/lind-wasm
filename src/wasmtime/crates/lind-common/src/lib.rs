@@ -247,16 +247,15 @@ const MAX_DEBUG_STR_LEN: usize = 1024;
 
 /// Read a NUL-terminated string from the calling cage's linear memory.
 ///
-/// `offset` is a guest pointer, not a host address — the host adds the base so a
-/// guest can never name an arbitrary host address.
+/// `offset` is a guest pointer, not a host address. Two things keep this safe:
+/// the 32-bit bound means `base + offset` always lands inside this cage's own
+/// memory, and `check_addr_read` clears the page before we touch it — the 4 GiB
+/// reservation is mostly unmapped, so only the vmmap knows what is readable.
 ///
-/// The reported memory size covers the whole 4 GiB reservation, not the mapped
-/// pages, so it is only a first filter: each page is checked against the cage's
-/// vmmap *before* it is touched, the same way `_strlen_in_cage` does in threei.
-/// The scan stops at the first unmapped page or at `MAX_DEBUG_STR_LEN`.
-///
-/// `EFAULT` on an out-of-range pointer or a missing terminator. Non-UTF-8 is
-/// replaced, not rejected, so a bad message can't panic the host.
+/// Reads stop at the end of the starting page, so a message straddling a page
+/// boundary is truncated. That is deterministic per build and acceptable for a
+/// diagnostic. Non-UTF-8 is replaced, not rejected, so a bad message can't
+/// panic the host.
 fn read_guest_cstr<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
@@ -264,41 +263,22 @@ fn read_guest_cstr<
     caller: &mut Caller<'_, T>,
     offset: u64,
 ) -> Result<String, Errno> {
-    // Guest pointers are 32-bit.
+    // Bounds `off` so `base + off` below cannot wrap.
     if offset > u32::MAX as u64 {
         return Err(Errno::EFAULT);
     }
     let off = offset as usize;
-
+    let base = get_memory_base(caller);
     let cageid = wasmtime_lind_multi_process::current_cageid(caller) as u64;
-    let (base, mem_size) = get_memory_base_and_size(caller);
-    if off >= mem_size {
-        return Err(Errno::EFAULT);
-    }
 
-    let max_len = std::cmp::min(MAX_DEBUG_STR_LEN, mem_size - off);
     let page_size = PAGESIZE as usize;
-    let mut out: Vec<u8> = Vec::new();
-    let mut read = 0usize;
+    let len = std::cmp::min(MAX_DEBUG_STR_LEN, page_size - (off % page_size));
+    check_addr_read(cageid, base + off as u64, len).map_err(|_| Errno::EFAULT)?;
 
-    while read < max_len {
-        let addr = off + read;
-        // Stop at the next page boundary so one unmapped page ends the scan.
-        let chunk = std::cmp::min(page_size - (addr % page_size), max_len - read);
-        check_addr_read(cageid, base + addr as u64, chunk).map_err(|_| Errno::EFAULT)?;
-
-        // Safe: the vmmap just confirmed this chunk is mapped and readable.
-        let bytes = unsafe { std::slice::from_raw_parts((base as *const u8).add(addr), chunk) };
-        if let Some(end) = bytes.iter().position(|&b| b == 0) {
-            out.extend_from_slice(&bytes[..end]);
-            return Ok(String::from_utf8_lossy(&out).into_owned());
-        }
-        out.extend_from_slice(bytes);
-        read += chunk;
-    }
-
-    // No terminator within the cap.
-    Err(Errno::EFAULT)
+    // Safe: the vmmap just confirmed this range is mapped and readable.
+    let bytes = unsafe { std::slice::from_raw_parts((base as *const u8).add(off), len) };
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(len);
+    Ok(String::from_utf8_lossy(&bytes[..end]).into_owned())
 }
 
 /// Register runtime introspection functions: memory base address, cage ID,
