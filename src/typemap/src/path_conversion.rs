@@ -264,7 +264,7 @@ mod tests {
         let cageid = 1500;
         make_test_cage(cageid, "/");
 
-        let result = normpath(PathBuf::from("/etc/passwd"), cageid);
+        let result = normpath(PathBuf::from("/etc/../etc/passwd"), cageid);
 
         assert_eq!(result, PathBuf::from("/etc/passwd"));
     }

@@ -39,7 +39,26 @@ int main() {
 
     unlink("evil_link");
 
+    errno = 0;
+    /*
+    NOTE: /lind/README.md is specific to this dev-conatainer's mount
+    layout(repo checked out at /lind, matching LINDFS_ROOT's hardcoded
+    assumption in sysdefs). If this runs somewhere that mounts the repo 
+    differently, this path may not exist at all, in which case this 
+    check would accidentally pass via ENOENT.
+    Re-verify this path is valid if test is run in a new environment.
+    */
+    int escape_fd = open("/lind/README.md", O_RDONLY);
+    int escape_errno = errno;
+
+    if(escape_fd != -1) {
+        fprintf(stderr, "symlink_confinement test: FAIL -- opened "
+                "/lind/README.md from inside the cage, chroot escape\n");
+        close(escape_fd);
+        assert(0);
+    }
+    assert(escape_errno == ENOENT);
+
     printf("symlink_confinement test: PASS\n");
     return 0;
-    
 }
