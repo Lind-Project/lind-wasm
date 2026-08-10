@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use cage::memory::check_addr_write;
+use cage::memory::{check_addr_read, check_addr_write};
 use rand::Rng;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use sysdefs::constants::Errno;
+use sysdefs::constants::fs_const::PAGESIZE;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use sysdefs::lind_debug_panic;
@@ -13,7 +14,6 @@ use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
 use threei::threei_const;
-use typemap::path_conversion::get_cstr;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{LindHost, get_memory_base, get_memory_base_and_size};
@@ -242,6 +242,65 @@ fn add_syscall_to_linker<
     Ok(())
 }
 
+/// Read cap for guest strings; matches `lind_debug_printf`'s buffer.
+const MAX_DEBUG_STR_LEN: usize = 1024;
+
+/// Read a NUL-terminated string from the calling cage's linear memory.
+///
+/// `offset` is a guest pointer, not a host address — the host adds the base so a
+/// guest can never name an arbitrary host address.
+///
+/// The reported memory size covers the whole 4 GiB reservation, not the mapped
+/// pages, so it is only a first filter: each page is checked against the cage's
+/// vmmap *before* it is touched, the same way `_strlen_in_cage` does in threei.
+/// The scan stops at the first unmapped page or at `MAX_DEBUG_STR_LEN`.
+///
+/// `EFAULT` on an out-of-range pointer or a missing terminator. Non-UTF-8 is
+/// replaced, not rejected, so a bad message can't panic the host.
+fn read_guest_cstr<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+    offset: u64,
+) -> Result<String, Errno> {
+    // Guest pointers are 32-bit.
+    if offset > u32::MAX as u64 {
+        return Err(Errno::EFAULT);
+    }
+    let off = offset as usize;
+
+    let cageid = wasmtime_lind_multi_process::current_cageid(caller) as u64;
+    let (base, mem_size) = get_memory_base_and_size(caller);
+    if off >= mem_size {
+        return Err(Errno::EFAULT);
+    }
+
+    let max_len = std::cmp::min(MAX_DEBUG_STR_LEN, mem_size - off);
+    let page_size = PAGESIZE as usize;
+    let mut out: Vec<u8> = Vec::new();
+    let mut read = 0usize;
+
+    while read < max_len {
+        let addr = off + read;
+        // Stop at the next page boundary so one unmapped page ends the scan.
+        let chunk = std::cmp::min(page_size - (addr % page_size), max_len - read);
+        check_addr_read(cageid, base + addr as u64, chunk).map_err(|_| Errno::EFAULT)?;
+
+        // Safe: the vmmap just confirmed this chunk is mapped and readable.
+        let bytes = unsafe { std::slice::from_raw_parts((base as *const u8).add(addr), chunk) };
+        if let Some(end) = bytes.iter().position(|&b| b == 0) {
+            out.extend_from_slice(&bytes[..end]);
+            return Ok(String::from_utf8_lossy(&out).into_owned());
+        }
+        out.extend_from_slice(bytes);
+        read += chunk;
+    }
+
+    // No terminator within the cap.
+    Err(Errno::EFAULT)
+}
+
 /// Register runtime introspection functions: memory base address, cage ID,
 /// setjmp/longjmp, epoch callback, and debug panic.
 fn add_runtime_to_linker<
@@ -265,10 +324,19 @@ fn add_runtime_to_linker<
         },
     )?;
 
-    linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
-        let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
-        lind_debug_panic!("FROM GUEST: {}", _panic_str);
-    })?;
+    linker.func_wrap(
+        "lind",
+        "debug-panic",
+        move |mut caller: Caller<'_, T>, msg: u64| -> () {
+            match read_guest_cstr::<T, U>(&mut caller, msg) {
+                Ok(_panic_str) => lind_debug_panic!("FROM GUEST: {}", _panic_str),
+                // Still fatal either way; report the pointer, don't deref it.
+                Err(_) => {
+                    lind_debug_panic!("FROM GUEST: <unreadable message pointer {:#x}>", msg)
+                }
+            }
+        },
+    )?;
 
     #[cfg(feature = "asyncify-setjmp")]
     linker.func_wrap(
@@ -321,9 +389,9 @@ fn add_debug_to_linker<
         "debug",
         "lind_debug_str",
         move |mut caller: Caller<'_, T>, ptr: i32| -> i32 {
-            let mem_base = get_memory_base(&mut caller);
-            if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
-                eprintln!("[LIND DEBUG STR]: {}", msg);
+            match read_guest_cstr::<T, U>(&mut caller, (ptr as u32) as u64) {
+                Ok(msg) => eprintln!("[LIND DEBUG STR]: {}", msg),
+                Err(_) => eprintln!("[LIND DEBUG STR]: <unreadable pointer {:#x}>", ptr as u32),
             }
             ptr
         },

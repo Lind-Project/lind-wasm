@@ -1,4 +1,5 @@
-#include "addr_translation.h"
+#include <stdint.h>
+
 #include "lind_debug.h"
 
 #ifdef LIND_DEBUG
@@ -6,6 +7,9 @@
 #include <stdio.h>
 #endif
 
+// `msg` is a guest pointer, not a host address: the host adds the base and
+// bounds-checks it. Translating here would let any module name an arbitrary
+// host address. Stays 64-bit to keep the wasm import signature unchanged.
 void __lind_debug_panic(uint64_t msg) __attribute__((
     __import_module__("lind"),
     __import_name__("debug-panic")
@@ -15,7 +19,7 @@ void __lind_debug_panic(uint64_t msg) __attribute__((
 // depends on configuration, may halt or just log
 void lind_debug_panic (const char* msg)
 {
-    __lind_debug_panic(TRANSLATE_GUEST_POINTER_TO_HOST(msg));
+    __lind_debug_panic((uint64_t)(uintptr_t) msg);
 }
 
 #ifdef LIND_DEBUG
