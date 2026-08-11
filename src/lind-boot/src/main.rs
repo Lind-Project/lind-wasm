@@ -91,9 +91,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // program exit code, terminate with EX_SOFTWARE (70) to signal
     // a runtime-level failure rather than a cage-provided exit code.
     match execute_wasmtime(lindboot_cli) {
-        Ok(code) => std::process::exit(code),
+        Ok(code) => {
+            cage::memory::cow::dump_stats_if_requested();
+            std::process::exit(code)
+        }
         Err(e) => {
             eprintln!("{:?}", e);
+            cage::memory::cow::dump_stats_if_requested();
             std::process::exit(sysdefs::constants::EX_SOFTWARE);
         }
     }

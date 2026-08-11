@@ -4,6 +4,7 @@
 //! initializing vmmap, helper functions for handling vmmap during a fork syscall, and
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
+use crate::memory::cow::COW_MANAGER;
 use crate::memory::VmmapOps;
 use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
@@ -86,11 +87,21 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
     // first retrieve corresponding vmmaps
     let parent_cage = get_cage(parent_cageid).unwrap();
     let child_cage = get_cage(child_cageid).unwrap();
-    let parent_vmmap = parent_cage.vmmap.read();
-    let child_vmmap = child_cage.vmmap.read();
+
+    // Write locks (not read) on both sides: the COW path (see
+    // cow-implementation-plan.md Milestone 1) mutates each side's
+    // VmmapEntry::backing field in place as entries get lazily promoted/
+    // shared, which a plain read lock can't support. Snapshot the entries
+    // to modify into a Vec first so this loop doesn't hold a live borrow of
+    // `entries` while also calling methods that mutate it.
+    let mut parent_vmmap = parent_cage.vmmap.write();
+    let mut child_vmmap = child_cage.vmmap.write();
+    let entries: Vec<_> = parent_vmmap.entries.iter().map(|(_, e)| e.clone()).collect();
+
+    let cow_enabled = COW_MANAGER.enabled();
 
     // iterate through each vmmap entry
-    for (_interval, entry) in parent_vmmap.entries.iter() {
+    for entry in entries {
         // PROT_NONE regions are already configured with PROT_NONE by default,
         // and reading from a host PROT_NONE page would cause a SIGSEGV
         if entry.prot == PROT_NONE {
@@ -117,50 +128,72 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     child_st as *mut libc::c_void,
                 );
             };
-        } else {
-            unsafe {
-                // temporarily enable write on child's memory region to write parent data
-                libc::mprotect(
-                    child_st as *mut libc::c_void,
-                    addr_len,
-                    PROT_READ | PROT_WRITE,
-                );
-
-                // write parent data
-                let local_iov = libc::iovec {
-                    iov_base: parent_st as *mut libc::c_void,
-                    iov_len: addr_len,
-                };
-                let remote_iov = libc::iovec {
-                    iov_base: child_st as *mut libc::c_void,
-                    iov_len: addr_len,
-                };
-                let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
-                if ret < 0 {
-                    lind_log!(
-                        Default,
-                        "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={}), falling back to copy_nonoverlapping",
-                        get_errno(),
-                        parent_st,
-                        child_st,
-                        addr_len,
-                    );
-                    std::ptr::copy_nonoverlapping(
-                        parent_st as *const u8,
-                        child_st as *mut u8,
-                        addr_len,
-                    );
-                }
-
-                // revert child's memory region prot
-                libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
-            };
+            continue;
         }
+
+        // MAP_PRIVATE-ish entry. Try the COW share path first
+        // (cow-design.md §7); only fall back to the eager
+        // process_vm_writev copy if COW is disabled or the share failed
+        // for some reason (e.g. mmap of the page-store slot failed).
+        if cow_enabled {
+            let shared = COW_MANAGER.fork_share_entry(
+                &mut parent_vmmap,
+                &mut child_vmmap,
+                parent_cageid,
+                child_cageid,
+                entry.page_num,
+                entry.npages,
+                entry.prot,
+                entry.backing,
+                parent_st,
+                child_st,
+                addr_len,
+            );
+            if shared {
+                continue;
+            }
+        }
+
+        unsafe {
+            // temporarily enable write on child's memory region to write parent data
+            libc::mprotect(
+                child_st as *mut libc::c_void,
+                addr_len,
+                PROT_READ | PROT_WRITE,
+            );
+
+            // write parent data
+            let local_iov = libc::iovec {
+                iov_base: parent_st as *mut libc::c_void,
+                iov_len: addr_len,
+            };
+            let remote_iov = libc::iovec {
+                iov_base: child_st as *mut libc::c_void,
+                iov_len: addr_len,
+            };
+            let ret = libc::process_vm_writev(libc::getpid(), &local_iov, 1, &remote_iov, 1, 0);
+            if ret < 0 {
+                lind_log!(
+                    Default,
+                    "process_vm_writev failed with errno {} (parent_st=0x{:x}, child_st=0x{:x}, len={}), falling back to copy_nonoverlapping",
+                    get_errno(),
+                    parent_st,
+                    child_st,
+                    addr_len,
+                );
+                std::ptr::copy_nonoverlapping(
+                    parent_st as *const u8,
+                    child_st as *mut u8,
+                    addr_len,
+                );
+            }
+
+            // revert child's memory region prot
+            libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
+        };
     }
 
     // update program break for child
-    drop(child_vmmap);
-    let mut child_vmmap = child_cage.vmmap.write();
     child_vmmap.set_heap_start(parent_vmmap.heap_start);
 }
 

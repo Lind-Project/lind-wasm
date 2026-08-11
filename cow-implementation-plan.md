@@ -1,5 +1,43 @@
 # Lind COW Fork — Implementation Plan
 
+## Milestone 1 implementation notes (post-implementation)
+
+Milestone 1 (single-threaded, no intervening guest memory syscalls) is implemented and passing:
+`src/cage/src/memory/cow.rs` (new), wired into `fork_vmmap` (`memory.rs`), `MemoryBackingType::Cow`
+added to `vmmap.rs`, instrumentation counters exposed via `LIND_COW_STATS=1`. All 13
+`tests/cow-tests/correctness/*.c` pass under `LIND_FORK_MEMORY=cow`, byte-identical to the eager
+baseline; the full `tests/unit-tests/` suite (246 tests) passes identically in both modes (same 2
+pre-existing environment-only native failures, unrelated to COW). Three things discovered during
+implementation that matter for later milestones:
+
+1. **UFFD write-protect requires shmem-backed memory, not a plain regular-file `MAP_SHARED`
+   mapping.** The `PageStore` design in `cow-design.md` §4.2/§3.3 (modeled on `ShmFile`'s
+   create-then-unlink regular-file pattern) fails `UFFDIO_REGISTER` with `EINVAL` when used for
+   COW's page store — `ShmFile`'s pattern works for plain `MAP_SHARED` sharing (SysV shm) but not
+   for UFFD-WP specifically. Fixed by backing `PageStore` with `memfd_create()` instead (shmem, not
+   filesystem-backed). Any future backing-store code should stay on `memfd_create`.
+2. **The wasm stack+guard region (the vmmap entry starting at page_num 0) must not be COW-shared.**
+   Sharing it breaks Asyncify's fork/rewind process (the child never reaches user code). Excluded by
+   an explicit `page_num == 0` check in `fork_share_entry`. This also has no real COW upside — a
+   stack diverges between parent and child almost immediately regardless.
+3. **Small vmmap entries (roughly sub-1-MiB — wasm data segment, dylink GOT/table copies, and
+   similar) are also unsafe to COW-share as implemented**, distinct from the stack issue: forking a
+   *second* time from a cage that had already COW-shared one of these small regions crashes (a raw
+   SIGSEGV, not caught by any check), even in scenarios with no writes at all. Root cause not fully
+   diagnosed — worked around with a conservative `addr_len >= 1 MiB` floor in `fork_share_entry`,
+   which is also a reasonable permanent design choice on its own merits (COW's benefit only matters
+   for large regions; eager-copying a few hundred KB is already cheap, so there's no performance
+   reason to accept the risk). If this floor is ever lowered, re-investigate the second-fork crash
+   first rather than assuming it was purely a Milestone-1-scope artifact.
+
+Known simplifications carried into later milestones (documented in `cow.rs`'s module doc comment):
+whole-vmmap-entry COW granularity (not per-4KB-page — a write anywhere in a shared entry
+materializes the whole entry; correct but not maximally efficient, see `cow-design.md` §18/§20 and
+plan Phase 8), and no `exec()`/exit() refcount teardown yet (plan Milestone 3 item 3.4 — backing
+slots currently leak for the life of the process).
+
+---
+
 Companion to `cow-design.md` (revision 2). This document sequences the work into four milestones,
 matching the shape proposed in discussion:
 

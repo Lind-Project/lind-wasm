@@ -31,6 +31,10 @@ const DEFAULT_VMMAP_SIZE: u32 = 1 << (32 - PAGESHIFT);
 /// - Anonymous: Memory not backed by any file (e.g. heap allocations)
 /// - SharedMemory: Memory backed by a shared memory segment, identified by shmid
 /// - FileDescriptor: Memory backed by a file, identified by file descriptor
+/// - Cow: Memory backed by a Lind COW page-store slot, identified by BackingId
+///   (see cage::memory::cow). Only ever applies to entries that would
+///   otherwise be Anonymous/MAP_PRIVATE -- SharedMemory entries are already
+///   shared by guest intent and are never COW-managed (cow-design.md §30.4).
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MemoryBackingType {
@@ -38,6 +42,7 @@ pub enum MemoryBackingType {
     Anonymous,
     SharedMemory(u64),   // stores shmid
     FileDescriptor(u64), // stores file descriptor addr
+    Cow(u64),            // stores BackingId (cage::memory::cow::BackingId)
 }
 
 /// An entry in the virtual memory map that contains fields such as page number, number of pages,
