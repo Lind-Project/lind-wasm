@@ -33,8 +33,43 @@ implementation that matter for later milestones:
 Known simplifications carried into later milestones (documented in `cow.rs`'s module doc comment):
 whole-vmmap-entry COW granularity (not per-4KB-page — a write anywhere in a shared entry
 materializes the whole entry; correct but not maximally efficient, see `cow-design.md` §18/§20 and
-plan Phase 8), and no `exec()`/exit() refcount teardown yet (plan Milestone 3 item 3.4 — backing
-slots currently leak for the life of the process).
+plan Phase 8). Benchmarked consequence: fork+exec/fork+read-only are large wins (~70%/~44% latency
+reduction at 512 MiB touched), but fork+write is currently *slower* than eager (~2-2.5x at 512 MiB)
+because every write, however small, re-copies the whole entry on top of the promotion copy already
+paid at fork time -- fixing this is the highest-value follow-up, tracked as Phase 8.
+
+## Milestone 2 implementation notes (post-implementation)
+
+Milestone 2 (recursive fork, narrow pass) is done: `m2_recursive_chain.c` and `m2_diamond_siblings.c`
+both pass under `LIND_FORK_MEMORY=cow`. The plan's exit criterion also asked for an audit confirming
+no leaked/never-decremented refcounts across generations -- implemented as `CowManager::audit()`
+(walks every live cage's vmmap, counts `Cow(id)` references, compares against each backing's
+recorded `refcount`), exposed via `LIND_COW_AUDIT=1` alongside `LIND_COW_STATS=1`.
+
+Building that audit surfaced a real gap, now fixed: `cage::cage_finalize` removes a cage from
+`CAGE_MAP` (dropping its `Vmmap`) as soon as that cage truly exits -- not just at whole-process
+shutdown, but per-cage, immediately. Milestone 1 had no hook into this at all, so a backing's
+`refcount` only ever grew across repeated forks, never reflecting cages that had already exited --
+worse than the "just a leak" framing in the Milestone 1 notes above, since it also left
+`fault_routes` entries pointing at host address ranges the OS is free to reuse for an unrelated
+later cage. Fixed with `CowManager::on_cage_exit`, called from `cage_finalize` right before
+`remove_cage` (needs the cage's vmmap still present). This is still not full Milestone 3 teardown
+(doesn't run for `exec()`, never recycles a page-store slot once its refcount hits 0), but it keeps
+`refcount`/`fault_routes` accurate as cages come and go, which is what Milestone 2's audit needed to
+be meaningful at all.
+
+With that fix, the audit shows the mechanism working correctly: for both the recursive-chain and
+diamond-siblings scenarios, 2 of the 3 backing objects created reach `refcount == 0` (matching zero
+live references) once their owning cages (the fork children) exit. The one remaining "mismatch" at
+full-process end is the top-level cage's own backing, and is a benign artifact of hook placement,
+not a bookkeeping bug: `dump_stats_if_requested` (called from `lind-boot/main.rs` right after
+`execute_wasmtime` returns) runs slightly before that same cage's own `cage_finalize` completes --
+a timing detail of the runtime's exit sequence, unrelated to COW. Re-verify this doesn't hide a real
+bug if `dump_stats_if_requested`'s call site ever moves.
+
+Full existing test suite (`process_tests`, both `LIND_FORK_MEMORY=eager` and `=cow`) re-run clean
+after the `cage_finalize` change: 55/57 in both modes, same 2 pre-existing environment-only
+failures, no regression from touching a shared exit path used by every fork/exit test.
 
 ---
 

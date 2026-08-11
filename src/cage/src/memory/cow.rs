@@ -522,6 +522,121 @@ impl CowManager {
         self.unregister_route(host_start, host_len);
         let _ = self.uffd().wake(host_start as *mut c_void, host_len);
     }
+
+    /// Milestone 2 exit criterion (cow-implementation-plan.md): confirm
+    /// backing-object/refcount bookkeeping stays correct across multiple
+    /// fork generations and non-linear fork trees, with no leaked/
+    /// never-decremented refcounts. Walks every cage's vmmap and counts how
+    /// many `VmmapEntry::backing == Cow(id)` occurrences exist for each
+    /// `id`, then compares that live count against `backings[id].refcount`.
+    ///
+    /// This is an O(cages * entries) scan, not something to run on a hot
+    /// path -- it's a diagnostic for tests/benchmarking (see
+    /// `dump_stats_if_requested`), not part of normal fork/materialize
+    /// operation.
+    ///
+    /// Note: since Milestone 1 doesn't implement exec()/exit() refcount
+    /// teardown yet (plan Milestone 3 item 3.4), an exited cage's vmmap
+    /// entries are never cleared, so they still count as "live" references
+    /// here -- that's intentional and correct for what this audit checks:
+    /// whether fork-time sharing/materialize bookkeeping is internally
+    /// consistent, not whether backings get recycled promptly (a separate,
+    /// already-documented Milestone 1 limitation).
+    pub fn audit(&self) -> CowAuditReport {
+        let max_cageid = sysdefs::constants::lind_platform_const::MAX_CAGEID as u64;
+        let mut live_counts: std::collections::HashMap<BackingId, usize> = std::collections::HashMap::new();
+        for cageid in 0..max_cageid {
+            let Some(cage) = get_cage(cageid) else {
+                continue;
+            };
+            let vmmap = cage.vmmap.read();
+            for (_interval, entry) in vmmap.entries.iter() {
+                if let MemoryBackingType::Cow(id) = entry.backing {
+                    *live_counts.entry(id).or_insert(0) += 1;
+                }
+            }
+        }
+
+        let mut mismatches = Vec::new();
+        let mut total_recorded_refcount = 0usize;
+        for item in self.backings.iter() {
+            let id = *item.key();
+            let recorded = item.value().refcount;
+            let live = live_counts.get(&id).copied().unwrap_or(0);
+            total_recorded_refcount += recorded;
+            if recorded != live {
+                mismatches.push(format!(
+                    "backing {}: recorded refcount={} but live vmmap references={}",
+                    id, recorded, live
+                ));
+            }
+        }
+        for (id, count) in &live_counts {
+            if !self.backings.contains_key(id) {
+                mismatches.push(format!(
+                    "backing {} referenced by {} live vmmap entries but missing from backings table",
+                    id, count
+                ));
+            }
+        }
+
+        CowAuditReport {
+            total_backings: self.backings.len(),
+            total_recorded_refcount,
+            total_live_references: live_counts.values().sum(),
+            mismatches,
+        }
+    }
+
+    /// Best-effort refcount release when a cage is finalized.
+    ///
+    /// Discovered empirically while building the Milestone 2 audit above:
+    /// `cage::cage_finalize` removes a cage from `CAGE_MAP` (and drops its
+    /// `Cage`/`Vmmap`) as soon as that cage truly finishes running -- not
+    /// just at process shutdown, but per-cage, as each one exits. Without
+    /// this hook, a `Cow` backing's `refcount` would only ever grow across
+    /// repeated forks, never reflecting cages that have already exited,
+    /// which both leaks page-store space and (worse) leaves stale
+    /// `fault_routes` entries pointing at host address ranges the OS is
+    /// free to hand to an unrelated later cage.
+    ///
+    /// This is still not full Milestone 3 teardown (plan item 3.4): it
+    /// does not run for `exec()` (only whatever calls this is wired to,
+    /// currently just `cage_finalize`), and it never recycles/frees a
+    /// page-store slot even once its refcount reaches 0 -- that requires
+    /// also knowing no *other* cage's mapping still points at that file
+    /// offset via `mmap`, which is more bookkeeping than this narrow fix
+    /// needs to take on. It closes the specific gap this session found:
+    /// keeping `refcount` and `fault_routes` accurate as cages come and go.
+    pub fn on_cage_exit(&self, cageid: u64) {
+        if !self.enabled() {
+            return;
+        }
+        let Some(cage) = get_cage(cageid) else {
+            return;
+        };
+        let vmmap = cage.vmmap.read();
+        for (_interval, entry) in vmmap.entries.iter() {
+            if let MemoryBackingType::Cow(id) = entry.backing {
+                if let Some(mut meta) = self.backings.get_mut(&id) {
+                    meta.refcount = meta.refcount.saturating_sub(1);
+                }
+                let addr_st = (entry.page_num << sysdefs::constants::fs_const::PAGESHIFT) as u32;
+                let addr_len = (entry.npages << sysdefs::constants::fs_const::PAGESHIFT) as usize;
+                let host_addr = vmmap.user_to_sys(addr_st);
+                self.unregister_route(host_addr, addr_len);
+            }
+        }
+    }
+}
+
+/// Result of `CowManager::audit`. `mismatches.is_empty()` is the pass/fail
+/// signal; the counts are there for diagnostics even when it passes.
+pub struct CowAuditReport {
+    pub total_backings: usize,
+    pub total_recorded_refcount: usize,
+    pub total_live_references: usize,
+    pub mismatches: Vec<String>,
 }
 
 fn set_entry_backing(vmmap: &mut Vmmap, page_num: u32, npages: u32, backing: MemoryBackingType) {
@@ -598,6 +713,14 @@ pub fn is_cow_enabled() -> bool {
     COW_MANAGER.enabled()
 }
 
+/// Call from `cage_finalize` (or any other cage-teardown path) before the
+/// cage is removed from `CAGE_MAP`, so `CowManager::on_cage_exit` can still
+/// read its vmmap. See that method's doc comment for what this does and
+/// does not cover.
+pub fn on_cage_exit(cageid: u64) {
+    COW_MANAGER.on_cage_exit(cageid);
+}
+
 /// Milestone 1 step 1.7 instrumentation: print the fork-copy counters if
 /// `LIND_COW_STATS=1` is set, so a benchmark run can directly confirm "no
 /// bulk copy occurred" instead of only inferring it from wall-clock time
@@ -621,4 +744,18 @@ pub fn dump_stats_if_requested() {
         COW_MANAGER.materialize_bytes.load(Ordering::Relaxed),
         COW_MANAGER.materialize_fast_path_count.load(Ordering::Relaxed),
     );
+
+    if std::env::var("LIND_COW_AUDIT").as_deref() == Ok("1") {
+        let report = COW_MANAGER.audit();
+        eprintln!(
+            "[cow-audit] total_backings={} total_recorded_refcount={} total_live_references={} mismatches={}",
+            report.total_backings,
+            report.total_recorded_refcount,
+            report.total_live_references,
+            report.mismatches.len(),
+        );
+        for m in &report.mismatches {
+            eprintln!("[cow-audit] MISMATCH: {}", m);
+        }
+    }
 }

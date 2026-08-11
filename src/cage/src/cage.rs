@@ -1,6 +1,7 @@
 //! This file contains all the implementation related to Cage structure. Including structure
 //! definitions, a global variables that handles cage management, and cage initialization and
 //! finialization required by wasmtime
+use crate::memory::cow;
 use crate::memory::vmmap::*;
 use crate::timer::*;
 use arc_swap::ArcSwapOption;
@@ -397,6 +398,10 @@ pub fn cage_finalize(cageid: u64) {
             crate::signal::signal::lind_send_signal(cage.parent, SIGCHLD);
         }
     }
+
+    // Must run before remove_cage() drops this cage's Vmmap -- on_cage_exit
+    // needs to read it to know which Cow backings this cage was referencing.
+    cow::on_cage_exit(cageid);
 
     fdtables::remove_cage_from_fdtable(cageid);
     remove_cage(cageid);
