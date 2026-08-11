@@ -16,6 +16,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use wasmtime::{AsContextMut, Engine, Instance, Linker, Module, Store, Val};
 use wasmtime_lind_multi_process::CAGE_START_ID;
@@ -92,6 +93,24 @@ pub struct SandboxedLib {
 /// Works for both static and dynamic (dylink) modules — it reuses the binary's
 /// `prepare_main_instance`, so the dynamic-linking setup is identical.
 pub fn init_sandboxed_lib(cli: CliOptions) -> Result<SandboxedLib> {
+    // Guard against a second resident library in the same process.
+    //
+    // We install cage state at the fixed `CAGE_START_ID`, but RawPOSIX/3i/cage state
+    // is process-global. That is fine for exactly one generated `.so`: the stub's
+    // `OnceLock` calls this once. But if a host loads two sandboxed libraries — or two
+    // wrappers both call `init_sandboxed_lib` — the second would re-install state for
+    // the same cage id, silently clobbering the first cage's tables. Until each
+    // instance gets its own cage id (via `alloc_cage_id`), a shared cage manager, and
+    // drop-time teardown, refuse the second init with a clear error rather than
+    // corrupt state.
+    static INITIALIZED: AtomicBool = AtomicBool::new(false);
+    if INITIALIZED.swap(true, Ordering::SeqCst) {
+        return Err(anyhow!(
+            "a sandboxed library is already resident in this process; \
+             multiple concurrent sandboxed-lib instances are not yet supported"
+        ));
+    }
+
     // One-time, process-global runtime init (RawPOSIX + 3i + vmctx pool). Idempotent.
     ensure_global_runtime_init();
 
