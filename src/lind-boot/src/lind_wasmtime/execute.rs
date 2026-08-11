@@ -110,13 +110,27 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
 
     match result {
         Ok(ref ret_vals) => {
-            // Interpret the first return value of the Wasm entry point
-            // as the process exit code. If the module does not explicitly
-            // return an i32, we treat it as a successful exit (code = 0).
-            let exit_code = match ret_vals.first() {
-                Some(Val::I32(code)) => *code,
-                _ => 0,
+            // Determine the process exit code.
+            //
+            // In normal `_start` mode the first return value of the Wasm entry point
+            // *is* the process exit code (and a module that returns no i32 is a
+            // successful exit, code 0).
+            //
+            // In `--call` mode the returned value is the called function's *result*
+            // (e.g. `add(2, 3) => 5`), not an exit status — it has already been
+            // printed by `run_entry`. Using it as the exit code would make a
+            // successful call exit non-zero (5 here), which reads as failure and
+            // breaks callers like `make check`. So a successful invocation exits 0;
+            // failure is still reported via the `Err` arm below.
+            let exit_code = if is_sandboxed_lib_call {
+                0
+            } else {
+                match ret_vals.first() {
+                    Some(Val::I32(code)) => *code,
+                    _ => 0,
+                }
             };
+            
             // In sandboxed-lib (`--call`) mode no guest exit() ran, so the
             // initial cage is still alive. Finalize it ourselves (the same
             // teardown the crash path performs) so `lind_manager.wait()` does
