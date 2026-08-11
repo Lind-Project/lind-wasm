@@ -40,6 +40,8 @@ use crate::cli::CliOptions;
 /// - `Buf` is an input buffer copied *into* the guest (e.g. a C string, incl. its NUL).
 /// - `Out` is a caller-allocated output buffer: the guest writes into it and the bytes
 ///   are copied back out into `dst`. `dst.len()` is the buffer's capacity.
+/// - `InOut` the same, but the buffer's existing contents are copied *in* first,
+///   because the guest reads them as well (in-place transforms).
 /// - `OutLen` is a `size_t *` output parameter: the guest writes a length there, which
 ///   is read back into `*dst` (and can drive an `Out` buffer's copy-back length).
 pub enum Arg<'a> {
@@ -52,6 +54,10 @@ pub enum Arg<'a> {
     /// A caller-allocated output buffer. The guest writes into it; after the call the
     /// first `len`-determined bytes are copied back into `dst`. `dst.len()` = capacity.
     Out { dst: &'a mut [u8], len: OutLen },
+    /// A caller-allocated **in/out** buffer, for functions that transform it in place.
+    /// Identical to [`Arg::Out`] except that `dst`'s current contents are copied into
+    /// the guest allocation *before* the call, since the guest reads them too.
+    InOut { dst: &'a mut [u8], len: OutLen },
     /// A `size_t *` output parameter. The guest writes a length; it is read back into
     /// `*dst` and is available to resolve an [`OutLen::FromArg`] on an `Out` buffer.
     OutLen(&'a mut usize),
@@ -178,10 +184,11 @@ impl SandboxedLib {
     ///
     /// Input buffers ([`Arg::Buf`]) are copied into freshly guest-`malloc`'d memory;
     /// output buffers ([`Arg::Out`]) and length out-params ([`Arg::OutLen`]) get guest
-    /// allocations too. After the call, out-lengths are read back, each out-buffer's
-    /// copy-back length is resolved (see [`OutLen`]), the bytes are copied into the
-    /// caller's slices, and all allocations are freed (even on failure). Returns the
-    /// first result widened to `i64` (`0` for a `void` return).
+    /// allocations too, and in/out buffers ([`Arg::InOut`]) get both — an allocation
+    /// seeded with the caller's bytes. After the call, out-lengths are read back, each
+    /// out-buffer's copy-back length is resolved (see [`OutLen`]), the bytes are copied
+    /// into the caller's slices, and all allocations are freed (even on failure).
+    /// Returns the first result widened to `i64` (`0` for a `void` return).
     ///
     /// The guest must export `guest_malloc(i32)->i32` / `guest_free(i32)`.
     pub fn call(&mut self, name: &str, args: &mut [Arg]) -> Result<i64> {
@@ -206,6 +213,18 @@ impl SandboxedLib {
                     to_free.push(ptr);
                     params.push(Val::I32(ptr as i32));
                 }
+
+                // In/out: like `Out`, but seed the guest allocation with the caller's
+                // current bytes — the guest reads the buffer as well as writing it.
+                // The *whole* capacity is copied, so the guest sees exactly the buffer
+                // the caller passed (note: that includes any bytes past a terminator).
+                Arg::InOut { dst, .. } => {
+                    let ptr = self.copy_in(&**dst)?;
+                    ptrs[i] = Some(ptr);
+                    to_free.push(ptr);
+                    params.push(Val::I32(ptr as i32));
+                }
+
                 Arg::OutLen(_) => {
                     let ptr = self.guest_malloc(SIZE_T_BYTES)?;
                     ptrs[i] = Some(ptr);
@@ -260,10 +279,14 @@ impl SandboxedLib {
             }
         }
 
-        // Phase 4: copy each out-buffer back into the caller's slice.
+        // Phase 4: copy each out-buffer back into the caller's slice. `Out` and `InOut`
+        // are identical here — they differ only in whether the buffer was seeded in
+        // Phase 1.
         for i in 0..args.len() {
             let (ptr, spec, cap) = match &args[i] {
-                Arg::Out { dst, len } => (ptrs[i].unwrap(), *len, dst.len()),
+                Arg::Out { dst, len } | Arg::InOut { dst, len } => {
+                    (ptrs[i].unwrap(), *len, dst.len())
+                }
                 _ => continue,
             };
             let want = match spec {
@@ -278,7 +301,7 @@ impl SandboxedLib {
                 OutLen::Nul => (self.guest_cstr_len(ptr, cap)? + 1).min(cap),
             };
             let bytes = self.read_mem(ptr, want)?;
-            if let Arg::Out { dst, .. } = &mut args[i] {
+            if let Arg::Out { dst, .. } | Arg::InOut { dst, .. } = &mut args[i] {
                 dst[..bytes.len()].copy_from_slice(&bytes);
             }
         }

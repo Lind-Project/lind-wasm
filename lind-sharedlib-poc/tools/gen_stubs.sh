@@ -21,6 +21,9 @@
 #                                      nul    = up to & including the first NUL
 #                                      cap    = the whole buffer (capacity)
 #                                      arg<M> = the value the guest wrote into outlen arg #M
+#   inoutbuf,cap=C,len=X    same, but the buffer's existing contents are also copied
+#                             INTO the guest first — for in-place transforms, where
+#                             the guest reads the buffer as well as writing it
 #   outlen                  size_t* output param — the guest writes a length there,
 #                             read back into the caller's size_t and usable as len=arg<M>
 #
@@ -50,7 +53,7 @@ while IFS= read -r line; do
             i32) ;;
             usize) marshal=1 ;;
             cstr) marshal=1; has_cstr=1; has_ptr=1 ;;
-            outbuf,*) marshal=1; has_ptr=1 ;;
+            outbuf,*|inoutbuf,*) marshal=1; has_ptr=1 ;;
             outlen) marshal=1; has_ptr=1 ;;
             *) echo "gen_stubs.sh: unknown arg spec '$t'" >&2; exit 2 ;;
         esac
@@ -222,7 +225,14 @@ while IFS= read -r line; do
                 preamble="${preamble}    let in${i} = unsafe { cstr_bytes(a${i}) };\n"
                 argexpr="${argexpr}\n        Arg::Buf(&in${i})"
                 ;;
-            outbuf,*)
+            outbuf,*|inoutbuf,*)
+                # `Out` vs `InOut` differ only in whether the caller's current bytes
+                # are copied into the guest before the call; the cap=/len= parsing and
+                # the copy-back are identical.
+                case "$t" in
+                    inoutbuf,*) variant="InOut"; bufvar="io" ;;
+                    *)          variant="Out";   bufvar="out" ;;
+                esac
                 # parse cap=C and len=X out of the comma-separated spec
                 cap=""; lenspec=""
                 IFS=, read -ra fields <<< "$t"
@@ -232,18 +242,18 @@ while IFS= read -r line; do
                         len=*) lenspec="${f#len=}" ;;
                     esac
                 done
-                [ -z "$cap" ] && { echo "gen_stubs.sh: outbuf missing cap= in '$t' ($name)" >&2; exit 2; }
+                [ -z "$cap" ] && { echo "gen_stubs.sh: ${t%%,*} missing cap= in '$t' ($name)" >&2; exit 2; }
                 capidx=$((cap - 1))   # 1-based arg # -> 0-based param name
                 case "$lenspec" in
                     ret) outlen="OutLen::Ret" ;;
                     nul) outlen="OutLen::Nul" ;;
                     cap) outlen="OutLen::Cap" ;;
                     arg*) outlen="OutLen::FromArg($(( ${lenspec#arg} - 1 )))" ;;
-                    *) echo "gen_stubs.sh: outbuf bad len='$lenspec' in '$t' ($name)" >&2; exit 2 ;;
+                    *) echo "gen_stubs.sh: ${t%%,*} bad len='$lenspec' in '$t' ($name)" >&2; exit 2 ;;
                 esac
                 params="${params}a${i}: *mut c_char"
-                preamble="${preamble}    let out${i} = unsafe { core::slice::from_raw_parts_mut(a${i} as *mut u8, a${capidx} as usize) };\n"
-                argexpr="${argexpr}\n        Arg::Out { dst: out${i}, len: ${outlen} }"
+                preamble="${preamble}    let ${bufvar}${i} = unsafe { core::slice::from_raw_parts_mut(a${i} as *mut u8, a${capidx} as usize) };\n"
+                argexpr="${argexpr}\n        Arg::${variant} { dst: ${bufvar}${i}, len: ${outlen} }"
                 ;;
             outlen)
                 params="${params}a${i}: *mut usize"

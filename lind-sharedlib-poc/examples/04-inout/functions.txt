@@ -1,0 +1,10 @@
+# Stub manifest — in/out buffers (the guest reads AND writes the caller's buffer).
+#
+#   <name> <ret> <arg-spec>...
+#
+# `inoutbuf,cap=C,len=X` is `outbuf` plus a copy-IN of the buffer's current contents.
+# cap=C  -> capacity is the value of arg #C (1-based); len=X -> how many bytes come back.
+compact_spaces  usize  inoutbuf,cap=2,len=ret   usize
+reverse_str     void   inoutbuf,cap=2,len=nul   usize
+rot13_block     void   inoutbuf,cap=2,len=cap   usize
+append_suffix   void   inoutbuf,cap=2,len=arg4  usize  cstr  outlen
