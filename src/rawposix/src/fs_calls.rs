@@ -1565,12 +1565,9 @@ pub extern "C" fn fcntl_syscall(
 ///  - `arg3`–`arg6` and their corresponding `_cageid`: Reserved arguments (must be unused).
 ///
 /// ## Implementation Details:
-///  - The path arguments are translated from the RawPOSIX perspective into host kernel paths
-///    using `sc_convert_path_to_host`, which applies path normalization relative to the cage's CWD.
-///  - The unused arguments are validated with `sc_unusedarg`; any unexpected values are treated
-///    as a security violation.
-///  - The underlying `libc::link()` is invoked with the translated paths.
-///  - On failure, `errno` is retrieved via `get_errno()` and normalized through `handle_errno()`.
+///  - `link(oldpath, newpath)` is equivalent to `linkat(AT_FDCWD, oldpath, AT_FDCWD,
+///    newpath, 0)`, so this call delegates to `linkat_syscall`, which handles path
+///    translation, unused-argument validation, and errno normalization.
 ///
 /// ## Return Value:
 ///  - `0` on success.
@@ -1590,16 +1587,6 @@ pub extern "C" fn link_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Type conversion
-    let oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
-        Ok(oldpath) => oldpath,
-        Err(e) => return syscall_error(e, "link", "path conversion failed"),
-    };
-    let newpath = match sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid) {
-        Ok(newpath) => newpath,
-        Err(e) => return syscall_error(e, "link", "path conversion failed"),
-    };
-
     // Validate unused args
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -1612,11 +1599,139 @@ pub extern "C" fn link_syscall(
         );
     }
 
-    let ret = unsafe { libc::link(oldpath.as_ptr(), newpath.as_ptr()) };
+    // Delegate to linkat_syscall with both dirfds set to AT_FDCWD and no flags
+    linkat_syscall(
+        cageid,
+        AT_FDCWD as u64,
+        cageid,
+        oldpath_arg,
+        oldpath_cageid,
+        AT_FDCWD as u64,
+        cageid,
+        newpath_arg,
+        newpath_cageid,
+        0,
+        cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
+}
+
+//------------------------------------LINKAT SYSCALL------------------------------------
+/// `linkat_syscall` creates a new link (hard link) to an existing file, relative to
+/// directory file descriptors.
+/// Reference: https://man7.org/linux/man-pages/man2/linkat.2.html
+///
+/// ## Arguments:
+///  - `cageid`: Identifier of the calling Cage (namespace / process-like container).
+///  - `olddirfd_arg` / `olddirfd_cageid`: Directory fd that `oldpath` is resolved
+///    relative to, or `AT_FDCWD`.
+///  - `oldpath_arg` / `oldpath_cageid`: Address of the existing pathname in the caller's
+///    address space.
+///  - `newdirfd_arg` / `newdirfd_cageid`: Directory fd that `newpath` is resolved
+///    relative to, or `AT_FDCWD`.
+///  - `newpath_arg` / `newpath_cageid`: Address of the new pathname in the caller's
+///    address space.
+///  - `flags_arg` / `flags_cageid`: `AT_SYMLINK_FOLLOW` and/or `AT_EMPTY_PATH`.
+///  - `arg6` and its corresponding `_cageid`: Reserved argument (must be unused).
+///
+/// ## Implementation Details:
+///  - When a dirfd is `AT_FDCWD`, the corresponding path is translated into a host kernel
+///    path with `sc_convert_path_to_host` (normalized relative to the cage's CWD).
+///    Otherwise the virtual fd is translated to the underlying kernel fd and the raw
+///    (untranslated) path is passed through, letting the kernel resolve it relative to
+///    that directory.
+///  - The underlying `libc::linkat()` is invoked with the translated fds/paths and flags.
+///  - On failure, `errno` is retrieved via `get_errno()` and normalized through `handle_errno()`.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - Negative errno (`EEXIST`, `ENOENT`, `EBADF`, `EFAULT`, etc.) on failure.
+pub extern "C" fn linkat_syscall(
+    cageid: u64,
+    olddirfd_arg: u64,
+    olddirfd_cageid: u64,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newdirfd_arg: u64,
+    newdirfd_cageid: u64,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let olddirfd = sc_convert_sysarg_to_i32(olddirfd_arg, olddirfd_cageid, cageid);
+    let newdirfd = sc_convert_sysarg_to_i32(newdirfd_arg, newdirfd_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // Validate unused args
+    if !sc_unusedarg(arg6, arg6_cageid) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "linkat_syscall"
+        );
+    }
+
+    let c_oldpath;
+    let old_kernel_fd = if olddirfd == AT_FDCWD {
+        c_oldpath = match sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "linkat", "old path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, olddirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "linkat", "Bad olddirfd");
+        }
+        let vfd = wrappedvfd.unwrap();
+        // Use the raw (untranslated) path here intentionally. `sc_convert_path_to_host`
+        // resolves relative to CWD, but linkat interprets oldpath relative to olddirfd.
+        // The kernel handles that resolution, so we pass the original guest string.
+        let tmp_cstr = match get_cstr(oldpath_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EFAULT, "linkat", "invalid oldpath"),
+        };
+        c_oldpath = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let c_newpath;
+    let new_kernel_fd = if newdirfd == AT_FDCWD {
+        c_newpath = match sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid) {
+            Ok(path) => path,
+            Err(e) => return syscall_error(e, "linkat", "new path conversion failed"),
+        };
+        AT_FDCWD
+    } else {
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, newdirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "linkat", "Bad newdirfd");
+        }
+        let vfd = wrappedvfd.unwrap();
+        let tmp_cstr = match get_cstr(newpath_arg) {
+            Ok(p) => p,
+            Err(_) => return syscall_error(Errno::EFAULT, "linkat", "invalid newpath"),
+        };
+        c_newpath = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
+    };
+
+    let ret = unsafe {
+        libc::linkat(
+            old_kernel_fd,
+            c_oldpath.as_ptr(),
+            new_kernel_fd,
+            c_newpath.as_ptr(),
+            flags,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
-        return handle_errno(errno, "link");
+        return handle_errno(errno, "linkat");
     }
     ret
 }
