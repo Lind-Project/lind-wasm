@@ -212,11 +212,8 @@ pub fn get_specific_virtual_fd(
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
     //
-    // Valid virtual fds are 0..FD_PER_PROCESS_MAX (exclusive of the max,
-    // since the backing array below is indexed 0..FD_PER_PROCESS_MAX).
-    // requested_virtualfd == FD_PER_PROCESS_MAX previously passed this
-    // guard and indexed the array out of bounds, panicking the host
-    // instead of returning EBADF (e.g. dup2(x, FD_PER_PROCESS_MAX)).
+    // >= not >: requested_virtualfd == FD_PER_PROCESS_MAX must be EBADF, not
+    // an out-of-bounds index into the backing array.
     if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }
@@ -235,14 +232,10 @@ pub fn get_specific_virtual_fd(
     // calls the intermediate handler instead of the last one.
     _increment_fdcount(myentry);
     // Read the old entry and write the new one under a SINGLE guard
-    // acquisition (via replace()), not two separate ones. Two guards let
-    // two concurrent calls targeting the same requested_virtualfd both
-    // read the same old entry and both decrement it (an FDCOUNT
-    // underflow panic, or a double release of a still-live host fd), or
-    // let one call's write overwrite a concurrent get_unused_virtual_fd's
-    // insert into the same slot (a permanent refcount leak). The guard
-    // is dropped before the close handler below runs, since a handler
-    // may re-enter this module (see the recursion tests).
+    // acquisition (via replace()), not two separate ones: two guards let
+    // concurrent calls to the same slot both decrement the same old entry,
+    // or let one call's write clobber a concurrent insert. Dropped before
+    // the close handler below, since a handler may re-enter this module.
     let myoptionentry = {
         let mut row = FDTABLE.get_mut(&cageid).unwrap();
         row[requested_virtualfd as usize].replace(myentry)
@@ -312,16 +305,12 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
     // Insert a copy and ensure it didn't exist...
     // I've checked this should be a copy, not a ref to the same thing.
     //
-    // Snapshot the source row and do the refcount increments under a
-    // single guard, rather than two separate FDTABLE.get(&srccageid)
-    // calls. With two separate reads, a close_virtualfd() landing between
-    // them could leave the child holding an entry that was never
-    // incremented (later double-release / underflow panic), and a
-    // get_unused_virtual_fd() landing between them could increment a key
-    // whose entry never makes it into the child (permanent refcount
-    // leak -- the underlying fd is never actually closed). The guard is
-    // dropped before FDTABLE.insert() below, since srccageid and
-    // newcageid may hash to the same shard.
+    // Snapshot the source row and do the refcount increments under a single
+    // guard, not two separate FDTABLE.get(&srccageid) calls: a
+    // close_virtualfd() or get_unused_virtual_fd() landing between two reads
+    // could desync the child's refcounts from its fd-table contents. Guard
+    // is dropped before FDTABLE.insert(), since srccageid and newcageid may
+    // hash to the same shard.
     let hmcopy = {
         let srcrow = FDTABLE.get(&srccageid).unwrap();
         let copy = *srcrow;
@@ -547,14 +536,10 @@ fn _decrement_fdcount(entry: FDTableEntry) -> Result<(), i32> {
 fn _increment_fdcount(entry: FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
 
-    // Use entry() so the shard lock is held across the whole read-modify-
-    // write. The previous get_mut()/else-insert() pair released the lock
-    // between the check and the write, so two threads racing to be the
-    // first referencer of the same (fdkind,underfd) could both observe
-    // "missing" and both insert(1), undercounting the refcount by one per
-    // extra racer. That causes the `last` close handler to fire while
-    // another cage still holds the fd. _decrement_fdcount (above) already
-    // uses this entry() pattern; this makes the two symmetric.
+    // entry() holds the shard lock across the whole read-modify-write; the
+    // previous get_mut()/else-insert() pair released it between the two,
+    // letting two first-referencers of the same key both insert(1) and
+    // undercount. Matches _decrement_fdcount's pattern above.
     *FDCOUNT.entry(mytuple).or_insert(0) += 1;
 }
 

@@ -144,7 +144,7 @@ pub extern "C" fn openat_syscall(
         ) {
             Ok(vfd) => vfd as i32,
             // The host openat() already succeeded, so the kernel fd must be closed before
-            // we report EMFILE -- otherwise every exhausted-table openat permanently leaks
+            // we report EMFILE, otherwise every exhausted-table openat permanently leaks
             // one host fd, and the host is the shared resource across all cages. Mirrors
             // the cleanup `pipe_syscall`/`dup_syscall` already do on this path.
             Err(_) => {
@@ -229,10 +229,7 @@ pub extern "C" fn open_syscall(
         0,
     ) {
         Ok(vfd) => vfd as i32,
-        // The host open() already succeeded, so the kernel fd must be closed before we
-        // report EMFILE -- otherwise every exhausted-table open permanently leaks one
-        // host fd, and the host is the shared resource across all cages. Mirrors the
-        // cleanup `pipe_syscall`/`dup_syscall` already do on this path.
+        // Close the kernel fd before reporting EMFILE; see openat_syscall above.
         Err(_) => {
             unsafe {
                 libc::close(kernel_fd);
@@ -952,22 +949,13 @@ pub extern "C" fn mmap_syscall(
 
     let vmmap = cage.vmmap.read();
 
-    // Per-cage memory quota. Checked before mmap_inner, because once the host
-    // mmap has run the memory is committed and refusing it would mean undoing
-    // a mapping the cage may already have been handed.
-    //
-    // Only pages not already mapped in this range are charged: with MAP_FIXED
-    // set (it is forced on above) a request can legitimately overwrite the
-    // cage's own existing mapping, which replaces rather than consumes.
-    //
-    // Note this check and the vmmap update below are not one atomic section --
-    // the lock is released across mmap_inner. Two threads of the same cage can
-    // therefore both pass a check that only one of them should have. That
-    // window is pre-existing and wider than the quota: find_map_space already
-    // hands both threads the same address (see the write lock taken and
-    // dropped above). Closing it properly means holding the write lock across
-    // mmap_inner, which is a separate change; the quota is at worst overshot
-    // by one concurrent request, never by an unbounded amount.
+    // Per-cage memory quota. Checked before mmap_inner, since once the host
+    // mmap runs the memory is committed. Only pages not already mapped in
+    // this range are charged, since MAP_FIXED can legitimately overwrite the
+    // cage's own existing mapping. Not atomic with the vmmap update below
+    // (the lock is released across mmap_inner); a pre-existing race also
+    // shared by find_map_space, so the quota can be overshot by at most one
+    // concurrent request, never unboundedly.
     if rounded_length > 0
         && cage.mem_limit_would_exceed(
             &vmmap,
@@ -1309,13 +1297,10 @@ pub extern "C" fn brk_syscall(
         if vmmap.check_existing_mapping(old_brk_page, brk_page - old_brk_page, 0) {
             return syscall_error(Errno::ENOMEM, "brk", "no memory");
         }
-        // Per-cage memory quota. Checked here, while the vmmap write lock is
-        // still held and before any of the mutations below, so the decision
-        // cannot race another thread of this cage growing the same heap.
-        //
-        // Only the newly claimed pages are charged: the heap entry is
-        // rewritten in full below, so charging the whole new span would
-        // re-charge everything the cage already holds.
+        // Per-cage memory quota, checked while the vmmap write lock is still
+        // held. Only the newly claimed pages are charged: the heap entry
+        // is rewritten in full below, so charging the whole span would
+        // re-charge what the cage already holds.
         let growth_pages = (brk_page - old_brk_page) as u64;
         if cage.mem_limit_would_exceed(&vmmap, growth_pages) {
             return syscall_error(Errno::ENOMEM, "brk", "memory limit exceeded");
@@ -1519,7 +1504,7 @@ pub extern "C" fn fcntl_syscall(
             ) {
                 Ok(new_vfd) => return new_vfd as i32,
                 // `vfd_arg` was already validated by `_fcntl_helper` above, so the only
-                // way this allocation fails is a full virtual fd table -- that is EMFILE,
+                // way this allocation fails is a full virtual fd table: that is EMFILE,
                 // not EBADF. Reporting EBADF here made an exhausted cage look like it had
                 // been handed a bad descriptor.
                 Err(_) => return syscall_error(Errno::EMFILE, "fcntl", "Too many open files"),
@@ -3146,7 +3131,7 @@ pub extern "C" fn dup2_syscall(
 
     // `oldfd` must be validated BEFORE the `oldfd == newfd` fast path, not after.
     // POSIX: "If oldfd is not a valid file descriptor, then the call fails, and
-    // newfd is not closed" -- dup2() only returns newfd unchanged when oldfd is
+    // newfd is not closed": dup2() only returns newfd unchanged when oldfd is
     // *valid* and equal to it. Checking equality first made dup2(badfd, badfd)
     // report success and hand back a virtual fd number that was never open.
     let old_vfd = match fdtables::translate_virtual_fd(cageid, old_vfd_arg) {

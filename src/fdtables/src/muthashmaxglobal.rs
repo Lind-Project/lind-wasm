@@ -255,10 +255,8 @@ pub fn get_specific_virtual_fd(
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
     //
-    // Valid virtual fds are 0..FD_PER_PROCESS_MAX (exclusive of the max).
-    // requested_virtualfd == FD_PER_PROCESS_MAX previously passed this
-    // guard (e.g. dup2(x, FD_PER_PROCESS_MAX)), which is inconsistent
-    // with every other entry point's bound in this file.
+    // >= not >. requested_virtualfd == FD_PER_PROCESS_MAX must be EBADF,
+    // consistent with every other entry point's bound in this file.
     if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }

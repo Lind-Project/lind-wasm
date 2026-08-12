@@ -1,45 +1,27 @@
 /*
- * CONC-003 -- cage-table and fd-refcount operations.
+ * CONC-003: cage-table and fd-refcount operations.
  *
  * Black-box mirror of the in-crate tests in src/fdtables/src/lib.rs
- * (the `conc_003_*` block): the public C/POSIX interface cannot inspect
- * Lind's internal fd refcount, so this test proves the same invariant
- * externally, via pipe EOF.
+ * (`conc_003_*`): the C/POSIX interface cannot inspect Lind's internal fd
+ * refcount, so this proves the same invariant externally via pipe EOF.
  *
- * Because lind runs every cage in a single host process, a pipe's write
- * end is backed by exactly one host fd, and that host fd's real
- * libc::close() is driven solely by fdtables' (fdkind, underfd) refcount
- * (see kernel_close / register_close_handlers in rawposix). So:
- *   - a reader must NOT see EOF while any write-side reference to the
- *     pipe remains live in ANY cage;
- *   - a reader MUST see EOF once the very last write-side reference,
- *     wherever it lives, is closed.
- * Native/lind agreement on this is a differential test of the refcount.
+ * lind runs every cage in one host process, so a pipe's write end is
+ * backed by exactly one host fd, and its real libc::close() is driven
+ * solely by fdtables' (fdkind, underfd) refcount. A reader must NOT see
+ * EOF while any write-side reference remains live in ANY cage, and MUST
+ * see EOF once the very last one, wherever it lives, is closed.
  *
- * Every fork is from the main thread only (lind returns -1 for fork()
- * from a non-main thread; this file has no threads at all -- the
- * concurrency under test comes from several simultaneously-live forked
- * child cages instead). Forked children use only raw syscalls and
- * _exit() with a distinct code per failure, per repo convention.
- *
- * A two-pipe (gate/ack) rendezvous, not sleeps, makes children act
- * concurrently: the parent forks every child before closing any of its
- * own references (so each child inherits the full reference set), each
- * child acks readiness and then blocks on the gate, and the parent
- * releases all children at once with one write per child. The parent
- * closes its own ack-write-end before waiting for acks, which turns a
- * child that dies before acking into an immediate EOF on the ack pipe
- * (a diagnosable failure) instead of an indefinite block (a 30s harness
- * timeout). Every blocking wait is also EINTR-retried and every "EOF
- * now" check is poll()-bounded, because lind's cage_finalize() records
- * a zombie and signals the parent's waitpid() BEFORE it actually calls
- * remove_cage_from_fdtable() -- so waitpid() returning does not, by
- * itself, prove a forked child's references are gone yet.
+ * fork() is main-thread-only (lind returns -1 otherwise); concurrency
+ * comes from several simultaneously-live forked child cages, held at a
+ * two-pipe gate/ack rendezvous (see barrier_t below) rather than sleeps.
+ * Every blocking wait is EINTR-retried and every "EOF now" check is
+ * poll()-bounded, since cage_finalize() signals the parent's waitpid()
+ * before it actually releases the cage's fd-table references.
  *
  * Determinism: exactly one line on stdout ("CONC-003 PASS\n"). No pids,
  * clocks, addresses, fd numbers, or errno values are ever printed or
- * compared. Diagnostics (fd-leak scan only) go to fd 2, which the
- * harness surfaces only on a nonzero exit.
+ * compared. Diagnostics (fd-leak scan only) go to fd 2, surfaced only on
+ * a nonzero exit.
  */
 #define _GNU_SOURCE
 #include <assert.h>
@@ -73,9 +55,7 @@
 #endif
 #define FD_SCAN 128
 
-/* ------------------------------------------------------------------ */
-/* Deterministic per-(a,c) byte pattern (same shape as conc_002's).    */
-/* ------------------------------------------------------------------ */
+/* Deterministic per-(a,c) byte pattern (same shape as conc_002's). */
 static void make_record(unsigned char *b, int a, int c)
 {
     unsigned s = (unsigned)(a + 1) * 2654435761u + (unsigned)(c & 0xff) * 40503u;
@@ -86,11 +66,7 @@ static void make_record(unsigned char *b, int a, int c)
     b[RECORD - 1] = (unsigned char)(c & 0xff);
 }
 
-/* Best-effort removal of leftovers from a previous crashed run. The
- * native run is unprivileged and the lind run is under sudo, so a
- * root-owned leftover from a crashed lind run can otherwise block the
- * next native run; this self-heals when possible and fails loudly (at
- * mkdir/open below) when it cannot. */
+/* Best-effort cleanup of leftovers from a previous crashed run. */
 static void pre_clean(void)
 {
     unlink(TFILE);
@@ -111,8 +87,8 @@ static void snapshot_fds(int *out)
 /* EINTR-retrying wrappers. Lind interrupts blocking syscalls by     */
 /* sending SIGUSR2 to a cage's main thread, via a handler installed  */
 /* with no SA_RESTART. That never happens to this test today only    */
-/* because SIGCHLD's default disposition is Ignore -- a fact about   */
-/* SIGCHLD, not a guarantee from lind -- so every blocking call here */
+/* because SIGCHLD's default disposition is Ignore (a fact about     */
+/* SIGCHLD, not a guarantee from lind), so every blocking call here  */
 /* is retried on EINTR regardless.                                   */
 /* ------------------------------------------------------------------ */
 static ssize_t xread(int fd, void *buf, size_t n)
@@ -289,7 +265,7 @@ static void run_phase_a(int round)
     pid_t kids[3];
     int i;
     for (i = 0; i < 3; i++) {
-        fflush(stdout); /* repo convention; nothing buffered here */
+        fflush(stdout);
         kids[i] = fork();
         assert(kids[i] >= 0); /* main thread => lind must succeed too */
         if (kids[i] == 0) {
@@ -329,7 +305,7 @@ static void run_phase_a(int round)
         assert(WEXITSTATUS(status) == 0);
     }
 
-    /* A1: p[0] must NOT see EOF -- the parent's p[1] is still live,
+    /* A1: p[0] must NOT see EOF; the parent's p[1] is still live,
      * regardless of what all three children just did to their copies. */
     assert(set_nonblock(p[0], 1) == 0);
     assert(expect_eagain(p[0]));
@@ -397,12 +373,12 @@ static void run_phase_b(void)
 
     assert(barrier_parent_ready(&b, 1) == 0);
 
-    /* Parent closes ALL of its own write references -- after this, only
+    /* Parent closes ALL of its own write references; after this, only
      * the CHILD cage's copy of p[1] is a live write-side reference. */
     assert(close(p[1]) == 0);
 
     /* B1: no EOF while a CHILD cage (not the parent) holds the only
-     * write reference -- proves the refcount is not scoped to "the
+     * write reference; proves the refcount is not scoped to "the
      * cage that currently has the read end open". */
     assert(set_nonblock(p[0], 1) == 0);
     assert(expect_eagain(p[0]));

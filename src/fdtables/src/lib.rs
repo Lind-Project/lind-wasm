@@ -1719,26 +1719,11 @@ mod tests {
     }
 
     // =====================================================================
-    // CONC-002 -- fd-table concurrency stress.
+    // CONC-002: fd-table concurrency stress.
     //
-    // This block also carries regression coverage for three bugs found
-    // and fixed while implementing CONC-002 (see dashmaparrayglobal.rs and
-    // its siblings):
-    //   (a) _increment_fdcount was a non-atomic get_mut()/else-insert(), so
-    //       two cages first-referencing the same (fdkind,underfd) could
-    //       both take the "missing" branch and both insert(1), undercounting
-    //       the refcount.
-    //   (b) get_specific_virtual_fd used `> FD_PER_PROCESS_MAX` instead of
-    //       `>=`, so requested_virtualfd == FD_PER_PROCESS_MAX indexed the
-    //       backing table out of bounds instead of returning EBADF.
-    //   (c) copy_fdtable_for_cage read the source row twice (once for the
-    //       snapshot, once more for the refcount increments), so a
-    //       concurrent close/allocate landing between the two reads could
-    //       desync the child's refcounts from its fd-table contents.
-    //
-    // A fourth bug in the same family, bug (d), was found later while
-    // designing CONC-003; it is documented and fixed in the CONC-003 block
-    // below.
+    // Regression coverage for the concurrency fixes in dashmaparrayglobal.rs
+    // and its siblings (_increment_fdcount, get_specific_virtual_fd,
+    // copy_fdtable_for_cage).
     // =====================================================================
 
     /// Reserved cage-id block for CONC-002. Disjoint from
@@ -1748,8 +1733,8 @@ mod tests {
     const C2_CHILD: u64 = 0x0000_0000_C0C2_0020; // fork copies, +0..C2_WORKERS
     const C2_STABLE: u64 = 0x0000_0000_C0C2_0040;
     const C2_VICTIM: u64 = 0x0000_0000_C0C2_0050; // +0..4, cycled by Test 2
-                                                  // 0xC0C2_0060..0xC0C2_00FF left free; later rows of #1304 use their own
-                                                  // 0xC0Cn_0000 blocks instead (see the CONC-003 block below).
+                                                  // 0xC0C2_0060..0xC0C2_00FF left free; later CONC test rows use
+                                                  // their own 0xC0Cn_0000 blocks instead (see CONC-003 below).
 
     const C2_WORKERS: usize = 8;
 
@@ -1847,14 +1832,11 @@ mod tests {
     }
 
     #[test]
-    /// Mixes all five operations the roadmap asks for: allocation,
-    /// translation, fd-table copying, close, and cage removal. Each of the
-    /// C2_WORKERS threads owns one cage end-to-end, so this test is not
-    /// exercising bugs (a)/(c) (those need two cages racing on the SAME
-    /// underfd or the SAME cage's fd-table copy, which is exactly what
-    /// Tests 3 and 4 below do) -- it is instead the "does the whole
-    /// lifecycle hang together under concurrency" smoke test the roadmap's
-    /// C test mirrors on the syscall side.
+    /// Mixes allocation, translation, fd-table copying, close, and cage
+    /// removal. Each of the C2_WORKERS threads owns one cage end-to-end
+    /// (Tests 3 and 4 below cover two cages racing on the same underfd or
+    /// fd-table copy); this is the "does the whole lifecycle hold together
+    /// under concurrency" smoke test.
     fn conc_002_fd_lifecycle_multicage_stress() {
         let _lock = c2_test_guard();
         refresh();
@@ -2064,10 +2046,8 @@ mod tests {
     /// A stable cage with a known fd-table, plus victim cages the main
     /// thread creates and destroys underneath 4 reader threads. Readers
     /// translate only in the stable cage and observe victims exclusively
-    /// through check_cage_exists() -- the one entry point that does not
-    /// assert!(check_cage_exists(..)) and then separately .unwrap() a
-    /// FDTABLE.get() (a pattern that is a known panic-on-race elsewhere;
-    /// see Test 4, which drives the analogous race in
+    /// through check_cage_exists(), which does not separately assert-then-
+    /// unwrap a FDTABLE.get() (Test 4 drives the analogous race in
     /// copy_fdtable_for_cage specifically).
     fn conc_002_translate_isolation_under_cage_removal() {
         let _lock = c2_test_guard();
@@ -2207,22 +2187,16 @@ mod tests {
     }
 
     #[test]
-    /// Regression test for a fixed defect: _increment_fdcount in
-    /// dashmaparrayglobal.rs (and dashmapvecglobal.rs) used to be a
-    /// non-atomic get_mut()/else-insert(), so two cages first-referencing
-    /// the same (fdkind,underfd) concurrently could both take the
-    /// "missing" branch and both insert(1), undercounting the refcount by
-    /// up to N-1. The symptom was a premature `last` close (the underlying
-    /// fd released while another cage still held it), or a "FDCOUNT
-    /// missing key" / "FDCOUNT underflow for key" panic inside
-    /// _decrement_fdcount.
+    /// Regression test for _increment_fdcount's read-modify-write-under-one-
+    /// guard fix (see dashmaparrayglobal.rs): two cages first-referencing
+    /// the same (fdkind,underfd) concurrently used to be able to both
+    /// insert(1), undercounting the refcount.
     ///
-    /// This race is NOT reachable between two threads in the *same* cage:
-    /// get_unused_virtual_fd holds the FDTABLE row guard across both the
-    /// slot scan and _increment_fdcount. Every worker below therefore lives
-    /// in its own cage, and all workers race on ONE shared underfd per
-    /// round -- the same underfd, deliberately, unlike every other test in
-    /// this file.
+    /// Not reachable between two threads in the *same* cage --
+    /// get_unused_virtual_fd holds the row guard across the scan and the
+    /// increment, so every worker below lives in its own cage, and all
+    /// workers race on ONE shared underfd per round, deliberately unlike
+    /// every other test in this file.
     fn conc_002_shared_underfd_refcount_race() {
         let _lock = c2_test_guard();
         refresh();
@@ -2249,9 +2223,10 @@ mod tests {
                     let cage = C2_BASE + w as u64;
                     for round in 0..ROUNDS {
                         // Deliberately the SAME underfd across all
-                        // C2_WORKERS threads this round -- the exact race
-                        // window for bug (a). Distinct across rounds so
-                        // C2_RELEASED can count "one last-close per round".
+                        // C2_WORKERS threads this round: the exact race
+                        // window _increment_fdcount's fix closes. Distinct
+                        // across rounds so C2_RELEASED can count "one
+                        // last-close per round".
                         let shared_underfd = 0x1000_0000u64 + round as u64;
                         start.wait();
                         let vfd = get_unused_virtual_fd(
@@ -2278,8 +2253,7 @@ mod tests {
             .collect();
 
         for h in handles {
-            h.join()
-                .expect("a CONC-002 worker panicked (this is what bug 1a used to reproduce)");
+            h.join().expect("a CONC-002 worker panicked");
         }
 
         assert_eq!(alloc_errs.load(Ordering::SeqCst), 0);
@@ -2295,7 +2269,7 @@ mod tests {
             for (u, n) in released.iter() {
                 assert_eq!(
                     *n, 1,
-                    "underfd {u:#x} was released {n} times (expected exactly 1 -- \
+                    "underfd {u:#x} was released {n} times (expected exactly 1; \
                      a refcount race would show 0 or >1)"
                 );
             }
@@ -2312,18 +2286,12 @@ mod tests {
     }
 
     #[test]
-    /// Regression test for a fixed defect: copy_fdtable_for_cage in
-    /// dashmaparrayglobal.rs (and dashmapvecglobal.rs) used to read the
-    /// source cage's fd row twice -- once via `*FDTABLE.get(&src)` for the
-    /// snapshot, once more via a separate `FDTABLE.get(&src).iter()` for
-    /// the refcount increments. A close_virtualfd() landing between the two
-    /// reads could leave the child cage holding an entry that was never
-    /// incremented (later double-release / underflow panic); a
-    /// get_unused_virtual_fd() landing between them could increment a key
-    /// whose entry never made it into the child (a permanent refcount leak
-    /// -- the underlying fd would never actually be released).
+    /// Regression test for copy_fdtable_for_cage's snapshot-under-one-guard
+    /// fix (see dashmaparrayglobal.rs): reading the source row twice let a
+    /// concurrent close/allocate desync the child's refcounts from its
+    /// fd-table contents.
     ///
-    /// This is the in-crate mirror of what
+    /// In-crate mirror of what
     /// tests/unit-tests/process_tests/deterministic/conc_002_cage_fd_fs_stress.c
     /// drives from the C side: fork() interleaved with concurrent fd-table
     /// churn in the forking cage.
@@ -2391,15 +2359,11 @@ mod tests {
                 continue;
             }
             let child_snapshot = return_fdtable_copy(child_cage);
-            // Self-consistency only: every entry the child claims to hold
-            // must translate back to itself. Deliberately NOT compared
-            // against a snapshot of the source taken before the copy --
-            // the churner threads keep mutating src_cage throughout, so a
-            // "before" snapshot can legitimately differ from what an
-            // in-flight copy actually captured. The real oracle for bug 1c
-            // is the exactly-once release accounting below: an
-            // under-incremented entry either panics in _decrement_fdcount
-            // or shows up there as a leaked/double-released underfd.
+            // Self-consistency only, not compared against a pre-copy
+            // snapshot of src_cage: the churner threads keep mutating it
+            // throughout. The real oracle is the exactly-once release
+            // accounting below: an under-incremented entry either panics in
+            // _decrement_fdcount or shows up as a leaked/double-released fd.
             for (&vfd, ent) in &child_snapshot {
                 if translate_virtual_fd(child_cage, vfd).as_ref() != Ok(ent) {
                     copy_errs += 1;
@@ -2429,7 +2393,7 @@ mod tests {
                 released.len() as u64,
                 churn_allocs.load(Ordering::SeqCst),
                 "not every underfd the churners allocated fired exactly one \
-                 last-close -- a leak or a double-release would show up here"
+                 last-close; a leak or a double-release would show up here"
             );
             for (u, n) in released.iter() {
                 assert_eq!(
@@ -2461,7 +2425,7 @@ mod tests {
     }
 
     // =====================================================================
-    // CONC-003 -- cage-table and fd-refcount operations.
+    // CONC-003: cage-table and fd-refcount operations.
     //
     // Oracle: all interleavings preserve the fdtables refcount invariants:
     //   (i)   sum of live references to a (fdkind, underfd) == FDCOUNT[key]
@@ -2471,33 +2435,16 @@ mod tests {
     //         release
     // A decrement fires `last` iff it is the one that takes the count to 0,
     // and the count is a pure function of how many increments/decrements
-    // have happened so far, not their order -- so the totals asserted below
+    // have happened so far, not their order, so the totals asserted below
     // are exact equalities, not bounds, regardless of thread interleaving.
     //
-    // This is the in-crate mirror of
+    // In-crate mirror of
     // tests/unit-tests/process_tests/deterministic/conc_003_cage_fd_refcounts.c,
-    // which drives the same invariant from the C/POSIX side using pipe EOF
-    // as an external oracle (the public interface cannot inspect FDCOUNT
-    // directly).
+    // which drives the same invariant from the C/POSIX side via pipe EOF.
     //
-    // While designing this block, a bug in the same family as CONC-002's
-    // (a)-(c) above was found and fixed in dashmaparrayglobal.rs and
-    // dashmapvecglobal.rs. Continuing that list as bug (d):
-    //   (d) get_specific_virtual_fd used to read the target virtual-fd slot
-    //       under one DashMap guard (`FDTABLE.get(&cageid)`) and then write
-    //       it under a second, separately acquired guard
-    //       (`FDTABLE.get_mut(&cageid)`). Two concurrent calls racing to
-    //       overwrite the same slot (e.g. two dup2()s onto the same target,
-    //       or a dup2() racing a close()/allocate() that lands on the same
-    //       slot) could both observe the same "old" entry and both
-    //       decrement it -- an FDCOUNT underflow panic, or a double release
-    //       of a still-live host fd -- or have one call's write overwrite a
-    //       concurrent get_unused_virtual_fd()'s insert into the same slot,
-    //       permanently leaking that entry's reference. vanillaglobal.rs
-    //       and muthashmaxglobal.rs use HashMap::insert, which returns the
-    //       old value atomically under one guard, and were not affected.
-    //       conc_003_dup2_overwrite_refcount_conservation below is the
-    //       regression test.
+    // conc_003_dup2_overwrite_refcount_conservation below also regression-
+    // tests get_specific_virtual_fd's read/write-under-one-guard fix (see
+    // dashmaparrayglobal.rs).
     // =====================================================================
 
     /// Reserved cage-id block for CONC-003. 0xC0C3 == "CONC-003". Disjoint
@@ -2514,7 +2461,7 @@ mod tests {
     const C3_WORKERS: usize = 8;
 
     /// A dedicated fdkind plus a disjoint underfd window guarantees no
-    /// FDCOUNT key ever aliases with another test's leftovers -- refresh()
+    /// FDCOUNT key ever aliases with another test's leftovers: refresh()
     /// clears FDTABLE and CLOSEHANDLERTABLE but never FDCOUNT, so refcount
     /// state leaks across every test in this binary.
     const C3_FDKIND: u32 = 0x7E57_0003;
@@ -2605,7 +2552,7 @@ mod tests {
     /// then 15 of those 16 references are dropped through three different
     /// decrement paths (explicit close, cage removal, and explicit-close-
     /// then-removal) running concurrently, while the primary cage's one
-    /// retained reference must survive untouched -- no `last` close, and
+    /// retained reference must survive untouched: no `last` close, and
     /// translate_virtual_fd must keep working.
     fn conc_003_refcount_conservation_across_cages() {
         let _lock = c2_test_guard();
@@ -2644,7 +2591,7 @@ mod tests {
                             2 => remove_cage_from_fdtable(C3_CHILD + 1),
                             _ => {
                                 // Explicit-close path, rather than cage
-                                // teardown, for the third child -- races
+                                // teardown, for the third child: races
                                 // the other two decrement paths against
                                 // this one.
                                 for &vfd in &v {
@@ -2719,9 +2666,8 @@ mod tests {
     }
 
     #[test]
-    /// Regression test for CONC-003 bug (d) (see the block header above):
-    /// get_specific_virtual_fd's non-atomic read-then-write of the target
-    /// virtual-fd slot.
+    /// Regression test for get_specific_virtual_fd's read-then-write-under-
+    /// one-guard fix (see dashmaparrayglobal.rs).
     fn conc_003_dup2_overwrite_refcount_conservation() {
         let _lock = c2_test_guard();
         refresh();
@@ -2730,7 +2676,7 @@ mod tests {
         // --- Phase 1: self-dup2 (deterministic, single-threaded). POSIX's
         // dup2(fd, fd) is a no-op at the syscall layer, but the underlying
         // fdtables primitive still runs a full get_specific_virtual_fd onto
-        // its own slot -- this pins that primitive's self-overwrite path,
+        // its own slot: this pins that primitive's self-overwrite path,
         // which must fire `intermediate`, never `last`.
         {
             init_empty_cage(C3_A);
@@ -2765,8 +2711,9 @@ mod tests {
         // reference to it at any moment (nothing else ever aliases a fresh
         // underfd), so its eventual overwrite/close is always a `last`
         // close: the oracle is simply "every underfd installed is released
-        // exactly once, and nothing panics" -- a panic here is bug (d)'s
-        // loud failure mode (an FDCOUNT underflow).
+        // exactly once, and nothing panics"; a panic here is the loud
+        // failure mode of the get_specific_virtual_fd fix (FDCOUNT
+        // underflow).
         {
             const DUP_ROUNDS: usize = 300;
 
@@ -2813,10 +2760,7 @@ mod tests {
             let mut expected: std::collections::HashSet<u64> = std::collections::HashSet::new();
             expected.insert(u0);
             for h in handles {
-                let installed = h.join().expect(
-                    "a CONC-003 dup2-overwrite worker panicked \
-                     (this is what bug (d) used to reproduce)",
-                );
+                let installed = h.join().expect("a CONC-003 dup2-overwrite worker panicked");
                 expected.extend(installed);
             }
             let churn_installed = churner
@@ -2911,7 +2855,7 @@ mod tests {
             }
             assert!(!check_cage_exists(C3_CHILD + 1));
 
-            // Remove the two survivors concurrently -- the 6th and final
+            // Remove the two survivors concurrently: the 6th and final
             // decrement, whichever thread performs it, is the sole `last`.
             let start2 = Arc::new(Barrier::new(2));
             let h_a = {
@@ -2950,8 +2894,8 @@ mod tests {
             c3_setup();
 
             // --- Sub-phase 2: does the RIGHT set of entries get dropped,
-            // not just the right count? Two disjoint underfds -- cloexec
-            // entries all on u_cx, non-cloexec all on u_keep -- so a bug
+            // not just the right count? Two disjoint underfds: cloexec
+            // entries all on u_cx, non-cloexec all on u_keep, so a bug
             // that drops (or spares) the wrong kind shows up as an early or
             // missing release on the wrong key, not just a miscount.
             let u_cx = c3_next_underfd();
@@ -3012,7 +2956,7 @@ mod tests {
     /// allocate and release references to that very same key. Distinct
     /// from conc_002_shared_underfd_refcount_race, which has every worker
     /// release its reference by the end of each round and so cannot
-    /// express "no last close while a reference exists" -- there is no
+    /// express "no last close while a reference exists"; there is no
     /// permanent holder there to violate.
     fn conc_003_no_last_close_while_referenced() {
         let _lock = c2_test_guard();
@@ -3087,50 +3031,30 @@ mod tests {
     }
 
     // =====================================================================
-    // CONC-004 -- refcount conservation under dup/close/fork.
+    // CONC-004: refcount conservation under dup/close/fork.
     //
-    // The narrowly-controlled counterpart to CONC-003. Where CONC-003 races
-    // many different decrement paths at once and asks "did the count
-    // survive?", CONC-004 pins down ONE lifecycle --
+    // The narrowly-controlled counterpart to CONC-003: pins down ONE
+    // lifecycle: allocate -> duplicate -> fork -> concurrent close ->
+    // final close, swept across the full matrix of shapes, under a strict
+    // ownership model where every reference is released exactly once by
+    // exactly one owner. So every quantity asserted below is an exact
+    // equality, not a bound.
     //
-    //     allocate -> duplicate -> fork -> concurrent close -> final close
+    // The primitives model rawposix's three POSIX duplication calls (see
+    // src/rawposix/src/fs_calls.rs), which take different paths here:
     //
-    // -- and sweeps it across the full matrix of shapes under a strict
-    // ownership model: every reference is released exactly once, by exactly
-    // one owner, and no two owners ever touch the same virtual fd in the
-    // same cage. That removes every source of schedule-dependence from the
-    // *application* side, so every quantity asserted below is an exact
-    // equality derived from the config alone, not a bound.
+    //   DupKind::Dup     dup(): FRESH key at count 1 (host-delegated).
+    //   DupKind::Dup2    dup2(): SOURCE's underfd, shared key, count += 1.
+    //   DupKind::Fdupfd  fcntl(F_DUPFD): SOURCE's underfd, shared key like
+    //                    Dup2, unlike Dup.
     //
-    // The primitives here model rawposix's three POSIX duplication calls,
-    // which are POSIX-equivalent but take different paths inside lind
-    // (see src/rawposix/src/fs_calls.rs):
+    // Sweeping all three matters because an implementation that mixed up
+    // fresh-vs-shared keys for one of them would still pass a test that
+    // only exercised the others.
     //
-    //   DupKind::Dup     dup(): rawposix calls libc::dup(underfd), yielding
-    //                    a FRESH host fd registered as a NEW key at count 1.
-    //                    The original key is untouched -- the refcounting is
-    //                    delegated to the host kernel. Modelled here as
-    //                    get_unused_virtual_fd on a freshly-minted underfd.
-    //   DupKind::Dup2    dup2(): get_specific_virtual_fd with the SOURCE's
-    //                    underfd -- shared key, count += 1.
-    //   DupKind::Fdupfd  fcntl(F_DUPFD): get_unused_virtual_fd_from_startfd
-    //                    with the SOURCE's underfd -- shared key, like dup2
-    //                    and NOT like dup.
-    //
-    // Sweeping all three matters because the asymmetry is easy to break in
-    // one direction only: a change that made dup() share the key, or dup2()
-    // mint a fresh one, would still pass a test that only exercised one of
-    // them. In the Dup rows the fresh keys must reach zero and fire `last`
-    // WHILE the shared sentinel key is still held -- an independence
-    // property CONC-003 has no analogue for.
-    //
-    // This is the in-crate mirror of
+    // In-crate mirror of
     // tests/unit-tests/process_tests/deterministic/conc_004_dup_close_fork_refcounts.c,
-    // which drives the same lifecycle from the C/POSIX side using pipe EOF
-    // as its oracle. The roadmap's headline assertion -- last_close_count
-    // == 1 after every copy and duplicate is gone -- is far more precise
-    // here than "the C program did not crash", because the count is read
-    // directly out of a registered final-close handler.
+    // which drives the same lifecycle from the C/POSIX side via pipe EOF.
     // =====================================================================
 
     /// Reserved cage-id block for CONC-004. 0xC0C4 == "CONC-004". Disjoint
@@ -3150,12 +3074,12 @@ mod tests {
     /// FD_PER_PROCESS_MAX is 1024.
     const C4_DUP2_SLOT: u64 = 100;
     /// Start-fd handed to get_unused_virtual_fd_from_startfd for the
-    /// Fdupfd path -- a nonzero start exercises the argument that
+    /// Fdupfd path; a nonzero start exercises the argument that
     /// distinguishes it from plain get_unused_virtual_fd.
     const C4_FDUPFD_START: u64 = 50;
 
     /// A dedicated fdkind plus a disjoint underfd window guarantees no
-    /// FDCOUNT key ever aliases with another test's leftovers -- refresh()
+    /// FDCOUNT key ever aliases with another test's leftovers: refresh()
     /// clears FDTABLE and CLOSEHANDLERTABLE but never FDCOUNT, so refcount
     /// state leaks across every test in this binary.
     const C4_FDKIND: u32 = 0x7E57_0004;
@@ -3341,7 +3265,7 @@ mod tests {
 
         // --- Fork. Every child is created BEFORE any release, so each one
         // deterministically inherits exactly the `ninherited` duplicates
-        // plus the sentinel -- there is no "did this child get it or not?"
+        // plus the sentinel; there is no "did this child get it or not?"
         // ambiguity for an owner to trip over.
         for c in 0..cfg.nchild as u64 {
             copy_fdtable_for_cage(C4_A, C4_CHILD + c).unwrap();
@@ -3387,7 +3311,7 @@ mod tests {
         // inherited copies at indices c, c+nchild, ... and then drops its
         // cage. The parent's and the children's copies are distinct entries
         // in distinct cages, so the only thing they contend on is the
-        // shared FDCOUNT key -- which is exactly the contention under test.
+        // shared FDCOUNT key, which is exactly the contention under test.
         let parties = cfg.nchild + cfg.nthread + 1;
         let start = Arc::new(Barrier::new(parties));
 
@@ -3410,9 +3334,9 @@ mod tests {
                         close_virtualfd(cage, vfd).unwrap();
                     }
                 }
-                // Everything still open in this cage -- the sentinel copy,
-                // the duplicates this child does not own, and (when
-                // !child_close) all of them -- must be released here.
+                // Everything still open in this cage (the sentinel copy,
+                // the duplicates this child does not own, and, when
+                // !child_close, all of them) must be released here.
                 remove_cage_from_fdtable(cage);
             }));
         }
@@ -3728,7 +3652,7 @@ mod tests {
     }
 
     // ================================================================
-    // CONC-005a -- per-cage fd exhaustion isolation.
+    // CONC-005a: per-cage fd exhaustion isolation.
     //
     // Black-box counterpart:
     //   tests/unit-tests/process_tests/deterministic/
@@ -3749,7 +3673,7 @@ mod tests {
     const C5_CHILD: u64 = 0x0000_0000_C0C5_0010; // fork copy of C5_A
 
     /// A dedicated fdkind plus a disjoint underfd window guarantees no
-    /// FDCOUNT key ever aliases with another test's leftovers -- refresh()
+    /// FDCOUNT key ever aliases with another test's leftovers: refresh()
     /// clears FDTABLE and CLOSEHANDLERTABLE but never FDCOUNT, so refcount
     /// state leaks across every test in this binary.
     const C5_FDKIND: u32 = 0x7E57_0005;
@@ -3815,7 +3739,7 @@ mod tests {
     /// holding all 1024 of its own.
     ///
     /// A global cap (which is what TOTAL_FD_MAX would introduce if it were
-    /// ever wired up -- see the ENFILE note at the top of this file) shows
+    /// ever wired up; see the ENFILE note at the top of this file) shows
     /// up here as B failing partway through its own fill.
     fn conc_005_fd_limit_is_per_cage() {
         let _lock = c2_test_guard();
@@ -3832,7 +3756,7 @@ mod tests {
             Err(threei::Errno::EMFILE as u64)
         );
 
-        // B, whose table has not been touched, is unaffected -- it can
+        // B, whose table has not been touched, is unaffected: it can
         // still allocate a full 1024 of its own.
         let b_vfds = c5_fill(C5_B);
         assert_eq!(
@@ -3851,7 +3775,7 @@ mod tests {
             get_unused_virtual_fd(C5_A, C5_FDKIND, c5_next_underfd(), false, 0),
             Ok(0)
         );
-        // B is still exactly as full as it was -- A's cleanup did not
+        // B is still exactly as full as it was; A's cleanup did not
         // hand B any headroom either.
         assert_eq!(
             get_unused_virtual_fd(C5_B, C5_FDKIND, c5_next_underfd(), false, 0),
@@ -3937,7 +3861,7 @@ mod tests {
     }
 
     #[test]
-    /// Cage lifecycle still works while a cage is saturated -- the case
+    /// Cage lifecycle still works while a cage is saturated: the case
     /// the C test covers by forking B only after A has already hit its
     /// cap.
     ///
@@ -3945,7 +3869,7 @@ mod tests {
     /// full (fork copies the whole table, so the child inherits the
     /// saturation, not a fresh budget), every inherited entry is a second
     /// reference rather than a new one, and tearing the child down
-    /// releases exactly the child's share -- leaving the parent's 1024
+    /// releases exactly the child's share, leaving the parent's 1024
     /// references intact.
     fn conc_005_fork_and_teardown_from_exhausted_cage() {
         let _lock = c2_test_guard();

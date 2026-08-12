@@ -8,6 +8,7 @@ use cage::timer::IntervalTimer;
 use cage::{add_cage, encode_wait_status, get_cage, remove_cage, Cage, ExitStatus, Zombie};
 use dashmap::DashMap;
 use fdtables;
+use fdtables::FD_PER_PROCESS_MAX;
 use libc::sched_yield;
 use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
@@ -17,7 +18,6 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
-use fdtables::FD_PER_PROCESS_MAX;
 use sysdefs::constants::fs_const::{PAGESHIFT, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
     MAX_CAGEID, MAX_LINEAR_MEMORY_SIZE, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
@@ -1315,7 +1315,7 @@ pub extern "C" fn prlimit64_syscall(
     // That matches Linux, where an unprivileged process may lower a soft limit
     // but not raise it back above the hard limit.
     //
-    // Every other resource is still refused -- but with a plain EPERM, never a
+    // Every other resource is still refused, but with a plain EPERM, never a
     // `lind_debug_panic!`. `lind-logging` is on by default (Makefile
     // LIND_LOGGING_FEATURE) and the default PanicBehavior is PanicAndExit, so
     // a debug panic here would let any guest abort the whole runtime, and with
@@ -1341,8 +1341,7 @@ pub extern "C" fn prlimit64_syscall(
                     // leave the cage permanently in violation with no way to
                     // signal that, and every later mmap would fail for a
                     // reason the guest never caused.
-                    let in_use =
-                        (cage.vmmap.read().charged_pages()) << PAGESHIFT;
+                    let in_use = (cage.vmmap.read().charged_pages()) << PAGESHIFT;
                     if requested < in_use {
                         return syscall_error(
                             Errno::EINVAL,

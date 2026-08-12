@@ -1,86 +1,35 @@
 /*
- * CONC-005b -- per-cage memory pressure isolation.
+ * CONC-005b: per-cage memory pressure isolation.
  *
  * The memory counterpart to CONC-005a. One cage allocates until its memory
  * quota refuses it, holds that state, and a second cage must go on
- * allocating and computing correctly throughout. The claim under test is
- * that a cage's memory bound is its own: exhausting it must not make
- * anyone else's allocation fail, and releasing it must restore the
- * exhausted cage rather than leaving it wedged.
+ * allocating and computing correctly throughout. Exhausting A's quota must
+ * not make B's allocation fail, and releasing A must restore it rather
+ * than leaving it wedged.
  *
- * -------------------------------------------------------------------
- * Why this test lowers its own limit instead of allocating until it dies
- * -------------------------------------------------------------------
- * Lind gives every cage a linear memory reserved at the wasm32 ceiling of
- * 4 GiB and pre-grown to its maximum, so nothing stops one cage from
- * committing all of it. An "allocate until it fails" test would therefore
- * try to commit multiple GiB on the host before seeing its first failure,
- * which is exactly the way to take out a CI container rather than test it.
+ * A bounds itself first with setrlimit(RLIMIT_AS) rather than allocating
+ * until it dies: lind reserves every cage's linear memory at the wasm32
+ * ceiling (4 GiB) up front, so "allocate until it fails" would try to
+ * commit multiple GiB on the host, taking out the CI container rather
+ * than testing it. This turns the exhaustion point into a known quantity
+ * (LIMIT_MB) and is the same call on both sides of the harness's diff:
+ * native glibc lowers a real RLIMIT_AS, lind lowers the cage's rawposix
+ * quota. Lowering is the only direction available to a guest: the
+ * ceiling itself belongs to the runtime (--max-cage-memory).
  *
- * So A bounds itself first, with setrlimit(RLIMIT_AS). That turns the
- * exhaustion point into a small, known quantity (LIMIT_MB below) instead
- * of a property of the machine, and it is the same call on both sides of
- * the harness's native-vs-lind diff: native glibc lowers a real
- * RLIMIT_AS, and lind lowers the cage's rawposix quota. Both make the
- * next allocation fail cheaply and deterministically.
+ * If setrlimit is refused, or the allocator never reaches the limit, A
+ * records that and skips only the assertions that require a failed
+ * allocation; the isolation and recovery checks still run and the PASS
+ * line is identical either way (same shape as CONC-005a's fd cap).
  *
- * Lowering is the only direction available -- a cage may reduce its own
- * quota but never raise it, since the ceiling belongs to the runtime
- * (--max-cage-memory), not to the guest.
- *
- * -------------------------------------------------------------------
- * Why the exhaustion assertions are conditional
- * -------------------------------------------------------------------
- * If setrlimit is refused, or the allocator never reaches the limit
- * within a bounded number of attempts, A records that and skips only the
- * assertions that require a failed allocation. The isolation and recovery
- * checks -- which are the actual subject -- still run, and the single
- * PASS line is identical either way, so the harness's diff is unaffected.
- * This is the same shape CONC-005a uses for its fd cap.
- *
- * A degraded run is still worth having: B's progress and A's recovery do
- * not depend on A having hit the limit, only on A having tried hard.
- *
- * -------------------------------------------------------------------
- * What "correct" means for B
- * -------------------------------------------------------------------
- * B does not merely allocate. It fills its buffer from the same
+ * B does not merely allocate: it fills its buffer from the same
  * deterministic generator the other CONC tests use and checksums it, so a
- * runtime that satisfied the allocation from memory it had already handed
- * to A -- the failure mode a shared or mis-accounted quota would produce
- * -- shows up as a checksum mismatch rather than as a silent pass.
- *
- * -------------------------------------------------------------------
- * Ordering hazards this test is built around
- * -------------------------------------------------------------------
- * (1) fork() must happen from the MAIN thread only: lind returns -1 for
- *     fork() from a non-main thread (lind-multi-process/src/lib.rs) while
- *     native glibc succeeds, which would diverge the harness's
- *     native-vs-lind stdout diff. The parent stays single-threaded.
- * (2) A's rendezvous pipes are created before it allocates anything, so
- *     they survive into the exhausted state: once A is at its quota it may
- *     be unable to obtain anything new, and a rendezvous built afterwards
- *     could not be relied on. write()/read() on already-open fds allocate
- *     nothing.
- * (3) The parent closes its own ack[1] before reading acks, so a child
- *     that dies before acking yields immediate EOF (diagnosable) rather
- *     than a 30s harness timeout.
- * (4) Forked children use only raw syscalls and _exit() with a distinct
- *     code per failure: fork() in a multithreaded process copies only the
- *     calling thread, so printf()/malloc() in the child can deadlock on a
- *     lock held by a thread that does not exist there. A uses codes 30-46
- *     and B uses 51-58, and the parent recovers and reports the code on
- *     fd 2 -- a child that fails simply stops acking, so without that the
- *     only visible symptom would be a missing ack.
- * (5) A touches one byte per page rather than memset()ing whole blocks.
- *     The point is to force real commitment, not to move LIMIT_MB of
- *     bytes through the CI machine's memory bandwidth.
- * (6) B is forked only after A reports being exhausted, so B's success
- *     cannot be explained by B having allocated first.
+ * runtime that satisfied B's allocation from memory already handed to A
+ * shows up as a checksum mismatch rather than a silent pass.
  *
  * Determinism: exactly one line on stdout ("CONC-005b PASS\n"). No pids,
  * clocks, addresses, sizes, allocation counts, or errno values are ever
- * printed or compared -- how far A gets before failing legitimately
+ * printed or compared; how far A gets before failing legitimately
  * differs between native and lind. Diagnostics go to fd 2, which the
  * harness surfaces only on a nonzero exit.
  */
@@ -107,15 +56,13 @@
 #define CHUNK   (1024 * 1024)
 #define MAX_BLK (LIMIT_MB * 4)
 
-/* B's modest buffer -- deliberately tiny next to A's footprint. */
+/* B's modest buffer, deliberately tiny next to A's footprint. */
 #define B_BYTES (256 * 1024)
 
 #define PAGE   4096
 #define RECORD 16
 
-/* ------------------------------------------------------------------ */
 /* Deterministic per-(a,c) byte pattern (same shape as conc_002/003/004). */
-/* ------------------------------------------------------------------ */
 static void make_record(unsigned char *b, int a, int c)
 {
     unsigned s = (unsigned)(a + 1) * 2654435761u + (unsigned)(c & 0xff) * 40503u;
@@ -140,10 +87,7 @@ static unsigned long checksum(const unsigned char *p, size_t n)
     return h;
 }
 
-/* ------------------------------------------------------------------ */
-/* EINTR-retrying wrappers (same rationale as conc_003/004: lind may     */
-/* interrupt a blocking syscall with SIGUSR2 and no SA_RESTART).         */
-/* ------------------------------------------------------------------ */
+/* EINTR-retrying wrappers (same rationale as conc_003's header). */
 static ssize_t xread(int fd, void *buf, size_t n)
 {
     ssize_t r;
@@ -226,7 +170,7 @@ static int barrier_init(barrier_t *b)
 /* ------------------------------------------------------------------ */
 
 /* A's blocks live in BSS: a forked child must not rely on the allocator to
- * track the very allocations it is stress-testing (hazard 4). */
+ * track the very allocations it is stress-testing. */
 static char *g_blk[MAX_BLK];
 
 static void child_a(barrier_t *b)
@@ -287,7 +231,7 @@ static void child_a(barrier_t *b)
 
         /* (A2) Being at the limit must not corrupt the allocator. Every
          * block handed out earlier still has to hold what was written to
-         * it -- a quota that over-committed would show up here as one
+         * it: a quota that over-committed would show up here as one
          * block's pages having been reused for another. */
         {
             int i;
@@ -306,7 +250,7 @@ static void child_a(barrier_t *b)
          * a time, so the request that got refused was an arena growth, and
          * the arena can still have room for several more CHUNK-sized
          * requests afterwards. What must hold is that only a BOUNDED number
-         * of them succeed -- an unbounded run would mean the limit is
+         * of them succeed; an unbounded run would mean the limit is
          * bounding nothing.
          *
          * Draining them here also leaves the cage genuinely at its ceiling
@@ -369,8 +313,7 @@ static void child_b(barrier_t *b)
     int i;
 
     /* B inherited A's rendezvous. Holding ack[1] open would stop the
-     * parent's ack[0] from ever reporting EOF if A died -- the
-     * diagnosability hazard (3) exists to avoid. Shed all four. */
+     * parent's ack[0] from ever reporting EOF if A died. Shed all four. */
     close(b->gate[0]);
     close(b->gate[1]);
     close(b->ack[0]);
@@ -433,21 +376,21 @@ int main(void)
 
     assert(barrier_init(&b) == 0);
 
-    fflush(stdout); /* repo convention; nothing buffered here */
-    pa = fork();
+    fflush(stdout);
+    pa = fork(); /* main thread only: lind returns -1 otherwise */
     assert(pa >= 0);
     if (pa == 0)
         child_a(&b);
 
-    /* Hazard (3): shed the parent's own copies so a child that dies before
-     * acking becomes EOF on ack[0] rather than an indefinite block. */
+    /* Shed the parent's own copies so a child that dies before acking
+     * becomes EOF on ack[0] rather than an indefinite block. */
     close(b.gate[0]);
     close(b.ack[1]);
 
     /* (a) A has reached its own memory bound and is holding it. */
     expect_ack(b.ack[0], pa, "exhausted");
 
-    /* (b) The parent -- a different cage -- allocates and computes
+    /* (b) The parent (a different cage) allocates and computes
      * correctly while A is saturated. Free coverage, no extra cage. */
     {
         unsigned char *p = (unsigned char *)malloc(B_BYTES);
@@ -468,7 +411,7 @@ int main(void)
     /* (c) A whole new cage can still be created while A is at its limit,
      * and (d) it allocates and computes correctly. B is forked here, not
      * earlier, so its success cannot be explained by ordering. */
-    fflush(stdout); /* repo convention; nothing buffered here */
+    fflush(stdout);
     pb = fork();
     assert(pb >= 0);
     if (pb == 0)

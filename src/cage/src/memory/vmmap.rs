@@ -298,7 +298,7 @@ impl Vmmap {
     /// counter. `update()` inserts with overwrite semantics and NoditMap
     /// splits and merges intervals as it goes, so an incrementally
     /// maintained total would have to reproduce those rules exactly to stay
-    /// correct -- and any drift would be silent, permanent, and would
+    /// correct, and any drift would be silent, permanent, and would
     /// eventually deny a cage memory it is not actually using. A cage holds
     /// tens of entries, and every caller of this already does O(entries)
     /// work (find_map_space, check_existing_mapping), so the sum is not the
@@ -314,7 +314,7 @@ impl Vmmap {
     /// map `npages` at `page_num`.
     ///
     /// Whatever is already mapped inside the requested span is a
-    /// replacement rather than new consumption -- MAP_FIXED over a live
+    /// replacement rather than new consumption: MAP_FIXED over a live
     /// mapping and brk() rewriting its own heap entry both land here.
     /// Charging the whole span instead would let a cage's accounted usage
     /// climb while its real footprint stayed flat, and it would eventually

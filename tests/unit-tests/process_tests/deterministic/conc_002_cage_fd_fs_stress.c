@@ -1,28 +1,22 @@
 /*
- * CONC-002 -- cage fd-table / filesystem concurrency stress.
+ * CONC-002: cage fd-table / filesystem concurrency stress.
  *
- * NTHREADS worker threads hammer the cage's fd table and the filesystem
- * (open/dup/dup2/fcntl/lseek/read/write/pread/pwrite/stat/fstat/lstat/
- * access/ftruncate/rename/unlink/mkdir/rmdir/close) on per-thread-private
- * paths, while the MAIN thread -- and only the main thread -- fork()s and
- * reaps children, interleaved with that worker activity.  That races
- * rawposix's copy_fdtable_for_cage() against live fd-table churn, which is
- * the bug surface this test targets.
+ * NTHREADS worker threads hammer the cage's fd table and filesystem on
+ * per-thread-private paths, while the MAIN thread, and only the main
+ * thread, fork()s and reaps children, interleaved with that activity.
+ * That races rawposix's copy_fdtable_for_cage() against live fd-table
+ * churn, which is the bug surface this test targets.
  *
- * Why fork() is main-thread-only: lind returns -1 for fork() from a
- * non-main thread (lind-multi-process/src/lib.rs, "fork inside a thread is
- * currently not supported") while native glibc succeeds, so a worker-thread
- * fork would diverge between the native and lind runs and break the
- * harness's native-vs-lind stdout diff.
- *
- * Why the forked child uses only raw syscalls and _exit(): fork() in a
- * multithreaded process copies only the calling thread.  On native glibc a
- * malloc/stdio lock may be held by a thread that does not exist in the
- * child, so printf()/malloc() there can deadlock.
+ * fork() is main-thread-only: lind returns -1 for fork() from a non-main
+ * thread while native glibc succeeds, which would diverge the harness's
+ * native-vs-lind diff. The forked child uses only raw syscalls and
+ * _exit(): fork() in a multithreaded process copies only the calling
+ * thread, so printf()/malloc() there can deadlock on a lock some other
+ * thread held.
  *
  * Determinism: every byte written is a pure function of (thread, round).
  * No pids, clocks, addresses, fd numbers, or errno values are ever printed
- * or compared -- only success/failure of each syscall.  Output is exactly
+ * or compared; only success/failure of each syscall. Output is exactly
  * one line.
  */
 #define _GNU_SOURCE
@@ -65,9 +59,7 @@
 #endif
 #define FD_SCAN 128
 
-/* ------------------------------------------------------------------ */
-/* Deterministic per-(thread,round) byte pattern.                      */
-/* ------------------------------------------------------------------ */
+/* Deterministic per-(thread,round) byte pattern. */
 static void make_record(unsigned char *b, int t, int i)
 {
     unsigned s = (unsigned)(t + 1) * 2654435761u + (unsigned)i * 40503u;
@@ -112,10 +104,7 @@ static pthread_barrier_t g_start;            /* NTHREADS+1 parties, waited once 
     } while (0)
 #define WCHECK(w, cond, det) do { if (!(cond)) WFAIL(w, det); } while (0)
 
-/* Best-effort removal of leftovers from a previous crashed run.  Failures
- * are ignored: the point is to self-heal when possible and to fail loudly
- * (at mkdir/open below) when a root-owned leftover from a crashed
- * `sudo lind_run` genuinely blocks the unprivileged native run. */
+/* Best-effort cleanup of leftovers from a previous crashed run. */
 static void pre_clean(void)
 {
     char p[64];
@@ -181,7 +170,7 @@ static void *worker(void *arg)
         fdup = dup(fd);
         WCHECK(w, fdup >= 0, i);
 
-        /* dup2's target must be an fd this thread already owns -- NEVER
+        /* dup2's target must be an fd this thread already owns, NEVER
          * a fixed number, since the fd space is shared across threads. */
         tgt = dup(fd);
         WCHECK(w, tgt >= 0, i);
@@ -277,7 +266,7 @@ done:
 }
 
 /* -------------------------------------------------------------------- *
- * Forked child: async-signal-safe only -- raw syscalls, memcmp, _exit().
+ * Forked child: async-signal-safe only (raw syscalls, memcmp, _exit()).
  * No stdio, no malloc, no assert() (assert -> fprintf -> abort), no
  * pthread calls.  Distinct exit codes make the parent's failure report
  * actionable without any printed output.
@@ -377,7 +366,7 @@ int main(void)
 
         wait_for_progress((long)(f + 1) * NTHREADS * ROUNDS / (NFORKS + 1));
 
-        fflush(stdout); /* repo convention; nothing buffered here */
+        fflush(stdout);
         pid = fork();
         assert(pid >= 0); /* main thread => lind must succeed too */
         if (pid == 0)
@@ -465,7 +454,7 @@ int main(void)
     assert(S_ISREG(sa.st_mode));
     /* Deliberately NOT compared: st_atime (relatime/noatime is host
      * policy), st_blocks/st_blksize (allocation policy differs, e.g.
-     * tmpfs vs ext4, sparse files), st_mtim/st_ctim (wall-clock -- equal
+     * tmpfs vs ext4, sparse files), st_mtim/st_ctim (wall-clock, equal
      * in practice here since nothing writes between the two stats, but
      * left out on principle).  None of these is ever printed or compared
      * across the native/lind boundary. */

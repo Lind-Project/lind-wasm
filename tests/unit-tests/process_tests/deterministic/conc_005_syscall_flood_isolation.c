@@ -1,5 +1,5 @@
 /*
- * CONC-005c -- syscall flood isolation.
+ * CONC-005c: syscall flood isolation.
  *
  * CONC-005a and CONC-005b exhaust a countable resource (descriptors,
  * memory) and ask whether the count is per-cage. CONC-005c exhausts
@@ -7,84 +7,29 @@
  * cage spins issuing syscalls as fast as it can from several threads, and
  * a second cage must keep making forward progress the whole time.
  *
- * -------------------------------------------------------------------
- * What is actually shared, and therefore what this can starve
- * -------------------------------------------------------------------
- * Cages are otherwise genuinely parallel -- every cage thread is a real OS
- * thread with its own wasmtime Store, and there is no global runtime lock
- * around rawposix. But every guest syscall, from every thread of every
- * cage, passes through 3i's dispatch, and with the default `hashmap`
- * handler-table backend (src/threei/Cargo.toml) that means taking one
- * process-global std::sync::Mutex per call
- * (src/threei/src/handler_table/hashmap_impl.rs). Each call also probes
- * the EXITING_TABLE DashSet shard for its cage and bumps the cage's
- * ArcSwap refcount, twice over (src/threei/src/threei.rs).
+ * Cages are otherwise genuinely parallel, but every guest syscall passes
+ * through 3i's dispatch, and with the default `hashmap` handler-table
+ * backend that means taking one process-global Mutex per call
+ * (src/threei/src/handler_table/hashmap_impl.rs). That is this test's
+ * single identified target; if it ever fails, the fix is the sharded
+ * `dashmap` backend that already exists alongside the default one, not a
+ * weaker assertion here.
  *
- * So this test has a single, identified target. If it ever does fail, the
- * fix is the sharded `dashmap` backend that already exists alongside the
- * default one -- not a weaker assertion here.
+ * getpid() is the flood: it does no host work and this glibc does not
+ * cache it, so every call is a real dispatch. Progress is recorded in a
+ * MAP_SHARED|MAP_ANONYMOUS page mapped before the forks, so reading or
+ * bumping a counter costs zero syscalls (a pipe would drag fdtables'
+ * shard locks into the measurement).
  *
- * -------------------------------------------------------------------
- * Why getpid() is the flood, and a shared page is the scoreboard
- * -------------------------------------------------------------------
- * getpid() is the only implemented syscall that does no host work at all:
- * rawposix answers it from the cage table (src/rawposix/src/sys_calls.rs),
- * and this glibc does not cache it, so every call is a real dispatch. That
- * concentrates the flood on the shared path rather than on the host
- * kernel, where the OS scheduler would absorb it.
- *
- * Progress is recorded in a MAP_SHARED|MAP_ANONYMOUS page mapped BEFORE
- * the forks, so reading or bumping a counter costs zero syscalls. Using a
- * pipe instead would drag fdtables' shard locks into the very measurement
- * the test is trying to make.
- *
- * -------------------------------------------------------------------
- * Why the assertion is a floor, and why there is no timer
- * -------------------------------------------------------------------
- * The test asserts only that B completes TARGET operations while A floods.
- * It does NOT compare rates, ratios, or latencies: native Linux has no
- * global syscall mutex, so any threshold tight enough to be interesting
- * under lind is trivially satisfied natively, and any threshold tight
- * enough to be interesting on an idle machine is flaky on a loaded CI box.
- * A floor is the assertion that means the same thing in both places.
- *
- * There is deliberately no in-test watchdog. Total starvation or a hang is
- * caught by the harness's own 30s timeout, which reports it as a timeout;
- * building a second, clock-derived watchdog on top would only add a source
- * of nondeterminism to a test whose entire value is being deterministic.
- *
- * -------------------------------------------------------------------
- * Ordering hazards this test is built around
- * -------------------------------------------------------------------
- * (1) fork() must happen from the MAIN thread only: lind returns -1 for
- *     fork() from a non-main thread (lind-multi-process/src/lib.rs) while
- *     native glibc succeeds, which would diverge the harness's
- *     native-vs-lind stdout diff. The parent stays single-threaded, and A
- *     creates its threads only AFTER it has been forked -- pthread_create
- *     inside a cage is fine, it is fork() from a thread that is not.
- * (2) Both children are forked before either starts work, and held at a
- *     two-pipe rendezvous, so B cannot finish before A has begun flooding.
- *     A test where B raced ahead of the flood would pass vacuously.
- * (3) The parent closes its own ack[1] before reading acks, so a child
- *     that dies before acking yields immediate EOF (diagnosable) rather
- *     than a 30s harness timeout.
- * (4) Forked children use only raw syscalls and _exit() with a distinct
- *     code per failure. A's flooding threads must not assert either: they
- *     record a failure line and stop, in the style of conc_002's workers,
- *     because a pthread that aborts inside a forked cage is far harder to
- *     attribute than an exit code. A uses codes 30-38 and B uses 51-57.
- * (5) Only two cages are forked. Cage IDs are never recycled
- *     (src/cage/src/cage.rs) and the process-wide ceiling is 2046, so a
- *     test that forked per iteration would burn a shared, unreplenishable
- *     resource -- which is what fork_max_cages.c does, and why it is in
- *     skip_test_cases.txt.
- * (6) The flood is stopped by a flag in the shared page, not by a signal
- *     and not by killing A. A must exit cleanly for its own assertions to
- *     be meaningful.
+ * The assertion is a floor: B completes TARGET operations while A
+ * floods, not a rate or ratio, since native Linux has no global
+ * syscall mutex to make a tighter threshold mean the same thing in both
+ * places. There is deliberately no in-test watchdog; total starvation is
+ * caught by the harness's own 30s timeout.
  *
  * Determinism: exactly one line on stdout ("CONC-005c PASS\n"). No pids,
  * clocks, addresses, iteration counts, or rates are ever printed or
- * compared -- how many syscalls A lands is exactly what differs between
+ * compared; how many syscalls A lands is exactly what differs between
  * machines and between native and lind. Diagnostics go to fd 2, which the
  * harness surfaces only on a nonzero exit.
  */
@@ -109,7 +54,7 @@
 #define NFLOOD 4
 
 /* Operations B must complete. Each is a full file lifecycle, so this is a
- * few hundred syscalls' worth of real work -- enough that B could not
+ * few hundred syscalls' worth of real work: enough that B could not
  * finish it in a scheduling fluke, small enough to stay far inside the
  * harness's 30s timeout even on a slow machine. */
 #define TARGET 200
@@ -117,9 +62,7 @@
 #define RECORD 16
 #define NREC   4
 
-/* fd-leak scan in the parent, same convention as conc_002/003/004/005a.
- * Disable with -DCONC005C_NO_FD_LEAK_SCAN if it ever proves to be an
- * artifact rather than a real leak. */
+/* fd-leak scan in the parent; same convention as conc_002 (see its header). */
 #ifndef CONC005C_NO_FD_LEAK_SCAN
 #define DO_FD_LEAK_SCAN 1
 #else
@@ -137,9 +80,7 @@ struct shared {
     volatile long stop;       /* parent -> A: wind down */
 };
 
-/* ------------------------------------------------------------------ */
 /* Deterministic per-(a,c) byte pattern (same shape as conc_002/003/004). */
-/* ------------------------------------------------------------------ */
 static void make_record(unsigned char *b, int a, int c)
 {
     unsigned s = (unsigned)(a + 1) * 2654435761u + (unsigned)(c & 0xff) * 40503u;
@@ -156,9 +97,7 @@ static void pre_clean(void)
     rmdir(DIRNAME);
 }
 
-/* ------------------------------------------------------------------ */
-/* EINTR-retrying wrappers (same rationale as conc_003/004).            */
-/* ------------------------------------------------------------------ */
+/* EINTR-retrying wrappers (same rationale as conc_003/004). */
 static ssize_t xread(int fd, void *buf, size_t n)
 {
     ssize_t r;
@@ -228,8 +167,8 @@ static int barrier_init(barrier_t *b)
 static struct shared *g_sh;      /* A's view of the scoreboard */
 static volatile long g_thread_fail; /* nonzero => some flood thread failed */
 
-/* Flooding threads must not assert (hazard 4): they record and return, and
- * A's main thread turns that into an exit code. */
+/* Flooding threads must not assert: they record and return, and A's main
+ * thread turns that into an exit code. */
 static void *flood_fn(void *arg)
 {
     pid_t self = getpid();
@@ -267,7 +206,7 @@ static void child_a(barrier_t *b, struct shared *sh)
     close(b->ack[0]);
 
     /* Hold at the starting line until the parent has both children ready,
-     * so the flood cannot finish before B has even begun (hazard 2). */
+     * so the flood cannot finish before B has even begun. */
     if (xwrite(b->ack[1], &one, 1) != 1)
         _exit(30);
     if (xread(b->gate[0], &buf, 1) != 1)
@@ -279,7 +218,7 @@ static void child_a(barrier_t *b, struct shared *sh)
         made++;
     }
     if (made == 0)
-        _exit(32); /* could not flood at all -- the test would be vacuous */
+        _exit(32); /* could not flood at all: the test would be vacuous */
 
     /* The main thread floods too, so A is never merely idle-waiting. */
     {
@@ -386,20 +325,20 @@ int main(void)
     assert(barrier_init(&ba) == 0);
     assert(barrier_init(&bb) == 0);
 
-    fflush(stdout); /* repo convention; nothing buffered here */
-    pa = fork();
+    fflush(stdout);
+    pa = fork(); /* main thread only: lind returns -1 otherwise */
     assert(pa >= 0);
     if (pa == 0)
         child_a(&ba, sh);
 
-    fflush(stdout); /* repo convention; nothing buffered here */
+    fflush(stdout);
     pb = fork();
     assert(pb >= 0);
     if (pb == 0)
         child_b(&bb, sh);
 
-    /* Hazard (3): shed the parent's own copies so a child that dies before
-     * acking becomes EOF rather than an indefinite block. */
+    /* Shed the parent's own copies so a child that dies before acking
+     * becomes EOF rather than an indefinite block. */
     close(ba.gate[0]);
     close(ba.ack[1]);
     close(bb.gate[0]);
@@ -415,7 +354,7 @@ int main(void)
     while (sh->a_started < NFLOOD) {
         /* Spin without syscalls: any wait primitive here would itself
          * queue on the very dispatch path under test. If A never starts,
-         * the harness timeout catches it -- see the header on watchdogs. */
+         * the harness timeout catches it; see the header on watchdogs. */
     }
 
     assert(xwrite(bb.gate[1], &one, 1) == 1);

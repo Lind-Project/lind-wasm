@@ -1,107 +1,35 @@
 /*
- * CONC-005a -- per-cage fd exhaustion isolation.
+ * CONC-005a: per-cage fd exhaustion isolation.
  *
- * CONC-002/003/004 all stay well below the fd limit and ask whether
- * descriptors are tracked correctly. CONC-005a drives ONE cage all the way
- * into EMFILE and asks the orthogonal question: is the limit actually
- * per-cage? A cap that is really global, or a runtime that faults when any
- * cage saturates its table, would let one cage deny service to every other
- * one -- the isolation property the whole cage model rests on.
+ * CONC-002/003/004 stay well below the fd limit and ask whether descriptors
+ * are tracked correctly. CONC-005a drives ONE cage into EMFILE and asks the
+ * orthogonal question: is the limit actually per-cage? A cap that is really
+ * global, or a runtime that faults when any cage saturates its table, would
+ * let one cage deny service to every other one.
  *
- * The scenario is a strict happens-before chain, so every assertion holds
- * under any interleaving:
+ * Strict happens-before chain, so every assertion holds under any
+ * interleaving: A exhausts -> A acks -> parent does its own file I/O ->
+ * parent forks B (after A is already exhausted, so B's success cannot be
+ * explained by grabbing descriptors first) -> B allocates and does file
+ * I/O -> B exits 0 -> parent releases A -> A closes everything and
+ * re-opens -> A exits 0.
  *
- *   A exhausts -> A acks -> parent does its own file I/O -> parent forks B
- *   -> B allocates and does file I/O -> B exits 0 -> parent releases A
- *   -> A closes everything and re-opens -> A exits 0
+ * The exhaustion loop is bounded at FD_CAP rather than unbounded: lind
+ * pins every cage at FD_PER_PROCESS_MAX (1024), but the native reference
+ * run sees the real host soft limit (often ~1e6), which would blow the
+ * harness's timeout. EMFILE-specific assertions run only if the limit was
+ * actually reached (`hit_limit`); a native run with a high limit degrades
+ * to the isolation and cleanup checks, and both paths emit the same PASS
+ * line.
  *
- * B is forked AFTER A is already exhausted, on purpose. That covers cage
- * creation itself (copy_fdtable_for_cage from a parent whose sibling is at
- * its cap) in addition to allocation inside B, and it means B's success
- * cannot be explained by B having grabbed its descriptors first.
- *
- * -------------------------------------------------------------------
- * Why the exhaustion loop is bounded instead of unbounded
- * -------------------------------------------------------------------
- * lind pins every cage at FD_PER_PROCESS_MAX (1024,
- * src/fdtables/src/commonconstants.rs), and prlimit64 reports a hardcoded
- * RLIMIT_NOFILE of 1024 regardless of the host. The NATIVE reference run
- * of this same source sees the host soft limit instead, which is commonly
- * 1048576 under Docker/systemd -- so "open until it fails" is ~1000 opens
- * on lind and ~1e6 opens natively, which would blow the 30s harness
- * timeout on the side that is only supposed to be the oracle.
- *
- * Lowering the limit first is not available either: lind's prlimit64
- * rejects every setrlimit with EPERM (src/rawposix/src/sys_calls.rs), so
- * the two runs could not be normalised that way.
- *
- * So the loop stops at FD_CAP, just above lind's 1024, and the
- * EMFILE-specific assertions run only if the limit was actually reached
- * (`hit_limit`). On lind that is always true and the exhaustion checks
- * always run; on a native host with a high limit the run degrades to the
- * isolation and cleanup checks. Both emit the identical single PASS line,
- * which is what the harness diffs.
- *
- * -------------------------------------------------------------------
- * What the exhausted-state checks pin down
- * -------------------------------------------------------------------
- * Every allocating call must report EMFILE, and must report it as EMFILE:
- *
- *   open, openat  fdtables' get_unused_virtual_fd has no free slot. Both
- *                 must also close the kernel fd they already obtained
- *                 before returning, as pipe()/dup() already do, or every
- *                 such failure leaks one HOST fd -- and the host fd space
- *                 is shared by all cages, so that leak is exactly the
- *                 cross-cage denial this test exists to rule out. It is
- *                 unobservable from inside a cage (it would take ~1e6
- *                 failures to surface), so the loop below deliberately
- *                 stops at the FIRST EMFILE rather than spinning on it;
- *                 that part of the fix is enforced by review, not here.
- *   dup           same allocation, separate call site.
- *   fcntl F_DUPFD (and F_DUPFD_CLOEXEC) go through
- *                 get_unused_virtual_fd_from_startfd. Both used to
- *                 translate its EMFILE into EBADF, which makes an
- *                 exhausted cage indistinguishable from one that was
- *                 handed a bad descriptor.
- *   pipe          must fail atomically: neither end may be installed.
- *
- * dup2() onto an already-open descriptor must still SUCCEED while
- * exhausted. It reuses an occupied slot rather than allocating one, so a
- * cap enforced on operations instead of on table slots shows up here and
- * nowhere else.
- *
- * -------------------------------------------------------------------
- * Ordering hazards this test is built around
- * -------------------------------------------------------------------
- * (1) fork() must happen from the MAIN thread only: lind returns -1 for
- *     fork() from a non-main thread (lind-multi-process/src/lib.rs) while
- *     native glibc succeeds, which would diverge the harness's
- *     native-vs-lind stdout diff. This test keeps the parent
- *     single-threaded throughout, so the hazard cannot arise.
- * (2) The rendezvous fds are created BEFORE A starts exhausting, so they
- *     survive into the exhausted state. Once A is at its cap it cannot
- *     open anything -- including a pipe -- so a rendezvous established
- *     after exhaustion would be unbuildable, and sleeping instead would be
- *     nondeterministic. write()/read() on already-open fds need no
- *     allocation, so A can still talk to the parent while saturated.
- * (3) The parent closes its own ack[1] before reading acks, so a child
- *     that dies before acking yields immediate EOF (diagnosable) rather
- *     than a 30s harness timeout.
- * (4) Forked children use only raw syscalls and _exit() with a distinct
- *     code per failure: fork() in a multithreaded process copies only the
- *     calling thread, so printf()/malloc() in the child can deadlock on a
- *     lock held by a thread that does not exist there. A uses codes 30-45
- *     and B uses 51-60, and the parent recovers and reports the code on
- *     fd 2 -- a child that fails simply stops acking, so without that the
- *     only visible symptom would be a missing ack.
- * (5) A records its descriptors in a static array rather than closing a
- *     numeric range on the way out. The range's upper bound differs
- *     between the two runs (see FD_CAP above), and a blind range close
- *     would also shut the rendezvous fds A still needs.
+ * Every allocating call (open/openat/dup/pipe/fcntl F_DUPFD) must report
+ * EMFILE while exhausted, not EBADF (see fs_calls.rs). dup2() onto an
+ * already-open descriptor must still SUCCEED while exhausted, since it
+ * reuses a slot rather than allocating one.
  *
  * Determinism: exactly one line on stdout ("CONC-005a PASS\n"). No pids,
  * clocks, addresses, fd numbers, fd counts, or errno values are ever
- * printed or compared -- in particular the number of descriptors A
+ * printed or compared; in particular the number of descriptors A
  * managed to open is deliberately never reported, since that is precisely
  * what differs between native and lind. Diagnostics go to fd 2, which the
  * harness surfaces only on a nonzero exit.
@@ -134,11 +62,7 @@
 #define RECORD 16
 #define NREC   8
 
-/* fd-leak scan in the parent: comparable across native/lind as long as
- * both allocate the lowest free fd, which fdtables' get_unused_virtual_fd
- * does by construction (same convention as conc_002/003/004). Disable
- * with -DCONC005A_NO_FD_LEAK_SCAN if this ever proves to be an artifact
- * rather than a real leak. */
+/* fd-leak scan in the parent; same convention as conc_002 (see its header). */
 #ifndef CONC005A_NO_FD_LEAK_SCAN
 #define DO_FD_LEAK_SCAN 1
 #else
@@ -146,9 +70,7 @@
 #endif
 #define FD_SCAN 128
 
-/* ------------------------------------------------------------------ */
 /* Deterministic per-(a,c) byte pattern (same shape as conc_002/003/004). */
-/* ------------------------------------------------------------------ */
 static void make_record(unsigned char *b, int a, int c)
 {
     unsigned s = (unsigned)(a + 1) * 2654435761u + (unsigned)(c & 0xff) * 40503u;
@@ -159,11 +81,7 @@ static void make_record(unsigned char *b, int a, int c)
     b[RECORD - 1] = (unsigned char)(c & 0xff);
 }
 
-/* Best-effort removal of leftovers from a previous crashed run. The
- * native run is unprivileged and the lind run is under sudo, so a
- * root-owned leftover from a crashed lind run can otherwise block the
- * next native run; this self-heals when possible and fails loudly (at
- * mkdir/open below) when it cannot. */
+/* Best-effort cleanup of leftovers from a previous crashed run. */
 static void pre_clean(void)
 {
     unlink(HOGF);
@@ -172,14 +90,7 @@ static void pre_clean(void)
     rmdir(DIRNAME);
 }
 
-/* ------------------------------------------------------------------ */
-/* EINTR-retrying wrappers. Lind interrupts blocking syscalls by       */
-/* sending SIGUSR2 to a cage's main thread, via a handler installed    */
-/* with no SA_RESTART. That never happens to this test today only     */
-/* because SIGCHLD's default disposition is Ignore -- a fact about     */
-/* SIGCHLD, not a guarantee from lind -- so every blocking call here   */
-/* is retried on EINTR regardless.                                     */
-/* ------------------------------------------------------------------ */
+/* EINTR-retrying wrappers (same rationale as conc_003's header). */
 static ssize_t xread(int fd, void *buf, size_t n)
 {
     ssize_t r;
@@ -282,8 +193,10 @@ static int barrier_init(barrier_t *b)
 /* Child A: exhaust, hold, prove the failure modes, then recover.      */
 /* ------------------------------------------------------------------ */
 
-/* A's descriptors, in BSS: a forked child must not malloc (hazard 4), and
- * the exact set is needed for the cleanup phase (hazard 5). */
+/* A's descriptors, in BSS: a forked child must not malloc, and the exact
+ * set is needed for the cleanup phase (the FD_CAP upper bound differs
+ * between native and lind, and a blind range close would also shut the
+ * rendezvous fds A still needs). */
 static int g_fds[FD_CAP];
 
 static void child_a(barrier_t *b)
@@ -335,7 +248,7 @@ static void child_a(barrier_t *b)
         if (fcntl(probe, F_DUPFD_CLOEXEC, 0) != -1 || errno != EMFILE)
             _exit(36);
 
-        /* (A4) pipe must fail atomically -- no half-installed end. */
+        /* (A4) pipe must fail atomically: no half-installed end. */
         p[0] = -1;
         p[1] = -1;
         if (pipe(p) != -1 || errno != EMFILE)
@@ -389,8 +302,7 @@ static void child_b(barrier_t *b)
 
     /* B inherited A's rendezvous. Holding gate[0] open would be harmless,
      * but holding ack[1] open would keep the parent's ack[0] from ever
-     * reporting EOF if A died -- exactly the diagnosability hazard (3) is
-     * there to avoid. Shed both. */
+     * reporting EOF if A died. Shed both. */
     close(b->gate[0]);
     close(b->gate[1]);
     close(b->ack[0]);
@@ -465,21 +377,21 @@ int main(void)
 
     assert(barrier_init(&b) == 0);
 
-    fflush(stdout); /* repo convention; nothing buffered here */
-    pa = fork();
+    fflush(stdout);
+    pa = fork(); /* main thread only: lind returns -1 otherwise */
     assert(pa >= 0);
     if (pa == 0)
         child_a(&b);
 
-    /* Hazard (3): shed the parent's own copies so a child that dies before
-     * acking becomes EOF on ack[0] rather than an indefinite block. */
+    /* Shed the parent's own copies so a child that dies before acking
+     * becomes EOF on ack[0] rather than an indefinite block. */
     close(b.gate[0]);
     close(b.ack[1]);
 
     /* (a) A has reached its own cap and is holding it. */
     expect_ack(b.ack[0], pa, "exhausted");
 
-    /* (b) The parent -- a different cage -- is unaffected while A is
+    /* (b) The parent (a different cage) is unaffected while A is
      * saturated. Cheap coverage that needs no extra cage. */
     {
         unsigned char rec[RECORD], got[RECORD];
@@ -500,7 +412,7 @@ int main(void)
      * it gets a working fd table of its own. B is forked here, not
      * earlier, so its success cannot be explained by it having allocated
      * before A filled up. */
-    fflush(stdout); /* repo convention; nothing buffered here */
+    fflush(stdout);
     pb = fork();
     assert(pb >= 0);
     if (pb == 0)

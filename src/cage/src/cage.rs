@@ -196,20 +196,11 @@ pub struct Cage {
     pub child_num: AtomicU64,
     // vmmap represents the virtual memory mapping for this cage. More details on `memory::vmmap`
     pub vmmap: RwLock<Vmmap>,
-    // mem_limit is this cage's memory quota, in BYTES. `u64::MAX` means unlimited,
-    // which is the default and preserves the historical behaviour of no cap at all.
-    //
-    // Lind gives every cage a linear memory reserved at the full wasm32 ceiling
-    // (4 GiB) and pre-grown to its maximum, so wasmtime's own StoreLimits /
-    // ResourceLimiter never sees a growth request and cannot bound a cage --
-    // SharedMemory::grow passes `None` for the limiter. All real commitment
-    // happens instead through rawposix's mmap/brk/shmat, against this cage's
-    // vmmap. That makes the vmmap the only place a per-cage cap can be enforced,
-    // and this field the natural place to keep the bound.
-    //
-    // Usage is NOT cached here: it is derived from `vmmap` under the same lock
-    // that mutates it (see Vmmap::charged_pages), so the limit and the usage
-    // cannot drift apart.
+    // mem_limit is this cage's memory quota, in BYTES. `u64::MAX` means unlimited
+    // (the default). Wasmtime's own ResourceLimiter never sees a growth request
+    // (linear memory is pre-grown to the wasm32 ceiling at creation), so vmmap
+    // is the only place a per-cage cap can be enforced; usage is derived from it
+    // on demand rather than cached here (see Vmmap::charged_pages).
     pub mem_limit: AtomicU64,
     // final_exit_status stores the terminal status of the cage once a
     // termination condition has been determined.
@@ -271,26 +262,20 @@ pub struct Cage {
 
 impl Cage {
     /// Admission check for a mapping that would consume `additional_pages`
-    /// pages this cage is not already charged for.
+    /// pages this cage is not already charged for. Returns true when the
+    /// request must be refused with ENOMEM.
     ///
-    /// Returns true when the request must be refused with ENOMEM.
-    ///
-    /// The caller passes the `Vmmap` guard it is already holding rather than
-    /// taking one here, so that the check and the mutation it guards happen
-    /// inside a single critical section. Re-acquiring the lock would reopen
-    /// the check-then-act window between threads of the same cage and,
-    /// because vmmap is an RwLock rather than a reentrant one, would also
-    /// deadlock the callers that hold it for writing across the whole call.
+    /// Takes the caller's `Vmmap` guard rather than acquiring its own, so the
+    /// check and the mutation it guards run in one critical section: vmmap
+    /// is a non-reentrant RwLock, so re-locking here would deadlock callers
+    /// that hold it for writing across the whole call.
     pub fn mem_limit_would_exceed(&self, vmmap: &Vmmap, additional_pages: u64) -> bool {
         let limit = self.mem_limit.load(Ordering::Relaxed);
         if limit == u64::MAX {
             return false; // unlimited: the default
         }
         let limit_pages = limit >> PAGESHIFT;
-        vmmap
-            .charged_pages()
-            .saturating_add(additional_pages)
-            > limit_pages
+        vmmap.charged_pages().saturating_add(additional_pages) > limit_pages
     }
 }
 
@@ -538,7 +523,6 @@ mod tests {
             "Retrieved cage should have correct ID"
         );
 
-        // Clean up: this test previously left cage 2 in CAGE_MAP forever.
         remove_cage(2);
         assert!(get_cage(2).is_none());
     }
@@ -546,19 +530,18 @@ mod tests {
     // ----------------------------------------------------------------------
     // CONC-001 — Cage spawn/destroy stress
     //
-    // See https://github.com/Lind-Project/lind-wasm/issues/1304 (row CONC-001).
-    // Verifies: no panic/deadlock; no stale entry left in CAGE_MAP; an
-    // `Arc<Cage>` obtained before removal remains valid until the holder
-    // releases it; cage-owned fd-table resources are released exactly once;
-    // repeated create/destroy does not leak state into later iterations.
+    // Verifies: no panic/deadlock/stale CAGE_MAP entry; an `Arc<Cage>`
+    // obtained before removal stays valid until released; fd-table
+    // resources are released exactly once; repeated create/destroy does
+    // not leak state across iterations.
     // ----------------------------------------------------------------------
 
     // Reserved cage-id block for this test file: far from INIT_CAGEID (1) and
     // from the id used by test_get_cage_valid (2); comfortably below
     // MAX_CAGEID (2048, enforced by check_cageid) so add_cage/remove_cage never
     // panic; and never touched via alloc_cage_id() (whose private, monotonic
-    // counter starts at 1 and is never reset). 2016..2047 is left free for the
-    // other CONC/ISO rows of #1304.
+    // counter starts at 1 and is never reset). 2016..2047 is left free for
+    // other CONC/ISO test rows.
     const PARENT_ID: u64 = 2000;
     const CHILD_BASE: u64 = 2001;
     const CHILD_SLOTS: u64 = 8;
@@ -934,7 +917,7 @@ mod tests {
         );
 
         // Cross-cage exactly-once: the shared underfd is released only when
-        // the parent -- its last remaining holder -- closes it, never at the
+        // the parent, its last remaining holder, closes it, never at the
         // child's teardown.
         let last_before_shared = LAST_CLOSES.load(Ordering::SeqCst);
         fdtables::close_virtualfd(PARENT_ID, parent_fd_s).unwrap();
@@ -991,7 +974,7 @@ mod tests {
             total_children += 1;
         }
         // Phase B: pin a single id so add -> destroy -> add lands back-to-back
-        // in the same ArcSwapOption slot -- the sharpest test of "no state
+        // in the same ArcSwapOption slot, the sharpest test of "no state
         // leaks into later iterations".
         for _ in 0..(iters / 5) {
             run_one_round(&round, &parent, CHILD_BASE, global_iter);

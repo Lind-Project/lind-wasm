@@ -1,75 +1,28 @@
 /*
- * CONC-004 -- refcount conservation under dup/close/fork.
+ * CONC-004: refcount conservation under dup/close/fork.
  *
- * The narrowly-controlled counterpart to CONC-003. CONC-003 races many
- * different decrement paths at once and asks "did the count survive?".
- * CONC-004 pins down ONE lifecycle --
- *
- *     open -> dup/dup2/F_DUPFD -> fork -> concurrent close -> final close
- *
- * -- and sweeps it across a matrix of shapes, under a strict ownership
- * model: every descriptor is closed exactly once, by exactly one owner.
- * No two threads ever close the same virtual fd number, so there is no
- * application-level close/use race whose outcome could legitimately
- * depend on scheduling; every assertion below is a hard equality that
- * must hold under any interleaving.
+ * The narrowly-controlled counterpart to CONC-003: pins down ONE lifecycle,
+ * open -> dup/dup2/F_DUPFD -> fork -> concurrent close -> final close,
+ * swept across a matrix of shapes, under a strict ownership model where
+ * every descriptor is closed exactly once by exactly one owner. So every
+ * assertion below is a hard equality that must hold under any interleaving.
  *
  * Black-box mirror of the in-crate `conc_004_*` tests in
- * src/fdtables/src/lib.rs. The C/POSIX interface cannot inspect Lind's
- * internal refcount, so this test proves the same invariant externally
- * via pipe EOF: lind runs every cage in one host process, so a pipe's
- * write end is backed by host fd(s) whose real libc::close() is driven
- * solely by fdtables' (fdkind, underfd) refcount (kernel_close /
- * register_close_handlers in rawposix). Therefore a reader must NOT see
- * EOF while any write-side reference lives in ANY cage, and MUST see EOF
- * once the very last one -- wherever it lives -- is released.
+ * src/fdtables/src/lib.rs, proving the same invariant externally via pipe
+ * EOF (see CONC-003's header for why pipe EOF is a valid refcount oracle).
  *
- * -------------------------------------------------------------------
- * Why the three duplication calls are swept separately
- * -------------------------------------------------------------------
- * They are POSIX-equivalent but take different paths inside lind:
+ * The three duplication calls are swept separately because they take
+ * different paths inside lind: dup() gets a FRESH (fdkind, underfd) key
+ * (refcounting delegated to the host kernel); dup2() and fcntl(F_DUPFD)
+ * both reuse the source's underfd, a SHARED key. A result that differs
+ * between the dup and dup2 rows of the same shape is itself the finding.
  *
- *   dup(fd)            rawposix calls libc::dup(underfd), producing a
- *                      FRESH host fd, and registers it as a new
- *                      (fdkind, underfd) key at count 1. The original
- *                      key is untouched -- refcounting is delegated to
- *                      the HOST kernel.
- *   dup2(old,new)      reuses old's underfd via get_specific_virtual_fd,
- *                      so fdtables' own count for that key goes up by 1
- *                      (and the previous occupant of `new` goes down).
- *   fcntl(fd,F_DUPFD)  reuses fd's underfd via
- *                      get_unused_virtual_fd_from_startfd -- shared key,
- *                      like dup2, NOT like dup.
- *
- * The pipe-EOF oracle is correct for all three because both refcounts
- * must conserve, but it measures a different one in the dup() rows. A
- * result that differs between the dup and dup2 rows of the same shape is
- * itself the finding, which is why the sweep runs identical shapes
- * through all three calls.
- *
- * -------------------------------------------------------------------
- * Ordering hazards this test is built around
- * -------------------------------------------------------------------
- * (1) fork() must happen from the MAIN thread only: lind returns -1 for
- *     fork() from a non-main thread (lind-multi-process/src/lib.rs) while
- *     native glibc succeeds, which would diverge the harness's
- *     native-vs-lind stdout diff. Closer pthreads therefore only close.
- * (2) Every child is forked BEFORE any close happens. Otherwise whether a
- *     child inherits a given descriptor would depend on scheduling, and
- *     the child's own close() of it could legitimately fail with EBADF.
- *     A two-pipe (gate/ack) rendezvous, not sleeps, holds the children at
- *     the starting line until the parent releases them all at once.
- * (3) waitpid() returning does NOT prove a forked child's references are
- *     gone: cage_finalize() records the zombie and signals the parent
- *     (cage.rs:383-397) BEFORE it calls remove_cage_from_fdtable()
- *     (cage.rs:401). So every "the resource is released now" check is
- *     poll()-bounded rather than an unbounded blocking read. The race is
- *     one-directional and safe: a lingering reference can only DELAY EOF,
- *     never fabricate one, so the "must NOT see EOF" checks stay sound.
- * (4) Forked children use only raw syscalls and _exit() with a distinct
- *     code per failure: fork() in a multithreaded process copies only the
- *     calling thread, so printf()/malloc() in the child can deadlock on a
- *     lock held by a thread that does not exist there.
+ * fork() is main-thread-only (closer pthreads only close); every child is
+ * forked before any close happens, held at a two-pipe gate/ack rendezvous
+ * until released together; every "released now" check is poll()-bounded,
+ * since cage_finalize() signals the parent's waitpid() before actually
+ * releasing the cage's fd-table references; forked children use only raw
+ * syscalls and _exit() with a distinct code per failure.
  *
  * Determinism: exactly one line on stdout ("CONC-004 PASS\n"). No pids,
  * clocks, addresses, fd numbers or errno values are ever printed or
@@ -116,11 +69,8 @@
 /* An fd number that is certainly not open, for the EBADF checks. */
 #define BADFD 500
 
-/* fd-leak scan: comparable across native/lind as long as both allocate
- * the lowest free fd, which fdtables' get_unused_virtual_fd does by
- * construction (same convention as conc_002/conc_003). Disable with
- * -DCONC004_NO_FD_LEAK_SCAN if this ever proves to be an artifact rather
- * than a real leak. FD_SCAN must cover the DUP2_BASE band. */
+/* fd-leak scan; same convention as conc_002 (see its header). FD_SCAN must
+ * cover the DUP2_BASE band here. */
 #ifndef CONC004_NO_FD_LEAK_SCAN
 #define DO_FD_LEAK_SCAN 1
 #else
@@ -128,9 +78,7 @@
 #endif
 #define FD_SCAN 256
 
-/* ------------------------------------------------------------------ */
-/* Deterministic per-(a,c) byte pattern (same shape as conc_002/003).  */
-/* ------------------------------------------------------------------ */
+/* Deterministic per-(a,c) byte pattern (same shape as conc_002/003). */
 static void make_record(unsigned char *b, int a, int c)
 {
     unsigned s = (unsigned)(a + 1) * 2654435761u + (unsigned)(c & 0xff) * 40503u;
@@ -141,11 +89,7 @@ static void make_record(unsigned char *b, int a, int c)
     b[RECORD - 1] = (unsigned char)(c & 0xff);
 }
 
-/* Best-effort removal of leftovers from a previous crashed run. The
- * native run is unprivileged and the lind run is under sudo, so a
- * root-owned leftover from a crashed lind run can otherwise block the
- * next native run; this self-heals when possible and fails loudly (at
- * mkdir/open below) when it cannot. */
+/* Best-effort cleanup of leftovers from a previous crashed run. */
 static void pre_clean(void)
 {
     unlink(TFILE);
@@ -153,14 +97,7 @@ static void pre_clean(void)
     rmdir(DIRNAME);
 }
 
-/* ------------------------------------------------------------------ */
-/* EINTR-retrying wrappers. Lind interrupts blocking syscalls by       */
-/* sending SIGUSR2 to a cage's main thread, via a handler installed    */
-/* with no SA_RESTART. That never happens to this test today only     */
-/* because SIGCHLD's default disposition is Ignore -- a fact about     */
-/* SIGCHLD, not a guarantee from lind -- so every blocking call here   */
-/* is retried on EINTR regardless.                                     */
-/* ------------------------------------------------------------------ */
+/* EINTR-retrying wrappers (same rationale as conc_003's header). */
 static ssize_t xread(int fd, void *buf, size_t n)
 {
     ssize_t r;
@@ -402,7 +339,7 @@ static int g_tid[MAX_THREAD];
 static pthread_barrier_t g_start;
 
 /* Closer thread: owns exactly the duplicates at indices
- * tid, tid+nthread, tid+2*nthread, ... -- a partition of 0..ndup, so no
+ * tid, tid+nthread, tid+2*nthread, ...: a partition of 0..ndup, so no
  * two threads ever touch the same descriptor. */
 static void *closer_fn(void *arg)
 {
@@ -465,7 +402,7 @@ static int make_dups(int sentinel, const struct cfg *c, int from, int to)
 
 /* Fork `n` children, each of which acks and then blocks on the gate.
  * Child c owns the inherited duplicates at indices c, c+n, c+2n, ...
- * (again a partition, so no two children close the same one) -- but they
+ * (again a partition, so no two children close the same one), but they
  * are the CHILD's private copies, entirely disjoint from the parent's,
  * so this never races the parent's closer threads.
  *
@@ -477,10 +414,10 @@ static int fork_children(pid_t *kids, int n, int ninherited, const struct cfg *c
 {
     int i;
     for (i = 0; i < n; i++) {
-        fflush(stdout); /* repo convention; nothing buffered here */
-        kids[i] = fork();
+        fflush(stdout);
+        kids[i] = fork(); /* main thread only: lind returns -1 otherwise */
         if (kids[i] < 0)
-            return -1; /* main thread => lind must succeed too */
+            return -1;
         if (kids[i] == 0) {
             int j;
             barrier_child_wait(b);
@@ -508,8 +445,8 @@ static int fork_children(pid_t *kids, int n, int ninherited, const struct cfg *c
                         _exit(33);
                 }
             }
-            /* Whatever is left -- the sentinel copy, the duplicates this
-             * child does not own, and (when !child_close) all of them --
+            /* Whatever is left (the sentinel copy, the duplicates this
+             * child does not own, and, when !child_close, all of them)
              * must be released by cage teardown at _exit. */
             _exit(0);
         }
@@ -620,7 +557,7 @@ static void run_pipe_round(const struct cfg *c, int cfgidx)
     assert(reap_children(kids, c->nchild) == 0);
 
     /* A1: NO EOF. Every duplicate is closed and every child cage is gone,
-     * but the parent's sentinel is still live -- so not one write-side
+     * but the parent's sentinel is still live, so not one write-side
      * reference may have been over-released. */
     assert(set_nonblock(p[0], 1) == 0);
     assert(expect_eagain(p[0]));
@@ -667,7 +604,7 @@ static void run_pipe_round(const struct cfg *c, int cfgidx)
 }
 
 /* ------------------------------------------------------------------ */
-/* Phase B: regular file. Same ownership shape, plus data fidelity --   */
+/* Phase B: regular file. Same ownership shape, plus data fidelity:     */
 /* the retained reference must see every owner's write, and the data    */
 /* must survive the final close (i.e. it reached the file, rather than  */
 /* being visible only through a lingering in-memory reference).         */
@@ -710,7 +647,7 @@ static void run_file_round(const struct cfg *c, int cfgidx)
     assert(reap_children(kids, c->nchild) == 0);
 
     /* The sentinel must still see the parent's original records, every
-     * child's record, and every closer-thread record -- all written at
+     * child's record, and every closer-thread record, all written at
      * disjoint offsets through references that are now gone. */
     for (i = 0; i < NREC; i++) {
         unsigned char want[RECORD], gotb[RECORD];
@@ -758,7 +695,7 @@ static void run_file_round(const struct cfg *c, int cfgidx)
 /*                                                                     */
 /* dup2(oldfd, oldfd) is only a no-op when oldfd is VALID; POSIX says   */
 /* an invalid oldfd fails with EBADF and newfd is not closed. Getting   */
-/* this wrong hands back an fd number that was never open -- a          */
+/* this wrong hands back an fd number that was never open, a           */
 /* fabricated reference the refcount knows nothing about.               */
 /* ------------------------------------------------------------------ */
 static void run_dup_semantics(void)

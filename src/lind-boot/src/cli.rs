@@ -85,7 +85,7 @@ pub struct CliOptions {
     /// Per-cage memory quota in bytes. 0 (the default) means unlimited.
     ///
     /// This is a quota on memory a cage actually commits through
-    /// mmap/brk/shmat, tracked in its vmmap -- not a reservation. It is
+    /// mmap/brk/shmat, tracked in its vmmap, not a reservation. It is
     /// unrelated to --lind-internal-memory-reservation, which sizes Lind's
     /// own non-guest memories and does not affect guest memory at all.
     ///
