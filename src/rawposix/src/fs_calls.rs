@@ -566,6 +566,38 @@ pub extern "C" fn mknod_syscall(
     ret
 }
 
+pub extern "C" fn umask_syscall(
+    cageid: u64,
+    mask_arg: u64,
+    mask_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let mask = sc_convert_sysarg_to_u32(mask_arg, mask_cageid, cageid) & 0o777;
+
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "umask_syscall"
+        );
+    }
+
+    unsafe { libc::umask(mask as libc::mode_t) as i32 }
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/pipe.2.html
 ///
 /// Linux `pipe()` syscall is equivalent to calling `pipe2()` with flags set to zero.
