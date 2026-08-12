@@ -11,8 +11,8 @@ pub const THREEI_MATCHALL: u64 = 501;
 /// See function-level comments for specific usage details.  
 pub const ELINDAPIABORTED: u64 = 0xE001_0001;
 /// ELINDESRCH: if either the source (targetcage) or destination
-// (handlefunccage) is in the EXITING state.
-/// See function-level comments for specific usage details.  
+/// (handlefunccage) is in the EXITING state.
+/// See function-level comments for specific usage details.
 pub const ELINDESRCH: u64 = 0xE001_0002;
 /// Indicates a successful Grate call.
 /// This value (0) is returned from functions that perform a Grate-side
