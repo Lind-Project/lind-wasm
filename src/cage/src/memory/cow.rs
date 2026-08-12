@@ -1,32 +1,61 @@
 //! Lind COW (copy-on-write) fork memory backing.
 //!
 //! Implements the shared-backing-object + userfaultfd write-protect design
-//! from `/cow-design.md`, scoped to `/cow-implementation-plan.md` Milestone 1:
-//! `fork_vmmap`'s `MAP_PRIVATE` branch shares memory via a zero-copy
+//! from `/cow-design.md`, scoped to `/cow-implementation-plan.md` Milestones
+//! 1-2: `fork_vmmap`'s `MAP_PRIVATE` branch shares memory via a zero-copy
 //! `MAP_SHARED` mapping of a Lind-owned page-store slot instead of an eager
 //! `process_vm_writev` copy, splitting into a private copy only on the first
 //! write to a still-shared range (detected via `userfaultfd` write-protect).
 //!
-//! # Scope of this implementation (Milestone 1)
+//! # Chunk granularity (not per-vmmap-entry, not per-4KB-page)
+//!
+//! A `VmmapEntry` shared via COW is internally divided into fixed-size
+//! `COW_CHUNK_SIZE` (1 MiB) chunks, each independently tracked (own
+//! `BackingId`, own refcount, own materialize-on-write). A write anywhere in
+//! a chunk only copies *that chunk*, not the whole entry -- this replaces an
+//! earlier whole-entry-granularity version that, while simpler, made every
+//! write cost proportional to the entry's size rather than to how much
+//! actually diverged (confirmed empirically: a 4 KiB write into a 128 MiB
+//! entry cost the same as writing all of it). 1 MiB (not 4 KiB) was chosen
+//! deliberately: `cow-design.md` §18 frames 4 KiB vs 64 KiB as a real
+//! tradeoff (minimum copy-on-write vs. fewer backing objects/mmap calls per
+//! fork); at 4 KiB, sharing a 512 MiB entry would need up to ~131,000
+//! separate chunk records, which risks the VMA-fragmentation problem §19
+//! warns about being the largest scalability risk in this whole design. 1
+//! MiB keeps that count in the hundreds while still cutting materialize cost
+//! by orders of magnitude for realistic sparse-write patterns. `VmmapEntry`
+//! itself is never split -- `VmmapEntry::backing` is just a `Cow` marker
+//! ("this entry has chunk-level COW state, look it up here") rather than a
+//! single `BackingId`; the real per-chunk bookkeeping lives entirely in
+//! `CowManager::chunk_owners`, keyed by host address.
+//!
+//! `fork_share_entry`'s mmap calls into the child still coalesce contiguous
+//! same-backing-run chunks into one `mmap` call each, so a freshly-promoted
+//! (never-diverged) entry costs one `mmap` call at fork time either way, not
+//! one per chunk -- only an entry that has already partially diverged pays
+//! more than one child-side `mmap` call, proportional to how fragmented it
+//! already is.
+//!
+//! # Scope of this implementation (Milestones 1-2)
 //!
 //! - Single-threaded cages, no intervening guest `mmap`/`munmap`/`mprotect`/
 //!   `brk` between fork and first write. `cow-design.md` §9.2's
 //!   vmmap-mutating-syscall guard is Milestone 3 work and is NOT implemented
 //!   here; only §9.1's direct-write/UFFD-WP-fault trigger is.
-//! - **Whole-vmmap-entry granularity, not per-4KB-page.** A write anywhere
-//!   in a shared entry's range materializes the *entire* entry, not just the
-//!   touched page. This is a deliberate simplification explicitly allowed by
-//!   `cow-design.md` §18 ("start coarse for implementation simplicity") --
-//!   it keeps materialization from ever needing to split a `VmmapEntry`
-//!   (mirroring the entry's range 1:1 with a single `BackingId`), at the
-//!   cost of not showing a benchmark win for small partial writes to a large
-//!   entry until page/extent-level granularity is added later (tracked as
-//!   follow-up work, see `cow-design.md` §20 / plan Phase 8). Correctness is
-//!   unaffected by this choice -- see the reasoning in `materialize_unique`.
-//! - No `exec()`/exit() refcount teardown yet (plan Milestone 3 item 3.4) --
-//!   backing slots are never freed in this build. Fine for the fork-scoped
-//!   correctness/benchmark scenarios this milestone targets; would leak
-//!   page-store space in a long-running multi-fork process.
+//! - Small entries (`< 1 MiB` total) and the wasm stack region (the vmmap
+//!   entry starting at page_num 0) are excluded from COW and stay on the
+//!   eager path -- both for correctness reasons found empirically during
+//!   Milestone 1 bring-up (see `cow-implementation-plan.md`'s Milestone 1
+//!   notes): sharing either broke Asyncify's fork/rewind on a cage's second
+//!   fork, and neither has any real COW upside anyway (stacks diverge
+//!   immediately; small entries are cheap to eager-copy regardless).
+//! - Exit-time refcount release (`on_cage_exit`, wired into
+//!   `cage::cage_finalize`) keeps `chunk_owners`/refcounts accurate as cages
+//!   exit, but this is still not full Milestone 3 `exec()`/exit() teardown
+//!   (plan item 3.4): it doesn't run for `exec()`, and a backing whose
+//!   refcount reaches 0 is never recycled/freed from the page store (would
+//!   need to also confirm no *other* mapping still points at that file
+//!   offset, which is more bookkeeping than this narrow fix takes on).
 
 use crate::cage::get_cage;
 use crate::memory::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
@@ -38,34 +67,54 @@ use std::os::unix::fs::FileExt;
 use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{LazyLock, OnceLock};
-use sysdefs::constants::fs_const::{MAP_FIXED, MAP_SHARED, PAGESIZE};
+use sysdefs::constants::fs_const::{MAP_FIXED, MAP_SHARED, PAGESHIFT, PAGESIZE};
 use sysdefs::lind_log;
 use userfaultfd::{Event, FaultKind, FeatureFlags, RegisterMode, Uffd, UffdBuilder};
 
-/// Identifies one backing slot in the page store.
+/// Identifies one backing slot in the page store. Now one per *chunk*, not
+/// one per shared `VmmapEntry` -- see the module doc comment.
 pub type BackingId = u64;
 
-/// One backing slot: a byte range in the page-store file that some set of
-/// cages currently share (refcount > 1), or that exactly one cage now
-/// privately owns going forward without needing further COW protection
-/// (refcount == 1, `cow-design.md` Invariant 4). Guarded entirely by the
-/// `DashMap` shard lock in `CowManager::backings` -- every access to
-/// `refcount` goes through a `get`/`get_mut` on that map, never bypassed,
-/// which is what makes the check-and-maybe-decrement in
-/// `materialize_unique` atomic (`cow-design.md` §9.2 "take a lock...
-/// re-read the mapping metadata after acquiring the lock").
+/// Fixed COW unit size. See the module doc comment for why 1 MiB.
+const COW_CHUNK_SIZE: usize = 1024 * 1024;
+
+/// `VmmapEntry::backing` value used for any entry with chunk-level COW
+/// state. The real per-chunk identity lives in `CowManager::chunk_owners`,
+/// not in this field -- `0` is never a real `BackingId` (`next_backing_id`
+/// starts at 1), so it's a safe, unambiguous marker.
+const CHUNKED_ENTRY_MARKER: u64 = 0;
+
+/// One backing slot: a `COW_CHUNK_SIZE`-ish byte range in the page-store
+/// file (the last chunk of an entry may be shorter) that some set of cages
+/// currently share (refcount > 1), or that exactly one cage now privately
+/// owns going forward without needing further COW protection (refcount ==
+/// 1, `cow-design.md` Invariant 4). Guarded entirely by the `DashMap` shard
+/// lock in `CowManager::backings` -- every access to `refcount` goes through
+/// a `get`/`get_mut` on that map, never bypassed, which is what makes the
+/// check-and-maybe-decrement in `handle_write_fault` atomic
+/// (`cow-design.md` §9.2 "take a lock... re-read the mapping metadata after
+/// acquiring the lock").
 struct BackingMeta {
     file_offset: u64,
     len: usize,
     refcount: usize,
 }
 
-/// Where a currently write-protected host address range routes to: which
-/// cage owns that mapping and which backing it currently points at. Keyed
-/// by host address in `CowManager::fault_routes` so the pager thread can
-/// resolve a raw UFFD fault address without scanning every cage's vmmap.
+/// Which cage a given host-address chunk belongs to and which backing it
+/// currently points at. Keyed by host address in `CowManager::chunk_owners`,
+/// one entry per chunk, so the pager thread can resolve a raw UFFD fault
+/// address to exactly the chunk it fell in without scanning any vmmap.
+///
+/// Unlike Milestone 1's `fault_routes` (which this replaces), entries here
+/// are **persistent**: they are not removed when a chunk becomes unique/
+/// unprotected, only when its owning cage exits (`on_cage_exit`). This is
+/// required for chunk granularity to work at all -- `VmmapEntry::backing` is
+/// now just a generic marker, so `chunk_owners` is the *only* record of
+/// "does this specific chunk have COW identity, and if so which backing,"
+/// needed by a later fork of the same entry even after some of its chunks
+/// have already gone unique in the meantime.
 #[derive(Clone, Copy)]
-struct FaultRoute {
+struct ChunkOwner {
     cageid: u64,
     backing_id: BackingId,
 }
@@ -111,8 +160,8 @@ impl PageStore {
         self.file.as_raw_fd()
     }
 
-    /// Bump-allocate `len` bytes (rounded up to page size) in the store
-    /// file. Milestone 1 never frees/recycles slots -- refcount-driven
+    /// Bump-allocate `len` bytes (rounded up to host page size) in the store
+    /// file. Milestone 1-2 never free/recycle slots -- refcount-driven
     /// recycling on exec()/exit() is plan Milestone 3 item 3.4
     /// (`cow-design.md` §14).
     fn allocate(&self, len: usize) -> std::io::Result<u64> {
@@ -124,13 +173,14 @@ impl PageStore {
 
     /// Copy `len` bytes from a live host memory range into the store at
     /// `file_offset`. This is the one remaining real bulk copy in the COW
-    /// design -- it happens once per entry, the first time it is shared or
-    /// split, not once per fork (`cow-design.md` §7 step 1, §9.4).
+    /// design for a given chunk -- it happens once per chunk, the first
+    /// time that chunk is shared or split, not once per fork
+    /// (`cow-design.md` §7 step 1, §9.4).
     ///
     /// # Safety
     /// `src` must point to at least `len` readable bytes for the duration
     /// of the call. Callers pass a currently-live host mapping (either the
-    /// entry being promoted, or a still-shared page being split), which is
+    /// entry being promoted, or a still-shared chunk being split), which is
     /// always safe to read regardless of its current refcount (the read
     /// path never mutates state, `cow-design.md` §8/Invariant 2).
     unsafe fn write_from(&self, file_offset: u64, src: *const u8, len: usize) -> std::io::Result<()> {
@@ -145,7 +195,7 @@ pub struct CowManager {
     next_backing_id: AtomicU64,
     uffd: OnceLock<Uffd>,
     enabled: AtomicBool,
-    fault_routes: Mutex<NoditMap<usize, Interval<usize>, FaultRoute>>,
+    chunk_owners: Mutex<NoditMap<usize, Interval<usize>, ChunkOwner>>,
 
     // Milestone 1.7 instrumentation -- see cow-implementation-plan.md
     /// Number of vmmap entries lazily promoted from Anonymous -> Cow (i.e.
@@ -157,10 +207,11 @@ pub struct CowManager {
     /// Number of entries zero-copy-shared into a child at fork time
     /// (promotions + subsequent-generation shares of already-Cow entries).
     pub share_count: AtomicU64,
-    /// Number of write faults that triggered `materialize_unique`.
+    /// Number of write faults that triggered chunk materialization.
     pub materialize_count: AtomicU64,
-    /// Bytes copied by `materialize_unique` (the write-triggered split
-    /// cost, as opposed to promotion's fork-triggered cost).
+    /// Bytes copied by materialize (the write-triggered split cost, as
+    /// opposed to promotion's fork-triggered cost) -- now bounded by
+    /// `COW_CHUNK_SIZE` per event instead of the whole entry's size.
     pub materialize_bytes: AtomicU64,
     /// Subset of `materialize_count` that hit the fast path (refcount was
     /// already 1, no copy needed -- `cow-design.md` §9.3).
@@ -176,7 +227,7 @@ impl CowManager {
             next_backing_id: AtomicU64::new(1),
             uffd: OnceLock::new(),
             enabled: AtomicBool::new(false),
-            fault_routes: Mutex::new(NoditMap::new()),
+            chunk_owners: Mutex::new(NoditMap::new()),
             promote_count: AtomicU64::new(0),
             promote_bytes: AtomicU64::new(0),
             share_count: AtomicU64::new(0),
@@ -234,38 +285,161 @@ impl CowManager {
         self.uffd.get().expect("cow: uffd accessed while disabled")
     }
 
-    fn register_route(&self, host_start: usize, host_len: usize, cageid: u64, backing_id: BackingId) {
-        let mut routes = self.fault_routes.lock();
-        let _ = routes.insert_overwrite(
-            ie(host_start, host_start + host_len),
-            FaultRoute { cageid, backing_id },
-        );
+    fn register_chunk(&self, start: usize, len: usize, cageid: u64, backing_id: BackingId) {
+        let mut map = self.chunk_owners.lock();
+        let _ = map.insert_overwrite(ie(start, start + len), ChunkOwner { cageid, backing_id });
     }
 
-    fn unregister_route(&self, host_start: usize, host_len: usize) {
-        let mut routes = self.fault_routes.lock();
-        let _ = routes.remove_overlapping(ie(host_start, host_start + host_len));
+    fn remove_chunk(&self, start: usize, len: usize) {
+        let mut map = self.chunk_owners.lock();
+        let _ = map.remove_overlapping(ie(start, start + len));
     }
 
-    fn lookup_route(&self, addr: usize) -> Option<(usize, usize, FaultRoute)> {
-        let routes = self.fault_routes.lock();
-        let result = routes
+    /// Returns `(chunk_start, chunk_len, owner)` for the chunk containing
+    /// `addr`, if any.
+    fn lookup_chunk(&self, addr: usize) -> Option<(usize, usize, ChunkOwner)> {
+        let map = self.chunk_owners.lock();
+        let result = map
             .overlapping(ie(addr, addr + 1))
             .next()
-            .map(|(interval, route)| (interval.start(), interval.end() - interval.start() + 1, *route));
+            .map(|(interval, owner)| (interval.start(), interval.end() - interval.start() + 1, *owner));
         result
+    }
+
+    /// First-ever share of an entry: one bulk copy of the whole range into
+    /// the page store, then split into `COW_CHUNK_SIZE` chunks each with
+    /// their own fresh `BackingId` (`refcount = 1`, all pointing at
+    /// contiguous offsets within that one copy). Remaps the parent's own
+    /// range onto the new backing in one `mmap` call (still contiguous at
+    /// this point, so this doesn't yet pay the per-chunk `mmap` cost that
+    /// only applies once an entry has partially diverged).
+    fn promote_entry(&self, parent_st: usize, addr_len: usize, prot: i32, parent_cageid: u64) -> bool {
+        let base_offset = match self.page_store.allocate(addr_len) {
+            Ok(o) => o,
+            Err(e) => {
+                lind_log!(Default, "cow: page store allocation failed during promotion: {:?}", e);
+                return false;
+            }
+        };
+        if let Err(e) = unsafe { self.page_store.write_from(base_offset, parent_st as *const u8, addr_len) } {
+            lind_log!(Default, "cow: page store copy failed during promotion: {:?}", e);
+            return false;
+        }
+        self.promote_count.fetch_add(1, Ordering::Relaxed);
+        self.promote_bytes.fetch_add(addr_len as u64, Ordering::Relaxed);
+
+        let num_chunks = (addr_len + COW_CHUNK_SIZE - 1) / COW_CHUNK_SIZE;
+        let base_id = self.next_backing_id.fetch_add(num_chunks as u64, Ordering::SeqCst);
+        let mut chunk_offset = 0usize;
+        for i in 0..num_chunks {
+            let chunk_len = COW_CHUNK_SIZE.min(addr_len - chunk_offset);
+            let id = base_id + i as u64;
+            self.backings.insert(
+                id,
+                BackingMeta {
+                    file_offset: base_offset + chunk_offset as u64,
+                    len: chunk_len,
+                    refcount: 1,
+                },
+            );
+            self.register_chunk(parent_st + chunk_offset, chunk_len, parent_cageid, id);
+            chunk_offset += chunk_len;
+        }
+
+        // Remap the parent's own range onto the new MAP_SHARED backing --
+        // parent transitions from private-anon to Cow-shared, in place, at
+        // the same host address (cow-design.md §7.2). One mmap call since
+        // all chunks are still contiguous right after this bulk copy.
+        let ret = unsafe {
+            libc::mmap(
+                parent_st as *mut c_void,
+                addr_len,
+                prot,
+                (MAP_SHARED | MAP_FIXED) as i32,
+                self.page_store.raw_fd(),
+                base_offset as i64,
+            )
+        };
+        if ret == libc::MAP_FAILED {
+            lind_log!(Default, "cow: mmap MAP_SHARED failed while promoting parent range");
+            return false;
+        }
+        true
+    }
+
+    /// Share every chunk of `[parent_st, parent_st+addr_len)` into the
+    /// child at `child_st`, coalescing consecutive chunks whose backing
+    /// offsets are contiguous into a single `mmap` call each (so a
+    /// never-diverged entry still costs exactly one `mmap` call here, same
+    /// as the whole-entry version did -- only a partially-diverged entry
+    /// pays more than one, proportional to how fragmented it already is).
+    fn share_chunks_into_child(&self, parent_st: usize, child_st: usize, addr_len: usize, prot: i32, child_cageid: u64) -> bool {
+        let mut offset = 0usize;
+        while offset < addr_len {
+            let Some((_, chunk_len, owner)) = self.lookup_chunk(parent_st + offset) else {
+                lind_log!(Default, "cow: missing chunk owner at parent offset {}", offset);
+                return false;
+            };
+            let Some(base_file_offset) = self.backings.get(&owner.backing_id).map(|m| m.file_offset) else {
+                lind_log!(Default, "cow: backing {} vanished during share", owner.backing_id);
+                return false;
+            };
+
+            // Extend the run while the next chunk continues contiguously in
+            // the page store.
+            let mut run_len = chunk_len;
+            while offset + run_len < addr_len {
+                let Some((_, next_len, next_owner)) = self.lookup_chunk(parent_st + offset + run_len) else {
+                    break;
+                };
+                let next_file_offset = self.backings.get(&next_owner.backing_id).map(|m| m.file_offset);
+                if next_file_offset != Some(base_file_offset + run_len as u64) {
+                    break;
+                }
+                run_len += next_len;
+            }
+
+            let ret = unsafe {
+                libc::mmap(
+                    (child_st + offset) as *mut c_void,
+                    run_len,
+                    prot,
+                    (MAP_SHARED | MAP_FIXED) as i32,
+                    self.page_store.raw_fd(),
+                    base_file_offset as i64,
+                )
+            };
+            if ret == libc::MAP_FAILED {
+                lind_log!(Default, "cow: mmap MAP_SHARED failed while sharing chunk run into child");
+                return false;
+            }
+
+            // Bump refcount and register the child's chunk_owners entry for
+            // every chunk in the run just mapped.
+            let mut sub = 0usize;
+            while sub < run_len {
+                let Some((_, clen, o)) = self.lookup_chunk(parent_st + offset + sub) else {
+                    break;
+                };
+                if let Some(mut meta) = self.backings.get_mut(&o.backing_id) {
+                    meta.refcount += 1;
+                }
+                self.register_chunk(child_st + offset + sub, clen, child_cageid, o.backing_id);
+                sub += clen;
+            }
+
+            offset += run_len;
+        }
+        true
     }
 
     /// Share one `vmmap` entry's range into a child at fork time, avoiding
     /// the bulk copy in `fork_vmmap`'s `MAP_PRIVATE` branch
     /// (`cow-design.md` §7). Returns `true` if handled (caller should skip
     /// the eager `process_vm_writev` path for this entry), `false` if COW
-    /// is disabled and the caller should fall back to eager copy unchanged.
-    ///
-    /// `parent_vmmap`/`child_vmmap` are passed as `&mut` because this
-    /// mutates each side's `VmmapEntry::backing` field to record the
-    /// (possibly newly allocated) `BackingId` -- see the module doc comment
-    /// on why this is done at whole-entry granularity.
+    /// is disabled, the entry is excluded (too small, or the stack region),
+    /// or the share failed for some reason (e.g. mmap of a page-store slot
+    /// failed) -- in all `false` cases the caller falls back to eager copy.
     #[allow(clippy::too_many_arguments)]
     pub fn fork_share_entry(
         &self,
@@ -291,148 +465,78 @@ impl CowManager {
         // allocations, and empirically (cow-implementation-plan.md
         // Milestone 1 notes) sharing them via the MAP_FIXED remap this
         // function does causes crashes on a cage's *second* fork, not its
-        // first (consistent with something in Asyncify/Wasmtime's runtime
-        // bookkeeping for these regions not tolerating the mapping-type
-        // change). There's no real COW upside to sharing them anyway --
-        // the whole point of COW is avoiding the cost of copying *large*
+        // first. There's no real COW upside to sharing them anyway -- the
+        // whole point of COW is avoiding the cost of copying *large*
         // regions, and eager-copying a few hundred KB is already cheap.
-        // Leaving them on the eager path sidesteps the risk entirely.
         const COW_MIN_ENTRY_BYTES: usize = 1024 * 1024;
         if addr_len < COW_MIN_ENTRY_BYTES {
             return false;
         }
-        // The entry starting at page_num 0 is the wasm stack+guard region
-        // set up by early_init_stack/the static-build initial mmap (both
-        // always start the stack at address 0 in Lind's layout). Fork's
-        // Asyncify unwind/rewind writes into this region as an intrinsic
-        // part of resuming the child, and empirically (see
-        // cow-implementation-plan.md Milestone 1 notes) sharing it via the
-        // MAP_FIXED remap this function does breaks that rewind. It also
-        // provides no real COW benefit anyway -- a stack diverges between
-        // parent and child essentially immediately on any fork, so it would
-        // materialize right away regardless. Fall back to the eager copy
-        // path for it, same as before this change.
+        // The entry starting at page_num 0 is the wasm stack+guard region.
+        // Sharing it breaks Asyncify's fork/rewind (cow-implementation-plan.md
+        // Milestone 1 notes); it also has no real COW upside since a stack
+        // diverges between parent and child essentially immediately.
         if page_num == 0 {
             return false;
         }
 
-        let backing_id = match current_backing {
-            MemoryBackingType::Cow(id) => {
-                // Already shared by an earlier fork in this lineage --
-                // no copy needed, just add another reference
+        match current_backing {
+            MemoryBackingType::Cow(_) => {
+                // Already shared by an earlier fork in this lineage -- no
+                // bulk copy needed, just add another reference per chunk
                 // (cow-design.md §12, the recursive-fork win).
-                id
             }
             MemoryBackingType::Anonymous => {
-                // First time this entry is ever shared: promote it.
-                let offset = match self.page_store.allocate(addr_len) {
-                    Ok(o) => o,
-                    Err(e) => {
-                        lind_log!(Default, "cow: page store allocation failed during promotion: {:?}", e);
-                        return false;
-                    }
-                };
-                if let Err(e) = unsafe { self.page_store.write_from(offset, parent_st as *const u8, addr_len) } {
-                    lind_log!(Default, "cow: page store copy failed during promotion: {:?}", e);
+                if !self.promote_entry(parent_st, addr_len, prot, parent_cageid) {
                     return false;
                 }
-                self.promote_count.fetch_add(1, Ordering::Relaxed);
-                self.promote_bytes.fetch_add(addr_len as u64, Ordering::Relaxed);
-
-                let new_id = self.next_backing_id.fetch_add(1, Ordering::SeqCst);
-                self.backings.insert(
-                    new_id,
-                    BackingMeta {
-                        file_offset: offset,
-                        len: addr_len,
-                        refcount: 1,
-                    },
-                );
-
-                // Remap the parent's own range onto the new MAP_SHARED
-                // backing -- parent transitions from private-anon to
-                // Cow-shared, in place, at the same host address
-                // (cow-design.md §7.2).
-                let ret = unsafe {
-                    libc::mmap(
-                        parent_st as *mut c_void,
-                        addr_len,
-                        prot,
-                        (MAP_SHARED | MAP_FIXED) as i32,
-                        self.page_store.raw_fd(),
-                        offset as i64,
-                    )
-                };
-                if ret == libc::MAP_FAILED {
-                    lind_log!(Default, "cow: mmap MAP_SHARED failed while promoting parent range");
-                    return false;
-                }
-                set_entry_backing(parent_vmmap, page_num, npages, MemoryBackingType::Cow(new_id));
-                new_id
+                set_entry_backing(parent_vmmap, page_num, npages, MemoryBackingType::Cow(CHUNKED_ENTRY_MARKER));
             }
             // SharedMemory/FileDescriptor/None entries never reach here --
             // fork_vmmap only calls this for the MAP_PRIVATE branch.
             _ => return false,
-        };
+        }
 
-        // Map the same backing into the child, and bump the shared
-        // refcount (cow-design.md §7.4).
-        let child_ret = unsafe {
-            libc::mmap(
-                child_st as *mut c_void,
-                addr_len,
-                prot,
-                (MAP_SHARED | MAP_FIXED) as i32,
-                self.page_store.raw_fd(),
-                self.backings.get(&backing_id).unwrap().file_offset as i64,
-            )
-        };
-        if child_ret == libc::MAP_FAILED {
-            lind_log!(Default, "cow: mmap MAP_SHARED failed while sharing into child");
+        if !self.share_chunks_into_child(parent_st, child_st, addr_len, prot, child_cageid) {
             return false;
         }
-        {
-            let mut meta = self.backings.get_mut(&backing_id).expect("cow: backing vanished during share");
-            meta.refcount += 1;
-        }
-        set_entry_backing(child_vmmap, page_num, npages, MemoryBackingType::Cow(backing_id));
+        set_entry_backing(child_vmmap, page_num, npages, MemoryBackingType::Cow(CHUNKED_ENTRY_MARKER));
 
-        // Write-protect both sides (cow-design.md §7.2/§7.4). Idempotent
-        // with respect to our own bookkeeping: register_route always
-        // overwrites, and we only skip the actual UFFD ioctl if our own
-        // index says this exact range is already registered (e.g. the
-        // parent side, in the "already Cow" branch, if it was never
-        // unprotected since an earlier fork).
-        self.ensure_write_protected(parent_st, addr_len, parent_cageid, backing_id);
-        self.ensure_write_protected(child_st, addr_len, child_cageid, backing_id);
+        // Write-protect both sides' full byte range in one ioctl call each
+        // (cow-design.md §7.2/§7.4) -- UFFD registration/protection
+        // granularity is independent of chunk-backing granularity, so this
+        // doesn't need to happen per chunk.
+        self.ensure_write_protected(parent_st, addr_len);
+        self.ensure_write_protected(child_st, addr_len);
 
         self.share_count.fetch_add(1, Ordering::Relaxed);
         true
     }
 
-    fn ensure_write_protected(&self, host_start: usize, host_len: usize, cageid: u64, backing_id: BackingId) {
-        let already = self.lookup_route(host_start).is_some();
-        if !already {
-            if let Err(e) = self
-                .uffd()
-                .register_with_mode(host_start as *mut c_void, host_len, RegisterMode::WRITE_PROTECT)
-            {
-                lind_log!(Default, "cow: uffd register failed: {:?}", e);
-                return;
-            }
+    fn ensure_write_protected(&self, host_start: usize, host_len: usize) {
+        if let Err(e) = self
+            .uffd()
+            .register_with_mode(host_start as *mut c_void, host_len, RegisterMode::WRITE_PROTECT)
+        {
+            // Non-fatal: likely already registered from an earlier fork of
+            // this same entry, or from a defensive re-register after a
+            // chunk materialize (see handle_write_fault). UFFDIO_REGISTER
+            // on an already-registered range is expected to be redundant
+            // here, not a real error -- write_protect below is what
+            // actually matters.
+            lind_log!(Default, "cow: uffd register (possibly redundant) returned {:?}", e);
         }
         if let Err(e) = self.uffd().write_protect(host_start as *mut c_void, host_len) {
             lind_log!(Default, "cow: uffd write_protect failed: {:?}", e);
-            return;
         }
-        self.register_route(host_start, host_len, cageid, backing_id);
     }
 
     /// Handle a UFFD write-protect fault (`cow-design.md` §9.1/§9). Runs on
-    /// the dedicated pager thread.
+    /// the dedicated pager thread. Operates on exactly the chunk the fault
+    /// address falls in, not the whole entry it belongs to.
     fn handle_write_fault(&self, addr: usize) {
-        let Some((host_start, host_len, route)) = self.lookup_route(addr) else {
-            lind_log!(Default, "cow: write fault at {:#x} has no registered route, waking defensively", addr);
+        let Some((chunk_start, chunk_len, owner)) = self.lookup_chunk(addr) else {
+            lind_log!(Default, "cow: write fault at {:#x} has no registered chunk, waking defensively", addr);
             let _ = self.uffd().wake(addr as *mut c_void, PAGESIZE as usize);
             return;
         };
@@ -448,8 +552,8 @@ impl CowManager {
         let is_unique = {
             let mut meta = self
                 .backings
-                .get_mut(&route.backing_id)
-                .expect("cow: unknown backing id in fault route");
+                .get_mut(&owner.backing_id)
+                .expect("cow: unknown backing id in chunk fault");
             if meta.refcount == 1 {
                 true
             } else {
@@ -459,47 +563,48 @@ impl CowManager {
         };
 
         if is_unique {
-            // Fast path (cow-design.md §9.3): this cage's mapping is
+            // Fast path (cow-design.md §9.3): this chunk's mapping is
             // already the only reference to this backing -- no copy.
             self.materialize_fast_path_count.fetch_add(1, Ordering::Relaxed);
-            let _ = self.uffd().remove_write_protection(host_start as *mut c_void, host_len, true);
-            self.unregister_route(host_start, host_len);
+            let _ = self.uffd().remove_write_protection(chunk_start as *mut c_void, chunk_len, true);
+            // chunk_owners keeps pointing at the same (now-unique) backing
+            // -- correct, no change needed there.
             return;
         }
 
-        // Shared path (cow-design.md §9.4-9.5): allocate a new slot, copy
-        // the current (still valid to read) contents, remap just this
-        // cage's range onto it at the same host address.
-        let new_offset = match self.page_store.allocate(host_len) {
+        // Shared path (cow-design.md §9.4-9.5): allocate a new chunk-sized
+        // slot, copy the current (still valid to read) contents, remap just
+        // this chunk onto it at the same host address.
+        let new_offset = match self.page_store.allocate(chunk_len) {
             Ok(o) => o,
             Err(e) => {
                 lind_log!(Default, "cow: page store allocation failed in materialize: {:?}", e);
-                let _ = self.uffd().wake(host_start as *mut c_void, host_len);
+                let _ = self.uffd().wake(chunk_start as *mut c_void, chunk_len);
                 return;
             }
         };
-        if let Err(e) = unsafe { self.page_store.write_from(new_offset, host_start as *const u8, host_len) } {
+        if let Err(e) = unsafe { self.page_store.write_from(new_offset, chunk_start as *const u8, chunk_len) } {
             lind_log!(Default, "cow: page store copy failed in materialize: {:?}", e);
-            let _ = self.uffd().wake(host_start as *mut c_void, host_len);
+            let _ = self.uffd().wake(chunk_start as *mut c_void, chunk_len);
             return;
         }
-        self.materialize_bytes.fetch_add(host_len as u64, Ordering::Relaxed);
+        self.materialize_bytes.fetch_add(chunk_len as u64, Ordering::Relaxed);
 
         let new_id = self.next_backing_id.fetch_add(1, Ordering::SeqCst);
         self.backings.insert(
             new_id,
             BackingMeta {
                 file_offset: new_offset,
-                len: host_len,
+                len: chunk_len,
                 refcount: 1,
             },
         );
 
-        let existing_prot = current_prot_hint(route.cageid, host_start);
+        let existing_prot = current_prot_hint(owner.cageid, chunk_start);
         let ret = unsafe {
             libc::mmap(
-                host_start as *mut c_void,
-                host_len,
+                chunk_start as *mut c_void,
+                chunk_len,
                 existing_prot,
                 (MAP_SHARED | MAP_FIXED) as i32,
                 self.page_store.raw_fd(),
@@ -508,52 +613,51 @@ impl CowManager {
         };
         if ret == libc::MAP_FAILED {
             lind_log!(Default, "cow: mmap MAP_SHARED failed in materialize");
-            let _ = self.uffd().wake(host_start as *mut c_void, host_len);
+            let _ = self.uffd().wake(chunk_start as *mut c_void, chunk_len);
             return;
         }
-        update_cage_vmmap_backing(route.cageid, host_start, host_len, MemoryBackingType::Cow(new_id));
-        // This range is unique now; drop its UFFD-WP registration. The
-        // mmap(MAP_FIXED) above implicitly unmapped/replaced the
-        // previously-registered range, which is expected to drop its UFFD
-        // registration as a side effect of the unmap -- unregister_route
-        // just keeps our own reverse index consistent with that. We still
-        // issue an explicit wake below in case the faulting thread's
-        // pending fault wasn't already resolved by the implicit unmap.
-        self.unregister_route(host_start, host_len);
-        let _ = self.uffd().wake(host_start as *mut c_void, host_len);
+
+        self.register_chunk(chunk_start, chunk_len, owner.cageid, new_id);
+
+        // Defensive re-register: the MAP_FIXED replace above may have
+        // dropped UFFD registration for just this chunk's sub-range
+        // (cow-design.md §15.3's open question -- Milestone 1 found this
+        // happens for a whole-entry replace; assumed to hold for a
+        // chunk-sized one too). A redundant register on an unaffected
+        // range is harmless (see ensure_write_protected). This chunk is
+        // unique now so it is NOT write-protected here -- only
+        // re-registered, so a *later* fork sharing this exact chunk again
+        // can write_protect it without needing to register first.
+        if let Err(e) = self
+            .uffd()
+            .register_with_mode(chunk_start as *mut c_void, chunk_len, RegisterMode::WRITE_PROTECT)
+        {
+            lind_log!(Default, "cow: defensive re-register after materialize returned {:?}", e);
+        }
+
+        let _ = self.uffd().wake(chunk_start as *mut c_void, chunk_len);
     }
 
     /// Milestone 2 exit criterion (cow-implementation-plan.md): confirm
     /// backing-object/refcount bookkeeping stays correct across multiple
     /// fork generations and non-linear fork trees, with no leaked/
-    /// never-decremented refcounts. Walks every cage's vmmap and counts how
-    /// many `VmmapEntry::backing == Cow(id)` occurrences exist for each
-    /// `id`, then compares that live count against `backings[id].refcount`.
+    /// never-decremented refcounts. Counts how many `chunk_owners` entries
+    /// currently point at each `BackingId` and compares that live count
+    /// against the backing's recorded `refcount`.
     ///
-    /// This is an O(cages * entries) scan, not something to run on a hot
-    /// path -- it's a diagnostic for tests/benchmarking (see
+    /// This is an O(total chunks) scan, not something to run on a hot path
+    /// -- it's a diagnostic for tests/benchmarking (see
     /// `dump_stats_if_requested`), not part of normal fork/materialize
-    /// operation.
-    ///
-    /// Note: since Milestone 1 doesn't implement exec()/exit() refcount
-    /// teardown yet (plan Milestone 3 item 3.4), an exited cage's vmmap
-    /// entries are never cleared, so they still count as "live" references
-    /// here -- that's intentional and correct for what this audit checks:
-    /// whether fork-time sharing/materialize bookkeeping is internally
-    /// consistent, not whether backings get recycled promptly (a separate,
-    /// already-documented Milestone 1 limitation).
+    /// operation. `chunk_owners` entries are removed on `on_cage_exit`, so
+    /// (unlike counting via `VmmapEntry::backing`, which Milestone 1's
+    /// version of this audit did) this reflects only currently-alive
+    /// cages' references without needing to walk `CAGE_MAP` at all.
     pub fn audit(&self) -> CowAuditReport {
-        let max_cageid = sysdefs::constants::lind_platform_const::MAX_CAGEID as u64;
         let mut live_counts: std::collections::HashMap<BackingId, usize> = std::collections::HashMap::new();
-        for cageid in 0..max_cageid {
-            let Some(cage) = get_cage(cageid) else {
-                continue;
-            };
-            let vmmap = cage.vmmap.read();
-            for (_interval, entry) in vmmap.entries.iter() {
-                if let MemoryBackingType::Cow(id) = entry.backing {
-                    *live_counts.entry(id).or_insert(0) += 1;
-                }
+        {
+            let map = self.chunk_owners.lock();
+            for (_interval, owner) in map.iter() {
+                *live_counts.entry(owner.backing_id).or_insert(0) += 1;
             }
         }
 
@@ -566,7 +670,7 @@ impl CowManager {
             total_recorded_refcount += recorded;
             if recorded != live {
                 mismatches.push(format!(
-                    "backing {}: recorded refcount={} but live vmmap references={}",
+                    "backing {}: recorded refcount={} but live chunk references={}",
                     id, recorded, live
                 ));
             }
@@ -574,7 +678,7 @@ impl CowManager {
         for (id, count) in &live_counts {
             if !self.backings.contains_key(id) {
                 mismatches.push(format!(
-                    "backing {} referenced by {} live vmmap entries but missing from backings table",
+                    "backing {} referenced by {} live chunk_owners entries but missing from backings table",
                     id, count
                 ));
             }
@@ -590,24 +694,28 @@ impl CowManager {
 
     /// Best-effort refcount release when a cage is finalized.
     ///
-    /// Discovered empirically while building the Milestone 2 audit above:
+    /// Discovered empirically while building the Milestone 2 audit:
     /// `cage::cage_finalize` removes a cage from `CAGE_MAP` (and drops its
     /// `Cage`/`Vmmap`) as soon as that cage truly finishes running -- not
     /// just at process shutdown, but per-cage, as each one exits. Without
-    /// this hook, a `Cow` backing's `refcount` would only ever grow across
+    /// this hook, a backing's `refcount` would only ever grow across
     /// repeated forks, never reflecting cages that have already exited,
     /// which both leaks page-store space and (worse) leaves stale
-    /// `fault_routes` entries pointing at host address ranges the OS is
+    /// `chunk_owners` entries pointing at host address ranges the OS is
     /// free to hand to an unrelated later cage.
     ///
+    /// Walks this cage's own `Cow`-marked vmmap entries, and for each one
+    /// steps through its chunks (using whatever chunk boundaries
+    /// `chunk_owners` actually has recorded, so this works regardless of
+    /// how fragmented the entry has become), decrementing each chunk's
+    /// backing refcount and removing that chunk's `chunk_owners` entry.
+    ///
     /// This is still not full Milestone 3 teardown (plan item 3.4): it
-    /// does not run for `exec()` (only whatever calls this is wired to,
-    /// currently just `cage_finalize`), and it never recycles/frees a
-    /// page-store slot even once its refcount reaches 0 -- that requires
-    /// also knowing no *other* cage's mapping still points at that file
-    /// offset via `mmap`, which is more bookkeeping than this narrow fix
-    /// needs to take on. It closes the specific gap this session found:
-    /// keeping `refcount` and `fault_routes` accurate as cages come and go.
+    /// does not run for `exec()`, and never recycles/frees a page-store
+    /// slot even once its refcount reaches 0 -- that requires also knowing
+    /// no *other* cage's mapping still points at that file offset via
+    /// `mmap`, which is more bookkeeping than this narrow fix needs to
+    /// take on.
     pub fn on_cage_exit(&self, cageid: u64) {
         if !self.enabled() {
             return;
@@ -617,14 +725,22 @@ impl CowManager {
         };
         let vmmap = cage.vmmap.read();
         for (_interval, entry) in vmmap.entries.iter() {
-            if let MemoryBackingType::Cow(id) = entry.backing {
-                if let Some(mut meta) = self.backings.get_mut(&id) {
+            if !matches!(entry.backing, MemoryBackingType::Cow(_)) {
+                continue;
+            }
+            let addr_st = (entry.page_num << PAGESHIFT) as u32;
+            let addr_len = (entry.npages << PAGESHIFT) as usize;
+            let host_addr = vmmap.user_to_sys(addr_st);
+            let mut offset = 0usize;
+            while offset < addr_len {
+                let Some((c_start, c_len, owner)) = self.lookup_chunk(host_addr + offset) else {
+                    break;
+                };
+                if let Some(mut meta) = self.backings.get_mut(&owner.backing_id) {
                     meta.refcount = meta.refcount.saturating_sub(1);
                 }
-                let addr_st = (entry.page_num << sysdefs::constants::fs_const::PAGESHIFT) as u32;
-                let addr_len = (entry.npages << sysdefs::constants::fs_const::PAGESHIFT) as usize;
-                let host_addr = vmmap.user_to_sys(addr_st);
-                self.unregister_route(host_addr, addr_len);
+                self.remove_chunk(c_start, c_len);
+                offset += c_len;
             }
         }
     }
@@ -649,33 +765,21 @@ fn set_entry_backing(vmmap: &mut Vmmap, page_num: u32, npages: u32, backing: Mem
     }
 }
 
-/// Best-effort protection lookup for the fault path: re-derive the
-/// prot the guest expects for this range from the owning cage's vmmap,
-/// so the freshly materialized mapping keeps the same logical permission
-/// the shared mapping had (e.g. PROT_READ|PROT_WRITE).
+/// Best-effort protection lookup for the fault path: re-derive the prot the
+/// guest expects for this range from the owning cage's vmmap, so the
+/// freshly materialized chunk keeps the same logical permission the shared
+/// mapping had (e.g. PROT_READ|PROT_WRITE).
 fn current_prot_hint(cageid: u64, host_addr: usize) -> i32 {
     let Some(cage) = get_cage(cageid) else {
         return sysdefs::constants::fs_const::PROT_READ | sysdefs::constants::fs_const::PROT_WRITE;
     };
     let vmmap = cage.vmmap.read();
     let user_addr = vmmap.sys_to_user(host_addr);
-    let page_num = user_addr >> sysdefs::constants::fs_const::PAGESHIFT;
+    let page_num = user_addr >> PAGESHIFT;
     vmmap
         .find_page(page_num)
         .map(|e| e.prot)
         .unwrap_or(sysdefs::constants::fs_const::PROT_READ | sysdefs::constants::fs_const::PROT_WRITE)
-}
-
-fn update_cage_vmmap_backing(cageid: u64, host_addr: usize, host_len: usize, backing: MemoryBackingType) {
-    let Some(cage) = get_cage(cageid) else {
-        lind_log!(Default, "cow: update_cage_vmmap_backing: cage {} not found", cageid);
-        return;
-    };
-    let mut vmmap = cage.vmmap.write();
-    let user_addr = vmmap.sys_to_user(host_addr);
-    let page_num = user_addr >> sysdefs::constants::fs_const::PAGESHIFT;
-    let npages = (host_len as u32) >> sysdefs::constants::fs_const::PAGESHIFT;
-    set_entry_backing(&mut vmmap, page_num, npages, backing);
 }
 
 fn spawn_pager_thread() {
@@ -693,9 +797,9 @@ fn spawn_pager_thread() {
                 }
                 Ok(Some(_other_event)) => {
                     // Fork/Remap/Remove/Unmap events: not expected in
-                    // Milestone 1's scope (no intervening guest syscalls on
-                    // Cow-managed ranges); ignore defensively rather than
-                    // crash the pager thread.
+                    // Milestone 1-2's scope (no intervening guest syscalls
+                    // on Cow-managed ranges); ignore defensively rather
+                    // than crash the pager thread.
                 }
                 Ok(None) => continue,
                 Err(e) => {

@@ -71,6 +71,65 @@ Full existing test suite (`process_tests`, both `LIND_FORK_MEMORY=eager` and `=c
 after the `cage_finalize` change: 55/57 in both modes, same 2 pre-existing environment-only
 failures, no regression from touching a shared exit path used by every fork/exit test.
 
+## Chunk-granular materialization (post-Milestone-2 follow-up, done)
+
+The whole-entry-granularity limitation flagged in the Milestone 1 notes above was confirmed to be
+a real, significant cost, not just a theoretical inefficiency: benchmarking showed `ForkWrite1pct`
+1.6-2.8x *slower* than eager (a single 4-byte write into a 512 MiB entry still copied the whole
+512 MiB), and `ForkRecursiveChain` 2x slower for the same reason compounded across generations (A's
+promotion + B's whole-entry materialize + C's whole-entry materialize = 3 full-buffer copies to
+touch 10% of data total). A direct probe (fix a 128 MiB entry, vary only how many bytes get
+written from 4 KiB to 128 MiB) showed materialize cost was completely flat regardless of write
+size -- proof the cost tracked entry size, not write size, which is backwards from what COW is
+supposed to deliver.
+
+Fixed by replacing whole-`VmmapEntry` granularity with fixed 1 MiB chunks, each independently
+tracked (own `BackingId`, own refcount, own materialize-on-write) in `cow.rs`. `VmmapEntry` itself
+is never split -- `VmmapEntry::backing` becomes a generic `Cow` marker ("this entry has chunk-level
+COW state"), and the real per-chunk bookkeeping moved into `CowManager::chunk_owners`, a host-
+address-keyed map that (unlike Milestone 1's `fault_routes`, which this replaces) is **persistent**
+-- entries are never removed when a chunk goes unique, only when its owning cage exits. This is
+required for chunk granularity to work at all: with no single per-entry `BackingId` field left to
+consult, `chunk_owners` is the only record of which chunks have COW identity and which backing they
+currently point at.
+
+1 MiB (not 4 KiB) was a deliberate choice, not the default -- `cow-design.md` §18 frames 4 KiB vs
+64 KiB as a real tradeoff (minimum copy vs. fewer backing objects/mmap calls), and at 4 KiB a
+512 MiB entry would need ~131,000 chunk records, risking exactly the VMA-fragmentation problem §19
+calls out as the design's largest scalability risk. 1 MiB keeps chunk counts in the hundreds per
+entry while still cutting materialize cost by orders of magnitude for realistic sparse-write
+patterns. `fork_share_entry`'s child-side `mmap` calls still coalesce contiguous same-backing runs
+of chunks into one call each, so a never-diverged entry costs exactly one `mmap` call at fork time,
+same as the whole-entry version -- only an already-partially-diverged entry pays more than one,
+proportional to its own fragmentation.
+
+One new behavior worth knowing about (`ensure_write_protected`, `handle_write_fault`): rather than
+tracking "has this exact byte range already been UFFD-registered" as separate state, the
+implementation just always calls `register_with_mode` defensively (parent+child at fork-share time,
+and again on every chunk materialize, since a `MAP_FIXED` replace of a chunk's sub-range may drop
+its UFFD registration the same way Milestone 1 found happens for a whole-entry replace) and treats
+a failure as non-fatal/logged rather than aborting -- `write_protect`, which runs after it, is what
+actually matters for correctness. This avoided needing a second persistent tracking structure just
+for registration state, at the cost of one (usually redundant, harmless) extra ioctl call per
+fork-share and per materialize.
+
+Results: `m2_recursive_chain.c`/`m2_diamond_siblings.c` pass on the first try with the rewrite,
+stable across repeated runs; the audit now reports **zero mismatches** for both scenarios (previously
+one, a benign timing artifact -- see above); the direct write-size probe now shows cost sloping with
+write size (19.5ms at 4 KiB up to 96.1ms at 128 MiB) instead of sitting flat at ~90ms regardless of
+write size. Full benchmark comparison at 512 MiB (eager / COW-whole-entry / COW-chunk-granular):
+`ForkWrite1pct` 165.2ms / 267.0ms (+62%) / **51.3ms (-69%)**; `ForkRecursiveChain` 471.1ms / 853.1ms
+(+81%) / **384.3ms (-18%)**. `ForkWrite100pct` (writing literally every byte) is still slower under
+COW than eager (178.0ms / 433.4ms / 410.9ms) -- expected and not a regression to chase, since that
+specific case pays the same total copy volume as eager plus one UFFD fault/context-switch per chunk,
+matching `cow-design.md` §26 case D's own prediction that this is the natural worst case.
+`ForkExec`/`ForkReadAll` (no writes) are unaffected by this change, as expected (~63% and ~roughly
+even respectively vs eager at 512 MiB, matching Milestone 1/2 numbers within run-to-run noise).
+
+Full test suite re-run clean after the rewrite: `tests/cow-tests/correctness` 13/13 in both modes
+(stable across repeated runs), full existing `tests/unit-tests/` suite 244/246 in COW mode (same 2
+pre-existing environment-only failures).
+
 ---
 
 Companion to `cow-design.md` (revision 2). This document sequences the work into four milestones,
