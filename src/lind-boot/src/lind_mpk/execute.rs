@@ -206,6 +206,15 @@ fn exec_mpk_internal(
         .to_str()
         .context("invalid UTF-8 in path")?
         .to_string();
+
+    //step 1.1: locate the .so file, turn it into fully qualified path for dlmopen
+    let canonical_so_path = std::fs::canonicalize(&so_path)
+        .context("failed to canonicalize .so path")?;
+    let so_path = canonical_so_path
+        .to_str()
+        .context("invalid UTF-8 in .so path")?
+        .to_owned();
+
     let c_so_path = CString::new(so_path.as_str()).context("NUL byte in .so path")?;
 
     mpk_debug(format!("executing new program: {}", so_path));
@@ -424,24 +433,24 @@ fn exec_mpk_internal(
     let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
     envp.push(std::ptr::null());
 
-    let main_sym = CString::new("cage_main").unwrap();
+    let main_sym = CString::new("main").unwrap();
     let main_ptr = unsafe { libc::dlsym(handle, main_sym.as_ptr()) };
     if main_ptr.is_null() {
         unsafe {
             libc::dlclose(libc_handle);
             libc::dlclose(handle);
         }
-        bail!("could not find 'cage_main' symbol in {}", so_path);
+        bail!("could not find 'main' symbol in {}", so_path);
     }
-    mpk_debug(format!("resolved cage_main at {main_ptr:p}"));
+    mpk_debug(format!("resolved main at {main_ptr:p}"));
 
     type MainFn = unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
     let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
     let argc = (argv.len() - 1) as c_int;
     
-    mpk_debug(format!("calling cage_main with argc={argc}"));
+    mpk_debug(format!("calling main with argc={argc}"));
     let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) };
-    mpk_debug(format!("cage_main returned exit_code={exit_code}"));
+    mpk_debug(format!("main returned exit_code={exit_code}"));
 
     //invoke exit syscall to terminate the process
     let _ = threei::make_syscall(
@@ -459,9 +468,19 @@ fn exec_mpk_internal(
 
 pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
     let so_path = lindboot_cli.wasm_file();
-    let c_so_path = CString::new(so_path).context("NUL byte in .so path")?;
+    
+    mpk_debug(format!("starting execute_mpk for {}, cwd={}", so_path, std::env::current_dir().unwrap().display()));
+    
+    //step 0: locate the .so file, turn it into fully qualified path for dlmopen
+    let canonical_so_path = std::fs::canonicalize(&so_path)
+        .context("failed to canonicalize .so path")?;
+    let so_path = canonical_so_path
+        .to_str()
+        .context("invalid UTF-8 in .so path")?
+        .to_owned();
 
-    mpk_debug(format!("starting execute_mpk for {}", so_path));
+    let c_so_path = CString::new(so_path.as_str()).context("NUL byte in .so path")?;
+
 
     // Step 1: Load the .so in a fresh dlmopen namespace so its custom glibc
     //         is completely isolated from the host libc.
@@ -662,8 +681,8 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         })
         .collect();
 
-    let main_sym = CString::new("cage_main").unwrap();
-    mpk_debug("resolving cage_main");
+    let main_sym = CString::new("main").unwrap();
+    mpk_debug("resolving main");
     let main_ptr = unsafe { libc::dlsym(handle, main_sym.as_ptr()) };
     if main_ptr.is_null() {
         unsafe {
@@ -672,16 +691,16 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         }
         bail!("could not find 'main' symbol in {}", so_path);
     }
-    mpk_debug(format!("resolved cage_main at {main_ptr:p}"));
+    mpk_debug(format!("resolved main at {main_ptr:p}"));
 
     type MainFn =
         unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
     let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
     let argc = c_args.len() as c_int;
 
-    mpk_debug(format!("spawning cage_main thread with argc={argc}"));
+    mpk_debug(format!("spawning main thread with argc={argc}"));
 
-    // Step 7: Call cage_main inside a dedicated thread.
+    // Step 7: Call main inside a dedicated thread.
     // c_args and c_envs are moved into the closure so the CString backing
     // data outlives the raw pointer slices built from them inside the thread.
     // main_fn and argc are Copy, so they are simply captured by value.
@@ -699,9 +718,9 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     envp.push(std::ptr::null());
     let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) }; 
 
-    // mpk_debug("waiting for cage_main thread to finish");
+    // mpk_debug("waiting for main thread to finish");
     // let exit_code = join_handle.join().unwrap_or(-1);
-    // mpk_debug(format!("cage_main returned exit_code={exit_code}"));
+    // mpk_debug(format!("main returned exit_code={exit_code}"));
 
 
 
