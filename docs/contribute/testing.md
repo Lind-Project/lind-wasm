@@ -31,17 +31,15 @@ docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t dev --target bas
 
 docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
 ```
-5. Build toolchain (glibc and wasmtime)
+5. Build the toolchain (runtime, glibc sysroot and `lindfs`)
 ```
 # this may take a while ...
-make lind-boot sysroot
+make build
 ```
 6. Run the test suite 
 ```
 ./scripts/test/harnesses/wasmtestreport.py
-./scripts/test/harnesses/wasmtestreport.py
 ```
-Run `scripts/test/harnesses/wasmtestreport.py --help` to list available usage options.
 Run `scripts/test/harnesses/wasmtestreport.py --help` to list available usage options.
 
 ## Directory Structure

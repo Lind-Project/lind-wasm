@@ -17,6 +17,11 @@ Check out the [Getting started](https://lind-project.github.io/lind-wasm/getting
 guide for a Hello World! example and [our docs](https://lind-project.github.io/lind-wasm/)
 to learn more about Lind!
 
+**Supported platforms:** `lind-wasm` targets **linux/amd64**. A native build
+requires x86-64 Linux (tested on Ubuntu 22.04) and roughly 20 GB of free disk
+space. On other hosts, use the development image with `--platform=linux/amd64`.
+Run `make checkenv` to verify a machine.
+
 
 
 ## Repository Structure and Components

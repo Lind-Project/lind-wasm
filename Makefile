@@ -235,6 +235,13 @@ md_generation:
 	@echo "Wrote $(OUT)/e2e_comment.md"
 
 
+# Verify the host has everything needed to build and run lind-wasm.
+# Use `make checkenv BUILD_ONLY=1` on a fresh checkout to skip the checks for
+# artifacts that `make build` has not produced yet.
+.PHONY: checkenv
+checkenv:
+	./scripts/bin/lind_checkenv $(if $(BUILD_ONLY),--build)
+
 .PHONY: lint
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml

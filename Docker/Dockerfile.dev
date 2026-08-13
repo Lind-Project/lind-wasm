@@ -132,7 +132,8 @@ RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/bin/lind_compile /usr
 # Replace copied helper scripts with symlinks so local edits are reflected.
 RUN rm -f /usr/local/bin/lind_compile /usr/local/bin/lind_run \
  && ln -sf /home/${USERNAME}/lind-wasm/scripts/bin/lind_compile /usr/local/bin/lind_compile \
- && ln -sf /home/${USERNAME}/lind-wasm/scripts/bin/lind_run     /usr/local/bin/lind_run
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/bin/lind_run     /usr/local/bin/lind_run \
+ && ln -sf /home/${USERNAME}/lind-wasm/scripts/bin/lind_checkenv /usr/local/bin/lind_checkenv
 USER ${USERNAME}
 
 CMD ["/bin/bash"]

@@ -120,19 +120,15 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
    source "$HOME/.cargo/env"
    ```
 
-   Install the pinned nightly toolchain and `rust-src` component:
+   The repository pins its toolchain in
+   [`rust-toolchain.toml`](https://github.com/Lind-Project/lind-wasm/blob/main/rust-toolchain.toml),
+   and `rustup` installs and selects that channel automatically the first time you
+   build inside the repository. Do not pin a different nightly by hand:
+   `rust-toolchain.toml` wins at build time, so a toolchain you select manually —
+   and any components you add to it — is silently ignored.
 
-   ```bash
-   rustup toolchain install nightly-2026-02-11 \
-     --profile minimal \
-     --component rust-src
-   ```
-
-   Verify the installation:
-
-   ```bash
-   rustc +nightly-2026-02-11 --version
-   ```
+   The `rust-src` component still has to be added explicitly. Because that must
+   happen against the pinned channel, it is done after cloning, in step 8.
 
 4. __Install WABT 1.0.38__
 
@@ -243,16 +239,36 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
 
 8. __Build Lind-Wasm__
 
-   From the repository root, build the development runtime, Lind filesystem,
-   custom glibc, and sysroot:
+   From the repository root, add `rust-src` to the pinned toolchain. Running this
+   inside the repository is what makes `rustup` resolve `rust-toolchain.toml`:
 
    ```bash
    cd ~/lind-wasm
-   make lind-debug
+   rustup component add rust-src
+   rustup show active-toolchain
    ```
 
+   Check that the machine has everything else it needs. Every `FAIL` comes with
+   the command that fixes it:
+
+   ```bash
+   make checkenv BUILD_ONLY=1
+   ```
+
+   Then build the runtime, Lind filesystem, custom glibc, and sysroot:
+
+   ```bash
+   make build
+   ```
+
+   Use `make build` rather than the individual targets: `make lind-boot sysroot`
+   skips the `lindfs` target, and `make sysroot` on its own fails on a clean
+   checkout because building the shared libc needs `lind-boot` to exist already.
+   For a debug runtime use `make lind-debug` instead — but do not mix the two, or
+   you will get `unknown import: debug::lind_debug_num` at run time.
+
    See the project [`Makefile`](https://github.com/Lind-Project/lind-wasm/blob/main/Makefile) for the individual build
-   targets.
+   targets and build knobs.
 
 9. __Install the Lind helper commands__
 
@@ -301,9 +317,12 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
 
 10. __Create the Lind filesystem compatibility link__
 
-    The current runtime expects `lindfs` at
-    `/home/lind/lind-wasm/lindfs`. When the WSL username is not `lind`,
-    create a compatibility symbolic link:
+    The runtime `chroot`s into a path that is compiled in as a constant —
+    `LINDFS_ROOT` in `src/sysdefs/src/constants/lind_platform_const.rs`, currently
+    `/home/lind/lind-wasm/lindfs`. It is not read from the environment, so a
+    checkout anywhere else panics at startup with `The configured lindfs does not
+    exist`. Unless your home directory is literally `/home/lind`, create a
+    compatibility symbolic link:
 
     ```bash
     sudo mkdir -p /home/lind
@@ -333,7 +352,7 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
 
     ```bash
     cd ~/lind-wasm
-    lind_compile -s hello.c
+    lind_compile hello.c
     ```
 
     Run the compiled program using its path inside `lindfs`:
@@ -347,3 +366,15 @@ The dependencies require a significant amount of storage so 15-20gb of free spac
     ```text
     Hello, World!
     ```
+
+    Two things to expect the first time:
+
+    - `lind_run` prompts for a password. It re-executes itself under `sudo -E`
+      because the runtime needs root to `chroot`.
+    - The path is `/hello.cwasm`, not `./hello.cwasm`. `lind_compile` copies its
+      output into `lindfs/`, and the runtime `chroot`s there, so paths are relative
+      to `lindfs` rather than to your shell's working directory.
+
+    `lind_compile` builds dynamically by default, resolving *lind-glibc* from
+    `lindfs/lib/libc.cwasm` at run time. Pass `-s` for a statically linked binary,
+    which does not need the shared libc to be present.
