@@ -583,8 +583,7 @@ do_precompile() {
 cp_to_lindfs() {
   mkdir -p "${LINDFS_ROOT}"
   if [[ "${TARGET_KIND}" == "mpk" ]]; then
-    mkdir -p "${LINDFS_ROOT}/usr/bin"
-    cp "${OUT_SO}" "${LINDFS_ROOT}/usr/bin/"
+    cp "${OUT_SO}" "${LINDFS_ROOT}"
     return
   fi
   if [[ -n "${OUT_CWASM}" && -f "${OUT_CWASM}" ]]; then
