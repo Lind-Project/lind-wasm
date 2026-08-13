@@ -30,6 +30,12 @@ usage() {
   cat >&2 <<EOF
 usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
 
+  Target selection (defaults to wasm):
+    --target wasm       : compile for the WASM runtime (default)
+    --target mpk        : compile a native MPK/shared-library target
+    --wasm              : shorthand for --target wasm
+    --mpk               : shorthand for --target mpk
+
   Modes (at most one, defaults to full pipeline):
     (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
     --compile-only      : .c -> .wasm
@@ -61,7 +67,9 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     Use -- to separate lind_compile flags from clang flags if needed.
 
   Examples:
-    $(basename "$0") hello.c                              # dynamic build (default)
+    $(basename "$0") hello.c                              # dynamic wasm build (default)
+    $(basename "$0") --target=wasm hello.c
+    $(basename "$0") --target=mpk hello.c                 # native MPK/shared-library target
     $(basename "$0") -s hello.c                           # static build
     $(basename "$0") --compile-library mylib.c            # shared library for dlopen
     $(basename "$0") --compile-only hello.c
@@ -78,6 +86,7 @@ EOF
 }
 
 MODE="full"          # full, compile-only, opt-only, precompile-only
+TARGET_KIND="wasm"   # wasm or mpk
 PRINT_CMDS="false"
 SHARED_BUILD="true"
 WITH_FPCAST="false"
@@ -97,6 +106,25 @@ set_mode() {
     exit 2
   fi
   MODE="${new_mode}"
+}
+
+set_target() {
+  local new_target="$1"
+  case "${new_target}" in
+    wasm|mpk)
+      ;;
+    *)
+      echo "error: unknown target kind: ${new_target}" >&2
+      usage
+      exit 2
+      ;;
+  esac
+  if [[ "${TARGET_KIND}" != "wasm" && "${TARGET_KIND}" != "${new_target}" ]]; then
+    echo "error: multiple target selections specified (already ${TARGET_KIND}, got ${new_target})" >&2
+    usage
+    exit 2
+  fi
+  TARGET_KIND="${new_target}"
 }
 
 run_cmd() {
@@ -120,6 +148,19 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --precompile-only)
       set_mode "precompile-only"
+      ;;
+    --target)
+      shift
+      set_target "$1"
+      ;;
+    --target=*)
+      set_target "${1#*=}"
+      ;;
+    --wasm)
+      set_target "wasm"
+      ;;
+    --mpk)
+      set_target "mpk"
       ;;
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
@@ -183,10 +224,11 @@ if [[ "${#EXTRA_CLANG_ARGS[@]}" -gt 0 && "${EXTRA_CLANG_ARGS[0]}" == "--" ]]; th
   EXTRA_CLANG_ARGS=("${EXTRA_CLANG_ARGS[@]:1}")
 fi
 if [[ "${PRINT_ARGS}" == "true" ]]; then
-  printf '[DEBUG] original args: ' >&2
+    printf '[DEBUG] original args: ' >&2
   printf '%q ' "${ORIGINAL_ARGS[@]}" >&2
   printf '\n' >&2
   printf '[DEBUG] mode: %s\n' "${MODE}" >&2
+  printf '[DEBUG] target: %s\n' "${TARGET_KIND}" >&2
   printf '[DEBUG] src arg: %s\n' "${SRC_ARG}" >&2
   printf '[DEBUG] extra clang args: ' >&2
   printf '%q ' "${EXTRA_CLANG_ARGS[@]}" >&2
@@ -232,36 +274,58 @@ EXT="${SRC##*.}"
 
 OUT_WASM=""
 OUT_CWASM=""
+OUT_SO=""
 
-case "${MODE}" in
-  full|"compile-only")
-    if [[ "${EXT}" != "c" ]]; then
-      echo "error: ${MODE} mode expects a .c file, got: ${SRC}" >&2
-      usage
-      exit 2
-    fi
-    OUT_WASM="${SRC%.c}.wasm"
-    OUT_CWASM="${SRC%.c}.cwasm"
-    ;;  
-  "opt-only")
-    if [[ "${EXT}" != "wasm" ]]; then
-      echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
-      usage
-      exit 2
-    fi
-    OUT_WASM="${SRC}"
+case "${TARGET_KIND}" in
+  wasm)
+    case "${MODE}" in
+      full|"compile-only")
+        if [[ "${EXT}" != "c" ]]; then
+          echo "error: ${MODE} mode expects a .c file, got: ${SRC}" >&2
+          usage
+          exit 2
+        fi
+        OUT_WASM="${SRC%.c}.wasm"
+        OUT_CWASM="${SRC%.c}.cwasm"
+        ;;
+      "opt-only")
+        if [[ "${EXT}" != "wasm" ]]; then
+          echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
+          usage
+          exit 2
+        fi
+        OUT_WASM="${SRC}"
+        ;;
+      "precompile-only")
+        if [[ "${EXT}" != "wasm" ]]; then
+          echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
+          usage
+          exit 2
+        fi
+        OUT_WASM="${SRC}"
+        OUT_CWASM="${SRC%.wasm}.cwasm"
+        ;;
+      *)
+        echo "error: internal: unknown mode '${MODE}'" >&2
+        exit 2
+        ;;
+    esac
     ;;
-  "precompile-only")
-    if [[ "${EXT}" != "wasm" ]]; then
-      echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
+  mpk)
+    if [[ "${EXT}" != "c" ]]; then
+      echo "error: target=mpk expects a .c file, got: ${SRC}" >&2
       usage
       exit 2
     fi
-    OUT_WASM="${SRC}"
-    OUT_CWASM="${SRC%.wasm}.cwasm"
+    if [[ "${MODE}" != "full" && "${MODE}" != "compile-only" ]]; then
+      echo "error: target=mpk only supports full and compile-only modes" >&2
+      usage
+      exit 2
+    fi
+    OUT_SO="${SRC%.c}.so"
     ;;
   *)
-    echo "error: internal: unknown mode '${MODE}'" >&2
+    echo "error: internal: unknown target kind '${TARGET_KIND}'" >&2
     exit 2
     ;;
 esac
@@ -271,6 +335,8 @@ CLANG_BIN="clang"  # must be on PATH
 LIND_WASM_OPT_BIN="${REPO_ROOT}/scripts/lind-wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
 LINDFS_ROOT="${REPO_ROOT}/lindfs/"
+MPK_LIBC_DIR="${REPO_ROOT}/glibc-2.35/build"
+
 if [[ -n "${TARGET_DIR}" ]]; then
   LINDFS_ROOT="${REPO_ROOT}/lindfs/${TARGET_DIR}/"
 fi
@@ -283,18 +349,24 @@ if [[ ! -d "${SYSROOT}" ]]; then
   SYSROOT="${REPO_ROOT}/src/glibc/sysroot"
 fi
 
-# Only check tools needed for the selected mode, to be more flexible
-if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" ]]; then
-  command -v "${CLANG_BIN}" >/dev/null 2>&1 || { echo "error: clang not found on PATH" >&2; exit 2; }
-  [[ -d "${SYSROOT}" ]] || { echo "error: sysroot missing at ${SYSROOT}" >&2; exit 2; }
+# Only check tools needed for the selected mode and target
+if [[ "${TARGET_KIND}" == "wasm" ]]; then
+  if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" ]]; then
+    command -v "${CLANG_BIN}" >/dev/null 2>&1 || { echo "error: clang not found on PATH" >&2; exit 2; }
+    [[ -d "${SYSROOT}" ]] || { echo "error: sysroot missing at ${SYSROOT}" >&2; exit 2; }
+  fi
+
+  if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
+    [[ -x "${LIND_WASM_OPT_BIN}" ]] || { echo "error: lind-wasm-opt not found at ${LIND_WASM_OPT_BIN}" >&2; exit 2; }
+  fi
+
+  if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
+    [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
+  fi
 fi
 
-if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
-  [[ -x "${LIND_WASM_OPT_BIN}" ]] || { echo "error: lind-wasm-opt not found at ${LIND_WASM_OPT_BIN}" >&2; exit 2; }
-fi
-
-if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
-  [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
+if [[ "${TARGET_KIND}" == "mpk" ]]; then
+  command -v "${CC:-gcc}" >/dev/null 2>&1 || { echo "error: gcc not found on PATH" >&2; exit 2; }
 fi
 
 # --- debug output (post-normalization) ---
@@ -468,6 +540,10 @@ do_library_compile() {
 }
 
 do_compile() {
+  if [[ "${TARGET_KIND}" == "mpk" ]]; then
+    do_mpk_compile
+    return
+  fi
   if [[ "${COMPILE_LIBRARY}" == "true" ]]; then
     do_library_compile
   else
@@ -477,6 +553,14 @@ do_compile() {
       do_static_compile
     fi
   fi
+}
+
+do_mpk_compile() {
+  run_cmd "${CC:-gcc}" \
+    -Wall -g -fPIC \
+    -shared -Wl,--rpath=/lib/elf \
+    -o "${OUT_SO}" "${SRC}" \
+    -L"${MPK_LIBC_DIR}" -lc
 }
 
 do_optimize() {
@@ -498,6 +582,11 @@ do_precompile() {
 
 cp_to_lindfs() {
   mkdir -p "${LINDFS_ROOT}"
+  if [[ "${TARGET_KIND}" == "mpk" ]]; then
+    mkdir -p "${LINDFS_ROOT}/usr/bin"
+    cp "${OUT_SO}" "${LINDFS_ROOT}/usr/bin/"
+    return
+  fi
   if [[ -n "${OUT_CWASM}" && -f "${OUT_CWASM}" ]]; then
     cp "${OUT_CWASM}" "${LINDFS_ROOT}"
   else
@@ -509,8 +598,10 @@ cp_to_lindfs() {
 case "${MODE}" in
   full)
     do_compile
-    do_optimize
-    do_precompile
+    if [[ "${TARGET_KIND}" == "wasm" ]]; then
+      do_optimize
+      do_precompile
+    fi
     cp_to_lindfs
     ;;
   "compile-only")
@@ -527,14 +618,21 @@ case "${MODE}" in
 esac
 
 # --- result summary ---
-case "${MODE}" in
-  full)
-    echo "OK: ${OUT_CWASM}"
+case "${TARGET_KIND}" in
+  mpk)
+    echo "OK: ${OUT_SO}"
     ;;
-  "compile-only"|"opt-only")
-    echo "OK: ${OUT_WASM}"
-    ;;
-  "precompile-only")
-    echo "OK: ${OUT_CWASM}"
+  wasm)
+    case "${MODE}" in
+      full)
+        echo "OK: ${OUT_CWASM}"
+        ;;
+      "compile-only"|"opt-only")
+        echo "OK: ${OUT_WASM}"
+        ;;
+      "precompile-only")
+        echo "OK: ${OUT_CWASM}"
+        ;;
+    esac
     ;;
 esac
