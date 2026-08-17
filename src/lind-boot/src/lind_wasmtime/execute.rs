@@ -103,6 +103,7 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
         engine,
         module,
         CAGE_START_ID as u64,
+        None, // the first cage has no memory to inherit
     );
 
     match result {
@@ -153,12 +154,18 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
 /// does not require mutating it. The goal here is to perform the minimal work needed
 /// to re-create a Wasmtime engine/store, attach host APIs, instantiate the module
 /// inside the provided `cageid`, and transfer control to the new guest entrypoint.
+///
+/// `reuse_memory` carries the linear memory the target cage already owns. On the exec
+/// path it is `Some`, so the new image is instantiated on the cage's existing 4 GiB
+/// reservation instead of mapping a second one; the initial boot passes `None` and a
+/// fresh reservation is created.
 pub fn execute_with_lind(
     lind_boot: CliOptions,
     lind_manager: Arc<LindCageManager>,
     engine: Engine,
     module: Module,
     cageid: u64,
+    reuse_memory: Option<SharedMemory>,
 ) -> Result<Vec<Val>> {
     // -- Initialize the Wasmtime execution environment --
     let args = lind_boot.args.clone();
@@ -255,6 +262,7 @@ pub fn execute_with_lind(
         lind_boot.clone(),
         cageid as i32,
         &dylink_metadata,
+        reuse_memory,
     )?;
 
     if dylink_metadata.dylink_enabled {
@@ -361,6 +369,17 @@ pub fn execute_with_lind(
         )
         .with_context(|| format!("failed to run main module"))
     });
+
+    // The grate worker pool `load_main_module` registered for this cage owns one
+    // `Store` (and instance) per worker, all attached to this cage's linear memory.
+    // The registry is a process-wide table, so as long as the entry is there the
+    // cage's 4 GiB reservation stays mapped -- for every cage that ever ran a
+    // program image, for the rest of the host process's lifetime. The program has
+    // now finished, so drop the registry's reference; a grate call still in flight
+    // holds its own `Arc` (see `submit_grate_request`) and finishes normally.
+    //
+    // No handler is registered on the dylink path, so a missing entry is expected.
+    let _ = unregister_grate_handler(cageid);
 
     result
 }
@@ -478,6 +497,7 @@ fn attach_api(
     lindboot_cli: CliOptions,
     cageid: i32,
     dylink_metadata: &DylinkMetadata,
+    reuse_memory: Option<SharedMemory>,
 ) -> Result<()> {
     // Initialize argv/environ data and attach all Lind host functions
     // (syscall dispatch, debug, signals, and argv/environ) to the linker.
@@ -524,7 +544,14 @@ fn attach_api(
     // Pass all modules so the memory is created with limits that satisfy every
     // module's import declaration (union: max of mins, min of maxes).
     let all_modules: Vec<Module> = modules.iter().map(|(_, _, m)| m.clone()).collect();
-    attach_shared_memory(&mut *wstore, &mut linker_guard, &all_modules, true, cageid)?;
+    attach_shared_memory(
+        &mut *wstore,
+        &mut linker_guard,
+        &all_modules,
+        true,
+        cageid,
+        reuse_memory,
+    )?;
 
     // Define the __c_longjmp tag for wasm EH-based setjmp/longjmp.
     // libc.so (wasm_eh_setjmp.o) and user programs both import "env"."__c_longjmp";
@@ -555,7 +582,7 @@ fn attach_api(
                 host.fork()
             }
         },
-        |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs| {
+        |lindboot_cli, path, args, engine, module, cageid, lind_manager, envs, cage_memory| {
             let mut new_lindboot_cli = lindboot_cli.clone();
             new_lindboot_cli.args = vec![String::from(path)];
             // new_lindboot_cli.wasm_file = path.to_string();
@@ -572,6 +599,7 @@ fn attach_api(
                 engine,
                 module,
                 cageid as u64,
+                cage_memory,
             )
         },
     )?);

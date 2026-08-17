@@ -125,6 +125,11 @@ pub struct LindCtx<T, U> {
     fork_host: Arc<dyn Fn(&T, bool) -> T + Send + Sync + 'static>,
 
     // exec the host
+    //
+    // The `Option<SharedMemory>` argument is the linear memory the exec-ed image
+    // should be instantiated on. `execve` replaces the program of an existing cage,
+    // so the cage's current 4 GiB reservation is passed here and reused rather than
+    // mapping a second one; `None` falls back to allocating a fresh reservation.
     exec_host: Arc<
         dyn Fn(
                 &U,
@@ -135,6 +140,7 @@ pub struct LindCtx<T, U> {
                 i32,
                 &Arc<LindCageManager>,
                 &Option<Vec<(String, Option<String>)>>,
+                Option<SharedMemory>,
             ) -> Result<Vec<Val>>
             + Send
             + Sync
@@ -174,6 +180,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             i32,
             &Arc<LindCageManager>,
             &Option<Vec<(String, Option<String>)>>,
+            Option<SharedMemory>,
         ) -> Result<Vec<Val>>
         + Send
         + Sync
@@ -1457,6 +1464,23 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         }
         let exec_module = exec_module.unwrap();
 
+        // exec replaces the program image but keeps the cage, so the 4 GiB linear
+        // memory this cage already owns is handed to the new image instead of
+        // mapping a second reservation. It is looked up under the import name the
+        // current program's main module uses, which is how it was defined in this
+        // cage's linker (see `attach_shared_memory`).
+        //
+        // If the lookup fails we simply fall back to a fresh reservation, which is
+        // the pre-existing behaviour, so exec keeps working either way.
+        let cage_memory = shared_memory_import_name(main_module).and_then(|(module, name)| {
+            self.linker.as_ref().and_then(|linker| {
+                linker
+                    .get(&mut *caller, &module, &name)
+                    .ok()
+                    .and_then(|ext| ext.into_shared_memory())
+            })
+        });
+
         // get the base address of the memory
         let address = get_memory_base(&mut caller);
 
@@ -1533,6 +1557,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 cloned_cageid,
                 &cloned_lind_manager,
                 &environs,
+                cage_memory,
             );
 
             // If the exec'd module crashed (wasm trap, unreachable, etc.) rather
@@ -2356,12 +2381,26 @@ where
     caller.data().get_ctx().tid as i32
 }
 
-// attach a new SharedMemory to the Linker for multi-threading usage
+// attach a SharedMemory to the Linker for multi-threading usage
 // Warning: only set need_init to true for first cage initialization
 //
 // `all_modules` should include the main module plus all preload library modules.
 // The shared memory is created with limits that satisfy every module's import
 // declaration: min = max(all declared mins), max = min(all declared maxes).
+//
+// `existing_memory` is the `exec` path: `execve` replaces the program image of a
+// cage that already owns a 4 GiB linear-memory reservation, so the reservation is
+// reused instead of mapping a second one (the old one would otherwise stay mapped
+// until the exec-ed program finishes, since the pre-exec `Store` is still alive
+// further down the host call stack). When reusing, the region is released back to
+// the kernel (`MADV_DONTNEED`) so the new image starts from zeroed pages, exactly
+// like a freshly mmap-ed reservation.
+//
+// Note that reusing the reservation means the pre-exec image's memory really is
+// gone once exec succeeds, so a sibling thread that outlives exec would fault.
+// POSIX requires exec to terminate every other thread in the process first, which
+// lind does not do yet (see the thread cleanup TODO in rawposix `exec_syscall`);
+// exec is currently only reachable from a cage's main thread.
 pub fn attach_shared_memory<
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
@@ -2371,6 +2410,7 @@ pub fn attach_shared_memory<
     all_modules: &[Module],
     need_init: bool,
     cageid: i32,
+    existing_memory: Option<SharedMemory>,
 ) -> Result<()> {
     // Find the shared memory import in the first module (main module) to get
     // the import namespace / name under which to register the memory.
@@ -2378,22 +2418,8 @@ pub fn attach_shared_memory<
         .first()
         .ok_or_else(|| anyhow!("no modules provided"))?;
 
-    let mut import_module_name = "";
-    let mut import_name = "";
-    let mut found = false;
-    for import in main_module.imports() {
-        if let Some(m) = import.ty().memory() {
-            if m.is_shared() {
-                import_module_name = import.module();
-                import_name = import.name();
-                found = true;
-                break;
-            }
-        }
-    }
-    if !found {
-        return Err(anyhow!("Main Module does not contain a shared memory"));
-    }
+    let (import_module_name, import_name) = shared_memory_import_name(main_module)
+        .ok_or_else(|| anyhow!("Main Module does not contain a shared memory"))?;
 
     // In lind-wasm the linear memory is always a fixed 4 GiB physical
     // reservation (MmapMemory overrides max to MAX_MEMORY_SIZE = 4 GiB).
@@ -2422,20 +2448,30 @@ pub fn attach_shared_memory<
     // current_length can be grown to the full physical reservation.
     const LIND_MAX_PAGES: u64 = 65536;
 
-    let mem_type = wasmtime::MemoryTypeBuilder::new()
-        .shared(true)
-        .min(combined_min)
-        .max(Some(LIND_MAX_PAGES))
-        .build()
-        .map_err(anyhow::Error::from)?;
+    let reused = existing_memory.is_some();
+    let mem = match existing_memory {
+        // exec: keep the cage's current reservation instead of mapping a new one.
+        Some(mem) => mem,
+        None => {
+            let mem_type = wasmtime::MemoryTypeBuilder::new()
+                .shared(true)
+                .min(combined_min)
+                .max(Some(LIND_MAX_PAGES))
+                .build()
+                .map_err(anyhow::Error::from)?;
 
-    let mem = SharedMemory::new(main_module.engine(), mem_type)?;
+            SharedMemory::new(main_module.engine(), mem_type)?
+        }
+    };
 
     // Grow to the full 4 GiB so that every wasm address in [0, 4GiB) passes
     // the current_length bounds check.  The physical pages are already reserved
     // by MmapMemory; this just makes them PROT_READ|PROT_WRITE and updates
     // current_length atomically.
-    let delta = LIND_MAX_PAGES.saturating_sub(combined_min);
+    //
+    // A reused memory was already grown to LIND_MAX_PAGES by the cage's previous
+    // image, so `mem.size()` (not `combined_min`) decides what is still missing.
+    let delta = LIND_MAX_PAGES.saturating_sub(mem.size());
     if delta > 0 {
         mem.grow(delta)
             .map_err(anyhow::Error::from)
@@ -2445,13 +2481,28 @@ pub fn attach_shared_memory<
     if need_init {
         let memory_base = mem.get_memory_base();
 
-        // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
-        // before handing it to rawposix. rawposix vmmap is solely responsible
-        // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses
-        // them. early_init_stack (dylink) and the make_syscall in
-        // new_started_impl_with_lind re-establish the required initial regions
-        // before any wasm code runs.
         unsafe {
+            // A reused reservation still holds the previous image's pages. Hand
+            // them back to the kernel so the new image sees zeroed memory (.bss
+            // and any page the module does not write a data segment into), which
+            // is what a freshly mmap-ed reservation would have given us. On a
+            // private anonymous mapping MADV_DONTNEED drops the pages and the
+            // next touch faults in a zero page, so this also returns the old
+            // program's RSS instead of carrying it across exec.
+            if reused {
+                libc::madvise(
+                    memory_base as *mut libc::c_void,
+                    1usize << 32,
+                    libc::MADV_DONTNEED,
+                );
+            }
+
+            // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
+            // before handing it to rawposix. rawposix vmmap is solely responsible
+            // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses
+            // them. early_init_stack (dylink) and the make_syscall in
+            // new_started_impl_with_lind re-establish the required initial regions
+            // before any wasm code runs.
             libc::mprotect(
                 memory_base as *mut libc::c_void,
                 1usize << 32,
@@ -2461,9 +2512,27 @@ pub fn attach_shared_memory<
 
         cage::init_vmmap(cageid as u64, memory_base as usize, None);
     }
-    linker.define(&store, import_module_name, import_name, mem.clone())?;
+    linker.define(&store, &import_module_name, &import_name, mem.clone())?;
 
     Ok(())
+}
+
+/// Return the `(module, name)` pair under which `module` imports its shared linear
+/// memory, or `None` if it does not import one.
+///
+/// Both `attach_shared_memory` (which defines the memory in a cage's linker) and
+/// the exec path (which looks the memory back up so it can be reused) need this
+/// name, so it is derived in one place.
+fn shared_memory_import_name(module: &Module) -> Option<(String, String)> {
+    module.imports().find_map(|import| {
+        let ty = import.ty();
+        let memory = ty.memory()?;
+        if memory.is_shared() {
+            Some((import.module().to_string(), import.name().to_string()))
+        } else {
+            None
+        }
+    })
 }
 
 pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {
