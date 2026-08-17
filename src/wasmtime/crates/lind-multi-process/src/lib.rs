@@ -5,6 +5,7 @@ use cfg_if::cfg_if;
 use anyhow::{Context, Result, anyhow};
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
 use sysdefs::constants::lind_platform_const::{
     UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
 };
@@ -2392,9 +2393,9 @@ where
 // cage that already owns a 4 GiB linear-memory reservation, so the reservation is
 // reused instead of mapping a second one (the old one would otherwise stay mapped
 // until the exec-ed program finishes, since the pre-exec `Store` is still alive
-// further down the host call stack). When reusing, the region is released back to
-// the kernel (`MADV_DONTNEED`) so the new image starts from zeroed pages, exactly
-// like a freshly mmap-ed reservation.
+// further down the host call stack). When reusing, the region is re-mapped fresh
+// and anonymous so the new image starts from zeroed pages, exactly like a newly
+// mmap-ed reservation would.
 //
 // Note that reusing the reservation means the pre-exec image's memory really is
 // gone once exec succeeds, so a sibling thread that outlives exec would fault.
@@ -2481,33 +2482,55 @@ pub fn attach_shared_memory<
     if need_init {
         let memory_base = mem.get_memory_base();
 
-        unsafe {
-            // A reused reservation still holds the previous image's pages. Hand
-            // them back to the kernel so the new image sees zeroed memory (.bss
-            // and any page the module does not write a data segment into), which
-            // is what a freshly mmap-ed reservation would have given us. On a
-            // private anonymous mapping MADV_DONTNEED drops the pages and the
-            // next touch faults in a zero page, so this also returns the old
-            // program's RSS instead of carrying it across exec.
-            if reused {
-                libc::madvise(
+        // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
+        // before handing it to rawposix. rawposix vmmap is solely responsible
+        // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses
+        // them. early_init_stack (dylink) and the make_syscall in
+        // new_started_impl_with_lind re-establish the required initial regions
+        // before any wasm code runs.
+        if reused {
+            // A reused reservation still carries the previous image's mappings,
+            // and `mprotect` alone would only change their permissions: the old
+            // pages stay, so the new image would see stale bytes wherever nothing
+            // writes over them -- .bss above all, which is never written and is
+            // simply assumed to be zero.
+            //
+            // Nor is MADV_DONTNEED enough. The region is not uniformly private and
+            // anonymous: rawposix maps files into it with MAP_FIXED (`mmap_inner`)
+            // and attaches SysV shm with MAP_SHARED|MAP_FIXED (`cage::shmat`).
+            // MADV_DONTNEED only zero-fills on the private anonymous parts; over a
+            // file-backed or shared range it just drops the cached pages and the
+            // contents come straight back on the next access, with the old VMA type
+            // still in place.
+            //
+            // So re-establish a fresh anonymous mapping over the whole region, the
+            // same way rawposix's own `munmap` releases a range. This replaces any
+            // leftover file/shm mapping, discards every page (the next touch faults
+            // in a zero page), and returns the old program's RSS -- while keeping
+            // the address range reserved, since MAP_FIXED lands inside the
+            // reservation Wasmtime's `MmapMemory` already owns.
+            let mapped = unsafe {
+                libc::mmap(
                     memory_base as *mut libc::c_void,
                     1usize << 32,
-                    libc::MADV_DONTNEED,
-                );
+                    PROT_NONE,
+                    (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+                    -1,
+                    0,
+                )
+            };
+            if mapped != memory_base as *mut libc::c_void {
+                return Err(anyhow!(
+                    "failed to reset linear memory of cage {} for exec: mmap returned {:p}, expected {:p}",
+                    cageid,
+                    mapped,
+                    memory_base as *mut libc::c_void,
+                ));
             }
-
-            // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
-            // before handing it to rawposix. rawposix vmmap is solely responsible
-            // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses
-            // them. early_init_stack (dylink) and the make_syscall in
-            // new_started_impl_with_lind re-establish the required initial regions
-            // before any wasm code runs.
-            libc::mprotect(
-                memory_base as *mut libc::c_void,
-                1usize << 32,
-                libc::PROT_NONE,
-            );
+        } else {
+            unsafe {
+                libc::mprotect(memory_base as *mut libc::c_void, 1usize << 32, PROT_NONE);
+            }
         }
 
         cage::init_vmmap(cageid as u64, memory_base as usize, None);
