@@ -320,7 +320,6 @@ pub fn execute_with_lind(
             // to relocate/interpret the library's function references into the
             // shared table. GOT entries are patched through the shared LindGOT.
             lind_log!(DYLINK, "library {} instantiate", name);
-            let mut got_guard = lind_got.lock().unwrap();
             lib_linker
                 .module_with_preload(
                     &mut wstore,
@@ -329,7 +328,7 @@ pub fn execute_with_lind(
                     &module,
                     &mut table_inner,
                     table_start,
-                    &got_guard,
+                    lind_got,
                     path.clone(),
                 )
                 .map_err(anyhow::Error::from)
