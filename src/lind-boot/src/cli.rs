@@ -69,6 +69,11 @@ pub struct CliOptions {
     /// Defaults to 64 MiB.
     #[arg(long = "thread-stack-size", default_value_t = 64 * 1024 * 1024)]
     pub thread_stack_size: usize,
+
+    /// Debug: skip registering the syscall interposition handler
+    /// (__enable_syscall_interpose is resolved but never called).
+    #[arg(long = "no-interpose")]
+    pub no_interpose: bool,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
