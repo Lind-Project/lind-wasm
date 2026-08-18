@@ -233,6 +233,19 @@ impl LindGOT {
         self.update_entry_if_unresolved(name, val)
     }
 
+    /// Look up a symbol's cached resolved value directly, without requiring a GOT cell
+    /// (i.e. a `GOT.func`/`GOT.mem` import) to have ever been registered for `name`.
+    ///
+    /// `symbol_cache` is populated for *every* exported function/global of *every* loaded
+    /// module (see `cache_symbol`), regardless of whether anyone imports it as `GOT.func`/
+    /// `GOT.mem`. This lets a deferred call-through stub (see
+    /// `Linker::define_unknown_imports_as_deferred_calls`) discover a symbol's resolved
+    /// table index at *call* time, even for plain `env`-module function imports that never
+    /// went through `new_entry`.
+    pub fn get_cached_symbol(&self, name: &str) -> Option<u32> {
+        self.symbol_cache.get(name).map(|v| *v)
+    }
+
     /// Read the GOT cell if the symbol exists.
     ///
     /// Returns `Some(value)` if found, otherwise `None`.

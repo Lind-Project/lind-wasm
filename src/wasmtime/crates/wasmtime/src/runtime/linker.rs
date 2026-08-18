@@ -19,6 +19,7 @@ use core::mem::MaybeUninit;
 use log::warn;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use std::sync::Mutex;
 use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
 use sysdefs::lind_log;
 use wasmtime_environ::{Atom, EntityIndex, GlobalIndex, PanicOnOom, StringPool};
@@ -328,6 +329,86 @@ impl<T> Linker<T> {
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
                     })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Implement any unresolved *function*-typed imports of `module` with a deferred
+    /// call-through stub, instead of the immediate hard trap that
+    /// [`Linker::define_unknown_imports_as_traps`] installs.
+    ///
+    /// ## Why this exists
+    ///
+    /// Lind's `--preload` dylink loader instantiates preloaded library modules one at a
+    /// time, strictly before the main module (see the preload loop in
+    /// `lind-boot`'s `execute_with_lind`). A library's *direct* call to a symbol it does
+    /// not itself define (e.g. an interposable hook such as `xerbla_`) is compiled by
+    /// `wasm-ld` into a genuine wasm function import (`env::xerbla_`), and
+    /// `wasmtime::Instance::new` must satisfy every import synchronously, at the moment
+    /// the library is instantiated — long before the main module (which is always
+    /// instantiated last) exists to provide it. There is no wasm-level equivalent of
+    /// ELF's deferred/lazy PLT binding, so binding the import eagerly to *anything*
+    /// concrete at this point is premature.
+    ///
+    /// Instead of a value, this binds the import to a small host trampoline that defers
+    /// the actual lookup to *call* time: it consults `got`'s symbol cache (populated for
+    /// every module's exports via `apply_GOT_relocs`/`cache_symbol` — main module
+    /// included, regardless of preload order) for the target function's shared
+    /// indirect-function-table index, fetches the funcref from `table`, and forwards the
+    /// call. By the time the stub is actually invoked (i.e. once the guest program is
+    /// running), every module — including main — has already been instantiated and
+    /// registered its exports, so this reproduces the property that makes ELF-style
+    /// symbol interposition work: resolution is deferred until the full symbol table is
+    /// known, so a main-module override of a library-internal hook is honored, matching
+    /// ELF's main-executable-first priority in its global symbol scope.
+    ///
+    /// If the symbol is still unresolved by the time the stub is invoked (i.e. it is
+    /// genuinely undefined by any loaded module), it falls back to the exact same trap
+    /// behavior as [`Linker::define_unknown_imports_as_traps`].
+    ///
+    /// Note this only helps when the compiler actually emitted a genuine `env` import for
+    /// the call. A symbol a library defines locally itself is resolved by `wasm-ld` to a
+    /// direct wasm-local-function-index call at the library's own build time and never
+    /// becomes an import at all — that call never reaches this (or any runtime) machinery,
+    /// which is a separate, known `wasm-ld` gap independent of this loader-ordering fix.
+    pub fn define_unknown_imports_as_deferred_calls(
+        &mut self,
+        module: &Module,
+        got: &Arc<Mutex<LindGOT>>,
+        table: &Table,
+    ) -> Result<()>
+    where
+        T: 'static,
+    {
+        for import in module.imports() {
+            if let Err(import_err) = self._get_by_import(&import) {
+                if let ExternType::Func(func_ty) = import_err.ty() {
+                    let name = import.name().to_string();
+                    let got = got.clone();
+                    let table = *table;
+                    lind_log!(
+                        DYLINK,
+                        "[debug] link undefined symbol \"{}\" to a deferred call-through stub",
+                        name
+                    );
+                    self.func_new(
+                        import.module(),
+                        import.name(),
+                        func_ty,
+                        move |mut caller: Caller<'_, T>, args: &[Val], results: &mut [Val]| {
+                            let cached = got.lock().unwrap().get_cached_symbol(&name);
+                            if let Some(index) = cached {
+                                if let Some(crate::Ref::Func(Some(f))) =
+                                    table.get(&mut caller, index as u64)
+                                {
+                                    return f.call(&mut caller, args, results);
+                                }
+                            }
+                            bail!(import_err.clone());
+                        },
+                    )?;
                 }
             }
         }
@@ -1246,7 +1327,7 @@ impl<T> Linker<T> {
         module: &Module,
         table: &mut Table,
         table_base: i32,
-        got: &LindGOT,
+        got: &Arc<Mutex<LindGOT>>,
         path: String,
     ) -> Result<&mut Self>
     where
@@ -1293,9 +1374,16 @@ impl<T> Linker<T> {
 
                 module_linker.allow_shadowing(false);
 
-                // Resolve any remaining unknown imports to trap stubs so the library can
-                // instantiate even when it has optional/unused imports.
-                // TODO: we probably want to remove this in the future
+                // Resolve any remaining unknown *function-call* imports (e.g. a library
+                // calling a symbol the main module — instantiated last — will provide, such
+                // as an interposable hook) to a deferred call-through stub rather than a hard
+                // trap, so a later-instantiated provider (main module or another library) can
+                // still satisfy the call once it actually happens. See
+                // `define_unknown_imports_as_deferred_calls` for the full rationale. Any
+                // import that is not function-typed (and thus not handled there) still falls
+                // through to a hard trap so the library can instantiate even when it has
+                // optional/unused imports.
+                module_linker.define_unknown_imports_as_deferred_calls(module, got, table)?;
                 module_linker.define_unknown_imports_as_traps(module);
 
                 // Instantiate the library module. `InstantiateLib(handler)` tells the Lind instantiation
@@ -1323,13 +1411,16 @@ impl<T> Linker<T> {
                 let memory_base = unsafe { *handler };
 
                 let fpcast_enabled = self.engine.config().fpcast_enabled;
-                instance.apply_GOT_relocs(
-                    &mut store,
-                    Some(got),
-                    table,
-                    Some(memory_base),
-                    fpcast_enabled,
-                )?;
+                {
+                    let got_guard = got.lock().unwrap();
+                    instance.apply_GOT_relocs(
+                        &mut store,
+                        Some(&*got_guard),
+                        table,
+                        Some(memory_base),
+                        fpcast_enabled,
+                    )?;
+                }
 
                 // If the module has a start function, run it (Wasm start semantics).
                 if let Some(start) = module.compiled_module().module().start_func {
