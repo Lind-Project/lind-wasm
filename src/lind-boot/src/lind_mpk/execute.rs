@@ -5,7 +5,7 @@
 
 use crate::cli::CliOptions;
 use crate::lind_mpk::syscalls::{
-    ENABLE_INTERPOSE_PTR, LIND_MANAGER,
+    ENABLE_INTERPOSE_PTR, LIND_MANAGER, NO_INTERPOSE,
     mpk_clone_syscall_entry, mpk_exit_syscall_entry
 };
 use crate::lind_mpk::RuntimeInfo::MPKRuntimeInfo;
@@ -381,15 +381,19 @@ fn exec_mpk_internal(
 
     let enable_interpose: EnableInterposeF = unsafe { std::mem::transmute(sym_ptr) };
     ENABLE_INTERPOSE_PTR.store(sym_ptr as u64, Ordering::Release);
-    let ret = unsafe { enable_interpose(Some(lind_syscall_handler)) };
-    if ret != 0 {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
+    if NO_INTERPOSE.load(Ordering::Acquire) {
+        mpk_debug("--no-interpose: skipping __enable_syscall_interpose call");
+    } else {
+        let ret = unsafe { enable_interpose(Some(lind_syscall_handler)) };
+        if ret != 0 {
+            unsafe {
+                libc::dlclose(libc_handle);
+                libc::dlclose(handle);
+            }
+            bail!("__enable_syscall_interpose returned {}", ret);
         }
-        bail!("__enable_syscall_interpose returned {}", ret);
+        mpk_debug("syscall interposition handler registered");
     }
-    mpk_debug("syscall interposition handler registered");
     
     // Step 9: Map fresh 4 GB for the new program, initialize vmmap, and update RuntimeInfo.
     mpk_debug("mapping 4 GB cage memory for new program with MAP_NORESERVE");
@@ -468,7 +472,13 @@ fn exec_mpk_internal(
 
 pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
     let so_path = lindboot_cli.wasm_file();
-    
+
+    // Propagate the --no-interpose flag globally before any interpose call.
+    NO_INTERPOSE.store(lindboot_cli.no_interpose, Ordering::Release);
+    if lindboot_cli.no_interpose {
+        mpk_debug("--no-interpose: syscall interposition disabled");
+    }
+
     mpk_debug(format!("starting execute_mpk for {}, cwd={}", so_path, std::env::current_dir().unwrap().display()));
     
     //step 0: locate the .so file, turn it into fully qualified path for dlmopen
@@ -603,19 +613,18 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     // Publish the resolved function pointer so that mpk_clone_syscall_entry can
     // re-register a new handler inside the child process after fork.
     ENABLE_INTERPOSE_PTR.store(sym_ptr as u64, Ordering::Release);
-    let ret = unsafe { enable_interpose(Some(lind_syscall_handler)) };
-    if ret != 0 {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-    mpk_debug("syscall interposition handler registered successfully");
+    if NO_INTERPOSE.load(Ordering::Acquire) {
+        mpk_debug("--no-interpose: skipping __enable_syscall_interpose call");
+    } else {
+        let ret = unsafe { enable_interpose(Some(lind_syscall_handler)) };
+        if ret != 0 {
+            unsafe {
+                libc::dlclose(libc_handle);
+                libc::dlclose(handle);
+            }
+            bail!("__enable_syscall_interpose returned {}", ret);
         }
-        bail!("__enable_syscall_interpose returned {}", ret);
-    mpk_debug(format!(
-        "building argv/envp: args={}, vars={}",
-        lindboot_cli.args.len(),
-        lindboot_cli.vars.len()
-    ));
+        mpk_debug("syscall interposition handler registered successfully");
     }
 
     //step 4.1: debug print the resolved addresses of fork, clone, __clone_internal
