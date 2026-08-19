@@ -10,13 +10,14 @@
 //! binary via `prepare_main_instance`; it simply keeps the resulting instance alive
 //! instead of running an entry point.
 //!
-//! Current scope (PoC): scalar (`i32`) arguments and results (no marshalling), a
-//! single global instance, no chroot (a library must not chroot its host), and calls
-//! are serialized by the caller (e.g. a `Mutex`).
+//! Current scope (PoC): scalars, input/output/in-out buffers, and `const struct *`
+//! inputs, marshalled across the ILP32/LP64 boundary (see [`Arg`]); a single global
+//! instance, no chroot (a library must not chroot its host), and calls serialized by
+//! the caller (e.g. a `Mutex`).
 
 use anyhow::{Context, Result, anyhow};
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use wasmtime::{AsContextMut, Engine, Instance, Linker, Module, Store, Val};
 use wasmtime_lind_multi_process::CAGE_START_ID;
@@ -31,18 +32,18 @@ use crate::cli::CliOptions;
 
 /// A host-side argument to a guest call.
 ///
-/// Scalars (`I32`/`USize`) pass straight through. A wasm `i32` *is* a native `int`,
+/// Scalars (`I32`/`USize`) pass straight through — a wasm `i32` *is* a native `int`,
 /// and wasm32 `size_t` is a 4-byte value. Everything else is *marshalled*: a host
 /// pointer is meaningless inside the guest's own linear-memory address space, so
 /// buffers are copied into guest memory (via the guest allocator) and the call
 /// receives the resulting **guest offset**. Allocations are freed after the call.
 ///
-/// - `Buf` is an input buffer copied *into* the guest (e.g. a C string, incl. its NUL).
-/// - `Out` is a caller-allocated output buffer: the guest writes into it and the bytes
+/// - `Buf` — an input buffer copied *into* the guest (e.g. a C string, incl. its NUL).
+/// - `Out` — a caller-allocated output buffer: the guest writes into it and the bytes
 ///   are copied back out into `dst`. `dst.len()` is the buffer's capacity.
-/// - `InOut` the same, but the buffer's existing contents are copied *in* first,
+/// - `InOut` — the same, but the buffer's existing contents are copied *in* first,
 ///   because the guest reads them as well (in-place transforms).
-/// - `OutLen` is a `size_t *` output parameter: the guest writes a length there, which
+/// - `OutLen` — a `size_t *` output parameter: the guest writes a length there, which
 ///   is read back into `*dst` (and can drive an `Out` buffer's copy-back length).
 pub enum Arg<'a> {
     /// A scalar `i32`, passed by value.
@@ -61,9 +62,34 @@ pub enum Arg<'a> {
     /// A `size_t *` output parameter. The guest writes a length; it is read back into
     /// `*dst` and is available to resolve an [`OutLen::FromArg`] on an `Out` buffer.
     OutLen(&'a mut usize),
+    /// A `const struct *` **input** argument, marshalled field by field.
+    ///
+    /// A struct can't be copied byte-for-byte: the host is LP64 (8-byte pointers/`long`)
+    /// and the guest is wasm32/ILP32 (4-byte pointers/`long`), so the field *offsets*
+    /// differ. The caller (the generated stub) reads each host field — rustc handles the
+    /// host layout via `#[repr(C)]` — and hands them over as [`Field`]s in declaration
+    /// order. The engine computes the *guest* layout, allocates the guest struct, writes
+    /// each field at its guest offset (converting widths, nested-allocating any pointer),
+    /// and passes the struct's guest offset. Input only: not copied back.
+    StructIn(&'a [Field<'a>]),
 }
 
-/// How many bytes to copy back out of an [`Arg::Out`] buffer. A per-function contract
+/// One field of a struct being marshalled into the guest (see [`Arg::StructIn`]), in
+/// declaration order. The host-side value is already extracted by the caller; the
+/// variant records how the guest stores it.
+pub enum Field<'a> {
+    /// A 4-byte scalar (`int`/`float`/narrower) — same width on host and guest.
+    I32(i32),
+    /// An 8-byte scalar (`int64_t`/`double`) — same width on host and guest.
+    I64(i64),
+    /// A host `long`/`size_t` (8 bytes) stored as the guest's 4-byte `long` (truncated).
+    Long(i64),
+    /// A pointer field: the pointee bytes are copied into a fresh guest allocation and
+    /// the field holds the resulting 4-byte guest offset. (e.g. a `char *`, incl. NUL.)
+    Ptr(&'a [u8]),
+}
+
+/// How many bytes to copy back out of an [`Arg::Out`] buffer — a per-function contract
 /// that the C type alone can't express, so it is declared per call site.
 #[derive(Clone, Copy)]
 pub enum OutLen {
@@ -213,7 +239,6 @@ impl SandboxedLib {
                     to_free.push(ptr);
                     params.push(Val::I32(ptr as i32));
                 }
-
                 // In/out: like `Out`, but seed the guest allocation with the caller's
                 // current bytes — the guest reads the buffer as well as writing it.
                 // The *whole* capacity is copied, so the guest sees exactly the buffer
@@ -224,12 +249,39 @@ impl SandboxedLib {
                     to_free.push(ptr);
                     params.push(Val::I32(ptr as i32));
                 }
-
                 Arg::OutLen(_) => {
                     let ptr = self.guest_malloc(SIZE_T_BYTES)?;
                     ptrs[i] = Some(ptr);
                     to_free.push(ptr);
                     params.push(Val::I32(ptr as i32));
+                }
+                // Struct input: pack the fields into a guest allocation using the *guest*
+                // (wasm32) layout, nested-allocating any pointer field, then pass the
+                // struct's guest offset. All allocations (struct + nested) are freed after.
+                Arg::StructIn(fields) => {
+                    let (offsets, size) = guest_struct_layout(fields);
+                    let base = self.guest_malloc(size)?;
+                    ptrs[i] = Some(base);
+                    to_free.push(base);
+                    for (f, &off) in fields.iter().zip(offsets.iter()) {
+                        let field_ptr = base + off as u32;
+                        match f {
+                            Field::I32(v) => self.write_mem(field_ptr, &v.to_le_bytes())?,
+                            Field::I64(v) => self.write_mem(field_ptr, &v.to_le_bytes())?,
+                            // Host `long`/`size_t` (8 bytes) -> guest `long` (4 bytes).
+                            Field::Long(v) => {
+                                self.write_mem(field_ptr, &(*v as i32).to_le_bytes())?
+                            }
+                            // Pointer field: copy the pointee into the guest and store
+                            // the resulting 4-byte offset in the struct.
+                            Field::Ptr(bytes) => {
+                                let p = self.copy_in(bytes)?;
+                                to_free.push(p);
+                                self.write_mem(field_ptr, &p.to_le_bytes())?;
+                            }
+                        }
+                    }
+                    params.push(Val::I32(base as i32));
                 }
             }
         }
@@ -434,3 +486,32 @@ impl SandboxedLib {
 
 /// Size of a `size_t` in the wasm32 guest.
 const SIZE_T_BYTES: usize = 4;
+
+/// Compute the guest (wasm32/ILP32) layout of a struct from its fields: the byte
+/// offset of each field and the struct's total size. Fields are laid out in
+/// declaration order with C rules — each is aligned to its own size, and the struct
+/// is padded up to its largest field alignment. This mirrors what clang produces for
+/// the guest struct, so the packed bytes land where the guest expects them.
+fn guest_struct_layout(fields: &[Field]) -> (Vec<usize>, usize) {
+    // (size, align) of each field *in the guest*. Pointers and `long` are 4 bytes
+    // there (unlike LP64 host); `int`/`float` are 4, `int64`/`double` are 8.
+    fn size_align(f: &Field) -> (usize, usize) {
+        match f {
+            Field::I32(_) | Field::Long(_) | Field::Ptr(_) => (4, 4),
+            Field::I64(_) => (8, 8),
+        }
+    }
+    let align_up = |n: usize, a: usize| (n + a - 1) & !(a - 1);
+
+    let mut off = 0usize;
+    let mut max_align = 1usize;
+    let mut offsets = Vec::with_capacity(fields.len());
+    for f in fields {
+        let (size, align) = size_align(f);
+        off = align_up(off, align);
+        offsets.push(off);
+        off += size;
+        max_align = max_align.max(align);
+    }
+    (offsets, align_up(off, max_align))
+}

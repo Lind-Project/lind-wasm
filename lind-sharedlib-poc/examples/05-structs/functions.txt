@@ -1,0 +1,13 @@
+# Stub manifest — struct input (a const struct* argument, marshalled field by field).
+#
+#   <name> <ret> <arg-spec>...
+#   struct NAME { <ftype> <field>; ... }   (ftype: i32 | long | i64 | cstr)
+#
+# `struct=Person` passes a const struct Person* : the stub reads the host-layout
+# struct and the engine repacks it into the guest (ILP32) layout, nested-allocating
+# the char* field.
+struct Person { i32 id; long score; cstr name; }
+
+person_id       i32    struct=Person
+person_score    usize  struct=Person
+person_namelen  usize  struct=Person

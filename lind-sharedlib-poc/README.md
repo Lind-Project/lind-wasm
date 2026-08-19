@@ -4,7 +4,11 @@ Take a library, compile it to WebAssembly, run it as a guest inside the
 lind/wasmtime sandbox, and expose it to the outside world as an ordinary native
 `.so`. An **unmodified** native application links the `.so` and calls its
 functions normally — unaware that the real work happens inside a wasm sandbox.
-A **binary drop-in** for an unmodified app, not a recompile against a wrapper API.
+Same idea as RLBox, but a stricter constraint: a **binary drop-in** for an
+unmodified app, not a recompile against a wrapper API.
+
+The full design write-up is in
+[`docs/internal/sandboxed-library.md`](../docs/internal/sandboxed-library.md).
 
 ## How this folder is organized
 
@@ -16,11 +20,12 @@ marshalling capability on top of the previous:
 | Example | Adds |
 | --- | --- |
 | [`examples/01-scalars`](examples/01-scalars) | plumbing only — scalar `int(int,int)`, no marshalling |
-| [`examples/02-buffers`](examples/02-strings) | copy-in of a `const char*` (first marshalled argument) |
-| `examples/03-strings` | NUL-terminated string copy across the boundary |
-| `examples/04-structs` | struct copy + ILP32/LP64 layout |
-| `examples/05-callbacks` | guest trampoline re-entering the host |
-| `examples/06-concurrency` | drop the global lock |
+| [`examples/02-strings`](examples/02-strings) | copy-in of a `const char*` (first marshalled argument) |
+| [`examples/03-buffers`](examples/03-buffers) | caller-allocated output buffers / copy-out (all four length contracts) |
+| [`examples/04-inout`](examples/04-inout) | in/out buffers — the guest reads and writes the caller's buffer (in-place) |
+| [`examples/05-structs`](examples/05-structs) | `const struct*` input — field-by-field marshalling across ILP32/LP64 |
+| `examples/06-callbacks` *(next)* | guest trampoline re-entering the host |
+| `examples/07-concurrency` | drop the global lock |
 
 ### Anatomy of an example
 

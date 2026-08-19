@@ -26,6 +26,15 @@
 #                             the guest reads the buffer as well as writing it
 #   outlen                  size_t* output param — the guest writes a length there,
 #                             read back into the caller's size_t and usable as len=arg<M>
+#   struct=NAME             const struct NAME* input — marshalled field by field (the
+#                             host LP64 and guest ILP32 layouts differ). NAME must be
+#                             declared by a struct line (see below).
+#
+# Struct declarations (anywhere in the file, before or after the functions):
+#
+#   struct NAME { <ftype> <field>; <ftype> <field>; ... }
+#
+# where <ftype> is one of:  i32 (int/float) | long | i64 (int64/double) | cstr (char*)
 #
 # A function whose args + return are all `i32` gets a trivial pass-through stub.
 # Anything else is a *marshalled* stub built from an `Arg` array. This is the seam
@@ -34,16 +43,73 @@ set -euo pipefail
 
 funcs="${1:?usage: gen_stubs.sh <functions.txt>}"
 
+# Echo "ftype:field ftype:field ..." for the struct named $1, read from its
+# `struct NAME { ... }` declaration in the manifest.
+struct_fields() {
+    local want="$1" line body f ftype fname out
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        # shellcheck disable=SC2086
+        set -- $line
+        [ "${1:-}" = "struct" ] || continue
+        [ "${2:-}" = "$want" ] || continue
+        body="${line#*\{}"; body="${body%\}*}"
+        out=""
+        local IFS=';'
+        for f in $body; do
+            f="${f#"${f%%[![:space:]]*}"}"   # ltrim
+            f="${f%"${f##*[![:space:]]}"}"   # rtrim
+            [ -z "$f" ] && continue
+            ftype="${f%% *}"; fname="${f##* }"
+            out="$out ${ftype}:${fname}"
+        done
+        printf '%s\n' "${out# }"
+        return 0
+    done < "$funcs"
+    echo "gen_stubs.sh: unknown struct '$want'" >&2
+    return 1
+}
+
+# Emit a #[repr(C)] Rust struct for every `struct NAME { ... }` in the manifest, so
+# the stub can read the caller's struct with the host's native field layout.
+emit_structs() {
+    local line sname fd ft fn
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        # shellcheck disable=SC2086
+        set -- $line
+        [ "${1:-}" = "struct" ] || continue
+        sname="$2"
+        printf '\n#[repr(C)]\n#[allow(dead_code)]\nstruct %s {\n' "$sname"
+        for fd in $(struct_fields "$sname"); do
+            ft="${fd%%:*}"; fn="${fd#*:}"
+            case "$ft" in
+                i32)  printf '    %s: c_int,\n' "$fn" ;;
+                long) printf '    %s: c_long,\n' "$fn" ;;
+                i64)  printf '    %s: c_longlong,\n' "$fn" ;;
+                cstr) printf '    %s: *const c_char,\n' "$fn" ;;
+                *) echo "gen_stubs.sh: struct $sname: unknown field type '$ft'" >&2; exit 2 ;;
+            esac
+        done
+        printf '}\n'
+    done < "$funcs"
+}
+
 # --- pass 1: classify what helpers/imports we need -------------------------------
-has_scalar=0   # an all-i32 function -> emit the scalar `call` helper
-has_marshal=0  # any marshalled function -> emit Arg-array helpers + imports
-has_cstr=0     # any cstr arg -> need CStr + cstr_bytes
-has_ptr=0      # any cstr/outbuf/outlen arg -> need c_char / pointer params
+has_scalar=0      # an all-i32 function -> emit the scalar `call` helper
+has_marshal=0     # any marshalled function -> emit Arg-array helpers + imports
+has_cstr=0        # any cstr (arg or struct field) -> need CStr + cstr_bytes
+has_ptr=0         # any cstr/outbuf/outlen arg -> need c_char / pointer params
+has_struct=0      # any struct= arg -> need Field + emit repr(C) structs
+need_c_int=0      # struct i32 field  -> need core::ffi::c_int
+need_c_long=0     # struct long field -> need core::ffi::c_long
+need_c_longlong=0 # struct i64 field  -> need core::ffi::c_longlong
 while IFS= read -r line; do
     line="${line%%#*}"
     [ -z "${line// /}" ] && continue
     # shellcheck disable=SC2086
     set -- $line
+    [ "$1" = "struct" ] && continue    # struct declaration, not a function
     _name="$1"; shift
     ret="$1"; shift
     marshal=0
@@ -55,6 +121,17 @@ while IFS= read -r line; do
             cstr) marshal=1; has_cstr=1; has_ptr=1 ;;
             outbuf,*|inoutbuf,*) marshal=1; has_ptr=1 ;;
             outlen) marshal=1; has_ptr=1 ;;
+            struct=*)
+                marshal=1; has_struct=1
+                for fd in $(struct_fields "${t#struct=}"); do
+                    case "${fd%%:*}" in
+                        i32)  need_c_int=1 ;;
+                        long) need_c_long=1 ;;
+                        i64)  need_c_longlong=1 ;;
+                        cstr) has_cstr=1; has_ptr=1 ;;
+                    esac
+                done
+                ;;
             *) echo "gen_stubs.sh: unknown arg spec '$t'" >&2; exit 2 ;;
         esac
     done
@@ -76,15 +153,31 @@ use std::sync::{Mutex, OnceLock};
 HEADER
 
 # --- header: imports (marshalling pulls in a couple more) -------------------------
-if [ "$has_cstr" -eq 1 ]; then
-    printf '\nuse core::ffi::{CStr, c_char};\n'
-elif [ "$has_ptr" -eq 1 ]; then
-    printf '\nuse core::ffi::c_char;\n'
+# core::ffi: collect exactly the C types the stubs reference, in a stable order.
+ffi=""
+add_ffi() { case " $ffi " in *" $1 "*) ;; *) ffi="${ffi:+$ffi }$1" ;; esac; }
+[ "$has_cstr" -eq 1 ] && add_ffi CStr
+{ [ "$has_cstr" -eq 1 ] || [ "$has_ptr" -eq 1 ]; } && add_ffi c_char
+[ "$need_c_int" -eq 1 ] && add_ffi c_int
+[ "$need_c_long" -eq 1 ] && add_ffi c_long
+[ "$need_c_longlong" -eq 1 ] && add_ffi c_longlong
+if [ -n "$ffi" ]; then
+    printf '\nuse core::ffi::{%s};\n' "$(echo "$ffi" | tr ' ' ',' | sed 's/,/, /g')"
 fi
 if [ "$has_marshal" -eq 1 ]; then
-    printf '\nuse lind_boot::{Arg, CliOptions, OutLen, SandboxedLib, init_sandboxed_lib};\n'
+    if [ "$has_struct" -eq 1 ]; then
+        printf '\nuse lind_boot::{Arg, CliOptions, Field, OutLen, SandboxedLib, init_sandboxed_lib};\n'
+    else
+        printf '\nuse lind_boot::{Arg, CliOptions, OutLen, SandboxedLib, init_sandboxed_lib};\n'
+    fi
 else
     printf '\nuse lind_boot::{CliOptions, SandboxedLib, init_sandboxed_lib};\n'
+fi
+
+# repr(C) mirrors of the manifest's struct declarations (so the stub reads the
+# caller's struct with the host's native layout).
+if [ "$has_struct" -eq 1 ]; then
+    emit_structs
 fi
 
 # --- header: lazy-init rationale + the resident instance --------------------------
@@ -186,6 +279,7 @@ while IFS= read -r line; do
     [ -z "${line// /}" ] && continue
     # shellcheck disable=SC2086
     set -- $line
+    [ "$1" = "struct" ] && continue    # struct declaration, handled by emit_structs
     name="$1"; shift
     ret="$1"; shift
 
@@ -259,6 +353,31 @@ while IFS= read -r line; do
                 params="${params}a${i}: *mut usize"
                 preamble="${preamble}    let len${i} = unsafe { &mut *a${i} };\n"
                 argexpr="${argexpr}\n        Arg::OutLen(len${i})"
+                ;;
+            struct=*)
+                # const struct NAME* input: borrow the caller's struct (host layout via
+                # repr(C)), copy in any pointer fields, and build a Field array in
+                # declaration order for the engine to pack into the guest layout.
+                sname="${t#struct=}"
+                params="${params}a${i}: *const ${sname}"
+                preamble="${preamble}    let s${i} = unsafe { &*a${i} };\n"
+                farr=""; j=0
+                for fd in $(struct_fields "$sname"); do
+                    [ "$j" -gt 0 ] && farr="${farr},"
+                    ft="${fd%%:*}"; fn="${fd#*:}"
+                    case "$ft" in
+                        i32)  farr="${farr}\n        Field::I32(s${i}.${fn})" ;;
+                        long) farr="${farr}\n        Field::Long(s${i}.${fn} as i64)" ;;
+                        i64)  farr="${farr}\n        Field::I64(s${i}.${fn} as i64)" ;;
+                        cstr)
+                            preamble="${preamble}    let s${i}_${fn} = unsafe { cstr_bytes(s${i}.${fn}) };\n"
+                            farr="${farr}\n        Field::Ptr(&s${i}_${fn})"
+                            ;;
+                    esac
+                    j=$((j + 1))
+                done
+                preamble="${preamble}    let f${i} = [${farr}\n    ];\n"
+                argexpr="${argexpr}\n        Arg::StructIn(&f${i})"
                 ;;
         esac
         i=$((i + 1))
