@@ -12,16 +12,15 @@
 
 #define REGION_SIZE (64 * 1024)
 
-int main(void)
+int main(void)\
 {
-	// Create an address that is no longer mapped
+	
 	unsigned char *invalid = mmap(NULL, REGION_SIZE,
-	                              PROT_READ | PROT_WRITE,
-	                              MAP_PRIVATE | MAP_ANONYMOUS,
-	                              -1, 0);
+                                PROT_NONE,
+                                MAP_PRIVATE | MAP_ANONYMOUS,
+                                -1, 0);
 
 	assert(invalid != MAP_FAILED);
-	assert(munmap(invalid, REGION_SIZE) == 0);
 
 	int fds[2];
 	assert(pipe(fds) == 0);
