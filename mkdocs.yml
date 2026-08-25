@@ -20,6 +20,7 @@ nav:
     - Wasmtime: internal/wasmtime.md
     - Threei: internal/3i.md
     - Grates: internal/grates.md
+    - Grate API: internal/grate-api.md
     - Clamping: internal/clamping.md
     - RawPOSIX: internal/rawposix.md
     - Multi-Processing: internal/multiprocess-support.md
@@ -31,6 +32,7 @@ nav:
   - Contributing:
     - contribute/index.md
     - Development setup: contribute/dev-container.md
+    - Native Linux setup: contribute/running-on-native-linux.md
     - Rust style guide: contribute/styleguide.md
     - Lind toolchain: contribute/toolchain.md
     - Compiling Rust programs: contribute/compile-with-rust.md
@@ -40,6 +42,7 @@ nav:
     - Security policy: https://github.com/Lind-Project/lind-wasm/security/policy
     - Docker Hub release workflow: contribute/docker-release-workflow.md
     - End-to-End Testing: contribute/e2e-testing.md
+    - Releasing lind-wasm: contribute/releasing-lind-wasm.md
     - Pipelines:
       - Overview: contribute/pipelines/overview.md
       - lind-wasm: contribute/pipelines/lind-wasm.md
