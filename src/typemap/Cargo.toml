@@ -14,5 +14,3 @@ default = ["fast"]
 fast = []
 secure = []
 
-[dev-dependencies]
-dashmap = "5.1"

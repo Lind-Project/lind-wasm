@@ -10,6 +10,12 @@ int main() {
 
     assert(symlink("/etc/passwd", "evil_link") == 0);
 
+    /* 
+    NOTE: this only checks that symlink resolution is internally consistent
+    (following evil_link behaves like a normal read), not that either path
+    is actually confined. See the /lind/README.md-based checks below for
+    the actual confinement/escape proof.
+    */
     errno = 0;
     int direct_fd = open("/etc/passwd", O_RDONLY);
     int direct_errno = errno;
@@ -58,6 +64,22 @@ int main() {
         assert(0);
     }
     assert(escape_errno == ENOENT);
+
+    unlink("evil_link_readme");
+    assert(symlink("/lind/README.md", "evil_link_readme") == 0);
+
+    errno = 0;
+    int link_escape_fd = open("evil_link_readme", O_RDONLY);
+    int link_escape_errno = errno;
+    if(link_escape_fd != -1) {
+        fprintf(stderr, "symlink_confinement test: FAIL -- opened "
+              "/lind/README.md via symlink from inside the cage, "
+              "chroot escape via symlink target\n");
+        close(link_escape_fd);
+        assert(0);
+    }
+    assert(link_escape_errno == ENOENT);
+    unlink("evil_link_readme");
 
     printf("symlink_confinement test: PASS\n");
     return 0;

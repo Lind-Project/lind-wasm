@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(path_without_trailing_slashes("///"), "/");
     }
 
-    use dashmap::DashMap;
+    use cage::DashMap;
 
     // Builds a minimal cage and registers it under 'cageid', so
     // normpath(path, cageid) can find it via cage::get_cage()
