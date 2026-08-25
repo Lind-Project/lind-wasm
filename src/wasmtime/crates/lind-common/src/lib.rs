@@ -263,8 +263,11 @@ fn read_guest_cstr<
     caller: &mut Caller<'_, T>,
     offset: u64,
 ) -> Result<String, Errno> {
-    // Bounds `off` so `base + off` below cannot wrap.
-    if offset > u32::MAX as u64 {
+    // Rejects NULL, and bounds `off` so `base + off` below cannot wrap.
+    // Guest offset 0 is mapped readable (`instance.rs:561` maps from
+    // `start_addr = 0`), so without this a NULL message would pass the
+    // `check_addr_read` below and log an empty string instead of being reported.
+    if offset == 0 || offset > u32::MAX as u64 {
         return Err(Errno::EFAULT);
     }
     let off = offset as usize;
