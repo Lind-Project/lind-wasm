@@ -336,43 +336,14 @@ impl<T> Linker<T> {
     }
 
     /// Implement any unresolved *function*-typed imports of `module` with a deferred
-    /// call-through stub, instead of the immediate hard trap that
+    /// call-through stub instead of the immediate hard trap that
     /// [`Linker::define_unknown_imports_as_traps`] installs.
     ///
-    /// ## Why this exists
-    ///
-    /// Lind's `--preload` dylink loader instantiates preloaded library modules one at a
-    /// time, strictly before the main module (see the preload loop in
-    /// `lind-boot`'s `execute_with_lind`). A library's *direct* call to a symbol it does
-    /// not itself define (e.g. an interposable hook such as `xerbla_`) is compiled by
-    /// `wasm-ld` into a genuine wasm function import (`env::xerbla_`), and
-    /// `wasmtime::Instance::new` must satisfy every import synchronously, at the moment
-    /// the library is instantiated — long before the main module (which is always
-    /// instantiated last) exists to provide it. There is no wasm-level equivalent of
-    /// ELF's deferred/lazy PLT binding, so binding the import eagerly to *anything*
-    /// concrete at this point is premature.
-    ///
-    /// Instead of a value, this binds the import to a small host trampoline that defers
-    /// the actual lookup to *call* time: it consults `got`'s symbol cache (populated for
-    /// every module's exports via `apply_GOT_relocs`/`cache_symbol` — main module
-    /// included, regardless of preload order) for the target function's shared
-    /// indirect-function-table index, fetches the funcref from `table`, and forwards the
-    /// call. By the time the stub is actually invoked (i.e. once the guest program is
-    /// running), every module — including main — has already been instantiated and
-    /// registered its exports, so this reproduces the property that makes ELF-style
-    /// symbol interposition work: resolution is deferred until the full symbol table is
-    /// known, so a main-module override of a library-internal hook is honored, matching
-    /// ELF's main-executable-first priority in its global symbol scope.
-    ///
-    /// If the symbol is still unresolved by the time the stub is invoked (i.e. it is
-    /// genuinely undefined by any loaded module), it falls back to the exact same trap
-    /// behavior as [`Linker::define_unknown_imports_as_traps`].
-    ///
-    /// Note this only helps when the compiler actually emitted a genuine `env` import for
-    /// the call. A symbol a library defines locally itself is resolved by `wasm-ld` to a
-    /// direct wasm-local-function-index call at the library's own build time and never
-    /// becomes an import at all — that call never reaches this (or any runtime) machinery,
-    /// which is a separate, known `wasm-ld` gap independent of this loader-ordering fix.
+    /// Libraries are instantiated before the main module, so a library's call to a
+    /// symbol main will provide (e.g. an interposable hook) can't be resolved yet.
+    /// Instead of trapping immediately, bind a trampoline that looks the symbol up in
+    /// `got` at *call* time (by then main has instantiated and registered its exports)
+    /// and forwards through `table`. Falls back to the same trap if still unresolved.
     pub fn define_unknown_imports_as_deferred_calls(
         &mut self,
         module: &Module,
@@ -1374,15 +1345,8 @@ impl<T> Linker<T> {
 
                 module_linker.allow_shadowing(false);
 
-                // Resolve any remaining unknown *function-call* imports (e.g. a library
-                // calling a symbol the main module — instantiated last — will provide, such
-                // as an interposable hook) to a deferred call-through stub rather than a hard
-                // trap, so a later-instantiated provider (main module or another library) can
-                // still satisfy the call once it actually happens. See
-                // `define_unknown_imports_as_deferred_calls` for the full rationale. Any
-                // import that is not function-typed (and thus not handled there) still falls
-                // through to a hard trap so the library can instantiate even when it has
-                // optional/unused imports.
+                // Defer unresolved function imports (e.g. a call into main) instead of
+                // trapping immediately; anything left (non-function imports) still traps.
                 module_linker.define_unknown_imports_as_deferred_calls(module, got, table)?;
                 module_linker.define_unknown_imports_as_traps(module);
 
