@@ -71,6 +71,26 @@ extern void cblas_sger (const int, const int, const int, const float, const floa
 extern void cblas_ssyr (const int, const int, const int, const float, const float *, const int, float *, const int);
 extern void cblas_ssyr2(const int, const int, const int, const float, const float *, const int, const float *, const int, float *, const int);
 
+// level-2 banded + packed
+extern void cblas_dgbmv(const int, const int, const int, const int, const int, const int, const double, const double *, const int, const double *, const int, const double, double *, const int);
+extern void cblas_dsbmv(const int, const int, const int, const int, const double, const double *, const int, const double *, const int, const double, double *, const int);
+extern void cblas_dtbmv(const int, const int, const int, const int, const int, const int, const double *, const int, double *, const int);
+extern void cblas_dtbsv(const int, const int, const int, const int, const int, const int, const double *, const int, double *, const int);
+extern void cblas_dspmv(const int, const int, const int, const double, const double *, const double *, const int, const double, double *, const int);
+extern void cblas_dspr (const int, const int, const int, const double, const double *, const int, double *);
+extern void cblas_dtpmv(const int, const int, const int, const int, const int, const double *, double *, const int);
+extern void cblas_dtpsv(const int, const int, const int, const int, const int, const double *, double *, const int);
+extern void cblas_dspr2(const int, const int, const int, const double, const double *, const int, const double *, const int, double *);
+extern void cblas_sgbmv(const int, const int, const int, const int, const int, const int, const float, const float *, const int, const float *, const int, const float, float *, const int);
+extern void cblas_ssbmv(const int, const int, const int, const int, const float, const float *, const int, const float *, const int, const float, float *, const int);
+extern void cblas_stbmv(const int, const int, const int, const int, const int, const int, const float *, const int, float *, const int);
+extern void cblas_stbsv(const int, const int, const int, const int, const int, const int, const float *, const int, float *, const int);
+extern void cblas_sspmv(const int, const int, const int, const float, const float *, const float *, const int, const float, float *, const int);
+extern void cblas_sspr (const int, const int, const int, const float, const float *, const int, float *);
+extern void cblas_stpmv(const int, const int, const int, const int, const int, const float *, float *, const int);
+extern void cblas_stpsv(const int, const int, const int, const int, const int, const float *, float *, const int);
+extern void cblas_sspr2(const int, const int, const int, const float, const float *, const int, const float *, const int, float *);
+
 
 __attribute__((export_name("guest_malloc")))
 void *guest_malloc(size_t n) { return malloc(n); }
@@ -243,4 +263,43 @@ void lind_cblas_ssyr(int o,int u,int n,float al,const float*x,int ix,float*a,int
 __attribute__((export_name("lind_cblas_ssyr2")))
 void lind_cblas_ssyr2(int o,int u,int n,float al,const float*x,int ix,const float*y,int iy,float*a,int lda){ cblas_ssyr2(o,u,n,al,x,ix,y,iy,a,lda); }
 
+
+// level-2 banded + packed
+__attribute__((export_name("lind_cblas_dgbmv")))
+void lind_cblas_dgbmv(int o,int t,int m,int n,int kl,int ku,double al,const double*a,int lda,const double*x,int ix,double be,double*y,int iy){ cblas_dgbmv(o,t,m,n,kl,ku,al,a,lda,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_dsbmv")))
+void lind_cblas_dsbmv(int o,int u,int n,int k,double al,const double*a,int lda,const double*x,int ix,double be,double*y,int iy){ cblas_dsbmv(o,u,n,k,al,a,lda,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_dtbmv")))
+void lind_cblas_dtbmv(int o,int u,int t,int d,int n,int k,const double*a,int lda,double*x,int ix){ cblas_dtbmv(o,u,t,d,n,k,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_dtbsv")))
+void lind_cblas_dtbsv(int o,int u,int t,int d,int n,int k,const double*a,int lda,double*x,int ix){ cblas_dtbsv(o,u,t,d,n,k,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_dspmv")))
+void lind_cblas_dspmv(int o,int u,int n,double al,const double*ap,const double*x,int ix,double be,double*y,int iy){ cblas_dspmv(o,u,n,al,ap,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_dspr")))
+void lind_cblas_dspr(int o,int u,int n,double al,const double*x,int ix,double*ap){ cblas_dspr(o,u,n,al,x,ix,ap); }
+__attribute__((export_name("lind_cblas_dtpmv")))
+void lind_cblas_dtpmv(int o,int u,int t,int d,int n,const double*ap,double*x,int ix){ cblas_dtpmv(o,u,t,d,n,ap,x,ix); }
+__attribute__((export_name("lind_cblas_dtpsv")))
+void lind_cblas_dtpsv(int o,int u,int t,int d,int n,const double*ap,double*x,int ix){ cblas_dtpsv(o,u,t,d,n,ap,x,ix); }
+__attribute__((export_name("lind_cblas_dspr2")))
+void lind_cblas_dspr2(int o,int u,int n,double al,const double*x,int ix,const double*y,int iy,double*ap){ cblas_dspr2(o,u,n,al,x,ix,y,iy,ap); }
+
+__attribute__((export_name("lind_cblas_sgbmv")))
+void lind_cblas_sgbmv(int o,int t,int m,int n,int kl,int ku,float al,const float*a,int lda,const float*x,int ix,float be,float*y,int iy){ cblas_sgbmv(o,t,m,n,kl,ku,al,a,lda,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_ssbmv")))
+void lind_cblas_ssbmv(int o,int u,int n,int k,float al,const float*a,int lda,const float*x,int ix,float be,float*y,int iy){ cblas_ssbmv(o,u,n,k,al,a,lda,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_stbmv")))
+void lind_cblas_stbmv(int o,int u,int t,int d,int n,int k,const float*a,int lda,float*x,int ix){ cblas_stbmv(o,u,t,d,n,k,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_stbsv")))
+void lind_cblas_stbsv(int o,int u,int t,int d,int n,int k,const float*a,int lda,float*x,int ix){ cblas_stbsv(o,u,t,d,n,k,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_sspmv")))
+void lind_cblas_sspmv(int o,int u,int n,float al,const float*ap,const float*x,int ix,float be,float*y,int iy){ cblas_sspmv(o,u,n,al,ap,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_sspr")))
+void lind_cblas_sspr(int o,int u,int n,float al,const float*x,int ix,float*ap){ cblas_sspr(o,u,n,al,x,ix,ap); }
+__attribute__((export_name("lind_cblas_stpmv")))
+void lind_cblas_stpmv(int o,int u,int t,int d,int n,const float*ap,float*x,int ix){ cblas_stpmv(o,u,t,d,n,ap,x,ix); }
+__attribute__((export_name("lind_cblas_stpsv")))
+void lind_cblas_stpsv(int o,int u,int t,int d,int n,const float*ap,float*x,int ix){ cblas_stpsv(o,u,t,d,n,ap,x,ix); }
+__attribute__((export_name("lind_cblas_sspr2")))
+void lind_cblas_sspr2(int o,int u,int n,float al,const float*x,int ix,const float*y,int iy,float*ap){ cblas_sspr2(o,u,n,al,x,ix,y,iy,ap); }
 
