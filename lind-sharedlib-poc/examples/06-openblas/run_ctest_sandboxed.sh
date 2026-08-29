@@ -27,7 +27,7 @@ STUB_DIR="${STUB_DIR:-$SCRIPT_DIR/stub/target/release}"
 : "${LIND_ENABLE_FPCAST:=0}"
 : "${LEVELS:=1 2}"
 : "${PRECISIONS:=s d}"
-: "${LEVEL2_ROUTINES:=gemv}"
+: "${LEVEL2_ROUTINES:=gemv symv trmv trsv ger syr syr2}"
 
 CT="$OPENBLAS_NATIVE/ctest"
 [ -f "$STUB_DIR/libopenblas.so" ] || { echo "build the stub first: (cd $SCRIPT_DIR && make host)"; exit 1; }

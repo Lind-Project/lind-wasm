@@ -57,6 +57,21 @@ extern void   cblas_sgemv(const int, const int, const int, const int, const floa
                           const float *, const int, const float *, const int,
                           const float, float *, const int);
 
+// level-2 general/square group
+extern void cblas_dsymv(const int, const int, const int, const double, const double *, const int, const double *, const int, const double, double *, const int);
+extern void cblas_dtrmv(const int, const int, const int, const int, const int, const double *, const int, double *, const int);
+extern void cblas_dtrsv(const int, const int, const int, const int, const int, const double *, const int, double *, const int);
+extern void cblas_dger (const int, const int, const int, const double, const double *, const int, const double *, const int, double *, const int);
+extern void cblas_dsyr (const int, const int, const int, const double, const double *, const int, double *, const int);
+extern void cblas_dsyr2(const int, const int, const int, const double, const double *, const int, const double *, const int, double *, const int);
+extern void cblas_ssymv(const int, const int, const int, const float, const float *, const int, const float *, const int, const float, float *, const int);
+extern void cblas_strmv(const int, const int, const int, const int, const int, const float *, const int, float *, const int);
+extern void cblas_strsv(const int, const int, const int, const int, const int, const float *, const int, float *, const int);
+extern void cblas_sger (const int, const int, const int, const float, const float *, const int, const float *, const int, float *, const int);
+extern void cblas_ssyr (const int, const int, const int, const float, const float *, const int, float *, const int);
+extern void cblas_ssyr2(const int, const int, const int, const float, const float *, const int, const float *, const int, float *, const int);
+
+
 __attribute__((export_name("guest_malloc")))
 void *guest_malloc(size_t n) { return malloc(n); }
 
@@ -198,3 +213,34 @@ void lind_cblas_sgemv(int order, int trans, int m, int n, float alpha,
                       float beta, float *y, int incy) {
     cblas_sgemv(order, trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
 }
+
+
+// level-2 general/square group
+__attribute__((export_name("lind_cblas_dsymv")))
+void lind_cblas_dsymv(int o,int u,int n,double al,const double*a,int lda,const double*x,
+int ix,double be,double*y,int iy){ cblas_dsymv(o,u,n,al,a,lda,x,ix,be,y,iy); }__attribute__((export_name("lind_cblas_dtrmv")))
+void lind_cblas_dtrmv(int o,int u,int t,int d,int n,const double*a,int lda,double*x,int ix){ cblas_dtrmv(o,u,t,d,n,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_dtrsv")))
+void lind_cblas_dtrsv(int o,int u,int t,int d,int n,const double*a,int lda,double*x,int ix){ cblas_dtrsv(o,u,t,d,n,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_dger")))
+void lind_cblas_dger(int o,int m,int n,double al,const double*x,int ix,const double*y,int iy,double*a,int lda){ cblas_dger(o,m,n,al,x,ix,y,iy,a,lda); }
+__attribute__((export_name("lind_cblas_dsyr")))
+void lind_cblas_dsyr(int o,int u,int n,double al,const double*x,int ix,double*a,int lda)
+{ cblas_dsyr(o,u,n,al,x,ix,a,lda); }
+__attribute__((export_name("lind_cblas_dsyr2")))
+void lind_cblas_dsyr2(int o,int u,int n,double al,const double*x,int ix,const double*y,int iy,double*a,int lda){ cblas_dsyr2(o,u,n,al,x,ix,y,iy,a,lda); }
+
+__attribute__((export_name("lind_cblas_ssymv")))
+void lind_cblas_ssymv(int o,int u,int n,float al,const float*a,int lda,const float*x,int ix,float be,float*y,int iy){ cblas_ssymv(o,u,n,al,a,lda,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_strmv")))
+void lind_cblas_strmv(int o,int u,int t,int d,int n,const float*a,int lda,float*x,int ix){ cblas_strmv(o,u,t,d,n,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_strsv")))
+void lind_cblas_strsv(int o,int u,int t,int d,int n,const float*a,int lda,float*x,int ix){ cblas_strsv(o,u,t,d,n,a,lda,x,ix); }
+__attribute__((export_name("lind_cblas_sger")))
+void lind_cblas_sger(int o,int m,int n,float al,const float*x,int ix,const float*y,int iy,float*a,int lda){ cblas_sger(o,m,n,al,x,ix,y,iy,a,lda); }
+__attribute__((export_name("lind_cblas_ssyr")))
+void lind_cblas_ssyr(int o,int u,int n,float al,const float*x,int ix,float*a,int lda){ cblas_ssyr(o,u,n,al,x,ix,a,lda); }
+__attribute__((export_name("lind_cblas_ssyr2")))
+void lind_cblas_ssyr2(int o,int u,int n,float al,const float*x,int ix,const float*y,int iy,float*a,int lda){ cblas_ssyr2(o,u,n,al,x,ix,y,iy,a,lda); }
+
+

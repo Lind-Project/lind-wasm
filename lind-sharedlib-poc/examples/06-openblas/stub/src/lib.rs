@@ -541,6 +541,12 @@ fn gemv_vec_lens(trans: c_int, m: c_int, n: c_int) -> (c_int, c_int) {
     if trans == CBLAS_NO_TRANS { (n, m) } else { (m, n) }
 }
 
+/// Elements of an n×n square matrix (symmetric/triangular) with leading dimension lda.
+/// Order/uplo don't change the storage span for a square matrix.
+fn sqmat_elems(n: c_int, lda: c_int) -> usize {
+    (lda.max(0) as usize) * (n.max(0) as usize)
+}
+
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn cblas_dgemv(
@@ -621,4 +627,115 @@ pub extern "C" fn cblas_sgemv(
             Arg::I32(incy),
         ],
     );
+}
+
+
+// --- level-2 general/square group (symv, trmv, trsv, ger, syr, syr2) ---------------
+// All enum args (order/uplo/trans/diag) pass through as I32. Square matrices (symv,
+// trmv, trsv, syr, syr2) span `lda*n`; ger's general A uses gemat_elems. A is read-only
+// for symv/trmv/trsv (Buf) and in/out for ger/syr/syr2 (InOut, rank-k updates). trmv/
+// trsv transform x in place (InOut).
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_dsymv(order: c_int, uplo: c_int, n: c_int, alpha: f64, a: *const f64, lda: c_int, x: *const f64, incx: c_int, beta: f64, y: *mut f64, incy: c_int) {
+    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) * F64) };
+    let xb = unsafe { vin(x, n, incx) };
+    let yb = unsafe { vout(y, n, incy) };
+    call("lind_cblas_dsymv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F64(alpha), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::F64(beta), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_dtrmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const f64, lda: c_int, x: *mut f64, incx: c_int) {
+    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) * F64) };
+    let xb = unsafe { vout(x, n, incx) }; // x := op(A)·x  (in place)
+    call("lind_cblas_dtrmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_dtrsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const f64, lda: c_int, x: *mut f64, incx: c_int) {
+    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) *F64) };
+    let xb = unsafe { vout(x, n, incx) }; // solve op(A)·x = b  (x overwritten)
+    call("lind_cblas_dtrsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_dger(order: c_int, m: c_int, n: c_int, alpha: f64, x: *const f64, incx: c_int, y: *const f64, incy: c_int, a: *mut f64, lda: c_int) {
+    let xb = unsafe { vin(x, m, incx) };
+    let yb = unsafe { vin(y, n, incy) };
+    let ab = unsafe { core::slice::from_raw_parts_mut(a as *mut u8, gemat_elems(order, m, n, lda) * F64) };
+    call("lind_cblas_dger", &mut [Arg::I32(order), Arg::I32(m), Arg::I32(n), Arg::F64(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_dsyr(order: c_int, uplo: c_int, n: c_int, alpha: f64, x: *const f64, incx: c_int, a: *mut f64, lda: c_int) {
+    let xb = unsafe { vin(x, n, incx) };
+    let ab = unsafe { core::slice::from_raw_parts_mut(a as *mut u8, sqmat_elems(n, lda) * F64) };
+    call("lind_cblas_dsyr", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F64(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_dsyr2(order: c_int, uplo: c_int, n: c_int, alpha: f64, x: *const f64, incx: c_int, y: *const f64, incy: c_int, a: *mut f64, lda: c_int) {
+    let xb = unsafe { vin(x, n, incx) };
+    let yb = unsafe { vin(y, n, incy) };
+    let ab = unsafe { core::slice::from_raw_parts_mut(a as *mut u8, sqmat_elems(n, lda) * F64) };
+    call("lind_cblas_dsyr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F64(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+
+// single-precision twins
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ssymv(order: c_int, uplo: c_int, n: c_int, alpha: f32, a: *const f32, lda: c_int, x: *const f32, incx: c_int, beta: f32, y: *mut f32, incy: c_int) {
+    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) * F32) };
+    let xb = unsafe { sin(x, n, incx) };
+    let yb = unsafe { sout(y, n, incy) };
+    call("lind_cblas_ssymv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::F32(beta), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_strmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const f32, lda: c_int, x: *mut f32, incx: c_int) {
+    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) * F32) };
+    let xb = unsafe { sout(x, n, incx) };
+    call("lind_cblas_strmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_strsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const f32, lda: c_int, x: *mut f32, incx: c_int) {
+    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) * F32) };
+    let xb = unsafe { sout(x, n, incx) };
+    call("lind_cblas_strsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_sger(order: c_int, m: c_int, n: c_int, alpha: f32, x: *const f32, incx: c_int, y: *const f32, incy: c_int, a: *mut f32, lda: c_int) {
+    let xb = unsafe { sin(x, m, incx) };
+    let yb = unsafe { sin(y, n, incy) };
+    let ab = unsafe { core::slice::from_raw_parts_mut(a as *mut u8, gemat_elems(order, m, n, lda) * F32) };
+    call("lind_cblas_sger", &mut [Arg::I32(order), Arg::I32(m), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ssyr(order: c_int, uplo: c_int, n: c_int, alpha: f32, x: *const f32, incx: c_int, a: *mut f32, lda: c_int) {
+    let xb = unsafe { sin(x, n, incx) };
+    let ab = unsafe { core::slice::from_raw_parts_mut(a as *mut u8, sqmat_elems(n, lda) * F32) };
+    call("lind_cblas_ssyr", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ssyr2(order: c_int, uplo: c_int, n: c_int, alpha: f32, x: *const f32, incx: c_int, y: *const f32, incy: c_int, a: *mut f32, lda: c_int) {
+    let xb = unsafe { sin(x, n, incx) };
+    let yb = unsafe { sin(y, n, incy) };
+    let ab = unsafe { core::slice::from_raw_parts_mut(a as *mut u8, sqmat_elems(n, lda) * F32) };
+    call("lind_cblas_ssyr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst:ab, len: OutLen::Cap }, Arg::I32(lda)]);
 }
