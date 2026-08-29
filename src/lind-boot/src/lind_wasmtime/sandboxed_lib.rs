@@ -50,6 +50,10 @@ pub enum Arg<'a> {
     I32(i32),
     /// A scalar `size_t`, passed by value (wasm32 `size_t` is 4 bytes).
     USize(usize),
+    /// A scalar `f32`, passed by value (a wasm `f32` *is* a native `float`).
+    F32(f32),
+    /// A scalar `f64`, passed by value (a wasm `f64` *is* a native `double`).
+    F64(f64),
     /// An input buffer copied into the guest; the call receives its guest offset.
     Buf(&'a [u8]),
     /// A caller-allocated output buffer. The guest writes into it; after the call the
@@ -206,7 +210,45 @@ impl SandboxedLib {
         }
     }
 
-    /// Call an exported function, marshalling pointer arguments through guest memory.
+    /// Call an exported function, marshalling arguments through guest memory, and
+    /// return the first result widened to `i64` (`0` for a `void` return). For
+    /// floating-point results use [`Self::call_f64`] / [`Self::call_f32`].
+    ///
+    /// See [`Self::call_collect`] for the marshalling details.
+    pub fn call(&mut self, name: &str, args: &mut [Arg]) -> Result<i64> {
+        let results = self.call_collect(name, args)?;
+        match results.first() {
+            None => Ok(0), // void
+            Some(Val::I32(v)) => Ok(*v as i64),
+            Some(Val::I64(v)) => Ok(*v),
+            other => Err(anyhow!(
+                "expected an integer or void result from `{}`, got {:?}",
+                name,
+                other
+            )),
+        }
+    }
+
+    /// Like [`Self::call`], but for an exported function that returns `f64` (`double`).
+    pub fn call_f64(&mut self, name: &str, args: &mut [Arg]) -> Result<f64> {
+        let results = self.call_collect(name, args)?;
+        match results.first() {
+            Some(Val::F64(bits)) => Ok(f64::from_bits(*bits)),
+            other => Err(anyhow!("expected an f64 result from `{}`, got {:?}", name, other)),
+        }
+    }
+
+    /// Like [`Self::call`], but for an exported function that returns `f32` (`float`).
+    pub fn call_f32(&mut self, name: &str, args: &mut [Arg]) -> Result<f32> {
+        let results = self.call_collect(name, args)?;
+        match results.first() {
+            Some(Val::F32(bits)) => Ok(f32::from_bits(*bits)),
+            other => Err(anyhow!("expected an f32 result from `{}`, got {:?}", name, other)),
+        }
+    }
+
+    /// Call an exported function, marshalling arguments through guest memory, and
+    /// return the raw wasm results.
     ///
     /// Input buffers ([`Arg::Buf`]) are copied into freshly guest-`malloc`'d memory;
     /// output buffers ([`Arg::Out`]) and length out-params ([`Arg::OutLen`]) get guest
@@ -214,10 +256,9 @@ impl SandboxedLib {
     /// seeded with the caller's bytes. After the call, out-lengths are read back, each
     /// out-buffer's copy-back length is resolved (see [`OutLen`]), the bytes are copied
     /// into the caller's slices, and all allocations are freed (even on failure).
-    /// Returns the first result widened to `i64` (`0` for a `void` return).
     ///
     /// The guest must export `guest_malloc(i32)->i32` / `guest_free(i32)`.
-    pub fn call(&mut self, name: &str, args: &mut [Arg]) -> Result<i64> {
+    fn call_collect(&mut self, name: &str, args: &mut [Arg]) -> Result<Vec<Val>> {
         // Phase 1: allocate + copy inputs in; build wasm params; remember each arg's
         // guest offset (for out-copy and freeing).
         let mut ptrs: Vec<Option<u32>> = vec![None; args.len()];
@@ -227,6 +268,9 @@ impl SandboxedLib {
             match a {
                 Arg::I32(v) => params.push(Val::I32(*v)),
                 Arg::USize(v) => params.push(Val::I32(*v as i32)),
+                // wasm F32/F64 vals carry the raw IEEE-754 bits.
+                Arg::F32(v) => params.push(Val::F32(v.to_bits())),
+                Arg::F64(v) => params.push(Val::F64(v.to_bits())),
                 Arg::Buf(bytes) => {
                     let ptr = self.copy_in(bytes)?;
                     ptrs[i] = Some(ptr);
@@ -302,20 +346,13 @@ impl SandboxedLib {
             }
             return Err(anyhow::Error::from(e)).with_context(|| format!("failed to call `{}`", name));
         }
+        // Integer view of the result, used only to resolve `OutLen::Ret` copy-back
+        // lengths (Phase 4). A non-integer result (e.g. f64) is simply not a length,
+        // so it contributes 0 here; the caller's wrapper interprets the real result.
         let ret: i64 = match results.first() {
-            None => 0, // void
             Some(Val::I32(v)) => *v as i64,
             Some(Val::I64(v)) => *v,
-            other => {
-                for ptr in to_free {
-                    let _ = self.guest_free(ptr);
-                }
-                return Err(anyhow!(
-                    "expected an integer or void result from `{}`, got {:?}",
-                    name,
-                    other
-                ));
-            }
+            _ => 0,
         };
 
         // Phase 3: read out-length params, and write them back into the caller's slots.
@@ -362,7 +399,7 @@ impl SandboxedLib {
         for ptr in to_free {
             let _ = self.guest_free(ptr);
         }
-        Ok(ret)
+        Ok(results)
     }
 
     /// `(host base pointer, byte length)` of the guest's linear memory.

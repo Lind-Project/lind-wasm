@@ -134,13 +134,18 @@ impl CliOptions {
     ///
     /// Provided so embedders (e.g. a cdylib wrapper) don't have to track the full
     /// field set as the CLI evolves.
+    ///
+    /// `enable_fpcast` is taken from the `LIND_ENABLE_FPCAST` env var (`1`/`true`),
+    /// because a dynamically-compiled guest built with fpcast-emu (e.g. a real dylink
+    /// library such as OpenBLAS) must run with it enabled, and this build/run setting
+    /// has to match how the guest `.cwasm` was produced.
     pub fn for_sandboxed_lib(module_path: impl Into<String>) -> Self {
         CliOptions {
             verbose: 0,
             debug: false,
             precompile: false,
             wasmtime_backtrace: false,
-            enable_fpcast: false,
+            enable_fpcast: env_flag("LIND_ENABLE_FPCAST"),
             call: None,
             wasm_bytes: None,
             args: vec![module_path.into()],
@@ -148,5 +153,13 @@ impl CliOptions {
             preloads: preloads_from_env(),
             thread_stack_size: 64 * 1024 * 1024,
         }
+    }
+}
+
+/// Read a boolean-ish env var: true for `1`/`true` (case-insensitive), else false.
+fn env_flag(name: &str) -> bool {
+    match std::env::var(name) {
+        Ok(v) => v == "1" || v.eq_ignore_ascii_case("true"),
+        Err(_) => false,
     }
 }
