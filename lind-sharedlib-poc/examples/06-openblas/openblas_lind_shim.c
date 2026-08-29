@@ -1,0 +1,200 @@
+// The resident SHIM — the sandbox's MAIN module (Option A).
+//
+// A `-shared` OpenBLAS can't be the main module (its internal function tables only get
+// set up on the preload path), so OpenBLAS is loaded as a PRELOAD and this small module
+// is the main module instead. Two jobs:
+//   1. Export guest_malloc/guest_free so the host (SandboxedLib) can place matrices and
+//      vectors into the shared linear memory and take results back out.
+//   2. Export a thin wrapper per BLAS function under a stable name (lind_cblas_*). The
+//      wrappers call cblas_*, which are UNDEFINED here — the default (dynamic)
+//      lind_compile build turns them into dynamic imports, resolved at runtime from the
+//      preloaded OpenBLAS (and malloc/free from libc). So the host only ever looks up
+//      the lind_cblas_*/guest_* symbols this module defines.
+//
+// Build:  lind_compile openblas_lind_shim.c   (see the Makefile `shim` target)
+// Run:    LIND_MODULE = this .cwasm;  LIND_PRELOAD includes plain OpenBLAS + libc/libm.
+//
+// (The same source can alternatively be linked INTO OpenBLAS via --whole-archive, which
+// defines cblas_* statically — but that path loads OpenBLAS as main and traps on
+// indirect kernel dispatch. Option A, above, is the working model.)
+
+#include <stddef.h>
+#include <stdlib.h>
+
+// We deliberately do NOT include <cblas.h>: it pulls in OpenBLAS's internal common.h
+// and a generated config.h that only exists in the build tree. Forward-declare the
+// functions we wrap instead; their definitions come from libopenblas.a at link time.
+// These prototypes match OpenBLAS's cblas.h for a 32-bit-index (BINARY=32) build.
+extern size_t cblas_idamax(const int, const double *, const int);
+extern double cblas_ddot (const int, const double *, const int, const double *, const int);
+extern double cblas_dnrm2(const int, const double *, const int);
+extern double cblas_dasum(const int, const double *, const int);
+extern void   cblas_daxpy(const int, const double, const double *, const int, double *, const int);
+extern void   cblas_dcopy(const int, const double *, const int, double *, const int);
+extern void   cblas_dswap(const int, double *, const int, double *, const int);
+extern void   cblas_dscal(const int, const double, double *, const int);
+extern void   cblas_drot (const int, double *, const int, double *, const int, const double, const double);
+extern void   cblas_drotg(double *, double *, double *, double *);
+extern void   cblas_drotm(const int, double *, const int, double *, const int, const double *);
+
+extern size_t cblas_isamax(const int, const float *, const int);
+extern float  cblas_sdot (const int, const float *, const int, const float *, const int);
+extern float  cblas_snrm2(const int, const float *, const int);
+extern float  cblas_sasum(const int, const float *, const int);
+extern void   cblas_saxpy(const int, const float, const float *, const int, float *, const int);
+extern void   cblas_scopy(const int, const float *, const int, float *, const int);
+extern void   cblas_sswap(const int, float *, const int, float *, const int);
+extern void   cblas_sscal(const int, const float, float *, const int);
+extern void   cblas_srot (const int, float *, const int, float *, const int, const float, const float);
+extern void   cblas_srotg(float *, float *, float *, float *);
+extern void   cblas_srotm(const int, float *, const int, float *, const int, const float *);
+
+// level-2 (order/trans are enums, ABI-compatible with int)
+extern void   cblas_dgemv(const int, const int, const int, const int, const double,
+                          const double *, const int, const double *, const int,
+                          const double, double *, const int);
+extern void   cblas_sgemv(const int, const int, const int, const int, const float,
+                          const float *, const int, const float *, const int,
+                          const float, float *, const int);
+
+__attribute__((export_name("guest_malloc")))
+void *guest_malloc(size_t n) { return malloc(n); }
+
+__attribute__((export_name("guest_free")))
+void guest_free(void *p) { free(p); }
+
+// --- BLAS level-1 (double) subset -------------------------------------------------
+
+__attribute__((export_name("lind_cblas_idamax")))
+size_t lind_cblas_idamax(int n, const double *x, int incx) {
+    return cblas_idamax(n, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_ddot")))
+double lind_cblas_ddot(int n, const double *x, int incx, const double *y, int incy) {
+    return cblas_ddot(n, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_dnrm2")))
+double lind_cblas_dnrm2(int n, const double *x, int incx) {
+    return cblas_dnrm2(n, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_dasum")))
+double lind_cblas_dasum(int n, const double *x, int incx) {
+    return cblas_dasum(n, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_daxpy")))
+void lind_cblas_daxpy(int n, double alpha, const double *x, int incx,
+                      double *y, int incy) {
+    cblas_daxpy(n, alpha, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_dcopy")))
+void lind_cblas_dcopy(int n, const double *x, int incx, double *y, int incy) {
+    cblas_dcopy(n, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_dswap")))
+void lind_cblas_dswap(int n, double *x, int incx, double *y, int incy) {
+    cblas_dswap(n, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_dscal")))
+void lind_cblas_dscal(int n, double alpha, double *x, int incx) {
+    cblas_dscal(n, alpha, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_drot")))
+void lind_cblas_drot(int n, double *x, int incx, double *y, int incy,
+                     double c, double s) {
+    cblas_drot(n, x, incx, y, incy, c, s);
+}
+
+__attribute__((export_name("lind_cblas_drotg")))
+void lind_cblas_drotg(double *a, double *b, double *c, double *s) {
+    cblas_drotg(a, b, c, s);
+}
+
+__attribute__((export_name("lind_cblas_drotm")))
+void lind_cblas_drotm(int n, double *x, int incx, double *y, int incy,
+                      const double *param) {
+    cblas_drotm(n, x, incx, y, incy, param);
+}
+
+// --- BLAS level-1 (single) subset -------------------------------------------------
+
+__attribute__((export_name("lind_cblas_isamax")))
+size_t lind_cblas_isamax(int n, const float *x, int incx) {
+    return cblas_isamax(n, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_sdot")))
+float lind_cblas_sdot(int n, const float *x, int incx, const float *y, int incy) {
+    return cblas_sdot(n, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_snrm2")))
+float lind_cblas_snrm2(int n, const float *x, int incx) {
+    return cblas_snrm2(n, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_sasum")))
+float lind_cblas_sasum(int n, const float *x, int incx) {
+    return cblas_sasum(n, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_saxpy")))
+void lind_cblas_saxpy(int n, float alpha, const float *x, int incx,
+                      float *y, int incy) {
+    cblas_saxpy(n, alpha, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_scopy")))
+void lind_cblas_scopy(int n, const float *x, int incx, float *y, int incy) {
+    cblas_scopy(n, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_sswap")))
+void lind_cblas_sswap(int n, float *x, int incx, float *y, int incy) {
+    cblas_sswap(n, x, incx, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_sscal")))
+void lind_cblas_sscal(int n, float alpha, float *x, int incx) {
+    cblas_sscal(n, alpha, x, incx);
+}
+
+__attribute__((export_name("lind_cblas_srot")))
+void lind_cblas_srot(int n, float *x, int incx, float *y, int incy,
+                     float c, float s) {
+    cblas_srot(n, x, incx, y, incy, c, s);
+}
+
+__attribute__((export_name("lind_cblas_srotg")))
+void lind_cblas_srotg(float *a, float *b, float *c, float *s) {
+    cblas_srotg(a, b, c, s);
+}
+
+__attribute__((export_name("lind_cblas_srotm")))
+void lind_cblas_srotm(int n, float *x, int incx, float *y, int incy,
+                      const float *param) {
+    cblas_srotm(n, x, incx, y, incy, param);
+}
+
+// --- BLAS level-2 subset ----------------------------------------------------------
+
+__attribute__((export_name("lind_cblas_dgemv")))
+void lind_cblas_dgemv(int order, int trans, int m, int n, double alpha,
+                      const double *a, int lda, const double *x, int incx,
+                      double beta, double *y, int incy) {
+    cblas_dgemv(order, trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
+
+__attribute__((export_name("lind_cblas_sgemv")))
+void lind_cblas_sgemv(int order, int trans, int m, int n, float alpha,
+                      const float *a, int lda, const float *x, int incx,
+                      float beta, float *y, int incy) {
+    cblas_sgemv(order, trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
