@@ -12,7 +12,17 @@ To debug a WebAssembly module using GDB, ensure that your module is compiled wit
 
 ### Running GDB with the runtime
 
-Build the debug runtime, then start GDB against it:
+Build the debug runtime, then start GDB against it. Which invocation you need
+depends on how the program was compiled.
+
+For a **dynamic build** — what `lind_compile` produces by default:
+
+```sh
+make lind-debug
+sudo gdb --args ./build/lind-boot --preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm malloc-test.cwasm
+```
+
+For a **static build** (`lind_compile -s`), the preloads are not needed:
 
 ```sh
 make lind-debug
@@ -24,6 +34,7 @@ sudo gdb --args ./build/lind-boot malloc-test.cwasm
 - `gdb --args`: Passes arguments to the program through GDB.
 - `sudo`: The runtime `chroot`s into `lindfs`, which requires root. `scripts/bin/lind_run` normally does this for you.
 - `./build/lind-boot`: The runtime binary. `make lind-debug` installs the debug build here, at the same path as the release build.
+- `--preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm`: The shared *lind-glibc* and libm a dynamic build resolves its imports against. `lind_run` passes these for you; running `lind-boot` directly under GDB means passing them yourself.
 - `malloc-test.cwasm`: Your program, as a path *inside* `lindfs` (see [Getting Started](../getting-started.md#what-just-happened)).
 
 Run `./build/lind-boot --help` for the full set of runtime options.
@@ -33,9 +44,10 @@ Run `./build/lind-boot --help` for the full set of runtime options.
 ### Example Debugging Session
 
 1. **Start GDB**  
-   Launch GDB with the runtime and your WebAssembly module:
+   Launch GDB with the runtime and your WebAssembly module (dynamic build shown,
+   see [above](#running-gdb-with-the-runtime) for the static variant):
    ```sh
-   sudo gdb --args ./build/lind-boot malloc-test.cwasm
+   sudo gdb --args ./build/lind-boot --preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm malloc-test.cwasm
    ```
 
 2. **Set Breakpoints**  

@@ -48,8 +48,9 @@ This is the fastest path and the one to use if you are evaluating Lind.
 docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev  # this might take a while ...
 docker run --platform=linux/amd64 -it --privileged --ipc=host --init \
   --cap-add=SYS_PTRACE securesystemslab/lind-wasm-dev /bin/bash
-cd lind-wasm
 ```
+
+The shell starts in `/home/lind/lind-wasm`, the prebuilt checkout.
 
 What those flags are for:
 
@@ -63,13 +64,32 @@ What those flags are for:
 
 !!! note "There is no build step"
 
-    This image ships a runtime, sysroot and `lindfs` that were built when the
-    image was built (see `RUN make lind-debug` in
+    Run exactly as above and there is nothing to build. The image ships a
+    runtime, sysroot and `lindfs` that were built into `/home/lind/lind-wasm`
+    when the image was built (see `RUN make lind-debug` in
     [`Docker/Dockerfile.dev`](https://github.com/Lind-Project/lind-wasm/blob/main/Docker/Dockerfile.dev)).
-    Skip straight to [Run your first program](#run-your-first-program).
+    That is the directory the shell starts in. Skip straight to
+    [Run your first program](#run-your-first-program).
 
     You only need to rebuild after changing the source — see
     [Option B](#option-b-build-from-source).
+
+!!! warning "A bind-mounted checkout has no build outputs"
+
+    The prebuilt outputs live *inside the image*, at `/home/lind/lind-wasm`.
+    Mounting your own checkout over a different path gives you a tree that has
+    never been built:
+
+    ```bash
+    # Your host checkout at /lind — no build/lind-boot, no sysroot, no lindfs
+    docker run --platform=linux/amd64 -v "$PWD:/lind" -w /lind -it \
+      securesystemslab/lind-wasm-dev /bin/bash
+    ```
+
+    `make test` and `lind_run` then fail with `lind-boot` missing
+    ([#1355](https://github.com/Lind-Project/lind-wasm/issues/1355)). Either
+    run `make build` once inside the mounted tree, or drop `-v`/`-w` and use
+    the image's own checkout.
 
 ## Option B: build from source
 
