@@ -49,7 +49,7 @@ impl Mmap {
                 size.byte_count(),
                 rustix::mm::ProtFlags::READ | rustix::mm::ProtFlags::WRITE,
                 // rustix::mm::MapFlags::PRIVATE | MMAP_NORESERVE_FLAG,
-                rustix::mm::MapFlags::PRIVATE, 
+                rustix::mm::MapFlags::PRIVATE,
             )?
         };
         let memory = std::ptr::slice_from_raw_parts_mut(ptr.cast(), size.byte_count());

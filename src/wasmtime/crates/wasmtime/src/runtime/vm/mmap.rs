@@ -99,11 +99,12 @@ impl Mmap<AlignedLength> {
             //     mapping_size
             // );
 
-            let sys = mmap::Mmap::new(mapping_size).map_err(|e| {
-                eprintln!("[accessible_reserved new] mmap::Mmap::new ERR: {:#?}", e);
-                e
-            })
-            .with_context(|| format!("mmap failed to allocate {mapping_size:#x} bytes"))?;
+            let sys = mmap::Mmap::new(mapping_size)
+                .map_err(|e| {
+                    eprintln!("[accessible_reserved new] mmap::Mmap::new ERR: {:#?}", e);
+                    e
+                })
+                .with_context(|| format!("mmap failed to allocate {mapping_size:#x} bytes"))?;
 
             Ok(Mmap {
                 sys,
@@ -141,10 +142,7 @@ impl Mmap<AlignedLength> {
                     result
                         .make_accessible(HostAlignedByteCount::ZERO, accessible_size)
                         .map_err(|e| {
-                            eprintln!(
-                                "[accessible_reserved new] make_accessible ERR: {:#?}",
-                                e
-                            );
+                            eprintln!("[accessible_reserved new] make_accessible ERR: {:#?}", e);
                             e
                         })
                         .with_context(|| {
