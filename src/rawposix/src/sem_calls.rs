@@ -313,7 +313,11 @@ pub extern "C" fn sem_post_syscall(
     loop {
         let v = state.value.load(Ordering::SeqCst);
         if v >= SEM_VALUE_MAX {
-            return syscall_error(Errno::EOVERFLOW, "sem_post", "value would exceed SEM_VALUE_MAX");
+            return syscall_error(
+                Errno::EOVERFLOW,
+                "sem_post",
+                "value would exceed SEM_VALUE_MAX",
+            );
         }
         if state
             .value

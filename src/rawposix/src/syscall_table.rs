@@ -20,16 +20,15 @@ use super::fs_calls::{
     utimensat_syscall, write_syscall, writev_syscall,
 };
 use super::init::RawCallFunc;
-use super::sem_calls::{
-    sem_destroy_syscall, sem_getvalue_syscall, sem_init_syscall, sem_post_syscall,
-    sem_wait_syscall,
-};
 use super::net_calls::{
     accept4_syscall, accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall,
     epoll_create_syscall, epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall,
     getpeername_syscall, getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall,
     ppoll_syscall, recvfrom_syscall, recvmsg_syscall, select_syscall, sendmsg_syscall,
     sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
+};
+use super::sem_calls::{
+    sem_destroy_syscall, sem_getvalue_syscall, sem_init_syscall, sem_post_syscall, sem_wait_syscall,
 };
 use super::sys_calls::{
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,

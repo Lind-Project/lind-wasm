@@ -1,7 +1,7 @@
 use cage::{
-    get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page, shmat_helper,
-    shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX,
-    SHM_METADATA, get_base_address,
+    get_base_address, get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page,
+    shmat_helper, shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps,
+    HEAP_ENTRY_INDEX, SHM_METADATA,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
@@ -1110,8 +1110,7 @@ pub extern "C" fn mmap_syscall(
             if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
                 eprintln!(
                     "[vmmap-add-hit-ffffe000-after] cage={} ret={:?}",
-                    cageid,
-                    add_ret,
+                    cageid, add_ret,
                 );
             }
         }
@@ -1160,7 +1159,10 @@ pub extern "C" fn mmap_inner(
     let is_shared = flags & (MAP_SHARED as i32) != 0;
 
     if vfd_arg == -1 && has_anon && has_fixed && (is_private || is_shared) {
-        println!("[mmap_inner] anonymous fixed mapping, returning addr={:?}", addr);
+        println!(
+            "[mmap_inner] anonymous fixed mapping, returning addr={:?}",
+            addr
+        );
         return addr as usize;
     }
     // end

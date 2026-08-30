@@ -62,7 +62,7 @@ impl MmapMemory {
         if is_lind_guest_memory {
             maximum = Some(super::MAX_MEMORY_SIZE);
         }
-        
+
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).
