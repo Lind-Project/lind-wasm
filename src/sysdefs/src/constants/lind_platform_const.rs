@@ -129,8 +129,8 @@ pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 /// shared linear memory. `wasm-ld --import-memory` always emits `env`.`memory`,
 /// and lind's toolchain builds every module (main, glibc, preloads) that way, so
 /// this is fixed rather than discovered by scanning a module's import section.
-const LIND_MEMORY_IMPORT_MODULE: &str = "env";
-const LIND_MEMORY_IMPORT_NAME: &str = "memory";
+pub const LIND_MEMORY_IMPORT_MODULE: &str = "env";
+pub const LIND_MEMORY_IMPORT_NAME: &str = "memory";
 
 /// Maximum number of grate workers that may exist for one grate handler.
 ///
