@@ -30,9 +30,12 @@ STUB_DIR="${STUB_DIR:-$SCRIPT_DIR/stub/target/release}"
 # Per-level precision sets. Complex (c/z) is wired for the levels whose complex routines
 # exist in the stub — currently level 1. As complex level-2/3 land, add c z here.
 : "${L1_PRECISIONS:=s d c z}"
-: "${L2_PRECISIONS:=$PRECISIONS}"
+: "${L2_PRECISIONS:=s d c z}"
 : "${L3_PRECISIONS:=$PRECISIONS}"
-: "${LEVEL2_ROUTINES:=gemv gbmv symv sbmv spmv trmv tbmv tpmv trsv tbsv tpsv ger syr spr syr2 spr2}"
+# Union of real + complex level-2 base names. Each precision only enables the ones that
+# appear in its own ?in2 (e.g. symv exists for s/d, hemv/geru/gerc/her*/hpr* for c/z), so
+# a shared superset is safe — un-present names simply never match.
+: "${LEVEL2_ROUTINES:=gemv gbmv symv sbmv spmv hemv hbmv hpmv trmv tbmv tpmv trsv tbsv tpsv ger geru gerc syr spr her hpr syr2 spr2 her2 hpr2}"
 : "${LEVEL3_ROUTINES:=gemm symm syrk syr2k trmm trsm}"
 
 CT="$OPENBLAS_NATIVE/ctest"

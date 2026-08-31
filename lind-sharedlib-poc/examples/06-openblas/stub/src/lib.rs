@@ -1071,6 +1071,23 @@ unsafe fn cxscalar_out<'a>(p: *mut c_void, elem: usize) -> &'a mut [u8] {
     unsafe { core::slice::from_raw_parts_mut(p as *mut u8, elem) }
 }
 
+/// Byte view of a complex matrix of `elems` complex values (`elem` bytes each).
+///
+/// # Safety
+/// `p` must point to at least `elems` complex values of `elem` bytes.
+unsafe fn cmat_in<'a>(p: *const c_void, elems: usize, elem: usize) -> &'a [u8] {
+    unsafe { core::slice::from_raw_parts(p as *const u8, elems * elem) }
+}
+
+/// Mutable byte view of a complex matrix of `elems` complex values.
+///
+/// # Safety
+/// As `cmat_in`.
+unsafe fn cmat_out<'a>(p: *mut c_void, elems: usize, elem: usize) -> &'a mut [u8] {
+    unsafe { core::slice::from_raw_parts_mut(p as *mut u8, elems * elem) }
+}
+
+
 // --- single-complex (c) ------------------------------------------------------------
 
 #[unsafe(no_mangle)]
@@ -1215,5 +1232,311 @@ pub extern "C" fn cblas_zscal(n: c_int, alpha: *const c_void, x: *mut c_void, in
 pub extern "C" fn cblas_zdscal(n: c_int, alpha: f64, x: *mut c_void, incx: c_int) {
     let xb = unsafe { cxout(x, n, incx, C128) };
     call("lind_cblas_zdscal", &mut [Arg::I32(n), Arg::F64(alpha), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+
+
+// ===================================================================================
+// CBLAS complex level-2 (c/z). Element COUNTS reuse the real level-2 size helpers
+// (gemat_elems / bandmat_elems / packed_elems / sqmat_elems); only the byte width
+// (C64/C128) changes. New wrinkles vs the real level-2 sets:
+//   * alpha/beta cross BY POINTER (Arg::Buf of one element) for gemv/gbmv, the Hermitian
+//     mat-vecs (hemv/hbmv/hpmv), and the rank-1/2 updates (geru/gerc/her2/hpr2).
+//   * her/hpr take a REAL alpha BY VALUE (F32 for c, F64 for z) — the only by-value scalar
+//     in complex level-2 (the Hermitian diagonal stays real).
+//   * ger splits into geru (unconjugated) and gerc (conjugated); both update A in place.
+// A/AP is Buf for the mat-vecs, InOut for the rank updates; x is in/out for the triangular
+// products/solves, else read-only; y (mat-vec output) is in/out.
+// ===================================================================================
+
+// --- single-complex (c) ------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cgemv(order: c_int, trans: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let ab = unsafe { cmat_in(a, gemat_elems(order, m, n, lda), C64) };
+    let (lenx, leny) = gemv_vec_lens(trans, m, n);
+    let xb = unsafe { cxin(x, lenx, incx, C64) };
+    let yb = unsafe { cxout(y, leny, incy, C64) };
+    call("lind_cblas_cgemv", &mut [Arg::I32(order), Arg::I32(trans), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cgbmv(order: c_int, trans: c_int, m: c_int, n: c_int, kl: c_int, ku: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, kl, lda), C64) };
+    let (lenx, leny) = gemv_vec_lens(trans, m, n);
+    let xb = unsafe { cxin(x, lenx, incx, C64) };
+    let yb = unsafe { cxout(y, leny, incy, C64) };
+    call("lind_cblas_cgbmv", &mut [Arg::I32(order), Arg::I32(trans), Arg::I32(m), Arg::I32(n), Arg::I32(kl), Arg::I32(ku), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_chemv(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let ab = unsafe { cmat_in(a, sqmat_elems(n, lda), C64) };
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let yb = unsafe { cxout(y, n, incy, C64) };
+    call("lind_cblas_chemv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_chbmv(order: c_int, uplo: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, k, lda), C64) };
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let yb = unsafe { cxout(y, n, incy, C64) };
+    call("lind_cblas_chbmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_chpmv(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, ap: *const c_void, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let apb = unsafe { cmat_in(ap, packed_elems(n), C64) };
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let yb = unsafe { cxout(y, n, incy, C64) };
+    call("lind_cblas_chpmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(apb), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctrmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, sqmat_elems(n, lda), C64) };
+    let xb = unsafe { cxout(x, n, incx, C64) };
+    call("lind_cblas_ctrmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctbmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, k: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, k, lda), C64) };
+    let xb = unsafe { cxout(x, n, incx, C64) };
+    call("lind_cblas_ctbmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::I32(k), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctpmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, ap: *const c_void, x: *mut c_void, incx: c_int) {
+    let apb = unsafe { cmat_in(ap, packed_elems(n), C64) };
+    let xb = unsafe { cxout(x, n, incx, C64) };
+    call("lind_cblas_ctpmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(apb), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctrsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, sqmat_elems(n, lda), C64) };
+    let xb = unsafe { cxout(x, n, incx, C64) };
+    call("lind_cblas_ctrsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctbsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, k: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, k, lda), C64) };
+    let xb = unsafe { cxout(x, n, incx, C64) };
+    call("lind_cblas_ctbsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::I32(k), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctpsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, ap: *const c_void, x: *mut c_void, incx: c_int) {
+    let apb = unsafe { cmat_in(ap, packed_elems(n), C64) };
+    let xb = unsafe { cxout(x, n, incx, C64) };
+    call("lind_cblas_ctpsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(apb), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cgeru(order: c_int, m: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, a: *mut c_void, lda: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let xb = unsafe { cxin(x, m, incx, C64) };
+    let yb = unsafe { cxin(y, n, incy, C64) };
+    let ab = unsafe { cmat_out(a, gemat_elems(order, m, n, lda), C64) };
+    call("lind_cblas_cgeru", &mut [Arg::I32(order), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cgerc(order: c_int, m: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, a: *mut c_void, lda: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let xb = unsafe { cxin(x, m, incx, C64) };
+    let yb = unsafe { cxin(y, n, incy, C64) };
+    let ab = unsafe { cmat_out(a, gemat_elems(order, m, n, lda), C64) };
+    call("lind_cblas_cgerc", &mut [Arg::I32(order), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cher(order: c_int, uplo: c_int, n: c_int, alpha: f32, x: *const c_void, incx: c_int, a: *mut c_void, lda: c_int) {
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let ab = unsafe { cmat_out(a, sqmat_elems(n, lda), C64) };
+    call("lind_cblas_cher", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_chpr(order: c_int, uplo: c_int, n: c_int, alpha: f32, x: *const c_void, incx: c_int, ap: *mut c_void) {
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let apb = unsafe { cmat_out(ap, packed_elems(n), C64) };
+    call("lind_cblas_chpr", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::InOut { dst: apb, len: OutLen::Cap }]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cher2(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, a: *mut c_void, lda: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let yb = unsafe { cxin(y, n, incy, C64) };
+    let ab = unsafe { cmat_out(a, sqmat_elems(n, lda), C64) };
+    call("lind_cblas_cher2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_chpr2(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, ap: *mut c_void) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let yb = unsafe { cxin(y, n, incy, C64) };
+    let apb = unsafe { cmat_out(ap, packed_elems(n), C64) };
+    call("lind_cblas_chpr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: apb, len: OutLen::Cap }]);
+}
+
+// --- double-complex (z) ------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zgemv(order: c_int, trans: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let ab = unsafe { cmat_in(a, gemat_elems(order, m, n, lda), C128) };
+    let (lenx, leny) = gemv_vec_lens(trans, m, n);
+    let xb = unsafe { cxin(x, lenx, incx, C128) };
+    let yb = unsafe { cxout(y, leny, incy, C128) };
+    call("lind_cblas_zgemv", &mut [Arg::I32(order), Arg::I32(trans), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zgbmv(order: c_int, trans: c_int, m: c_int, n: c_int, kl: c_int, ku: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, kl, lda), C128) };
+    let (lenx, leny) = gemv_vec_lens(trans, m, n);
+    let xb = unsafe { cxin(x, lenx, incx, C128) };
+    let yb = unsafe { cxout(y, leny, incy, C128) };
+    call("lind_cblas_zgbmv", &mut [Arg::I32(order), Arg::I32(trans), Arg::I32(m), Arg::I32(n), Arg::I32(kl), Arg::I32(ku), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zhemv(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let ab = unsafe { cmat_in(a, sqmat_elems(n, lda), C128) };
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let yb = unsafe { cxout(y, n, incy, C128) };
+    call("lind_cblas_zhemv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zhbmv(order: c_int, uplo: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, k, lda), C128) };
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let yb = unsafe { cxout(y, n, incy, C128) };
+    call("lind_cblas_zhbmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zhpmv(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, ap: *const c_void, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let apb = unsafe { cmat_in(ap, packed_elems(n), C128) };
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let yb = unsafe { cxout(y, n, incy, C128) };
+    call("lind_cblas_zhpmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(apb), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztrmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, sqmat_elems(n, lda), C128) };
+    let xb = unsafe { cxout(x, n, incx, C128) };
+    call("lind_cblas_ztrmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztbmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, k: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, k, lda), C128) };
+    let xb = unsafe { cxout(x, n, incx, C128) };
+    call("lind_cblas_ztbmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::I32(k), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztpmv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, ap: *const c_void, x: *mut c_void, incx: c_int) {
+    let apb = unsafe { cmat_in(ap, packed_elems(n), C128) };
+    let xb = unsafe { cxout(x, n, incx, C128) };
+    call("lind_cblas_ztpmv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(apb), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztrsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, sqmat_elems(n, lda), C128) };
+    let xb = unsafe { cxout(x, n, incx, C128) };
+    call("lind_cblas_ztrsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztbsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, k: c_int, a: *const c_void, lda: c_int, x: *mut c_void, incx: c_int) {
+    let ab = unsafe { cmat_in(a, bandmat_elems(n, k, lda), C128) };
+    let xb = unsafe { cxout(x, n, incx, C128) };
+    call("lind_cblas_ztbsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::I32(k), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztpsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, ap: *const c_void, x: *mut c_void, incx: c_int) {
+    let apb = unsafe { cmat_in(ap, packed_elems(n), C128) };
+    let xb = unsafe { cxout(x, n, incx, C128) };
+    call("lind_cblas_ztpsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(apb), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zgeru(order: c_int, m: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, a: *mut c_void, lda: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let xb = unsafe { cxin(x, m, incx, C128) };
+    let yb = unsafe { cxin(y, n, incy, C128) };
+    let ab = unsafe { cmat_out(a, gemat_elems(order, m, n, lda), C128) };
+    call("lind_cblas_zgeru", &mut [Arg::I32(order), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zgerc(order: c_int, m: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, a: *mut c_void, lda: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let xb = unsafe { cxin(x, m, incx, C128) };
+    let yb = unsafe { cxin(y, n, incy, C128) };
+    let ab = unsafe { cmat_out(a, gemat_elems(order, m, n, lda), C128) };
+    call("lind_cblas_zgerc", &mut [Arg::I32(order), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zher(order: c_int, uplo: c_int, n: c_int, alpha: f64, x: *const c_void, incx: c_int, a: *mut c_void, lda: c_int) {
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let ab = unsafe { cmat_out(a, sqmat_elems(n, lda), C128) };
+    call("lind_cblas_zher", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F64(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_zhpr(order: c_int, uplo: c_int, n: c_int, alpha: f64, x: *const c_void, incx: c_int, ap: *mut c_void) {
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let apb = unsafe { cmat_out(ap, packed_elems(n), C128) };
+    call("lind_cblas_zhpr", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F64(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::InOut { dst: apb, len: OutLen::Cap }]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zher2(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, a: *mut c_void, lda: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let yb = unsafe { cxin(y, n, incy, C128) };
+    let ab = unsafe { cmat_out(a, sqmat_elems(n, lda), C128) };
+    call("lind_cblas_zher2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zhpr2(order: c_int, uplo: c_int, n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, y: *const c_void, incy: c_int, ap: *mut c_void) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let yb = unsafe { cxin(y, n, incy, C128) };
+    let apb = unsafe { cmat_out(ap, packed_elems(n), C128) };
+    call("lind_cblas_zhpr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: apb, len: OutLen::Cap }]);
 }
 
