@@ -525,7 +525,7 @@ pub extern "C" fn srotm_(
 
 // CBLAS enum values (from cblas.h).
 const CBLAS_ROW_MAJOR: c_int = 101;
-const _CBLAS_COL_MAJOR: c_int = 102;
+const CBLAS_COL_MAJOR: c_int = 102;
 const CBLAS_NO_TRANS: c_int = 111;
 
 /// Elements spanned by an `m`×`n` general matrix stored with leading dimension `lda`:
@@ -1894,5 +1894,47 @@ pub extern "C" fn icamax_(n: *const c_int, x: *const c_void, incx: *const c_int)
 #[unsafe(no_mangle)]
 pub extern "C" fn izamax_(n: *const c_int, x: *const c_void, incx: *const c_int) -> c_int {
     unsafe { famax(cblas_izamax(*n, x, *incx), *n) }
+}
+
+
+// --- level-2 Fortran forwarders: gemv ----------------------------------------------
+// The Fortran ABI differs from level-1 in two ways handled here: the transpose flag is a
+// CHARACTER ('N'/'T'/'C', any case) rather than a CBLAS enum int, and there is no `order`
+// (Fortran BLAS is column-major). We translate the char and pass CblasColMajor, then reuse
+// cblas_?gemv — whose sizing (gemat_elems = lda*n for col-major, gemv_vec_lens) already
+// matches. No shim change: lind_cblas_?gemv already exists from the ctest level-2 work.
+// (OpenBLAS's own C Fortran interface takes the char by pointer with no hidden length arg,
+// and utest calls it the same way, so the forwarder takes just `*const c_char`.)
+
+use core::ffi::c_char;
+
+/// Fortran BLAS trans flag ('N'/'T'/'C', any case) -> CBLAS enum.
+fn trans_enum(c: c_char) -> c_int {
+    match (c as u8).to_ascii_uppercase() {
+        b'T' => 112,         // CblasTrans
+        b'C' => 113,         // CblasConjTrans
+        _ => CBLAS_NO_TRANS, // 'N'
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn sgemv_(trans: *const c_char, m: *const c_int, n: *const c_int, alpha: *const f32, a: *const f32, lda: *const c_int, x: *const f32, incx: *const c_int, beta: *const f32, y: *mut f32, incy: *const c_int) {
+    unsafe { cblas_sgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, *alpha, a, *lda, x, *incx, *beta, y, *incy) }
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn dgemv_(trans: *const c_char, m: *const c_int, n: *const c_int, alpha: *const f64, a: *const f64, lda: *const c_int, x: *const f64, incx: *const c_int, beta: *const f64, y: *mut f64, incy: *const c_int) {
+    unsafe { cblas_dgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, *alpha, a, *lda, x, *incx, *beta, y, *incy) }
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cgemv_(trans: *const c_char, m: *const c_int, n: *const c_int, alpha: *const c_void, a: *const c_void, lda: *const c_int, x: *const c_void, incx: *const c_int, beta: *const c_void, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_cgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, alpha, a, *lda, x, *incx, beta, y, *incy) }
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn zgemv_(trans: *const c_char, m: *const c_int, n: *const c_int, alpha: *const c_void, a: *const c_void, lda: *const c_int, x: *const c_void, incx: *const c_int, beta: *const c_void, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_zgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, alpha, a, *lda, x, *incx, beta, y, *incy) }
 }
 
