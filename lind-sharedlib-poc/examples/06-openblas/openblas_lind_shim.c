@@ -49,6 +49,31 @@ extern void   cblas_srot (const int, float *, const int, float *, const int, con
 extern void   cblas_srotg(float *, float *, float *, float *);
 extern void   cblas_srotm(const int, float *, const int, float *, const int, const float *);
 
+// complex level-1 (c = single-complex, z = double-complex). Complex scalars/vectors
+// cross as void*; scalars alpha are by-pointer; dot returns via an out-pointer (?dot?_sub);
+// the norm/asum reductions return a real (float / double).
+extern size_t cblas_icamax(const int, const void *, const int);
+extern float  cblas_scnrm2(const int, const void *, const int);
+extern float  cblas_scasum(const int, const void *, const int);
+extern void   cblas_cdotu_sub(const int, const void *, const int, const void *, const int, void *);
+extern void   cblas_cdotc_sub(const int, const void *, const int, const void *, const int, void *);
+extern void   cblas_caxpy(const int, const void *, const void *, const int, void *, const int);
+extern void   cblas_ccopy(const int, const void *, const int, void *, const int);
+extern void   cblas_cswap(const int, void *, const int, void *, const int);
+extern void   cblas_cscal(const int, const void *, void *, const int);
+extern void   cblas_csscal(const int, const float, void *, const int);
+extern size_t cblas_izamax(const int, const void *, const int);
+extern double cblas_dznrm2(const int, const void *, const int);
+extern double cblas_dzasum(const int, const void *, const int);
+extern void   cblas_zdotu_sub(const int, const void *, const int, const void *, const int, void *);
+extern void   cblas_zdotc_sub(const int, const void *, const int, const void *, const int, void *);
+extern void   cblas_zaxpy(const int, const void *, const void *, const int, void *, const int);
+extern void   cblas_zcopy(const int, const void *, const int, void *, const int);
+extern void   cblas_zswap(const int, void *, const int, void *, const int);
+extern void   cblas_zscal(const int, const void *, void *, const int);
+extern void   cblas_zdscal(const int, const double, void *, const int);
+
+
 // level-2 (order/trans are enums, ABI-compatible with int)
 extern void   cblas_dgemv(const int, const int, const int, const int, const double,
                           const double *, const int, const double *, const int,
@@ -90,6 +115,20 @@ extern void cblas_sspr (const int, const int, const int, const float, const floa
 extern void cblas_stpmv(const int, const int, const int, const int, const int, const float *, float *, const int);
 extern void cblas_stpsv(const int, const int, const int, const int, const int, const float *, float *, const int);
 extern void cblas_sspr2(const int, const int, const int, const float, const float *, const int, const float *, const int, float *);
+
+// level-3
+extern void cblas_dgemm (const int, const int, const int, const int, const int, const int, const double, const double *, const int, const double *, const int, const double, double *, const int);
+extern void cblas_dsymm (const int, const int, const int, const int, const int, const double, const double *, const int, const double *, const int, const double, double *, const int);
+extern void cblas_dsyrk (const int, const int, const int, const int, const int, const double, const double *, const int, const double, double *, const int);
+extern void cblas_dsyr2k(const int, const int, const int, const int, const int, const double, const double *, const int, const double *, const int, const double, double *, const int);
+extern void cblas_dtrmm (const int, const int, const int, const int, const int, const int, const int, const double, const double *, const int, double *, const int);
+extern void cblas_dtrsm (const int, const int, const int, const int, const int, const int, const int, const double, const double *, const int, double *, const int);
+extern void cblas_sgemm (const int, const int, const int, const int, const int, const int, const float, const float *, const int, const float *, const int, const float, float *, const int);
+extern void cblas_ssymm (const int, const int, const int, const int, const int, const float, const float *, const int, const float *, const int, const float, float *, const int);
+extern void cblas_ssyrk (const int, const int, const int, const int, const int, const float, const float *, const int, const float, float *, const int);
+extern void cblas_ssyr2k(const int, const int, const int, const int, const int, const float, const float *, const int, const float *, const int, const float, float *, const int);
+extern void cblas_strmm (const int, const int, const int, const int, const int, const int, const int, const float, const float *, const int, float *, const int);
+extern void cblas_strsm (const int, const int, const int, const int, const int, const int, const int, const float, const float *, const int, float *, const int);
 
 
 __attribute__((export_name("guest_malloc")))
@@ -302,4 +341,74 @@ __attribute__((export_name("lind_cblas_stpsv")))
 void lind_cblas_stpsv(int o,int u,int t,int d,int n,const float*ap,float*x,int ix){ cblas_stpsv(o,u,t,d,n,ap,x,ix); }
 __attribute__((export_name("lind_cblas_sspr2")))
 void lind_cblas_sspr2(int o,int u,int n,float al,const float*x,int ix,const float*y,int iy,float*ap){ cblas_sspr2(o,u,n,al,x,ix,y,iy,ap); }
+
+// level-3
+__attribute__((export_name("lind_cblas_dgemm")))
+void lind_cblas_dgemm(int o,int ta,int tb,int m,int n,int k,double al,const double*a,int lda,const double*b,int ldb,double be,double*c,int ldc){ cblas_dgemm(o,ta,tb,m,n,k,al,a,lda,b,ldb,be,c,ldc); }
+__attribute__((export_name("lind_cblas_dsymm")))
+void lind_cblas_dsymm(int o,int s,int u,int m,int n,double al,const double*a,int lda,const double*b,int ldb,double be,double*c,int ldc){ cblas_dsymm(o,s,u,m,n,al,a,lda,b,ldb,be,c,ldc); }
+__attribute__((export_name("lind_cblas_dsyrk")))
+void lind_cblas_dsyrk(int o,int u,int t,int n,int k,double al,const double*a,int lda,double be,double*c,int ldc){ cblas_dsyrk(o,u,t,n,k,al,a,lda,be,c,ldc); }
+__attribute__((export_name("lind_cblas_dsyr2k")))
+void lind_cblas_dsyr2k(int o,int u,int t,int n,int k,double al,const double*a,int lda,const double*b,int ldb,double be,double*c,int ldc){ cblas_dsyr2k(o,u,t,n,k,al,a,lda,b,ldb,be,c,ldc); }
+__attribute__((export_name("lind_cblas_dtrmm")))
+void lind_cblas_dtrmm(int o,int s,int u,int t,int d,int m,int n,double al,const double*a,int lda,double*b,int ldb){ cblas_dtrmm(o,s,u,t,d,m,n,al,a,lda,b,ldb); }
+__attribute__((export_name("lind_cblas_dtrsm")))
+void lind_cblas_dtrsm(int o,int s,int u,int t,int d,int m,int n,double al,const double*a,int lda,double*b,int ldb){ cblas_dtrsm(o,s,u,t,d,m,n,al,a,lda,b,ldb); }
+
+__attribute__((export_name("lind_cblas_sgemm")))
+void lind_cblas_sgemm(int o,int ta,int tb,int m,int n,int k,float al,const float*a,int lda,const float*b,int ldb,float be,float*c,int ldc){ cblas_sgemm(o,ta,tb,m,n,k,al,a,lda,b,ldb,be,c,ldc); }
+__attribute__((export_name("lind_cblas_ssymm")))
+void lind_cblas_ssymm(int o,int s,int u,int m,int n,float al,const float*a,int lda,const float*b,int ldb,float be,float*c,int ldc){ cblas_ssymm(o,s,u,m,n,al,a,lda,b,ldb,be,c,ldc); }
+__attribute__((export_name("lind_cblas_ssyrk")))
+void lind_cblas_ssyrk(int o,int u,int t,int n,int k,float al,const float*a,int lda,float be,float*c,int ldc){ cblas_ssyrk(o,u,t,n,k,al,a,lda,be,c,ldc); }
+__attribute__((export_name("lind_cblas_ssyr2k")))
+void lind_cblas_ssyr2k(int o,int u,int t,int n,int k,float al,const float*a,int lda,const float*b,int ldb,float be,float*c,int ldc){ cblas_ssyr2k(o,u,t,n,k,al,a,lda,b,ldb,be,c,ldc); }
+__attribute__((export_name("lind_cblas_strmm")))
+void lind_cblas_strmm(int o,int s,int u,int t,int d,int m,int n,float al,const float*a,int lda,float*b,int ldb){ cblas_strmm(o,s,u,t,d,m,n,al,a,lda,b,ldb); }
+__attribute__((export_name("lind_cblas_strsm")))
+void lind_cblas_strsm(int o,int s,int u,int t,int d,int m,int n,float al,const float*a,int lda,float*b,int ldb){ cblas_strsm(o,s,u,t,d,m,n,al,a,lda,b,ldb); }
+
+// --- complex level-1 --------------------------------------------------------------
+__attribute__((export_name("lind_cblas_icamax")))
+size_t lind_cblas_icamax(int n,const void*x,int ix){ return cblas_icamax(n,x,ix); }
+__attribute__((export_name("lind_cblas_scnrm2")))
+float lind_cblas_scnrm2(int n,const void*x,int ix){ return cblas_scnrm2(n,x,ix); }
+__attribute__((export_name("lind_cblas_scasum")))
+float lind_cblas_scasum(int n,const void*x,int ix){ return cblas_scasum(n,x,ix); }
+__attribute__((export_name("lind_cblas_cdotu_sub")))
+void lind_cblas_cdotu_sub(int n,const void*x,int ix,const void*y,int iy,void*d){ cblas_cdotu_sub(n,x,ix,y,iy,d); }
+__attribute__((export_name("lind_cblas_cdotc_sub")))
+void lind_cblas_cdotc_sub(int n,const void*x,int ix,const void*y,int iy,void*d){ cblas_cdotc_sub(n,x,ix,y,iy,d); }
+__attribute__((export_name("lind_cblas_caxpy")))
+void lind_cblas_caxpy(int n,const void*al,const void*x,int ix,void*y,int iy){ cblas_caxpy(n,al,x,ix,y,iy); }
+__attribute__((export_name("lind_cblas_ccopy")))
+void lind_cblas_ccopy(int n,const void*x,int ix,void*y,int iy){ cblas_ccopy(n,x,ix,y,iy); }
+__attribute__((export_name("lind_cblas_cswap")))
+void lind_cblas_cswap(int n,void*x,int ix,void*y,int iy){ cblas_cswap(n,x,ix,y,iy); }
+__attribute__((export_name("lind_cblas_cscal")))
+void lind_cblas_cscal(int n,const void*al,void*x,int ix){ cblas_cscal(n,al,x,ix); }
+__attribute__((export_name("lind_cblas_csscal")))
+void lind_cblas_csscal(int n,float al,void*x,int ix){ cblas_csscal(n,al,x,ix); }
+
+__attribute__((export_name("lind_cblas_izamax")))
+size_t lind_cblas_izamax(int n,const void*x,int ix){ return cblas_izamax(n,x,ix); }
+__attribute__((export_name("lind_cblas_dznrm2")))
+double lind_cblas_dznrm2(int n,const void*x,int ix){ return cblas_dznrm2(n,x,ix); }
+__attribute__((export_name("lind_cblas_dzasum")))
+double lind_cblas_dzasum(int n,const void*x,int ix){ return cblas_dzasum(n,x,ix); }
+__attribute__((export_name("lind_cblas_zdotu_sub")))
+void lind_cblas_zdotu_sub(int n,const void*x,int ix,const void*y,int iy,void*d){ cblas_zdotu_sub(n,x,ix,y,iy,d); }
+__attribute__((export_name("lind_cblas_zdotc_sub")))
+void lind_cblas_zdotc_sub(int n,const void*x,int ix,const void*y,int iy,void*d){ cblas_zdotc_sub(n,x,ix,y,iy,d); }
+__attribute__((export_name("lind_cblas_zaxpy")))
+void lind_cblas_zaxpy(int n,const void*al,const void*x,int ix,void*y,int iy){ cblas_zaxpy(n,al,x,ix,y,iy); }
+__attribute__((export_name("lind_cblas_zcopy")))
+void lind_cblas_zcopy(int n,const void*x,int ix,void*y,int iy){ cblas_zcopy(n,x,ix,y,iy); }
+__attribute__((export_name("lind_cblas_zswap")))
+void lind_cblas_zswap(int n,void*x,int ix,void*y,int iy){ cblas_zswap(n,x,ix,y,iy); }
+__attribute__((export_name("lind_cblas_zscal")))
+void lind_cblas_zscal(int n,const void*al,void*x,int ix){ cblas_zscal(n,al,x,ix); }
+__attribute__((export_name("lind_cblas_zdscal")))
+void lind_cblas_zdscal(int n,double al,void*x,int ix){ cblas_zdscal(n,al,x,ix); }
 

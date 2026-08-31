@@ -25,9 +25,15 @@ STUB_DIR="${STUB_DIR:-$SCRIPT_DIR/stub/target/release}"
 # ENGINE fpcast must be OFF — turning it on double-applies it and traps "indirect call
 # type mismatch" on level-2+ indirect kernel dispatch.
 : "${LIND_ENABLE_FPCAST:=0}"
-: "${LEVELS:=1 2}"
+: "${LEVELS:=1 2 3}"
 : "${PRECISIONS:=s d}"
+# Per-level precision sets. Complex (c/z) is wired for the levels whose complex routines
+# exist in the stub — currently level 1. As complex level-2/3 land, add c z here.
+: "${L1_PRECISIONS:=s d c z}"
+: "${L2_PRECISIONS:=$PRECISIONS}"
+: "${L3_PRECISIONS:=$PRECISIONS}"
 : "${LEVEL2_ROUTINES:=gemv gbmv symv sbmv spmv trmv tbmv tpmv trsv tbsv tpsv ger syr spr syr2 spr2}"
+: "${LEVEL3_ROUTINES:=gemm symm syrk syr2k trmm trsm}"
 
 CT="$OPENBLAS_NATIVE/ctest"
 [ -f "$STUB_DIR/libopenblas.so" ] || { echo "build the stub first: (cd $SCRIPT_DIR && make host)"; exit 1; }
@@ -46,22 +52,25 @@ linker_for() { case "$1" in *c_?blat?.o) echo gfortran ;; *) echo cc ;; esac; }
 
 # --- level 1: self-contained (no input file) ---------------------------------------
 run_level1() {
-    local p="$1" wrap="$CT/c_${p}blas1.o" driver out
+    local p="$1" wrap="$CT/c_${p}blas1.o" driver out nativea
     [ -f "$wrap" ] || { echo "skip L1 ${p}: missing $wrap"; return; }
     driver="$(driver_obj "$p" 1)"; [ -n "$driver" ] || { echo "skip L1 ${p}: no driver"; return; }
+    # Native .a fills any symbol the wrapper references but we don't wrap (e.g. the
+    # complex driver's Fortran refs); wins nothing our .so already provides.
+    nativea="$(ls "$OPENBLAS_NATIVE"/libopenblas*.a 2>/dev/null | head -n1 || true)"
     out="$CT/x${p}cblat1_sandboxed"
     echo "relink $(basename "$driver") + c_${p}blas1.o -> $out"
-    "$(linker_for "$driver")" "$driver" "$wrap" -L"$STUB_DIR" -lopenblas -lm -o "$out"
+    "$(linker_for "$driver")" "$driver" "$wrap" -L"$STUB_DIR" -lopenblas ${nativea:+"$nativea"} -lm -o "$out"
     echo "=============== ctest level-1 ${p} (SANDBOXED) ==============="
     runit "$out"
 }
 
-# --- level 2: reads ?in2; needs support objs + native .a for un-wrapped symbols -----
-# The wrapper c_?blas2.o references EVERY level-2 cblas_*; we only wrap some. Link our
+# --- levels 2 & 3: read ?in2/?in3; need support objs + native .a for un-wrapped syms --
+# The wrapper c_?blasL.o references EVERY level-L cblas_*; we only wrap some. Link our
 # .so first (wins for what we wrapped) then the native libopenblas.a (fills the rest —
-# those are never called because the generated input disables them). Error-exit tests
-# are disabled too (they need the xerbla callback we haven't built).
-gen_input2() { # $1 = source ?in2, $2 = precision, $3 = enabled base names
+# never called because the generated input disables them). Error-exit tests are disabled
+# too (they need the xerbla callback we haven't built).
+gen_input() { # $1 = source ?inL, $2 = precision, $3 = enabled base names
     awk -v p="$2" -v en="$3" '
         BEGIN { n=split(en, a, " "); for (i=1;i<=n;i++) on["cblas_" p a[i]]=1 }
         /LOGICAL FLAG, T TO TEST ERROR EXITS/ { sub(/^[[:space:]]*T/, "F"); print; next }
@@ -70,39 +79,39 @@ gen_input2() { # $1 = source ?in2, $2 = precision, $3 = enabled base names
     ' "$1"
 }
 
-run_level2() {
-    local p="$1" wrap="$CT/c_${p}blas2.o" driver out nativea input support=()
-    [ -f "$wrap" ] || { echo "skip L2 ${p}: missing $wrap"; return; }
-    driver="$(driver_obj "$p" 2)"; [ -n "$driver" ] || { echo "skip L2 ${p}: no driver"; return; }
+# Run one matrix-level driver (level 2 or 3) for precision $1, level $2, routines $3.
+run_matrix_level() {
+    local p="$1" lvl="$2" routines="$3"
+    local wrap="$CT/c_${p}blas${lvl}.o" driver out nativea input support=()
+    [ -f "$wrap" ] || { echo "skip L${lvl} ${p}: missing $wrap"; return; }
+    driver="$(driver_obj "$p" "$lvl")"; [ -n "$driver" ] || { echo "skip L${lvl} ${p}: no driver"; return; }
     nativea="$(ls "$OPENBLAS_NATIVE"/libopenblas*.a 2>/dev/null | head -n1 || true)"
-    [ -n "$nativea" ] || { echo "skip L2 ${p}: need native libopenblas.a in $OPENBLAS_NATIVE for un-wrapped symbols"; return; }
-      # Match the native xscblat2/xdcblat2 link set: driver + wrappers + the error-exit
-    # checker c_?2chke.o (also DEFINES the cblas_ok/lerr/info/rout globals that
-    # c_xerbla.o uses) + auxiliary + c_xerbla + constant. All linked so symbols resolve;
-    # the chke path stays dormant because the generated input disables error-exits.
-    
+    [ -n "$nativea" ] || { echo "skip L${lvl} ${p}: need native libopenblas.a in $OPENBLAS_NATIVE"; return; }
+    # Match the native xN?cblatL link set: driver + wrappers + the error-exit checker
+    # c_?Lchke.o (also DEFINES the cblas_ok/lerr/info/rout globals c_xerbla.o uses) +
+    # auxiliary + c_xerbla + constant. Linked so symbols resolve; the chke path stays
+    # dormant because the generated input disables error-exits.
     local o
-    for o in "c_${p}2chke.o" auxiliary.o constant.o c_xerbla.o; do
+    for o in "c_${p}${lvl}chke.o" auxiliary.o constant.o c_xerbla.o; do
         [ -f "$CT/$o" ] && support+=("$CT/$o")
     done
 
-    out="$CT/x${p}cblat2_sandboxed"
-    echo "relink $(basename "$driver") + c_${p}blas2.o (+support) -> $out  [+native .a fills un-wrapped]"
+    out="$CT/x${p}cblat${lvl}_sandboxed"
+    echo "relink $(basename "$driver") + c_${p}blas${lvl}.o (+support) -> $out  [+native .a fills un-wrapped]"
     "$(linker_for "$driver")" "$driver" "$wrap" "${support[@]}" \
         -L"$STUB_DIR" -lopenblas "$nativea" -lm -o "$out"
 
-    input="$(mktemp)"; gen_input2 "$CT/${p}in2" "$p" "$LEVEL2_ROUTINES" > "$input"
-    echo "=========== ctest level-2 ${p} (SANDBOXED; routines: $LEVEL2_ROUTINES) ==========="
+    input="$(mktemp)"; gen_input "$CT/${p}in${lvl}" "$p" "$routines" > "$input"
+    echo "=========== ctest level-${lvl} ${p} (SANDBOXED; routines: $routines) ==========="
     runit "$out" < "$input"
     rm -f "$input"
 }
 
 for lvl in $LEVELS; do
-    for p in $PRECISIONS; do
-        case "$lvl" in
-            1) run_level1 "$p" ;;
-            2) run_level2 "$p" ;;
-            *) echo "level $lvl not supported yet" ;;
-        esac
-    done
+    case "$lvl" in
+        1) for p in $L1_PRECISIONS; do run_level1 "$p"; done ;;
+        2) for p in $L2_PRECISIONS; do run_matrix_level "$p" 2 "$LEVEL2_ROUTINES"; done ;;
+        3) for p in $L3_PRECISIONS; do run_matrix_level "$p" 3 "$LEVEL3_ROUTINES"; done ;;
+        *) echo "level $lvl not supported yet" ;;
+    esac
 done
