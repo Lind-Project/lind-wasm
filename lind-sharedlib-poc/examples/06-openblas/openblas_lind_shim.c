@@ -132,6 +132,15 @@ extern void cblas_zher2k(const int, const int, const int, const int, const int, 
 extern void cblas_ztrmm (const int, const int, const int, const int, const int, const int, const int, const void *, const void *, const int, void *, const int);
 extern void cblas_ztrsm (const int, const int, const int, const int, const int, const int, const int, const void *, const void *, const int, void *, const int);
 
+// extra standard routines used by utest (not by the ctest drivers): rotmg, complex rot
+// (real c/s applied to complex vectors), dsdot/sdsdot (float in, double accumulate).
+extern void   cblas_srotmg(float *, float *, float *, const float, float *);
+extern void   cblas_drotmg(double *, double *, double *, const double, double *);
+extern void   cblas_csrot (const int, void *, const int, void *, const int, const float, const float);
+extern void   cblas_zdrot (const int, void *, const int, void *, const int, const double, const double);
+extern double cblas_dsdot (const int, const float *, const int, const float *, const int);
+extern float  cblas_sdsdot(const int, const float, const float *, const int, const float *, const int);
+
 
 // level-2 (order/trans are enums, ABI-compatible with int)
 extern void   cblas_dgemv(const int, const int, const int, const int, const double,
@@ -589,4 +598,19 @@ __attribute__((export_name("lind_cblas_ztrmm")))
 void lind_cblas_ztrmm(int o,int s,int u,int t,int d,int m,int n,const void*al,const void*a,int lda,void*b,int ldb){ cblas_ztrmm(o,s,u,t,d,m,n,al,a,lda,b,ldb); }
 __attribute__((export_name("lind_cblas_ztrsm")))
 void lind_cblas_ztrsm(int o,int s,int u,int t,int d,int m,int n,const void*al,const void*a,int lda,void*b,int ldb){ cblas_ztrsm(o,s,u,t,d,m,n,al,a,lda,b,ldb); }
+
+
+// --- extra standard routines for utest (rotmg / complex rot / dsdot) ---------------
+__attribute__((export_name("lind_cblas_srotmg")))
+void lind_cblas_srotmg(float*d1,float*d2,float*b1,float b2,float*p){ cblas_srotmg(d1,d2,b1,b2,p); }
+__attribute__((export_name("lind_cblas_drotmg")))
+void lind_cblas_drotmg(double*d1,double*d2,double*b1,double b2,double*p){ cblas_drotmg(d1,d2,b1,b2,p); }
+__attribute__((export_name("lind_cblas_csrot")))
+void lind_cblas_csrot(int n,void*x,int ix,void*y,int iy,float c,float s){ cblas_csrot(n,x,ix,y,iy,c,s); }
+__attribute__((export_name("lind_cblas_zdrot")))
+void lind_cblas_zdrot(int n,void*x,int ix,void*y,int iy,double c,double s){ cblas_zdrot(n,x,ix,y,iy,c,s); }
+__attribute__((export_name("lind_cblas_dsdot")))
+double lind_cblas_dsdot(int n,const float*x,int ix,const float*y,int iy){ return cblas_dsdot(n,x,ix,y,iy); }
+__attribute__((export_name("lind_cblas_sdsdot")))
+float lind_cblas_sdsdot(int n,float sb,const float*x,int ix,const float*y,int iy){ return cblas_sdsdot(n,sb,x,ix,y,iy); }
 

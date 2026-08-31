@@ -1938,3 +1938,90 @@ pub extern "C" fn zgemv_(trans: *const c_char, m: *const c_int, n: *const c_int,
     unsafe { cblas_zgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, alpha, a, *lda, x, *incx, beta, y, *incy) }
 }
 
+
+// ===================================================================================
+// Additional standard BLAS routines exercised by utest but not by the ctest drivers, so
+// they were never wrapped before: rotmg (modified Givens generation), complex rot
+// (csrot/zdrot — a REAL plane rotation applied to complex vectors), and dsdot/sdsdot
+// (single-precision inputs accumulated in double). Each gets a cblas_* wrapper (the guest
+// export lind_cblas_* is NEW — added to the shim) plus a Fortran forwarder for utest.
+// ===================================================================================
+
+// rotmg: d1,d2,b1 are in/out scalars; b2 is a by-value input; param P[5] is output.
+// P is a PARTIAL-write buffer: depending on the computed flag, rotmg writes only a subset
+// of param (e.g. flag=0 sets param[2]/param[3] but not param[1]/param[4]), and callers
+// expect the untouched entries preserved. Marshalling P as Out would copy guest garbage
+// back over them, so P must be InOut (seed the caller's values) — the same rule as any
+// strided/partial output buffer.
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_srotmg(d1: *mut f32, d2: *mut f32, b1: *mut f32, b2: f32, p: *mut f32) {
+    let d1b = unsafe { sscalar_out(d1) };
+    let d2b = unsafe { sscalar_out(d2) };
+    let b1b = unsafe { sscalar_out(b1) };
+    let pb = unsafe { core::slice::from_raw_parts_mut(p as *mut u8, 5 * F32) };
+    call("lind_cblas_srotmg", &mut [Arg::InOut { dst: d1b, len: OutLen::Cap }, Arg::InOut { dst: d2b, len: OutLen::Cap }, Arg::InOut { dst: b1b, len: OutLen::Cap }, Arg::F32(b2), Arg::InOut { dst: pb, len: OutLen::Cap }]);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_drotmg(d1: *mut f64, d2: *mut f64, b1: *mut f64, b2: f64, p: *mut f64) {
+    let d1b = unsafe { scalar_out(d1) };
+    let d2b = unsafe { scalar_out(d2) };
+    let b1b = unsafe { scalar_out(b1) };
+    let pb = unsafe { core::slice::from_raw_parts_mut(p as *mut u8, 5 * F64) };
+    call("lind_cblas_drotmg", &mut [Arg::InOut { dst: d1b, len: OutLen::Cap }, Arg::InOut { dst: d2b, len: OutLen::Cap }, Arg::InOut { dst: b1b, len: OutLen::Cap }, Arg::F64(b2), Arg::InOut { dst: pb, len: OutLen::Cap }]);
+}
+
+// csrot/zdrot: apply a REAL plane rotation (c,s real, by value) to two complex vectors in
+// place (both in/out).
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_csrot(n: c_int, x: *mut c_void, incx: c_int, y: *mut c_void, incy: c_int, c: f32, s: f32) {
+    let xb = unsafe { cxout(x, n, incx, C64) };
+    let yb = unsafe { cxout(y, n, incy, C64) };
+    call("lind_cblas_csrot", &mut [Arg::I32(n), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy), Arg::F32(c), Arg::F32(s)]);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_zdrot(n: c_int, x: *mut c_void, incx: c_int, y: *mut c_void, incy: c_int, c: f64, s: f64) {
+    let xb = unsafe { cxout(x, n, incx, C128) };
+    let yb = unsafe { cxout(y, n, incy, C128) };
+    call("lind_cblas_zdrot", &mut [Arg::I32(n), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy), Arg::F64(c), Arg::F64(s)]);
+}
+
+// dsdot: float inputs, double accumulate + return. sdsdot: same, plus a float sb bias.
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_dsdot(n: c_int, x: *const f32, incx: c_int, y: *const f32, incy: c_int) -> f64 {
+    let xb = unsafe { sin(x, n, incx) };
+    let yb = unsafe { sin(y, n, incy) };
+    call_f64("lind_cblas_dsdot", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_sdsdot(n: c_int, sb: f32, x: *const f32, incx: c_int, y: *const f32, incy: c_int) -> f32 {
+    let xb = unsafe { sin(x, n, incx) };
+    let yb = unsafe { sin(y, n, incy) };
+    call_f32("lind_cblas_sdsdot", &mut [Arg::I32(n), Arg::F32(sb), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy)])
+}
+
+// Fortran forwarders for the above (every arg by pointer; c/s/b2/sb are also pointers).
+#[unsafe(no_mangle)]
+pub extern "C" fn srotmg_(d1: *mut f32, d2: *mut f32, b1: *mut f32, b2: *const f32, p: *mut f32) {
+    unsafe { cblas_srotmg(d1, d2, b1, *b2, p) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn drotmg_(d1: *mut f64, d2: *mut f64, b1: *mut f64, b2: *const f64, p: *mut f64) {
+    unsafe { cblas_drotmg(d1, d2, b1, *b2, p) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn csrot_(n: *const c_int, x: *mut c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int, c: *const f32, s: *const f32) {
+    unsafe { cblas_csrot(*n, x, *incx, y, *incy, *c, *s) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zdrot_(n: *const c_int, x: *mut c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int, c: *const f64, s: *const f64) {
+    unsafe { cblas_zdrot(*n, x, *incx, y, *incy, *c, *s) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dsdot_(n: *const c_int, x: *const f32, incx: *const c_int, y: *const f32, incy: *const c_int) -> f64 {
+    unsafe { cblas_dsdot(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn sdsdot_(n: *const c_int, sb: *const f32, x: *const f32, incx: *const c_int, y: *const f32, incy: *const c_int) -> f32 {
+    unsafe { cblas_sdsdot(*n, *sb, x, *incx, y, *incy) }
+}
+
