@@ -1540,3 +1540,202 @@ pub extern "C" fn cblas_zhpr2(order: c_int, uplo: c_int, n: c_int, alpha: *const
     call("lind_cblas_zhpr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: apb, len: OutLen::Cap }]);
 }
 
+
+// ===================================================================================
+// CBLAS complex level-3 (c/z). Same shape rules as the real level-3 set: every operand
+// is a full 2D matrix sized gemat_elems(order, R, C, ld); (R,C) via trans_dims (flip by
+// trans) or square via side_dim. A/B are Buf; C is in/out (gemm/symm/hemm/syrk/herk/
+// syr2k/her2k), B is in/out (trmm/trsm). Adds the complex-only hemm/herk/her2k. Scalars:
+//   * alpha/beta by POINTER for gemm/symm/hemm/syrk/syr2k, and alpha for trmm/trsm.
+//   * herk takes BOTH alpha and beta REAL by value (F32/F64).
+//   * her2k takes a complex alpha (by ptr) but a REAL beta by value.
+// ===================================================================================
+
+// --- single-complex (c) ------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cgemm(order: c_int, transa: c_int, transb: c_int, m: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let (ar, ac) = trans_dims(transa, m, k);
+    let (br, bc) = trans_dims(transb, k, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C64) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, br, bc, ldb), C64) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, m, n, ldc), C64) };
+    call("lind_cblas_cgemm", &mut [Arg::I32(order), Arg::I32(transa), Arg::I32(transb), Arg::I32(m), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_csymm(order: c_int, side: c_int, uplo: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C64) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, m, n, ldb), C64) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, m, n, ldc), C64) };
+    call("lind_cblas_csymm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_chemm(order: c_int, side: c_int, uplo: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C64) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, m, n, ldb), C64) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, m, n, ldc), C64) };
+    call("lind_cblas_chemm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_csyrk(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C64) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C64) };
+    call("lind_cblas_csyrk", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cherk(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: f32, a: *const c_void, lda: c_int, beta: f32, c: *mut c_void, ldc: c_int) {
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C64) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C64) };
+    call("lind_cblas_cherk", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::F32(alpha), Arg::Buf(ab), Arg::I32(lda), Arg::F32(beta), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_csyr2k(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C64) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, ar, ac, ldb), C64) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C64) };
+    call("lind_cblas_csyr2k", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_cher2k(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: f32, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C64) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, ar, ac, ldb), C64) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C64) };
+    call("lind_cblas_cher2k", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::F32(beta), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctrmm(order: c_int, side: c_int, uplo: c_int, trans: c_int, diag: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *mut c_void, ldb: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C64) };
+    let bb = unsafe { cmat_out(b, gemat_elems(order, m, n, ldb), C64) };
+    call("lind_cblas_ctrmm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: bb, len: OutLen::Cap }, Arg::I32(ldb)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ctrsm(order: c_int, side: c_int, uplo: c_int, trans: c_int, diag: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *mut c_void, ldb: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C64) };
+    let bb = unsafe { cmat_out(b, gemat_elems(order, m, n, ldb), C64) };
+    call("lind_cblas_ctrsm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: bb, len: OutLen::Cap }, Arg::I32(ldb)]);
+}
+
+// --- double-complex (z) ------------------------------------------------------------
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zgemm(order: c_int, transa: c_int, transb: c_int, m: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let (ar, ac) = trans_dims(transa, m, k);
+    let (br, bc) = trans_dims(transb, k, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C128) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, br, bc, ldb), C128) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, m, n, ldc), C128) };
+    call("lind_cblas_zgemm", &mut [Arg::I32(order), Arg::I32(transa), Arg::I32(transb), Arg::I32(m), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zsymm(order: c_int, side: c_int, uplo: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C128) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, m, n, ldb), C128) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, m, n, ldc), C128) };
+    call("lind_cblas_zsymm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zhemm(order: c_int, side: c_int, uplo: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C128) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, m, n, ldb), C128) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, m, n, ldc), C128) };
+    call("lind_cblas_zhemm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zsyrk(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C128) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C128) };
+    call("lind_cblas_zsyrk", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zherk(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: f64, a: *const c_void, lda: c_int, beta: f64, c: *mut c_void, ldc: c_int) {
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C128) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C128) };
+    call("lind_cblas_zherk", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::F64(alpha), Arg::Buf(ab), Arg::I32(lda), Arg::F64(beta), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zsyr2k(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: *const c_void, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C128) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, ar, ac, ldb), C128) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C128) };
+    call("lind_cblas_zsyr2k", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::Buf(be), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zher2k(order: c_int, uplo: c_int, trans: c_int, n: c_int, k: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *const c_void, ldb: c_int, beta: f64, c: *mut c_void, ldc: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let (ar, ac) = trans_dims(trans, n, k);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ar, ac, lda), C128) };
+    let bb = unsafe { cmat_in(b, gemat_elems(order, ar, ac, ldb), C128) };
+    let cb = unsafe { cmat_out(c, gemat_elems(order, n, n, ldc), C128) };
+    call("lind_cblas_zher2k", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(n), Arg::I32(k), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(bb), Arg::I32(ldb), Arg::F64(beta), Arg::InOut { dst: cb, len: OutLen::Cap }, Arg::I32(ldc)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztrmm(order: c_int, side: c_int, uplo: c_int, trans: c_int, diag: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *mut c_void, ldb: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C128) };
+    let bb = unsafe { cmat_out(b, gemat_elems(order, m, n, ldb), C128) };
+    call("lind_cblas_ztrmm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: bb, len: OutLen::Cap }, Arg::I32(ldb)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_ztrsm(order: c_int, side: c_int, uplo: c_int, trans: c_int, diag: c_int, m: c_int, n: c_int, alpha: *const c_void, a: *const c_void, lda: c_int, b: *mut c_void, ldb: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let ad = side_dim(side, m, n);
+    let ab = unsafe { cmat_in(a, gemat_elems(order, ad, ad, lda), C128) };
+    let bb = unsafe { cmat_out(b, gemat_elems(order, m, n, ldb), C128) };
+    call("lind_cblas_ztrsm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: bb, len: OutLen::Cap }, Arg::I32(ldb)]);
+}
+
