@@ -1739,3 +1739,160 @@ pub extern "C" fn cblas_ztrsm(order: c_int, side: c_int, uplo: c_int, trans: c_i
     call("lind_cblas_ztrsm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: bb, len: OutLen::Cap }, Arg::I32(ldb)]);
 }
 
+// ===================================================================================
+// Fortran-ABI (BLASFUNC) forwarders for the utest suite. Unlike the reference CBLAS
+// ctest path, utest calls the Fortran symbols (daxpy_, dscal_, ...): EVERY argument is
+// a pointer, there is no `order` (BLAS is implicitly column-major), and the integer
+// i?amax result is 1-based. Each forwarder just derefs its pointer args and calls the
+// already-sandboxed cblas_* above — so utest exercises the very same guest code.
+//
+// This is the STANDARD level-1 set only. Routines needing more work stay on the native
+// libopenblas.a fallback in the harness for now: complex dot (cdotu_/zdotu_ — fragile
+// complex-return ABI), dsdot/sdsdot (need a cblas_dsdot), rotmg, the char-flag level-2/3
+// forwarders (gemv_/gemm_ — need 'N'/'T' -> enum translation), and the OpenBLAS
+// extensions (amax/amin/axpby/ismin — need extension cblas_* wrappers).
+//
+// (drot_/drotm_/srot_/srotm_ are already defined above for the ctest level-1 driver.)
+// ===================================================================================
+
+// --- real single/double: axpy, copy, swap, scal ------------------------------------
+#[unsafe(no_mangle)]
+pub extern "C" fn saxpy_(n: *const c_int, alpha: *const f32, x: *const f32, incx: *const c_int, y: *mut f32, incy: *const c_int) {
+    unsafe { cblas_saxpy(*n, *alpha, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn daxpy_(n: *const c_int, alpha: *const f64, x: *const f64, incx: *const c_int, y: *mut f64, incy: *const c_int) {
+    unsafe { cblas_daxpy(*n, *alpha, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn scopy_(n: *const c_int, x: *const f32, incx: *const c_int, y: *mut f32, incy: *const c_int) {
+    unsafe { cblas_scopy(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dcopy_(n: *const c_int, x: *const f64, incx: *const c_int, y: *mut f64, incy: *const c_int) {
+    unsafe { cblas_dcopy(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn sswap_(n: *const c_int, x: *mut f32, incx: *const c_int, y: *mut f32, incy: *const c_int) {
+    unsafe { cblas_sswap(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dswap_(n: *const c_int, x: *mut f64, incx: *const c_int, y: *mut f64, incy: *const c_int) {
+    unsafe { cblas_dswap(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn sscal_(n: *const c_int, alpha: *const f32, x: *mut f32, incx: *const c_int) {
+    unsafe { cblas_sscal(*n, *alpha, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dscal_(n: *const c_int, alpha: *const f64, x: *mut f64, incx: *const c_int) {
+    unsafe { cblas_dscal(*n, *alpha, x, *incx) }
+}
+
+// --- real single/double: dot / nrm2 / asum (scalar returns) ------------------------
+#[unsafe(no_mangle)]
+pub extern "C" fn sdot_(n: *const c_int, x: *const f32, incx: *const c_int, y: *const f32, incy: *const c_int) -> f32 {
+    unsafe { cblas_sdot(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn ddot_(n: *const c_int, x: *const f64, incx: *const c_int, y: *const f64, incy: *const c_int) -> f64 {
+    unsafe { cblas_ddot(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn snrm2_(n: *const c_int, x: *const f32, incx: *const c_int) -> f32 {
+    unsafe { cblas_snrm2(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dnrm2_(n: *const c_int, x: *const f64, incx: *const c_int) -> f64 {
+    unsafe { cblas_dnrm2(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn sasum_(n: *const c_int, x: *const f32, incx: *const c_int) -> f32 {
+    unsafe { cblas_sasum(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dasum_(n: *const c_int, x: *const f64, incx: *const c_int) -> f64 {
+    unsafe { cblas_dasum(*n, x, *incx) }
+}
+
+/// Fortran i?amax: returns a 1-based index, or 0 when n < 1 (cblas is 0-based).
+fn famax(zero_based: usize, n: c_int) -> c_int {
+    if n < 1 { 0 } else { zero_based as c_int + 1 }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn isamax_(n: *const c_int, x: *const f32, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_isamax(*n, x, *incx), *n) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn idamax_(n: *const c_int, x: *const f64, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_idamax(*n, x, *incx), *n) }
+}
+
+// --- complex single/double: axpy, copy, swap, scal ---------------------------------
+#[unsafe(no_mangle)]
+pub extern "C" fn caxpy_(n: *const c_int, alpha: *const c_void, x: *const c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_caxpy(*n, alpha, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zaxpy_(n: *const c_int, alpha: *const c_void, x: *const c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_zaxpy(*n, alpha, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn ccopy_(n: *const c_int, x: *const c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_ccopy(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zcopy_(n: *const c_int, x: *const c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_zcopy(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cswap_(n: *const c_int, x: *mut c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_cswap(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zswap_(n: *const c_int, x: *mut c_void, incx: *const c_int, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_zswap(*n, x, *incx, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cscal_(n: *const c_int, alpha: *const c_void, x: *mut c_void, incx: *const c_int) {
+    unsafe { cblas_cscal(*n, alpha, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zscal_(n: *const c_int, alpha: *const c_void, x: *mut c_void, incx: *const c_int) {
+    unsafe { cblas_zscal(*n, alpha, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn csscal_(n: *const c_int, alpha: *const f32, x: *mut c_void, incx: *const c_int) {
+    unsafe { cblas_csscal(*n, *alpha, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zdscal_(n: *const c_int, alpha: *const f64, x: *mut c_void, incx: *const c_int) {
+    unsafe { cblas_zdscal(*n, *alpha, x, *incx) }
+}
+
+// --- complex single/double: nrm2 / asum (real returns) / iamax ---------------------
+#[unsafe(no_mangle)]
+pub extern "C" fn scnrm2_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f32 {
+    unsafe { cblas_scnrm2(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dznrm2_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f64 {
+    unsafe { cblas_dznrm2(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn scasum_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f32 {
+    unsafe { cblas_scasum(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dzasum_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f64 {
+    unsafe { cblas_dzasum(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn icamax_(n: *const c_int, x: *const c_void, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_icamax(*n, x, *incx), *n) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn izamax_(n: *const c_int, x: *const c_void, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_izamax(*n, x, *incx), *n) }
+}
+
