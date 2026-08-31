@@ -125,6 +125,13 @@ pub enum DylinkErrorCode {
 
 pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 
+/// The import namespace / name under which every lind-wasm module imports its
+/// shared linear memory. `wasm-ld --import-memory` always emits `env`.`memory`,
+/// and lind's toolchain builds every module (main, glibc, preloads) that way, so
+/// this is fixed rather than discovered by scanning a module's import section.
+const LIND_MEMORY_IMPORT_MODULE: &str = "env";
+const LIND_MEMORY_IMPORT_NAME: &str = "memory";
+
 /// Maximum number of grate workers that may exist for one grate handler.
 ///
 /// This is a platform-wide configuration constant. lind-wasm preallocates

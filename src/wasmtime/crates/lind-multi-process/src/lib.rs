@@ -7,7 +7,8 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
 use sysdefs::constants::lind_platform_const::{
-    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
+    LIND_MEMORY_IMPORT_MODULE, LIND_MEMORY_IMPORT_NAME, UNUSED_ARG, UNUSED_ID, UNUSED_NAME,
+    unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL};
@@ -1467,19 +1468,20 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         // exec replaces the program image but keeps the cage, so the 4 GiB linear
         // memory this cage already owns is handed to the new image instead of
-        // mapping a second reservation. It is looked up under the import name the
-        // current program's main module uses, which is how it was defined in this
-        // cage's linker (see `attach_shared_memory`).
+        // mapping a second reservation. It is looked up under the same fixed name
+        // `attach_shared_memory` defined it under in this cage's linker.
         //
         // If the lookup fails we simply fall back to a fresh reservation, which is
         // the pre-existing behaviour, so exec keeps working either way.
-        let cage_memory = shared_memory_import_name(main_module).and_then(|(module, name)| {
-            self.linker.as_ref().and_then(|linker| {
-                linker
-                    .get(&mut *caller, &module, &name)
-                    .ok()
-                    .and_then(|ext| ext.into_shared_memory())
-            })
+        let cage_memory = self.linker.as_ref().and_then(|linker| {
+            linker
+                .get(
+                    &mut *caller,
+                    LIND_MEMORY_IMPORT_MODULE,
+                    LIND_MEMORY_IMPORT_NAME,
+                )
+                .ok()
+                .and_then(|ext| ext.into_shared_memory())
         });
 
         // get the base address of the memory
@@ -2398,10 +2400,12 @@ where
 // mmap-ed reservation would.
 //
 // Note that reusing the reservation means the pre-exec image's memory really is
-// gone once exec succeeds, so a sibling thread that outlives exec would fault.
-// POSIX requires exec to terminate every other thread in the process first, which
-// lind does not do yet (see the thread cleanup TODO in rawposix `exec_syscall`);
-// exec is currently only reachable from a cage's main thread.
+// gone once exec succeeds, so a sibling thread that outlives exec would keep
+// running against a linear memory whose contents have been discarded. POSIX
+// requires exec to terminate every other thread in the cage first; rawposix's
+// `exec_syscall` documents that as its job but does not do it yet, so multi-
+// threaded exec is not safe on this path. No lind application exercises it today
+// (exec is only reached from a cage's main thread) -- tracked separately.
 pub fn attach_shared_memory<
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
     U: Clone + Send + Sync + 'static,
@@ -2413,14 +2417,11 @@ pub fn attach_shared_memory<
     cageid: i32,
     existing_memory: Option<SharedMemory>,
 ) -> Result<()> {
-    // Find the shared memory import in the first module (main module) to get
-    // the import namespace / name under which to register the memory.
+    // The main module is only needed for its engine; the import name the memory is
+    // registered under is fixed (see LIND_MEMORY_IMPORT_MODULE / _NAME).
     let main_module = all_modules
         .first()
         .ok_or_else(|| anyhow!("no modules provided"))?;
-
-    let (import_module_name, import_name) = shared_memory_import_name(main_module)
-        .ok_or_else(|| anyhow!("Main Module does not contain a shared memory"))?;
 
     // In lind-wasm the linear memory is always a fixed 4 GiB physical
     // reservation (MmapMemory overrides max to MAX_MEMORY_SIZE = 4 GiB).
@@ -2535,27 +2536,14 @@ pub fn attach_shared_memory<
 
         cage::init_vmmap(cageid as u64, memory_base as usize, None);
     }
-    linker.define(&store, &import_module_name, &import_name, mem.clone())?;
+    linker.define(
+        &store,
+        LIND_MEMORY_IMPORT_MODULE,
+        LIND_MEMORY_IMPORT_NAME,
+        mem.clone(),
+    )?;
 
     Ok(())
-}
-
-/// Return the `(module, name)` pair under which `module` imports its shared linear
-/// memory, or `None` if it does not import one.
-///
-/// Both `attach_shared_memory` (which defines the memory in a cage's linker) and
-/// the exec path (which looks the memory back up so it can be reused) need this
-/// name, so it is derived in one place.
-fn shared_memory_import_name(module: &Module) -> Option<(String, String)> {
-    module.imports().find_map(|import| {
-        let ty = import.ty();
-        let memory = ty.memory()?;
-        if memory.is_shared() {
-            Some((import.module().to_string(), import.name().to_string()))
-        } else {
-            None
-        }
-    })
 }
 
 pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result<()> {
