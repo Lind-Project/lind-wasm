@@ -30,8 +30,18 @@ fn lib() -> &'static Mutex<SandboxedLib> {
     })
 }
 
+/// Print `[sandbox] <name>` to stderr when LIND_TRACE is set — a per-call audit trail
+/// proving the routine ran through the guest (not the native fallback).
+fn trace(name: &str) {
+    if std::env::var_os("LIND_TRACE").is_some() {
+        eprintln!("[sandbox] {name}");
+    }
+}
+
+
 /// Call a void/integer-returning guest export.
 fn call(name: &str, args: &mut [Arg]) -> i64 {
+    trace(name);
     lib()
         .lock()
         .unwrap()
@@ -41,6 +51,7 @@ fn call(name: &str, args: &mut [Arg]) -> i64 {
 
 /// Call an f64-returning guest export.
 fn call_f64(name: &str, args: &mut [Arg]) -> f64 {
+    trace(name);
     lib()
         .lock()
         .unwrap()
@@ -299,6 +310,7 @@ const F32: usize = 4; // bytes per float
 
 /// Call an f32-returning guest export.
 fn call_f32(name: &str, args: &mut [Arg]) -> f32 {
+    trace(name);
     lib()
         .lock()
         .unwrap()
