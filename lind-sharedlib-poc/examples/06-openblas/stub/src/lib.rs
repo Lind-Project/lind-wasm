@@ -1951,6 +1951,31 @@ pub extern "C" fn zgemv_(trans: *const c_char, m: *const c_int, n: *const c_int,
 }
 
 
+// --- level-3 Fortran forwarders: gemm ----------------------------------------------
+// Same char->enum + column-major reuse as gemv, over cblas_?gemm (already sandboxed from
+// ctest level-3). No shim change. utest's fork-safety tests call gemm, so forwarding it
+// routes them through the sandbox too.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn sgemm_(transa: *const c_char, transb: *const c_char, m: *const c_int, n: *const c_int, k: *const c_int, alpha: *const f32, a: *const f32, lda: *const c_int, b: *const f32, ldb: *const c_int, beta: *const f32, c: *mut f32, ldc: *const c_int) {
+    unsafe { cblas_sgemm(CBLAS_COL_MAJOR, trans_enum(*transa), trans_enum(*transb), *m, *n, *k, *alpha, a, *lda, b, *ldb, *beta, c, *ldc) }
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn dgemm_(transa: *const c_char, transb: *const c_char, m: *const c_int, n: *const c_int, k: *const c_int, alpha: *const f64, a: *const f64, lda: *const c_int, b: *const f64, ldb: *const c_int, beta: *const f64, c: *mut f64, ldc: *const c_int) {
+    unsafe { cblas_dgemm(CBLAS_COL_MAJOR, trans_enum(*transa), trans_enum(*transb), *m, *n, *k, *alpha, a, *lda, b, *ldb, *beta, c, *ldc) }
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cgemm_(transa: *const c_char, transb: *const c_char, m: *const c_int, n: *const c_int, k: *const c_int, alpha: *const c_void, a: *const c_void, lda: *const c_int, b: *const c_void, ldb: *const c_int, beta: *const c_void, c: *mut c_void, ldc: *const c_int) {
+    unsafe { cblas_cgemm(CBLAS_COL_MAJOR, trans_enum(*transa), trans_enum(*transb), *m, *n, *k, alpha, a, *lda, b, *ldb, beta, c, *ldc) }
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn zgemm_(transa: *const c_char, transb: *const c_char, m: *const c_int, n: *const c_int, k: *const c_int, alpha: *const c_void, a: *const c_void, lda: *const c_int, b: *const c_void, ldb: *const c_int, beta: *const c_void, c: *mut c_void, ldc: *const c_int) {
+    unsafe { cblas_zgemm(CBLAS_COL_MAJOR, trans_enum(*transa), trans_enum(*transb), *m, *n, *k, alpha, a, *lda, b, *ldb, beta, c, *ldc) }
+}
+
 // ===================================================================================
 // Additional standard BLAS routines exercised by utest but not by the ctest drivers, so
 // they were never wrapped before: rotmg (modified Givens generation), complex rot
