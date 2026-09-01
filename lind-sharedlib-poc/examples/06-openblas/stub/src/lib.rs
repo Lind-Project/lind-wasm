@@ -1920,11 +1920,15 @@ pub extern "C" fn izamax_(n: *const c_int, x: *const c_void, incx: *const c_int)
 
 use core::ffi::c_char;
 
-/// Fortran BLAS trans flag ('N'/'T'/'C', any case) -> CBLAS enum.
+/// Fortran BLAS trans flag ('N'/'T'/'C'/'R', any case) -> CBLAS enum. 'R' is OpenBLAS's
+/// ConjNoTrans (conjugate, no transpose) extension — used by the test_extensions gemm/gemv
+/// suites; the reference ctest drivers never exercise it, so it must be mapped explicitly
+/// or it falls through to NoTrans and silently computes the wrong (un-conjugated) result.
 fn trans_enum(c: c_char) -> c_int {
     match (c as u8).to_ascii_uppercase() {
         b'T' => 112,         // CblasTrans
         b'C' => 113,         // CblasConjTrans
+        b'R' => 114,         // CblasConjNoTrans (OpenBLAS extension)
         _ => CBLAS_NO_TRANS, // 'N'
     }
 }
