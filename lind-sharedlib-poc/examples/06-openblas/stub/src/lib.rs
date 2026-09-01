@@ -2025,3 +2025,48 @@ pub extern "C" fn sdsdot_(n: *const c_int, sb: *const f32, x: *const f32, incx: 
     unsafe { cblas_sdsdot(*n, *sb, x, *incx, y, *incy) }
 }
 
+
+// --- complex dot (Fortran complex-RETURN ABI) --------------------------------------
+// CBLAS returns the complex dot through an out-pointer (?dotu_sub, which we already
+// sandbox); the FORTRAN ?dotu_/?dotc_ RETURN the complex by value. On the x86-64 SysV
+// ABI a #[repr(C)] {re, im} pair is returned in xmm0[:xmm1] — the same as C99 _Complex
+// and OpenBLAS's OPENBLAS_COMPLEX_* struct — so we compute via the existing sandboxed
+// cblas_?dot?_sub (writing into a local) and return it by value. No shim change.
+// (Assumes the native build is NOT RETURN_BY_STACK, i.e. the standard x86-64 convention.)
+
+#[repr(C)]
+pub struct Cf32 {
+    re: f32,
+    im: f32,
+}
+#[repr(C)]
+pub struct Cf64 {
+    re: f64,
+    im: f64,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cdotu_(n: *const c_int, x: *const c_void, incx: *const c_int, y: *const c_void, incy: *const c_int) -> Cf32 {
+    let mut r = Cf32 { re: 0.0, im: 0.0 };
+    unsafe { cblas_cdotu_sub(*n, x, *incx, y, *incy, &mut r as *mut Cf32 as *mut c_void) };
+    r
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cdotc_(n: *const c_int, x: *const c_void, incx: *const c_int, y: *const c_void, incy: *const c_int) -> Cf32 {
+    let mut r = Cf32 { re: 0.0, im: 0.0 };
+    unsafe { cblas_cdotc_sub(*n, x, *incx, y, *incy, &mut r as *mut Cf32 as *mut c_void) };
+    r
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zdotu_(n: *const c_int, x: *const c_void, incx: *const c_int, y: *const c_void, incy: *const c_int) -> Cf64 {
+    let mut r = Cf64 { re: 0.0, im: 0.0 };
+    unsafe { cblas_zdotu_sub(*n, x, *incx, y, *incy, &mut r as *mut Cf64 as *mut c_void) };
+    r
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zdotc_(n: *const c_int, x: *const c_void, incx: *const c_int, y: *const c_void, incy: *const c_int) -> Cf64 {
+    let mut r = Cf64 { re: 0.0, im: 0.0 };
+    unsafe { cblas_zdotc_sub(*n, x, *incx, y, *incy, &mut r as *mut Cf64 as *mut c_void) };
+    r
+}
+
