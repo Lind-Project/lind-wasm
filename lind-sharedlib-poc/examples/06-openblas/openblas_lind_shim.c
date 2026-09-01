@@ -141,6 +141,29 @@ extern void   cblas_zdrot (const int, void *, const int, void *, const int, cons
 extern double cblas_dsdot (const int, const float *, const int, const float *, const int);
 extern float  cblas_sdsdot(const int, const float, const float *, const int, const float *, const int);
 
+// OpenBLAS extensions. axpby/amax/amin/i?max/i?min have a CBLAS form; the signed max/min
+// VALUE functions (smax/dmax/smin/dmin) do NOT, so the shim calls their FORTRAN symbols
+// (smax_ etc., imported from the preloaded OpenBLAS) directly.
+extern void   cblas_saxpby(const int, const float, const float *, const int, const float, float *, const int);
+extern void   cblas_daxpby(const int, const double, const double *, const int, const double, double *, const int);
+extern void   cblas_caxpby(const int, const void *, const void *, const int, const void *, void *, const int);
+extern void   cblas_zaxpby(const int, const void *, const void *, const int, const void *, void *, const int);
+extern float  cblas_samax (const int, const float *, const int);
+extern double cblas_damax (const int, const double *, const int);
+extern float  cblas_scamax(const int, const void *, const int);
+extern double cblas_dzamax(const int, const void *, const int);
+extern float  cblas_samin (const int, const float *, const int);
+extern double cblas_damin (const int, const double *, const int);
+extern float  cblas_scamin(const int, const void *, const int);
+extern double cblas_dzamin(const int, const void *, const int);
+extern size_t cblas_ismax (const int, const float *, const int);
+extern size_t cblas_idmax (const int, const double *, const int);
+extern size_t cblas_ismin (const int, const float *, const int);
+extern size_t cblas_idmin (const int, const double *, const int);
+extern float  smax_(const int *, const float *, const int *);
+extern double dmax_(const int *, const double *, const int *);
+extern float  smin_(const int *, const float *, const int *);
+extern double dmin_(const int *, const double *, const int *);
 
 // level-2 (order/trans are enums, ABI-compatible with int)
 extern void   cblas_dgemv(const int, const int, const int, const int, const double,
@@ -613,4 +636,49 @@ __attribute__((export_name("lind_cblas_dsdot")))
 double lind_cblas_dsdot(int n,const float*x,int ix,const float*y,int iy){ return cblas_dsdot(n,x,ix,y,iy); }
 __attribute__((export_name("lind_cblas_sdsdot")))
 float lind_cblas_sdsdot(int n,float sb,const float*x,int ix,const float*y,int iy){ return cblas_sdsdot(n,sb,x,ix,y,iy); }
+
+
+// --- OpenBLAS extensions -----------------------------------------------------------
+__attribute__((export_name("lind_cblas_saxpby")))
+void lind_cblas_saxpby(int n,float al,const float*x,int ix,float be,float*y,int iy){ cblas_saxpby(n,al,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_daxpby")))
+void lind_cblas_daxpby(int n,double al,const double*x,int ix,double be,double*y,int iy){ cblas_daxpby(n,al,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_caxpby")))
+void lind_cblas_caxpby(int n,const void*al,const void*x,int ix,const void*be,void*y,int iy){ cblas_caxpby(n,al,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_zaxpby")))
+void lind_cblas_zaxpby(int n,const void*al,const void*x,int ix,const void*be,void*y,int iy){ cblas_zaxpby(n,al,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_samax")))
+float lind_cblas_samax(int n,const float*x,int ix){ return cblas_samax(n,x,ix); }
+__attribute__((export_name("lind_cblas_damax")))
+double lind_cblas_damax(int n,const double*x,int ix){ return cblas_damax(n,x,ix); }
+__attribute__((export_name("lind_cblas_scamax")))
+float lind_cblas_scamax(int n,const void*x,int ix){ return cblas_scamax(n,x,ix); }
+__attribute__((export_name("lind_cblas_dzamax")))
+double lind_cblas_dzamax(int n,const void*x,int ix){ return cblas_dzamax(n,x,ix); }
+__attribute__((export_name("lind_cblas_samin")))
+float lind_cblas_samin(int n,const float*x,int ix){ return cblas_samin(n,x,ix); }
+__attribute__((export_name("lind_cblas_damin")))
+double lind_cblas_damin(int n,const double*x,int ix){ return cblas_damin(n,x,ix); }
+__attribute__((export_name("lind_cblas_scamin")))
+float lind_cblas_scamin(int n,const void*x,int ix){ return cblas_scamin(n,x,ix); }
+__attribute__((export_name("lind_cblas_dzamin")))
+double lind_cblas_dzamin(int n,const void*x,int ix){ return cblas_dzamin(n,x,ix); }
+__attribute__((export_name("lind_cblas_ismax")))
+size_t lind_cblas_ismax(int n,const float*x,int ix){ return cblas_ismax(n,x,ix); }
+__attribute__((export_name("lind_cblas_idmax")))
+size_t lind_cblas_idmax(int n,const double*x,int ix){ return cblas_idmax(n,x,ix); }
+__attribute__((export_name("lind_cblas_ismin")))
+size_t lind_cblas_ismin(int n,const float*x,int ix){ return cblas_ismin(n,x,ix); }
+__attribute__((export_name("lind_cblas_idmin")))
+size_t lind_cblas_idmin(int n,const double*x,int ix){ return cblas_idmin(n,x,ix); }
+
+// signed max/min VALUE — no cblas form, call the guest's Fortran symbols directly.
+__attribute__((export_name("lind_smax")))
+float lind_smax(int n,const float*x,int ix){ return smax_(&n,x,&ix); }
+__attribute__((export_name("lind_dmax")))
+double lind_dmax(int n,const double*x,int ix){ return dmax_(&n,x,&ix); }
+__attribute__((export_name("lind_smin")))
+float lind_smin(int n,const float*x,int ix){ return smin_(&n,x,&ix); }
+__attribute__((export_name("lind_dmin")))
+double lind_dmin(int n,const double*x,int ix){ return dmin_(&n,x,&ix); }
 

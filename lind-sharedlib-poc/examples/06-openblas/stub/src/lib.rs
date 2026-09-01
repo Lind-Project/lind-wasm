@@ -2070,3 +2070,199 @@ pub extern "C" fn zdotc_(n: *const c_int, x: *const c_void, incx: *const c_int, 
     r
 }
 
+
+// ===================================================================================
+// OpenBLAS EXTENSIONS exercised by utest (not standard BLAS). Most have a CBLAS form
+// (cblas_?axpby / ?amax / ?amin / i?max / i?min), wrapped like the rest. The signed
+// max/min VALUE routines (smax/dmax/smin/dmin) have NO cblas form, so their guest wrapper
+// calls the Fortran symbol directly (see the shim's lind_smax etc.) and the stub forwarder
+// marshals straight to it. utest calls all of these by their Fortran names.
+// ===================================================================================
+
+// axpby: y := alpha*x + beta*y. Real alpha/beta by value (s/d), by pointer (c/z); y in/out.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_saxpby(n: c_int, alpha: f32, x: *const f32, incx: c_int, beta: f32, y: *mut f32, incy: c_int) {
+    let xb = unsafe { sin(x, n, incx) };
+    let yb = unsafe { sout(y, n, incy) };
+    call("lind_cblas_saxpby", &mut [Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::F32(beta), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_daxpby(n: c_int, alpha: f64, x: *const f64, incx: c_int, beta: f64, y: *mut f64, incy: c_int) {
+    let xb = unsafe { vin(x, n, incx) };
+    let yb = unsafe { vout(y, n, incy) };
+    call("lind_cblas_daxpby", &mut [Arg::I32(n), Arg::F64(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::F64(beta), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_caxpby(n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C64) };
+    let be = unsafe { cxscalar(beta, C64) };
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    let yb = unsafe { cxout(y, n, incy, C64) };
+    call("lind_cblas_caxpby", &mut [Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn cblas_zaxpby(n: c_int, alpha: *const c_void, x: *const c_void, incx: c_int, beta: *const c_void, y: *mut c_void, incy: c_int) {
+    let al = unsafe { cxscalar(alpha, C128) };
+    let be = unsafe { cxscalar(beta, C128) };
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    let yb = unsafe { cxout(y, n, incy, C128) };
+    call("lind_cblas_zaxpby", &mut [Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+}
+
+// amax/amin: max/min ABS value, real return. scamax/dzamax etc. take complex, return real.
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_samax(n: c_int, x: *const f32, incx: c_int) -> f32 {
+    let xb = unsafe { sin(x, n, incx) };
+    call_f32("lind_cblas_samax", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_damax(n: c_int, x: *const f64, incx: c_int) -> f64 {
+    let xb = unsafe { vin(x, n, incx) };
+    call_f64("lind_cblas_damax", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_scamax(n: c_int, x: *const c_void, incx: c_int) -> f32 {
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    call_f32("lind_cblas_scamax", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_dzamax(n: c_int, x: *const c_void, incx: c_int) -> f64 {
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    call_f64("lind_cblas_dzamax", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_samin(n: c_int, x: *const f32, incx: c_int) -> f32 {
+    let xb = unsafe { sin(x, n, incx) };
+    call_f32("lind_cblas_samin", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_damin(n: c_int, x: *const f64, incx: c_int) -> f64 {
+    let xb = unsafe { vin(x, n, incx) };
+    call_f64("lind_cblas_damin", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_scamin(n: c_int, x: *const c_void, incx: c_int) -> f32 {
+    let xb = unsafe { cxin(x, n, incx, C64) };
+    call_f32("lind_cblas_scamin", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_dzamin(n: c_int, x: *const c_void, incx: c_int) -> f64 {
+    let xb = unsafe { cxin(x, n, incx, C128) };
+    call_f64("lind_cblas_dzamin", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)])
+}
+
+// index of max/min (CBLAS returns 0-based CBLAS_INDEX; the Fortran forwarders add 1).
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_ismax(n: c_int, x: *const f32, incx: c_int) -> usize {
+    let xb = unsafe { sin(x, n, incx) };
+    call("lind_cblas_ismax", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)]) as usize
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_idmax(n: c_int, x: *const f64, incx: c_int) -> usize {
+    let xb = unsafe { vin(x, n, incx) };
+    call("lind_cblas_idmax", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)]) as usize
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_ismin(n: c_int, x: *const f32, incx: c_int) -> usize {
+    let xb = unsafe { sin(x, n, incx) };
+    call("lind_cblas_ismin", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)]) as usize
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn cblas_idmin(n: c_int, x: *const f64, incx: c_int) -> usize {
+    let xb = unsafe { vin(x, n, incx) };
+    call("lind_cblas_idmin", &mut [Arg::I32(n), Arg::Buf(xb), Arg::I32(incx)]) as usize
+}
+
+// Fortran forwarders for the CBLAS-backed extensions.
+#[unsafe(no_mangle)]
+pub extern "C" fn saxpby_(n: *const c_int, alpha: *const f32, x: *const f32, incx: *const c_int, beta: *const f32, y: *mut f32, incy: *const c_int) {
+    unsafe { cblas_saxpby(*n, *alpha, x, *incx, *beta, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn daxpby_(n: *const c_int, alpha: *const f64, x: *const f64, incx: *const c_int, beta: *const f64, y: *mut f64, incy: *const c_int) {
+    unsafe { cblas_daxpby(*n, *alpha, x, *incx, *beta, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn caxpby_(n: *const c_int, alpha: *const c_void, x: *const c_void, incx: *const c_int, beta: *const c_void, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_caxpby(*n, alpha, x, *incx, beta, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn zaxpby_(n: *const c_int, alpha: *const c_void, x: *const c_void, incx: *const c_int, beta: *const c_void, y: *mut c_void, incy: *const c_int) {
+    unsafe { cblas_zaxpby(*n, alpha, x, *incx, beta, y, *incy) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn samax_(n: *const c_int, x: *const f32, incx: *const c_int) -> f32 {
+    unsafe { cblas_samax(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn damax_(n: *const c_int, x: *const f64, incx: *const c_int) -> f64 {
+    unsafe { cblas_damax(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn scamax_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f32 {
+    unsafe { cblas_scamax(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dzamax_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f64 {
+    unsafe { cblas_dzamax(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn samin_(n: *const c_int, x: *const f32, incx: *const c_int) -> f32 {
+    unsafe { cblas_samin(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn damin_(n: *const c_int, x: *const f64, incx: *const c_int) -> f64 {
+    unsafe { cblas_damin(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn scamin_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f32 {
+    unsafe { cblas_scamin(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dzamin_(n: *const c_int, x: *const c_void, incx: *const c_int) -> f64 {
+    unsafe { cblas_dzamin(*n, x, *incx) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn ismax_(n: *const c_int, x: *const f32, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_ismax(*n, x, *incx), *n) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn idmax_(n: *const c_int, x: *const f64, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_idmax(*n, x, *incx), *n) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn ismin_(n: *const c_int, x: *const f32, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_ismin(*n, x, *incx), *n) }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn idmin_(n: *const c_int, x: *const f64, incx: *const c_int) -> c_int {
+    unsafe { famax(cblas_idmin(*n, x, *incx), *n) }
+}
+
+// Signed max/min VALUE: no cblas form, so marshal straight to the guest's Fortran-backed
+// wrapper (shim lind_smax -> smax_). Fortran symbol = every arg by pointer.
+#[unsafe(no_mangle)]
+pub extern "C" fn smax_(n: *const c_int, x: *const f32, incx: *const c_int) -> f32 {
+    let xb = unsafe { sin(x, *n, *incx) };
+    call_f32("lind_smax", &mut [Arg::I32(unsafe { *n }), Arg::Buf(xb), Arg::I32(unsafe { *incx })])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dmax_(n: *const c_int, x: *const f64, incx: *const c_int) -> f64 {
+    let xb = unsafe { vin(x, *n, *incx) };
+    call_f64("lind_dmax", &mut [Arg::I32(unsafe { *n }), Arg::Buf(xb), Arg::I32(unsafe { *incx })])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn smin_(n: *const c_int, x: *const f32, incx: *const c_int) -> f32 {
+    let xb = unsafe { sin(x, *n, *incx) };
+    call_f32("lind_smin", &mut [Arg::I32(unsafe { *n }), Arg::Buf(xb), Arg::I32(unsafe { *incx })])
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn dmin_(n: *const c_int, x: *const f64, incx: *const c_int) -> f64 {
+    let xb = unsafe { vin(x, *n, *incx) };
+    call_f64("lind_dmin", &mut [Arg::I32(unsafe { *n }), Arg::Buf(xb), Arg::I32(unsafe { *incx })])
+}
+
