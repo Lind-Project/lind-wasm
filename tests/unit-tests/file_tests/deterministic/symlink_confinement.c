@@ -13,8 +13,8 @@ int main() {
     /* 
     NOTE: this only checks that symlink resolution is internally consistent
     (following evil_link behaves like a normal read), not that either path
-    is actually confined. See the /lind/README.md-based checks below for
-    the actual confinement/escape proof.
+    is actually confined. See the sentinel-file checks below for actual 
+    confinement/escape proof.
     */
     errno = 0;
     int direct_fd = open("/etc/passwd", O_RDONLY);
@@ -46,40 +46,59 @@ int main() {
     unlink("evil_link");
 
     errno = 0;
-    /*
-    NOTE: /lind/README.md is specific to this dev-conatainer's mount
-    layout(repo checked out at /lind, matching LINDFS_ROOT's hardcoded
-    assumption in sysdefs). If this runs somewhere that mounts the repo 
-    differently, this path may not exist at all, in which case this 
-    check would accidentally pass via ENOENT.
-    Re-verify this path is valid if test is run in a new environment.
-    */
-    int escape_fd = open("/lind/README.md", O_RDONLY);
-    int escape_errno = errno;
+    int sentinel_fd = open("/tmp/lind/sentinel.txt", O_RDONLY);
 
-    if(escape_fd != -1) {
-        fprintf(stderr, "symlink_confinement test: FAIL -- opened "
-                "/lind/README.md from inside the cage, chroot escape\n");
-        close(escape_fd);
+    if(sentinel_fd == -1) {
+        fprintf(stderr, "symlink_confinement test: FAIL - could not open "
+                "/tmp/lind/sentinel.txt from inside the cage (errno %d)\n", errno);
         assert(0);
     }
-    assert(escape_errno == ENOENT);
 
-    unlink("evil_link_readme");
-    assert(symlink("/lind/README.md", "evil_link_readme") == 0);
+    char sentinel_buf[64] = {0};
+    ssize_t sentinel_n = read(sentinel_fd, sentinel_buf, sizeof(sentinel_buf) - 1);
+    close(sentinel_fd);
+
+    assert(sentinel_n >= 0);
+    sentinel_buf[sentinel_n] = '\0';
+
+    if(strcmp(sentinel_buf, "LIND_HOST_ONLY") == 0) {
+        fprintf(stderr, "symlink_confinement test: FAIL - read host sentinel "
+                "from inside the cage, chroot escape\n");
+        assert(0);
+    } else if(strcmp(sentinel_buf, "LIND_CAGE_ONLY") != 0) {
+        fprintf(stderr, "symlink_confinement test: FAIL - unexpected sentinel "
+                "content: \"%s\"\n", sentinel_buf);
+        assert(0);
+    }
+    unlink("evil_link_sentinel");
+    assert(symlink("/tmp/lind/sentinel.txt", "evil_link_sentinel") == 0);
 
     errno = 0;
-    int link_escape_fd = open("evil_link_readme", O_RDONLY);
-    int link_escape_errno = errno;
-    if(link_escape_fd != -1) {
-        fprintf(stderr, "symlink_confinement test: FAIL -- opened "
-              "/lind/README.md via symlink from inside the cage, "
-              "chroot escape via symlink target\n");
-        close(link_escape_fd);
+    int link_sentinel_fd = open("evil_link_sentinel", O_RDONLY);
+    if(link_sentinel_fd == -1) {
+        fprintf(stderr, "symlink_confinement test: FAIL - could not open "
+                "evil_link sentinel from inside the cage (errno %d)\n", errno);
         assert(0);
     }
-    assert(link_escape_errno == ENOENT);
-    unlink("evil_link_readme");
+
+    char link_sentinel_buf[64] = {0};
+    ssize_t link_sentinel_n = read(link_sentinel_fd, link_sentinel_buf, sizeof(link_sentinel_buf) - 1);
+    close(link_sentinel_fd);
+
+    assert(link_sentinel_n >= 0);
+    link_sentinel_buf[link_sentinel_n] = '\0';
+
+    if(strcmp(link_sentinel_buf, "LIND_HOST_ONLY") == 0) {
+        fprintf(stderr, "symlink_confinement test: FAIL - read host sentinel "
+                "via symlink from inside the cage, chroot escape via symlink target\n");
+        assert(0);
+    } else if(strcmp(link_sentinel_buf, "LIND_CAGE_ONLY") != 0) {
+        fprintf(stderr, "symlink_confinement test: FAIL - unexpected sentinel "
+                "content via symlink: \"%s\"\n", link_sentinel_buf);
+        assert(0);
+    }
+
+    unlink("evil_link_sentinel");
 
     printf("symlink_confinement test: PASS\n");
     return 0;
