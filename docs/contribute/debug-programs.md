@@ -2,35 +2,52 @@
 
 ## Debugging with GDB
 
-To debug a WebAssembly module using GDB, ensure that your module is compiled with debugging information (e.g., using the -g flag during compilation). Additionally, Wasmtime itself must be compiled in debug mode (i.e., without the --release flag) to enable effective debugging of both the runtime and the module. This allows GDB to access symbol information from both your program and Wasmtime.
+To debug a WebAssembly module using GDB, ensure that your module is compiled with debugging information (e.g., using the -g flag during compilation). Additionally, the runtime itself must be built in debug mode, with `make lind-debug`, to enable effective debugging of both the runtime and the module. This allows GDB to access symbol information from both your program and the runtime.
 
 > **Note:** Current limitations in GDB support for WebAssembly include lack of instruction-level inspection. Commands like `layout split` and `si` (step instruction) may break the terminal. It’s recommended to use `layout src` for source-level debugging.
 
+> **Note:** GDB debugs the Rust runtime, not the C code running inside the WebAssembly module.
+
 ---
 
-### Running GDB with Wasmtime
+### Running GDB with the runtime
 
-Use the following command to start GDB with Wasmtime:
+Build the debug runtime, then start GDB against it. Which invocation you need
+depends on how the program was compiled.
+
+For a **dynamic build** — what `lind_compile` produces by default:
 
 ```sh
-gdb --args ../wasmtime/target/debug/wasmtime run -D debug-info -O opt-level=0 malloc-test.wasm
+make lind-debug
+sudo gdb --args ./build/lind-boot --preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm malloc-test.cwasm
+```
+
+For a **static build** (`lind_compile -s`), the preloads are not needed:
+
+```sh
+make lind-debug
+sudo gdb --args ./build/lind-boot malloc-test.cwasm
 ```
 
 **Explanation of arguments:**
 
 - `gdb --args`: Passes arguments to the program through GDB.
-- `../wasmtime/target/debug/wasmtime run`: Runs your WebAssembly module using the Wasmtime binary.
-- `-D debug-info`: Enables Wasmtime’s debug information support.
-- `-O opt-level=0`: Disables optimizations for easier debugging.
+- `sudo`: The runtime `chroot`s into `lindfs`, which requires root. `scripts/bin/lind_run` normally does this for you.
+- `./build/lind-boot`: The runtime binary. `make lind-debug` installs the debug build here, at the same path as the release build.
+- `--preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm`: The shared *lind-glibc* and libm a dynamic build resolves its imports against. `lind_run` passes these for you; running `lind-boot` directly under GDB means passing them yourself.
+- `malloc-test.cwasm`: Your program, as a path *inside* `lindfs` (see [Getting Started](../getting-started.md#what-just-happened)).
+
+Run `./build/lind-boot --help` for the full set of runtime options.
 
 ---
 
 ### Example Debugging Session
 
 1. **Start GDB**  
-   Launch GDB with Wasmtime and your WebAssembly module:
+   Launch GDB with the runtime and your WebAssembly module (dynamic build shown,
+   see [above](#running-gdb-with-the-runtime) for the static variant):
    ```sh
-   gdb --args ../wasmtime/target/debug/wasmtime run -D debug-info -O opt-level=0 malloc-test.wasm
+   sudo gdb --args ./build/lind-boot --preload env=/lib/libc.cwasm --preload env=/lib/libm.cwasm malloc-test.cwasm
    ```
 
 2. **Set Breakpoints**  

@@ -17,6 +17,23 @@ Check out the [Getting started](https://lind-project.github.io/lind-wasm/getting
 guide for a Hello World! example and [our docs](https://lind-project.github.io/lind-wasm/)
 to learn more about Lind!
 
+**Supported platforms:** `lind-wasm` targets **linux/amd64**. A native build
+requires x86-64 Linux (tested on Ubuntu 22.04) and roughly 20 GB of free disk
+space.
+
+| Host | How to run |
+| --- | --- |
+| x86-64 Linux | native build, or the development image |
+| Windows | Ubuntu 22.04 under WSL2, covered in the [Native Linux setup](https://lind-project.github.io/lind-wasm/contribute/running-on-native-linux/) guide; or Docker Desktop with `--platform=linux/amd64` |
+| macOS (Intel or Apple Silicon) | the development image with `--platform=linux/amd64`; on Apple Silicon this runs under emulation and is slower |
+
+On Windows and macOS, clone into a case-sensitive filesystem — the WSL2 ext4
+filesystem rather than `/mnt/c`, for example. The glibc sources contain
+case-colliding filenames (see
+[#1246](https://github.com/Lind-Project/lind-wasm/issues/1246)).
+
+Run `make checkenv` to verify a machine.
+
 
 
 ## Repository Structure and Components

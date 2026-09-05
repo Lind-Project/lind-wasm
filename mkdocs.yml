@@ -14,6 +14,11 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  # Installation pages sit next to Getting Started rather than under Contributing:
+  # they are how a user installs Lind, not how they contribute to it. The files
+  # stay under docs/contribute/ so their published URLs do not change.
+  - Development setup: contribute/dev-container.md
+  - Native Linux setup: contribute/running-on-native-linux.md
   - Internal Documentation:
     - internal/index.md
     - libc: internal/libc.md
@@ -31,8 +36,6 @@ nav:
     - C++ support: internal/libcpp.md
   - Contributing:
     - contribute/index.md
-    - Development setup: contribute/dev-container.md
-    - Native Linux setup: contribute/running-on-native-linux.md
     - Rust style guide: contribute/styleguide.md
     - Lind toolchain: contribute/toolchain.md
     - Compiling Rust programs: contribute/compile-with-rust.md
