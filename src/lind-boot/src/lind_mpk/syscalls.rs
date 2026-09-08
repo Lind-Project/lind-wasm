@@ -16,7 +16,7 @@ use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, setup_gs_con
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
-use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_SYSCALL};
+use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::data::sys_struct::CloneArgStruct;
 use std::arch::asm;
@@ -176,7 +176,7 @@ unsafe extern "C" fn child_syscall_handler(
     );
 
     //don't expect return value for exec and exit, just loop and wait for kill signal from parent
-    if (number == EXIT_SYSCALL as i64) || (number == EXEC_SYSCALL as i64) {
+    if (number == EXIT_SYSCALL as i64) || (number == EXEC_SYSCALL as i64) || (number == EXIT_GROUP_SYSCALL as i64) {
        loop {
             std::thread::park();
         }
@@ -534,9 +534,30 @@ pub extern "C" fn mpk_clone_syscall_entry(
 
             // Spawn a dedicated handler thread.  It blocks on recv (no polling)
             // and dispatches every syscall from the child cage through threei.
+            let parent_tid = current_tid();
+            let parent_registered_cages = {
+                let parent_cage = get_cage(_parent_cageid).expect("mpk_clone: parent cage not found");
+                let runtime_info = parent_cage.runtime_info.read();
+                runtime_info
+                    .as_any()
+                    .downcast_ref::<MPKRuntimeInfo>()
+                    .and_then(|mpk_info| {
+                        mpk_info
+                            .threads
+                            .read()
+                            .get(&parent_tid)
+                            .map(|thread| thread.thread_info.cage_ids.lock().unwrap().clone())
+                    })
+                    .unwrap_or_default()
+            };
+
             thread::spawn(move || {
+                //this tid is used to identify the os thread in the parent process. 
+                //This is easier than using the child process's pid because the helper thread always outlives the child process.
+                let helper_tid = current_tid(); 
+
                 let (gs_ptr, cage_ptr, context_pages, context_pages_size) =
-                    match setup_gs_context(child_cageid, pid) {
+                    match setup_gs_context(child_cageid, helper_tid) {
                         Ok(result) => result,
                         Err(error) => {
                             eprintln!("[lind-mpk] parent worker thread: setup_gs_context failed for child cage {}: {}", child_cageid, error);
@@ -547,7 +568,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
                 //create MPKThreadInfo and MPKCageThreadInfo and update in the child cage's MPK info
                 
                 // Create MpkThreadInfo from the GS context we just set up
-                let thread_info = MpkThreadInfo {
+                let thread_info = Arc::new(MpkThreadInfo {
                     gs_data: gs_ptr,
                     cage_data: cage_ptr,
                     context_pages,
@@ -555,30 +576,38 @@ pub extern "C" fn mpk_clone_syscall_entry(
                     supervisor_stack_base: 0, //not needed, the current thread was spawned on a supervisor stack
                     supervisor_stack_size: 0,
                     cage_ids: std::sync::Mutex::new(std::collections::HashSet::new()),
-                };
+                });
 
-                // Create MpkCageThreadInfo and register it in the child cage's runtime
-                //This is only a dummy. When a handler is registered on this cage, then this shows that a grate stack needs to be allocated for the worker thread.
-                let mut cage_info = MpkCageThreadInfo {
-                    thread_info: Arc::new(thread_info),
-                    stack_addr: 0, //not needed, the worker thread does not enter the cage
-                    stack_base: 0,
-                    stack_size: 0,
-                };
-                cage_info.thread_info.register_cage(child_cageid);
+                let mut registered_cage_ids = parent_registered_cages;
+                registered_cage_ids.insert(child_cageid);
 
-                // Register the worker thread context in the child cage's runtime on behalf of the child cage
-                if let Some(child_cage) = get_cage(child_cageid) {
-                    let runtime_info = child_cage.runtime_info.read();
-                    if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-                        mpk_info.threads.write().insert(pid, cage_info);
+                for cage_id in &registered_cage_ids {
+                    let mut cage_info = MpkCageThreadInfo {
+                        thread_info: Arc::clone(&thread_info),
+                        stack_addr: 0, //not needed, the worker thread does not enter the cage
+                        stack_base: 0,
+                        stack_size: 0,
+                    };
+                    cage_info.thread_info.register_cage(*cage_id);
+
+                    if *cage_id != child_cageid {
+                        //the helper thread never accesses the cage, so no stack needed.
+                        cage_info.allocate_grate_stack();
+                        mpk_debug(format!("allocated grate stack for cage {}", cage_id));
+                    }
+
+                    if let Some(cage) = get_cage(*cage_id) {
+                        let runtime_info = cage.runtime_info.read();
+                        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                            mpk_info.threads.write().insert(helper_tid, cage_info);
+                        } else {
+                            eprintln!("[lind-mpk] parent worker thread: cage {} has no MPKRuntimeInfo", cage_id);
+                            return;
+                        }
                     } else {
-                        eprintln!("[lind-mpk] parent worker thread: child cage {} has no MPKRuntimeInfo", child_cageid);
+                        eprintln!("[lind-mpk] parent worker thread: cage {} not found", cage_id);
                         return;
                     }
-                } else {
-                    eprintln!("[lind-mpk] parent worker thread: child cage {} not found", child_cageid);
-                    return;
                 }
 
                 loop {

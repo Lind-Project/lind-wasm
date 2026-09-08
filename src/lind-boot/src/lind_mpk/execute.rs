@@ -518,6 +518,24 @@ fn exec_mpk_internal(
     // Step 2: Tear down the existing namespace context now that arguments are safely copied.
     let cage = get_cage(cage_id)
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
+    let current_os_tid = current_tid();
+    let old_grate_cage_ids = {
+        let runtime_info = cage.runtime_info.read();
+        let mpk_info = runtime_info
+            .as_any()
+            .downcast_ref::<MPKRuntimeInfo>()
+            .ok_or_else(|| anyhow::anyhow!("cage {} does not have MPKRuntimeInfo; cannot exec", cage_id))?;
+        mpk_info
+            .threads
+            .read()
+            .get(&current_os_tid)
+            .map(|thread| thread.thread_info.cage_ids.lock().unwrap().clone())
+            .unwrap_or_default()
+    };
+    mpk_debug(format!(
+        "exec: preserving registered grate cages for tid {}: {:?}",
+        current_os_tid, old_grate_cage_ids
+    ));
     {
         let runtime_info = cage.runtime_info.read();
         if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
@@ -643,16 +661,55 @@ fn exec_mpk_internal(
 
     let enable_interpose: EnableInterposeF = unsafe { std::mem::transmute(sym_ptr) };
     ENABLE_INTERPOSE_PTR.store(sym_ptr as u64, Ordering::Release);
+    
+    // Step 8.1: Save the old list of grates for which a stack is registered. 
 
-    // Step 8.1: Set up supervisor stack and install GS before enabling interpose.
+    // Step 8.2: Set up supervisor stack and install GS before enabling interpose.
     // Returns MpkThreadInfo which is registered in MPKRuntimeInfo::threads below.
-    let thread_info = match setup_supervisor_stack(cage_id, current_tid()) {
+    let thread_info = Arc::new(match setup_supervisor_stack(cage_id, current_os_tid) {
         Ok(v) => v,
         Err(e) => {
             unsafe { libc::dlclose(libc_handle); libc::dlclose(handle); }
             return Err(e);
         }
-    };
+    });
+
+    // Keep the new cage and all restored grates attached to the same
+    // supervisor state for this OS thread.
+    thread_info.register_cage(cage_id);
+    for grate_cage_id in &old_grate_cage_ids {
+        if *grate_cage_id != cage_id {
+            thread_info.register_cage(*grate_cage_id);
+        }
+    }
+
+    // Recreate this thread's grate stack in every cage that was registered
+    // before exec replaced the current cage's MPK runtime.
+    for grate_cage_id in &old_grate_cage_ids {
+        if *grate_cage_id == cage_id {
+            continue;
+        }
+        let grate = get_cage(*grate_cage_id)
+            .ok_or_else(|| anyhow::anyhow!("grate cage {} not found during exec", grate_cage_id))?;
+        let grate_runtime_info = grate.runtime_info.read();
+        let grate_mpk_info = grate_runtime_info
+            .as_any()
+            .downcast_ref::<MPKRuntimeInfo>()
+            .ok_or_else(|| anyhow::anyhow!("cage {} is not using MPK", grate_cage_id))?;
+        let mut grate_threads = grate_mpk_info.threads.write();
+        let mut grate_thread: MpkCageThreadInfo = MpkCageThreadInfo {
+            thread_info: Arc::clone(&thread_info),
+            stack_addr: 0,
+            stack_base: 0,
+            stack_size: 0,
+        };
+        grate_thread.allocate_grate_stack()?;
+        grate_threads.insert(current_os_tid, grate_thread);
+        mpk_debug(format!(
+            "exec: restored grate stack for cage {} and tid {}",
+            grate_cage_id, current_os_tid
+        ));
+    }
 
     if NO_INTERPOSE.load(Ordering::Acquire) {
         mpk_debug("--no-interpose: skipping __enable_syscall_interpose call");
@@ -689,7 +746,6 @@ fn exec_mpk_internal(
     }
     mpk_debug(format!("new cage memory mapped at {memory_base:p}"));
     cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
-    let tid = current_tid();
     let mpk_info = MPKRuntimeInfo::new(
         handle,
         libc_handle,
@@ -698,19 +754,17 @@ fn exec_mpk_internal(
         memory_base,
         MPK_MEMORY_SIZE,
         THREAD_START_ID + 1,
-        Some((tid, MpkCageThreadInfo {
-            thread_info: Arc::new(MpkThreadInfo {
-                cage_ids: std::sync::Mutex::new(std::collections::HashSet::from([cage_id])),
-                ..thread_info
-            }),
+        Some((current_os_tid, MpkCageThreadInfo {
+            thread_info: Arc::clone(&thread_info),
             stack_addr: 0,
             stack_base: 0,
             stack_size: 0,
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);
-    mpk_debug(format!("updated MPKRuntimeInfo for cage {} (main tid={})", cage_id, tid));
-    register_mpk_handler_for_cage(cage_id)?;
+    mpk_debug(format!("updated MPKRuntimeInfo for cage {} (main tid={})", cage_id, current_os_tid));
+
+    //Note: register_mpk_handler_for_cage does not need to be called. The handler is installed through inheritance
 
 
     // Step 10: Build argc/argv/envp and call main

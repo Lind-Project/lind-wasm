@@ -4,7 +4,6 @@ use crate::lind_mpk::RuntimeInfo::{
 };
 use cage::get_cage;
 use std::arch::{asm, naked_asm};
-use std::collections::HashMap;
 use std::mem::{offset_of, size_of};
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::{THREEI_CAGEID, UNUSED_ARG, UNUSED_ID};
@@ -19,6 +18,12 @@ const MPK_CONTEXT_PAGE_SIZE: usize = 4096;
 const GS_CURRENT_CONTEXT: usize = MPK_CONTEXT_PAGE_SIZE + offset_of!(MPKCageCtxStack, current_context);
 const GS_CONTEXTS_ARRAY: usize = GS_CURRENT_CONTEXT + offset_of!(MPKCageCtxStack, contexts);
 const GS_CONTEXTS_SIZE: usize = size_of::<usize>();
+
+fn mpk_debug(message: impl AsRef<str>) {
+    if std::env::var_os("LIND_MPK_DEBUG").is_some() {
+        eprintln!("[lind-mpk] {}", message.as_ref());
+    }
+}
 
 pub fn register_mpk_handler_for_cage(cageid: u64) -> anyhow::Result<()> {
     
@@ -64,6 +69,10 @@ extern "C" fn mpk_register_handler(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
+    mpk_debug(format!(
+        "register_handler: target_cage={}, target_call={}, grate_cage={}, runtime_id={}, handler={:#x}",
+        target_cageid, target_call_num, handle_func_cage, runtime_id, handler_ptr
+    ));
     let result = (|| -> anyhow::Result<i32> {
         let cage = get_cage(target_cageid)
             .ok_or_else(|| anyhow::anyhow!("cage {} not found", target_cageid))?;
@@ -83,12 +92,22 @@ extern "C" fn mpk_register_handler(
             .ok_or_else(|| anyhow::anyhow!("cage {} is not using MPK", handle_func_cage))?;
         let mut grate_threads = grate_mpk_info.threads.write();
 
-        // Rebuild the entries so each target-cage OS thread gets a fresh
-        // MpkCageThreadInfo owned by this GRATE registration. The supervisor
-        // state remains attached to the same OS thread; only the grate stack
-        // belongs to this registration.
-        let mut new_threads = HashMap::with_capacity(cage_threads.len());
+        mpk_debug(format!(
+            "register_handler: target threads={}, existing grate threads={}",
+            cage_threads.len(), grate_threads.len()
+        ));
+
+        // Give each target-cage OS thread a MpkCageThreadInfo owned by this GRATE
+        // registration. The supervisor state remains attached to the same OS thread;
+        // only the grate stack belongs to this registration. If this thread already
+        // has an entry in the grate (e.g. a prior register_handler call for the same
+        // cage/grate pair, or the thread was registered by another handler), reuse it
+        // instead of clobbering its already-allocated grate stack.
+        let mut added = 0usize;
         for (tid, thread) in cage_threads.iter() {
+            if grate_threads.contains_key(tid) {
+                continue;
+            }
             let mut new_thread = MpkCageThreadInfo {
                 thread_info: Arc::clone(&thread.thread_info),
                 stack_addr: 0,
@@ -97,11 +116,15 @@ extern "C" fn mpk_register_handler(
             };
             new_thread.allocate_grate_stack()?;
             new_thread.thread_info.register_cage(handle_func_cage);
-            new_threads.insert(*tid, new_thread);
+            grate_threads.insert(*tid, new_thread);
+            added += 1;
         }
-        grate_threads.extend(new_threads);
+        mpk_debug(format!(
+            "register_handler: adding {} grate thread entries to cage {}",
+            added, handle_func_cage
+        ));
 
-        Ok(threei::register_handler(
+        let registration_result = threei::register_handler(
             UNUSED_ID,
             THREEI_CAGEID,
             target_cageid,
@@ -116,7 +139,12 @@ extern "C" fn mpk_register_handler(
             arg5_cageid,
             arg6,
             arg6_cageid,
-        ))
+        );
+        mpk_debug(format!(
+            "register_handler: threei result={} target_cage={} grate_cage={}",
+            registration_result, target_cageid, handle_func_cage
+        ));
+        Ok(registration_result)
     })();
 
     match result {
@@ -165,19 +193,22 @@ pub extern "C" fn grate_callback_trampoline(
 
     let gs_data = gs_base as *mut MPKSupervisorCtxStack;
     let os_tid = unsafe { (*gs_data).os_tid as libc::pid_t };
-    let cage = get_cage(cageid).expect("inner_grate_callback_trampoline: cage not found");
-    let runtime_info = cage.runtime_info.read();
-    let mpk_info = runtime_info
-        .as_any()
-        .downcast_ref::<MPKRuntimeInfo>()
-        .expect("inner_grate_callback_trampoline: cage is not using MPK");
-    let threads = mpk_info.threads.read();
-    let cage_thread = threads
-        .get(&os_tid)
-        .expect("inner_grate_callback_trampoline: thread is not registered in cage");
-    let cage_data = cage_thread.thread_info.cage_data;
-    let grate_stack = cage_thread.stack_addr;
+    let (grate_stack, cage_data) = {
+        let cage = get_cage(cageid).expect("inner_grate_callback_trampoline: cage not found");
+        let runtime_info = cage.runtime_info.read();
+        let mpk_info = runtime_info
+            .as_any()
+            .downcast_ref::<MPKRuntimeInfo>()
+            .expect("inner_grate_callback_trampoline: cage is not using MPK");
+        let threads = mpk_info.threads.read();
+        let cage_thread = threads
+            .get(&os_tid)
+            .expect("inner_grate_callback_trampoline: thread is not registered in cage");
+        (cage_thread.stack_addr, cage_thread.thread_info.cage_data)
+    };
     assert!(!cage_data.is_null(), "inner_grate_callback_trampoline: null cage context");
+
+    assert!((gs_base + 0x1000) as u64 == cage_data as u64, "inner_grate_callback_trampoline: cage data is not related to gs base");
 
     let cage_context_index = unsafe { (*cage_data).current_context };
     assert!(
