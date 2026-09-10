@@ -569,11 +569,11 @@ fn exec_mpk_internal(
             if cage_pid != 0 {
                 assert!(
                     cage_pid != my_pid,
-                    "mpk_exit: Cannot kill self (cage_pid={}, my_pid={})",
+                    "mpk_exec_internal: Cannot kill self (cage_pid={}, my_pid={})",
                     cage_pid, my_pid
                 );
                 
-                mpk_debug(format!("mpk_exit: killing child process {}", cage_pid));
+                mpk_debug(format!("mpk_exec_internal: killing child process {}", cage_pid));
                 unsafe {
                     libc::kill(cage_pid, libc::SIGKILL);
                 }

@@ -54,9 +54,9 @@ fn mpk_debug(message: impl AsRef<str>) {
     }
 }
 
-/// Updates the active supervisor context with the cage that this thread is
-/// currently servicing.
-fn update_active_cage_context(cageid: u64) {
+/// replaces any occurrence of the old cage in the supervisor context stack with the new cage id.
+/// This is used in the context of fork to return to a child cage
+fn update_active_cage_context(cageid: u64, old_cageid: u64) {
     let gs_base: usize;
     let current_context_index: usize;
     unsafe {
@@ -76,14 +76,13 @@ fn update_active_cage_context(cageid: u64) {
         "mpk: current context index out of bounds: {}",
         current_context_index
     );
-    assert!(
-        current_context_index > 0,
-        "mpk: current context index is zero, must be greater than zero in supervisor"
-    );
-
     let gs_data = gs_base as *mut MPKSupervisorCtxStack;
     unsafe {
-        (*gs_data).contexts[current_context_index - 1].cage_id = cageid;
+        for context in &mut (*gs_data).contexts {
+            if context.cage_id == old_cageid {
+                context.cage_id = cageid;
+            }
+        }
     }
 }
 
@@ -509,7 +508,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
                     // stack) live in the child's address space via fork's copy-on-write
                     // duplication and are not tracked by the parent.
                     let child_mpk_info = MPKRuntimeInfo::new(
-                        parent_mpk.loader_cage_handle,
+                        parent_mpk.loader_cage_handle, //this is shared with the parent and needs to be treated carefully
                         parent_mpk.loader_libc_handle,
                         parent_mpk.enable_interpose_fn,
                         pid,
@@ -693,7 +692,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
             }
 
             // Update the active context to reflect the new child cage id.
-            update_active_cage_context(child_cageid);
+            update_active_cage_context(child_cageid, _parent_cageid);
 
             // Return the child cage id in the child process too.
             0 as i32
