@@ -699,6 +699,7 @@ fn exec_mpk_internal(
         let mut grate_threads = grate_mpk_info.threads.write();
         let mut grate_thread: MpkCageThreadInfo = MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
+            grate_cage_id: *grate_cage_id,
             stack_addr: 0,
             stack_base: 0,
             stack_size: 0,
@@ -756,6 +757,7 @@ fn exec_mpk_internal(
         THREAD_START_ID + 1,
         Some((current_os_tid, MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
+            grate_cage_id: cage_id,
             stack_addr: 0,
             stack_base: 0,
             stack_size: 0,
@@ -1037,6 +1039,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
                 cage_ids: std::sync::Mutex::new(std::collections::HashSet::from([cage_id])),
                 ..thread_info
             }),
+            grate_cage_id: cage_id,
             stack_addr: 0,
             stack_base: 0,
             stack_size: 0,

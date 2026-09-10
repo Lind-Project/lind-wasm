@@ -2,7 +2,8 @@ use libc::{c_void, pid_t};
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use cage::{RuntimeInfo, RwLock};
+use cage::{get_cage, MemoryBackingType, RuntimeInfo, RwLock, VmmapOps};
+use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
 
 const MPK_GRATE_STACK_SIZE: usize = 8 * 1024 * 1024;
 const MPK_GRATE_STACK_GUARD: usize = 4096;
@@ -135,6 +136,8 @@ unsafe impl Sync for MpkThreadInfo {}
 #[derive(Debug)]
 pub struct MpkCageThreadInfo {
     pub thread_info: Arc<MpkThreadInfo>,
+    /// The grate whose vmmap backs this thread's stack.
+    pub grate_cage_id: u64,
     ///This is the stack the thread will use inside the grate.
     pub stack_addr: usize,
     pub stack_base: usize,
@@ -142,38 +145,71 @@ pub struct MpkCageThreadInfo {
 }
 
 impl MpkCageThreadInfo {
+    /// Allocates this thread's grate stack out of the grate's own vmmap
+    /// (`grate_cage_id`), rather than an independent mmap. The grate's
+    /// backing memory is already reserved via its 4 GB MAP_NORESERVE region,
+    /// so only the vmmap bookkeeping and the guard-page protection need to
+    /// be set up here.
     pub fn allocate_grate_stack(&mut self) -> anyhow::Result<()> {
         if self.stack_addr != 0 {
             return Ok(());
         }
 
         let allocation_size = MPK_GRATE_STACK_GUARD + MPK_GRATE_STACK_SIZE;
-        let stack_base = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                allocation_size,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-                -1,
-                0,
-            )
-        };
-        if stack_base == libc::MAP_FAILED {
-            anyhow::bail!(
-                "mmap for MPK grate stack failed: {}",
-                std::io::Error::last_os_error()
-            );
-        }
+        let npages = allocation_size >> PAGESHIFT;
+        let guard_pages = MPK_GRATE_STACK_GUARD >> PAGESHIFT;
 
-        if unsafe { libc::mprotect(stack_base, MPK_GRATE_STACK_GUARD, libc::PROT_NONE) } != 0 {
-            unsafe { libc::munmap(stack_base, allocation_size) };
+        let grate = get_cage(self.grate_cage_id)
+            .ok_or_else(|| anyhow::anyhow!("grate cage {} not found", self.grate_cage_id))?;
+        let mut vmmap = grate.vmmap.write();
+
+        let space = vmmap.find_map_space(npages, 1).ok_or_else(|| {
+            anyhow::anyhow!(
+                "no space in grate {} vmmap for grate stack",
+                self.grate_cage_id
+            )
+        })?;
+
+        let guard_start = space.start();
+        let stack_start = guard_start + guard_pages;
+
+        // Guard page: reserved in the vmmap, no access.
+        vmmap.add_entry_with_overwrite(
+            guard_start,
+            guard_pages,
+            PROT_NONE,
+            PROT_NONE,
+            0,
+            MemoryBackingType::Anonymous,
+            0,
+            0,
+            self.grate_cage_id,
+        )?;
+
+        // Usable stack region.
+        vmmap.add_entry_with_overwrite(
+            stack_start,
+            npages - guard_pages,
+            PROT_READ | PROT_WRITE,
+            PROT_READ | PROT_WRITE,
+            0,
+            MemoryBackingType::Anonymous,
+            0,
+            0,
+            self.grate_cage_id,
+        )?;
+
+        let stack_base = vmmap.page_num_to_sys(guard_start);
+        drop(vmmap);
+
+        if unsafe { libc::mprotect(stack_base as *mut c_void, MPK_GRATE_STACK_GUARD, libc::PROT_NONE) } != 0 {
             anyhow::bail!(
                 "mprotect for MPK grate stack guard failed: {}",
                 std::io::Error::last_os_error()
             );
         }
 
-        self.stack_base = stack_base as usize;
+        self.stack_base = stack_base;
         self.stack_size = allocation_size;
         self.stack_addr = self.stack_base + self.stack_size;
         Ok(())
@@ -182,9 +218,22 @@ impl MpkCageThreadInfo {
 
 impl Drop for MpkCageThreadInfo {
     fn drop(&mut self) {
+        // The stack lives inside the grate's vmmap/backing memory, which is
+        // owned and torn down by the grate itself; only release the vmmap
+        // bookkeeping and restore the guard page's protection here.
         if self.stack_base != 0 && self.stack_size != 0 {
+            if let Some(grate) = get_cage(self.grate_cage_id) {
+                let mut vmmap = grate.vmmap.write();
+                let start_page = vmmap.sys_to_page_num(self.stack_base);
+                let npages = self.stack_size >> PAGESHIFT;
+                let _ = vmmap.remove_entry(start_page, npages);
+            }
             unsafe {
-                libc::munmap(self.stack_base as *mut c_void, self.stack_size);
+                libc::mprotect(
+                    self.stack_base as *mut c_void,
+                    MPK_GRATE_STACK_GUARD,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                );
             }
         }
     }

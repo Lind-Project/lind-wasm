@@ -110,6 +110,7 @@ extern "C" fn mpk_register_handler(
             }
             let mut new_thread = MpkCageThreadInfo {
                 thread_info: Arc::clone(&thread.thread_info),
+                grate_cage_id: handle_func_cage,
                 stack_addr: 0,
                 stack_base: 0,
                 stack_size: 0,

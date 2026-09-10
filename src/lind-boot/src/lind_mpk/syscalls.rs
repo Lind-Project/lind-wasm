@@ -409,6 +409,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
                 };
                 let mut cage_info = MpkCageThreadInfo {
                     thread_info: Arc::new(thread_info),
+                    grate_cage_id: _parent_cageid,
                     stack_addr: 0,
                     stack_base: 0,
                     stack_size: 0,
@@ -583,6 +584,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
                 for cage_id in &registered_cage_ids {
                     let mut cage_info = MpkCageThreadInfo {
                         thread_info: Arc::clone(&thread_info),
+                        grate_cage_id: *cage_id,
                         stack_addr: 0, //not needed, the worker thread does not enter the cage
                         stack_base: 0,
                         stack_size: 0,
