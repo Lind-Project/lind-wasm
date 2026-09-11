@@ -784,12 +784,9 @@ pub extern "C" fn mpk_exit_syscall_entry(
                 // is dropped (cage_finalize below).
             }
             
-            let thread_info = if let Some(cage_thread_info) = mpk_info.threads.write().remove(&cage_tid) {
-                mpk_debug(format!("mpk_exit: freed supervisor stack for tid={}", cage_tid));
-                Some(Arc::clone(&cage_thread_info.thread_info))
-            } else {
-                None
-            };
+            let thread_info = mpk_info.threads.write().remove(&cage_tid).map(|cage_thread_info| {
+                Arc::clone(&cage_thread_info.thread_info)
+            });
 
             if let Some(thread_info) = thread_info {
                 let cage_ids = thread_info.cage_ids.lock().unwrap().clone();
@@ -806,6 +803,12 @@ pub extern "C" fn mpk_exit_syscall_entry(
                         }
                     }
                 }
+
+                // We are still executing on this OS thread's supervisor stack, which
+                // `thread_info` owns. Hand the last reference to the reaper thread so
+                // it is only dropped (and the stack unmapped) once this OS thread has
+                // actually exited.
+                crate::lind_mpk::RuntimeInfo::queue_thread_info_for_reap(cage_tid, thread_info);
             }
             
             
@@ -815,19 +818,27 @@ pub extern "C" fn mpk_exit_syscall_entry(
         
         let is_last = cage::signal::lind_thread_exit(exiting_cageid, THREAD_START_ID as u64);
         
+        if is_last {
+            cage::cage_finalize(exiting_cageid);
+            
+            // Decrement the cage counter
+            if let Some(lind_manager) = LIND_MANAGER.get() {
+                //ultimate teardown if this was the last cage
+                if lind_manager.decrement_and_is_zero() {
+                    //no more cages can ever queue reap work after this point
+                    crate::lind_mpk::RuntimeInfo::stop_thread_info_reaper();
+                }
+            }
+        }
         
-        cage::cage_finalize(exiting_cageid);
     } else {
         mpk_debug(format!("mpk_exit: cage {} not found", exiting_cageid));
     }
     
-    // Decrement the cage counter
-    if let Some(lind_manager) = LIND_MANAGER.get() {
-        lind_manager.decrement();
-    }
+
+    mpk_debug(format!("mpk_exit: cage {} cleanup complete", exiting_cageid));
 
     
-    mpk_debug(format!("mpk_exit: cage {} cleanup complete", exiting_cageid));
 
     //Here the thread is terminated. (exit does not return in this implementation)
     //it is assumed that there are no references to rust objects stored on the supervisor stack at this point.

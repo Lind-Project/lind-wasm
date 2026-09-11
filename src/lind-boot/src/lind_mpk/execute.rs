@@ -12,11 +12,13 @@ use crate::lind_mpk::syscalls::{
 use crate::lind_mpk::RuntimeInfo::{
     MPKCageCtxStack, MPKSupervisorContext, MPKSupervisorCtxStack, MPKCageContext,
     MPKRuntimeInfo, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
+    allocate_stack_in_vmmap,
 };
 use crate::shims::SyscallRuntime;
 use anyhow::{Context, bail};
 use cage::{VmmapBitWidth, get_cage};
 use libc::{c_char, c_int, c_ulong, c_void};
+use std::arch::asm;
 use std::sync::atomic::Ordering;
 use std::env;
 use std::ffi::{CStr, CString};
@@ -51,6 +53,15 @@ const RTLD_DI_LINKMAP: c_int = 2;
 // 4 GB virtual address space reserved for each cage with MAP_NORESERVE
 // (no swap space is committed until pages are actually touched).
 const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
+
+// Stack used to call the cage's own `main`, allocated out of the cage's
+// own vmmap so it is backed by memory the guest owns.
+const CAGE_STACK_SIZE: usize = 8 * 1024 * 1024;
+const CAGE_STACK_GUARD: usize = 4096;
+
+/// C main entrypoint signature.
+type MainFn = unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
+type ExitFn = unsafe extern "C" fn(c_int) -> !;
 
 // Size of the supervisor stack for each thread's syscall interposition.
 // The first page is PROT_NONE as a guard against supervisor stack overflow.
@@ -303,6 +314,91 @@ fn mpk_debug(message: impl AsRef<str>) {
     }
 }
 
+/// Writes `args` and `envs` onto the cage's own stack (`stack_top`, growing
+/// down), building the argv/envp pointer arrays and their backing strings
+/// entirely within memory the cage owns. Returns `(argc, argv, envp, new_rsp)`
+/// where `new_rsp` is the 16-byte aligned stack pointer to call `main` with.
+unsafe fn write_args_envs_to_cage_stack(
+    stack_top: usize,
+    args: &[String],
+    envs: &[(String, Option<String>)],
+) -> (c_int, *const *const c_char, *const *const c_char, usize) {
+    let mut cursor = stack_top;
+
+    let mut write_str = |s: &str| -> *const c_char {
+        let bytes = s.as_bytes();
+        cursor -= bytes.len() + 1; // +1 for NUL terminator
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), cursor as *mut u8, bytes.len());
+            *((cursor + bytes.len()) as *mut u8) = 0;
+        }
+        cursor as *const c_char
+    };
+
+    let arg_ptrs: Vec<*const c_char> = args.iter().map(|s| write_str(s)).collect();
+    let env_strings: Vec<String> = envs
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v.as_deref().unwrap_or("")))
+        .collect();
+    let env_ptrs: Vec<*const c_char> = env_strings.iter().map(|s| write_str(s)).collect();
+
+    // Align down to pointer size before placing the argv/envp arrays.
+    cursor &= !(std::mem::align_of::<*const c_char>() - 1);
+
+    cursor -= (env_ptrs.len() + 1) * std::mem::size_of::<*const c_char>();
+    let envp = cursor as *mut *const c_char;
+    for (i, ptr) in env_ptrs.iter().enumerate() {
+        unsafe { std::ptr::write(envp.add(i), *ptr) };
+    }
+    unsafe { std::ptr::write(envp.add(env_ptrs.len()), std::ptr::null()) };
+
+    cursor -= (arg_ptrs.len() + 1) * std::mem::size_of::<*const c_char>();
+    let argv = cursor as *mut *const c_char;
+    for (i, ptr) in arg_ptrs.iter().enumerate() {
+        unsafe { std::ptr::write(argv.add(i), *ptr) };
+    }
+    unsafe { std::ptr::write(argv.add(arg_ptrs.len()), std::ptr::null()) };
+
+    // The SysV x86-64 ABI requires rsp to be 16-byte aligned at the `call` instruction.
+    cursor &= !0xf;
+
+    (
+        args.len() as c_int,
+        argv as *const *const c_char,
+        envp as *const *const c_char,
+        cursor,
+    )
+}
+
+/// Switches to `new_rsp`, calls `main_fn`, then calls the isolated libc exit
+/// function on that same stack. `new_rsp` must already be 16-byte aligned.
+unsafe fn call_main_on_stack(
+    new_rsp: usize,
+    main_fn: MainFn,
+    exit_fn: ExitFn,
+    argc: c_int,
+    argv: *const *const c_char,
+    envp: *const *const c_char,
+) -> ! {
+    unsafe {
+        asm!(
+            "mov {new_rsp}, %rsp",
+            "call *{func}",
+            "mov %eax, %edi",
+            "call *%r12",
+            new_rsp = in(reg) new_rsp,
+            func = in(reg) main_fn,
+            in("r12") exit_fn, //callee saved!
+            in("rdi") argc,
+            in("rsi") argv,
+            in("rdx") envp,
+            clobber_abi("C"),
+            options(att_syntax),
+        );
+    }
+    std::hint::unreachable_unchecked()
+}
+
 // ── MPK SyscallRuntime implementation ────────────────────────────────────────
 
 /// MPK runtime implementation.
@@ -436,6 +532,10 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
         grate_callback_trampoline,
         0,
     );
+
+    // Frees MpkThreadInfos queued by mpk_exit_syscall_entry once their OS
+    // thread has actually exited (see RuntimeInfo::queue_thread_info_for_reap).
+    std::thread::spawn(crate::lind_mpk::RuntimeInfo::run_thread_info_reaper);
 
     mpk_debug("lind-mpk initialized successfully");
 }
@@ -769,21 +869,11 @@ fn exec_mpk_internal(
     //Note: register_mpk_handler_for_cage does not need to be called. The handler is installed through inheritance
 
 
-    // Step 10: Build argc/argv/envp and call main
-    let c_args: Vec<CString> = args.iter()
-        .map(|s| CString::new(s.as_str()).unwrap())
-        .collect();
-    let mut argv: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
-    argv.push(std::ptr::null());
-
-    let c_envs: Vec<CString> = vars.iter()
-        .map(|(k, v)| {
-            let val = v.as_deref().unwrap_or("");
-            CString::new(format!("{}={}", k, val)).unwrap()
-        })
-        .collect();
-    let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
-    envp.push(std::ptr::null());
+    // Step 10: Allocate a stack for the guest inside the cage's own vmmap,
+    // write argv/envp onto it, and call main there.
+    let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
+    let (argc, argv_ptr, envp_ptr, new_rsp) =
+        unsafe { write_args_envs_to_cage_stack(cage_stack_top, &args, &vars) };
 
     let main_sym = CString::new("main").unwrap();
     let main_ptr = unsafe { libc::dlsym(handle, main_sym.as_ptr()) };
@@ -796,26 +886,22 @@ fn exec_mpk_internal(
     }
     mpk_debug(format!("resolved main at {main_ptr:p}"));
 
-    type MainFn = unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
+    let exit_sym = CString::new("exit").unwrap();
+    let exit_ptr = unsafe { libc::dlsym(libc_handle, exit_sym.as_ptr()) };
+    if exit_ptr.is_null() {
+        unsafe {
+            libc::dlclose(libc_handle);
+            libc::dlclose(handle);
+        }
+        bail!("could not find 'exit' symbol in {}", so_path);
+    }
+    mpk_debug(format!("resolved exit at {exit_ptr:p}"));
+
     let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
-    let argc = (argv.len() - 1) as c_int;
-    
-    mpk_debug(format!("calling main with argc={argc}"));
-    let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) };
-    mpk_debug(format!("main returned exit_code={exit_code}"));
+    let exit_fn: ExitFn = unsafe { std::mem::transmute(exit_ptr) };
 
-    //invoke exit syscall to terminate the process
-    let _ = threei::make_syscall(
-        cage_id,
-        EXIT_SYSCALL as u64,
-        0, // _syscall_name: unused for native
-        cage_id,
-        exit_code as u64,
-        cage_id,
-        0, UNUSED_ID, 0, UNUSED_ID, 0, UNUSED_ID, 0, UNUSED_ID, 0, UNUSED_ID
-    );
-
-    Ok(exit_code as i32)
+    mpk_debug(format!("calling main on cage stack (rsp={:#x}) with argc={argc}", new_rsp));
+    unsafe { call_main_on_stack(new_rsp, main_fn, exit_fn, argc, argv_ptr, envp_ptr) }
 }
 
 pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
@@ -1054,20 +1140,12 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     register_mpk_handler_for_cage(cage_id)?;
 
 
-    // Step 6: Build argc / argv / envp from CliOptions.
-    let c_args: Vec<CString> = lindboot_cli
-        .args
-        .iter()
-        .map(|s| CString::new(s.as_str()).unwrap())
-        .collect();
-    let c_envs: Vec<CString> = lindboot_cli
-        .vars
-        .iter()
-        .map(|(k, v)| {
-            let val = v.as_deref().unwrap_or("");
-            CString::new(format!("{}={}", k, val)).unwrap()
-        })
-        .collect();
+    // Step 6: Allocate a stack for the guest inside the cage's own vmmap and
+    // write argv/envp onto it.
+    let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
+    let (argc, argv_ptr, envp_ptr, new_rsp) = unsafe {
+        write_args_envs_to_cage_stack(cage_stack_top, &lindboot_cli.args, &lindboot_cli.vars)
+    };
 
     let main_sym = CString::new("main").unwrap();
     mpk_debug("resolving main");
@@ -1081,38 +1159,22 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     }
     mpk_debug(format!("resolved main at {main_ptr:p}"));
 
-    type MainFn =
-        unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
+    let exit_sym = CString::new("exit").unwrap();
+    let exit_ptr = unsafe { libc::dlsym(libc_handle, exit_sym.as_ptr()) };
+    if exit_ptr.is_null() {
+        unsafe {
+            libc::dlclose(libc_handle);
+            libc::dlclose(handle);
+        }
+        bail!("could not find 'exit' symbol in {}", so_path);
+    }
+    mpk_debug(format!("resolved exit at {exit_ptr:p}"));
+
     let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
-    let argc = c_args.len() as c_int;
+    let exit_fn: ExitFn = unsafe { std::mem::transmute(exit_ptr) };
 
-    mpk_debug(format!("spawning main thread with argc={argc}"));
+    mpk_debug(format!("calling main on cage stack (rsp={:#x}) with argc={argc}", new_rsp));
 
-    // Step 7: Call main inside a dedicated thread.
-    // c_args and c_envs are moved into the closure so the CString backing
-    // data outlives the raw pointer slices built from them inside the thread.
-    // main_fn and argc are Copy, so they are simply captured by value.
-    // let join_handle = std::thread::spawn(move || {
-    //     let mut argv: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
-    //     argv.push(std::ptr::null());
-    //     let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
-    //     envp.push(std::ptr::null());
-    //     unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) }
-    // });
-
-    let mut argv: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
-    argv.push(std::ptr::null());
-    let mut envp: Vec<*const c_char> = c_envs.iter().map(|s| s.as_ptr()).collect();
-    envp.push(std::ptr::null());
-    let exit_code = unsafe { main_fn(argc, argv.as_ptr(), envp.as_ptr()) }; 
-
-    // mpk_debug("waiting for main thread to finish");
-    // let exit_code = join_handle.join().unwrap_or(-1);
-    // mpk_debug(format!("main returned exit_code={exit_code}"));
-
-
-
-    mpk_debug("execute_mpk completed successfully");
-
-    Ok(exit_code as i32)
+    // Step 7: Call main on the newly allocated cage stack.
+    unsafe { call_main_on_stack(new_rsp, main_fn, exit_fn, argc, argv_ptr, envp_ptr) }
 }

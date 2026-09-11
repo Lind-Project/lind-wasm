@@ -1,12 +1,93 @@
 use libc::{c_void, pid_t};
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use cage::{get_cage, MemoryBackingType, RuntimeInfo, RwLock, VmmapOps};
 use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
 
 const MPK_GRATE_STACK_SIZE: usize = 8 * 1024 * 1024;
 const MPK_GRATE_STACK_GUARD: usize = 4096;
+
+/// Allocates a guard-page + usable stack region out of `cage_id`'s own vmmap.
+/// The cage's backing memory is already reserved via its 4 GB MAP_NORESERVE
+/// region, so only the vmmap bookkeeping and the guard-page protection need
+/// to be set up here. Returns `(guard_start_sys_addr, stack_top_sys_addr)`.
+pub fn allocate_stack_in_vmmap(
+    cage_id: u64,
+    guard_size: usize,
+    usable_size: usize,
+) -> anyhow::Result<(usize, usize)> {
+    let allocation_size = guard_size + usable_size;
+    let npages = allocation_size >> PAGESHIFT;
+    let guard_pages = guard_size >> PAGESHIFT;
+
+    let cage = get_cage(cage_id).ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
+    let mut vmmap = cage.vmmap.write();
+
+    let space = vmmap
+        .find_map_space(npages, 1)
+        .ok_or_else(|| anyhow::anyhow!("no space in cage {} vmmap for stack", cage_id))?;
+
+    let guard_start = space.start();
+    let stack_start = guard_start + guard_pages;
+
+    // Guard page: reserved in the vmmap, no access.
+    vmmap.add_entry_with_overwrite(
+        guard_start,
+        guard_pages,
+        PROT_NONE,
+        PROT_NONE,
+        0,
+        MemoryBackingType::Anonymous,
+        0,
+        0,
+        cage_id,
+    )?;
+
+    // Usable stack region.
+    vmmap.add_entry_with_overwrite(
+        stack_start,
+        npages - guard_pages,
+        PROT_READ | PROT_WRITE,
+        PROT_READ | PROT_WRITE,
+        0,
+        MemoryBackingType::Anonymous,
+        0,
+        0,
+        cage_id,
+    )?;
+
+    let guard_start_sys = vmmap.page_num_to_sys(guard_start);
+    drop(vmmap);
+
+    if unsafe { libc::mprotect(guard_start_sys as *mut c_void, guard_size, libc::PROT_NONE) } != 0 {
+        anyhow::bail!(
+            "mprotect for stack guard failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+
+    Ok((guard_start_sys, guard_start_sys + allocation_size))
+}
+
+/// Releases a stack region previously allocated by `allocate_stack_in_vmmap`,
+/// removing its vmmap bookkeeping and restoring the guard page to read/write.
+pub fn free_stack_in_vmmap(cage_id: u64, guard_start_sys: usize, allocation_size: usize, guard_size: usize) {
+    if let Some(cage) = get_cage(cage_id) {
+        let mut vmmap = cage.vmmap.write();
+        let start_page = vmmap.sys_to_page_num(guard_start_sys);
+        let npages = allocation_size >> PAGESHIFT;
+        let _ = vmmap.remove_entry(start_page, npages);
+    }
+    unsafe {
+        libc::mprotect(
+            guard_start_sys as *mut c_void,
+            guard_size,
+            libc::PROT_READ | libc::PROT_WRITE,
+        );
+    }
+}
 
 /// Type alias for the __enable_syscall_interpose function pointer.
 /// This function is provided by the custom glibc loaded in the dlmopen
@@ -132,6 +213,51 @@ impl Drop for MpkThreadInfo {
 unsafe impl Send for MpkThreadInfo {}
 unsafe impl Sync for MpkThreadInfo {}
 
+// ── Deferred cleanup for still-running supervisor stacks ────────────────────
+//
+// A cage's exit handler runs on its own OS thread's supervisor stack. If that
+// call drops the last `Arc<MpkThreadInfo>` synchronously, `MpkThreadInfo::drop`
+// munmaps the very stack the code is executing on. Instead, the last reference
+// is queued here and only dropped by `run_thread_info_reaper` once the OS
+// thread has actually terminated.
+static PENDING_THREAD_REAP: OnceLock<Mutex<Vec<(pid_t, Arc<MpkThreadInfo>)>>> = OnceLock::new();
+
+fn pending_thread_reap() -> &'static Mutex<Vec<(pid_t, Arc<MpkThreadInfo>)>> {
+    PENDING_THREAD_REAP.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Queues `thread_info` to be dropped once OS thread `tid` has exited.
+pub fn queue_thread_info_for_reap(tid: pid_t, thread_info: Arc<MpkThreadInfo>) {
+    pending_thread_reap().lock().unwrap().push((tid, thread_info));
+}
+
+/// Returns whether OS thread `tid` is still alive in this process.
+fn os_thread_is_alive(tid: pid_t) -> bool {
+    let ret = unsafe { libc::syscall(libc::SYS_tgkill, libc::getpid(), tid, 0) };
+    ret == 0
+}
+
+static REAPER_SHOULD_STOP: AtomicBool = AtomicBool::new(false);
+
+/// Signals the background reaper thread to stop after its current iteration.
+/// Called once the last cage has exited, since no further entries can ever
+/// be queued after that point.
+pub fn stop_thread_info_reaper() {
+    REAPER_SHOULD_STOP.store(true, Ordering::Release);
+}
+
+/// Periodically drops queued `MpkThreadInfo`s whose OS thread has exited,
+/// until `stop_thread_info_reaper` is called. Spawned once from `init_mpk`.
+pub fn run_thread_info_reaper() {
+    while !REAPER_SHOULD_STOP.load(Ordering::Acquire) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        pending_thread_reap()
+            .lock()
+            .unwrap()
+            .retain(|(tid, _)| os_thread_is_alive(*tid));
+    }
+}
+
 
 #[derive(Debug)]
 pub struct MpkCageThreadInfo {
@@ -155,63 +281,15 @@ impl MpkCageThreadInfo {
             return Ok(());
         }
 
-        let allocation_size = MPK_GRATE_STACK_GUARD + MPK_GRATE_STACK_SIZE;
-        let npages = allocation_size >> PAGESHIFT;
-        let guard_pages = MPK_GRATE_STACK_GUARD >> PAGESHIFT;
-
-        let grate = get_cage(self.grate_cage_id)
-            .ok_or_else(|| anyhow::anyhow!("grate cage {} not found", self.grate_cage_id))?;
-        let mut vmmap = grate.vmmap.write();
-
-        let space = vmmap.find_map_space(npages, 1).ok_or_else(|| {
-            anyhow::anyhow!(
-                "no space in grate {} vmmap for grate stack",
-                self.grate_cage_id
-            )
-        })?;
-
-        let guard_start = space.start();
-        let stack_start = guard_start + guard_pages;
-
-        // Guard page: reserved in the vmmap, no access.
-        vmmap.add_entry_with_overwrite(
-            guard_start,
-            guard_pages,
-            PROT_NONE,
-            PROT_NONE,
-            0,
-            MemoryBackingType::Anonymous,
-            0,
-            0,
+        let (stack_base, stack_addr) = allocate_stack_in_vmmap(
             self.grate_cage_id,
+            MPK_GRATE_STACK_GUARD,
+            MPK_GRATE_STACK_SIZE,
         )?;
-
-        // Usable stack region.
-        vmmap.add_entry_with_overwrite(
-            stack_start,
-            npages - guard_pages,
-            PROT_READ | PROT_WRITE,
-            PROT_READ | PROT_WRITE,
-            0,
-            MemoryBackingType::Anonymous,
-            0,
-            0,
-            self.grate_cage_id,
-        )?;
-
-        let stack_base = vmmap.page_num_to_sys(guard_start);
-        drop(vmmap);
-
-        if unsafe { libc::mprotect(stack_base as *mut c_void, MPK_GRATE_STACK_GUARD, libc::PROT_NONE) } != 0 {
-            anyhow::bail!(
-                "mprotect for MPK grate stack guard failed: {}",
-                std::io::Error::last_os_error()
-            );
-        }
 
         self.stack_base = stack_base;
-        self.stack_size = allocation_size;
-        self.stack_addr = self.stack_base + self.stack_size;
+        self.stack_size = MPK_GRATE_STACK_GUARD + MPK_GRATE_STACK_SIZE;
+        self.stack_addr = stack_addr;
         Ok(())
     }
 }
@@ -222,19 +300,12 @@ impl Drop for MpkCageThreadInfo {
         // owned and torn down by the grate itself; only release the vmmap
         // bookkeeping and restore the guard page's protection here.
         if self.stack_base != 0 && self.stack_size != 0 {
-            if let Some(grate) = get_cage(self.grate_cage_id) {
-                let mut vmmap = grate.vmmap.write();
-                let start_page = vmmap.sys_to_page_num(self.stack_base);
-                let npages = self.stack_size >> PAGESHIFT;
-                let _ = vmmap.remove_entry(start_page, npages);
-            }
-            unsafe {
-                libc::mprotect(
-                    self.stack_base as *mut c_void,
-                    MPK_GRATE_STACK_GUARD,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                );
-            }
+            free_stack_in_vmmap(
+                self.grate_cage_id,
+                self.stack_base,
+                self.stack_size,
+                MPK_GRATE_STACK_GUARD,
+            );
         }
     }
 }
