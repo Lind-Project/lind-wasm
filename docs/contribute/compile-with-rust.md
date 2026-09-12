@@ -26,7 +26,7 @@ target = "wasm32-wasip1"
 
 [target.wasm32-wasip1]
 # Use lind’s custom clang wrapper for glibc-based WASI linking
-linker = "/home/lind-wasm/scripts/bin/wasip1-clang.sh"
+linker = "/home/lind/lind-wasm/scripts/bin/wasip1-clang.sh"
 
 rustflags = [
   # Do not use Rust’s built-in self-contained WASI linker
@@ -146,3 +146,44 @@ This ensures that `std` is always rebuilt with the required features whenever yo
 * Forces Rust to rebuild `std` for `wasm32-wasip1`
 * Applies your `rustflags` to `std` itself
 * Enables atomics + bulk-memory inside `libstd`
+
+---
+
+## 4. lind `libc` overlay (needed for `std::fs`)
+
+The upstream `libc` crate's `wasi` module follows wasi-libc. lind links
+against lind-glibc (32-bit Linux), so on lind `metadata()` returns a wrong
+size, `read_dir()` returns empty names, `File::create` fails (wasi `O_CREAT`
+value) and errno numbers are wrong. Reads, writes, time, `random_get` and
+pure-Rust crypto work.
+
+`scripts/rust/make_lind_libc.sh` writes a patched copy of `libc` to
+`build/lind-libc` (registry source + `scripts/rust/lind-libc-wasi.patch`).
+Use it for your crate and for std:
+
+```bash
+# once per toolchain; also patches the rust-src copy used by -Z build-std
+scripts/rust/make_lind_libc.sh build/lind-libc --patch-std nightly-2026-02-11
+
+cargo +nightly-2026-02-11 \
+  --config 'patch.crates-io.libc.path="/home/lind/lind-wasm/build/lind-libc"' \
+  build -Z build-std=std,panic_abort --target wasm32-wasip1 --release
+```
+
+`--patch-std` is needed because `-Z build-std` ignores the user `[patch]`
+table (tested with `--config` and with the manifest). The script edits the
+toolchain copy in place and keeps originals as `*.lind-orig`;
+`--unpatch-std <toolchain>` restores them.
+
+C code in crates (for example `ring`) must be built with the same wasm
+features:
+
+```bash
+export CC_wasm32_wasip1=clang
+export CFLAGS_wasm32_wasip1="--target=wasm32-wasip1 -matomics -mbulk-memory -pthread"
+```
+
+Known gaps: `std::thread::spawn` aborts on lind, `std::net` does not link,
+`std::process::Command` is unsupported. A full build script is
+`lind-wasm-apps/in-toto/compile_in-toto.sh`; `lind-wasm-apps/in-toto/probe`
+prints what works.
