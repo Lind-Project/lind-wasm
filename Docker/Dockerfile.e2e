@@ -58,6 +58,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
         automake \
         tzdata \
         wget \
+        libtinfo5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pinned WABT tools for compatibility (wasm2wat/wat2wasm/wasm-objdump).
@@ -91,8 +92,9 @@ ENV PATH="/${CLANG}/bin:${PATH}"
 ENV MATH_TEST_DIR="math_tests"
 
 # --- Install libtinfo5 ---
-RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.2_amd64.deb && \
-    apt install ./libtinfo5_6.3-2ubuntu0.2_amd64.deb
+# RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.2_amd64.deb && \
+#     apt install ./libtinfo5_6.3-2ubuntu0.2_amd64.deb
+RUN apt-get update && apt-get install -y libtinfo5
 
 # Install rust
 # --profile minimal tells rustup to install only the essentials for the toolchain

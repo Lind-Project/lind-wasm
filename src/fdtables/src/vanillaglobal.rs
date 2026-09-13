@@ -225,7 +225,9 @@ pub fn get_specific_virtual_fd(
     // Note that, I need to use the FD_PER_PROCESS_MAX setting because this
     // is also how I'm tracking how many values you have open.  If this
     // changed, then these constants could be decoupled...
-    if requested_virtualfd > FD_PER_PROCESS_MAX {
+    // This must be `>=`, not `>`: the table holds fds 0..FD_PER_PROCESS_MAX-1,
+    // so FD_PER_PROCESS_MAX itself is one past the end and has to be rejected.
+    if requested_virtualfd >= FD_PER_PROCESS_MAX {
         return Err(threei::Errno::EBADF as u64);
     }
 
