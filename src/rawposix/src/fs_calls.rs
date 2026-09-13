@@ -1368,7 +1368,8 @@ pub extern "C" fn brk_syscall(
 /// On error:
 /// Return error num EBADF(Bad File Descriptor)
 pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry, Errno> {
-    if vfd_arg > MAXFD as u64 {
+    // `>=`: fds run 0..MAXFD-1, so MAXFD itself is out of range.
+    if vfd_arg >= MAXFD as u64 {
         return Err(Errno::EBADF);
     }
     // Get underlying kernel fd
@@ -3179,7 +3180,10 @@ pub extern "C" fn dup2_syscall(
     }
 
     // Validate both virtual fds
-    if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
+    // `>=`: fds run 0..MAXFD-1, so MAXFD itself is out of range. With `>`,
+    // dup2(fd, MAXFD) reached get_specific_virtual_fd below, whose EBADF is
+    // unwrapped -- a guest could panic the host and take every cage with it.
+    if old_vfd_arg >= MAXFD as u64 || new_vfd_arg >= MAXFD as u64 {
         return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
     } else if old_vfd_arg == new_vfd_arg {
         // Does nothing
@@ -3253,7 +3257,8 @@ pub extern "C" fn dup3_syscall(
         );
     }
 
-    if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
+    // `>=`: see the equivalent bound in dup2_syscall above.
+    if old_vfd_arg >= MAXFD as u64 || new_vfd_arg >= MAXFD as u64 {
         return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
     }
 

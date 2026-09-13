@@ -1282,6 +1282,37 @@ mod tests {
     }
 
     #[test]
+    // FD_PER_PROCESS_MAX itself must be rejected, not just values above it.
+    // The backing table holds fds 0..FD_PER_PROCESS_MAX-1, so a bound of
+    // `> FD_PER_PROCESS_MAX` let the exact value through and indexed one past
+    // the end of the table, panicking the host. A guest reaches this directly
+    // with dup2(fd, FD_PER_PROCESS_MAX), where EBADF is the correct answer.
+    fn get_specific_virtual_fd_rejects_fd_at_max() {
+        let mut _thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
+            refresh();
+            TESTMUTEX.clear_poison();
+            e.into_inner()
+        });
+        refresh();
+
+        assert_eq!(
+            get_specific_virtual_fd(threei::TESTING_CAGEID, FD_PER_PROCESS_MAX, 0, 1, false, 0),
+            Err(threei::Errno::EBADF as u64)
+        );
+
+        // The largest fd the table can actually hold is still accepted.
+        assert!(get_specific_virtual_fd(
+            threei::TESTING_CAGEID,
+            FD_PER_PROCESS_MAX - 1,
+            0,
+            1,
+            false,
+            0
+        )
+        .is_ok());
+    }
+
+    #[test]
     // Let's test to see our functions error gracefully with badfds...
     fn badfd_test() {
         let mut _thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
