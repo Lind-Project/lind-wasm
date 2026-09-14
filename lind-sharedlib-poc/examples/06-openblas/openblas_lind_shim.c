@@ -165,13 +165,10 @@ extern double dmax_(const int *, const double *, const int *);
 extern float  smin_(const int *, const float *, const int *);
 extern double dmin_(const int *, const double *, const int *);
 
-// level-2 (order/trans are enums, ABI-compatible with int)
-extern void   cblas_dgemv(const int, const int, const int, const int, const double,
-                          const double *, const int, const double *, const int,
-                          const double, double *, const int);
-extern void   cblas_sgemv(const int, const int, const int, const int, const float,
-                          const float *, const int, const float *, const int,
-                          const float, float *, const int);
+// Complex gemv via the guest's FORTRAN symbol — handles OpenBLAS's extended conjugation
+// trans modes (N/T/C/R + O/S/U/D) that CBLAS cannot express. Fortran ABI: all by pointer.
+extern void cgemv_(const char *, const int *, const int *, const void *, const void *, const int *, const void *, const int *, const void *, void *, const int *);
+extern void zgemv_(const char *, const int *, const int *, const void *, const void *, const int *, const void *, const int *, const void *, void *, const int *);
 
 // level-2 (order/trans are enums, ABI-compatible with int)
 extern void   cblas_dgemv(const int, const int, const int, const int, const double,
@@ -228,7 +225,6 @@ extern void cblas_ssyrk (const int, const int, const int, const int, const int, 
 extern void cblas_ssyr2k(const int, const int, const int, const int, const int, const float, const float *, const int, const float *, const int, const float, float *, const int);
 extern void cblas_strmm (const int, const int, const int, const int, const int, const int, const int, const float, const float *, const int, float *, const int);
 extern void cblas_strsm (const int, const int, const int, const int, const int, const int, const int, const float, const float *, const int, float *, const int);
-
 
 __attribute__((export_name("guest_malloc")))
 void *guest_malloc(size_t n) { return malloc(n); }
@@ -372,19 +368,17 @@ void lind_cblas_sgemv(int order, int trans, int m, int n, float alpha,
     cblas_sgemv(order, trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
 }
 
-
 // level-2 general/square group
 __attribute__((export_name("lind_cblas_dsymv")))
-void lind_cblas_dsymv(int o,int u,int n,double al,const double*a,int lda,const double*x,
-int ix,double be,double*y,int iy){ cblas_dsymv(o,u,n,al,a,lda,x,ix,be,y,iy); }__attribute__((export_name("lind_cblas_dtrmv")))
+void lind_cblas_dsymv(int o,int u,int n,double al,const double*a,int lda,const double*x,int ix,double be,double*y,int iy){ cblas_dsymv(o,u,n,al,a,lda,x,ix,be,y,iy); }
+__attribute__((export_name("lind_cblas_dtrmv")))
 void lind_cblas_dtrmv(int o,int u,int t,int d,int n,const double*a,int lda,double*x,int ix){ cblas_dtrmv(o,u,t,d,n,a,lda,x,ix); }
 __attribute__((export_name("lind_cblas_dtrsv")))
 void lind_cblas_dtrsv(int o,int u,int t,int d,int n,const double*a,int lda,double*x,int ix){ cblas_dtrsv(o,u,t,d,n,a,lda,x,ix); }
 __attribute__((export_name("lind_cblas_dger")))
 void lind_cblas_dger(int o,int m,int n,double al,const double*x,int ix,const double*y,int iy,double*a,int lda){ cblas_dger(o,m,n,al,x,ix,y,iy,a,lda); }
 __attribute__((export_name("lind_cblas_dsyr")))
-void lind_cblas_dsyr(int o,int u,int n,double al,const double*x,int ix,double*a,int lda)
-{ cblas_dsyr(o,u,n,al,x,ix,a,lda); }
+void lind_cblas_dsyr(int o,int u,int n,double al,const double*x,int ix,double*a,int lda){ cblas_dsyr(o,u,n,al,x,ix,a,lda); }
 __attribute__((export_name("lind_cblas_dsyr2")))
 void lind_cblas_dsyr2(int o,int u,int n,double al,const double*x,int ix,const double*y,int iy,double*a,int lda){ cblas_dsyr2(o,u,n,al,x,ix,y,iy,a,lda); }
 
@@ -400,7 +394,6 @@ __attribute__((export_name("lind_cblas_ssyr")))
 void lind_cblas_ssyr(int o,int u,int n,float al,const float*x,int ix,float*a,int lda){ cblas_ssyr(o,u,n,al,x,ix,a,lda); }
 __attribute__((export_name("lind_cblas_ssyr2")))
 void lind_cblas_ssyr2(int o,int u,int n,float al,const float*x,int ix,const float*y,int iy,float*a,int lda){ cblas_ssyr2(o,u,n,al,x,ix,y,iy,a,lda); }
-
 
 // level-2 banded + packed
 __attribute__((export_name("lind_cblas_dgbmv")))
@@ -582,7 +575,6 @@ void lind_cblas_zher2(int o,int u,int n,const void*al,const void*x,int ix,const 
 __attribute__((export_name("lind_cblas_zhpr2")))
 void lind_cblas_zhpr2(int o,int u,int n,const void*al,const void*x,int ix,const void*y,int iy,void*ap){ cblas_zhpr2(o,u,n,al,x,ix,y,iy,ap); }
 
-
 // --- complex level-3 --------------------------------------------------------------
 __attribute__((export_name("lind_cblas_cgemm")))
 void lind_cblas_cgemm(int o,int ta,int tb,int m,int n,int k,const void*al,const void*a,int lda,const void*b,int ldb,const void*be,void*c,int ldc){ cblas_cgemm(o,ta,tb,m,n,k,al,a,lda,b,ldb,be,c,ldc); }
@@ -622,7 +614,6 @@ void lind_cblas_ztrmm(int o,int s,int u,int t,int d,int m,int n,const void*al,co
 __attribute__((export_name("lind_cblas_ztrsm")))
 void lind_cblas_ztrsm(int o,int s,int u,int t,int d,int m,int n,const void*al,const void*a,int lda,void*b,int ldb){ cblas_ztrsm(o,s,u,t,d,m,n,al,a,lda,b,ldb); }
 
-
 // --- extra standard routines for utest (rotmg / complex rot / dsdot) ---------------
 __attribute__((export_name("lind_cblas_srotmg")))
 void lind_cblas_srotmg(float*d1,float*d2,float*b1,float b2,float*p){ cblas_srotmg(d1,d2,b1,b2,p); }
@@ -636,7 +627,6 @@ __attribute__((export_name("lind_cblas_dsdot")))
 double lind_cblas_dsdot(int n,const float*x,int ix,const float*y,int iy){ return cblas_dsdot(n,x,ix,y,iy); }
 __attribute__((export_name("lind_cblas_sdsdot")))
 float lind_cblas_sdsdot(int n,float sb,const float*x,int ix,const float*y,int iy){ return cblas_sdsdot(n,sb,x,ix,y,iy); }
-
 
 // --- OpenBLAS extensions -----------------------------------------------------------
 __attribute__((export_name("lind_cblas_saxpby")))
@@ -682,3 +672,13 @@ float lind_smin(int n,const float*x,int ix){ return smin_(&n,x,&ix); }
 __attribute__((export_name("lind_dmin")))
 double lind_dmin(int n,const double*x,int ix){ return dmin_(&n,x,&ix); }
 
+// Complex gemv via the guest's Fortran symbol (flattened: scalars by value, char trans as
+// int). Rebuilds the by-pointer Fortran call so extended trans modes O/S/U/D work.
+__attribute__((export_name("lind_cgemv_f")))
+void lind_cgemv_f(int trans,int m,int n,const void*al,const void*a,int lda,const void*x,int ix,const void*be,void*y,int iy){
+    char t=(char)trans; cgemv_(&t,&m,&n,al,a,&lda,x,&ix,be,y,&iy);
+}
+__attribute__((export_name("lind_zgemv_f")))
+void lind_zgemv_f(int trans,int m,int n,const void*al,const void*a,int lda,const void*x,int ix,const void*be,void*y,int iy){
+    char t=(char)trans; zgemv_(&t,&m,&n,al,a,&lda,x,&ix,be,y,&iy);
+}

@@ -38,7 +38,6 @@ fn trace(name: &str) {
     }
 }
 
-
 /// Call a void/integer-returning guest export.
 fn call(name: &str, args: &mut [Arg]) -> i64 {
     trace(name);
@@ -539,6 +538,7 @@ pub extern "C" fn srotm_(
 const CBLAS_ROW_MAJOR: c_int = 101;
 const CBLAS_COL_MAJOR: c_int = 102;
 const CBLAS_NO_TRANS: c_int = 111;
+const CBLAS_CONJ_NO_TRANS: c_int = 114; // OpenBLAS extension: conjugate, do NOT transpose
 
 /// Elements spanned by an `m`×`n` general matrix stored with leading dimension `lda`:
 /// column-major packs `n` columns of `lda` (`lda ≥ m`); row-major packs `m` rows of
@@ -549,8 +549,10 @@ fn gemat_elems(order: c_int, m: c_int, n: c_int, lda: c_int) -> usize {
 }
 
 /// (len x, len y) for `y := op(A)·x`: NoTrans → A is m×n so x∈ℝⁿ, y∈ℝᵐ; else swapped.
+/// ConjNoTrans (114) conjugates in place and keeps the m×n shape, so it sizes like NoTrans;
+/// only Trans/ConjTrans actually swap. (m==n hid this until non-square ConjNoTrans inputs.)
 fn gemv_vec_lens(trans: c_int, m: c_int, n: c_int) -> (c_int, c_int) {
-    if trans == CBLAS_NO_TRANS { (n, m) } else { (m, n) }
+    if trans == CBLAS_NO_TRANS || trans == CBLAS_CONJ_NO_TRANS { (n, m) } else { (m, n) }
 }
 
 /// Elements of an n×n square matrix (symmetric/triangular) with leading dimension lda.
@@ -641,7 +643,6 @@ pub extern "C" fn cblas_sgemv(
     );
 }
 
-
 // --- level-2 general/square group (symv, trmv, trsv, ger, syr, syr2) ---------------
 // All enum args (order/uplo/trans/diag) pass through as I32. Square matrices (symv,
 // trmv, trsv, syr, syr2) span `lda*n`; ger's general A uses gemat_elems. A is read-only
@@ -668,7 +669,7 @@ pub extern "C" fn cblas_dtrmv(order: c_int, uplo: c_int, trans: c_int, diag: c_i
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn cblas_dtrsv(order: c_int, uplo: c_int, trans: c_int, diag: c_int, n: c_int, a: *const f64, lda: c_int, x: *mut f64, incx: c_int) {
-    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) *F64) };
+    let ab = unsafe { core::slice::from_raw_parts(a as *const u8, sqmat_elems(n, lda) * F64) };
     let xb = unsafe { vout(x, n, incx) }; // solve op(A)·x = b  (x overwritten)
     call("lind_cblas_dtrsv", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(n), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
 }
@@ -749,9 +750,8 @@ pub extern "C" fn cblas_ssyr2(order: c_int, uplo: c_int, n: c_int, alpha: f32, x
     let xb = unsafe { sin(x, n, incx) };
     let yb = unsafe { sin(y, n, incy) };
     let ab = unsafe { core::slice::from_raw_parts_mut(a as *mut u8, sqmat_elems(n, lda) * F32) };
-    call("lind_cblas_ssyr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst:ab, len: OutLen::Cap }, Arg::I32(lda)]);
+    call("lind_cblas_ssyr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: ab, len: OutLen::Cap }, Arg::I32(lda)]);
 }
-
 
 // --- level-2 banded + packed groups -----------------------------------------------
 // Banded A spans (n+band)*lda (matches the reference driver's allocation; band = kl for
@@ -904,7 +904,6 @@ pub extern "C" fn cblas_sspr2(order: c_int, uplo: c_int, n: c_int, alpha: f32, x
     call("lind_cblas_sspr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::F32(alpha), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: apb, len: OutLen::Cap }]);
 }
 
-
 // ===================================================================================
 // CBLAS level-3 (gemm, symm, syrk, syr2k, trmm, trsm). Every operand is a full 2D
 // matrix sized gemat_elems(order, R, C, ld); the stored shape (R,C) is flipped by
@@ -916,7 +915,10 @@ const CBLAS_LEFT: c_int = 141;
 
 /// Stored (rows, cols) of op(X): a×b when NoTrans, else b×a.
 fn trans_dims(trans: c_int, a: c_int, b: c_int) -> (c_int, c_int) {
-    if trans == CBLAS_NO_TRANS { (a, b) } else { (b, a) }
+    // ConjNoTrans (114) conjugates in place — it does NOT transpose — so the matrix keeps
+    // its a×b shape, exactly like NoTrans. Only Trans (112) / ConjTrans (113) swap the dims.
+    // (m==k hid this in the square cgemm/zgemm cases; non-square both-ConjNoTrans exposed it.)
+    if trans == CBLAS_NO_TRANS || trans == CBLAS_CONJ_NO_TRANS { (a, b) } else { (b, a) }
 }
 /// Order of the square matrix A: m when side is Left, else n.
 fn side_dim(side: c_int, m: c_int, n: c_int) -> c_int {
@@ -1033,7 +1035,6 @@ pub extern "C" fn cblas_strsm(order: c_int, side: c_int, uplo: c_int, trans: c_i
     call("lind_cblas_strsm", &mut [Arg::I32(order), Arg::I32(side), Arg::I32(uplo), Arg::I32(trans), Arg::I32(diag), Arg::I32(m), Arg::I32(n), Arg::F32(alpha), Arg::Buf(ab), Arg::I32(lda), Arg::InOut { dst: bb, len: OutLen::Cap }, Arg::I32(ldb)]);
 }
 
-
 // ===================================================================================
 // CBLAS complex level-1 (c = single-complex, 8-byte elems; z = double-complex, 16-byte).
 // Three patterns differ from the real level-1 sets:
@@ -1098,7 +1099,6 @@ unsafe fn cmat_in<'a>(p: *const c_void, elems: usize, elem: usize) -> &'a [u8] {
 unsafe fn cmat_out<'a>(p: *mut c_void, elems: usize, elem: usize) -> &'a mut [u8] {
     unsafe { core::slice::from_raw_parts_mut(p as *mut u8, elems * elem) }
 }
-
 
 // --- single-complex (c) ------------------------------------------------------------
 
@@ -1245,7 +1245,6 @@ pub extern "C" fn cblas_zdscal(n: c_int, alpha: f64, x: *mut c_void, incx: c_int
     let xb = unsafe { cxout(x, n, incx, C128) };
     call("lind_cblas_zdscal", &mut [Arg::I32(n), Arg::F64(alpha), Arg::InOut { dst: xb, len: OutLen::Cap }, Arg::I32(incx)]);
 }
-
 
 // ===================================================================================
 // CBLAS complex level-2 (c/z). Element COUNTS reuse the real level-2 size helpers
@@ -1551,7 +1550,6 @@ pub extern "C" fn cblas_zhpr2(order: c_int, uplo: c_int, n: c_int, alpha: *const
     let apb = unsafe { cmat_out(ap, packed_elems(n), C128) };
     call("lind_cblas_zhpr2", &mut [Arg::I32(order), Arg::I32(uplo), Arg::I32(n), Arg::Buf(al), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(yb), Arg::I32(incy), Arg::InOut { dst: apb, len: OutLen::Cap }]);
 }
-
 
 // ===================================================================================
 // CBLAS complex level-3 (c/z). Same shape rules as the real level-3 set: every operand
@@ -1908,7 +1906,6 @@ pub extern "C" fn izamax_(n: *const c_int, x: *const c_void, incx: *const c_int)
     unsafe { famax(cblas_izamax(*n, x, *incx), *n) }
 }
 
-
 // --- level-2 Fortran forwarders: gemv ----------------------------------------------
 // The Fortran ABI differs from level-1 in two ways handled here: the transpose flag is a
 // CHARACTER ('N'/'T'/'C', any case) rather than a CBLAS enum int, and there is no `order`
@@ -1943,17 +1940,52 @@ pub extern "C" fn sgemv_(trans: *const c_char, m: *const c_int, n: *const c_int,
 pub extern "C" fn dgemv_(trans: *const c_char, m: *const c_int, n: *const c_int, alpha: *const f64, a: *const f64, lda: *const c_int, x: *const f64, incx: *const c_int, beta: *const f64, y: *mut f64, incy: *const c_int) {
     unsafe { cblas_dgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, *alpha, a, *lda, x, *incx, *beta, y, *incy) }
 }
+// The COMPLEX gemv Fortran forwarders route through the guest's FORTRAN cgemv_/zgemv_
+// (not cblas_?gemv), because OpenBLAS's Fortran gemv accepts extended conjugation modes
+// that CBLAS has no enum for: 'N'/'T'/'C'/'R' plus 'O'/'S'/'U'/'D'. The letter selects
+// which of A / x is conjugated (per the test's own reference) — the GUEST does that math,
+// so we just pass the char through. The one thing marshalling must get right is the vector
+// lengths, which depend only on the transpose FAMILY (NoTrans vs Trans), not the
+// conjugation: gemv_fortran_lens classifies the char. (The real s/d gemv Fortran calls
+// have no such extended modes, so sgemv_/dgemv_ keep the simpler cblas path above.)
+
+/// (len x, len y) for a Fortran complex gemv given its trans char. NoTrans family
+/// (N/O/R/S) is x∈ℝⁿ, y∈ℝᵐ; Trans family (T/C/U/D) swaps them. Case-insensitive.
+fn gemv_fortran_lens(c: c_char, m: c_int, n: c_int) -> (c_int, c_int) {
+    match (c as u8).to_ascii_uppercase() {
+        b'T' | b'C' | b'U' | b'D' => (m, n), // transpose family
+        _ => (n, m),                         // NoTrans family: N/O/R/S
+    }
+}
+
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn cgemv_(trans: *const c_char, m: *const c_int, n: *const c_int, alpha: *const c_void, a: *const c_void, lda: *const c_int, x: *const c_void, incx: *const c_int, beta: *const c_void, y: *mut c_void, incy: *const c_int) {
-    unsafe { cblas_cgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, alpha, a, *lda, x, *incx, beta, y, *incy) }
+    unsafe {
+        let (tc, m, n, lda, incx, incy) = (*trans, *m, *n, *lda, *incx, *incy);
+        let (lenx, leny) = gemv_fortran_lens(tc, m, n);
+        let al = cxscalar(alpha, C64);
+        let be = cxscalar(beta, C64);
+        let ab = cmat_in(a, gemat_elems(CBLAS_COL_MAJOR, m, n, lda), C64);
+        let xb = cxin(x, lenx, incx, C64);
+        let yb = cxout(y, leny, incy, C64);
+        call("lind_cgemv_f", &mut [Arg::I32(tc as i32), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+    }
 }
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn zgemv_(trans: *const c_char, m: *const c_int, n: *const c_int, alpha: *const c_void, a: *const c_void, lda: *const c_int, x: *const c_void, incx: *const c_int, beta: *const c_void, y: *mut c_void, incy: *const c_int) {
-    unsafe { cblas_zgemv(CBLAS_COL_MAJOR, trans_enum(*trans), *m, *n, alpha, a, *lda, x, *incx, beta, y, *incy) }
+    unsafe {
+        let (tc, m, n, lda, incx, incy) = (*trans, *m, *n, *lda, *incx, *incy);
+        let (lenx, leny) = gemv_fortran_lens(tc, m, n);
+        let al = cxscalar(alpha, C128);
+        let be = cxscalar(beta, C128);
+        let ab = cmat_in(a, gemat_elems(CBLAS_COL_MAJOR, m, n, lda), C128);
+        let xb = cxin(x, lenx, incx, C128);
+        let yb = cxout(y, leny, incy, C128);
+        call("lind_zgemv_f", &mut [Arg::I32(tc as i32), Arg::I32(m), Arg::I32(n), Arg::Buf(al), Arg::Buf(ab), Arg::I32(lda), Arg::Buf(xb), Arg::I32(incx), Arg::Buf(be), Arg::InOut { dst: yb, len: OutLen::Cap }, Arg::I32(incy)]);
+    }
 }
-
 
 // --- level-3 Fortran forwarders: gemm ----------------------------------------------
 // Same char->enum + column-major reuse as gemv, over cblas_?gemm (already sandboxed from
@@ -2066,7 +2098,6 @@ pub extern "C" fn sdsdot_(n: *const c_int, sb: *const f32, x: *const f32, incx: 
     unsafe { cblas_sdsdot(*n, *sb, x, *incx, y, *incy) }
 }
 
-
 // --- complex dot (Fortran complex-RETURN ABI) --------------------------------------
 // CBLAS returns the complex dot through an out-pointer (?dotu_sub, which we already
 // sandbox); the FORTRAN ?dotu_/?dotc_ RETURN the complex by value. On the x86-64 SysV
@@ -2110,7 +2141,6 @@ pub extern "C" fn zdotc_(n: *const c_int, x: *const c_void, incx: *const c_int, 
     unsafe { cblas_zdotc_sub(*n, x, *incx, y, *incy, &mut r as *mut Cf64 as *mut c_void) };
     r
 }
-
 
 // ===================================================================================
 // OpenBLAS EXTENSIONS exercised by utest (not standard BLAS). Most have a CBLAS form
@@ -2306,4 +2336,3 @@ pub extern "C" fn dmin_(n: *const c_int, x: *const f64, incx: *const c_int) -> f
     let xb = unsafe { vin(x, *n, *incx) };
     call_f64("lind_dmin", &mut [Arg::I32(unsafe { *n }), Arg::Buf(xb), Arg::I32(unsafe { *incx })])
 }
-
