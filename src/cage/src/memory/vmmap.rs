@@ -2506,7 +2506,7 @@ mod tests {
     #[test]
     // ISO-003: a length large enough to overflow the range-arithmetic must be rejected
     fn test_check_addr_write_negative_length_overflow_rejected() {
-        let vmmap = test_vmmap();
+        let mut vmmap = test_vmmap();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
@@ -2536,7 +2536,7 @@ mod tests {
     #[test]
     // Targeting calculate_page_range directly
     fn test_calculate_page_range_overflow_returns_none() {
-        let mut vmmap = test_vmmap();
+        let vmmap = test_vmmap();
 
         let result = vmmap.calculate_page_range(0, usize::MAX);
 

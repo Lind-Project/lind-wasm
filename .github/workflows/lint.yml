@@ -61,3 +61,28 @@ jobs:
       #   env:
       #     GH_TOKEN: ${{ github.token }}
       #   run: zizmor -v .github/workflows #Running with -v to show all passes, will halt if any fail
+
+  rust-unit-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      # Deliberately no `rustup default` override here: this uses the
+      # toolchain pinned in rust-toolchain.toml, unlike the `lint` job above
+      # which pins an older nightly for clippy compatibility (see #242).
+      - name: Cage crate unit tests
+        run: cargo test --manifest-path src/cage/Cargo.toml -- --test-threads=1
+
+      # --test-threads=1 is mandatory: fdtables' tests share process-global
+      # state (FDTABLE / FDCOUNT / CLOSEHANDLERTABLE) and serialize on a
+      # hand-rolled TESTMUTEX that several tests take only after calling
+      # refresh(), which wipes that same state. This runs against the
+      # default `dashmaparray` feature only, which is what the rest of the
+      # build uses (see FDTABLES_IMPL in the top-level Makefile).
+      - name: fdtables crate unit tests
+        run: cargo test --manifest-path src/fdtables/Cargo.toml -- --test-threads=1
