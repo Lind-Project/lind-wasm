@@ -12,7 +12,7 @@ use cage::{get_cage, init_vmmap, lind_signal_init};
 use crate::lind_mpk::RuntimeInfo::{
     MPKRuntimeInfo, MPKSupervisorCtxStack, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
 };
-use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, setup_gs_context};
+use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, setup_gs_context, CAGE_STACK_GUARD};
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
@@ -35,6 +35,26 @@ pub static NO_INTERPOSE: AtomicBool = AtomicBool::new(false);
 // cage is forked; accessed by mpk_clone_syscall_entry to increment the counter.
 pub static LIND_MANAGER: OnceLock<Arc<LindCageManager>> = OnceLock::new();
 
+// glibc's x86-64 jmp_buf stores these registers in this order. The buffer is
+// created on the supervisor stack so clone3's copied stack can use the same address.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct MpkJumpBuffer {
+    rbx: libc::c_long,
+    rbp: libc::c_long,
+    r12: libc::c_long,
+    r13: libc::c_long,
+    r14: libc::c_long,
+    r15: libc::c_long,
+    rsp: libc::c_long,
+    rip: libc::c_long,
+}
+
+unsafe extern "C" {
+    fn setjmp(env: *mut libc::c_long) -> c_int;
+    fn longjmp(env: *mut libc::c_long, value: c_int) -> !;
+}
+
 // MPK has no Wasmtime epoch handler, so lind_signal_init receives a pointer to
 // this static zero, matching the disable_signals behaviour used in wasmtime.
 static MPK_EPOCH: AtomicU64 = AtomicU64::new(0);
@@ -51,6 +71,141 @@ fn mpk_debug_enabled() -> bool {
 fn mpk_debug(message: impl AsRef<str>) {
     if mpk_debug_enabled() {
         eprintln!("[lind-mpk] {}", message.as_ref());
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+fn current_pointer_guard() -> u64 {
+    let stack_guard: u64;
+    unsafe {
+        asm!(
+            "mov %fs:0x30, {stack_guard}",
+            stack_guard = out(reg) stack_guard,
+            options(nostack, preserves_flags, att_syntax)
+        );
+    }
+    stack_guard
+}
+
+#[cfg(target_arch = "x86_64")]
+fn relocate_mangled_stack_pointer(
+    pointer: libc::c_long,
+    delta: isize,
+    source_pointer_guard: u64,
+    target_pointer_guard: u64,
+) -> libc::c_long {
+    let mangled = pointer as u64;
+    let unmangled = mangled.rotate_right(17) ^ source_pointer_guard;
+    let relocated = unmangled.wrapping_add(delta as u64);
+    let remangled = (relocated ^ target_pointer_guard).rotate_left(17);
+    mpk_debug(format!(
+        "ptr mangle: mangled={:#x}, source_guard={:#x}, unmangled={:#x}, delta={:#x}, relocated={:#x}, target_guard={:#x}, remangled={:#x}",
+        mangled,
+        source_pointer_guard,
+        unmangled,
+        delta,
+        relocated,
+        target_pointer_guard,
+        remangled,
+    ));
+    remangled as libc::c_long
+}
+
+fn mpk_clone_thread_entry(
+    tid_sender: std::sync::mpsc::SyncSender<libc::pid_t>,
+    new_gs_data_addr: usize,
+    new_stack_base_addr: usize,
+    jump_buffer_addr: usize,
+    old_stack_base: usize,
+    parent_pointer_guard: u64,
+    registered_cage_ids: std::collections::HashSet<u64>,
+    thread_info: Arc<MpkThreadInfo>,
+) -> i32 {
+    let tid = current_tid();
+    let _ = tid_sender.send(tid);
+    let new_gs_data = new_gs_data_addr as *mut MPKSupervisorCtxStack;
+    unsafe {
+        (*new_gs_data).os_tid = tid as u64;
+        let result = libc::syscall(
+            libc::SYS_arch_prctl,
+            0x1001 as libc::c_long,
+            new_gs_data as u64,
+        );
+        if result != 0 {
+            lind_debug_panic(&format!(
+                "mpk_clone: arch_prctl(ARCH_SET_GS) failed: {}",
+                std::io::Error::last_os_error()
+            ));
+            return -EINVAL;
+        }
+    }
+
+    for cage_id in registered_cage_ids {
+        let Some(cage) = get_cage(cage_id) else {
+            lind_debug_panic(&format!("mpk_clone: cage {} not found", cage_id));
+            return -EINVAL;
+        };
+        let mut cage_info = MpkCageThreadInfo {
+            thread_info: Arc::clone(&thread_info),
+            grate_cage_id: cage_id,
+            stack_addr: 0,
+            stack_base: 0,
+            stack_size: 0,
+        };
+        cage_info.thread_info.register_cage(cage_id);
+        if let Err(error) = cage_info.allocate_grate_stack() {
+            lind_debug_panic(&format!(
+                "mpk_clone: grate stack allocation failed for tid={}: {}",
+                tid, error
+            ));
+            return -EINVAL;
+        }
+        let runtime_info = cage.runtime_info.read();
+        let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+            lind_debug_panic("mpk_clone: cage runtime changed while creating thread");
+            return -EINVAL;
+        };
+        mpk_info.threads.write().insert(tid, cage_info);
+    }
+
+    let copied_jump_buffer =
+        (new_stack_base_addr + (jump_buffer_addr - old_stack_base)) as *mut MpkJumpBuffer;
+    unsafe {
+        let child_pointer_guard = current_pointer_guard();
+        let stack_delta = new_stack_base_addr as isize - old_stack_base as isize;
+        //fix up all supervisor stack entries with the new stack base.
+        assert!(
+            (*new_gs_data).current_context > 0,
+            "mpk_clone: supervisor context stack is empty"
+        );
+        //for all contexts, offset supervisor stack pointers with the stack delta
+        for i in 0..(*new_gs_data).current_context {
+            mpk_debug(&format!(
+                "mpk_clone: adjusting supervisor stack pointer for context {}: super_rsp = {:#x}, new super_rsp = {:#x}",
+                i, (*new_gs_data).contexts[i].super_rsp, ((*new_gs_data).contexts[i].super_rsp as isize + stack_delta) as u64
+            ));
+            (*new_gs_data).contexts[i].super_rsp = ((*new_gs_data).contexts[i].super_rsp as isize + stack_delta) as u64;
+        }
+
+        (*copied_jump_buffer).rsp = relocate_mangled_stack_pointer(
+            (*copied_jump_buffer).rsp,
+            stack_delta,
+            parent_pointer_guard,
+            child_pointer_guard,
+        );
+        (*copied_jump_buffer).rbp = relocate_mangled_stack_pointer(
+            (*copied_jump_buffer).rbp,
+            stack_delta,
+            parent_pointer_guard,
+            child_pointer_guard,
+        );
+        (*copied_jump_buffer).rip = relocate_mangled_stack_pointer(
+            (*copied_jump_buffer).rip,
+            0,
+            parent_pointer_guard,
+            child_pointer_guard,
+        );
+        longjmp(copied_jump_buffer as *mut libc::c_long, 1);
     }
 }
 
@@ -272,17 +427,6 @@ extern "C" fn child_make_threei_call_handler(
 
 }
 
-/// Called from the custom glibc inside the isolated dlmopen namespace when the
-/// guest program invokes `clone`/`fork`.
-///
-/// Post-conditions (both parent and child return `child_cageid as i32`):
-/// - A fresh cage ID is allocated and the parent's fdtable is copied for the child.
-/// - The OS process is forked.
-/// - **Parent**: a dedicated worker thread is spawned that blocks on `recv` and
-///   dispatches every incoming `SyscallMsg` through `threei::make_syscall` on
-///   behalf of the child cage, then sends the `SyscallResp` back.
-/// - **Child**: `__enable_syscall_interpose` is re-registered with
-///   `child_syscall_handler`, which forwards every syscall over the socket.
 pub extern "C" fn mpk_clone_syscall_entry(
     cageid: u64, //This is rawposix' cage id as it performs make_syscall
     _clone_arg: u64,
@@ -298,6 +442,62 @@ pub extern "C" fn mpk_clone_syscall_entry(
     _arg6: u64,
     _arg6_cageid: u64,
 ) -> i32 {
+    //do setjmp here to save the current execution context for the child thread
+    //then return inner_mpk_clone_syscall_entry()
+    //the longjmp back will just return 0;
+
+    let mut jump_buffer = MpkJumpBuffer::default();
+
+    let jump_result = unsafe {
+        setjmp(&mut jump_buffer as *mut MpkJumpBuffer as *mut libc::c_long)
+    };
+    if jump_result != 0 {
+        return 0;
+    }
+
+    let result = inner_mpk_clone_syscall_entry(
+        cageid,
+        _clone_arg,
+        _clone_arg_cageid,
+        _parent_cageid,
+        _arg2_cageid,
+        _child_cageid_hint,
+        _arg3_cageid,
+        &mut jump_buffer,
+        _arg4_cageid,
+        _arg5,
+        _arg5_cageid,
+        _arg6,
+        _arg6_cageid,
+    );
+    result
+}
+/// Called from the custom glibc inside the isolated dlmopen namespace when the
+/// guest program invokes `clone`/`fork`.
+///
+/// Post-conditions (both parent and child return `child_cageid as i32`):
+/// - A fresh cage ID is allocated and the parent's fdtable is copied for the child.
+/// - The OS process is forked.
+/// - **Parent**: a dedicated worker thread is spawned that blocks on `recv` and
+///   dispatches every incoming `SyscallMsg` through `threei::make_syscall` on
+///   behalf of the child cage, then sends the `SyscallResp` back.
+/// - **Child**: `__enable_syscall_interpose` is re-registered with
+///   `child_syscall_handler`, which forwards every syscall over the socket.
+pub extern "C" fn inner_mpk_clone_syscall_entry(
+    cageid: u64, //This is rawposix' cage id as it performs make_syscall
+    _clone_arg: u64,
+    _clone_arg_cageid: u64,
+    _parent_cageid: u64,
+    _arg2_cageid: u64,
+    _child_cageid_hint: u64,
+    _arg3_cageid: u64,
+    jump_buffer: *mut MpkJumpBuffer,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i32 {
     let args = unsafe { &mut *(_clone_arg as *mut CloneArgStruct) };
     let isthread = args.flags & (CLONE_VM as u64) != 0; //CLONE_VM is set for threads, not for forked processes
 
@@ -306,6 +506,15 @@ pub extern "C" fn mpk_clone_syscall_entry(
         //Rawposix only respects CLONE_VM. Other flags are ignored.
         //Forwarded flags are
         //CLONE_SETTLS: We dont interfere with libc's TLS setup
+        //CLONE_PARENT_SETTID: Store TID at parent_tid
+        //CLONE_CHILD_SETTID: Store TID at child_tid
+        //CLONE_CHILD_CLEARTID: Clear TID and futex wake at child_tid on thread exit
+
+        let parent_tid_ptr = args.parent_tid;
+        let child_tid_ptr = args.child_tid;
+        let set_parent_tid = (args.flags & (CLONE_PARENT_SETTID as u64)) != 0;
+        let set_child_tid = (args.flags & (CLONE_CHILD_SETTID as u64)) != 0;
+        let clear_child_tid = (args.flags & (CLONE_CHILD_CLEARTID as u64)) != 0;
 
    
         //Ignored/set flags are ()
@@ -318,8 +527,6 @@ pub extern "C" fn mpk_clone_syscall_entry(
         args.flags |= ((CLONE_THREAD | CLONE_FILES | CLONE_FS | CLONE_SIGHAND | CLONE_SYSVSEM) as u64);
 
         //Ignored/cleared flags are (Most of these are simply out of scope as they are Linux specific, not POSIX)
-        //CLONE_CHILD_CLEARTID: not supported
-        //CLONE_CHILD_SETTID: not supported
         //CLONE_CLEAR_SIGHAND: not supported, could be implemented in Rawposix. PKRU is being reset on Linux signal delivery, so we need to provide a shim.
         //CLONE_DETACHED: not supported, historical
         //CLONE_INTO_CGROUP: not supported, 
@@ -331,23 +538,20 @@ pub extern "C" fn mpk_clone_syscall_entry(
         //CLONE_NEWUSER: not supported
         //CLONE_NEWUTS: not supported
         //CLONE_PARENT: not supported
-        //CLONE_PARENT_SETTID: not supported
         //CLONE_PIDFD: not supported
         //CLONE_PTRACE: not supported
         //CLONE_STOPPED: not supported
         //CLONE_UNTRACED: not supported
         //CLONE_VFORK: not supported
-        args.flags &= !((CLONE_CHILD_CLEARTID | CLONE_CHILD_SETTID | CLONE_CLEAR_SIGHAND 
+        args.flags &= !((CLONE_CLEAR_SIGHAND 
             | CLONE_DETACHED | CLONE_INTO_CGROUP | CLONE_NEWCGROUP | CLONE_NEWIPC | CLONE_NEWNET
             | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUSER | CLONE_NEWUTS | CLONE_PARENT
-            | CLONE_PARENT_SETTID | CLONE_PIDFD | CLONE_PTRACE | CLONE_UNTRACED
+            | CLONE_PIDFD | CLONE_PTRACE | CLONE_UNTRACED
             | CLONE_VFORK) as u64);
-        args.child_tid = 0;
-        args.parent_tid = 0;
         args.pidfd = 0;
 
         //still unsupported flags?
-        if (args.flags & !((CLONE_VM | CLONE_SETTLS | CLONE_THREAD | CLONE_FILES | CLONE_FS | CLONE_SIGHAND | CLONE_SYSVSEM) as u64)) != 0 {
+        if (args.flags & !((CLONE_VM | CLONE_SETTLS | CLONE_THREAD | CLONE_FILES | CLONE_FS | CLONE_SIGHAND | CLONE_SYSVSEM | CLONE_PARENT_SETTID | CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID) as u64)) != 0 {
             lind_debug_panic(&format!("mpk_clone: unsupported clone flags: {:#x}", args.flags));
             return -EINVAL;
         }
@@ -369,67 +573,135 @@ pub extern "C" fn mpk_clone_syscall_entry(
                 false, /* this is not the main thread */
             );
 
-            // The child installs its own GS data after clone3 returns. The
-            // supervisor stack must be created in the child because GS is
-            // thread-local even though the address space is shared.
-            drop(rtInfo);
-
-            
-            //here we launch the thread, in the parent process we return the thread id
-            //TODO: make this launch 
-            let _clone_result = unsafe {
-                libc::syscall(libc::SYS_clone3, args as *const _, size_of::<CloneArgStruct>())
-            };
-    
-            if (_clone_result < 0) {
-                let err = std::io::Error::last_os_error();
-                lind_debug_panic(&format!("mpk_clone: clone3 failed: {:#x}, errno: {}", _clone_result, err));
-                return _clone_result as i32;
-            }
-            else if (_clone_result > 0) {
-                //in the parent thread, we set the thread id in the cage's os_tid_map. 
-                //TODO: The child thread should block until this is done. However, the os_tid_map is only used for killing sibling threads. 
-                //If the child thread tries to exit before the parent thread sets the os_tid_map, it will still kill all other threads in the cage. 
-                //This becomes only an issue if there are multiple uninitialized threads in the cage and one of them exits before all the other OS thread ids are set in the os_tid_map.
-                cage.os_tid_map.insert(next_tid as i32, _clone_result as i64);
-                
-                return next_tid as i32;
-            }
-            else {
-                let tid = current_tid();
-                let thread_info = match setup_supervisor_stack(_parent_cageid, tid) {
-                    Ok(info) => info,
-                    Err(error) => {
-                        lind_debug_panic(&format!(
-                            "mpk_clone: setup_supervisor_stack failed for tid={}: {}",
-                            tid, error
-                        ));
-                        return -EINVAL;
-                    }
-                };
-                let mut cage_info = MpkCageThreadInfo {
-                    thread_info: Arc::new(thread_info),
-                    grate_cage_id: _parent_cageid,
-                    stack_addr: 0,
-                    stack_base: 0,
-                    stack_size: 0,
-                };
-                cage_info.thread_info.register_cage(_parent_cageid);
-                if let Err(error) = cage_info.allocate_grate_stack() {
-                    lind_debug_panic(&format!(
-                        "mpk_clone: grate stack allocation failed for tid={}: {}",
-                        tid, error
-                    ));
-                    return -EINVAL;
+            if set_parent_tid && parent_tid_ptr != 0 {
+                unsafe {
+                    *(parent_tid_ptr as *mut i32) = next_tid as i32;
                 }
-                let runtime_info = cage.runtime_info.read();
-                let mpk_info = runtime_info
-                    .as_any()
-                    .downcast_ref::<MPKRuntimeInfo>()
-                    .expect("mpk_clone: cage runtime changed while creating thread");
-                mpk_info.threads.write().insert(tid, cage_info);
-                return 0;
             }
+            if set_child_tid && child_tid_ptr != 0 {
+                unsafe {
+                    *(child_tid_ptr as *mut i32) = next_tid as i32;
+                }
+            }
+
+
+            let parent_tid = current_tid();
+            let parent_thread_info = mpk_info
+                .threads
+                .read()
+                .get(&parent_tid)
+                .map(|thread| Arc::clone(&thread.thread_info))
+                .expect("mpk_clone: parent thread is not registered");
+            let registered_cage_ids = parent_thread_info.cage_ids.lock().unwrap().clone();
+            let jump_buffer_addr = jump_buffer as usize;
+            let old_stack_base = parent_thread_info.supervisor_stack_base;
+            let stack_size = parent_thread_info.supervisor_stack_size;
+            let context_pages_size = parent_thread_info.context_pages_size;
+            let parent_pointer_guard = current_pointer_guard();
+
+            if stack_size == 0 || context_pages_size == 0 {
+                lind_debug_panic("mpk_clone: parent thread has no supervisor context");
+                return -EINVAL;
+            }
+
+            let new_context_pages = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    context_pages_size,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            let new_stack_base = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    stack_size,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            if new_context_pages == libc::MAP_FAILED || new_stack_base == libc::MAP_FAILED {
+                if new_context_pages != libc::MAP_FAILED {
+                    unsafe { libc::munmap(new_context_pages, context_pages_size) };
+                }
+                if new_stack_base != libc::MAP_FAILED {
+                    unsafe { libc::munmap(new_stack_base, stack_size) };
+                }
+                lind_debug_panic("mpk_clone: failed to duplicate thread context");
+                return -EINVAL;
+            }
+
+            let new_stack_base_addr = new_stack_base as usize;
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    parent_thread_info.context_pages as *const u8,
+                    new_context_pages as *mut u8,
+                    context_pages_size,
+                );
+                std::ptr::copy_nonoverlapping(
+                    (parent_thread_info.supervisor_stack_base as u64 + CAGE_STACK_GUARD as u64) as *const u8,
+                    (new_stack_base as u64 + CAGE_STACK_GUARD as u64) as *mut u8,
+                    (stack_size - CAGE_STACK_GUARD),
+                );
+                libc::mprotect(new_stack_base, CAGE_STACK_GUARD, libc::PROT_NONE);
+            }
+
+            let new_gs_data_addr = new_context_pages as usize;
+            let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+            let new_cage_data_addr = new_context_pages as usize + page_size;
+            let clear_child_tid_addr = if clear_child_tid { child_tid_ptr } else { 0 };
+            let thread_info = Arc::new(MpkThreadInfo {
+                gs_data: new_gs_data_addr as *mut MPKSupervisorCtxStack,
+                cage_data: new_cage_data_addr as *mut crate::lind_mpk::RuntimeInfo::MPKCageCtxStack,
+                context_pages: new_context_pages as usize,
+                context_pages_size,
+                supervisor_stack_base: new_stack_base as usize,
+                supervisor_stack_size: stack_size,
+                cage_ids: Mutex::new(std::collections::HashSet::new()),
+                child_tid: AtomicU64::new(clear_child_tid_addr),
+            });
+
+            // Fix up the top grate's return stack with the caller-provided stack.
+            unsafe {
+                let cage_data = &mut *thread_info.cage_data;
+                assert!(
+                    cage_data.current_context > 0,
+                    "mpk_clone: cage context stack is empty"
+                );
+                cage_data.contexts[cage_data.current_context - 1].rsp = args.stack + args.stack_size;
+            }
+
+
+            // Spawn the child on a normal Rust stack, then switch it to the copied
+            // supervisor stack before resuming at the saved setjmp return point.
+            let (tid_sender, tid_receiver) = std::sync::mpsc::sync_channel(1);
+            let handle = thread::spawn(move || {
+                mpk_clone_thread_entry(
+                    tid_sender,
+                    new_gs_data_addr,
+                    new_stack_base_addr,
+                    jump_buffer_addr,
+                    old_stack_base,
+                    parent_pointer_guard,
+                    registered_cage_ids,
+                    thread_info,
+                )
+            });
+
+
+            //update parent thread's return value
+            let child_os_tid = tid_receiver
+                .recv()
+                .expect("mpk_clone: child thread exited before reporting its tid");
+            cage.os_tid_map.insert(next_tid as i32, child_os_tid as i64);
+
+            return next_tid as i32;
+
         }
         else {
             panic!("mpk_clone: cage {} has no MPKRuntimeInfo", _parent_cageid);
@@ -446,19 +718,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
             .get()
             .expect("mpk_clone: LIND_MANAGER not set – call init_mpk first");
 
-        // MPK has no Wasmtime epoch; pass a pointer to a static zero so
-        // lind_signal_init stores a valid (disabled) epoch handler address.
-        let epoch_pointer: *mut u64 = MPK_EPOCH.as_ptr();
 
-        // initialize the signal for the main thread of forked cage
-        //FIXME: This associates the parent os_thread_id with the child cage. This can lead to an error on exit.
-        lind_signal_init(
-            child_cageid,
-            epoch_pointer,
-            THREAD_START_ID,
-            true, /* this is the main thread */
-        );
-        
         // // new cage created, increment the cage counter
         lind_manager.increment();
         
@@ -555,6 +815,18 @@ pub extern "C" fn mpk_clone_syscall_entry(
                 //this tid is used to identify the os thread in the parent process. 
                 //This is easier than using the child process's pid because the helper thread always outlives the child process.
                 let helper_tid = current_tid(); 
+                
+                // MPK has no Wasmtime epoch; pass a pointer to a static zero so
+                // lind_signal_init stores a valid (disabled) epoch handler address.
+                let epoch_pointer: *mut u64 = MPK_EPOCH.as_ptr();        
+                
+                // initialize the signal for the main thread of forked cage
+                lind_signal_init(
+                    child_cageid,
+                    epoch_pointer,
+                    THREAD_START_ID, //this is the first thread of the new cage
+                    true, /* this is the main thread */
+                );
 
                 let (gs_ptr, cage_ptr, context_pages, context_pages_size) =
                     match setup_gs_context(child_cageid, helper_tid) {
@@ -576,6 +848,7 @@ pub extern "C" fn mpk_clone_syscall_entry(
                     supervisor_stack_base: 0, //not needed, the current thread was spawned on a supervisor stack
                     supervisor_stack_size: 0,
                     cage_ids: std::sync::Mutex::new(std::collections::HashSet::new()),
+                    child_tid: AtomicU64::new(0),
                 });
 
                 let mut registered_cage_ids = parent_registered_cages;
@@ -729,24 +1002,12 @@ pub extern "C" fn mpk_exit_syscall_entry(
     // Get the exiting cage and retrieve its MPKRuntimeInfo
     if let Some(cage) = get_cage(exiting_cageid) {
         let runtime_info = cage.runtime_info.read();
-        
         if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-            let cage_pid = mpk_info.pid;
-            let my_pid = unsafe { libc::getpid() };
+            
             let mut cage_tid = 0;
-            
-            mpk_debug(format!("mpk_exit: cage_pid={}, my_pid={}", cage_pid, my_pid));
-            
-            // If the cage has a non-zero PID and it's different from our own,
-            // kill that process (it's a forked child)
+            let cage_pid = mpk_info.pid;
             if cage_pid != 0 {
-                assert!(
-                    cage_pid != my_pid,
-                    "mpk_exit: Cannot kill self (cage_pid={}, my_pid={})",
-                    cage_pid, my_pid
-                );
-
-                // Retrieve the thread ID from MPKSupervisorCtxStack and store it in cage_tid.
+                // Retrieve the thread ID from MPKSupervisorCtxStack and store it in cage_tid, we cant use gettid() directly.
                 unsafe {
                     asm!(
                         "mov %gs:{gs_super_os_tid_offset}, {cage_tid}",
@@ -755,60 +1016,124 @@ pub extern "C" fn mpk_exit_syscall_entry(
                         options(att_syntax)
                     );
                 }
-                
-                
-                mpk_debug(format!("mpk_exit: killing child process {}", cage_pid));
-                unsafe {
-                    libc::kill(cage_pid, libc::SIGKILL);
-                }
             }
-            else { //This cage is running in the same process, so we need to clean up the linker state.
+            else {
+                //This cage is running in the same process, so we need to clean up the linker state.
                 // Remove the exiting thread's MpkThreadInfo from the map; Drop frees its
                 // supervisor stack and GsSegmentData.
                 cage_tid = current_tid();
-                
-                
-                // Close the dlmopen handles for this cage's isolated namespace
-                mpk_debug("mpk_exit: closing dlmopen handles");
-                unsafe {
-                    libc::dlclose(mpk_info.loader_libc_handle);
-                    libc::dlclose(mpk_info.loader_cage_handle);
-                }
-                // Unmap the cage's 4 GB virtual address space.
-                if !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
-                    mpk_debug("mpk_exit: unmapping cage memory region");
-                    unsafe { libc::munmap(mpk_info.memory_base, mpk_info.memory_size); }
-                }
-                // Any remaining MpkThreadInfos in the threads map (e.g. for threads that
-                // exit without going through mpk_exit) are freed when MPKRuntimeInfo
-                // is dropped (cage_finalize below).
             }
-            
-            let thread_info = mpk_info.threads.write().remove(&cage_tid).map(|cage_thread_info| {
-                Arc::clone(&cage_thread_info.thread_info)
-            });
 
-            if let Some(thread_info) = thread_info {
-                let cage_ids = thread_info.cage_ids.lock().unwrap().clone();
-                for cage_id in cage_ids {
-                    if cage_id == exiting_cageid {
-                        continue;
+            let lind_tid = cage
+                .os_tid_map
+                .iter()
+                .find(|entry| *entry.value() == cage_tid as i64)
+                .map(|entry| *entry.key())
+                .expect("mpk_exit: current OS thread is not registered in os_tid_map");
+            let is_last = cage::signal::lind_thread_exit(exiting_cageid, lind_tid as u64);
+            mpk_debug(format!("mpk_exit: cage {} is_last_thread: {}", exiting_cageid, is_last));            
+            if is_last {               
+                
+                let my_pid = unsafe { libc::getpid() };
+                
+                mpk_debug(format!("mpk_exit: cage_pid={}, my_pid={}", cage_pid, my_pid));
+                
+                if cage_pid != 0 {
+                    // If the cage has a non-zero PID and it's different from our own,
+                    // kill that process (it's a forked child)
+                    assert!(
+                        cage_pid != my_pid,
+                        "mpk_exit: Cannot kill self (cage_pid={}, my_pid={})",
+                        cage_pid, my_pid
+                    );
+                    
+                    
+                    
+                    mpk_debug(format!("mpk_exit: killing child process {}", cage_pid));
+                    unsafe {
+                        libc::kill(cage_pid, libc::SIGKILL);
                     }
-                    if let Some(cage) = get_cage(cage_id) {
-                        let runtime_info = cage.runtime_info.read();
-                        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-                            mpk_info.threads.write().remove(&cage_tid);
-                            //log the removal of the thread info for this cage
-                            mpk_debug(format!("mpk_exit: removed thread info for tid={} from cage {}", cage_tid, cage_id));
+                }
+                else {
+
+                    
+                    // Close the dlmopen handles for this cage's isolated namespace
+                    mpk_debug("mpk_exit: closing dlmopen handles");
+                    unsafe {
+                        libc::dlclose(mpk_info.loader_libc_handle);
+                        libc::dlclose(mpk_info.loader_cage_handle);
+                    }
+                    // Unmap the cage's 4 GB virtual address space.
+                    if !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
+                        mpk_debug("mpk_exit: unmapping cage memory region");
+                        unsafe { libc::munmap(mpk_info.memory_base, mpk_info.memory_size); }
+                    }
+                    // Any remaining MpkThreadInfos in the threads map (e.g. for threads that
+                    // exit without going through mpk_exit) are freed when MPKRuntimeInfo
+                    // is dropped (cage_finalize below).
+                }
+                
+                cage::cage_finalize(exiting_cageid);
+                
+                // Decrement the cage counter
+                if let Some(lind_manager) = LIND_MANAGER.get() {
+                    //ultimate teardown if this was the last cage
+                    if lind_manager.decrement_and_is_zero() {
+                        mpk_debug(format!("mpk_exit: no more cages, exiting (exit_group) with status {}", exit_status));
+                        //no more cages => exitgroup
+                        unsafe { libc::syscall(libc::SYS_exit_group, exit_status); }
+                    }
+                }
+            }
+            else {
+                
+                let thread_info = mpk_info.threads.write().remove(&cage_tid).map(|cage_thread_info| {
+                    Arc::clone(&cage_thread_info.thread_info)
+                });
+    
+                if let Some(thread_info) = thread_info {
+                    let clear_tid_addr = thread_info.child_tid.swap(0, Ordering::SeqCst);
+                    if clear_tid_addr != 0 {
+                        unsafe {
+                            let atomic_tid = clear_tid_addr as *const AtomicI32;
+                            (*atomic_tid).store(0, Ordering::Release);
+                            //TODO: can we do this in rawposix?
+                            libc::syscall(
+                                libc::SYS_futex,
+                                clear_tid_addr,
+                                libc::FUTEX_WAKE,
+                                1,
+                                std::ptr::null::<libc::c_void>(),
+                                std::ptr::null::<libc::c_void>(),
+                                0,
+                            );
                         }
                     }
+    
+                    let cage_ids = thread_info.cage_ids.lock().unwrap().clone();
+                    for cage_id in cage_ids {
+                        if cage_id == exiting_cageid {
+                            continue;
+                        }
+                        if let Some(cage) = get_cage(cage_id) {
+                            let runtime_info = cage.runtime_info.read();
+                            if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                                mpk_info.threads.write().remove(&cage_tid);
+                                //log the removal of the thread info for this cage
+                                mpk_debug(format!("mpk_exit: removed thread info for tid={} from cage {}", cage_tid, cage_id));
+                            }
+                        }
+                    }
+    
+                    // We are still executing on this OS thread's supervisor stack, which
+                    // `thread_info` owns. Hand the last reference to the reaper thread so
+                    // it is only dropped (and the stack unmapped) once this OS thread has
+                    // actually exited.
+                    crate::lind_mpk::RuntimeInfo::queue_thread_info_for_reap(cage_tid, thread_info);
                 }
-
-                // We are still executing on this OS thread's supervisor stack, which
-                // `thread_info` owns. Hand the last reference to the reaper thread so
-                // it is only dropped (and the stack unmapped) once this OS thread has
-                // actually exited.
-                crate::lind_mpk::RuntimeInfo::queue_thread_info_for_reap(cage_tid, thread_info);
+                else {
+                    mpk_debug(format!("mpk_exit: no thread info found for cage {}", exiting_cageid));
+                }
             }
             
             
@@ -816,34 +1141,20 @@ pub extern "C" fn mpk_exit_syscall_entry(
             mpk_debug(format!("mpk_exit: cage {} has no MPKRuntimeInfo", exiting_cageid));
         }
         
-        let is_last = cage::signal::lind_thread_exit(exiting_cageid, THREAD_START_ID as u64);
-        
-        if is_last {
-            cage::cage_finalize(exiting_cageid);
-            
-            // Decrement the cage counter
-            if let Some(lind_manager) = LIND_MANAGER.get() {
-                //ultimate teardown if this was the last cage
-                if lind_manager.decrement_and_is_zero() {
-                    //no more cages can ever queue reap work after this point
-                    crate::lind_mpk::RuntimeInfo::stop_thread_info_reaper();
-                }
-            }
-        }
         
     } else {
         mpk_debug(format!("mpk_exit: cage {} not found", exiting_cageid));
     }
     
 
-    mpk_debug(format!("mpk_exit: cage {} cleanup complete", exiting_cageid));
+    mpk_debug(format!("mpk_exit: cage {} cleanup complete, exiting (exit, not exit_group) with status {}", exiting_cageid, exit_status));
 
     
 
     //Here the thread is terminated. (exit does not return in this implementation)
     //it is assumed that there are no references to rust objects stored on the supervisor stack at this point.
     unsafe {
-        libc::syscall(libc::SYS_exit, 0);
+        libc::syscall(libc::SYS_exit, exit_status); // One test expects lind to exit with the cages exit code
     }
     
     0 //dummy

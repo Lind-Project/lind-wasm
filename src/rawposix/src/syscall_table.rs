@@ -10,8 +10,8 @@ use super::fs_calls::{
     fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatat_syscall,
     fstatfs_syscall, fsync_syscall, ftruncate_syscall, futex_syscall, getcwd_syscall,
     getdents_syscall, getrandom_syscall, ioctl_syscall, lchown_syscall, link_syscall,
-    listxattr_syscall, lseek_syscall, lstat_syscall, mkdir_syscall, mknod_syscall, mmap_syscall,
-    mprotect_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, openat_syscall,
+    listxattr_syscall, lseek_syscall, lstat_syscall, madvise_syscall, mkdir_syscall, mknod_syscall,
+    mmap_syscall, mprotect_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, openat_syscall,
     pipe2_syscall, pipe_syscall, pread_syscall, preadv_syscall, pwrite_syscall, pwritev_syscall,
     read_syscall, readlink_syscall, readlinkat_syscall, readv_syscall, rename_syscall,
     renameat2_syscall, renameat_syscall, rmdir_syscall, setxattr_syscall, shmat_syscall,
@@ -29,9 +29,9 @@ use super::net_calls::{
 };
 use super::sys_calls::{
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
-    getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall,
-    prlimit64_syscall, sched_yield_syscall, setitimer_syscall, sigaction_syscall,
-    sigprocmask_syscall, sigsuspend_syscall, waitpid_syscall,
+    getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, gettid_syscall, getuid_syscall,
+    kill_syscall, prlimit64_syscall, rseq_syscall, sched_yield_syscall, set_robust_list_syscall,
+    setitimer_syscall, sigaction_syscall, sigprocmask_syscall, sigsuspend_syscall, waitpid_syscall,
 };
 use sysdefs::constants::syscall_const;
 
@@ -65,6 +65,12 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (
         syscall_const::SCHED_YIELD_SYSCALL as u64,
         sched_yield_syscall,
+    ),
+    (syscall_const::MADVISE_SYSCALL as u64, madvise_syscall),
+    (syscall_const::RSEQ_SYSCALL as u64, rseq_syscall),
+    (
+        syscall_const::SET_ROBUST_LIST_SYSCALL as u64,
+        set_robust_list_syscall,
     ),
     (
         syscall_const::RT_SIGSUSPEND_SYSCALL as u64,
@@ -134,6 +140,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::GETEGID_SYSCALL as u64, getegid_syscall),
     (syscall_const::GETPPID_SYSCALL as u64, getppid_syscall),
     (syscall_const::GETPGID_SYSCALL as u64, getpgid_syscall),
+    (syscall_const::GETTID_SYSCALL as u64, gettid_syscall),
     (syscall_const::MKNOD_SYSCALL as u64, mknod_syscall),
     (syscall_const::STATFS_SYSCALL as u64, statfs_syscall),
     (syscall_const::FSTATFS_SYSCALL as u64, fstatfs_syscall),

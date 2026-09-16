@@ -16,10 +16,10 @@ use crate::lind_mpk::RuntimeInfo::{
 };
 use crate::shims::SyscallRuntime;
 use anyhow::{Context, bail};
-use cage::{VmmapBitWidth, get_cage};
+use cage::{VmmapBitWidth, get_cage, lind_signal_init};
 use libc::{c_char, c_int, c_ulong, c_void};
 use std::arch::asm;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{Ordering, AtomicU64};
 use std::env;
 use std::ffi::{CStr, CString};
 use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
@@ -57,7 +57,7 @@ const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
 // Stack used to call the cage's own `main`, allocated out of the cage's
 // own vmmap so it is backed by memory the guest owns.
 const CAGE_STACK_SIZE: usize = 8 * 1024 * 1024;
-const CAGE_STACK_GUARD: usize = 4096;
+pub const CAGE_STACK_GUARD: usize = 4096;
 
 /// C main entrypoint signature.
 type MainFn = unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
@@ -71,6 +71,10 @@ const SUPERVISOR_STACK_GUARD: usize = 4096;            // one guard page
 // arch_prctl code for setting the GS base register.
 // Not always exported by the libc crate, so defined explicitly.
 const ARCH_SET_GS: c_int = 0x1001;
+
+// MPK has no Wasmtime epoch handler, so lind_signal_init receives a pointer to
+// this static zero, matching the disable_signals behaviour used in wasmtime.
+static MPK_EPOCH: AtomicU64 = AtomicU64::new(0);
 
 /// Allocates and initializes the per-thread GS and cage context pages, then
 /// installs the GS base for the calling thread.
@@ -206,6 +210,7 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
         supervisor_stack_base: stack_base as usize,
         supervisor_stack_size: total_size,
         cage_ids: std::sync::Mutex::new(std::collections::HashSet::new()),
+        child_tid: std::sync::atomic::AtomicU64::new(0),
     })
 }
 
@@ -535,7 +540,10 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
 
     // Frees MpkThreadInfos queued by mpk_exit_syscall_entry once their OS
     // thread has actually exited (see RuntimeInfo::queue_thread_info_for_reap).
-    std::thread::spawn(crate::lind_mpk::RuntimeInfo::run_thread_info_reaper);
+    std::thread::Builder::new()
+        .name("mpk-thread-reaper".to_string())
+        .spawn(crate::lind_mpk::RuntimeInfo::run_thread_info_reaper)
+        .expect("failed to spawn mpk-thread-reaper thread");
 
     mpk_debug("lind-mpk initialized successfully");
 }
@@ -1112,6 +1120,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
     cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
     let tid = current_tid();
+    thread_info.register_cage(cage_id);
     let mpk_info = MPKRuntimeInfo::new(
         handle,
         libc_handle,
@@ -1121,10 +1130,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         MPK_MEMORY_SIZE,
         THREAD_START_ID + 1,
         Some((tid, MpkCageThreadInfo {
-            thread_info: Arc::new(MpkThreadInfo {
-                cage_ids: std::sync::Mutex::new(std::collections::HashSet::from([cage_id])),
-                ..thread_info
-            }),
+            thread_info: Arc::new(thread_info),
             grate_cage_id: cage_id,
             stack_addr: 0,
             stack_base: 0,
@@ -1140,7 +1146,21 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     register_mpk_handler_for_cage(cage_id)?;
 
 
-    // Step 6: Allocate a stack for the guest inside the cage's own vmmap and
+    //Step 6: initialize signalling
+
+    // MPK has no Wasmtime epoch; pass a pointer to a static zero so
+    // lind_signal_init stores a valid (disabled) epoch handler address.
+    let epoch_pointer: *mut u64 = MPK_EPOCH.as_ptr();  
+    lind_signal_init(
+        cage_id,
+        epoch_pointer,
+        THREAD_START_ID, //this is the first thread of the new cage
+        true, /* this is the main thread */
+    );
+
+
+
+    // Step 7: Allocate a stack for the guest inside the cage's own vmmap and
     // write argv/envp onto it.
     let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
     let (argc, argv_ptr, envp_ptr, new_rsp) = unsafe {

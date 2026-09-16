@@ -757,6 +757,55 @@ pub extern "C" fn getpgid_syscall(
     (cage.cageid as i64)
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/gettid.2.html
+///
+/// Implements `gettid`, returning the calling thread's lind-assigned thread
+/// ID (the same value written to `child_tid`/`parent_tid` by `clone`).
+/// Found by reverse-looking up the calling OS thread ID in the cage's
+/// `os_tid_map`, which every runtime populates via `lind_signal_init`.
+///
+/// ## Returns
+/// The calling thread's lind-assigned thread ID.
+pub extern "C" fn gettid_syscall(
+    cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    if !(sc_unusedarg(arg1, arg1_cageid)
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "gettid_syscall"
+        );
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let os_tid = unsafe { libc::syscall(libc::SYS_gettid) };
+    let mut lind_tid = None;
+    for entry in cage.os_tid_map.iter() {
+        if *entry.value() == os_tid {
+            lind_tid = Some(*entry.key() as i64);
+            break;
+        }
+    }
+    lind_tid.expect("gettid_syscall: current OS thread not registered in os_tid_map")
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/getppid.3p.html
 ///
 /// See comments of `getpid_syscall` for more details
@@ -1349,6 +1398,53 @@ pub extern "C" fn sched_yield_syscall(
     }
 
     (unsafe { sched_yield() }) as i64
+}
+
+/// Dummy `rseq` implementation.
+///
+/// RawPOSIX does not currently model restartable sequences. Report ENOSYS so
+/// libc falls back to its no-rseq path, matching a kernel built without rseq support.
+pub extern "C" fn rseq_syscall(
+    _cageid: u64,
+    _rseq: u64,
+    _rseq_cageid: u64,
+    _rseq_len: u64,
+    _rseq_len_cageid: u64,
+    _flags: u64,
+    _flags_cageid: u64,
+    _sig: u64,
+    _sig_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i64 {
+    //enosys handling for rseq does not seem to be active in the glibc version used for mpk
+    // syscall_error(Errno::ENOSYS, "rseq", "restartable sequences not supported") as i64
+    0 as i64
+}
+
+/// Dummy `set_robust_list` implementation.
+///
+/// RawPOSIX does not currently model the robust futex list. Report ENOSYS so
+/// libc falls back to its no-robust-list path, matching a kernel built without support.
+pub extern "C" fn set_robust_list_syscall(
+    _cageid: u64,
+    _head: u64,
+    _head_cageid: u64,
+    _len: u64,
+    _len_cageid: u64,
+    _arg3: u64,
+    _arg3_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i64 {
+    // syscall_error(Errno::ENOSYS, "set_robust_list", "robust futex list not supported") as i64
+    0 as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/rt_sigsuspend.2.html

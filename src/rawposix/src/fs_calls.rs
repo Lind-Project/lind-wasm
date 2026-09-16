@@ -860,7 +860,8 @@ pub extern "C" fn mmap_syscall(
         | MAP_PRIVATE as i32
         | MAP_ANONYMOUS as i32
         | MAP_NORESERVE as i32
-        | MAP_POPULATE as i32;
+        | MAP_POPULATE as i32
+        | MAP_STACK as i32;
     if flags & !allowed_flags != 0 {
         lind_debug_panic(&format!(
             "mmap: unsupported flags {:#x} (allowed: {:#x})",
@@ -4493,6 +4494,41 @@ pub extern "C" fn mprotect_syscall(
     }
 
     (ret) as i64
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/madvise.2.html
+///
+/// Stub implementation: madvise is purely advisory, so we don't act on any of
+/// the hints and always report success.
+///
+/// ## Returns:
+///     - 0 always
+pub extern "C" fn madvise_syscall(
+    _cageid: u64,
+    _addr: u64,
+    _addr_cageid: u64,
+    _len: u64,
+    _len_cageid: u64,
+    _advice: u64,
+    _advice_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "madvise_syscall"
+        );
+    }
+
+    0
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/ioctl.2.html

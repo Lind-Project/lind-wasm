@@ -1,7 +1,7 @@
 use libc::{c_void, pid_t};
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use cage::{get_cage, MemoryBackingType, RuntimeInfo, RwLock, VmmapOps};
 use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
@@ -171,6 +171,8 @@ pub struct MpkThreadInfo {
     pub supervisor_stack_size: usize,
     /// Cage IDs whose thread maps contain an MpkCageThreadInfo for this OS thread.
     pub cage_ids: Mutex<HashSet<u64>>,
+    /// Pointer to child_tid in guest memory to atomically clear and futex wake on thread exit.
+    pub child_tid: AtomicU64,
 }
 
 impl MpkThreadInfo {
@@ -237,19 +239,10 @@ fn os_thread_is_alive(tid: pid_t) -> bool {
     ret == 0
 }
 
-static REAPER_SHOULD_STOP: AtomicBool = AtomicBool::new(false);
-
-/// Signals the background reaper thread to stop after its current iteration.
-/// Called once the last cage has exited, since no further entries can ever
-/// be queued after that point.
-pub fn stop_thread_info_reaper() {
-    REAPER_SHOULD_STOP.store(true, Ordering::Release);
-}
-
 /// Periodically drops queued `MpkThreadInfo`s whose OS thread has exited,
 /// until `stop_thread_info_reaper` is called. Spawned once from `init_mpk`.
 pub fn run_thread_info_reaper() {
-    while !REAPER_SHOULD_STOP.load(Ordering::Acquire) {
+    loop {
         std::thread::sleep(std::time::Duration::from_millis(20));
         pending_thread_reap()
             .lock()
