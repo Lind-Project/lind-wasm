@@ -30,6 +30,108 @@ use super::execute::{
 use super::host::HostCtx;
 use crate::cli::CliOptions;
 
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+// ===========================================================================
+// Guest -> host callbacks (upcalls).
+//
+// A normal sandboxed call is host -> guest (the stub calls a guest export). A
+// callback is the reverse: the guest calls an imported host function. The guest
+// imports a single generic entry point `env::__lind_upcall(slot, a0, a1, a2)`;
+// the host dispatches on `slot` to a handler the stub registered. This keeps the
+// engine library-agnostic — the stub owns what each callback does (e.g. OpenBLAS's
+// xerbla error handler), exactly like the forward-marshalling stubs.
+//
+// Pointer arguments cross the OTHER way here, so a handler needs *reverse*
+// marshalling: `UpcallCtx` reads/writes the guest's (shared) linear memory so the
+// handler can pull a guest string/buffer out into host memory before acting on it.
+// ===========================================================================
+
+/// Access to the guest's linear memory for the duration of one upcall. The guest is
+/// paused while the host handler runs, so the base pointer is stable; every access
+/// is bounds-checked against the memory's current length.
+pub struct UpcallCtx {
+    base: *mut u8,
+    size: usize,
+}
+
+impl UpcallCtx {
+    /// Wrap a raw base pointer + length (obtained via [`shared_mem_of`]).
+    pub fn new(base: *mut u8, size: usize) -> Self {
+        Self { base, size }
+    }
+
+    /// Copy `len` bytes out of guest memory at guest offset `ptr`. Returns `None`
+    /// (rather than reading out of bounds) if the range is invalid.
+    pub fn read_bytes(&self, ptr: i32, len: i32) -> Option<Vec<u8>> {
+        if ptr < 0 || len < 0 {
+            return None;
+        }
+        let (off, n) = (ptr as usize, len as usize);
+        if off.checked_add(n)? > self.size {
+            return None;
+        }
+        Some(unsafe { std::slice::from_raw_parts(self.base.add(off), n) }.to_vec())
+    }
+
+    /// Copy `bytes` into guest memory at guest offset `ptr`. Returns `false` (writing
+    /// nothing) if the range is invalid.
+    pub fn write_bytes(&self, ptr: i32, bytes: &[u8]) -> bool {
+        if ptr < 0 {
+            return false;
+        }
+        let off = ptr as usize;
+        if off.checked_add(bytes.len()).map_or(true, |end| end > self.size) {
+            return false;
+        }
+        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.base.add(off), bytes.len()) };
+        true
+    }
+}
+
+/// A registered guest->host callback. Receives the reverse-marshalling context and the
+/// three raw `i32` args the guest passed; returns the `i32` the guest sees.
+pub type UpcallHandler = Box<dyn Fn(&UpcallCtx, [i32; 3]) -> i32 + Send + Sync + 'static>;
+
+fn upcall_registry() -> &'static Mutex<HashMap<i32, UpcallHandler>> {
+    static REG: OnceLock<Mutex<HashMap<i32, UpcallHandler>>> = OnceLock::new();
+    REG.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Register the handler invoked when the guest calls `__lind_upcall` with this `slot`.
+/// The stub calls this before `init_sandboxed_lib` to wire its callbacks (e.g. xerbla).
+pub fn register_upcall(slot: i32, handler: UpcallHandler) {
+    upcall_registry().lock().unwrap().insert(slot, handler);
+}
+
+/// Dispatch an upcall to its registered handler. Called by the host import closure in
+/// `execute.rs`; returns 0 if no handler is registered for the slot.
+pub fn dispatch_upcall(slot: i32, ctx: &UpcallCtx, args: [i32; 3]) -> i32 {
+    let reg = upcall_registry().lock().unwrap();
+    match reg.get(&slot) {
+        Some(h) => h(ctx, args),
+        None => {
+            eprintln!("[sandboxed_lib] __lind_upcall: no handler registered for slot {slot}");
+            0
+        }
+    }
+}
+
+/// Base pointer + current length of the (shared) guest linear memory reachable from a
+/// store context. Mirrors `SandboxedLib::guest_mem` for use from a host-import closure
+/// that only holds a `Caller`. Returns `None` if there is no shared linear memory.
+pub fn shared_mem_of(ctx: &mut impl AsContextMut) -> Option<(*mut u8, usize)> {
+    let em = ctx.as_context_mut().0.all_memories().next()?;
+    let base = em.shared_base_ptr()?;
+    let size = unsafe {
+        (*em.shared()?.vmmemory_ptr().as_ptr())
+            .current_length
+            .load(Ordering::SeqCst)
+    };
+    Some((base, size))
+}
+
 /// A host-side argument to a guest call.
 ///
 /// Scalars (`I32`/`USize`) pass straight through — a wasm `i32` *is* a native `int`,

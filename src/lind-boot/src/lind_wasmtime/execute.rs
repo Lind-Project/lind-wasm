@@ -594,6 +594,26 @@ pub(crate) fn attach_api(
         let tag = Tag::new(&mut *wstore, &tag_type)?;
         linker_guard.define(&*wstore, "env", "__c_longjmp", tag)?;
     }
+    
+    // Guest -> host callbacks (upcalls). A guest that imports `env::__lind_upcall`
+    // (e.g. the sandboxed-library shim's xerbla forwarder) reaches a host handler the
+    // stub registered via `sandboxed_lib::register_upcall`. Defining it here is inert
+    // for guests that don't import it. The closure grabs the shared linear memory so
+    // the handler can reverse-marshal pointer args out of the guest.
+    linker_guard.func_wrap(
+        "env",
+        "__lind_upcall",
+        |mut caller: wasmtime::Caller<'_, HostCtx>, slot: i32, a0: i32, a1: i32, a2: i32| -> i32 {
+            match super::sandboxed_lib::shared_mem_of(&mut caller) {
+                Some((base, size)) => {
+                    let ctx = super::sandboxed_lib::UpcallCtx::new(base, size);
+                    super::sandboxed_lib::dispatch_upcall(slot, &ctx, [a0, a1, a2])
+                }
+                None => 0,
+            }
+        },
+    )?;
+
 
     // attach Lind-Multi-Process-Context to the host
     let _ = wstore.data_mut().lind_fork_ctx = Some(LindCtx::new(
