@@ -1,0 +1,14 @@
+[package]
+name = "lind-libcallbacks"
+version = "0.1.0"
+edition = "2024"
+
+# Native shared object. `name = "callbacks"` -> `libcallbacks.so`, linked with `-lcallbacks`.
+[lib]
+name = "callbacks"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Reuses lind-boot's sandboxed-lib API, now including the upcall registry
+# (register_upcall / UpcallCtx) that wires guest->host callbacks.
+lind-boot = { path = "../../../../src/lind-boot" }
