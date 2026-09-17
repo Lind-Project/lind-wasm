@@ -1650,10 +1650,9 @@ pub extern "C" fn stat_syscall(
         return (handle_errno(errno, "xstat")) as i64;
     }
 
-    // Convert libc stat to StatData and copy to user buffer
-    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
-        Err(e) => return (syscall_error(e, "xstat", "Bad address")) as i64,
+    // Convert libc stat to the cage's expected stat layout and copy to user buffer
+    if let Err(e) = convert_statdata_to_user(cageid, statbuf_arg, statbuf_cageid, libc_statbuf) {
+        return (syscall_error(e, "xstat", "Bad address")) as i64;
     }
 
     (libcret) as i64
@@ -1713,9 +1712,8 @@ pub extern "C" fn lstat_syscall(
         return (handle_errno(errno, "lstat")) as i64;
     }
 
-    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
-        Err(e) => return (syscall_error(e, "lstat", "Bad address")) as i64,
+    if let Err(e) = convert_statdata_to_user(cageid, statbuf_arg, statbuf_cageid, libc_statbuf) {
+        return (syscall_error(e, "lstat", "Bad address")) as i64;
     }
 
     (libcret) as i64
@@ -1787,13 +1785,11 @@ pub extern "C" fn statfs_syscall(
         return (handle_errno(get_errno(), "statfs")) as i64;
     }
 
-    match sc_convert_addr_to_fstatdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => {
-            convert_fstatdata_to_user(statbuf_addr, host_statfs);
-            (ret) as i64
-        }
-        Err(e) => (syscall_error(e, "statfs", "Bad address")) as i64,
+    if let Err(e) = convert_fstatdata_to_user(cageid, statbuf_arg, statbuf_cageid, host_statfs) {
+        return (syscall_error(e, "statfs", "Bad address")) as i64;
     }
+
+    (ret) as i64
 }
 
 //------------------------------------FSYNC SYSCALL------------------------------------
@@ -2526,9 +2522,8 @@ pub extern "C" fn fstatat_syscall(
         return (handle_errno(errno, "fstatat")) as i64;
     }
 
-    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
-        Err(e) => return (syscall_error(e, "fstatat", "Bad address")) as i64,
+    if let Err(e) = convert_statdata_to_user(cageid, statbuf_arg, statbuf_cageid, libc_statbuf) {
+        return (syscall_error(e, "fstatat", "Bad address")) as i64;
     }
 
     (ret) as i64
@@ -3495,11 +3490,9 @@ pub extern "C" fn fstat_syscall(
         return (handle_errno(get_errno(), "fstat")) as i64;
     }
 
-    // Validate guest buffer range and writability
-    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
-        // 3) Populate StatData directly
-        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, host_stat),
-        Err(e) => return (syscall_error(e, "fstat", "Bad address")) as i64,
+    // Validate guest buffer range and populate it with the cage's expected stat layout
+    if let Err(e) = convert_statdata_to_user(cageid, statbuf_arg, statbuf_cageid, host_stat) {
+        return (syscall_error(e, "fstat", "Bad address")) as i64;
     }
 
     (ret) as i64
@@ -3620,11 +3613,9 @@ pub extern "C" fn fstatfs_syscall(
         return (handle_errno(get_errno(), "fstatfs")) as i64;
     }
 
-    // 2) Validate guest buffer range and writability
-    match sc_convert_addr_to_fstatdata(statfs_arg, statfs_cageid, cageid) {
-        // 3) Populate StatData directly
-        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, host_statfs),
-        Err(e) => return (syscall_error(e, "fstatfs", "Bad address")) as i64,
+    // 2) Validate guest buffer range and populate it with the cage's expected statfs layout
+    if let Err(e) = convert_fstatdata_to_user(cageid, statfs_arg, statfs_cageid, host_statfs) {
+        return (syscall_error(e, "fstatfs", "Bad address")) as i64;
     }
 
     (ret) as i64

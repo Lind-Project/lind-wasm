@@ -28,6 +28,27 @@ pub struct FSData {
     pub f_spare: [u8; 32],
 }
 
+/// Mirrors glibc's native `struct statfs64` layout byte-for-byte (120 bytes total,
+/// including `f_flags`), as used by cages running under the MPK runtime -- unlike
+/// Wasm cages, MPK cages run native code and expect the host's real statfs64 ABI
+/// rather than the repacked `FSData` layout used for Wasm linear memory.
+#[derive(Eq, PartialEq, Default, Debug)]
+#[repr(C)]
+pub struct Statfs64Data {
+    pub f_type: i64,
+    pub f_bsize: i64,
+    pub f_blocks: u64,
+    pub f_bfree: u64,
+    pub f_bavail: u64,
+    pub f_files: u64,
+    pub f_ffree: u64,
+    pub f_fsid: (i32, i32),
+    pub f_namelen: i64,
+    pub f_frsize: i64,
+    pub f_flags: i64,
+    pub f_spare: [i64; 4],
+}
+
 //redefining the StatData struct in this file so that we maintain flow of program
 //derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
 #[derive(Eq, PartialEq, Default, Debug)]
@@ -47,6 +68,30 @@ pub struct StatData {
     pub st_atim: (u64, u64),
     pub st_mtim: (u64, u64),
     pub st_ctim: (u64, u64),
+}
+
+/// Mirrors glibc's native `struct stat64` layout byte-for-byte (144 bytes total,
+/// including padding), as used by cages running under the MPK runtime -- unlike
+/// Wasm cages, MPK cages run native code and expect the host's real stat64 ABI
+/// rather than the repacked `StatData` layout used for Wasm linear memory.
+#[derive(Eq, PartialEq, Default, Debug)]
+#[repr(C)]
+pub struct Stat64Data {
+    pub st_dev: u64,
+    pub st_ino: u64,
+    pub st_nlink: u64,
+    pub st_mode: u32,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub __pad0: i32,
+    pub st_rdev: u64,
+    pub st_size: i64,
+    pub st_blksize: i64,
+    pub st_blocks: i64,
+    pub st_atim: (u64, u64),
+    pub st_mtim: (u64, u64),
+    pub st_ctim: (u64, u64),
+    pub __glibc_reserved: [i64; 3],
 }
 
 //R Limit for getrlimit system call

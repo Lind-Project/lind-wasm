@@ -151,6 +151,7 @@ pub extern "C" fn fork_syscall(
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
             runtime_info: RwLock::new(Box::new(cage::NullRuntimeInfo)),
+            runtime_type: AtomicU64::new(selfcage.runtime_type.load(Acquire)),
         };
 
         // increment child counter for parent

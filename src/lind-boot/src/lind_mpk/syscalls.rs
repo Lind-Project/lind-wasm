@@ -785,6 +785,9 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                         *child_cage.vmmap.write() = child_vmmap;
                     }
                     *child_cage.runtime_info.write() = Box::new(child_mpk_info);
+                    child_cage
+                        .runtime_type
+                        .store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
 
                 }
             }

@@ -11,7 +11,7 @@ pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
 pub use std::sync::Arc;
-use sysdefs::constants::lind_platform_const::MAX_CAGEID;
+use sysdefs::constants::lind_platform_const::{MAX_CAGEID, RUNTIME_TYPE_MPK, RUNTIME_TYPE_WASMTIME};
 use sysdefs::constants::sys_const::EXIT_SUCCESS;
 use sysdefs::constants::SIGCHLD;
 use sysdefs::data::fs_struct::SigactionStruct;
@@ -282,6 +282,12 @@ pub struct Cage {
     /// runtime specific information about the cage.
     /// Wrapped in RwLock to allow late initialization after cage creation.
     pub runtime_info: RwLock<Box<dyn RuntimeInfo>>,
+
+    /// Identifies the cage's execution backend, using the `RUNTIME_TYPE_*` values
+    /// from `sysdefs::constants::lind_platform_const` (shared with `threei_const`).
+    /// Starts as `RUNTIME_TYPE_WASMTIME` and is updated to `RUNTIME_TYPE_MPK` once
+    /// the cage execs into a native MPK `.so`.
+    pub runtime_type: AtomicU64,
 }
 
 /// We achieve an O(1) complexity for our cage map implementation through the following three approaches:
@@ -340,6 +346,15 @@ pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
             Some(cage) => Some(cage.clone()),
             None => None,
         }
+    }
+}
+
+/// Returns whether the given cage is running under the native MPK runtime.
+/// Returns `false` if the cage does not exist.
+pub fn cage_is_mpk(cageid: u64) -> bool {
+    match get_cage(cageid) {
+        Some(cage) => cage.runtime_type.load(Ordering::Acquire) == RUNTIME_TYPE_MPK,
+        None => false,
     }
 }
 
@@ -496,6 +511,7 @@ mod tests {
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
             runtime_info: RwLock::new(Box::new(NullRuntimeInfo)),
+            runtime_type: AtomicU64::new(RUNTIME_TYPE_WASMTIME),
         };
 
         add_cage(2, test_cage);

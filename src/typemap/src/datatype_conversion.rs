@@ -14,7 +14,8 @@ use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
-    FSData, ITimerVal, PipeArray, Rlimit, ShmidsStruct, SigactionStruct, SigsetType, StatData,
+    FSData, ITimerVal, PipeArray, Rlimit, ShmidsStruct, SigactionStruct, SigsetType, Stat64Data,
+    Statfs64Data, StatData,
 };
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
@@ -613,6 +614,26 @@ pub fn sc_convert_addr_to_statdata<'a>(
     Ok(unsafe { &mut *pointer })
 }
 
+/// `sc_convert_addr_to_stat64data` translates a user-provided address from the
+/// calling Cage's virtual memory into a mutable reference to a `Stat64Data`
+/// structure. This mirrors `sc_convert_addr_to_statdata`, but targets the
+/// native glibc `stat64` layout used by cages running under the MPK runtime.
+pub fn sc_convert_addr_to_stat64data<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut Stat64Data, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalid Cage ID");
+        }
+    }
+
+    let pointer = arg as *mut Stat64Data;
+    Ok(unsafe { &mut *pointer })
+}
+
 /// 'sc_convert_addr_to_rlimit'
 /// converts a u64 argument to a mutable reference to a Rlimit struct.
 /// Used by prlimit64_syscall to write resource limit to the caller
@@ -653,6 +674,26 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
     }
 
     let pointer = arg as *mut FSData;
+    Ok(unsafe { &mut *pointer })
+}
+
+/// `sc_convert_addr_to_statfs64data` translates a user-provided address from the
+/// calling Cage's virtual memory into a mutable reference to a `Statfs64Data`
+/// structure. This mirrors `sc_convert_addr_to_fstatdata`, but targets the
+/// native glibc `statfs64` layout used by cages running under the MPK runtime.
+pub fn sc_convert_addr_to_statfs64data<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut Statfs64Data, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalid Cage ID");
+        }
+    }
+
+    let pointer = arg as *mut Statfs64Data;
     Ok(unsafe { &mut *pointer })
 }
 

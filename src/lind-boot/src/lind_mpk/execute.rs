@@ -872,6 +872,7 @@ fn exec_mpk_internal(
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);
+    cage.runtime_type.store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
     mpk_debug(format!("updated MPKRuntimeInfo for cage {} (main tid={})", cage_id, current_os_tid));
 
     //Note: register_mpk_handler_for_cage does not need to be called. The handler is installed through inheritance
@@ -1138,6 +1139,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);
+    cage.runtime_type.store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
     mpk_debug(format!("MPKRuntimeInfo stored in cage {} (main tid={})", cage_id, tid));
 
     //Step 5: Notify threei of the cage runtime type

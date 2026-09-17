@@ -31,8 +31,10 @@ pub const GRATE_ERR: i64 = -0x1FFF_0003;
 /// trampoline function when dispatching grate calls.
 ///
 /// The value is expected to be globally unique among all runtimes registered with 3i
-pub const RUNTIME_TYPE_WASMTIME: u64 = 1;
-pub const RUNTIME_TYPE_MPK: u64 = 2;
+///
+/// Defined in `sysdefs` so that `cage` can also reference these runtime IDs
+/// without depending on `threei` (which depends on `cage`).
+pub use sysdefs::constants::lind_platform_const::{RUNTIME_TYPE_MPK, RUNTIME_TYPE_WASMTIME};
 /// 3i-specific syscall number for `register_handler`.
 ///
 /// Match the definition in `glibc/lind_syscall_num.h`.

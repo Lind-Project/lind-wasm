@@ -63,6 +63,16 @@ pub const RAWPOSIX_CAGEID: u64 = 777777;
 ///   call to the corresponding Wasmtime entry function rather than
 ///   treating it as a RawPOSIX syscall or grate calls.
 pub const WASMTIME_CAGEID: u64 = 888888;
+/// Runtime identifier for the Wasmtime-based execution environment.
+///
+/// Assigned to cages/grates executing as Wasm guests, and used to select
+/// the corresponding trampoline function when dispatching grate calls.
+/// The value must be globally unique among all runtimes registered with 3i.
+pub const RUNTIME_TYPE_WASMTIME: u64 = 1;
+/// Runtime identifier for the native MPK (Memory Protection Keys) execution
+/// environment. Assigned to cages running native `.so` code isolated via
+/// Intel MPK rather than as Wasm guests.
+pub const RUNTIME_TYPE_MPK: u64 = 2;
 /// Logical target Cage ID representing the **3i control layer itself**.
 ///
 /// This constant is a *virtual target identifier* used to route calls
