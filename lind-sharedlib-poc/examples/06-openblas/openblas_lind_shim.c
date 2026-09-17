@@ -21,6 +21,31 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+// ---- xerbla error-handler forwarder (Task B: guest -> host callback) ----
+// OpenBLAS reports bad arguments through the handler registered by openblas_set_xerbla.
+// The argument check runs HERE (in the guest), so we install a guest-side forwarder that
+// routes the call OUT to the host via __lind_upcall(slot 0, name, info, len); the stub's
+// slot-0 handler then invokes the application's registered xerbla. openblas_set_xerbla is
+// imported from the preloaded OpenBLAS; __lind_upcall is a host import. blasint == int
+// (BINARY=32). The stub calls the exported lind_install_xerbla once after the sandbox is up.
+typedef void (*openblas_xerbla_handler)(const char *name, const int *info, size_t length);
+extern openblas_xerbla_handler openblas_set_xerbla(openblas_xerbla_handler handler);
+extern int __lind_upcall(int slot, int a0, int a1, int a2);
+
+// NOT static, and exported: under fpcast the GOT/`apply_GOT_relocs` machinery gives an
+// *exported* function a `$fpcast_emu$` thunk and redirects its address (by symbol) to that
+// thunk. A static function has no GOT symbol, so its address stays the raw funcref whose
+// real type OpenBLAS's fpcast `call_indirect` rejects ("indirect call type mismatch").
+__attribute__((export_name("lind_guest_xerbla")))
+void lind_guest_xerbla(const char *name, const int *info, size_t length) {
+    __lind_upcall(0 /* SLOT_XERBLA */, (int)(long)name, (int)(*info), (int)length);
+}
+__attribute__((export_name("lind_install_xerbla")))
+int lind_install_xerbla(void) {
+    openblas_set_xerbla(lind_guest_xerbla);
+    return 0;
+}
+
 // We deliberately do NOT include <cblas.h>: it pulls in OpenBLAS's internal common.h
 // and a generated config.h that only exists in the build tree. Forward-declare the
 // functions we wrap instead; their definitions come from libopenblas.a at link time.
