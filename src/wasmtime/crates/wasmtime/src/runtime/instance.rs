@@ -570,6 +570,15 @@ impl Instance {
                 init_vmmap(cageid, memory_base, Some(required_memory_page));
                 // Allocated memory should include stack AND constant data region
 
+                // Only mark the module's own footprint RW; the grate stack arena
+                // stays PROT_NONE until a worker claims its slot (create_worker),
+                // so non-grate cages never fault in or fork-copy it.
+                let initial_accessible_size = if dylink_enabled {
+                    required_memory_size
+                } else {
+                    stack_arena_base
+                };
+
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                 make_syscall(
@@ -579,7 +588,7 @@ impl Instance {
                     cageid, // target cageid (should be same)
                     start_addr as u64,
                     cageid,
-                    required_memory_size as u64,
+                    initial_accessible_size as u64,
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
                     cageid,

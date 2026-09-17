@@ -77,8 +77,11 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
+use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
+use sysdefs::constants::syscall_const::MMAP_SYSCALL;
+use threei::threei::make_syscall;
 use wasmtime::error::Context as WasmtimeContext;
 use wasmtime::{Engine, Global, Linker, Module, Store, TypedFunc, Val};
 
@@ -711,6 +714,31 @@ where
 
     let stack_base = worker_stack_base(cageid, worker_id);
     let stack_top = worker_stack_top(cageid, worker_id);
+
+    // The slot starts PROT_NONE (see new_started_impl_with_lind); activate
+    // just this worker's own slot now. Leave the guard page before it
+    // PROT_NONE so stack overflow still traps.
+    make_syscall(
+        cageid,
+        (MMAP_SYSCALL) as u64,
+        0,
+        cageid,
+        stack_base as u64,
+        cageid,
+        (stack_top - stack_base) as u64,
+        cageid,
+        (PROT_READ | PROT_WRITE) as u64,
+        cageid,
+        (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+        cageid,
+        // we need to pass -1 here, but since make_syscall only accepts u64
+        // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+        (0 - 1) as u64,
+        cageid,
+        0,
+        cageid,
+    );
+
     let stack_pointer = instance
         .get_global(&mut store, "__stack_pointer")
         .ok_or_else(|| anyhow::anyhow!("missing __stack_pointer"))?;
