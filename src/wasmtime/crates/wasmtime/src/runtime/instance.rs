@@ -19,7 +19,7 @@ use core::ptr::NonNull;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 use sysdefs::constants::fs_const::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use sysdefs::constants::{
@@ -601,6 +601,34 @@ impl Instance {
                     0,
                     cageid,
                 );
+
+                // Reserve the rest of the arena as a PROT_NONE vmmap entry so
+                // vmmap's free-space search can't hand a guard page or an
+                // inactive worker slot to an unrelated guest mmap(). Still
+                // skipped by fork_vmmap, since it stays PROT_NONE.
+                if !dylink_enabled {
+                    let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
+                        * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
+                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                    make_syscall(
+                        cageid,
+                        (MMAP_SYSCALL) as u64,
+                        0,
+                        cageid,
+                        stack_arena_base as u64,
+                        cageid,
+                        stack_arena_size as u64,
+                        cageid,
+                        (PROT_NONE) as u64,
+                        cageid,
+                        (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+                        cageid,
+                        (0 - 1) as u64,
+                        cageid,
+                        0,
+                        cageid,
+                    );
+                }
             }
             // InstantiateChild: this is the child wasm instance forked by parent
             InstantiateType::InstantiateChild {

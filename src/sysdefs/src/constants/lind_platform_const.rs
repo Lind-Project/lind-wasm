@@ -288,7 +288,7 @@ pub fn fork_stack_arena_base_for_child(
 
 /// Tracks, per cage, whether a grate handler has ever been registered.
 /// Lets `fork` skip rebuilding a worker pool for cages that never use grates.
-pub static GRATE_HANDLER_REGISTERED: OnceLock<RwLock<Vec<bool>>> = OnceLock::new();
+static GRATE_HANDLER_REGISTERED: OnceLock<RwLock<Vec<bool>>> = OnceLock::new();
 
 fn grate_handler_registered_flags() -> &'static RwLock<Vec<bool>> {
     GRATE_HANDLER_REGISTERED.get_or_init(|| RwLock::new(Vec::new()))
@@ -307,6 +307,14 @@ pub fn mark_grate_handler_registered(cage_id: usize) {
 pub fn is_grate_handler_registered(cage_id: usize) -> bool {
     let flags = grate_handler_registered_flags().read().unwrap();
     flags.get(cage_id).copied().unwrap_or(false)
+}
+
+/// Clears the flag, e.g. when a cage execs into a module that no longer uses grates.
+pub fn unmark_grate_handler_registered(cage_id: usize) {
+    let mut flags = grate_handler_registered_flags().write().unwrap();
+    if let Some(flag) = flags.get_mut(cage_id) {
+        *flag = false;
+    }
 }
 
 /// Propagates the parent's grate-registration flag to a forked child, so a
