@@ -531,12 +531,11 @@ fn _decrement_fdcount(entry: FDTableEntry) -> Result<(), i32> {
 fn _increment_fdcount(entry: FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
 
-    // Get a mutable reference to the entry so we can update it.
-    if let Some(mut count) = FDCOUNT.get_mut(&mytuple) {
-        *count += 1;
-    } else {
-        FDCOUNT.insert(mytuple, 1);
-    }
+    // entry() holds the shard lock across the whole read-modify-write; the
+    // previous get_mut()/else-insert() pair released it between the two,
+    // letting two first-referencers of the same key both insert(1) and
+    // undercount. Matches _decrement_fdcount's pattern above.
+    *FDCOUNT.entry(mytuple).or_insert(0) += 1;
 }
 
 /***************   Code for handling select() ****************/
