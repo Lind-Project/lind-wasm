@@ -1,5 +1,15 @@
+# Development setup
+
 To access an environment with the source code and tooling, there is a development image available as well.  
 (Note: If you intend to use perf, you will need to install the appropriate `linux-tools-xxx` for your kernel)
+
+> **Note:** Despite the page name, this is a plain Docker image — there is no
+> `.devcontainer/` in the repository, so VS Code's "Reopen in Container" will not
+> pick it up automatically.
+
+The published image is prebuilt: it already contains a compiled runtime, sysroot
+and `lindfs`, so you can run a program without building anything. See
+[Getting Started](../getting-started.md) for the quickest path.
 
 ```
 docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev # this might take a while ...
