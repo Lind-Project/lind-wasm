@@ -52,6 +52,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
         python3 \
         python3-pip \
         sed \
+        sudo \
         autoconf \
         libtool \
         rsync \
@@ -136,7 +137,6 @@ RUN make sysroot \
 
 
 # Build Docker image that includes the full lind-wasm toolchain
-# NOTE: Lind-wasm source code is not included
 FROM base AS release
 
 COPY --from=build-lind-boot --parents src/lind-boot/target .
@@ -145,6 +145,12 @@ RUN chmod 0755 /build/lind-boot
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --from=build-glibc --parents build/sysroot .
 COPY --from=build-glibc --parents lindfs .
+
+# Preserve the glibc build-tree object that downstream app builds link
+# against directly (lind-wasm-apps: zlib, gnulib, openssl, libtirpc, bash).
+# It is not part of the installed sysroot, so it would otherwise be dropped.
+COPY --from=build-glibc --parents src/glibc/build/lind_debug.o .
+
 COPY --parents scripts tests tools skip_test_cases.txt .
 
 ENV LIND_WASM_ROOT=/
@@ -157,6 +163,8 @@ RUN chmod 0755 /scripts/bin/lind_compile /scripts/bin/lind_run /scripts/bin/carg
  && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
  && ln -sf /usr/local/bin/cargo-lind_compile /usr/local/bin/lind-cargo-build
 
+# Create symlink so hardcoded paths in wasmtime match Docker environment.
+RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
 FROM base AS test
