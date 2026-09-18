@@ -152,6 +152,11 @@ pub fn register_grate_handler_for_cage(
     }
 
     *guard = Some(Arc::new(handler));
+
+    // Record that this cage uses grates, so `fork` knows to rebuild a pool
+    // for its children instead of doing so for every forked cage.
+    lind_platform_const::mark_grate_handler_registered(cageid as usize);
+
     Ok(())
 }
 
