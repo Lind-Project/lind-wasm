@@ -1778,11 +1778,7 @@ mod tests {
         if entry.fdkind != C2_FDKIND || remaining != 0 {
             C2_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
         }
-        *C2_RELEASED
-            .lock()
-            .unwrap()
-            .entry(entry.underfd)
-            .or_insert(0) += 1;
+        *lock_recover(&C2_RELEASED).entry(entry.underfd).or_insert(0) += 1;
         C2_LAST.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -1794,16 +1790,33 @@ mod tests {
         Ok(())
     }
 
-    /// Factors out the two copy-pasted TESTMUTEX idioms used elsewhere in
-    /// this module. A mutex poisoned by one of the #[should_panic] tests is
-    /// recovered rather than cascading a PoisonError into every later test.
-    fn c2_test_guard() -> MutexGuard<'static, bool> {
+    /// Locks a static test mutex, recovering it when an earlier panic (one
+    /// of the #[should_panic] tests, or a failed assert) poisoned it, rather
+    /// than cascading a PoisonError into every later test in this binary.
+    /// Every lock of TESTMUTEX or of the CONC bookkeeping maps goes through
+    /// here, so the first real failure stays the only failure.
+    fn lock_recover<T>(m: &'static Mutex<T>) -> MutexGuard<'static, T> {
         loop {
-            match TESTMUTEX.lock() {
+            match m.lock() {
                 Ok(g) => return g,
-                Err(_) => TESTMUTEX.clear_poison(),
+                Err(_) => m.clear_poison(),
             }
         }
+    }
+
+    /// Factors out the two copy-pasted TESTMUTEX idioms used elsewhere in
+    /// this module.
+    fn c2_test_guard() -> MutexGuard<'static, bool> {
+        lock_recover(&TESTMUTEX)
+    }
+
+    /// Snapshot accessor: every assert about this bookkeeping runs against a
+    /// clone, with the guard already dropped. An assert that fired while
+    /// holding the guard would poison the mutex, and every later test in
+    /// this binary would then report a PoisonError instead of its own
+    /// result -- burying the first real failure under a cascade.
+    fn c2_released() -> std::collections::HashMap<u64, u64> {
+        lock_recover(&C2_RELEASED).clone()
     }
 
     /// Must be called *after* refresh(): refresh() clears
@@ -1815,7 +1828,7 @@ mod tests {
         C2_LAST.store(0, Ordering::SeqCst);
         C2_MID.store(0, Ordering::SeqCst);
         C2_HANDLER_ERRS.store(0, Ordering::SeqCst);
-        C2_RELEASED.lock().unwrap().clear();
+        lock_recover(&C2_RELEASED).clear();
     }
 
     fn c2_iters() -> usize {
@@ -1823,6 +1836,83 @@ mod tests {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(200)
+    }
+
+    /// The panic text `translate_virtual_fd` (and every other entry point in
+    /// this library) *documents* for an unknown cage: the `assert!` at the
+    /// top of the function. A caller racing cage removal cannot rule this
+    /// one out -- there is no way to pin a cage alive across a call -- so the
+    /// removal test below tolerates it.
+    const C2_UNKNOWN_CAGE_PANIC: &str = "Unknown cageid in fdtable access";
+
+    /// What the same call panics with *instead* when the removal lands after
+    /// that assert and before the separate `FDTABLE.get(&cageid).unwrap()`
+    /// that follows it: the library's own check-then-use, escaping as an
+    /// unwrap on a `None` row.
+    const C2_UNWRAP_NONE_PANIC: &str = "called `Option::unwrap()` on a `None` value";
+
+    /// Panic payloads are `&'static str` for a literal `panic!` and `String`
+    /// for a formatted one; both forms show up here, so both are read.
+    fn c2_panic_text(payload: &(dyn std::any::Any + Send)) -> String {
+        payload
+            .downcast_ref::<&'static str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| String::from("<non-string panic payload>"))
+    }
+
+    static C2_QUIET_PANICS: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+    lazy_static! {
+        /// The hook that was installed before c2_quiet_expected_panics()
+        /// replaced it -- normally libtest's own capturing hook, which must
+        /// be put back or every later test in this binary loses its panic
+        /// output.
+        static ref C2_PREV_HOOK: Mutex<Option<Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Sync + Send>>> =
+            Mutex::new(None);
+    }
+
+    /// Silences *only* the two panic messages the cage-removal race below
+    /// provokes on purpose, and only while it is running: each one is caught
+    /// and counted by the reader thread that raised it, and the several
+    /// thousand backtraces they produce would bury the assertion that
+    /// actually reports the result. Matching is on the message text, so a
+    /// panic carrying one of those two strings is silenced wherever it comes
+    /// from; every other panic, and every panic at all once the guard is
+    /// dropped, reaches the previous hook as usual.
+    ///
+    /// The returned guard restores the previous hook when it is dropped, so
+    /// an unrelated panic on the main thread cannot leave this hook installed
+    /// for the rest of the binary.
+    fn c2_quiet_expected_panics() -> C2QuietPanics {
+        let prev = std::panic::take_hook();
+        *lock_recover(&C2_PREV_HOOK) = Some(prev);
+        std::panic::set_hook(Box::new(|info| {
+            let expected = info.payload_as_str().is_some_and(|m| {
+                m.contains(C2_UNKNOWN_CAGE_PANIC) || m.contains(C2_UNWRAP_NONE_PANIC)
+            });
+            if expected && C2_QUIET_PANICS.load(Ordering::SeqCst) {
+                return;
+            }
+            if let Some(prev) = lock_recover(&C2_PREV_HOOK).as_ref() {
+                prev(info);
+            }
+        }));
+        C2_QUIET_PANICS.store(true, Ordering::SeqCst);
+        C2QuietPanics
+    }
+
+    /// Undoes c2_quiet_expected_panics(). Drop the guard once the racing
+    /// threads are joined and before any assertion runs, so a failing
+    /// assertion still prints.
+    struct C2QuietPanics;
+    impl Drop for C2QuietPanics {
+        fn drop(&mut self) {
+            C2_QUIET_PANICS.store(false, Ordering::SeqCst);
+            if let Some(prev) = lock_recover(&C2_PREV_HOOK).take() {
+                std::panic::set_hook(prev);
+            }
+        }
     }
 
     #[derive(Default)]
@@ -2012,7 +2102,7 @@ mod tests {
             .sum();
 
         {
-            let released = C2_RELEASED.lock().unwrap();
+            let released = c2_released();
             assert_eq!(
                 released.len() as u64,
                 total_allocs,
@@ -2048,20 +2138,43 @@ mod tests {
     }
 
     #[test]
-    /// A stable cage with a known fd-table, plus victim cages the main
-    /// thread creates and destroys underneath 4 reader threads. Readers
-    /// translate only in the stable cage and observe victims exclusively
-    /// through check_cage_exists(), which does not separately assert-then-
-    /// unwrap a FDTABLE.get() (Test 4 drives the analogous race in
-    /// copy_fdtable_for_cage specifically).
+    /// Pins the check-then-use inside translate_virtual_fd: it resolves the
+    /// cage row twice, as `assert!(check_cage_exists(cageid))` and then as a
+    /// separate `FDTABLE.get(&cageid).unwrap()`, so a concurrent
+    /// remove_cage_from_fdtable() landing between the two turns the panic
+    /// documented for an unknown cage into an unwrap-on-None from inside
+    /// fdtables. Most entry points here open with that same pair;
+    /// copy_fdtable_for_cage's different race is Test 4.
+    ///
+    /// Readers call into the victim cage the main thread is destroying, each
+    /// call check_cage_exists()-guarded like a careful caller's and caught
+    /// with catch_unwind, so a removal landing:
+    ///
+    ///   * before the reader's check -- makes no call: counted `saw_gone`;
+    ///   * before the library's assert -- raises the documented panic, which
+    ///     no caller-side check can avoid: tolerated, and counted as proof
+    ///     the window was entered (`window_entries`, asserted non-zero so
+    ///     this test cannot decay back into one that races nothing);
+    ///   * after it -- raises the unwrap-on-None this test pins: the only
+    ///     outcome it fails on.
+    ///
+    /// Readers re-verify the untouched C2_STABLE cage throughout, keeping the
+    /// isolation half this test is named for.
+    #[ignore = "fails until translate_virtual_fd resolves the cage row with a single lookup"]
     fn conc_002_translate_isolation_under_cage_removal() {
         let _lock = c2_test_guard();
         refresh();
         c2_setup();
 
         const C2_READERS: usize = 4;
-        const VICTIM_ITERS: usize = 400;
-        const SPIN_BUDGET: u64 = 2_000_000;
+        const C2_VICTIM_IDS: u64 = 4;
+        const VICTIM_ITERS: usize = 2_000;
+        const VICTIM_FDS: u64 = 3;
+        // How often a reader steps aside to re-verify the stable cage. The
+        // victim loop is deliberately tight otherwise: what decides whether
+        // this test ever observes the race is the fraction of a reader's
+        // time spent between check_cage_exists() and the lookup after it.
+        const STABLE_EVERY: u64 = 64;
 
         init_empty_cage(C2_STABLE);
         let stable: Vec<(u64, u64)> = (0..16)
@@ -2078,70 +2191,114 @@ mod tests {
         #[derive(Default)]
         struct ReaderErrs {
             bad_entry: AtomicU64,
-            spin_exhausted: AtomicU64,
             saw_live: AtomicU64,
             saw_gone: AtomicU64,
+            documented_panic: AtomicU64,
+            toctou_panic: AtomicU64,
+            other_panic: AtomicU64,
         }
 
         let errs: Arc<Vec<ReaderErrs>> =
             Arc::new((0..C2_READERS).map(|_| ReaderErrs::default()).collect());
         let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let victim_cycle = Arc::new(AtomicU64::new(0));
+        // First unexpected panic text, kept so the assertion can print it
+        // rather than just reporting a count.
+        let unexpected: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+        let quiet = c2_quiet_expected_panics();
 
         let handles: Vec<_> = (0..C2_READERS)
             .map(|r| {
                 let errs = Arc::clone(&errs);
                 let running = Arc::clone(&running);
                 let victim_cycle = Arc::clone(&victim_cycle);
+                let unexpected = Arc::clone(&unexpected);
                 let stable = stable.clone();
                 thread::spawn(move || {
                     let e = &errs[r];
-                    let mut last_cycle = u64::MAX;
-                    let mut budget = SPIN_BUDGET;
+                    let mut i = 0u64;
                     while running.load(Ordering::SeqCst) {
-                        for &(vfd, u) in &stable {
-                            match translate_virtual_fd(C2_STABLE, vfd) {
-                                Ok(ent)
-                                    if ent.fdkind == C2_FDKIND
-                                        && ent.underfd == u
-                                        && ent.perfdinfo == u => {}
-                                _ => {
-                                    e.bad_entry.fetch_add(1, Ordering::SeqCst);
+                        if i % STABLE_EVERY == 0 {
+                            for &(vfd, u) in &stable {
+                                match translate_virtual_fd(C2_STABLE, vfd) {
+                                    Ok(ent)
+                                        if ent.fdkind == C2_FDKIND
+                                            && ent.underfd == u
+                                            && ent.perfdinfo == u => {}
+                                    _ => {
+                                        e.bad_entry.fetch_add(1, Ordering::SeqCst);
+                                    }
+                                }
+                            }
+                            // The only yield in this loop: readers must not
+                            // starve the main thread's get_unused_virtual_fd,
+                            // which needs the same shard's write lock.
+                            thread::yield_now();
+                        }
+                        i += 1;
+
+                        // Whichever victim the main thread is working on
+                        // right now. A stale read only means this reader
+                        // finds the cage gone, which is one of the outcomes
+                        // being counted.
+                        let victim =
+                            C2_VICTIM + victim_cycle.load(Ordering::SeqCst) % C2_VICTIM_IDS;
+
+                        // The check-then-use a careful caller writes -- and
+                        // which closes nothing, because the cage can still be
+                        // removed between here and either lookup inside
+                        // translate_virtual_fd.
+                        if !check_cage_exists(victim) {
+                            e.saw_gone.fetch_add(1, Ordering::SeqCst);
+                            continue;
+                        }
+                        e.saw_live.fetch_add(1, Ordering::SeqCst);
+
+                        for vfd in 0..VICTIM_FDS {
+                            // Ok(entry) (cage alive, fd allocated) and
+                            // Err(EBADFD) (cage alive, slot not filled yet)
+                            // are both correct outcomes; only a panic is
+                            // interesting here.
+                            match std::panic::catch_unwind(|| translate_virtual_fd(victim, vfd)) {
+                                Ok(_) => {}
+                                Err(payload) => {
+                                    let text = c2_panic_text(payload.as_ref());
+                                    if text.contains(C2_UNKNOWN_CAGE_PANIC) {
+                                        e.documented_panic.fetch_add(1, Ordering::SeqCst);
+                                    } else if text.contains(C2_UNWRAP_NONE_PANIC) {
+                                        e.toctou_panic.fetch_add(1, Ordering::SeqCst);
+                                    } else {
+                                        e.other_panic.fetch_add(1, Ordering::SeqCst);
+                                        let mut slot = unexpected
+                                            .lock()
+                                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                        if slot.is_none() {
+                                            *slot = Some(text);
+                                        }
+                                    }
+                                    // The cage is gone; there is nothing left
+                                    // to ask it about this round.
+                                    break;
                                 }
                             }
                         }
-
-                        let victim = C2_VICTIM + (r as u64 % 4);
-                        if check_cage_exists(victim) {
-                            e.saw_live.fetch_add(1, Ordering::SeqCst);
-                        } else {
-                            e.saw_gone.fetch_add(1, Ordering::SeqCst);
-                        }
-
-                        let cur = victim_cycle.load(Ordering::SeqCst);
-                        if cur != last_cycle {
-                            last_cycle = cur;
-                            budget = SPIN_BUDGET;
-                        } else if budget == 0 {
-                            e.spin_exhausted.fetch_add(1, Ordering::SeqCst);
-                            budget = SPIN_BUDGET; // don't spam if genuinely stalled
-                        } else {
-                            budget -= 1;
-                        }
-                        thread::yield_now();
                     }
                 })
             })
             .collect();
 
         for i in 0..VICTIM_ITERS {
-            let victim = C2_VICTIM + (i as u64 % 4);
+            let victim = C2_VICTIM + (i as u64 % C2_VICTIM_IDS);
             init_empty_cage(victim);
-            for _ in 0..3 {
+            for _ in 0..VICTIM_FDS {
                 let u = c2_next_underfd();
                 get_unused_virtual_fd(victim, C2_FDKIND, u, false, u).unwrap();
             }
             remove_cage_from_fdtable(victim);
+            // Publishes the *next* victim to the readers. Ordered after the
+            // removal so a reader that reads ahead of this store keeps
+            // hammering the id that is being torn down, not the next one.
             victim_cycle.fetch_add(1, Ordering::SeqCst);
         }
 
@@ -2149,22 +2306,30 @@ mod tests {
         for h in handles {
             h.join().expect("a CONC-002 reader panicked");
         }
+        drop(quiet);
+
+        let unexpected_text = unexpected
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+            .unwrap_or_else(|| String::from("<none recorded>"));
 
         let mut total_live = 0u64;
         let mut total_gone = 0u64;
+        let mut total_documented = 0u64;
+        let mut total_toctou = 0u64;
+        let mut total_other = 0u64;
         for (r, e) in errs.iter().enumerate() {
             assert_eq!(
                 e.bad_entry.load(Ordering::SeqCst),
                 0,
                 "reader {r}: saw a wrong entry in the stable cage"
             );
-            assert_eq!(
-                e.spin_exhausted.load(Ordering::SeqCst),
-                0,
-                "reader {r}: exhausted its spin budget waiting for a victim-cycle change"
-            );
             total_live += e.saw_live.load(Ordering::SeqCst);
             total_gone += e.saw_gone.load(Ordering::SeqCst);
+            total_documented += e.documented_panic.load(Ordering::SeqCst);
+            total_toctou += e.toctou_panic.load(Ordering::SeqCst);
+            total_other += e.other_panic.load(Ordering::SeqCst);
         }
         assert!(
             total_live > 0,
@@ -2174,12 +2339,40 @@ mod tests {
             total_gone > 0,
             "no reader ever observed a victim cage after removal"
         );
+        assert_eq!(
+            total_other, 0,
+            "a reader's call into a victim cage panicked with something \
+             other than the two expected removal races: {unexpected_text}"
+        );
+
+        // Both panic classes mean a call was in flight while the cage was
+        // being removed, which is the only thing that makes the assertion
+        // below meaningful.
+        let window_entries = total_documented + total_toctou;
+        assert!(
+            window_entries > 0,
+            "no reader's call ever overlapped a removal in {VICTIM_ITERS} \
+             cycles, so the check-then-use window was never entered: this \
+             test proved nothing about it. Raise VICTIM_ITERS."
+        );
+        assert_eq!(
+            total_toctou, 0,
+            "{total_toctou} of {window_entries} call(s) that raced a removal \
+             passed translate_virtual_fd's assert!(check_cage_exists(..)) and \
+             then unwrapped the None row that remove_cage_from_fdtable had \
+             deleted in between; the two lookups need to become one"
+        );
 
         assert_eq!(return_fdtable_copy(C2_STABLE), snapshot);
         remove_cage_from_fdtable(C2_STABLE);
 
         {
-            let released = C2_RELEASED.lock().unwrap();
+            let released = c2_released();
+            assert_eq!(
+                released.len() as u64,
+                VICTIM_ITERS as u64 * VICTIM_FDS + stable.len() as u64,
+                "not every underfd allocated here fired exactly one last-close"
+            );
             for (u, n) in released.iter() {
                 assert_eq!(
                     *n, 1,
@@ -2271,7 +2464,7 @@ mod tests {
         assert_eq!(close_errs.load(Ordering::SeqCst), 0);
 
         {
-            let released = C2_RELEASED.lock().unwrap();
+            let released = c2_released();
             assert_eq!(
                 released.len(),
                 ROUNDS,
@@ -2297,19 +2490,20 @@ mod tests {
     }
 
     #[test]
-    /// Pins copy_fdtable_for_cage reading the source row twice,
-    /// once for the snapshot and once for the refcount increments: a
-    /// concurrent close/allocate landing between the two desyncs the child's
-    /// refcounts from its fd-table contents.
+    /// Pins copy_fdtable_for_cage reading the source row twice, once for the
+    /// snapshot and once for the refcount increments: a concurrent
+    /// close/allocate landing between the two desyncs the child's refcounts
+    /// from its fd-table contents.
     ///
-    /// In-crate mirror of what
-    /// tests/unit-tests/process_tests/deterministic/conc_002_cage_fd_fs_stress.c
-    /// drives from the C side: fork() interleaved with concurrent fd-table
-    /// churn in the forking cage.
+    /// In-crate mirror of
+    /// tests/unit-tests/process_tests/deterministic/conc_002_cage_fd_fs_stress.c:
+    /// fork() interleaved with fd-table churn in the forking cage.
     ///
-    /// Ignored rather than merely failing: the desync panics a worker and the
-    /// rest block forever on the round barrier, so on an unfixed tree this
-    /// DEADLOCKS the test binary rather than reporting a failure.
+    /// Ignored, not merely failing: the desync sends _decrement_fdcount into
+    /// its "FDCOUNT missing key" arm, which formats the map with
+    /// FDCOUNT.iter() while still holding that shard's FDCOUNT.entry() guard.
+    /// The thread deadlocks against itself before it can panic and the
+    /// churners pile up behind the shard, hanging the whole test binary.
     #[ignore = "deadlocks until copy_fdtable_for_cage snapshots and increments under one guard"]
     fn conc_002_copy_fdtable_vs_concurrent_churn() {
         let _lock = c2_test_guard();
@@ -2318,14 +2512,11 @@ mod tests {
 
         const CHURNERS: usize = 4;
         const COPIES: usize = 300;
-        // Bounded independently of `running`: if copy_fdtable_for_cage ever
-        // desyncs a child's refcounts from its contents (the bug this test
-        // pins), later bookkeeping calls degrade toward a full linear scan
-        // of FDCOUNT (see _decrement_fdcount's panic-message path), and 4
-        // churner threads hammering the table in a tight, unyielding loop
-        // can starve that scan indefinitely under parking_lot's fair-ish
-        // shard locks. A hard cap plus a periodic yield keeps this test's
-        // own failure mode a fast, clean assertion instead of a livelock.
+        // Bounded independently of `running`: a panicking main thread never
+        // clears the flag nor joins these threads, and uncapped they would go
+        // on mutating the global fdtable under every later test. At ~16x the
+        // main loop's runtime the cap binds only in that case, never on the
+        // deadlock above, where a blocked churner stops rechecking it.
         const CHURN_MAX: u64 = 200_000;
 
         let src_cage = C2_BASE;
@@ -2404,7 +2595,7 @@ mod tests {
         remove_cage_from_fdtable(src_cage);
 
         {
-            let released = C2_RELEASED.lock().unwrap();
+            let released = c2_released();
             assert_eq!(
                 released.len() as u64,
                 churn_allocs.load(Ordering::SeqCst),
@@ -2525,11 +2716,7 @@ mod tests {
         if entry.fdkind != C3_FDKIND || remaining != 0 || C3_HOLDER_ACTIVE.load(Ordering::SeqCst) {
             C3_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
         }
-        *C3_RELEASED
-            .lock()
-            .unwrap()
-            .entry(entry.underfd)
-            .or_insert(0) += 1;
+        *lock_recover(&C3_RELEASED).entry(entry.underfd).or_insert(0) += 1;
         C3_LAST.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -2537,14 +2724,30 @@ mod tests {
         if entry.fdkind != C3_FDKIND || remaining == 0 {
             C3_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
         }
-        C3_INTERMEDIATE_REMAINING
-            .lock()
-            .unwrap()
+        lock_recover(&C3_INTERMEDIATE_REMAINING)
             .entry(entry.underfd)
             .or_default()
             .push(remaining);
         C3_MID.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+
+    /// Snapshot accessor: every assert about this bookkeeping runs against a
+    /// clone, with the guard already dropped. An assert that fired while
+    /// holding the guard would poison the mutex, and every later test in
+    /// this binary would then report a PoisonError instead of its own
+    /// result -- burying the first real failure under a cascade.
+    fn c3_released() -> std::collections::HashMap<u64, u64> {
+        lock_recover(&C3_RELEASED).clone()
+    }
+
+    /// The `remaining` values reported for `u`, in arrival order; empty if
+    /// none were. Cloned with the guard dropped, as c3_released().
+    fn c3_intermediate_remaining(u: u64) -> Vec<u64> {
+        lock_recover(&C3_INTERMEDIATE_REMAINING)
+            .get(&u)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Must be called *after* refresh(): refresh() clears
@@ -2556,8 +2759,8 @@ mod tests {
         C3_MID.store(0, Ordering::SeqCst);
         C3_HANDLER_ERRS.store(0, Ordering::SeqCst);
         C3_HOLDER_ACTIVE.store(false, Ordering::SeqCst);
-        C3_RELEASED.lock().unwrap().clear();
-        C3_INTERMEDIATE_REMAINING.lock().unwrap().clear();
+        lock_recover(&C3_RELEASED).clear();
+        lock_recover(&C3_INTERMEDIATE_REMAINING).clear();
     }
 
     fn c3_iters() -> usize {
@@ -2635,19 +2838,14 @@ mod tests {
                 "last-close fired while C3_A still holds a reference"
             );
             assert_eq!(C3_MID.load(Ordering::SeqCst), 15);
-            assert!(!C3_RELEASED.lock().unwrap().contains_key(&u));
+            assert!(!c3_released().contains_key(&u));
             let entry = translate_virtual_fd(C3_A, v[0]).unwrap();
             assert_eq!((entry.fdkind, entry.underfd), (C3_FDKIND, u));
             for c in 0..C3_CHILDREN as u64 {
                 assert!(!check_cage_exists(C3_CHILD + c));
             }
             {
-                let mut remaining: Vec<u64> = C3_INTERMEDIATE_REMAINING
-                    .lock()
-                    .unwrap()
-                    .get(&u)
-                    .cloned()
-                    .unwrap_or_default();
+                let mut remaining = c3_intermediate_remaining(u);
                 remaining.sort_unstable_by(|a, b| b.cmp(a));
                 assert_eq!(remaining, (1..=15).rev().collect::<Vec<u64>>());
             }
@@ -2655,7 +2853,7 @@ mod tests {
             close_virtualfd(C3_A, v[0]).unwrap();
             assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
             assert_eq!(C3_MID.load(Ordering::SeqCst), 15);
-            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+            assert_eq!(c3_released().get(&u).copied(), Some(1));
 
             // Key-removal oracle, portable across all four backends since
             // it never touches a private map directly: _increment_fdcount
@@ -2675,7 +2873,7 @@ mod tests {
                 15,
                 "a stale FDCOUNT entry for {u:#x} survived the previous last-close"
             );
-            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 2);
+            assert_eq!(c3_released().get(&u).copied(), Some(2));
 
             remove_cage_from_fdtable(C3_A);
             assert!(!check_cage_exists(C3_A));
@@ -2716,17 +2914,14 @@ mod tests {
 
             assert_eq!(C3_MID.load(Ordering::SeqCst), 1);
             assert_eq!(C3_LAST.load(Ordering::SeqCst), 0);
-            assert_eq!(
-                C3_INTERMEDIATE_REMAINING.lock().unwrap().get(&u).cloned(),
-                Some(vec![1])
-            );
+            assert_eq!(c3_intermediate_remaining(u), vec![1]);
             let entry = translate_virtual_fd(C3_A, v).unwrap();
             assert!(entry.should_cloexec);
             assert_eq!(entry.perfdinfo, u ^ 0xff);
 
             close_virtualfd(C3_A, v).unwrap();
             assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
-            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+            assert_eq!(c3_released().get(&u).copied(), Some(1));
 
             remove_cage_from_fdtable(C3_A);
             c3_setup();
@@ -2804,7 +2999,7 @@ mod tests {
 
             assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
             {
-                let released = C3_RELEASED.lock().unwrap();
+                let released = c3_released();
                 assert_eq!(
                     released.len(),
                     expected.len(),
@@ -2906,14 +3101,9 @@ mod tests {
 
             assert_eq!(C3_MID.load(Ordering::SeqCst), 17);
             assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
-            assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+            assert_eq!(c3_released().get(&u).copied(), Some(1));
             {
-                let mut remaining: Vec<u64> = C3_INTERMEDIATE_REMAINING
-                    .lock()
-                    .unwrap()
-                    .get(&u)
-                    .cloned()
-                    .unwrap_or_default();
+                let mut remaining = c3_intermediate_remaining(u);
                 remaining.sort_unstable_by(|a, b| b.cmp(a));
                 assert_eq!(remaining, (1..=17).rev().collect::<Vec<u64>>());
             }
@@ -2938,8 +3128,9 @@ mod tests {
             // count(u_cx) = 6, count(u_keep) = 6.
 
             empty_fds_for_exec(C3_CHILD); // drops C3_CHILD's 3 cloexec (u_cx) entries
-            assert!(!C3_RELEASED.lock().unwrap().contains_key(&u_cx));
-            assert!(!C3_RELEASED.lock().unwrap().contains_key(&u_keep));
+            let released = c3_released();
+            assert!(!released.contains_key(&u_cx));
+            assert!(!released.contains_key(&u_keep));
             for ent in return_fdtable_copy(C3_CHILD).values() {
                 assert!(!ent.should_cloexec);
                 assert_eq!(ent.underfd, u_keep);
@@ -2965,7 +3156,7 @@ mod tests {
 
             assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
             {
-                let released = C3_RELEASED.lock().unwrap();
+                let released = c3_released();
                 assert_eq!(released.get(&u_cx).copied(), Some(1));
                 assert_eq!(released.get(&u_keep).copied(), Some(1));
             }
@@ -3042,7 +3233,7 @@ mod tests {
             0,
             "last-close fired while C3_HOLDER still held a reference"
         );
-        assert!(C3_RELEASED.lock().unwrap().is_empty());
+        assert!(c3_released().is_empty());
         assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
 
         for w in 0..C3_WORKERS as u64 {
@@ -3052,7 +3243,7 @@ mod tests {
         close_virtualfd(C3_HOLDER, holder_vfd).unwrap();
 
         assert_eq!(C3_LAST.load(Ordering::SeqCst), 1);
-        assert_eq!(*C3_RELEASED.lock().unwrap().get(&u).unwrap(), 1);
+        assert_eq!(c3_released().get(&u).copied(), Some(1));
         assert_eq!(C3_HANDLER_ERRS.load(Ordering::SeqCst), 0);
 
         remove_cage_from_fdtable(C3_HOLDER);
@@ -3152,11 +3343,7 @@ mod tests {
         if entry.fdkind != C4_FDKIND || remaining != 0 || sentinel_violation {
             C4_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
         }
-        *C4_RELEASED
-            .lock()
-            .unwrap()
-            .entry(entry.underfd)
-            .or_insert(0) += 1;
+        *lock_recover(&C4_RELEASED).entry(entry.underfd).or_insert(0) += 1;
         C4_LAST.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -3164,14 +3351,30 @@ mod tests {
         if entry.fdkind != C4_FDKIND || remaining == 0 {
             C4_HANDLER_ERRS.fetch_add(1, Ordering::SeqCst);
         }
-        C4_INTERMEDIATE_REMAINING
-            .lock()
-            .unwrap()
+        lock_recover(&C4_INTERMEDIATE_REMAINING)
             .entry(entry.underfd)
             .or_default()
             .push(remaining);
         C4_MID.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+
+    /// Snapshot accessor: every assert about this bookkeeping runs against a
+    /// clone, with the guard already dropped. An assert that fired while
+    /// holding the guard would poison the mutex, and every later test in
+    /// this binary would then report a PoisonError instead of its own
+    /// result -- burying the first real failure under a cascade.
+    fn c4_released() -> std::collections::HashMap<u64, u64> {
+        lock_recover(&C4_RELEASED).clone()
+    }
+
+    /// The `remaining` values reported for `u`, in arrival order; empty if
+    /// none were. Cloned with the guard dropped, as c4_released().
+    fn c4_intermediate_remaining(u: u64) -> Vec<u64> {
+        lock_recover(&C4_INTERMEDIATE_REMAINING)
+            .get(&u)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Must be called *after* refresh(): refresh() clears
@@ -3184,8 +3387,8 @@ mod tests {
         C4_HANDLER_ERRS.store(0, Ordering::SeqCst);
         C4_SENTINEL_ACTIVE.store(false, Ordering::SeqCst);
         C4_SENTINEL_UNDERFD.store(u64::MAX, Ordering::SeqCst);
-        C4_RELEASED.lock().unwrap().clear();
-        C4_INTERMEDIATE_REMAINING.lock().unwrap().clear();
+        lock_recover(&C4_RELEASED).clear();
+        lock_recover(&C4_INTERMEDIATE_REMAINING).clear();
     }
 
     /// The whole config matrix below is 432 shapes, so a single iteration
@@ -3401,7 +3604,7 @@ mod tests {
 
         // --- Everything is gone except C4_A's sentinel reference.
         assert!(
-            !C4_RELEASED.lock().unwrap().contains_key(&u_sent),
+            !c4_released().contains_key(&u_sent),
             "the sentinel key was released while C4_A still held it ({cfg:?})"
         );
         assert_eq!(
@@ -3420,12 +3623,7 @@ mod tests {
         // exactly {refs_sent-1, ..., 1}. Sorting first makes this an
         // equality that holds under any interleaving.
         {
-            let mut remaining: Vec<u64> = C4_INTERMEDIATE_REMAINING
-                .lock()
-                .unwrap()
-                .get(&u_sent)
-                .cloned()
-                .unwrap_or_default();
+            let mut remaining = c4_intermediate_remaining(u_sent);
             remaining.sort_unstable_by(|a, b| b.cmp(a));
             assert_eq!(
                 remaining,
@@ -3437,7 +3635,7 @@ mod tests {
         // Every fresh (dup()-style) key must be fully released ALREADY --
         // independently of the still-held sentinel key.
         {
-            let released = C4_RELEASED.lock().unwrap();
+            let released = c4_released();
             for u in &dup_underfds {
                 if *u == u_sent {
                     continue; // shared-key mode
@@ -3462,8 +3660,8 @@ mod tests {
         C4_SENTINEL_ACTIVE.store(false, Ordering::SeqCst);
         close_virtualfd(C4_A, v_sent).unwrap();
         assert_eq!(
-            *C4_RELEASED.lock().unwrap().get(&u_sent).unwrap(),
-            1,
+            c4_released().get(&u_sent).copied(),
+            Some(1),
             "last_close_count != 1 for the sentinel key ({cfg:?})"
         );
         assert_eq!(C4_LAST.load(Ordering::SeqCst), nfresh + 1, "{cfg:?}");
@@ -3484,11 +3682,7 @@ mod tests {
         let mid_before = C4_MID.load(Ordering::SeqCst);
         let v2 = get_unused_virtual_fd(C4_A, C4_FDKIND, u_sent, false, u_sent).unwrap();
         close_virtualfd(C4_A, v2).unwrap();
-        assert_eq!(
-            *C4_RELEASED.lock().unwrap().get(&u_sent).unwrap(),
-            2,
-            "{cfg:?}"
-        );
+        assert_eq!(c4_released().get(&u_sent).copied(), Some(2), "{cfg:?}");
         assert_eq!(
             C4_MID.load(Ordering::SeqCst),
             mid_before,
@@ -3643,7 +3837,7 @@ mod tests {
 
             // Independence, in both directions:
             {
-                let released = C4_RELEASED.lock().unwrap();
+                let released = c4_released();
                 assert!(
                     !released.contains_key(&u_sent),
                     "the shared sentinel key fired `last` while C4_A still held it"
@@ -3670,7 +3864,7 @@ mod tests {
 
             C4_SENTINEL_ACTIVE.store(false, Ordering::SeqCst);
             close_virtualfd(C4_A, v_sent).unwrap();
-            assert_eq!(*C4_RELEASED.lock().unwrap().get(&u_sent).unwrap(), 1);
+            assert_eq!(c4_released().get(&u_sent).copied(), Some(1));
             assert_eq!(C4_LAST.load(Ordering::SeqCst), NFRESH as u64 + 1);
             assert_eq!(C4_HANDLER_ERRS.load(Ordering::SeqCst), 0);
 

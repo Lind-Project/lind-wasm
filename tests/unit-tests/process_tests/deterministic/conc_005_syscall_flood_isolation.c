@@ -125,10 +125,41 @@ static pid_t xwaitpid(pid_t pid, int *status)
     return r;
 }
 
+/* The parent's handle on the scoreboard, for stop_flood() below. NULL
+ * before the mapping exists and after A has been reaped. */
+static struct shared *g_parent_sh;
+
+/* A's threads have exactly one exit condition: sh->stop. So every parent
+ * failure path between releasing A and the normal wind-down must set it
+ * first -- assert() aborts through abort(), which runs no atexit handler,
+ * and an abort that skips the flag leaves A spinning on NFLOOD cores
+ * still holding the harness's stdout pipe. The harness would then report
+ * a timeout (natively an orphaned flooder, under lind a crash path that
+ * waits on A) instead of the diagnostics this test writes to fd 2. */
+static void stop_flood(void)
+{
+    if (g_parent_sh)
+        g_parent_sh->stop = 1;
+}
+
+/* assert() with the flood wound down first. The condition is evaluated
+ * exactly once, so it is safe over calls with side effects (waitpid).
+ * Plain assert() is still correct before A is released and after it is
+ * reaped; only the window in between needs this. */
+#define PASSERT(cond, msg)         \
+    do {                           \
+        if (!(cond)) {             \
+            stop_flood();          \
+            assert(0 && msg);      \
+        }                          \
+    } while (0)
+
 static void expect_exit0(int status, const char *who)
 {
     if (WEXITSTATUS(status) == 0)
         return;
+    /* Reached only on a failure, which may be B's while A still floods. */
+    stop_flood();
     {
         char m[128];
         int n = snprintf(m, sizeof m, "conc_005c FAIL child=%s exit=%d\n", who,
@@ -318,6 +349,7 @@ int main(void)
     sh = (struct shared *)mmap(NULL, 4096, PROT_READ | PROT_WRITE,
                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     assert(sh != MAP_FAILED);
+    g_parent_sh = sh;
     sh->b_progress = 0;
     sh->a_started = 0;
     sh->stop = 0;
@@ -357,21 +389,25 @@ int main(void)
          * the harness timeout catches it; see the header on watchdogs. */
     }
 
-    assert(xwrite(bb.gate[1], &one, 1) == 1);
+    /* From here until the wind-down below, A is spinning: every failure
+     * path must go through PASSERT so the flood is stopped first. */
+    PASSERT(xwrite(bb.gate[1], &one, 1) == 1, "could not release B");
 
     /* THE ASSERTION: B runs to completion while A floods. A cage starved
      * by another cage's syscall volume would never get here, and the
      * harness's 30s timeout would report it. */
-    assert(xwaitpid(pb, &status) == pb);
-    assert(WIFEXITED(status));
+    PASSERT(xwaitpid(pb, &status) == pb, "waitpid(B) failed");
+    PASSERT(WIFEXITED(status), "B did not exit normally");
     expect_exit0(status, "B");
-    assert(sh->b_progress == TARGET);
+    PASSERT(sh->b_progress == TARGET, "B's progress count disagrees with its exit");
 
     /* Wind the flood down and confirm A itself was healthy throughout --
      * a flooder that had died early would have made the test vacuous. */
     sh->stop = 1;
     assert(xwaitpid(pa, &status) == pa);
     assert(WIFEXITED(status));
+    /* A is reaped; nothing is spinning and sh is about to be unmapped. */
+    g_parent_sh = NULL;
     expect_exit0(status, "A");
 
     close(ba.gate[1]);
