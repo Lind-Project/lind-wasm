@@ -978,8 +978,8 @@ fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
     // maps the file with a file-backed mmap, which is not supported inside an SGX enclave
     // (enarx/sallyport only provides anonymous mappings). The bytes path deserializes from a
     // buffer the same way the main module does when it arrives via `wasm_bytes`.
-    let bytes = std::fs::read(path)
-        .with_context(|| format!("failed to read module {}", path.display()))?;
+    let bytes =
+        std::fs::read(path).with_context(|| format!("failed to read module {}", path.display()))?;
     read_wasm_or_cwasm_bytes(engine, &bytes, &path.display().to_string())
 }
 
