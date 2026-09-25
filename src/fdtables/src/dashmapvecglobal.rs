@@ -306,14 +306,21 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
     );
 
     // Insert a copy and ensure it didn't exist...
-    let hmcopy = FDTABLE.get(&srccageid).unwrap().clone();
+    // Snapshot the source row and increment its entries under a single guard,
+    // so a concurrent close / get_unused_virtual_fd can't slip in between and
+    // leave the child with entries that weren't counted (or counted entries
+    // the child never got).  The guard is dropped before the insert below,
+    // because srccageid and newcageid may live in the same shard.
+    let hmcopy = {
+        let srcrow = FDTABLE.get(&srccageid).unwrap();
+        let copy = srcrow.clone();
 
-    // Increment copied items
-    for entry in FDTABLE.get(&srccageid).unwrap().iter() {
-        if entry.is_some() {
-            _increment_fdcount(entry.unwrap());
+        // Increment copied items
+        for entry in copy.iter().flatten() {
+            _increment_fdcount(*entry);
         }
-    }
+        copy
+    };
 
     assert!(FDTABLE.insert(newcageid, hmcopy).is_none());
 
