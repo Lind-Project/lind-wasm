@@ -7,7 +7,7 @@ use arc_swap::ArcSwapOption;
 use dashmap::DashMap;
 /// Uses spinlocks first (for short waits) and parks threads when blocking to reduce kernel
 /// interaction and increases efficiency.
-pub use parking_lot::{Mutex, RwLock};
+pub use parking_lot::{Condvar, Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, AtomicU64, Ordering};
 pub use std::sync::{Arc, LazyLock};
@@ -185,8 +185,19 @@ pub struct Cage {
     // exited, but whose exit status has not yet been retrieved by their parent using wait() / waitpid().
     // When a cage exits, shared memory segments are detached, file descriptors are removed from fdtable,
     // and cage struct is cleaned up, but its exit status are inserted along with its cage id into the end of
-    // its parent cage's zombies list
-    pub zombies: RwLock<Vec<Zombie>>,
+    // its parent cage's zombies list.
+    // This is a Mutex (not RwLock) because it is paired with `wait_cond` below so that
+    // wait() / waitpid() can block on the condition variable instead of busy-polling.
+    pub zombies: Mutex<Vec<Zombie>>,
+    // wait_cond is the condition variable paired with `zombies`. A thread blocked in
+    // wait() / waitpid() sleeps on it and is woken up when:
+    //   1. a child cage exits and a Zombie entry is pushed into `zombies` (cage_finalize),
+    //   2. a signal is delivered to this cage's main thread (signal_epoch_trigger), so the
+    //      waiter can return EINTR and let the signal be handled, or
+    //   3. the cage is being killed (epoch_kill_all), so the waiter can unwind.
+    // Notifiers must acquire the `zombies` mutex (at least briefly) after changing the
+    // state and before notifying, otherwise a wake-up could be lost.
+    pub wait_cond: Condvar,
     // child_num keeps track of the number of active child cages created by the current cage.
     // It is incremented when a new child cage is spawned (e.g., during `fork` or `clone` operations)
     // and decremented when a child cage exits. This field helps manage synchronization and
@@ -383,16 +394,20 @@ pub fn cage_finalize(cageid: u64) {
         // Record zombie and notify parent.
         if cage.parent != cageid {
             if let Some(parent) = get_cage(cage.parent) {
-                parent.child_num.fetch_sub(1, Ordering::SeqCst);
-                let mut zombie_vec = parent.zombies.write();
                 let zombie_status = {
                     let recorded = *cage.final_exit_status.read();
                     recorded.unwrap_or(ExitStatus::Exited(EXIT_SUCCESS))
                 };
+                // Push the zombie and decrement child_num under the same lock so that a
+                // waiter holding `zombies` always observes a consistent
+                // (zombies, child_num) pair, then wake up any blocked waitpid().
+                let mut zombie_vec = parent.zombies.lock();
                 zombie_vec.push(Zombie {
                     cageid,
                     exit_code: zombie_status,
                 });
+                parent.child_num.fetch_sub(1, Ordering::SeqCst);
+                parent.wait_cond.notify_all();
             }
             crate::signal::signal::lind_send_signal(cage.parent, SIGCHLD);
         }
@@ -440,7 +455,8 @@ mod tests {
             os_tid_map: DashMap::new(),
             main_threadid: RwLock::new(0),
             interval_timer: crate::timer::IntervalTimer::new(2),
-            zombies: RwLock::new(vec![]),
+            zombies: Mutex::new(vec![]),
+            wait_cond: Condvar::new(),
             child_num: AtomicU64::new(0),
             vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
             final_exit_status: RwLock::new(None),
