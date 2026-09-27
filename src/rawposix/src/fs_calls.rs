@@ -143,7 +143,14 @@ pub extern "C" fn openat_syscall(
             0,
         ) {
             Ok(vfd) => vfd as i32,
-            Err(_) => syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened"),
+            Err(_) => {
+                // close the kernel fd if there's an error on getting virtual fd,
+                // otherwise the host fd would leak on every EMFILE
+                unsafe {
+                    libc::close(kernel_fd);
+                }
+                syscall_error(Errno::EMFILE, "openat_syscall", "Too many files opened")
+            }
         }
     }
 }
@@ -220,7 +227,14 @@ pub extern "C" fn open_syscall(
         0,
     ) {
         Ok(vfd) => vfd as i32,
-        Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
+        Err(_) => {
+            // close the kernel fd if there's an error on getting virtual fd,
+            // otherwise the host fd would leak on every EMFILE
+            unsafe {
+                libc::close(kernel_fd);
+            }
+            syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened")
+        }
     }
 }
 
