@@ -14,8 +14,8 @@ use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
-    FSData, ITimerVal, PipeArray, Rlimit, ShmidsStruct, SigactionStruct, SigsetType, Stat64Data,
-    Statfs64Data, StatData,
+    FSData, ITimerVal, KernelSigactionStruct, PipeArray, Rlimit, ShmidsStruct, SigactionStruct,
+    SigsetType, Stat64Data, Statfs64Data, StatData,
 };
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
@@ -405,6 +405,48 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
     }
 
     let ptr = act_arg as *mut SigactionStruct;
+    unsafe { Some(&mut *ptr) }
+}
+
+/// Convert a user-provided pointer (u64) from a cage into a shared reference to
+/// an MPK-native `KernelSigactionStruct`.
+pub fn sc_convert_kernel_sigactionStruct<'a>(
+    act_arg: u64,
+    act_arg_cageid: u64,
+    cageid: u64,
+) -> Option<&'a KernelSigactionStruct> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(act_arg_cageid, cageid) {
+            return None;
+        }
+    }
+    if act_arg == 0 {
+        return None;
+    }
+
+    let ptr = act_arg as *const KernelSigactionStruct;
+    unsafe { Some(&*ptr) }
+}
+
+/// Convert a user-provided pointer (u64) from a cage into a mutable reference to
+/// an MPK-native `KernelSigactionStruct`.
+pub fn sc_convert_kernel_sigactionStruct_mut<'a>(
+    act_arg: u64,
+    act_arg_cageid: u64,
+    cageid: u64,
+) -> Option<&'a mut KernelSigactionStruct> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(act_arg_cageid, cageid) {
+            return None;
+        }
+    }
+    if act_arg == 0 {
+        return None;
+    }
+
+    let ptr = act_arg as *mut KernelSigactionStruct;
     unsafe { Some(&mut *ptr) }
 }
 

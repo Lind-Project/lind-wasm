@@ -111,7 +111,7 @@ pub fn signal_handler<
         }
 
         let (signo, signal_handler, restorer) = signal.unwrap();
-        if signal_handler == SIG_DFL as u32 {
+        if signal_handler == SIG_DFL as u64 {
             // default handler
             // look up the signal's default handler
             match sysdefs::constants::signal_default_handler_dispatcher(signo) {
@@ -153,7 +153,7 @@ pub fn signal_handler<
                     panic!("signal_handler: NONEXIST signal received!");
                 }
             }
-        } else if signal_handler == SIG_IGN as u32 {
+        } else if signal_handler == SIG_IGN as u64 {
             // ignore the signal
             continue;
         } else {

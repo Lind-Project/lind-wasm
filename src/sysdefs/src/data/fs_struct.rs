@@ -185,9 +185,19 @@ pub type IovecStruct = libc::iovec;
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(C)]
 pub struct SigactionStruct {
-    pub sa_handler: u32,
+    pub sa_handler: u64,
     pub sa_mask: SigsetType,
     pub sa_flags: i32,
+}
+
+/// Mirrors Linux x86_64 `struct kernel_sigaction` used by native MPK runtime.
+#[derive(Copy, Clone, Debug, Default)]
+#[repr(C)]
+pub struct KernelSigactionStruct {
+    pub k_sa_handler: u64,
+    pub sa_flags: u64,
+    pub sa_restorer: u64,
+    pub sa_mask: SigsetType,
 }
 
 use std::mem::size_of;

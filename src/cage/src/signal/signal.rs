@@ -400,21 +400,21 @@ pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
 // retrieve the signal handler for the specified signal of the cage
 // if the signal handler does not exist, then return SIG_DFL
 // thread safety: this function will only be invoked by main thread of the cage
-pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
+pub fn signal_get_handler(cageid: u64, signo: i32) -> u64 {
     let cage = match get_cage(cageid) {
         Some(c) => c,
         None => {
             #[cfg(feature = "lind_debug")]
             lind_debug_panic(&format!("signal_get_handler: cage {} not found", cageid));
 
-            return SIG_DFL as u32;
+            return SIG_DFL as u64;
         }
     };
     let handler = match cage.signalhandler.get(&signo) {
         Some(action_struct) => {
             action_struct.sa_handler // if we have a handler and its not blocked return it
         }
-        None => SIG_DFL as u32, // if we dont have a handler return SIG_DFL
+        None => SIG_DFL as u64, // if we dont have a handler return SIG_DFL
     };
     handler
 }
@@ -443,13 +443,15 @@ pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
                 return true;
             }
 
-            let mut pending_signals = cage.pending_signals.write();
-            // TODO: currently we are queuing the same signals instead of merging the same signal
-            // this is different from linux which always merge the same signal if they havn't been handled yet
-            // we queue the signals for now because our epoch based signal implementation could have much longer
-            // gap for signal checkings than linux. We need to finally decide whether do the queuing or merging
-            // in the future, probably based on some experimental data
-            pending_signals.push(signo);
+            {
+                let mut pending_signals = cage.pending_signals.write();
+                // TODO: currently we are queuing the same signals instead of merging the same signal
+                // this is different from linux which always merge the same signal if they havn't been handled yet
+                // we queue the signals for now because our epoch based signal implementation could have much longer
+                // gap for signal checkings than linux. We need to finally decide whether do the queuing or merging
+                // in the future, probably based on some experimental data
+                pending_signals.push(signo);
+            }
 
             // we only trigger epoch if the signal is not blocked
             if !signal_check_block(cageid, signo) {
@@ -460,10 +462,14 @@ pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
                 // executing. Send SIGUSR2 to the main thread's OS tid to interrupt
                 // the blocking syscall with EINTR, allowing the thread to return
                 // to wasm and see the epoch change.
-                let main_tid = *cage.main_threadid.read();
-                if let Some(os_tid) = cage.os_tid_map.get(&main_tid) {
+                let main_tid = {
+                    let guard = cage.main_threadid.read();
+                    *guard
+                };
+                let os_tid = cage.os_tid_map.get(&main_tid).map(|entry| *entry);
+                if let Some(os_tid) = os_tid {
                     unsafe {
-                        libc::syscall(libc::SYS_tkill, *os_tid as i32, libc::SIGUSR2);
+                        libc::syscall(libc::SYS_tkill, os_tid as i32, libc::SIGUSR2);
                     }
                 }
             }
@@ -484,7 +490,7 @@ pub fn convert_signal_mask(signo: i32) -> u64 {
 // the second element is the signal handler
 // and the third element is the signal mask restore callback function
 // thread safety: this function will only be invoked by main thread of the cage
-pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)> {
+pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u64, Box<dyn Fn(u64)>)> {
     let cage = get_cage(cageid)?;
     let mut pending_signals = cage.pending_signals.write();
     let sigset = cage.sigset.load(Ordering::Relaxed);
@@ -506,7 +512,7 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
                 let signal_handler = sigaction.sa_handler;
                 // if SA_RESETHAND is set, we reset the signal handler to default for this signal
                 if sigaction.sa_flags as u32 & SA_RESETHAND > 0 {
-                    sigaction.sa_handler = SIG_DFL as u32;
+                    sigaction.sa_handler = SIG_DFL as u64;
                 }
 
                 // if SA_NODEFER is set, we allow the same signal to interrupt itself

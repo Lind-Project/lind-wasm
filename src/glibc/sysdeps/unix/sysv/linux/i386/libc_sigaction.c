@@ -95,7 +95,7 @@ void signal_callback(__sighandler_t callback, int signal) {
 
 // rawposix sigaction struct
 struct rawposix_sigaction {
-  __sighandler_t handler;
+  unsigned long long handler;
   unsigned long long sa_mask;
   int sa_flags;
 };
@@ -108,7 +108,7 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
   // check for NULL pointer
   if (act)
   {
-    rawposix_act.handler = act->sa_handler;
+    rawposix_act.handler = (unsigned long long)(act->sa_handler);
     rawposix_act.sa_mask = act->sa_mask.__val[0];
     rawposix_act.sa_flags = act->sa_flags;
   }
@@ -117,7 +117,7 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
   // check for NULL pointer
   if (oact)
   {
-    oact->sa_handler = rawposix_oact.handler;
+    oact->sa_handler = (__sighandler_t)(rawposix_oact.handler);
     oact->sa_mask.__val[0] = rawposix_oact.sa_mask;
     oact->sa_flags = rawposix_oact.sa_flags;
   }

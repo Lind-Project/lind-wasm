@@ -12,10 +12,11 @@ use libc::sched_yield;
 use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::sync::atomic::Ordering::*;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysdefs::constants::err_const::{syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::{
@@ -24,15 +25,26 @@ use sysdefs::constants::lind_platform_const::{
 };
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, RLIMIT_AS, RLIMIT_CORE, RLIMIT_DATA,
-    RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
-    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
+    RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK, SIGALRM, SIGCHLD, SIGKILL, SIGSTOP,
+    SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::constants::syscall_const;
-use sysdefs::data::fs_struct::{ITimerVal, Rlimit, SigactionStruct};
+use sysdefs::data::fs_struct::{ITimerVal, KernelSigactionStruct, Rlimit, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 use threei::threei_const;
+
+struct AlarmState {
+    generation: AtomicU64,
+    deadline_unix_s: AtomicU64,
+}
+
+static ALARM_STATE: OnceLock<DashMap<u64, Arc<AlarmState>>> = OnceLock::new();
+
+fn alarm_state_table() -> &'static DashMap<u64, Arc<AlarmState>> {
+    ALARM_STATE.get_or_init(DashMap::new)
+}
 
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/clone.2.html
@@ -1032,8 +1044,6 @@ pub extern "C" fn sigaction_syscall(
     arg6_cageid: u64,
 ) -> i64 {
     let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
-    let act = sc_convert_sigactionStruct(act_arg, act_arg_cageid, cageid);
-    let oact = sc_convert_sigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
     // Validate that the extra unused arguments are indeed unused.
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
@@ -1050,6 +1060,49 @@ pub extern "C" fn sigaction_syscall(
         Some(c) => c,
         None => return (syscall_error(Errno::ECHILD, "sigaction", "Cage not found")) as i64,
     };
+
+    let cage_runtime = threei::get_cage_runtime(cageid);
+
+    if cage_runtime == Some(threei_const::RUNTIME_TYPE_MPK) {
+        let act = sc_convert_kernel_sigactionStruct(act_arg, act_arg_cageid, cageid);
+        let oact = sc_convert_kernel_sigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
+
+        // If oact (old action pointer) is provided, fill it with the current action.
+        if let Some(oact_ref) = oact {
+            if let Some(current_act) = cage.signalhandler.get(&sig) {
+                oact_ref.k_sa_handler = current_act.sa_handler;
+                oact_ref.sa_flags = current_act.sa_flags as u32 as u64;
+                oact_ref.sa_restorer = 0;
+                oact_ref.sa_mask = current_act.sa_mask;
+            } else {
+                oact_ref.clone_from(&KernelSigactionStruct::default());
+            }
+        }
+
+        // If a new action is provided in act, update the signal handler.
+        if let Some(new_act) = act {
+            // Disallow modification for SIGKILL and SIGSTOP.
+            if sig == SIGKILL || sig == SIGSTOP {
+                return (syscall_error(
+                    Errno::EINVAL,
+                    "sigaction",
+                    "Cannot modify SIGKILL or SIGSTOP",
+                )) as i64;
+            }
+            let translated = SigactionStruct {
+                sa_handler: new_act.k_sa_handler,
+                sa_mask: new_act.sa_mask,
+                sa_flags: new_act.sa_flags as i32,
+            };
+            // Insert the new signal action into the cage's signal handler table.
+            cage.signalhandler.insert(sig, translated);
+        }
+
+        return 0;
+    }
+
+    let act = sc_convert_sigactionStruct(act_arg, act_arg_cageid, cageid);
+    let oact = sc_convert_sigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
 
     // If oact (old action pointer) is provided, fill it with the current action.
     if let Some(oact_ref) = oact {
@@ -1474,23 +1527,25 @@ pub extern "C" fn sigsuspend_syscall(
     arg6_cageid: u64,
 ) -> i64 {
     let set = sc_convert_sigset(set_arg, set_cageid, cageid);
-    let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
     if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg4, arg4_cageid)
+    && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!(
+        {
+            panic!(
             "{}: unused arguments contain unexpected values -- security violation",
             "sigsuspend_syscall"
         );
     }
-
+    
     let cage = get_cage(cageid).unwrap();
     let curr_sigset = cage.sigset.load(Relaxed);
-
-    if let Some(some_oldset) = oldset {
-        *some_oldset = curr_sigset;
+    
+    if !sc_unusedarg(oldset_arg, oldset_cageid) {
+        let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
+        if let Some(some_oldset) = oldset {
+            *some_oldset = curr_sigset;
+        }
     }
 
     if let Some(some_set) = set {
@@ -1514,6 +1569,101 @@ pub extern "C" fn sigsuspend_syscall(
         }
         unsafe { sched_yield() };
     }
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/alarm.2.html
+///
+/// Rudimentary `alarm` implementation:
+/// - Stores one pending alarm per cage.
+/// - Uses host `clock_nanosleep` for timing in a helper thread.
+/// - Delivers expiration by calling `lind_send_signal(cageid, SIGALRM)`.
+///
+/// ## Returns
+/// Number of seconds remaining for any previously scheduled alarm.
+pub extern "C" fn alarm_syscall(
+    cageid: u64,
+    seconds_arg: u64,
+    seconds_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i64 {
+    let seconds = sc_convert_sysarg_to_u32(seconds_arg, seconds_cageid, cageid);
+
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "alarm_syscall"
+        );
+    }
+
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let state = alarm_state_table()
+        .entry(cageid)
+        .or_insert_with(|| {
+            Arc::new(AlarmState {
+                generation: AtomicU64::new(0),
+                deadline_unix_s: AtomicU64::new(0),
+            })
+        })
+        .clone();
+
+    let prev_deadline = state.deadline_unix_s.load(Acquire);
+    let prev_remaining = prev_deadline.saturating_sub(now_secs);
+
+    // Bump generation first so older timer threads are canceled.
+    let generation = state.generation.fetch_add(1, SeqCst) + 1;
+
+    if seconds == 0 {
+        state.deadline_unix_s.store(0, Release);
+        return prev_remaining as i64;
+    }
+
+    let deadline = now_secs.saturating_add(seconds as u64);
+    state.deadline_unix_s.store(deadline, Release);
+
+    let state_for_thread = state.clone();
+    std::thread::spawn(move || {
+        let req = libc::timespec {
+            tv_sec: seconds as libc::time_t,
+            tv_nsec: 0,
+        };
+
+        unsafe {
+            libc::syscall(
+                libc::SYS_clock_nanosleep,
+                libc::CLOCK_MONOTONIC,
+                0,
+                &req as *const libc::timespec,
+                std::ptr::null_mut::<libc::timespec>(),
+            );
+        }
+
+        if state_for_thread.generation.load(SeqCst) == generation
+            && state_for_thread.deadline_unix_s.load(Acquire) == deadline
+        {
+            state_for_thread.deadline_unix_s.store(0, Release);
+            let _ = lind_send_signal(cageid, SIGALRM);
+        }
+    });
+
+    prev_remaining as i64
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html

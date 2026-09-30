@@ -16,11 +16,12 @@ use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, setup_gs_con
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
-use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL};
+use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL, SIGACTION_SYSCALL};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::data::sys_struct::CloneArgStruct;
 use std::arch::asm;
 use crate::lind_mpk::trampoline::{GS_SUPER_OS_TID};
+use crate::lind_mpk::signals::{handle_signal};
 
 // Stored by execute.rs after it resolves __enable_syscall_interpose so that
 // mpk_clone_syscall_entry can re-register a new handler in the child process.
@@ -75,6 +76,24 @@ fn mpk_debug(message: impl AsRef<str>) {
 }
 
 #[cfg(target_arch = "x86_64")]
+fn current_host_rsp() -> usize {
+    let rsp: usize;
+    unsafe {
+        asm!(
+            "mov %rsp, {out}",
+            out = out(reg) rsp,
+            options(nostack, preserves_flags, att_syntax),
+        );
+    }
+    rsp
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn current_host_rsp() -> usize {
+    0
+}
+
+#[cfg(target_arch = "x86_64")]
 fn current_pointer_guard() -> u64 {
     let stack_guard: u64;
     unsafe {
@@ -121,6 +140,9 @@ fn mpk_clone_thread_entry(
     registered_cage_ids: std::collections::HashSet<u64>,
     thread_info: Arc<MpkThreadInfo>,
 ) -> i32 {
+    thread_info
+        .exit_stack
+        .store(current_host_rsp(), Ordering::Release);
     let tid = current_tid();
     let _ = tid_sender.send(tid);
     let new_gs_data = new_gs_data_addr as *mut MPKSupervisorCtxStack;
@@ -148,7 +170,7 @@ fn mpk_clone_thread_entry(
         let mut cage_info = MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: cage_id,
-            stack_addr: 0,
+            stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
         };
@@ -246,6 +268,7 @@ fn update_active_cage_context(cageid: u64, old_cageid: u64) {
 
 #[repr(C)]
 struct SyscallMsg {
+    msg_kind: u64,
     syscall_num: u64,
     syscall_name: u64,
     self_cageid: u64,
@@ -266,8 +289,15 @@ struct SyscallMsg {
 
 #[repr(C)]
 struct SyscallResp {
+    resp_kind: u64,
     retval: i64,
+    execute_on_client: u64,
 }
+
+const MSG_KIND_SYSCALL: u64 = 1;
+const MSG_KIND_FETCH_PENDING_SIGNAL: u64 = 2;
+const RESP_KIND_SYSCALL: u64 = 1;
+const RESP_KIND_FETCH_PENDING_SIGNAL: u64 = 2;
 
 // Per-process fd used by the child's syscall handler to reach the parent's
 // worker thread.  Set once in the child immediately after fork; never mutated
@@ -276,6 +306,106 @@ struct SyscallResp {
 // Using a plain static instead of thread_local because after fork there is
 // exactly one thread in the child and we never spawn any before we set this.
 static CHILD_SOCKET_FD: AtomicI32 = AtomicI32::new(-1);
+static CHILD_ACTIVE_CAGEID: AtomicU64 = AtomicU64::new(0);
+
+fn helper_take_pending_signal(cageid: u64) -> i32 {
+    let Some(cage) = get_cage(cageid) else {
+        return 0;
+    };
+    let mut pending = cage.pending_signals.write();
+    if pending.is_empty() {
+        0
+    } else {
+        pending.remove(0)
+    }
+}
+
+extern "C" fn child_sigusr2_handler(_signo: i32) {
+    let fd = CHILD_SOCKET_FD.load(Ordering::Acquire);
+    let cageid = CHILD_ACTIVE_CAGEID.load(Ordering::Acquire);
+    if fd < 0 || cageid == 0 {
+        return;
+    }
+
+    let req = SyscallMsg {
+        msg_kind: MSG_KIND_FETCH_PENDING_SIGNAL,
+        syscall_num: 0,
+        syscall_name: 0,
+        self_cageid: cageid,
+        target_cageid: cageid,
+        arg1: 0,
+        arg1_cageid: cageid,
+        arg2: 0,
+        arg2_cageid: cageid,
+        arg3: 0,
+        arg3_cageid: cageid,
+        arg4: 0,
+        arg4_cageid: cageid,
+        arg5: 0,
+        arg5_cageid: cageid,
+        arg6: 0,
+        arg6_cageid: cageid,
+    };
+    let sent = unsafe {
+        libc::send(
+            fd,
+            &req as *const SyscallMsg as *const libc::c_void,
+            size_of::<SyscallMsg>(),
+            0,
+        )
+    };
+    if sent as usize != size_of::<SyscallMsg>() {
+        return;
+    }
+
+    let mut resp = SyscallResp {
+        resp_kind: 0,
+        retval: 0,
+        execute_on_client: 0,
+    };
+    let recvd = unsafe {
+        libc::recv(
+            fd,
+            &mut resp as *mut SyscallResp as *mut libc::c_void,
+            size_of::<SyscallResp>(),
+            0,
+        )
+    };
+    if recvd as usize != size_of::<SyscallResp>()
+        || resp.resp_kind != RESP_KIND_FETCH_PENDING_SIGNAL
+    {
+        return;
+    }
+
+    let signo = resp.retval as i32;
+    if signo <= 0 || signo >= 32 {
+        return;
+    }
+
+    if let Some(cage) = get_cage(cageid) {
+        cage.pending_signals.write().push(signo);
+    }
+
+
+    // the child syscall handler does not obtain any lock so we can directly handle the signal here.
+    handle_signal(cageid, None);
+
+}
+
+fn install_child_sigusr2_handler() {
+    unsafe {
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = child_sigusr2_handler as usize;
+        sa.sa_flags = 0;
+        libc::sigemptyset(&mut sa.sa_mask);
+        if libc::sigaction(libc::SIGUSR2, &sa, std::ptr::null_mut()) != 0 {
+            eprintln!(
+                "[lind-mpk] child: failed to install SIGUSR2 handler: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+}
 
 /// Syscall handler installed in the **child** process after fork.
 ///
@@ -298,6 +428,7 @@ unsafe extern "C" fn child_syscall_handler(
     assert!(fd >= 0, "[child_syscall_handler] socket fd not initialised");
 
     let msg = SyscallMsg {
+        msg_kind: MSG_KIND_SYSCALL,
         syscall_num: number as u64,
         syscall_name: 0,
         self_cageid: cage_id,
@@ -337,7 +468,11 @@ unsafe extern "C" fn child_syscall_handler(
     }
 
     // Block until the parent's worker thread sends back the result.
-    let mut resp = SyscallResp { retval: 0 };
+    let mut resp = SyscallResp {
+        resp_kind: 0,
+        retval: 0,
+        execute_on_client: 0,
+    };
     let recvd = libc::recv(
         fd,
         &mut resp as *mut SyscallResp as *mut libc::c_void,
@@ -345,10 +480,33 @@ unsafe extern "C" fn child_syscall_handler(
         0, // blocking – no MSG_DONTWAIT
     );
     assert!(
-        recvd as usize == size_of::<SyscallResp>(),
+        recvd as usize == size_of::<SyscallResp>() && resp.resp_kind == RESP_KIND_SYSCALL,
         "[child_syscall_handler] recv failed: {}",
         std::io::Error::last_os_error()
     );
+
+    if resp.execute_on_client != 0 {
+        // Mirror selected syscalls in the child process to keep child-local
+        // process state in sync with the helper-dispatched call.
+        return threei::make_syscall(
+            cage_id,
+            msg.syscall_num,
+            msg.syscall_name,
+            msg.target_cageid,
+            msg.arg1,
+            msg.arg1_cageid,
+            msg.arg2,
+            msg.arg2_cageid,
+            msg.arg3,
+            msg.arg3_cageid,
+            msg.arg4,
+            msg.arg4_cageid,
+            msg.arg5,
+            msg.arg5_cageid,
+            msg.arg6,
+            msg.arg6_cageid,
+        );
+    }
 
     resp.retval
 }
@@ -379,6 +537,7 @@ extern "C" fn child_make_threei_call_handler(
     assert!(fd >= 0, "[child_make_threei_call_handler] socket fd not initialised");
 
     let msg = SyscallMsg {
+        msg_kind: MSG_KIND_SYSCALL,
         syscall_num,
         syscall_name,
         self_cageid,
@@ -409,7 +568,11 @@ extern "C" fn child_make_threei_call_handler(
             std::io::Error::last_os_error()
         );
     
-        let mut resp = SyscallResp { retval: 0 };
+        let mut resp = SyscallResp {
+            resp_kind: 0,
+            retval: 0,
+            execute_on_client: 0,
+        };
         let recvd = libc::recv(
             fd,
             &mut resp as *mut SyscallResp as *mut libc::c_void,
@@ -417,7 +580,7 @@ extern "C" fn child_make_threei_call_handler(
             0,
         );
         assert!(
-            recvd as usize == size_of::<SyscallResp>(),
+            recvd as usize == size_of::<SyscallResp>() && resp.resp_kind == RESP_KIND_SYSCALL,
             "[child_make_threei_call_handler] recv failed: {}",
             std::io::Error::last_os_error()
         );
@@ -663,6 +826,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 supervisor_stack_base: new_stack_base as usize,
                 supervisor_stack_size: stack_size,
                 cage_ids: Mutex::new(std::collections::HashSet::new()),
+                exit_stack: std::sync::atomic::AtomicUsize::new(0),
                 child_tid: AtomicU64::new(clear_child_tid_addr),
             });
 
@@ -725,6 +889,22 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
         // Notify threei of the cage runtime type
         threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_MPK);
 
+        // Fork inherits signal dispositions. Apply this to the child cage
+        // before fork so the child process sees it in its inherited snapshot.
+        if let (Some(parent_cage), Some(child_cage)) = (
+            get_cage(_parent_cageid),
+            get_cage(child_cageid),
+        ) {
+            child_cage.signalhandler.clear();
+            for entry in parent_cage.signalhandler.iter() {
+                child_cage.signalhandler.insert(*entry.key(), *entry.value());
+            }
+            child_cage.sigset.store(
+                parent_cage.sigset.load(Ordering::Relaxed),
+                Ordering::Relaxed,
+            );
+        }
+
 
         // ── 2. Create a SOCK_SEQPACKET socketpair for syscall forwarding ──────────
         //
@@ -784,6 +964,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                         let child_vmmap = parent_cage.vmmap.read().clone();
                         *child_cage.vmmap.write() = child_vmmap;
                     }
+
                     *child_cage.runtime_info.write() = Box::new(child_mpk_info);
                     child_cage
                         .runtime_type
@@ -817,7 +998,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             thread::spawn(move || {
                 //this tid is used to identify the os thread in the parent process. 
                 //This is easier than using the child process's pid because the helper thread always outlives the child process.
-                let helper_tid = current_tid(); 
+                // let helper_tid = current_tid(); 
                 
                 // MPK has no Wasmtime epoch; pass a pointer to a static zero so
                 // lind_signal_init stores a valid (disabled) epoch handler address.
@@ -829,10 +1010,16 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     epoch_pointer,
                     THREAD_START_ID, //this is the first thread of the new cage
                     true, /* this is the main thread */
-                );
+                );                
+                // For forked cages, the logical main thread runs in the child
+                // process, so map THREAD_START_ID to the child's PID/TID.
+                if let Some(cage) = get_cage(child_cageid) {
+                    cage.os_tid_map.insert(THREAD_START_ID, pid as i64);
+                }
+
 
                 let (gs_ptr, cage_ptr, context_pages, context_pages_size) =
-                    match setup_gs_context(child_cageid, helper_tid) {
+                    match setup_gs_context(child_cageid, pid) {
                         Ok(result) => result,
                         Err(error) => {
                             eprintln!("[lind-mpk] parent worker thread: setup_gs_context failed for child cage {}: {}", child_cageid, error);
@@ -851,6 +1038,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     supervisor_stack_base: 0, //not needed, the current thread was spawned on a supervisor stack
                     supervisor_stack_size: 0,
                     cage_ids: std::sync::Mutex::new(std::collections::HashSet::new()),
+                    exit_stack: std::sync::atomic::AtomicUsize::new(current_host_rsp()),
                     child_tid: AtomicU64::new(0),
                 });
 
@@ -861,7 +1049,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     let mut cage_info = MpkCageThreadInfo {
                         thread_info: Arc::clone(&thread_info),
                         grate_cage_id: *cage_id,
-                        stack_addr: 0, //not needed, the worker thread does not enter the cage
+                        stack_addr: std::sync::atomic::AtomicUsize::new(0), //not needed, the worker thread does not enter the cage
                         stack_base: 0,
                         stack_size: 0,
                     };
@@ -876,7 +1064,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     if let Some(cage) = get_cage(*cage_id) {
                         let runtime_info = cage.runtime_info.read();
                         if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
-                            mpk_info.threads.write().insert(helper_tid, cage_info);
+                            mpk_info.threads.write().insert(pid, cage_info);
                         } else {
                             eprintln!("[lind-mpk] parent worker thread: cage {} has no MPKRuntimeInfo", cage_id);
                             return;
@@ -889,6 +1077,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
 
                 loop {
                     let mut msg = SyscallMsg {
+                        msg_kind: 0,
                         syscall_num: 0,
                         syscall_name: 0,
                         self_cageid: 0,
@@ -916,21 +1105,38 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                         break;
                     }
 
-                    // Forward the syscall to threei on behalf of the child cage.
-                    let retval = threei::make_syscall(
-                        child_cageid,
-                        msg.syscall_num,
-                        msg.syscall_name,
-                        msg.target_cageid,
-                        msg.arg1, msg.arg1_cageid,
-                        msg.arg2, msg.arg2_cageid,
-                        msg.arg3, msg.arg3_cageid,
-                        msg.arg4, msg.arg4_cageid,
-                        msg.arg5, msg.arg5_cageid,
-                        msg.arg6, msg.arg6_cageid,
-                    );
+                    let resp = if msg.msg_kind == MSG_KIND_FETCH_PENDING_SIGNAL {
+                        SyscallResp {
+                            resp_kind: RESP_KIND_FETCH_PENDING_SIGNAL,
+                            retval: helper_take_pending_signal(child_cageid) as i64,
+                            execute_on_client: 0,
+                        }
+                    } else {
+                        // Forward the syscall to threei on behalf of the child cage.
+                        let retval = threei::make_syscall(
+                            child_cageid,
+                            msg.syscall_num,
+                            msg.syscall_name,
+                            msg.target_cageid,
+                            msg.arg1, msg.arg1_cageid,
+                            msg.arg2, msg.arg2_cageid,
+                            msg.arg3, msg.arg3_cageid,
+                            msg.arg4, msg.arg4_cageid,
+                            msg.arg5, msg.arg5_cageid,
+                            msg.arg6, msg.arg6_cageid,
+                        );
+                        let execute_on_client = if msg.syscall_num == SIGACTION_SYSCALL as u64 {
+                            1
+                        } else {
+                            0
+                        };
+                        SyscallResp {
+                            resp_kind: RESP_KIND_SYSCALL,
+                            retval,
+                            execute_on_client,
+                        }
+                    };
 
-                    let resp = SyscallResp { retval };
                     unsafe {
                         libc::send(
                             parent_fd,
@@ -954,6 +1160,8 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             // Child does not need the parent-side fd.
             unsafe { libc::close(parent_fd) };        // Publish the socket fd so child_syscall_handler can find it.
             CHILD_SOCKET_FD.store(child_fd, Ordering::Release);
+            CHILD_ACTIVE_CAGEID.store(child_cageid, Ordering::Release);
+            install_child_sigusr2_handler();
 
             // Re-register the syscall interposition hook in the child so that all
             // subsequent syscalls from inside the dlmopen namespace are forwarded
@@ -999,6 +1207,89 @@ pub extern "C" fn mpk_exit_syscall_entry(
     _arg5_cageid: u64,
     _arg6: u64,
     _arg6_cageid: u64,
+) -> i32 {
+    let _ = (
+        _cageid,
+        _tid,
+        _arg2_cageid,
+        _arg3,
+        _arg3_cageid,
+        _arg4,
+        _arg4_cageid,
+        _arg5,
+        _arg5_cageid,
+        _arg6,
+        _arg6_cageid,
+    );
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if let Some(cage) = get_cage(exiting_cageid) {
+            let runtime_info = cage.runtime_info.read();
+            if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                let mut cage_tid = 0;
+                let cage_pid = mpk_info.pid;
+                if cage_pid != 0 {
+                    unsafe {
+                        asm!(
+                            "mov %gs:{gs_super_os_tid_offset}, {cage_tid}",
+                            cage_tid = out(reg) cage_tid,
+                            gs_super_os_tid_offset = const GS_SUPER_OS_TID,
+                            options(att_syntax)
+                        );
+                    }
+                } else {
+                    cage_tid = current_tid();
+                }
+
+                let exit_stack = mpk_info
+                    .threads
+                    .read()
+                    .get(&cage_tid)
+                    .map(|entry| entry.thread_info.exit_stack.load(Ordering::Acquire))
+                    .unwrap_or(0);
+
+                if exit_stack != 0 {
+                    return unsafe { call_mpk_exit_on_stack(exit_stack, exit_status, exiting_cageid) };
+                }
+            }
+        }
+    }
+
+    mpk_exit_syscall_entry_inner(exit_status, exiting_cageid)
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn call_mpk_exit_on_stack(
+    stack_top: usize,
+    exit_status: u64,
+    exiting_cageid: u64,
+) -> i32 {
+    let aligned_stack = stack_top & !0xf;
+    let handler = mpk_exit_syscall_entry_inner as usize;
+    let ret: i32;
+    unsafe {
+        asm!(
+            "mov %rsp, %r15",
+            "mov {new_rsp}, %rsp",
+            "call *{handler}",
+            "mov %r15, %rsp",
+            new_rsp = in(reg) aligned_stack,
+            handler = in(reg) handler,
+            in("rdi") exit_status,
+            in("rsi") exiting_cageid,
+            lateout("eax") ret,
+            lateout("r15") _,
+            clobber_abi("C"),
+            options(att_syntax),
+        );
+    }
+    ret
+}
+
+extern "C" fn mpk_exit_syscall_entry_inner(
+    exit_status: u64,
+    exiting_cageid: u64,
 ) -> i32 {
     mpk_debug(format!("mpk_exit: cage {} exiting with status {}", exiting_cageid, exit_status));
 
@@ -1232,5 +1523,25 @@ pub extern "C" fn mpk_make_threei_call_wrapper(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i64 {
-    threei::make_syscall(self_cageid, syscall_num, syscall_name, target_cageid, arg1, arg1_cageid, arg2, arg2_cageid, arg3, arg3_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid)
+    let retval = threei::make_syscall(
+        self_cageid,
+        syscall_num,
+        syscall_name,
+        target_cageid,
+        arg1,
+        arg1_cageid,
+        arg2,
+        arg2_cageid,
+        arg3,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    );
+    //TODO: This should check all cages for which we can handle signals in this OS thread, not just self_cageid
+    crate::lind_mpk::signals::handle_signal(self_cageid, None);
+    retval
 }

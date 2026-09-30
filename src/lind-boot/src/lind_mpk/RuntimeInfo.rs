@@ -1,8 +1,8 @@
 use libc::{c_void, pid_t};
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use cage::{get_cage, MemoryBackingType, RuntimeInfo, RwLock, VmmapOps};
 use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
 
@@ -171,6 +171,9 @@ pub struct MpkThreadInfo {
     pub supervisor_stack_size: usize,
     /// Cage IDs whose thread maps contain an MpkCageThreadInfo for this OS thread.
     pub cage_ids: Mutex<HashSet<u64>>,
+    /// Host-thread stack pointer captured near thread start, used as a safe stack
+    /// to run exit cleanup without touching the supervisor stack allocation.
+    pub exit_stack: AtomicUsize,
     /// Pointer to child_tid in guest memory to atomically clear and futex wake on thread exit.
     pub child_tid: AtomicU64,
 }
@@ -258,7 +261,7 @@ pub struct MpkCageThreadInfo {
     /// The grate whose vmmap backs this thread's stack.
     pub grate_cage_id: u64,
     ///This is the stack the thread will use inside the grate.
-    pub stack_addr: usize,
+    pub stack_addr: AtomicUsize,
     pub stack_base: usize,
     pub stack_size: usize,
 }
@@ -270,7 +273,7 @@ impl MpkCageThreadInfo {
     /// so only the vmmap bookkeeping and the guard-page protection need to
     /// be set up here.
     pub fn allocate_grate_stack(&mut self) -> anyhow::Result<()> {
-        if self.stack_addr != 0 {
+        if self.stack_addr.load(Ordering::Relaxed) != 0 {
             return Ok(());
         }
 
@@ -282,7 +285,7 @@ impl MpkCageThreadInfo {
 
         self.stack_base = stack_base;
         self.stack_size = MPK_GRATE_STACK_GUARD + MPK_GRATE_STACK_SIZE;
-        self.stack_addr = stack_addr;
+        self.stack_addr.store(stack_addr, Ordering::Relaxed);
         Ok(())
     }
 }
@@ -332,6 +335,12 @@ pub struct MPKRuntimeInfo {
     /// so its supervisor stack and GsSegmentData are tracked and freed on exit.
     /// Empty for forked child cages (their resources live in their own address space).
     pub threads: RwLock<HashMap<pid_t, MpkCageThreadInfo>>,
+    /// MPK cages do not have a Wasmtime epoch, so lifecycle transitions are
+    /// kept explicitly and observed at MPK entry points.
+    pub stopped: AtomicBool,
+    pub killed: AtomicBool,
+    pub state_lock: Mutex<()>,
+    pub state_cv: Condvar,
 }
 
 impl MPKRuntimeInfo {
@@ -364,6 +373,10 @@ impl MPKRuntimeInfo {
             memory_size,
             next_thread_id: RwLock::new(next_thread_id),
             threads: RwLock::new(thread_map),
+            stopped: AtomicBool::new(false),
+            killed: AtomicBool::new(false),
+            state_lock: Mutex::new(()),
+            state_cv: Condvar::new(),
         }
     }
 }

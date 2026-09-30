@@ -111,7 +111,7 @@ extern "C" fn mpk_register_handler(
             let mut new_thread = MpkCageThreadInfo {
                 thread_info: Arc::clone(&thread.thread_info),
                 grate_cage_id: handle_func_cage,
-                stack_addr: 0,
+                stack_addr: std::sync::atomic::AtomicUsize::new(0),
                 stack_base: 0,
                 stack_size: 0,
             };
@@ -205,7 +205,10 @@ pub extern "C" fn grate_callback_trampoline(
         let cage_thread = threads
             .get(&os_tid)
             .expect("inner_grate_callback_trampoline: thread is not registered in cage");
-        (cage_thread.stack_addr, cage_thread.thread_info.cage_data)
+        (
+            cage_thread.stack_addr.load(std::sync::atomic::Ordering::Relaxed),
+            cage_thread.thread_info.cage_data,
+        )
     };
     assert!(!cage_data.is_null(), "inner_grate_callback_trampoline: null cage context");
 

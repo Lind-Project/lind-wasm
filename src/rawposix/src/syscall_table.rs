@@ -28,7 +28,7 @@ use super::net_calls::{
     sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
 };
 use super::sys_calls::{
-    exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
+    alarm_syscall, exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
     getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, gettid_syscall, getuid_syscall,
     kill_syscall, prlimit64_syscall, rseq_syscall, sched_yield_syscall, set_robust_list_syscall,
     setitimer_syscall, sigaction_syscall, sigprocmask_syscall, sigsuspend_syscall, waitpid_syscall,
@@ -85,6 +85,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         syscall_const::NANOSLEEP_SYSCALL as u64,
         nanosleep_time64_syscall,
     ),
+    (syscall_const::ALARM_SYSCALL as u64, alarm_syscall),
     (syscall_const::SETITIMER_SYSCALL as u64, setitimer_syscall),
     (syscall_const::GETPID_SYSCALL as u64, getpid_syscall),
     (syscall_const::SOCKET_SYSCALL as u64, socket_syscall),
@@ -159,6 +160,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         syscall_const::CLOCK_GETTIME_SYSCALL as u64,
         clock_gettime_syscall,
     ),
+    (syscall_const::CLOCK_NANOSLEEP_SYSCALL as u64, nanosleep_time64_syscall),
     (syscall_const::EXIT_GROUP_SYSCALL as u64, exit_group_syscall),
     (syscall_const::EPOLL_WAIT_SYSCALL as u64, epoll_wait_syscall),
     (syscall_const::EPOLL_CTL_SYSCALL as u64, epoll_ctl_syscall),
@@ -190,5 +192,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::RENAMEAT2_SYSCALL as u64, renameat2_syscall),
     (syscall_const::GETRANDOM_SYSCALL as u64, getrandom_syscall),
     (syscall_const::CLONE3_SYSCALL as u64, fork_syscall),
+    (syscall_const::FACCESSAT2_SYSCALL as u64, faccessat_syscall),
 
 ];

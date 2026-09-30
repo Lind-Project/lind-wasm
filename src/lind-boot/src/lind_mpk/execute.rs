@@ -210,6 +210,7 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
         supervisor_stack_base: stack_base as usize,
         supervisor_stack_size: total_size,
         cage_ids: std::sync::Mutex::new(std::collections::HashSet::new()),
+        exit_stack: std::sync::atomic::AtomicUsize::new(current_host_rsp()),
         child_tid: std::sync::atomic::AtomicU64::new(0),
     })
 }
@@ -317,6 +318,24 @@ fn mpk_debug(message: impl AsRef<str>) {
     if mpk_debug_enabled() {
         eprintln!("[lind-mpk] {}", message.as_ref());
     }
+}
+
+#[cfg(target_arch = "x86_64")]
+fn current_host_rsp() -> usize {
+    let rsp: usize;
+    unsafe {
+        asm!(
+            "mov %rsp, {out}",
+            out = out(reg) rsp,
+            options(nostack, preserves_flags, att_syntax),
+        );
+    }
+    rsp
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn current_host_rsp() -> usize {
+    0
 }
 
 /// Writes `args` and `envs` onto the cage's own stack (`stack_top`, growing
@@ -506,24 +525,38 @@ extern "C" fn lind_syscall_handler(
     number: i64,
     cage_id: u64
 ) -> i64 {
-    threei::make_syscall(
+    let nargs = _nargs.clamp(0, 6) as usize;
+
+    let arg1 = if nargs >= 1 { a1 as u64 } else { UNUSED_ARG };
+    let arg2 = if nargs >= 2 { a2 as u64 } else { UNUSED_ARG };
+    let arg3 = if nargs >= 3 { a3 as u64 } else { UNUSED_ARG };
+    let arg4 = if nargs >= 4 { a4 as u64 } else { UNUSED_ARG };
+    let arg5 = if nargs >= 5 { a5 as u64 } else { UNUSED_ARG };
+    let arg6 = if nargs >= 6 { a6 as u64 } else { UNUSED_ARG };
+
+    let a1_cid = cage_id;
+    let a2_cid = cage_id;
+    let retval = threei::make_syscall(
         cage_id as u64, // self_cageid
         number as u64,
         0,                    // _syscall_name: unused for native
         cage_id as u64, // target_cageid
-        a1 as u64,
+        arg1,
+        a1_cid,
+        arg2,
+        a2_cid,
+        arg3,
         cage_id as u64,
-        a2 as u64,
+        arg4,
         cage_id as u64,
-        a3 as u64,
+        arg5,
         cage_id as u64,
-        a4 as u64,
+        arg6,
         cage_id as u64,
-        a5 as u64,
-        cage_id as u64,
-        a6 as u64,
-        cage_id as u64,
-    )
+    );
+
+    crate::lind_mpk::signals::handle_signal(cage_id, None);
+    retval
 }
 
 
@@ -531,6 +564,11 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
     mpk_debug("initializing lind-mpk");
     // Publish the manager globally so mpk_clone_syscall_entry can reach it.
     LIND_MANAGER.set(lind_manager).ok();
+
+    crate::lind_mpk::signals::register_kill_syscall_handler()
+        .expect("failed to register MPK kill syscall handler");
+    crate::lind_mpk::signals::register_os_signal_handlers()
+        .expect("failed to register MPK process signal handlers");
 
     threei::register_trampoline(
         threei_const::RUNTIME_TYPE_MPK,
@@ -808,7 +846,7 @@ fn exec_mpk_internal(
         let mut grate_thread: MpkCageThreadInfo = MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: *grate_cage_id,
-            stack_addr: 0,
+            stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
         };
@@ -866,12 +904,17 @@ fn exec_mpk_internal(
         Some((current_os_tid, MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: cage_id,
-            stack_addr: 0,
+            stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);
+    crate::lind_mpk::signals::register_mpk_memory_region(
+        cage_id,
+        memory_base as usize,
+        MPK_MEMORY_SIZE,
+    );
     cage.runtime_type.store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
     mpk_debug(format!("updated MPKRuntimeInfo for cage {} (main tid={})", cage_id, current_os_tid));
 
@@ -1133,12 +1176,17 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         Some((tid, MpkCageThreadInfo {
             thread_info: Arc::new(thread_info),
             grate_cage_id: cage_id,
-            stack_addr: 0,
+            stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);
+    crate::lind_mpk::signals::register_mpk_memory_region(
+        cage_id,
+        memory_base as usize,
+        MPK_MEMORY_SIZE,
+    );
     cage.runtime_type.store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
     mpk_debug(format!("MPKRuntimeInfo stored in cage {} (main tid={})", cage_id, tid));
 
