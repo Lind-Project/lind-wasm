@@ -971,16 +971,35 @@ pub(crate) fn read_wasm_or_cwasm_bytes(
 
 /// Load a Wasm module from disk, supporting both `.wasm` and precompiled `.cwasm` files.
 ///
-/// The file is read into memory and handed to `read_wasm_or_cwasm_bytes`, which
-/// deserializes a precompiled module or compiles a `.wasm` from source.
+/// The function probes the file header via `Engine::detect_precompiled_file`.
+/// If the file is a precompiled module it is deserialized directly (skipping
+/// compilation). Otherwise it is compiled from source via `Module::from_file`.
 fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
-    // Read the file into memory and go through the bytes loader. `Module::deserialize_file`
-    // maps the file with a file-backed mmap, which is not supported inside an SGX enclave
-    // (enarx/sallyport only provides anonymous mappings). The bytes path deserializes from a
-    // buffer the same way the main module does when it arrives via `wasm_bytes`.
-    let bytes =
-        std::fs::read(path).with_context(|| format!("failed to read module {}", path.display()))?;
-    read_wasm_or_cwasm_bytes(engine, &bytes, &path.display().to_string())
+    // `detect_precompiled_file` *expects* input to already be an ELF file. It is used to detect
+    // whether this ELF matches the current host architecture.
+    //
+    // When passing in a .wasm file, the ELF parsing unwinds early. (`ElfFile64::parse(&read_cache)?;`)
+    // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
+    match Engine::detect_precompiled_file(path) {
+        Ok(_) => match unsafe { Module::deserialize_file(engine, path) } {
+            Ok(module) => Ok(module),
+            // SGX enclaves refuse file-backed mmap with ENOTSUP.
+            Err(e) if e.downcast_ref::<rustix::io::Errno>() == Some(&rustix::io::Errno::NOTSUP) => {
+                let bytes = std::fs::read(path)
+                    .with_context(|| format!("failed to read module {}", path.display()))?;
+                read_wasm_or_cwasm_bytes(engine, &bytes, &path.display().to_string())
+            }
+            Err(e) => Err(anyhow::Error::from(e)).with_context(|| {
+                format!(
+                    "failed to deserialize precompiled module {}",
+                    path.display()
+                )
+            }),
+        },
+        Err(_) => Module::from_file(engine, path)
+            .map_err(anyhow::Error::from)
+            .with_context(|| format!("failed to compile module {}", path.display())),
+    }
 }
 
 /// This function takes a Wasm function (Func) and a list of string arguments, parses the
