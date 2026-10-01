@@ -1,4 +1,5 @@
 pub mod execute;
+pub mod loader;
 pub mod syscalls;
 pub mod RuntimeInfo;
 pub mod trampoline;

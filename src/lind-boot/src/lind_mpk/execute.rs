@@ -5,6 +5,12 @@
 
 use crate::cli::CliOptions;
 use wasmtime_lind_multi_process::THREAD_START_ID;
+use crate::lind_mpk::loader::{
+    auxv,
+    build_process_auxv,
+    mpk_load_ldso_and_binary_with_info,
+    ProcessAuxv,
+};
 use crate::lind_mpk::syscalls::{
     ENABLE_INTERPOSE_PTR, LIND_MANAGER, NO_INTERPOSE,
     mpk_clone_syscall_entry, mpk_exit_syscall_entry, mpk_make_threei_call_wrapper,
@@ -21,7 +27,7 @@ use libc::{c_char, c_int, c_ulong, c_void};
 use std::arch::asm;
 use std::sync::atomic::{Ordering, AtomicU64};
 use std::env;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 /// Minimal reproduction of the `link_map` struct from `<link.h>`.
 /// The libc crate does not expose this type, so we define only the fields we
@@ -58,6 +64,8 @@ const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
 // own vmmap so it is backed by memory the guest owns.
 const CAGE_STACK_SIZE: usize = 8 * 1024 * 1024;
 pub const CAGE_STACK_GUARD: usize = 4096;
+
+const DEFAULT_LDSO_PATH: &str = "/lib/ld.so";
 
 /// C main entrypoint signature.
 type MainFn = unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
@@ -320,6 +328,39 @@ fn mpk_debug(message: impl AsRef<str>) {
     }
 }
 
+fn merge_host_ld_env_vars(vars: &mut Vec<(String, Option<String>)>) {
+    let existing: std::collections::HashSet<String> =
+        vars.iter().map(|(k, _)| k.clone()).collect();
+
+    for (key, value) in std::env::vars() {
+        if key.starts_with("LD_") && !existing.contains(&key) {
+            vars.push((key, Some(value)));
+        }
+    }
+}
+
+fn ensure_ld_library_path_contains_lib_elf(vars: &mut Vec<(String, Option<String>)>) {
+    const ELF_LIB_DIR: &str = "/lib/elf";
+
+    if let Some((_, value)) = vars.iter_mut().find(|(key, _)| key == "LD_LIBRARY_PATH") {
+        let mut current = value.clone().unwrap_or_default();
+        let has_elf_lib_dir = current.split(':').any(|segment| segment == ELF_LIB_DIR);
+        if !has_elf_lib_dir {
+            if current.is_empty() {
+                current.push_str(ELF_LIB_DIR);
+            }
+            else {
+                current.push(':');
+                current.push_str(ELF_LIB_DIR);
+            }
+            *value = Some(current);
+        }
+    }
+    else {
+        vars.push(("LD_LIBRARY_PATH".to_string(), Some(ELF_LIB_DIR.to_string())));
+    }
+}
+
 #[cfg(target_arch = "x86_64")]
 fn current_host_rsp() -> usize {
     let rsp: usize;
@@ -421,6 +462,167 @@ unsafe fn call_main_on_stack(
         );
     }
     std::hint::unreachable_unchecked()
+}
+
+unsafe fn write_process_entry_stack(
+    stack_top: usize,
+    args: &[String],
+    envs: &[(String, Option<String>)],
+    execfn: &str,
+    auxv: &ProcessAuxv,
+) -> usize {
+    let mut cursor = stack_top;
+
+    let mut write_str = |s: &str| -> *const c_char {
+        let bytes = s.as_bytes();
+        cursor -= bytes.len() + 1;
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), cursor as *mut u8, bytes.len());
+            *((cursor + bytes.len()) as *mut u8) = 0;
+        }
+        cursor as *const c_char
+    };
+
+    let arg_ptrs: Vec<*const c_char> = args.iter().map(|s| write_str(s)).collect();
+    let env_strings: Vec<String> = envs
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v.as_deref().unwrap_or("")))
+        .collect();
+    let env_ptrs: Vec<*const c_char> = env_strings.iter().map(|s| write_str(s)).collect();
+    let execfn_ptr = write_str(execfn);
+    let platform_ptr = write_str("x86_64");
+
+    let mut random_bytes = [0u8; 16];
+    let got = unsafe {
+        libc::syscall(
+            libc::SYS_getrandom,
+            random_bytes.as_mut_ptr(),
+            random_bytes.len(),
+            0,
+        )
+    };
+    if got != random_bytes.len() as libc::c_long {
+        let seed = (current_tid() as u64) ^ (stack_top as u64) ^ (auxv.entry as u64);
+        for (idx, byte) in random_bytes.iter_mut().enumerate() {
+            let rotated = seed.rotate_left((idx as u32) * 5);
+            *byte = (rotated as u8) ^ ((idx as u8).wrapping_mul(31));
+        }
+    }
+
+    cursor -= random_bytes.len();
+    unsafe {
+        std::ptr::copy_nonoverlapping(random_bytes.as_ptr(), cursor as *mut u8, random_bytes.len());
+    }
+    let random_ptr = cursor as usize;
+
+    cursor &= !(std::mem::align_of::<usize>() - 1);
+
+    let aux_entries = [
+        (auxv::AT_SYSINFO_EHDR, auxv.sysinfo_ehdr),
+        (auxv::AT_MINSIGSTKSZ, auxv.minsigstksz),
+        (auxv::AT_HWCAP, auxv.hwcap),
+        (auxv::AT_PAGESZ, auxv.pagesz),
+        (auxv::AT_CLKTCK, auxv.clktck),
+        (auxv::AT_PHDR, auxv.phdr),
+        (auxv::AT_PHENT, auxv.phent),
+        (auxv::AT_PHNUM, auxv.phnum),
+        (auxv::AT_BASE, auxv.base),
+        (auxv::AT_FLAGS, auxv.flags),
+        (auxv::AT_ENTRY, auxv.entry),
+        (auxv::AT_UID, auxv.uid),
+        (auxv::AT_EUID, auxv.euid),
+        (auxv::AT_GID, auxv.gid),
+        (auxv::AT_EGID, auxv.egid),
+        (auxv::AT_SECURE, auxv.secure),
+        (auxv::AT_RANDOM, random_ptr),
+        (auxv::AT_HWCAP2, auxv.hwcap2),
+        (auxv::AT_EXECFN, execfn_ptr as usize),
+        (auxv::AT_PLATFORM, platform_ptr as usize),
+        (auxv::AT_3ITRMP_PTR, auxv.threei_trampoline_ptr),
+    ];
+
+    // Keep the final entry RSP 16-byte aligned while preserving strict
+    // argc/argv/envp/auxv adjacency expected by ELF process startup.
+    let entry_region_words = 1
+        + (arg_ptrs.len() + 1)
+        + (env_ptrs.len() + 1)
+        + (aux_entries.len() + 1) * 2;
+
+    let entry_region_bytes = entry_region_words * std::mem::size_of::<usize>();
+    let tentative_entry_rsp = cursor
+        .checked_sub(entry_region_bytes)
+        .expect("entry region underflow while building process stack");
+    let align_fix = tentative_entry_rsp & 0xf;
+    if align_fix != 0 {
+        debug_assert_eq!(align_fix, std::mem::size_of::<usize>());
+        cursor -= align_fix;
+    }
+
+    cursor -= (aux_entries.len() + 1) * 2 * std::mem::size_of::<usize>();
+    let auxp = cursor as *mut usize;
+    for (i, (kind, value)) in aux_entries.iter().enumerate() {
+        unsafe {
+            std::ptr::write(auxp.add(2 * i), *kind);
+            std::ptr::write(auxp.add(2 * i + 1), *value);
+        }
+    }
+    unsafe {
+        std::ptr::write(auxp.add(2 * aux_entries.len()), auxv::AT_NULL);
+        std::ptr::write(auxp.add(2 * aux_entries.len() + 1), 0);
+    }
+
+    cursor -= (env_ptrs.len() + 1) * std::mem::size_of::<usize>();
+    let envp = cursor as *mut usize;
+    for (i, ptr) in env_ptrs.iter().enumerate() {
+        unsafe { std::ptr::write(envp.add(i), *ptr as usize) };
+    }
+    unsafe { std::ptr::write(envp.add(env_ptrs.len()), 0) };
+
+    cursor -= (arg_ptrs.len() + 1) * std::mem::size_of::<usize>();
+    let argv = cursor as *mut usize;
+    for (i, ptr) in arg_ptrs.iter().enumerate() {
+        unsafe { std::ptr::write(argv.add(i), *ptr as usize) };
+    }
+    unsafe { std::ptr::write(argv.add(arg_ptrs.len()), 0) };
+
+    cursor -= std::mem::size_of::<usize>();
+    unsafe { std::ptr::write(cursor as *mut usize, args.len()) };
+
+    mpk_debug(format!(
+        "entry stack layout: argc@{:#x} argv@{:#x} envp@{:#x} auxv@{:#x} rsp={:#x}",
+        cursor,
+        argv as usize,
+        envp as usize,
+        auxp as usize,
+        cursor,
+    ));
+    debug_assert_eq!(cursor & 0xf, 0, "entry stack pointer must be 16-byte aligned");
+
+    cursor
+}
+
+unsafe fn jump_to_entrypoint(new_rsp: usize, entrypoint: usize) -> ! {
+    unsafe {
+        asm!(
+            "mov {new_rsp}, %rsp",
+            "jmp *{entry}",
+            new_rsp = in(reg) new_rsp,
+            entry = in(reg) entrypoint,
+            options(noreturn, att_syntax),
+        );
+    }
+}
+
+unsafe extern "C" fn noop_enable_interpose(
+    _handler: Option<unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, i32, i64, u64) -> i64>,
+    _make_threei_call: Option<extern "C" fn(
+        u64, u64, u64, u64,
+        u64, u64, u64, u64,
+        u64, u64, u64, u64,
+        u64, u64, u64, u64,
+    ) -> i64>,
+) -> c_int {
+    0
 }
 
 // ── MPK SyscallRuntime implementation ────────────────────────────────────────
@@ -610,15 +812,13 @@ fn exec_mpk_internal(
         .context("invalid UTF-8 in path")?
         .to_string();
 
-    //step 1.1: locate the .so file, turn it into fully qualified path for dlmopen
+    // step 1.1: locate the .so file and canonicalize it.
     let canonical_so_path = std::fs::canonicalize(&so_path)
         .context("failed to canonicalize .so path")?;
     let so_path = canonical_so_path
         .to_str()
         .context("invalid UTF-8 in .so path")?
         .to_owned();
-
-    let c_so_path = CString::new(so_path.as_str()).context("NUL byte in .so path")?;
 
     mpk_debug(format!("executing new program: {}", so_path));
 
@@ -658,6 +858,8 @@ fn exec_mpk_internal(
             i += 1;
         }
     }
+    merge_host_ld_env_vars(&mut vars);
+    ensure_ld_library_path_contains_lib_elf(&mut vars);
 
     mpk_debug(format!("parsed {} args, {} env vars", args.len(), vars.len()));
 
@@ -730,94 +932,14 @@ fn exec_mpk_internal(
         }
     }
 
-    // Step 5: Load the .so in a fresh dlmopen namespace
-    mpk_debug("calling dlmopen for new guest .so");
-    let handle = unsafe { libc::dlmopen(libc::LM_ID_NEWLM, c_so_path.as_ptr(), libc::RTLD_NOW) };
-    if handle.is_null() {
-        let err_msg = unsafe {
-            let p = libc::dlerror();
-            if p.is_null() {
-                "<unknown dlerror>"
-            } else {
-                CStr::from_ptr(p).to_str().unwrap_or("<utf8 error>")
-            }
-        };
-        bail!("dlmopen failed for {}: {}", so_path, err_msg);
-    }
-    mpk_debug(format!("dlmopen succeeded: handle={handle:p}"));
+    let enable_interpose: EnableInterposeF = noop_enable_interpose;
+    ENABLE_INTERPOSE_PTR.store(noop_enable_interpose as usize as u64, Ordering::Release);
 
-    // Retrieve the namespace id
-    let mut lmid: libc::Lmid_t = 0;
-    unsafe {
-        libc::dlinfo(handle, RTLD_DI_LMID, &mut lmid as *mut _ as *mut c_void);
-    }
-    mpk_debug(format!("namespace id resolved: lmid={lmid}"));
-
-    // Step 6: Walk the link_map chain to find the custom libc
-    let mut lm: *mut LinkMap = std::ptr::null_mut();
-    if unsafe { libc::dlinfo(handle, RTLD_DI_LINKMAP, &mut lm as *mut _ as *mut c_void) } != 0 {
-        unsafe { libc::dlclose(handle) };
-        bail!("dlinfo RTLD_DI_LINKMAP failed");
-    }
-
-    let mut libc_name_ptr: *const c_char = std::ptr::null();
-    let mut current: *mut LinkMap = lm;
-    while !current.is_null() {
-        let name_ptr = unsafe { (*current).l_name };
-        if !name_ptr.is_null() {
-            let name = unsafe { CStr::from_ptr(name_ptr) }.to_str().unwrap_or("");
-            if name.contains("libc.so") {
-                libc_name_ptr = name_ptr;
-                mpk_debug(format!("found custom libc: {name}"));
-                break;
-            }
-        }
-        current = unsafe { (*current).l_next };
-    }
-
-    if libc_name_ptr.is_null() {
-        unsafe { libc::dlclose(handle) };
-        bail!("could not find custom libc in dlmopen namespace for {}", so_path);
-    }
-
-    // Step 7: Obtain handle to the custom libc
-    let libc_handle = unsafe {
-        libc::dlmopen(lmid, libc_name_ptr, libc::RTLD_NOW | libc::RTLD_NOLOAD)
-    };
-    if libc_handle.is_null() {
-        unsafe { libc::dlclose(handle) };
-        bail!("failed to obtain handle to custom libc");
-    }
-    mpk_debug(format!("custom libc handle acquired: {libc_handle:p}"));
-
-    // Step 8: Register syscall interposition handler
-    let sym_name = CString::new("__enable_syscall_interpose").unwrap();
-    let sym_ptr = unsafe { libc::dlsym(libc_handle, sym_name.as_ptr()) };
-    if sym_ptr.is_null() {
-        let err = unsafe {
-            let p = libc::dlerror();
-            if p.is_null() { "<unknown>" } else { CStr::from_ptr(p).to_str().unwrap_or("<utf8>") }
-        };
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
-        bail!("__enable_syscall_interpose not found in custom libc: {}", err);
-    }
-
-    let enable_interpose: EnableInterposeF = unsafe { std::mem::transmute(sym_ptr) };
-    ENABLE_INTERPOSE_PTR.store(sym_ptr as u64, Ordering::Release);
-    
-    // Step 8.1: Save the old list of grates for which a stack is registered. 
-
-    // Step 8.2: Set up supervisor stack and install GS before enabling interpose.
+    // Step 5: Set up supervisor stack and install GS.
     // Returns MpkThreadInfo which is registered in MPKRuntimeInfo::threads below.
     let thread_info = Arc::new(match setup_supervisor_stack(cage_id, current_os_tid) {
         Ok(v) => v,
-        Err(e) => {
-            unsafe { libc::dlclose(libc_handle); libc::dlclose(handle); }
-            return Err(e);
-        }
+        Err(e) => return Err(e),
     });
 
     // Keep the new cage and all restored grates attached to the same
@@ -858,21 +980,7 @@ fn exec_mpk_internal(
         ));
     }
 
-    if NO_INTERPOSE.load(Ordering::Acquire) {
-        mpk_debug("--no-interpose: skipping __enable_syscall_interpose call");
-    } else {
-        let ret = unsafe { enable_interpose(Some(lind_syscall_handler), Some(mpk_make_threei_call_wrapper)) };
-        if ret != 0 {
-            unsafe {
-                libc::dlclose(libc_handle);
-                libc::dlclose(handle);
-            }
-            bail!("__enable_syscall_interpose returned {}", ret);
-        }
-        mpk_debug("syscall interposition handler registered");
-    }
-    
-    // Step 9: Map fresh 4 GB for the new program, initialize vmmap, and update RuntimeInfo.
+    // Step 6: Map fresh 4 GB for the new program and initialize vmmap.
     mpk_debug("mapping 4 GB cage memory for new program with MAP_NORESERVE");
     let memory_base = unsafe {
         libc::mmap(
@@ -885,17 +993,38 @@ fn exec_mpk_internal(
         )
     };
     if memory_base == libc::MAP_FAILED {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
         bail!("mmap for new cage memory failed: {}", std::io::Error::last_os_error());
     }
     mpk_debug(format!("new cage memory mapped at {memory_base:p}"));
     cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
+
+    // Step 7: Load custom ld.so + target binary into cage vmmap.
+    let loaded = {
+        let mut vmmap = cage.vmmap.write();
+        match mpk_load_ldso_and_binary_with_info(DEFAULT_LDSO_PATH, &so_path, &mut vmmap) {
+            Ok(v) => v,
+            Err(e) => {
+                unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+                return Err(e);
+            }
+        }
+    };
+    let process_auxv = match build_process_auxv(
+        &so_path,
+        &loaded,
+        lind_syscall_handler as *const () as usize,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+            return Err(e);
+        }
+    };
+
+    // Step 8: Update RuntimeInfo.
     let mpk_info = MPKRuntimeInfo::new(
-        handle,
-        libc_handle,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
         enable_interpose,
         0,
         memory_base,
@@ -918,42 +1047,22 @@ fn exec_mpk_internal(
     cage.runtime_type.store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
     mpk_debug(format!("updated MPKRuntimeInfo for cage {} (main tid={})", cage_id, current_os_tid));
 
-    //Note: register_mpk_handler_for_cage does not need to be called. The handler is installed through inheritance
+    // Note: register_mpk_handler_for_cage does not need to be called.
 
-
-    // Step 10: Allocate a stack for the guest inside the cage's own vmmap,
-    // write argv/envp onto it, and call main there.
+    // Step 9: Allocate a stack for the guest inside the cage's own vmmap,
+    // write argc/argv/envp entry layout, then jump into ld.so.
     let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
-    let (argc, argv_ptr, envp_ptr, new_rsp) =
-        unsafe { write_args_envs_to_cage_stack(cage_stack_top, &args, &vars) };
+    let entry_rsp = unsafe {
+        write_process_entry_stack(cage_stack_top, &args, &vars, &so_path, &process_auxv)
+    };
 
-    let main_sym = CString::new("main").unwrap();
-    let main_ptr = unsafe { libc::dlsym(handle, main_sym.as_ptr()) };
-    if main_ptr.is_null() {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
-        bail!("could not find 'main' symbol in {}", so_path);
-    }
-    mpk_debug(format!("resolved main at {main_ptr:p}"));
-
-    let exit_sym = CString::new("exit").unwrap();
-    let exit_ptr = unsafe { libc::dlsym(libc_handle, exit_sym.as_ptr()) };
-    if exit_ptr.is_null() {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
-        bail!("could not find 'exit' symbol in {}", so_path);
-    }
-    mpk_debug(format!("resolved exit at {exit_ptr:p}"));
-
-    let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
-    let exit_fn: ExitFn = unsafe { std::mem::transmute(exit_ptr) };
-
-    mpk_debug(format!("calling main on cage stack (rsp={:#x}) with argc={argc}", new_rsp));
-    unsafe { call_main_on_stack(new_rsp, main_fn, exit_fn, argc, argv_ptr, envp_ptr) }
+    mpk_debug(format!(
+        "jumping to ld.so entrypoint {:#x} on cage stack rsp={:#x} (binary_entry={:#x})",
+        loaded.ldso_entrypoint,
+        entry_rsp,
+        loaded.binary_entrypoint,
+    ));
+    unsafe { jump_to_entrypoint(entry_rsp, loaded.ldso_entrypoint as usize) }
 }
 
 pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
@@ -967,178 +1076,25 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
 
     mpk_debug(format!("starting execute_mpk for {}, cwd={}", so_path, std::env::current_dir().unwrap().display()));
     
-    //step 0: locate the .so file, turn it into fully qualified path for dlmopen
+    // step 0: locate the .so file and canonicalize it.
     let canonical_so_path = std::fs::canonicalize(&so_path)
         .context("failed to canonicalize .so path")?;
     let so_path = canonical_so_path
         .to_str()
         .context("invalid UTF-8 in .so path")?
         .to_owned();
+    let enable_interpose: EnableInterposeF = noop_enable_interpose;
+    ENABLE_INTERPOSE_PTR.store(noop_enable_interpose as usize as u64, Ordering::Release);
 
-    let c_so_path = CString::new(so_path.as_str()).context("NUL byte in .so path")?;
-
-
-    // Step 1: Load the .so in a fresh dlmopen namespace so its custom glibc
-    //         is completely isolated from the host libc.
-    mpk_debug("calling dlmopen for guest .so");
-    let handle =
-        unsafe { libc::dlmopen(libc::LM_ID_NEWLM, c_so_path.as_ptr(), libc::RTLD_NOW) };
-    if handle.is_null() {
-        let err_msg = unsafe {
-            let p = libc::dlerror();
-            if p.is_null() {
-                "<unknown dlerror>"
-            } else {
-                CStr::from_ptr(p).to_str().unwrap_or("<utf8 error>")
-            }
-        };
-        bail!("dlmopen failed for {}: {}", so_path, err_msg);
-    }
-    mpk_debug(format!("dlmopen succeeded: handle={handle:p}"));
-
-    // Retrieve the namespace id assigned to this new namespace.
-    let mut lmid: libc::Lmid_t = 0;
-    mpk_debug("querying RTLD_DI_LMID");
-    unsafe {
-        libc::dlinfo(
-            handle,
-            RTLD_DI_LMID,
-            &mut lmid as *mut _ as *mut c_void,
-        );
-    }
-    mpk_debug(format!("namespace id resolved: lmid={lmid}"));
-
-    // Step 2: Walk the link_map chain to find the custom libc loaded in the
-    //         new namespace alongside our .so.
-    let mut lm: *mut LinkMap = std::ptr::null_mut();
-    mpk_debug("querying RTLD_DI_LINKMAP");
-    if unsafe {
-        libc::dlinfo(
-            handle,
-            RTLD_DI_LINKMAP,
-            &mut lm as *mut _ as *mut c_void,
-        )
-    } != 0
-    {
-        unsafe { libc::dlclose(handle) };
-        bail!("dlinfo RTLD_DI_LINKMAP failed");
-    }
-
-    mpk_debug(format!("walking link_map chain starting at {lm:p}"));
-
-    let mut libc_name_ptr: *const c_char = std::ptr::null();
-    let mut current: *mut LinkMap = lm;
-    while !current.is_null() {
-        let name_ptr = unsafe { (*current).l_name };
-        if !name_ptr.is_null() {
-            let name = unsafe { CStr::from_ptr(name_ptr) }.to_str().unwrap_or("");
-            mpk_debug(format!("link_map entry: {name}"));
-            if name.contains("libc.so") {
-                libc_name_ptr = name_ptr;
-                mpk_debug(format!("selected custom libc: {name}"));
-                break;
-            }
-        }
-        current = unsafe { (*current).l_next };
-    }
-
-    if libc_name_ptr.is_null() {
-        unsafe { libc::dlclose(handle) };
-        bail!(
-            "could not find custom libc in dlmopen namespace for {}",
-            so_path
-        );
-    }
-
-    // Step 3: Obtain a handle to the custom libc (already mapped;
-    //         RTLD_NOLOAD prevents a second load) so we can resolve its
-    //         private symbols.
-    mpk_debug("opening custom libc with RTLD_NOLOAD");
-    let libc_handle = unsafe {
-        libc::dlmopen(
-            lmid,
-            libc_name_ptr,
-            libc::RTLD_NOW | libc::RTLD_NOLOAD,
-        )
-    };
-    if libc_handle.is_null() {
-        unsafe { libc::dlclose(handle) };
-        bail!("failed to obtain handle to custom libc");
-    }
-    mpk_debug(format!("custom libc handle acquired: {libc_handle:p}"));
-
-    // Step 4: Register lind_syscall_handler as the interposition hook.
-    //         After this point every syscall issued from inside the new
-    //         namespace goes through 3i → RawPOSIX instead of the kernel.
-    let sym_name = CString::new("__enable_syscall_interpose").unwrap();
-    mpk_debug("resolving __enable_syscall_interpose");
-    let sym_ptr = unsafe { libc::dlsym(libc_handle, sym_name.as_ptr()) };
-    if sym_ptr.is_null() {
-        let err = unsafe {
-            let p = libc::dlerror();
-            if p.is_null() {
-                "<unknown>"
-            } else {
-                CStr::from_ptr(p).to_str().unwrap_or("<utf8>")
-            }
-        };
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
-        mpk_debug(format!("resolved __enable_syscall_interpose at {sym_ptr:p}"));
-        bail!(
-            "__enable_syscall_interpose not found in custom libc: {}",
-            err
-        );
-    }
-
-    mpk_debug("registering syscall interposition handler");
-
-    let enable_interpose: EnableInterposeF = unsafe { std::mem::transmute(sym_ptr) };
-    // Publish the resolved function pointer so that mpk_clone_syscall_entry can
-    // re-register a new handler inside the child process after fork.
-    ENABLE_INTERPOSE_PTR.store(sym_ptr as u64, Ordering::Release);
-
-    // Step 4.2: Allocate the supervisor stack and set GS before enabling interpose.
+    // Step 1: Allocate the supervisor stack and set GS.
     // Returns MpkThreadInfo which is registered in MPKRuntimeInfo::threads below.
     let thread_info = match setup_supervisor_stack(cage_id, current_tid()) {
         Ok(v) => v,
-        Err(e) => {
-            unsafe { libc::dlclose(libc_handle); libc::dlclose(handle); }
-            return Err(e);
-        }
+        Err(e) => return Err(e),
     };
 
-    if NO_INTERPOSE.load(Ordering::Acquire) {
-        mpk_debug("--no-interpose: skipping __enable_syscall_interpose call");
-    } else {
-        let ret = unsafe { enable_interpose(Some(lind_syscall_handler), Some(mpk_make_threei_call_wrapper)) };
-        if ret != 0 {
-            unsafe {
-                libc::dlclose(libc_handle);
-                libc::dlclose(handle);
-            }
-            bail!("__enable_syscall_interpose returned {}", ret);
-        }
-        mpk_debug("syscall interposition handler registered successfully");
-    }
-
-    //step 4.1: debug print the resolved addresses of fork, clone, __clone_internal
-    let fork_sym = CString::new("fork").unwrap();
-    let fork_ptr = unsafe { libc::dlsym(libc_handle, fork_sym.as_ptr()) };
-    mpk_debug(format!("resolved fork at {fork_ptr:p}"));
-
-    let clone_sym = CString::new("clone").unwrap();
-    let clone_ptr = unsafe { libc::dlsym(libc_handle, clone_sym.as_ptr()) };
-    mpk_debug(format!("resolved clone at {clone_ptr:p}"));
-
-    let clone_internal_sym = CString::new("__clone_internal").unwrap();
-    let clone_internal_ptr = unsafe { libc::dlsym(libc_handle, clone_internal_sym.as_ptr()) };
-    mpk_debug(format!("resolved __clone_internal at {clone_internal_ptr:p}"));
-
-    // Step 4.2: Map 4 GB for the cage's virtual address space with MAP_NORESERVE,
-    // then set up MPKRuntimeInfo and store it in the cage.
+    // Step 2: Map 4 GB for the cage's virtual address space with MAP_NORESERVE,
+    // then load ld.so + binary into vmmap and store MPKRuntimeInfo.
     mpk_debug("mapping 4 GB cage memory with MAP_NORESERVE");
     let memory_base = unsafe {
         libc::mmap(
@@ -1151,10 +1107,6 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         )
     };
     if memory_base == libc::MAP_FAILED {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
         bail!("mmap failed: {}", std::io::Error::last_os_error());
     }
     mpk_debug(format!("cage memory mapped at {memory_base:p}"));
@@ -1163,11 +1115,33 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     let cage = get_cage(cage_id)
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
     cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
+    let loaded = {
+        let mut vmmap = cage.vmmap.write();
+        match mpk_load_ldso_and_binary_with_info(DEFAULT_LDSO_PATH, &so_path, &mut vmmap) {
+            Ok(v) => v,
+            Err(e) => {
+                unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+                return Err(e);
+            }
+        }
+    };
+    let process_auxv = match build_process_auxv(
+        &so_path,
+        &loaded,
+        lind_syscall_handler as *const () as usize,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+            return Err(e);
+        }
+    };
+
     let tid = current_tid();
     thread_info.register_cage(cage_id);
     let mpk_info = MPKRuntimeInfo::new(
-        handle,
-        libc_handle,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
         enable_interpose,
         0,
         memory_base,
@@ -1190,13 +1164,13 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     cage.runtime_type.store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
     mpk_debug(format!("MPKRuntimeInfo stored in cage {} (main tid={})", cage_id, tid));
 
-    //Step 5: Notify threei of the cage runtime type
+    // Step 3: Notify threei of the cage runtime type
     // (syscall handler registration is now done once at boot by shims::register_syscall_entries)
     threei::set_cage_runtime(cage_id, threei_const::RUNTIME_TYPE_MPK);
     register_mpk_handler_for_cage(cage_id)?;
 
 
-    //Step 6: initialize signalling
+    // Step 4: initialize signalling
 
     // MPK has no Wasmtime epoch; pass a pointer to a static zero so
     // lind_signal_init stores a valid (disabled) epoch handler address.
@@ -1209,42 +1183,30 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     );
 
 
-
-    // Step 7: Allocate a stack for the guest inside the cage's own vmmap and
-    // write argv/envp onto it.
+    // Step 5: Allocate a stack for the guest inside the cage's own vmmap and
+    // write argc/argv/envp entry layout.
     let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
-    let (argc, argv_ptr, envp_ptr, new_rsp) = unsafe {
-        write_args_envs_to_cage_stack(cage_stack_top, &lindboot_cli.args, &lindboot_cli.vars)
+    let mut launch_vars = lindboot_cli.vars.clone();
+    merge_host_ld_env_vars(&mut launch_vars);
+    ensure_ld_library_path_contains_lib_elf(&mut launch_vars);
+
+    let entry_rsp = unsafe {
+        write_process_entry_stack(
+            cage_stack_top,
+            &lindboot_cli.args,
+            &launch_vars,
+            &so_path,
+            &process_auxv,
+        )
     };
 
-    let main_sym = CString::new("main").unwrap();
-    mpk_debug("resolving main");
-    let main_ptr = unsafe { libc::dlsym(handle, main_sym.as_ptr()) };
-    if main_ptr.is_null() {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
-        bail!("could not find 'main' symbol in {}", so_path);
-    }
-    mpk_debug(format!("resolved main at {main_ptr:p}"));
+    mpk_debug(format!(
+        "jumping to ld.so entrypoint {:#x} on cage stack rsp={:#x} (binary_entry={:#x})",
+        loaded.ldso_entrypoint,
+        entry_rsp,
+        loaded.binary_entrypoint,
+    ));
 
-    let exit_sym = CString::new("exit").unwrap();
-    let exit_ptr = unsafe { libc::dlsym(libc_handle, exit_sym.as_ptr()) };
-    if exit_ptr.is_null() {
-        unsafe {
-            libc::dlclose(libc_handle);
-            libc::dlclose(handle);
-        }
-        bail!("could not find 'exit' symbol in {}", so_path);
-    }
-    mpk_debug(format!("resolved exit at {exit_ptr:p}"));
-
-    let main_fn: MainFn = unsafe { std::mem::transmute(main_ptr) };
-    let exit_fn: ExitFn = unsafe { std::mem::transmute(exit_ptr) };
-
-    mpk_debug(format!("calling main on cage stack (rsp={:#x}) with argc={argc}", new_rsp));
-
-    // Step 7: Call main on the newly allocated cage stack.
-    unsafe { call_main_on_stack(new_rsp, main_fn, exit_fn, argc, argv_ptr, envp_ptr) }
+    // Step 6: Transfer control to the loader entrypoint; execution returns via guest exit paths.
+    unsafe { jump_to_entrypoint(entry_rsp, loaded.ldso_entrypoint as usize) }
 }

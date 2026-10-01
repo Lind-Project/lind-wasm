@@ -1354,8 +1354,12 @@ extern "C" fn mpk_exit_syscall_entry_inner(
                     // Close the dlmopen handles for this cage's isolated namespace
                     mpk_debug("mpk_exit: closing dlmopen handles");
                     unsafe {
-                        libc::dlclose(mpk_info.loader_libc_handle);
-                        libc::dlclose(mpk_info.loader_cage_handle);
+                        if !mpk_info.loader_libc_handle.is_null() {
+                            libc::dlclose(mpk_info.loader_libc_handle);
+                        }
+                        if !mpk_info.loader_cage_handle.is_null() {
+                            libc::dlclose(mpk_info.loader_cage_handle);
+                        }
                     }
                     // Unmap the cage's 4 GB virtual address space.
                     if !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
