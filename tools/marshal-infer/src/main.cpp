@@ -14,6 +14,7 @@
 #include "Annotations.h"
 #include "Config.h"
 #include "Infer.h"
+#include "LlmPrompt.h"
 #include "ParamTree.h"
 
 #include "llvm/IR/DebugInfoMetadata.h"
@@ -25,8 +26,10 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSet.h"
 
 #include <fstream>
@@ -57,6 +60,32 @@ static cl::opt<std::string> ConfigFile("config",
              "checked-in per-symbol contracts, and coverage thresholds. "
              "Omitting this reproduces the built-in defaults exactly."),
     cl::value_desc("file"));
+
+// An inert inspection mode that writes the exact prompt (+ manifest) a
+// future LLM backend would receive for one function, and exits -- no
+// network request, no model SDK, no provider credentials, no marshal
+// decision. Kept as a wholly separate early-exit path in main() (see below)
+// rather than threaded through the ordinary inference pipeline, so passing
+// none of these flags reproduces ordinary static-inference output
+// byte-for-byte.
+static cl::opt<bool> LlmPromptOnly("llm-prompt-only",
+    cl::desc("write the Stage 1 LLM prompt/manifest for --function and exit; "
+             "makes no network request and requires no credentials"));
+static cl::opt<std::string> LlmFunction("function",
+    cl::desc("function name to build an LLM prompt for (with --llm-prompt-only)"),
+    cl::value_desc("name"));
+static cl::opt<std::string> LlmPromptOutput("prompt-output",
+    cl::desc("directory to write FUNCTION.prompt.txt/.json into "
+             "(with --llm-prompt-only)"),
+    cl::value_desc("dir"));
+static cl::opt<unsigned> LlmMaxCallDepth("llm-max-call-depth",
+    cl::desc("relevant-callee discovery depth limit (default 2)"), cl::init(2));
+static cl::opt<unsigned> LlmMaxFunctions("llm-max-functions",
+    cl::desc("relevant-callee discovery function-count limit (default 8)"),
+    cl::init(8));
+static cl::opt<unsigned> LlmMaxInstructions("llm-max-instructions",
+    cl::desc("relevant-callee discovery total-instruction limit (default 6000)"),
+    cl::init(6000));
 
 // --------------------------------------------------------------------------
 // Human-readable tree view (debugging)
@@ -443,6 +472,89 @@ int main(int argc, char **argv) {
         res.first->second = nullptr; // >1 conflicting definition -- ambiguous
     }
     mods.push_back(std::move(mod));
+  }
+
+  // LLM-prompt early exit: entirely separate from the ordinary inference
+  // pipeline below it -- reuses only module loading and `calleeIndex` (so
+  // cross-module delegation resolves identically to static inference),
+  // never touches Config/contracts/coverage, and never reaches Pass 2 or
+  // JSON emission. No network request, no model SDK.
+  if (LlmPromptOnly) {
+    if (LlmFunction.empty() || LlmPromptOutput.empty()) {
+      errs() << "marshal-infer: --llm-prompt-only requires both --function "
+                "and --prompt-output\n";
+      return 1;
+    }
+    // maxFunctions=0 is incompatible with the entry-always-included policy
+    // (LlmPrompt.cpp's own documented choice) -- there would be no way to
+    // include even the entry function itself. Rejected here, at the
+    // boundary, rather than given silent/surprising behavior inside
+    // buildLlmPrompt (see LlmPromptLimits's own precondition comment).
+    if (LlmMaxFunctions == 0) {
+      errs() << "marshal-infer: --llm-max-functions must be at least 1 (the "
+                "entry function itself always counts as one)\n";
+      return 1;
+    }
+    LlmPromptLimits limits;
+    limits.maxCallDepth = LlmMaxCallDepth;
+    limits.maxFunctions = LlmMaxFunctions;
+    limits.maxInstructions = LlmMaxInstructions;
+
+    LlmPromptResult result;
+    std::string perr;
+    if (!buildLlmPrompt(LlmFunction, mods, calleeIndex, limits, result, perr)) {
+      errs() << "marshal-infer: --llm-prompt-only: " << perr << "\n";
+      return 1;
+    }
+
+    std::error_code dec = sys::fs::create_directories(LlmPromptOutput);
+    if (dec) {
+      errs() << "marshal-infer: cannot create " << LlmPromptOutput << ": "
+             << dec.message() << "\n";
+      return 1;
+    }
+    // The artifact's on-disk name is a SANITIZED, deterministic derivation
+    // of the function name (never the raw symbol) -- a symbol containing a
+    // path separator or other unusual character must never be able to
+    // place a written file outside LlmPromptOutput. The exact original
+    // name is still recoverable from the manifest's own "function" field.
+    std::string baseName = sanitizeFunctionNameForFilename(LlmFunction);
+    SmallString<256> promptPath(LlmPromptOutput);
+    sys::path::append(promptPath, baseName + ".prompt.txt");
+    SmallString<256> manifestPath(LlmPromptOutput);
+    sys::path::append(manifestPath, baseName + ".prompt.json");
+
+    // sanitizeFunctionNameForFilename's character allowlist ([A-Za-z0-9_.-])
+    // makes both path components single, separator-free segments by
+    // construction -- no '/', no '\', and the ".."-as-a-whole-result case
+    // is caught and prefixed there specifically -- so `baseName` can never
+    // resolve outside LlmPromptOutput once joined with sys::path::append.
+    assert(sys::path::filename(promptPath) == StringRef(baseName + ".prompt.txt") &&
+           "sanitized artifact name must be a single path component");
+
+    std::error_code ec1, ec2;
+    raw_fd_ostream promptOut(promptPath, ec1, sys::fs::OF_Text);
+    if (ec1) {
+      errs() << "marshal-infer: cannot write " << promptPath << ": "
+             << ec1.message() << "\n";
+      return 1;
+    }
+    promptOut << result.promptText;
+    promptOut.close();
+
+    raw_fd_ostream manifestOut(manifestPath, ec2, sys::fs::OF_Text);
+    if (ec2) {
+      errs() << "marshal-infer: cannot write " << manifestPath << ": "
+             << ec2.message() << "\n";
+      return 1;
+    }
+    manifestOut << result.manifestJson;
+    manifestOut.close();
+
+    errs() << "marshal-infer: wrote " << promptPath << " and " << manifestPath
+           << " (no LLM was called; eligible_for_llm_inference="
+           << (isEligibleForLlmInference(result.evidence) ? "true" : "false") << ")\n";
+    return 0;
   }
 
   // Contract validation failures: a stale or incompatible checked-in

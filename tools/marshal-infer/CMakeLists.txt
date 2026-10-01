@@ -46,6 +46,7 @@ add_executable(marshal-infer
   src/Infer.cpp
   src/Annotations.cpp
   src/Config.cpp
+  src/LlmPrompt.cpp
 )
 target_include_directories(marshal-infer PRIVATE
   ${LLVM_INCLUDE_DIR}

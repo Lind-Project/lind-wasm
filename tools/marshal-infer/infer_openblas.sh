@@ -63,10 +63,33 @@
 #   3. emit wasm32 bitcode (+DWARF) for EVERY resolvable TU, public or
 #      internal, in parallel -- internal kernel/driver bodies are needed for
 #      one-hop delegation lookups even though they're never emitted themselves
+#   3.5. OPTIONAL: an offline LLM-prompt preview for LLM_PROMPT_FUNCTIONS,
+#      if set -- see below. No network request, no model SDK; this is the SAME
+#      resident bitcode step 4 analyzes, reused rather than re-traced/
+#      re-compiled by a separate script, since this script's own bitcode
+#      is destroyed (the whole ${WORK} directory) once it exits.
 #   4. marshal-infer over all bitcode, filtered to the resolved export list -> JSON
 #
 # Usage: tools/marshal-infer/infer_openblas.sh [out.json]
 # Output default: <repo>/openblas.marshal.json
+#
+# Env vars:
+#   LLM_PROMPT_FUNCTIONS  comma-separated function names to write a Stage 1
+#                         LLM prompt/manifest for (step 3.5), using the SAME
+#                         bitcode this run already emitted -- e.g.
+#                         LLM_PROMPT_FUNCTIONS=cblas_daxpy,cblas_dnrm2. Unset
+#                         (the default) skips step 3.5 entirely; ordinary
+#                         inference (step 4) is unaffected either way.
+#   LLM_PROMPT_OUTPUT     directory for step 3.5's artifacts. Default:
+#                         <repo>/llm-prompts/openblas (gitignored -- prompt
+#                         artifacts are experimental output, never committed).
+#   LLM_MAX_FUNCTIONS     overrides marshal-infer's --llm-max-functions (default
+#                         8) for step 3.5 only. A function whose dispatch-table
+#                         candidates (see resolveFunctionPointerTable,
+#                         LlmPrompt.cpp) alone exceed the default budget --
+#                         e.g. trmv/trsv/tpmv/tpsv/tbmv/tbsv's 8-entry
+#                         trans/uplo/diag table -- needs a higher value to
+#                         fully resolve. Unset keeps the tool's own default.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -243,6 +266,35 @@ export -f emit_one
 xargs -a "${WORK}/jobs.tsv" -d '\n' -P "${JOBS}" -I{} bash -c 'emit_one "$@"' _ {} || true
 NBC=$(find "${BCDIR}" -name '*.bc' | wc -l)
 echo "      ${NBC} TUs emitted bitcode"
+
+if [[ -n "${LLM_PROMPT_FUNCTIONS:-}" ]]; then
+  LLM_PROMPT_OUT="${LLM_PROMPT_OUTPUT:-${REPO_ROOT}/llm-prompts/openblas}"
+  echo "[3.5/4] Stage 1 LLM-prompt preview -> ${LLM_PROMPT_OUT}"
+  mkdir -p "${LLM_PROMPT_OUT}"
+  IFS=',' read -r -a LLM_FN_ARRAY <<< "${LLM_PROMPT_FUNCTIONS}"
+  # shellcheck disable=SC2046
+  BC_FILES=($(find "${BCDIR}" -name '*.bc'))
+  LLM_EXTRA_ARGS=()
+  [[ -n "${LLM_MAX_FUNCTIONS:-}" ]] && LLM_EXTRA_ARGS+=(--llm-max-functions "${LLM_MAX_FUNCTIONS}")
+  # A function named in LLM_PROMPT_FUNCTIONS was explicitly requested by the
+  # caller -- failing to generate its prompt is a run failure, not a
+  # warning to scroll past. Every requested function is still attempted
+  # (not aborted at the first failure) so one bad name doesn't hide
+  # diagnostics for the rest, but the script exits nonzero afterward.
+  LLM_PROMPT_FAILED=0
+  for fn in "${LLM_FN_ARRAY[@]}"; do
+    if ! "${MI}" --llm-prompt-only --function "${fn}" --prompt-output "${LLM_PROMPT_OUT}" \
+          "${BC_FILES[@]}" "${LLM_EXTRA_ARGS[@]}" 2>"${WORK}/llm_prompt_${fn}.err"; then
+      echo "      ERROR: LLM prompt generation failed for '${fn}':" >&2
+      cat "${WORK}/llm_prompt_${fn}.err" >&2
+      LLM_PROMPT_FAILED=1
+    fi
+  done
+  if [[ "${LLM_PROMPT_FAILED}" -eq 1 ]]; then
+    echo "LLM prompt generation failed for one or more explicitly requested functions -- aborting." >&2
+    exit 1
+  fi
+fi
 
 echo "[4/4] infer + filter to exports -> ${OUT}"
 # --config: the checked-in profile (see CONFIG.md) carries this library's

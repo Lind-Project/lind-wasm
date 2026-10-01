@@ -8,6 +8,17 @@ clang+llvm-*
 *.wat
 *.bc
 
+# Stage 1 LLM-prompt preview artifacts (local-notes/active/
+# plan-llm-marshal-inference.md) -- experimental output, never committed.
+/llm-prompts/
+
+# LLM API-query cache, run summaries, and comparison reports
+# (local-notes/active/plan-llm-api-inference.md) -- local generated
+# artifacts (may embed raw provider responses), never committed.
+/llm-cache/
+/llm-query-summaries/
+/llm-compare-report*.json
+
 #Ignore Build artifacts
 src/glibc/build/
 build/
@@ -29,6 +40,10 @@ tests/grate-tests/lib-interpose/full-libm/generated/
 /libz.marshal.json
 /openblas.marshal.json
 **/*.marshal.json
+
+# Consolidated OpenBLAS inference deliverable (regenerable via
+# tools/llm-infer/build_final_inference.py) -- local generated output.
+/openblas-inference/
 /tests/playground/
 /tests/grate-tests/lib-interpose/full-*/*_full_grate.c
 /tests/grate-tests/lib-interpose/auto-openblas-daxpy/openblas_daxpy_auto_grate.c
