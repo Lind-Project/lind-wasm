@@ -981,14 +981,21 @@ fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
     // When passing in a .wasm file, the ELF parsing unwinds early. (`ElfFile64::parse(&read_cache)?;`)
     // We can therefore not call .context()? on this function since that would unwind and not run the Module::from_file()
     match Engine::detect_precompiled_file(path) {
-        Ok(_) => unsafe { Module::deserialize_file(engine, path) }
-            .map_err(anyhow::Error::from)
-            .with_context(|| {
+        Ok(_) => match unsafe { Module::deserialize_file(engine, path) } {
+            Ok(module) => Ok(module),
+            // SGX enclaves refuse file-backed mmap with ENOTSUP.
+            Err(e) if e.downcast_ref::<rustix::io::Errno>() == Some(&rustix::io::Errno::NOTSUP) => {
+                let bytes = std::fs::read(path)
+                    .with_context(|| format!("failed to read module {}", path.display()))?;
+                read_wasm_or_cwasm_bytes(engine, &bytes, &path.display().to_string())
+            }
+            Err(e) => Err(anyhow::Error::from(e)).with_context(|| {
                 format!(
                     "failed to deserialize precompiled module {}",
                     path.display()
                 )
             }),
+        },
         Err(_) => Module::from_file(engine, path)
             .map_err(anyhow::Error::from)
             .with_context(|| format!("failed to compile module {}", path.display())),
