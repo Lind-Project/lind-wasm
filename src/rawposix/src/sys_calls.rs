@@ -555,6 +555,16 @@ pub extern "C" fn waitpid_syscall(
             }
             // A pending signal (or a kill of this cage) takes priority over sleeping again,
             // but only if there is really nothing to reap, which we just verified above.
+            //
+            // LIMITATION: signal_check_trigger only inspects the epoch of the cage's MAIN
+            // thread, because rawposix syscalls do not receive the calling thread id. If
+            // waitpid is called from a non-main thread, this check cannot see an
+            // exit_group initiated by the main thread (epoch_kill_all leaves the caller's
+            // own epoch untouched), so this waiter would keep sleeping and
+            // wait_all_threads_exited would never finish. Calling wait()/waitpid() from a
+            // non-main thread is not supported in Lind today. The fix is to check the
+            // calling thread's own epoch (thread_check_killed) once the thread id is
+            // available here. Tracked in the "waitpid from non-main thread" issue.
             if signal_check_trigger(cage.cageid) {
                 return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
             }
@@ -608,6 +618,7 @@ pub extern "C" fn waitpid_syscall(
             if nohang {
                 return 0;
             }
+            // Same main-thread-only limitation as in the wait-for-any branch above.
             if signal_check_trigger(cage.cageid) {
                 return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
             }
