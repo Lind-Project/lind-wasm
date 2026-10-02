@@ -164,6 +164,19 @@ fi
 cp "$SCRIPT_DIR/auto-v2wide/libtoy_handle_v2_stub.so" "$LINDFS/lib/libtoy_handle_v2_stub.so"
 echo ""
 
+# fail-closed/libextentexpr_stub.c: preloaded fallback for the general
+# lind_extent_expr tree tests (issue #22 / OpenBLAS inference integration,
+# Gate 1) -- same fail-closed-stub role as the others above.
+echo "Building shared fixture: libextentexpr_stub.so"
+if ! "$LIND_COMPILE" --compile-library "$SCRIPT_DIR/fail-closed/libextentexpr_stub.c" \
+        > /tmp/lib-interpose-compile.log 2>&1; then
+    echo "FATAL: failed to build fail-closed/libextentexpr_stub.c:"
+    cat /tmp/lib-interpose-compile.log
+    exit 2
+fi
+cp "$SCRIPT_DIR/fail-closed/libextentexpr_stub.so" "$LINDFS/lib/libextentexpr_stub.so"
+echo ""
+
 # auto-v2wide/v2wide_adapters.c is generated fresh here with
 # tools/marshal-gen/gen_v2_adapter.py from the checked-in
 # auto-v2wide/v2wide.spec.json) -- same "compiled fresh from source each
@@ -360,6 +373,15 @@ $output"
 # before compiling anything, if those copies have drifted out of sync.
 if ! bash "$SCRIPT_DIR/check_raw_arg_slot_consistency.sh"; then
     echo "FATAL: raw-arg-slot constant consistency check failed (see above)" >&2
+    exit 1
+fi
+echo ""
+
+# Pre-flight: the general lind_extent_expr tree's depth/node-count
+# ceilings are likewise duplicated across generation and runtime -- same
+# reasoning as the raw-arg-slot check just above.
+if ! bash "$SCRIPT_DIR/check_extent_expr_bounds_consistency.sh"; then
+    echo "FATAL: extent-expr bounds consistency check failed (see above)" >&2
     exit 1
 fi
 echo ""
@@ -1064,7 +1086,231 @@ run_test "fail-closed-stridevec-badindex" \
     -- \
     -- "[Grate|stridevec] toy_daxpy_badindex handler ran (should not happen)"
 
+# --------------------------------------------------------------------------
+# fail-closed-exprsize-*: LIND_SIZE_EXPR and LIND_SIZE_STRIDE_VECTOR's
+# general lind_extent_expr operands (size_operand_expr/stride_operand_expr)
+# through the REAL lind_marshal_dispatch path (issue #22's OpenBLAS
+# inference-to-runtime integration, Gate 3: "extend generated handler/
+# runtime support"). Gate 1's extentexpr-* tests above already exhaustively
+# cover the shared evaluator in isolation; these cover the NEW plumbing on
+# top of it -- see exprsize_grate.c/exprsize_cage.c for what each mode
+# targets and why.
+# --------------------------------------------------------------------------
+GRATE_EXTRA=("$SCRIPT_DIR/custom-lib/libtoy.c")
+for mode_desc in \
+    "basic:toy_daxpy_exprstride" \
+    "negstride:toy_daxpy_exprstride" \
+    "packedsum:toy_packedsum_exprsize"
+do
+    mode="${mode_desc%%:*}"
+    fn="${mode_desc#*:}"
+    GRATE_EXTRA=("$SCRIPT_DIR/custom-lib/libtoy.c")
+    run_test "fail-closed-exprsize-$mode" \
+        "fail-closed/exprsize_cage.c" \
+        "fail-closed/exprsize_grate.c" \
+        "env=/lib/libtoy.so" "yes" \
+        "/exprsize_cage.cwasm" "$mode" \
+        -- "[Grate|exprsize] registered 3/3 handlers" "[Cage|exprsize] PASS: $mode" \
+        -- "[Grate|exprsize] $fn handler ran"
+done
+
+GRATE_EXTRA=("$SCRIPT_DIR/custom-lib/libtoy.c")
+run_test "fail-closed-exprsize-badtree" \
+    "fail-closed/exprsize_cage.c" \
+    "fail-closed/exprsize_grate.c" \
+    "env=/lib/libtoy.so" "yes" \
+    "/exprsize_cage.cwasm" "badtree" \
+    -- "[Grate|exprsize] registered 3/3 handlers" "[Cage|exprsize] PASS: badtree" \
+    -- \
+    -- "[Grate|exprsize] toy_packedsum_badtree handler ran (should not happen)"
+
+# --------------------------------------------------------------------------
+# fail-closed-extentexpr-*: the general lind_extent_expr tree and its
+# evaluator, _lind_eval_extent_expr (issue #22 / OpenBLAS inference
+# integration, Gate 1: "define one runtime extent-expression contract").
+# Unlike stridevec above (a single lind_extent_operand leaf), the real
+# extent evaluation under test here happens INSIDE toy_extent_probe's own
+# handler, not during lind_marshal_dispatch's own pre-call argument
+# marshalling -- so, unlike stridevec's reject modes, the handler's own
+# "ran" marker is expected evidence for EVERY mode here, accept or reject:
+# it proves the handler genuinely reached the tree evaluation, not that
+# argument marshalling silently short-circuited beforehand. See
+# extentexpr_grate.c for exactly which tree each mode builds.
+GRATE_EXTRA=()
+for mode_desc in \
+    "constant:0" "arg_value:1" "arg_pointee:2" "abs:3" "abs-int-min:19" \
+    "product:4" "product-overflow:5" "max:6" "add:7" "add-overflow:8" \
+    "ceildiv-round:9" "ceildiv-exact:10" "ceildiv-byzero:11" \
+    "ceildiv-negdividend:12" "ceildiv-negdivisor:20" "negative-root:13" \
+    "zero-root:1" "sizet-overflow:14" "bad-arg-index:15" "bad-kind:16" \
+    "excessive-depth:17" "packed-storage:18" "packed-storage-zero:18" \
+    "null-child:21" "const-too-big:22" "pointee-null:23" "pointee-invalid:23" \
+    "leaf-u32:24" "leaf-i64:25" "leaf-u64:26" "leaf-u64-overflow:26" \
+    "product-negative-operands:27" "node-budget-exceeded:28"
+do
+    label="${mode_desc%%:*}"
+    modenum="${mode_desc#*:}"
+    run_test "fail-closed-extentexpr-$label" \
+        "fail-closed/extentexpr_cage.c" \
+        "fail-closed/extentexpr_grate.c" \
+        "env=/lib/libextentexpr_stub.so" "yes" \
+        "/extentexpr_cage.cwasm" "$label" \
+        -- "[Grate|extentexpr] registered 1/1 handlers" "[Cage|extentexpr] PASS: $label" \
+        -- "[Grate|extentexpr] toy_extent_probe handler ran mode=$modenum"
+done
+
 DECLARED_TESTS+=("fail-closed")
+
+# --------------------------------------------------------------------------
+# exectrace-*: Gate 5's own "strict execution oracle" self-test (issue #22's
+# OpenBLAS inference-to-runtime integration) -- its own explicit acceptance
+# criterion: "A harness self-test deliberately disables registration and
+# proves that a numerical pass is classified as local-only, not
+# interposed." exectrace_grate.c registers BOTH a V1 handler (toy_trace_add)
+# and a hand-written V2 adapter (toy_trace_sum) in "both" mode, and NEITHER
+# in "none" mode; exectrace_stub.c's own real implementation is correct
+# either way, so the cage's own PASS/FAIL lines alone can never tell the
+# two modes apart -- only lind_marshal.h's own [lind-trace] evidence (built
+# with -DLIND_MARSHAL_DEBUG specifically for this test) can, and only
+# tools/marshal-gen/execution_oracle.py's classify() turns that evidence
+# into an actual PASS_INTERPOSED/PASS_LOCAL_ONLY verdict.
+# --------------------------------------------------------------------------
+run_exectrace_oracle_proof() {
+    local ok=1
+
+    if ! compile_grate "$SCRIPT_DIR/exectrace/exectrace_grate.c" \
+            "$SCRIPT_DIR/exectrace/exectrace_stub.c" -DLIND_MARSHAL_DEBUG; then
+        fail_test "exectrace-both" build "COMPILE_STEP_FAILED (grate)
+$(cat /tmp/lib-interpose-compile.log)"
+        fail_test "exectrace-none" build "COMPILE_STEP_FAILED (grate)
+$(cat /tmp/lib-interpose-compile.log)"
+        return
+    fi
+    if ! compile_src "$SCRIPT_DIR/exectrace/exectrace_cage.c"; then
+        fail_test "exectrace-both" build "COMPILE_STEP_FAILED (cage)
+$(cat /tmp/lib-interpose-compile.log)"
+        fail_test "exectrace-none" build "COMPILE_STEP_FAILED (cage)
+$(cat /tmp/lib-interpose-compile.log)"
+        return
+    fi
+    if ! "$LIND_COMPILE" --compile-library "$SCRIPT_DIR/exectrace/exectrace_stub.c" \
+            > /tmp/lib-interpose-compile.log 2>&1; then
+        fail_test "exectrace-both" build "COMPILE_STEP_FAILED (preload stub)
+$(cat /tmp/lib-interpose-compile.log)"
+        fail_test "exectrace-none" build "COMPILE_STEP_FAILED (preload stub)
+$(cat /tmp/lib-interpose-compile.log)"
+        return
+    fi
+
+    mkdir -p "$LINDFS/lib"
+    cp "$SCRIPT_DIR/exectrace/exectrace_grate.cwasm" "$GRATES_DIR/"
+    cp "$SCRIPT_DIR/exectrace/exectrace_cage.cwasm" "$LINDFS/"
+    cp "$SCRIPT_DIR/exectrace/exectrace_stub.so" "$LINDFS/lib/"
+
+    local both_log="/tmp/lib-interpose-exectrace-both.log"
+    local none_log="/tmp/lib-interpose-exectrace-none.log"
+    local both_output both_exit none_output none_exit
+    both_output=$(cd "$LINDFS" && timeout 30 "$LIND_RUN" \
+        --preload "env=/lib/exectrace_stub.so:interposed" \
+        "grates/exectrace_grate.cwasm" both "/exectrace_cage.cwasm" 2>&1)
+    both_exit=$?
+    printf '%s' "$both_output" > "$both_log"
+    none_output=$(cd "$LINDFS" && timeout 30 "$LIND_RUN" \
+        --preload "env=/lib/exectrace_stub.so" \
+        "grates/exectrace_grate.cwasm" none "/exectrace_cage.cwasm" 2>&1)
+    none_exit=$?
+    printf '%s' "$none_output" > "$none_log"
+
+    rm -f "$GRATES_DIR/exectrace_grate.cwasm" "$LINDFS/exectrace_cage.cwasm" "$LINDFS/lib/exectrace_stub.so"
+
+    # Outputs are read from files, not interpolated into the script below,
+    # so arbitrary content (quotes, backslashes, stray """) in a grate's
+    # own stderr can never corrupt or inject into this classification step.
+    #
+    # classify()'s own "any required symbol observed" semantics (correct,
+    # and deliberately kept, for a REAL OpenBLAS test, where any one of
+    # several equivalent symbols proving coverage is enough) would let
+    # "both" mode pass this self-test even if only ONE of the two
+    # transports actually traced -- a V2-only or V1-only regression could
+    # hide behind the other transport's own evidence. So this self-test
+    # additionally asserts each symbol's own EXACT call count AND the real
+    # V2 pointer-size trace line's own fields, independently proving BOTH
+    # paths (not just "at least one"), end to end.
+    local verdicts
+    verdicts=$(python3 - "$both_exit" "$none_exit" "$both_log" "$none_log" <<PYEOF
+import sys
+sys.path.insert(0, "$REPO_ROOT/tools/marshal-gen")
+import execution_oracle as oracle
+
+both_exit, none_exit, both_log, none_log = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4]
+with open(both_log) as fh:
+    both_output = fh.read()
+with open(none_log) as fh:
+    none_output = fh.read()
+
+def numeric_ok(output):
+    return "[Cage|exectrace] PASS: toy_trace_add" in output and "[Cage|exectrace] PASS: toy_trace_sum" in output
+
+both_verdict = oracle.classify(
+    required_symbols=("toy_trace_add", "toy_trace_sum"),
+    numeric_ok=(both_exit == 0 and numeric_ok(both_output)),
+    call_counts=oracle.parse_call_counts(both_output))
+none_verdict = oracle.classify(
+    required_symbols=("toy_trace_add", "toy_trace_sum"),
+    numeric_ok=(none_exit == 0 and numeric_ok(none_output)),
+    call_counts=oracle.parse_call_counts(none_output))
+
+both_counts = oracle.parse_call_counts(both_output)
+both_ptr_sizes = oracle.parse_ptr_sizes(both_output)
+
+print(both_verdict)
+print(none_verdict)
+print(both_counts.get("toy_trace_add", 0))
+print(both_counts.get("toy_trace_sum", 0))
+print(1 if ("toy_trace_sum", "const", 20) in both_ptr_sizes else 0)
+PYEOF
+)
+    rm -f "$both_log" "$none_log"
+    local both_verdict none_verdict both_add_count both_sum_count both_ptr_ok
+    both_verdict="$(sed -n '1p' <<<"$verdicts")"
+    none_verdict="$(sed -n '2p' <<<"$verdicts")"
+    both_add_count="$(sed -n '3p' <<<"$verdicts")"
+    both_sum_count="$(sed -n '4p' <<<"$verdicts")"
+    both_ptr_ok="$(sed -n '5p' <<<"$verdicts")"
+
+    local both_errors=()
+    [[ "$both_verdict" != "PASS_INTERPOSED" ]] && \
+        both_errors+=("expected classify()==PASS_INTERPOSED, got '$both_verdict'")
+    [[ "$both_add_count" != "1" ]] && \
+        both_errors+=("expected toy_trace_add (V1) observed exactly once, got $both_add_count -- the V1 transport path may not have traced")
+    [[ "$both_sum_count" != "1" ]] && \
+        both_errors+=("expected toy_trace_sum (V2) observed exactly once, got $both_sum_count -- the V2 transport path may not have traced")
+    [[ "$both_ptr_ok" != "1" ]] && \
+        both_errors+=("expected a [lind-trace] toy_trace_sum ptr size_kind=const bytes=0x14 line -- the V2 pointer-size trace may be missing or wrong")
+
+    if [[ ${#both_errors[@]} -gt 0 ]]; then
+        fail_test "exectrace-both" assertion "$(printf '  - %s\n' "${both_errors[@]}")
+--- actual output ---
+$both_output"
+        ok=0
+    else
+        pass_test "exectrace-both"
+    fi
+
+    if [[ "$none_verdict" != "PASS_LOCAL_ONLY" ]]; then
+        fail_test "exectrace-none" assertion "expected classify()==PASS_LOCAL_ONLY, got '$none_verdict'
+--- actual output ---
+$none_output"
+        ok=0
+    else
+        pass_test "exectrace-none"
+    fi
+    return $(( ok == 1 ? 0 : 1 ))
+}
+
+GRATE_EXTRA=()
+run_exectrace_oracle_proof
+DECLARED_TESTS+=("exectrace-both" "exectrace-none" "exectrace")
 
 # --------------------------------------------------------------------------
 # fail-registration: a grate must abort startup rather than exec the cage

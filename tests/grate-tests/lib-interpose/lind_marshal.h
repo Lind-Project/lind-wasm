@@ -25,6 +25,7 @@
 //                               (in struct context: sibling field at fields[size_arg_index])
 //   LIND_SIZE_FROM_ARG_POINTEE— *(uint32_t at raw_args[size_arg_index]) (e.g. compress2 *destLen)
 //   LIND_SIZE_CSTR            — scan for '\0', capped at LIND_MARSHAL_CSTR_CAP
+//   LIND_SIZE_EXPR            — size_expr's evaluated lind_extent_expr tree value (bytes)
 //
 // --- Return kinds ---
 //   LIND_RET_VOID             — return 0
@@ -61,6 +62,7 @@
 #ifndef LIND_MARSHAL_NO_LIBC_HEADERS
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 #endif
 
 // ---------------------------------------------------------------------------
@@ -129,6 +131,16 @@ enum lind_size_kind {
     // operand sourced as LIND_EXTENT_CONSTANT rather than read from an
     // argument.
     LIND_SIZE_STRIDE_VECTOR     = 6,
+    // Byte count IS a general lind_extent_expr tree's own evaluated value
+    // (see that type's own doc) -- e.g. a packed-matrix footprint
+    // (`n*(n+1)/2*elem_size`) or a leading-dimension-scaled envelope
+    // (`lda*max(m,n)*elem_size`) that no single lind_extent_operand leaf
+    // can represent. `size_expr` points at the tree; evaluated via
+    // _lind_eval_extent_expr, which already enforces the non-negative/
+    // size_t-range final checks this kind needs -- unlike
+    // LIND_SIZE_STRIDE_VECTOR's own n/stride sub-operands below, this
+    // value already IS the complete byte count, not an intermediate one.
+    LIND_SIZE_EXPR              = 7,
 };
 
 // One scalar input to a size computation (currently: LIND_SIZE_STRIDE_VECTOR's
@@ -153,6 +165,123 @@ struct lind_extent_operand {
     uint32_t                 arg_index;   // meaningful for VALUE/POINTEE_I32 only
     enum lind_extent_source  source;
     uint32_t                 const_value; // meaningful for CONSTANT only
+};
+
+// ---------------------------------------------------------------------------
+// General bounded extent-expression tree.
+//
+// lind_extent_operand above is a single leaf: a direct argument value, a
+// value loaded through a pointer argument, or a spec-time constant. Some
+// real extent formulas this transport needs to carry are not a single
+// leaf -- a packed-matrix footprint ("n*(n+1)/2"), or a leading-dimension-
+// scaled envelope ("lda*max(m,n)"). This type is the general form both of
+// those (and lind_extent_operand's own three leaf shapes) are instances
+// of: a small, explicitly depth-bounded expression tree, evaluated to a
+// single non-negative size at dispatch time by _lind_eval_extent_expr.
+//
+// Every leaf kind here has the exact same semantics as the matching
+// lind_extent_operand source (LIND_EXPR_ARG_VALUE == LIND_EXTENT_VALUE,
+// LIND_EXPR_ARG_POINTEE_I32 == LIND_EXTENT_POINTEE_I32): both ultimately
+// read through _lind_read_arg_leaf_i64, the one place that actually
+// touches cross-cage memory for an extent leaf, so there is exactly one
+// implementation of that read, not two that could drift apart.
+//
+// A plain "divide" (exact division, not rounding) has no node of its own:
+// every currently-known caller needing division is a packed-storage
+// footprint of the form n*(n+1)/2, where the dividend is always even, so
+// ceiling and exact division agree -- see LIND_EXPR_CEIL_DIVIDE's own doc.
+// There is likewise no "subtract" node: nothing this transport currently
+// accepts needs one. Both are deliberate, narrow omissions, not oversights
+// -- widen this enum, and the shared evaluator below, if a future input
+// genuinely needs either.
+enum lind_extent_expr_kind {
+    LIND_EXPR_CONSTANT        = 0,  // const_value is the value (0 <= const_value <= INT64_MAX)
+    LIND_EXPR_ARG_VALUE       = 1,  // raw_args[arg_index] is the value
+    LIND_EXPR_ARG_POINTEE_I32 = 2,  // raw_args[arg_index] is a pointer to it
+    LIND_EXPR_ABS             = 3,  // |lhs|
+    // PRODUCT/MAX/ADD all require EACH operand to already be non-negative
+    // (checked after evaluating lhs/rhs, before combining them) -- a
+    // negative value may only ever appear as ABS's own direct child.
+    // Without this, e.g. product(-2, -3) would silently succeed as 6: two
+    // individually-nonsensical "sizes" (a negative dimension is never a
+    // valid size on its own) coincidentally cancelling into something
+    // that merely LOOKS like a valid positive extent, rather than being
+    // rejected as the malformed input it actually is. Checking only the
+    // ROOT's final value (as this transport still also does -- see
+    // _lind_eval_extent_expr) is not enough to catch that: it is a
+    // property of the whole tree's shape, not just its final value.
+    LIND_EXPR_PRODUCT         = 4,  // lhs * rhs, checked
+    LIND_EXPR_MAX             = 5,  // max(lhs, rhs)
+    LIND_EXPR_ADD             = 6,  // lhs + rhs, checked
+    // Ceiling division: ceil(lhs / rhs). Requires lhs >= 0 and rhs > 0 --
+    // every currently-known use (packed-storage n*(n+1)/2) is in this
+    // domain, and a signed convention for the general case (lhs<0 or
+    // rhs<0) has no established caller yet, so it fails closed rather
+    // than silently picking one.
+    LIND_EXPR_CEIL_DIVIDE     = 7,
+};
+
+// Hard ceiling on tree depth, enforced at evaluation time regardless of
+// what generation-time validation already did: a recursive evaluator
+// walking a sufficiently deep tree risks exhausting the real (wasm) call
+// stack, which is a resource bound independent of whether the tree's
+// VALUES are otherwise well-formed. Chosen generously relative to any
+// currently-known extent formula this transport carries (the deepest is
+// 4 levels: ceil_divide(product(n, add(n, 1)), 2)).
+#define LIND_EXTENT_EXPR_MAX_DEPTH 16
+
+// Hard ceiling on the TOTAL number of nodes visited evaluating one tree --
+// independent of, and in addition to, the depth bound above. Depth alone
+// bounds how deep the recursion goes, not how much WORK one evaluation
+// does: a full binary tree only 16 levels deep can still require on the
+// order of 2^16 node visits (and, if any of those are
+// LIND_EXPR_ARG_POINTEE_I32 leaves, that many cross-cage reads), so a
+// generated or malformed tree that is wide rather than deep would sail
+// past the depth check entirely. Enforced here at evaluation time
+// regardless of what generation-time validation already did, the same
+// reasoning as the depth bound. Chosen generously relative to any
+// currently-known extent formula (the packed-storage formula below needs
+// 7 nodes).
+#define LIND_EXTENT_EXPR_MAX_NODES 64
+
+// The concrete ABI width/signedness of a LIND_EXPR_ARG_VALUE leaf's raw
+// argument slot. Required rather than assumed: raw_args[] entries are
+// passed at whatever real width/signedness the interposed function's own
+// parameter has (a plain `int` is i32, but a `long`/pointer-sized count or
+// an explicitly unsigned parameter is not), and guessing wrong silently
+// corrupts the value, not just its label -- the same reasoning
+// wasm_scalar_ctype (gen_v2_adapter.py) already applies to a V2 adapter's
+// own parameters. Meaningful for LIND_EXPR_ARG_VALUE only;
+// LIND_EXPR_ARG_POINTEE_I32 is always a 4-byte signed int pointee, named
+// for exactly that width (ignores this field entirely).
+enum lind_extent_leaf_type {
+    LIND_EXTENT_LEAF_I32 = 0,  // sign-extend the low 32 bits (default: a
+                               // plain C `int`, the common case)
+    LIND_EXTENT_LEAF_U32 = 1,  // zero-extend the low 32 bits
+    LIND_EXTENT_LEAF_I64 = 2,  // the full 64-bit slot, reinterpreted signed
+    // The full 64-bit slot, reinterpreted unsigned -- representable only
+    // when its value fits int64_t's non-negative range (top bit clear):
+    // this evaluator's entire internal representation is int64_t (see
+    // this struct's own doc), so a genuinely huge u64 value -- one no
+    // real extent needs -- is rejected rather than silently wrapped into
+    // a negative number.
+    LIND_EXTENT_LEAF_U64 = 3,
+};
+
+// A node in the tree. Leaf fields (arg_index/const_value/leaf_type) are
+// meaningful only for the three leaf kinds (leaf_type for ARG_VALUE
+// only); lhs/rhs are meaningful only for the operator kinds (ABS uses lhs
+// only, and ignores rhs). A NULL lhs/rhs on an operator node is a
+// malformed spec, caught by _lind_eval_extent_expr rather than assumed
+// well-formed -- the same fail-closed posture as every other
+// lind_marshal.h structure.
+struct lind_extent_expr {
+    enum lind_extent_expr_kind      kind;
+    uint32_t                        arg_index;
+    enum lind_extent_leaf_type      leaf_type;
+    uint64_t                        const_value;
+    const struct lind_extent_expr  *lhs;
+    const struct lind_extent_expr  *rhs;
 };
 
 enum lind_return_kind {
@@ -194,6 +323,19 @@ struct lind_arg_spec {
     // LIND_SIZE_FROM_ARG_POINTEE keep their own, unrelated meaning for).
     struct lind_extent_operand size_operand;
     struct lind_extent_operand stride_operand;
+    // LIND_SIZE_STRIDE_VECTOR only, optional: when non-NULL, each overrides
+    // the matching single-leaf operand above with a general lind_extent_expr
+    // tree (e.g. `abs(incx)` for a stride that must be positive regardless
+    // of the real argument's sign) -- needed for a formula no single leaf
+    // can represent. NULL keeps the plain lind_extent_operand behavior
+    // above unchanged; a non-NULL size_operand_expr/stride_operand_expr
+    // always takes precedence over size_operand/stride_operand when
+    // computing that same slot, never blended with it.
+    const struct lind_extent_expr *size_operand_expr;
+    const struct lind_extent_expr *stride_operand_expr;
+    // LIND_SIZE_EXPR only: the complete byte count (see that enum value's
+    // own doc).
+    const struct lind_extent_expr *size_expr;
     struct lind_layout     *layout;          // NULL = flat buffer; non-NULL = structured pointee
     // PTR_ARRAY: describes each element of a NULL-terminated pointer array (argv).
     struct lind_arg_spec   *element;
@@ -577,16 +719,73 @@ static void *_lind_pre_ptr_array(uint64_t src_ptr, const struct lind_arg_spec *e
 // own pointer/handle safety logic.
 #define LIND_RAW_ARGS_MAX 6
 
+// Reads raw_args[arg_index] directly (interpreted per `leaf_type`), or an
+// i32 loaded through the pointer AT that argument via the checked
+// cross-cage copy path (for calling conventions that pass scalars by
+// reference, e.g. Fortran's, where a length or stride argument is a
+// pointer to the value, not the value itself) -- always sign-extended to
+// int64_t for the pointee case (ARG_POINTEE_I32 is always a 4-byte signed
+// int pointee; `leaf_type` is not consulted there at all). This is the one
+// place that actually touches cross-cage memory for an extent leaf (the
+// pointee case's _lind_copy_or_abort call) or needs the real per-call
+// `nargs` bounds check; a CONSTANT leaf (in either lind_extent_operand or
+// lind_extent_expr) bypasses this function entirely, since it has no
+// argument to read. Shared by _lind_eval_extent_operand (always passing
+// LIND_EXTENT_LEAF_I32, matching lind_extent_operand's own fixed width)
+// and _lind_eval_extent_expr's own leaf cases, so this one cross-cage read
+// path has exactly one implementation, not two that could drift apart.
+static inline int64_t _lind_read_arg_leaf_i64(
+    int is_pointee, uint32_t arg_index, enum lind_extent_leaf_type leaf_type,
+    const uint64_t *raw_args, uint32_t nargs,
+    uint64_t source_cage, uint64_t grate_cage,
+    const char *reason)
+{
+    if (arg_index >= nargs)
+        _lind_marshal_abort(reason);
+    uint64_t raw = raw_args[arg_index];
+    if (!is_pointee) {
+        switch (leaf_type) {
+            case LIND_EXTENT_LEAF_I32:
+                return (int64_t)(int32_t)(uint32_t)raw;
+            case LIND_EXTENT_LEAF_U32:
+                return (int64_t)(uint32_t)raw;
+            case LIND_EXTENT_LEAF_I64:
+                return (int64_t)raw;
+            case LIND_EXTENT_LEAF_U64:
+                if (raw > (uint64_t)INT64_MAX)
+                    _lind_marshal_abort(reason);
+                return (int64_t)raw;
+            default:
+                _lind_marshal_abort(reason);
+                return 0; // unreachable (abort traps)
+        }
+    }
+
+    if (raw == 0)
+        _lind_marshal_abort(reason);
+    if (raw > (uint64_t)UINT32_MAX)
+        _lind_marshal_abort(reason);
+    uint32_t val = 0;
+    _lind_copy_or_abort(grate_cage, source_cage,
+        raw, source_cage,
+        (uint64_t)(uintptr_t)&val, grate_cage,
+        sizeof(uint32_t), 0);
+    return (int64_t)(int32_t)val;
+}
+
 // Evaluates one lind_extent_operand: the argument's own value, an i32
-// loaded through a pointer argument via the checked cross-cage copy path
-// (see lind_extent_operand's doc for why a by-reference source exists), or
-// a value baked into the spec itself with no argument lookup at all. The
-// pointee case validates the argument index, rejects a NULL pointer, and
-// reads through _lind_copy_or_abort exactly like any other pointer-typed
-// argument -- provenance and range checking come from that existing
-// mechanism, not from anything new here. The constant case never touches
-// raw_args, since it has no argument to read: checked and range-limited
-// at generation time (gen_grate.py), not here.
+// loaded through a pointer argument (see lind_extent_operand's own doc for
+// why a by-reference source exists), or a value baked into the spec
+// itself with no argument lookup at all. A thin wrapper over
+// _lind_read_arg_leaf_i64 for the two argument-sourced cases (always as
+// LIND_EXTENT_LEAF_I32, lind_extent_operand's own fixed width) -- narrowing
+// its int64_t result back to int32_t here is lossless, since every value
+// that function can produce for I32 already fits in int32_t (the wider
+// int64_t return, and the other leaf_type choices, exist for
+// lind_extent_expr's own benefit -- see that type's own doc). The constant
+// case never touches raw_args or that shared function at all, since it has
+// no argument to read: checked and range-limited at generation time
+// (gen_grate.py), not here.
 static inline int32_t _lind_eval_extent_operand(
     const struct lind_extent_operand *op,
     const uint64_t *raw_args, uint32_t nargs,
@@ -595,31 +794,175 @@ static inline int32_t _lind_eval_extent_operand(
 {
     if (op->source == LIND_EXTENT_CONSTANT)
         return (int32_t)op->const_value;
-
-    if (op->arg_index >= nargs)
+    if (op->source != LIND_EXTENT_VALUE && op->source != LIND_EXTENT_POINTEE_I32)
         _lind_marshal_abort(reason);
-    uint64_t raw = raw_args[op->arg_index];
-    switch (op->source) {
-        case LIND_EXTENT_VALUE:
-            return (int32_t)(uint32_t)raw;
+    return (int32_t)_lind_read_arg_leaf_i64(
+        op->source == LIND_EXTENT_POINTEE_I32, op->arg_index, LIND_EXTENT_LEAF_I32,
+        raw_args, nargs, source_cage, grate_cage, reason);
+}
 
-        case LIND_EXTENT_POINTEE_I32: {
-            if (raw == 0)
-                _lind_marshal_abort(reason);
-            if (raw > (uint64_t)UINT32_MAX)
-                _lind_marshal_abort(reason);
-            uint32_t val = 0;
-            _lind_copy_or_abort(grate_cage, source_cage,
-                raw, source_cage,
-                (uint64_t)(uintptr_t)&val, grate_cage,
-                sizeof(uint32_t), 0);
-            return (int32_t)val;
+// ---------------------------------------------------------------------------
+// General extent-expression tree evaluation (see struct lind_extent_expr's
+// own doc).
+// ---------------------------------------------------------------------------
+
+// Aborts if `v` is negative. Shared by PRODUCT/ADD/MAX's operand checks
+// (see LIND_EXPR_PRODUCT's own doc for why each operand, not just the
+// final result, must be non-negative) -- a negative value may only ever
+// appear as ABS's own direct child.
+static inline int64_t _lind_require_nonneg(int64_t v, const char *reason) {
+    if (v < 0)
+        _lind_marshal_abort(reason);
+    return v;
+}
+
+// Recursive worker: evaluates `e` to a signed int64_t, tracking recursion
+// depth AND total node count explicitly (not relying on the C call stack,
+// or any bound on depth alone, to limit the work one evaluation can do --
+// see LIND_EXTENT_EXPR_MAX_DEPTH/_MAX_NODES's own docs: a tree can be wide
+// rather than deep). `*nodes_remaining` is shared across the whole
+// evaluation (decremented here, threaded through every recursive call),
+// not reset per subtree. Every leaf and every operator result is a
+// genuine int64_t value strictly between INT64_MIN and INT64_MAX (never
+// exactly INT64_MIN: a leaf is a sign-extended/zero-extended value or a
+// const_value already checked <= INT64_MAX, and PRODUCT/ADD/CEIL_DIVIDE
+// are all checked against overflowing into that range), so ABS's plain
+// negation can never itself overflow.
+static int64_t _lind_eval_extent_expr_depth(
+    const struct lind_extent_expr *e,
+    const uint64_t *raw_args, uint32_t nargs,
+    uint64_t source_cage, uint64_t grate_cage,
+    uint32_t depth, uint32_t *nodes_remaining)
+{
+    if (e == NULL)
+        _lind_marshal_abort("extent expression: null node");
+    if (depth >= LIND_EXTENT_EXPR_MAX_DEPTH)
+        _lind_marshal_abort("extent expression: exceeds maximum depth");
+    if (*nodes_remaining == 0)
+        _lind_marshal_abort("extent expression: exceeds maximum node count");
+    (*nodes_remaining)--;
+
+    switch (e->kind) {
+        case LIND_EXPR_CONSTANT:
+            if (e->const_value > (uint64_t)INT64_MAX)
+                _lind_marshal_abort("extent expression: constant exceeds representable range");
+            return (int64_t)e->const_value;
+
+        case LIND_EXPR_ARG_VALUE:
+            return _lind_read_arg_leaf_i64(0, e->arg_index, e->leaf_type, raw_args, nargs,
+                source_cage, grate_cage, "extent expression: invalid argument_value index");
+
+        case LIND_EXPR_ARG_POINTEE_I32:
+            return _lind_read_arg_leaf_i64(1, e->arg_index, LIND_EXTENT_LEAF_I32, raw_args, nargs,
+                source_cage, grate_cage, "extent expression: invalid argument_pointee_i32 index");
+
+        case LIND_EXPR_ABS: {
+            int64_t v = _lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining);
+            return v < 0 ? -v : v;
+        }
+
+        case LIND_EXPR_PRODUCT: {
+            int64_t a = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining),
+                "extent expression: product of a negative operand");
+            int64_t b = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining),
+                "extent expression: product of a negative operand");
+            int64_t result;
+            if (__builtin_mul_overflow(a, b, &result))
+                _lind_marshal_abort("extent expression: product overflow");
+            return result;
+        }
+
+        case LIND_EXPR_ADD: {
+            int64_t a = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining),
+                "extent expression: add of a negative operand");
+            int64_t b = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining),
+                "extent expression: add of a negative operand");
+            int64_t result;
+            if (__builtin_add_overflow(a, b, &result))
+                _lind_marshal_abort("extent expression: add overflow");
+            return result;
+        }
+
+        case LIND_EXPR_MAX: {
+            int64_t a = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining),
+                "extent expression: max of a negative operand");
+            int64_t b = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining),
+                "extent expression: max of a negative operand");
+            return a > b ? a : b;
+        }
+
+        case LIND_EXPR_CEIL_DIVIDE: {
+            int64_t a = _lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining);
+            int64_t b = _lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining);
+            if (b <= 0)
+                _lind_marshal_abort("extent expression: ceil_divide by non-positive divisor");
+            if (a < 0)
+                _lind_marshal_abort("extent expression: ceil_divide of a negative dividend");
+            // a/b + (a%b != 0), not (a+b-1)/b: the latter can itself
+            // overflow when a is near INT64_MAX, for no benefit (both
+            // formulas are exact for every valid a>=0, b>0).
+            int64_t q = a / b;
+            return (a % b != 0) ? q + 1 : q;
         }
 
         default:
-            _lind_marshal_abort(reason);
+            _lind_marshal_abort("extent expression: unrecognized node kind");
             return 0; // unreachable (abort traps)
     }
+}
+
+// Evaluates a general extent-expression tree to a final, checked size_t:
+// the root's value must be non-negative (a negative extent is never
+// meaningful) and must fit the real wasm32 target's size_t range (64-bit
+// evaluation throughout can succeed while still being too large for a
+// 32-bit size_t -- checked here the same way _lind_compute_size's own
+// LIND_SIZE_STRIDE_VECTOR case already does for its own final value).
+// Returns the tree's raw evaluated value directly, in whatever unit
+// (element count or byte count) the caller's own size_kind assigns to it
+// -- the same division of responsibility _lind_eval_extent_operand already
+// has relative to _lind_compute_size's LIND_SIZE_STRIDE_VECTOR case.
+static inline size_t _lind_eval_extent_expr(
+    const struct lind_extent_expr *e,
+    const uint64_t *raw_args, uint32_t nargs,
+    uint64_t source_cage, uint64_t grate_cage)
+{
+    uint32_t nodes_remaining = LIND_EXTENT_EXPR_MAX_NODES;
+    int64_t result = _lind_eval_extent_expr_depth(
+        e, raw_args, nargs, source_cage, grate_cage, 0, &nodes_remaining);
+    if (result < 0)
+        _lind_marshal_abort("extent expression: negative final extent");
+    if ((uint64_t)result > (uint64_t)(size_t)-1)
+        _lind_marshal_abort("extent expression: final extent exceeds size_t range");
+    return (size_t)result;
+}
+
+// Evaluates a general extent-expression tree to a signed int64_t WITHOUT
+// _lind_eval_extent_expr's own final non-negative/size_t-range checks --
+// for a tree that computes one intermediate sub-operand of a larger size
+// computation (LIND_SIZE_STRIDE_VECTOR's own size_operand_expr/
+// stride_operand_expr below), not a complete byte count in its own right.
+// The caller applies whatever domain check that specific sub-operand
+// actually needs (e.g. LIND_SIZE_STRIDE_VECTOR's count may legitimately
+// evaluate non-positive -- "sizes to 0", not an error -- while its stride
+// may not be negative at all); see LIND_SIZE_EXPR's own doc for the case
+// that DOES want the full final-value checks instead.
+static inline int64_t _lind_eval_extent_expr_signed(
+    const struct lind_extent_expr *e,
+    const uint64_t *raw_args, uint32_t nargs,
+    uint64_t source_cage, uint64_t grate_cage)
+{
+    uint32_t nodes_remaining = LIND_EXTENT_EXPR_MAX_NODES;
+    return _lind_eval_extent_expr_depth(
+        e, raw_args, nargs, source_cage, grate_cage, 0, &nodes_remaining);
 }
 
 // ---------------------------------------------------------------------------
@@ -680,15 +1023,31 @@ static inline size_t _lind_compute_size(
             // fail closed rather than copy the wrong bytes or expose an
             // address outside the real buffer. Left for whichever future
             // change actually needs it.
-            int32_t n = _lind_eval_extent_operand(
-                &as->size_operand, raw_args, nargs, source_cage, grate_cage,
-                "strided vector: invalid count operand");
+            // A non-NULL *_expr field always takes precedence over the
+            // matching plain lind_extent_operand -- see
+            // size_operand_expr/stride_operand_expr's own doc on
+            // lind_arg_spec. Uses the "signed, no final checks" evaluator:
+            // this n/stride value is an intermediate sub-operand of the
+            // overall byte count below, not a complete extent in its own
+            // right, so the domain checks immediately following (n<=0,
+            // stride<0) apply here exactly as they already do for the
+            // plain-operand path, not _lind_eval_extent_expr's own
+            // (different) final-value checks.
+            int64_t n = as->size_operand_expr
+                ? _lind_eval_extent_expr_signed(as->size_operand_expr, raw_args, nargs,
+                                                 source_cage, grate_cage)
+                : (int64_t)_lind_eval_extent_operand(
+                      &as->size_operand, raw_args, nargs, source_cage, grate_cage,
+                      "strided vector: invalid count operand");
             // n<=0 sizes to 0 (nothing touched), not an error.
             if (n <= 0)
                 return 0;
-            int32_t stride = _lind_eval_extent_operand(
-                &as->stride_operand, raw_args, nargs, source_cage, grate_cage,
-                "strided vector: invalid stride operand");
+            int64_t stride = as->stride_operand_expr
+                ? _lind_eval_extent_expr_signed(as->stride_operand_expr, raw_args, nargs,
+                                                 source_cage, grate_cage)
+                : (int64_t)_lind_eval_extent_operand(
+                      &as->stride_operand, raw_args, nargs, source_cage, grate_cage,
+                      "strided vector: invalid stride operand");
             if (stride < 0)
                 _lind_marshal_abort("strided vector: negative stride not supported");
 
@@ -714,6 +1073,9 @@ static inline size_t _lind_compute_size(
                 _lind_marshal_abort("strided vector size overflow");
             return (size_t)total;
         }
+
+        case LIND_SIZE_EXPR:
+            return _lind_eval_extent_expr(as->size_expr, raw_args, nargs, source_cage, grate_cage);
 
         default:
             return 0;
@@ -759,6 +1121,7 @@ static void *_lind_pre_ptr(uint64_t src_ptr, const struct lind_arg_spec *as,
         case LIND_SIZE_FROM_ARG:
         case LIND_SIZE_FROM_ARG_POINTEE:
         case LIND_SIZE_STRIDE_VECTOR:
+        case LIND_SIZE_EXPR:
             size = _lind_compute_size(as, raw_or_sibling, nargs, source_cage, grate_cage);
             break;
         default:
@@ -1108,6 +1471,85 @@ static void _lind_post_struct(const struct _lind_shadow *s,
 }
 
 // ---------------------------------------------------------------------------
+// Debug-only execution trace (issue #22's OpenBLAS inference-to-runtime
+// integration, Gate 5: "strict execution oracle"). A test that merely gets
+// the right NUMERIC answer never proves a call actually crossed the grate
+// -- a silent fallback to the real, uninterposed library can produce the
+// identical result. Building a grate with -DLIND_MARSHAL_DEBUG makes every
+// dispatched call (V1's lind_marshal_dispatch and every V2 generated
+// adapter alike, both funneling through this one pair of hooks) print a
+// line naming the real function, plus one further line per marshalled
+// pointer argument naming its selected size_kind and the exact byte count
+// _lind_compute_size settled on for it -- a harness can `grep -c` the
+// first for a per-symbol call count, or diff the second against a
+// baseline run to catch a sizing regression that happens to still produce
+// the right numeric answer. Parseable without printf (a static/freestanding
+// grate may not link one): plain write(2, ...) and hand-rolled hex/string
+// formatting, mirroring every other low-level helper in this file.
+//
+// _lind_dbg_call/_lind_dbg_ptr_size are declared UNCONDITIONALLY (not
+// themselves wrapped in #ifdef at their call sites) so every caller --
+// lind_marshal_dispatch, _lind_marshal_prepare_arg, and every V2 generated
+// adapter alike -- can call them directly with no conditional-compilation
+// noise of its own; only THIS definition differs between a debug and a
+// normal build, compiling to a true no-op (dead-code-eliminated) in the
+// latter.
+#ifdef LIND_MARSHAL_DEBUG
+#ifdef LIND_MARSHAL_NO_LIBC_HEADERS
+// <unistd.h> isn't included in this mode (see this file's own top-of-file
+// doc on LIND_MARSHAL_NO_LIBC_HEADERS) -- hand-declare write() the same
+// way every other libc symbol a freestanding grate needs is declared.
+extern long write(long, const void *, long);
+#endif
+
+static void _lind_dbg_hex(char *b, int *p, uint64_t v) {
+    for (int i = 60; i >= 0; i -= 4) {
+        int n = (int)((v >> i) & 0xf);
+        b[(*p)++] = (char)(n < 10 ? '0' + n : 'a' + n - 10);
+    }
+}
+
+static const char *_lind_dbg_size_kind_name(enum lind_size_kind sk) {
+    switch (sk) {
+        case LIND_SIZE_NONE:             return "none";
+        case LIND_SIZE_CONST:            return "const";
+        case LIND_SIZE_FROM_ARG:         return "from_arg";
+        case LIND_SIZE_FROM_ARG_POINTEE: return "from_arg_pointee";
+        case LIND_SIZE_CSTR:             return "cstr";
+        case LIND_SIZE_PTR_ARRAY:        return "ptr_array";
+        case LIND_SIZE_STRIDE_VECTOR:    return "stride_vector";
+        case LIND_SIZE_EXPR:             return "expr";
+        default:                         return "?";
+    }
+}
+
+static void _lind_dbg_call(const char *name) {
+    char b[160]; int p = 0;
+    for (const char *s = "[lind-trace] call "; *s; s++) b[p++] = *s;
+    for (const char *s = name; *s && p < 150; s++) b[p++] = *s;
+    b[p++] = '\n';
+    write(2, b, p);
+}
+
+static void _lind_dbg_ptr_size(const char *name, enum lind_size_kind sk, uint64_t bytes) {
+    char b[200]; int p = 0;
+    for (const char *s = "[lind-trace] "; *s; s++) b[p++] = *s;
+    for (const char *s = name; *s && p < 100; s++) b[p++] = *s;
+    for (const char *s = " ptr size_kind="; *s; s++) b[p++] = *s;
+    for (const char *s = _lind_dbg_size_kind_name(sk); *s; s++) b[p++] = *s;
+    for (const char *s = " bytes=0x"; *s; s++) b[p++] = *s;
+    _lind_dbg_hex(b, &p, bytes);
+    b[p++] = '\n';
+    write(2, b, p);
+}
+#else
+static inline void _lind_dbg_call(const char *name) { (void)name; }
+static inline void _lind_dbg_ptr_size(const char *name, enum lind_size_kind sk, uint64_t bytes) {
+    (void)name; (void)sk; (void)bytes;
+}
+#endif
+
+// ---------------------------------------------------------------------------
 // Shared per-call marshalling primitives.
 //
 // Each function below handles exactly one argument or one shadow at a time,
@@ -1131,7 +1573,8 @@ static inline uint64_t _lind_marshal_prepare_arg(
     const struct lind_arg_spec *as,
     const uint64_t *raw_args, uint32_t nargs,
     uint64_t source_cage, uint64_t grate_cage,
-    struct _lind_shadow *shadows, uint32_t *nshadows)
+    struct _lind_shadow *shadows, uint32_t *nshadows,
+    const char *dbg_name)
 {
     uint64_t raw = raw_args[arg_index];
 
@@ -1162,6 +1605,7 @@ static inline uint64_t _lind_marshal_prepare_arg(
                 : _lind_compute_size(as, raw_args, nargs, source_cage, grate_cage);
             if (as->size_kind == LIND_SIZE_CSTR && shadow_size == 0)
                 shadow_size = _lind_measure_cstr(raw, source_cage, grate_cage);
+            _lind_dbg_ptr_size(dbg_name, as->size_kind, (uint64_t)shadow_size);
 
             if (shadow != (void *)(uintptr_t)raw) {
                 shadows[*nshadows].arg_index    = arg_index;
@@ -1358,31 +1802,6 @@ static inline float _lind_v2_f32_from_bits(uint64_t bits) {
 // Core dispatch
 // ---------------------------------------------------------------------------
 
-#ifdef LIND_MARSHAL_DEBUG
-// Debug-only: log each interposed call's name, first arg, and real return value
-// to the grate's stderr (fd 2), so an interposed run can be compared against a
-// normal one. Uses the grate's own libc write() (a direct syscall — not
-// interposed). Hex output to avoid pulling in printf.
-extern long write(long, const void *, long);
-static void _lind_dbg_hex(char *b, int *p, uint64_t v) {
-    for (int i = 60; i >= 0; i -= 4) {
-        int n = (int)((v >> i) & 0xf);
-        b[(*p)++] = (char)(n < 10 ? '0' + n : 'a' + n - 10);
-    }
-}
-static void _lind_dbg_log(const char *name, uint64_t arg0, uint64_t ret) {
-    char b[160]; int p = 0;
-    for (const char *s = "[marshal] "; *s; s++) b[p++] = *s;
-    for (const char *s = name; *s && p < 120; s++) b[p++] = *s;
-    for (const char *s = " arg0=0x"; *s; s++) b[p++] = *s;
-    _lind_dbg_hex(b, &p, arg0);
-    for (const char *s = " ret=0x"; *s; s++) b[p++] = *s;
-    _lind_dbg_hex(b, &p, ret);
-    b[p++] = '\n';
-    write(2, b, p);
-}
-#endif
-
 static inline uint64_t lind_marshal_dispatch(
     void                           *typed_handler,
     const struct lind_marshal_spec *spec,
@@ -1392,7 +1811,6 @@ static inline uint64_t lind_marshal_dispatch(
     uint32_t                        nargs,
     const char                     *_dbg_name)
 {
-    (void)_dbg_name;
     // raw_args and the handler cast below are both fixed at LIND_RAW_ARGS_MAX
     // slots (the pass_fptr_to_wt/register_lib_handler transport width); a
     // spec with more args than that would read raw_args out of bounds and
@@ -1400,6 +1818,7 @@ static inline uint64_t lind_marshal_dispatch(
     if (spec->nargs > LIND_RAW_ARGS_MAX)
         _lind_marshal_abort("marshal spec exceeds raw ABI slot capacity");
 
+    _lind_dbg_call(_dbg_name);
     _lind_marshal_reset();
     _lind_marshal_source_cage = source_cage;
     _lind_marshal_grate_cage  = grate_cage;
@@ -1413,17 +1832,13 @@ static inline uint64_t lind_marshal_dispatch(
     for (uint32_t i = 0; i < effective_nargs; i++) {
         handler_args[i] = _lind_marshal_prepare_arg(
             i, &spec->args[i], raw_args, nargs, source_cage, grate_cage,
-            shadows, &nshadows);
+            shadows, &nshadows, _dbg_name);
     }
 
     // --- Handler ---
     uint64_t handler_ret = ((lind_handler6_t)typed_handler)(
         handler_args[0], handler_args[1], handler_args[2],
         handler_args[3], handler_args[4], handler_args[5]);
-
-#ifdef LIND_MARSHAL_DEBUG
-    _lind_dbg_log(_dbg_name, handler_args[0], handler_ret);
-#endif
 
     // --- Post-call ---
     for (uint32_t s = 0; s < nshadows; s++) {

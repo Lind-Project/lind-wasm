@@ -31,7 +31,42 @@ SIZE_KIND = {
     "cstr": "LIND_SIZE_CSTR",
     "ptr_array": "LIND_SIZE_PTR_ARRAY",
     "stride_vector": "LIND_SIZE_STRIDE_VECTOR",
+    "expr": "LIND_SIZE_EXPR",
 }
+
+# General lind_extent_expr tree node kinds (see lind_marshal.h's own doc on
+# that type) -- the vocabulary import_openblas_inference.py's
+# lower_operand_tree already lowers an LLM extent formula into, one-to-one.
+# Every key here always carries an "op" field matching it.
+EXTENT_EXPR_OP = {
+    "constant": "LIND_EXPR_CONSTANT",
+    "arg_value": "LIND_EXPR_ARG_VALUE",
+    "arg_pointee_i32": "LIND_EXPR_ARG_POINTEE_I32",
+    "abs": "LIND_EXPR_ABS",
+    "product": "LIND_EXPR_PRODUCT",
+    "max": "LIND_EXPR_MAX",
+    "add": "LIND_EXPR_ADD",
+    "ceil_divide": "LIND_EXPR_CEIL_DIVIDE",
+}
+EXTENT_EXPR_LEAF_TYPE = {
+    "i32": "LIND_EXTENT_LEAF_I32",
+    "u32": "LIND_EXTENT_LEAF_U32",
+    "i64": "LIND_EXTENT_LEAF_I64",
+    "u64": "LIND_EXTENT_LEAF_U64",
+}
+# A constant leaf's value must be representable the same way
+# lind_marshal.h's own LIND_EXPR_CONSTANT case requires (it stores the value
+# as uint64_t but evaluates the whole tree in int64_t, so a value above
+# INT64_MAX would abort there even though it fits the field's own type).
+EXTENT_EXPR_CONST_VALUE_MAX = (1 << 63) - 1
+
+# Must match tests/grate-tests/lib-interpose/lind_marshal.h's
+# LIND_EXTENT_EXPR_MAX_DEPTH/_MAX_NODES exactly -- duplicated, not shared,
+# the same pattern (and the same reason) as LIND_RAW_ARGS_MAX below;
+# tests/grate-tests/lib-interpose/check_extent_expr_bounds_consistency.sh
+# fails the moment the two copies disagree.
+LIND_EXTENT_EXPR_MAX_DEPTH = 16
+LIND_EXTENT_EXPR_MAX_NODES = 64
 # StrideVector extent operands: whether a raw wasm argument slot IS the
 # value, points to it, or the operand is a compile-time constant with no
 # argument behind it at all (see ParamTree.h's ExtentSource / lind_marshal.h's
@@ -60,7 +95,7 @@ RET_KIND = {
 # the app a grate-cage pointer it can't dereference.
 SUPPORTED_RET = {"void", "scalar", "ptr_alias_arg", "ptr_into_arg", "handle"}
 SUPPORTED_SIZE = {None, "none", "na", "const", "from_arg", "from_arg_pointee",
-                  "cstr", "ptr_array", "stride_vector"}
+                  "cstr", "ptr_array", "stride_vector", "expr"}
 
 # V1's call-site transport is fixed-arity at this many raw wasm-level
 # argument/cage-id pairs (pass_fptr_to_wt / register_lib_handler /
@@ -217,6 +252,166 @@ def _valid_extent_operand(o, nargs):
     return isinstance(idx, int) and not isinstance(idx, bool) and 0 <= idx < nargs
 
 
+_EXTENT_EXPR_LEAF_TYPE_WIDTH = {"i32": 4, "u32": 4, "i64": 8, "u64": 8}
+
+
+def _scalar_arg_matches_leaf_type(arg, leaf_type):
+    """True iff `arg` (a gen_grate args[] scalar entry) is exactly the
+    width an arg_value leaf's `leaf_type` requires AND, for an unsigned
+    leaf_type, the schema positively asserts the argument is unsigned.
+    float/double scalars never match ANY leaf_type, regardless of width:
+    lind_extent_expr's leaf types (i32/u32/i64/u64) are all plain-integer
+    reinterpretations of the raw argument slot, and a float/double's bit
+    pattern read that way is not a sensible count in any width -- it's an
+    unrelated reinterpretation of totally different bits, not merely the
+    wrong size. An integer scalar of the WRONG width (e.g. an 8-byte
+    `long` argument declared as a 4-byte `i32` leaf) would silently read
+    only the low (or, depending on real endianness/ABI, an unrelated)
+    half of the real value -- also rejected, not merely "probably fine".
+
+    gen_grate's own scalar schema has no explicit signed/unsigned type
+    string distinct from plain `"int"` -- import_openblas_inference.py's
+    own lower_llm_function always maps a scalar llvm_type to `"int"`
+    (i32), `"float"`, or `"double"`, with no `"uint"`/`"unsigned"`
+    counterpart anywhere in the schema today. So a plain `"int"` scalar
+    only ever matches a SIGNED leaf_type (`i32`/`i64`): `u32`/`u64` are
+    rejected even when the width matches, since nothing in the schema
+    positively asserts the argument is actually unsigned -- widen this if
+    the schema ever gains an explicit unsigned scalar type."""
+    if arg.get("type") != "int":
+        return False
+    if arg.get("size") != _EXTENT_EXPR_LEAF_TYPE_WIDTH.get(leaf_type):
+        return False
+    return leaf_type in ("i32", "i64")
+
+
+def _ptr_arg_has_proven_int32_pointee(arg):
+    """True iff `arg` (a gen_grate args[] ptr entry) carries an explicit,
+    importer-PROVEN annotation (`int32_pointee_proven`) that its pointee
+    is exactly a 4-byte int -- the only pointer shape arg_pointee_i32 may
+    safely dereference. Deliberately does NOT infer this from
+    `size_kind`/`const_size` alone: a fixed 4-byte buffer is not
+    necessarily an int (a real `float *` argument is equally 4 bytes per
+    element), and `pointee[0]["type"]` is documented as informational-only
+    metadata for some extent kinds (see import_openblas_inference.py's own
+    lower_pointer_argument doc), never a safety-critical proof on its own.
+    Only the explicit annotation -- set by the importer's own name-profile
+    verification (`_INT_SCALAR_NAMES`), not re-derived here -- is trusted."""
+    return arg.get("kind") == "ptr" and arg.get("int32_pointee_proven") is True
+
+
+def _valid_extent_expr_tree(node, args, depth=0, nodes_remaining=None):
+    """None iff `node` is a well-formed lind_extent_expr tree this generator
+    can safely emit: every op recognized, every leaf's arg_index in range
+    AND the referenced argument's own ABI kind/width consistent with that
+    leaf (arg_value must name a scalar of EXACTLY the width/float-ness its
+    leaf_type requires, with signedness checked where the schema can
+    actually represent it -- reading a pointer's raw bits, a mismatched-
+    width integer, or a float/double's bits as a count would all silently
+    misinterpret the argument; arg_pointee_i32 must name a ptr carrying an
+    explicit, importer-proven `int32_pointee_proven` annotation -- there is
+    nothing to dereference on a scalar, and neither a fixed byte count nor
+    a descriptive type label alone proves the pointee is actually an int,
+    e.g. a real `float *` is equally 4 bytes per element), a recognized
+    leaf_type for arg_value, every constant leaf's value non-negative and
+    representable, and the WHOLE tree within the runtime's
+    own depth/node-count ceiling (LIND_EXTENT_EXPR_MAX_DEPTH/_MAX_NODES
+    above) -- checked here, at generation time, in ADDITION to (not instead
+    of) the runtime's own identical checks in _lind_eval_extent_expr_depth:
+    this gives a precise, actionable reason tied to the actual JSON at the
+    point generation fails, while the runtime check remains the real
+    enforcement boundary against any other caller of arg_spec_body/
+    emit_extent_expr that skips this validator. The ABI-kind check in
+    particular matters even though import_openblas_inference.py already
+    enforces the matching rule on its own lowered output (lower_operand_tree's
+    own llvm_type checks): the generator is an INDEPENDENT trust boundary,
+    not merely a second copy of the importer's check, since nothing stops
+    a different or hand-edited marshal.json from reaching this code without
+    ever passing through that importer at all. Otherwise a short, specific
+    reason -- never silently truncates, defaults, or repairs a malformed
+    tree.
+
+    `args`: the function's own per-argument spec list (the same
+    {"kind": ...} dicts f.get("args", []) holds), used to both range-check
+    a leaf's arg_index and confirm the referenced argument's ABI kind, or
+    None to skip BOTH checks entirely -- the same "primary gate has the
+    real argument list, callers without one only get a weaker backstop"
+    split unmarshalable_reason/arg_spec_body already have for
+    _valid_extent_operand above (unmarshalable_reason is always called with
+    the real args list; arg_spec_body, which doesn't receive one, passes
+    None)."""
+    if nodes_remaining is None:
+        nodes_remaining = [LIND_EXTENT_EXPR_MAX_NODES]
+    if not isinstance(node, dict):
+        return f"expected an operand object, got {node!r}"
+    if depth >= LIND_EXTENT_EXPR_MAX_DEPTH:
+        return "exceeds maximum depth"
+    if nodes_remaining[0] <= 0:
+        return "exceeds maximum node count"
+    nodes_remaining[0] -= 1
+
+    op = node.get("op")
+    if op not in EXTENT_EXPR_OP:
+        return f"unsupported operator {op!r}"
+
+    if op == "constant":
+        v = node.get("value")
+        if (not isinstance(v, int) or isinstance(v, bool)
+                or not (0 <= v <= EXTENT_EXPR_CONST_VALUE_MAX)):
+            return f"constant leaf has invalid value {v!r}"
+        return None
+
+    if op in ("arg_value", "arg_pointee_i32"):
+        idx = node.get("arg_index")
+        if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
+            return f"argument index {idx!r} out of range"
+        if args is not None:
+            if idx >= len(args):
+                return f"argument index {idx!r} out of range (nargs={len(args)})"
+            arg = args[idx]
+            arg_kind = arg.get("kind", "scalar")
+            if op == "arg_value":
+                if arg_kind != "scalar":
+                    return (f"arg_value references argument {idx}, whose kind is "
+                            f"{arg_kind!r}, not scalar -- refusing to read a "
+                            f"non-scalar argument's raw bits as a count")
+                leaf_type = node.get("leaf_type")
+                if (leaf_type in EXTENT_EXPR_LEAF_TYPE
+                        and not _scalar_arg_matches_leaf_type(arg, leaf_type)):
+                    return (f"arg_value references argument {idx} (type="
+                            f"{arg.get('type')!r}, size={arg.get('size')!r}), which "
+                            f"does not match leaf_type {leaf_type!r} -- refusing to "
+                            f"read a mismatched-width or non-integer scalar's raw "
+                            f"bits as this leaf's value")
+            if op == "arg_pointee_i32" and arg_kind != "ptr":
+                return (f"arg_pointee_i32 references argument {idx}, whose kind is "
+                        f"{arg_kind!r}, not ptr -- refusing to dereference a "
+                        f"non-pointer argument")
+            if op == "arg_pointee_i32" and arg_kind == "ptr" and not _ptr_arg_has_proven_int32_pointee(arg):
+                return (f"arg_pointee_i32 references argument {idx}, which has no "
+                        f"importer-proven int32_pointee_proven annotation -- refusing "
+                        f"to dereference a pointer whose pointee can't be confirmed "
+                        f"to be a 4-byte int")
+        if op == "arg_value" and node.get("leaf_type") not in EXTENT_EXPR_LEAF_TYPE:
+            return f"arg_value leaf has unsupported leaf_type {node.get('leaf_type')!r}"
+        return None
+
+    if op == "abs":
+        operand = node.get("operand")
+        if operand is None:
+            return "abs missing its operand"
+        return _valid_extent_expr_tree(operand, args, depth + 1, nodes_remaining)
+
+    # Binary: product/max/add/ceil_divide.
+    lhs, rhs = node.get("lhs"), node.get("rhs")
+    if lhs is None or rhs is None:
+        return f"{op} missing lhs/rhs"
+    r = _valid_extent_expr_tree(lhs, args, depth + 1, nodes_remaining)
+    if r:
+        return r
+    return _valid_extent_expr_tree(rhs, args, depth + 1, nodes_remaining)
+
+
 def unmarshalable_reason(f, warn=False, max_args=LIND_RAW_ARGS_MAX):
     """None iff the runtime can faithfully marshal every part of this spec;
     otherwise a short, specific, actionable reason why not -- naming the
@@ -246,7 +441,8 @@ def unmarshalable_reason(f, warn=False, max_args=LIND_RAW_ARGS_MAX):
     # would compile fine and only abort -- taking the whole grate process
     # down with it -- on the function's first real call, so this exclusion is
     # still enforced, just no longer described as an anomaly.
-    nargs = len(f.get("args", []))
+    top_args = f.get("args", [])
+    nargs = len(top_args)
     if max_args is not None and nargs > max_args:
         reason = (f"needs {nargs} raw ABI slots, exceeding the interposition "
                   f"transport's {max_args}-slot capacity (V1-only; a "
@@ -274,7 +470,7 @@ def unmarshalable_reason(f, warn=False, max_args=LIND_RAW_ARGS_MAX):
     # the function stays force_local upstream and never reaches this check as
     # "marshal" at all.)
 
-    def walk(n, path):
+    def walk(n, path, top_level):
         if n.get("cursor"):                       # strsep-style cursor: not implemented
             return f"{path}: cursor-style pointee not implemented"
         if n.get("kind") == "ptr":
@@ -286,23 +482,70 @@ def unmarshalable_reason(f, warn=False, max_args=LIND_RAW_ARGS_MAX):
                 if (not isinstance(const_size, int) or isinstance(const_size, bool)
                         or const_size <= 0):
                     return f"{path}: stride_vector has invalid const_size {const_size!r}"
-                for label, key in (("size_operand", "size_operand"),
-                                   ("stride_operand", "stride_operand")):
-                    o = n.get(key)
-                    if not _valid_extent_operand(o, nargs):
-                        return f"{path}: stride_vector {label} malformed/out-of-range: {o!r}"
+                # Two mutually exclusive operand shapes: the legacy
+                # single-leaf lind_extent_operand pair (size_operand/
+                # stride_operand), or a general lind_extent_expr tree pair
+                # (size_operand_expr/stride_operand_expr -- import_
+                # openblas_inference.py's own output, always both together,
+                # e.g. for a stride that must be abs()'d). Exactly one of
+                # the two pairs must be present; one tree key present
+                # without its partner is self-contradictory, not a
+                # harmless partial spec.
+                has_size_expr = "size_operand_expr" in n
+                has_stride_expr = "stride_operand_expr" in n
+                if has_size_expr != has_stride_expr:
+                    return (f"{path}: stride_vector has exactly one of "
+                            f"size_operand_expr/stride_operand_expr -- both or "
+                            f"neither, never one alone")
+                if has_size_expr:
+                    # The runtime's nested-struct-field switch (lind_marshal.h)
+                    # only ever computes a sibling field's size via CSTR/
+                    # FROM_ARG/CONST -- there is no raw_args array (and no
+                    # general lind_extent_expr evaluation) in that context at
+                    # all, so a tree-shaped stride_vector operand generated
+                    # inside a struct field would compile fine and only abort
+                    # on the function's first real call. Reject at generation
+                    # time instead of expanding the (deliberately unexercised)
+                    # nested runtime path -- see Gate 3's own notes on why
+                    # nested expression support stays out of scope.
+                    if not top_level:
+                        return (f"{path}: stride_vector size_operand_expr/"
+                                f"stride_operand_expr is not supported on a "
+                                f"nested pointer field (only CSTR/FROM_ARG/CONST "
+                                f"are)")
+                    for label, key in (("size_operand_expr", "size_operand_expr"),
+                                       ("stride_operand_expr", "stride_operand_expr")):
+                        r = _valid_extent_expr_tree(n.get(key), top_args)
+                        if r:
+                            return f"{path}: stride_vector {label} {r}"
+                else:
+                    for label, key in (("size_operand", "size_operand"),
+                                       ("stride_operand", "stride_operand")):
+                        o = n.get(key)
+                        if not _valid_extent_operand(o, nargs):
+                            return f"{path}: stride_vector {label} malformed/out-of-range: {o!r}"
+            if sk == "expr":
+                # Same reasoning as stride_vector's tree-operand case just
+                # above: the nested-struct-field runtime switch has no
+                # LIND_SIZE_EXPR case at all, only CSTR/FROM_ARG/CONST.
+                if not top_level:
+                    return (f"{path}: size_kind 'expr' is not supported on a "
+                            f"nested pointer field (only CSTR/FROM_ARG/CONST are)")
+                r = _valid_extent_expr_tree(n.get("size_expr"), top_args)
+                if r:
+                    return f"{path}: size_expr {r}"
         for i, ch in enumerate(n.get("pointee") or []):
-            r = walk(ch, f"{path}.pointee[{i}]")
+            r = walk(ch, f"{path}.pointee[{i}]", False)
             if r:
                 return r
         for i, ch in enumerate(n.get("fields") or []):
-            r = walk(ch, f"{path}.fields[{i}]")
+            r = walk(ch, f"{path}.fields[{i}]", False)
             if r:
                 return r
         return None
 
-    for i, a in enumerate(f.get("args", [])):
-        r = walk(a, f"arg{i}")
+    for i, a in enumerate(top_args):
+        r = walk(a, f"arg{i}", True)
         if r:
             return r
     return None
@@ -350,6 +593,20 @@ class Emitter:
         if sk in ("from_arg", "from_arg_pointee"):
             idx = a.get("size_arg_index", a.get("size_field_index", 0))
             parts.append(f".size_arg_index = {idx}")
+        if sk == "expr":
+            # unmarshalable_reason() is the primary gate (it also
+            # range-checks every leaf's arg_index against the function's
+            # real arg count, which isn't known here) -- this call is a
+            # defense-in-depth backstop for any direct caller of
+            # arg_spec_body that skips it, the same division of
+            # responsibility stride_vector's own operand validation below
+            # already has.
+            node = a.get("size_expr")
+            reason = _valid_extent_expr_tree(node, None)
+            if reason:
+                raise ValueError(f"size_expr missing/malformed: {reason}")
+            expr_name = self.emit_extent_expr(node)
+            parts.append(f".size_expr = &{expr_name}")
         if sk == "stride_vector":
             # is_marshalable() is the primary gate (it also range-checks
             # arg_index against the function's real arg count, which isn't
@@ -384,8 +641,28 @@ class Emitter:
             const_size = a.get("const_size")
             if not isinstance(const_size, int) or isinstance(const_size, bool) or const_size <= 0:
                 raise ValueError(f"stride_vector has invalid const_size: {const_size!r}")
-            parts.append(f'.size_operand = {operand(a.get("size_operand"), "size_operand")}')
-            parts.append(f'.stride_operand = {operand(a.get("stride_operand"), "stride_operand")}')
+            # Two mutually exclusive operand shapes -- see
+            # unmarshalable_reason's own walk() doc on the same split.
+            has_size_expr = "size_operand_expr" in a
+            has_stride_expr = "stride_operand_expr" in a
+            if has_size_expr != has_stride_expr:
+                raise ValueError(
+                    "stride_vector has exactly one of size_operand_expr/"
+                    "stride_operand_expr -- both or neither, never one alone"
+                )
+            if has_size_expr:
+                size_node, stride_node = a["size_operand_expr"], a["stride_operand_expr"]
+                for node, label in ((size_node, "size_operand_expr"), (stride_node, "stride_operand_expr")):
+                    reason = _valid_extent_expr_tree(node, None)
+                    if reason:
+                        raise ValueError(f"stride_vector {label} missing/malformed: {reason}")
+                size_name = self.emit_extent_expr(size_node)
+                stride_name = self.emit_extent_expr(stride_node)
+                parts.append(f".size_operand_expr = &{size_name}")
+                parts.append(f".stride_operand_expr = &{stride_name}")
+            else:
+                parts.append(f'.size_operand = {operand(a.get("size_operand"), "size_operand")}')
+                parts.append(f'.stride_operand = {operand(a.get("stride_operand"), "stride_operand")}')
             parts.append(f'.const_size = {const_size}')
 
         # NULL-terminated array of pointers (argv): emit the per-element spec.
@@ -417,6 +694,35 @@ class Emitter:
         # a stable small int. For libz there are no handles in the marshalable
         # set, so this is rarely hit.
         return f"{(hash(cls) & 0x7fffffff)}u /* {cls} */"
+
+    def emit_extent_expr(self, node):
+        """Emit one lind_extent_expr tree node (and, recursively, every
+        child it has) into self.decls, children before their parent -- a
+        parent's own initializer takes a child's address, which C requires
+        to already be a visible prior declaration at file scope. Returns
+        the new node's own C variable name (not `&name`; callers embed it
+        the same way emit_layout/emit_element's own callers do). Assumes
+        `node` already passed _valid_extent_expr_tree -- the same division
+        of responsibility arg_spec_body's other nested emitters have."""
+        op = node["op"]
+        c_op = EXTENT_EXPR_OP[op]
+        name = self.uid("extentexpr")
+        if op == "constant":
+            init = f".kind = {c_op}, .const_value = {node['value']}ULL"
+        elif op == "arg_value":
+            init = (f'.kind = {c_op}, .arg_index = {node["arg_index"]}, '
+                    f'.leaf_type = {EXTENT_EXPR_LEAF_TYPE[node["leaf_type"]]}')
+        elif op == "arg_pointee_i32":
+            init = f'.kind = {c_op}, .arg_index = {node["arg_index"]}'
+        elif op == "abs":
+            child_name = self.emit_extent_expr(node["operand"])
+            init = f".kind = {c_op}, .lhs = &{child_name}"
+        else:  # product / max / add / ceil_divide
+            lhs_name = self.emit_extent_expr(node["lhs"])
+            rhs_name = self.emit_extent_expr(node["rhs"])
+            init = f".kind = {c_op}, .lhs = &{lhs_name}, .rhs = &{rhs_name}"
+        self.decls.append(f"static const struct lind_extent_expr {name} = {{ {init} }};")
+        return name
 
     def emit_element(self, node):
         """Emit a standalone lind_arg_spec for an array element; return its name."""

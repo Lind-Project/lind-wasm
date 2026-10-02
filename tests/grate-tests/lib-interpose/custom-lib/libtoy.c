@@ -149,3 +149,54 @@ int toy_daxpy_mixed(const int *n, double alpha, const double *x, int incx,
 int toy_daxpy_badindex(int n, double alpha, const double *x, int incx, double *y, int incy) {
     return toy_daxpy(n, alpha, x, incx, y, incy);
 }
+
+// toy_daxpy_exprstride: same computation as toy_daxpy, but walks forward
+// using the ABSOLUTE VALUE of incx/incy -- unlike toy_daxpy's raw
+// (possibly-negative) incx/incy. Used to test LIND_SIZE_STRIDE_VECTOR's
+// general lind_extent_expr operands (size_operand_expr/stride_operand_expr
+// -- issue #22's Gate 3, import_openblas_inference.py's own output shape
+// for a real OpenBLAS "stride_vector" extent), which can wrap a stride in
+// abs() the same way a real formula does for cblas_dger/cblas_dnrm2/etc.
+// That lets a spec accept a negative incx/incy (rejected outright by the
+// plain-lind_extent_operand path's own "negative stride not supported"
+// check, since that path has no way to express "take the magnitude"). Real
+// BLAS direction semantics for a negative increment (walking backward from
+// the LAST touched element) are a separate, pre-existing limitation this
+// toy function does not attempt to reproduce -- it only proves the general
+// expression-tree sizing path itself, not full real-BLAS parity.
+int toy_daxpy_exprstride(int n, double alpha, const double *x, int incx,
+                          double *y, int incy) {
+    int ix = incx < 0 ? -incx : incx;
+    int iy = incy < 0 ? -incy : incy;
+    for (int i = 0; i < n; i++)
+        y[i * iy] += alpha * x[i * ix];
+    return 0;
+}
+
+// toy_packedsum_exprsize: sums the n*(n+1)/2 doubles of a packed buffer --
+// the real formula shape import_openblas_inference.py lowers for
+// OpenBLAS's packed-storage ("sp"/"pp") functions
+// (ceil_divide(product(n, add(n, 1)), 2), scaled by the element size).
+// Used to test LIND_SIZE_EXPR (issue #22's Gate 3): a pointer's whole byte
+// extent computed directly from a general lind_extent_expr tree, not any
+// existing size_kind.
+double toy_packedsum_exprsize(int n, const double *ap) {
+    int count = (n * (n + 1)) / 2;
+    double sum = 0.0;
+    for (int i = 0; i < count; i++) sum += ap[i];
+    return sum;
+}
+
+// toy_packedsum_badtree: registered under its own symbol purely so a test
+// can pair it with a spec whose size_expr tree deliberately names an
+// out-of-range argument index, without colliding with
+// toy_packedsum_exprsize's own (correct) registration in the same grate.
+// Returns int (unlike toy_packedsum_exprsize's double), the same reason
+// toy_daxpy returns int instead of real cblas_daxpy's void: a rejected
+// call's LIND_GRATE_ERR sentinel needs a return value to travel back in,
+// and this function is never expected to actually run in the first place
+// (the call is rejected before reaching it).
+int toy_packedsum_badtree(int n, const double *ap) {
+    (void)n; (void)ap;
+    return 0;
+}

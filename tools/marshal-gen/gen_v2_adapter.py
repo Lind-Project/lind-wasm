@@ -45,8 +45,37 @@ from gen_grate import Emitter, unmarshalable_reason  # noqa: E402
 def v2_unmarshalable_reason(f):
     """Like gen_grate.py's unmarshalable_reason, but with no raw-ABI-slot
     cap: a V2 adapter has its own exact lowered signature, not V1's fixed
-    six-slot transport."""
-    return unmarshalable_reason(f, max_args=None)
+    six-slot transport. Also rejects any scalar argument/return whose
+    type/size this module can't positively confirm -- see
+    _v2_scalar_shape_confirmed's own doc for why guessing one (as V1's
+    ABI-agnostic dispatch can safely afford to) is unsound here: a
+    static-inference "proven" record's own `ret` can be as bare as
+    `{"kind": "scalar"}` (no type/size at all, since V1 never needed
+    either -- fpcast-emu adapts the real ABI at the BINARY level
+    regardless of the declared prototype), and defaulting that to int32
+    would silently emit a WRONG, value-corrupting prototype for an
+    actual float/double-returning function (confirmed against the real
+    openblas-inference artifact: 41 of 151 V2-eligible functions --
+    cblas_damax, cblas_dasum, damax_, ... -- have exactly this gap, every
+    one already V1-generatable, so rejecting them from V2 loses no real
+    coverage)."""
+    reason = unmarshalable_reason(f, max_args=None)
+    if reason:
+        return reason
+    for i, a in enumerate(f.get("args", [])):
+        if a.get("kind", "scalar") == "scalar" and not _v2_scalar_shape_confirmed(a):
+            return (f"arg{i}: scalar argument has no confirmed type/size "
+                    f"(type={a.get('type')!r}, size={a.get('size')!r}) -- V2 must emit "
+                    f"an exact, real C prototype, so an unconfirmed width/type can't "
+                    f"be safely assumed")
+    ret = f.get("ret") or {}
+    ret_kind = ret.get("kind", "void")
+    if (ret_kind not in ("void", "handle", "ptr_alias_arg", "ptr_into_arg")
+            and not _v2_scalar_shape_confirmed(ret)):
+        return (f"return value has no confirmed type/size (kind={ret_kind!r}, "
+                f"type={ret.get('type')!r}, size={ret.get('size')!r}) -- same reasoning "
+                f"as the scalar-argument check above")
+    return None
 
 
 def is_v2_marshalable(f):
@@ -63,6 +92,29 @@ DEFAULT_MANIFEST_VERSION = 2
 V2_SIG_CHAR = {"uint32_t": "i", "int32_t": "i", "int64_t": "l", "float": "f", "double": "d"}
 
 
+# Scalar (int/float/double) shapes this module can positively confirm are
+# safe to emit an EXACT, real C prototype/call for. V1's own generic
+# extern decl (gen_grate.py's `extern long name();`) never needs this,
+# since fpcast-emu adapts the real ABI at the BINARY level regardless of
+# the declared prototype -- so a static-inference "proven" record's
+# `type`/`size` fields were never load-bearing there, and some real
+# records (every "proven" scalar-returning function investigated here)
+# omit them entirely. V2 has no such adaptation: it calls through a real,
+# exactly-typed C prototype, so a missing or unrecognized type/size must
+# be rejected, never defaulted.
+_V2_CONFIRMED_SCALAR_SHAPES = {("int", 4), ("int", 8), ("float", 4), ("double", 8)}
+
+
+def _v2_scalar_shape_confirmed(node):
+    """True iff a scalar/ptr/handle `node` carries a type/size this module
+    can positively map to a real wasm-level C type -- see
+    _V2_CONFIRMED_SCALAR_SHAPES's own doc. ptr/handle are always
+    confirmed (always a 32-bit address regardless of pointee)."""
+    if node.get("kind", "scalar") in ("ptr", "handle"):
+        return True
+    return (node.get("type"), node.get("size")) in _V2_CONFIRMED_SCALAR_SHAPES
+
+
 def wasm_scalar_ctype(node):
     """Maps a JSON scalar/ptr/handle node to its wasm-level C parameter
     type: the value KIND that actually matters for calling-convention
@@ -73,8 +125,15 @@ def wasm_scalar_ctype(node):
     kind = node.get("kind", "scalar")
     if kind in ("ptr", "handle"):
         return "uint32_t"
-    size = node.get("size", 4)
-    t = node.get("type", "")
+    size, t = node.get("size"), node.get("type")
+    if (t, size) not in _V2_CONFIRMED_SCALAR_SHAPES:
+        # v2_unmarshalable_reason() is the primary gate; this is a
+        # defense-in-depth backstop for any direct caller of
+        # emit_v2_adapter that skips it -- never silently default to
+        # int32_t, which would be right only by coincidence for a
+        # genuinely-int node and WRONG (corrupting the real value) for an
+        # unconfirmed float/double one.
+        raise ValueError(f"scalar node has unconfirmed type/size: type={t!r}, size={size!r}")
     if size == 8 and t == "double":
         return "double"
     if size == 4 and t == "float":
@@ -183,6 +242,12 @@ class V2AdapterEmitter(Emitter):
         # for it: `static` linkage would prevent the symbol from surviving
         # to the export table regardless of any attribute.
         lines.append(f"{adapter_ret_ctype} {export_name}({params_decl}) {{")
+        # Gate 5's own execution-trace hook (issue #22) -- a true no-op
+        # outside a -DLIND_MARSHAL_DEBUG build (see lind_marshal.h's own
+        # doc on _lind_dbg_call), so emitting this call unconditionally in
+        # every one of this library's generated adapters costs nothing in
+        # a normal build and needs no #ifdef here.
+        lines.append(f'    _lind_dbg_call("{name}");')
         lines.append("    _lind_marshal_reset();")
         lines.append("    _lind_marshal_source_cage = source_cage;")
         lines.append("    _lind_marshal_grate_cage  = grate_cage;")
@@ -197,7 +262,7 @@ class V2AdapterEmitter(Emitter):
         for i in range(n):
             lines.append(
                 f"    uint64_t h{i} = _lind_marshal_prepare_arg({i}, &{argspecs_name}[{i}], "
-                f"raw_args, {n}, source_cage, grate_cage, shadows, &nshadows);"
+                f'raw_args, {n}, source_cage, grate_cage, shadows, &nshadows, "{name}");'
             )
 
         call_arg_ctypes = ["void *" if c == "uint32_t" else c for c in arg_ctypes]

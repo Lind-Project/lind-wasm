@@ -29,12 +29,21 @@ Two mechanical transforms are applied, both safe no-ops when not needed:
      even some "v5"-labeled entries in practice.
 After reshaping, the response is re-validated from scratch against
 TODAY's validator.py and the function's CURRENT manifest (from
---prompt-dir) -- never trusted blindly. Only a result that still
-independently validates (to usable OR model_unknown -- both are
-"the current validator parsed this response correctly", the interesting
-distinction for recovery purposes) gets written into the target cache,
-under the cache key a live query would actually use, so future runs see
-it as an ordinary cache hit.
+--prompt-dir) -- never trusted blindly.
+
+PROVENANCE IS NEVER REWRITTEN. The upgraded entry's provider/model/params
+are always the entry's OWN original values, read from its own meta.json
+-- never a caller-supplied override. The new cache key is computed from
+those SAME original values plus the current manifest, so the upgraded
+entry can only ever become a cache hit for a query that would have used
+that exact original provider/model/params anyway. This tool has no way
+to make an answer produced by one model masquerade as another's, and
+deliberately does not accept a provider/model override for that reason:
+an earlier version of this script did take --provider/--model as a
+relabeling target, which silently attributed gpt-5.5-produced answers to
+gpt-6-sol in the shared sweep cache. If you actually want data FOR a
+different model, query that model -- this tool only recovers data that
+already exists under its true identity.
 """
 
 import argparse
@@ -134,34 +143,27 @@ def main():
                     help="cache directory to write upgraded, reusable entries into")
     ap.add_argument("--prompt-dir", required=True,
                     help="CURRENT --llm-prompt-only output directory (for manifests + cache keys)")
-    ap.add_argument("--provider", required=True)
-    ap.add_argument("--model", required=True,
-                    help="the model a live run would use -- must match for the upgraded entry's "
-                         "cache key to actually be found by that run")
-    ap.add_argument("--param", action="append",
-                    help="key=value request parameter (repeatable) -- must match a live run's params")
     args = ap.parse_args()
-
-    params = {}
-    for p in args.param or []:
-        k, _, v = p.partition("=")
-        try:
-            params[k] = json.loads(v)
-        except json.JSONDecodeError:
-            params[k] = v
 
     manifests = load_current_manifests(args.prompt_dir)
     target_cache = cache_mod.Cache(args.target_cache_dir)
     target_version = validator_mod.RESPONSE_SCHEMA_VERSION
 
     counts = {"scanned": 0, "already_current": 0, "not_in_current_manifests": 0,
-             "json_invalid": 0, "already_covered": 0, "upgraded": 0, "still_invalid": 0}
+             "missing_identity": 0, "json_invalid": 0, "already_covered": 0,
+             "upgraded": 0, "still_invalid": 0}
 
     for source_dir in args.source_cache_dir:
         for key, meta, extracted_text in iter_cache_entries(source_dir):
             counts["scanned"] += 1
             function_name = meta.get("function")
             source_version = meta.get("response_schema_version")
+            original_provider = meta.get("provider")
+            original_model = meta.get("model")
+            original_params = meta.get("params", {})
+            if not original_provider or not original_model:
+                counts["missing_identity"] += 1
+                continue
             if source_version == target_version:
                 counts["already_current"] += 1
                 continue
@@ -185,7 +187,9 @@ def main():
                 counts["still_invalid"] += 1
                 continue
 
-            new_key = cache_mod.compute_cache_key(manifest, args.provider, args.model, params)
+            # Keyed by the ORIGINAL provider/model/params -- this can only
+            # ever satisfy a query that would have used that exact identity.
+            new_key = cache_mod.compute_cache_key(manifest, original_provider, original_model, original_params)
             lock = target_cache.lock(new_key)
             try:
                 if target_cache.read(new_key) is not None:
@@ -197,18 +201,21 @@ def main():
                     "input_hash": manifest["input_hash"],
                     "prompt_version": manifest["prompt_version"],
                     "response_schema_version": target_version,
-                    "provider": args.provider,
-                    "model": args.model,
-                    "params": params,
+                    "provider": original_provider,
+                    "model": original_model,
+                    "params": original_params,
                     "runner_request_format_version": cache_mod.RUNNER_REQUEST_FORMAT_VERSION,
                     "requested_at": meta.get("requested_at"),
-                    "upgraded_from_response_schema_version": source_version,
-                    "upgraded_from_cache_dir": source_dir,
-                    "upgraded_at": _now(),
+                    "original_response_schema_version": source_version,
+                    "normalized_response_schema_version": target_version,
+                    "provenance": "migrated",
+                    "migrated_from_cache_dir": source_dir,
+                    "migrated_from_key": key,
+                    "migrated_at": _now(),
                 }
                 usage = {"tokens": {}, "latency_s": None, "attempts": None,
                          "request_id": None, "completed_at": meta.get("requested_at")}
-                target_cache.write(new_key, new_meta, {"upgraded": True, "original_key": key},
+                target_cache.write(new_key, new_meta, {"migrated": True, "original_key": key},
                                    upgraded_text, vres.to_dict(), usage)
                 counts["upgraded"] += 1
             finally:
