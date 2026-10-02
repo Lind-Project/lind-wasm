@@ -17,7 +17,7 @@ use crate::lind_mpk::syscalls::{
     register_arch_prctl_syscall_handler, register_set_tid_address_syscall_handler,
 };
 use crate::lind_mpk::RuntimeInfo::{
-    MPKCageCtxStack, MPKSupervisorContext, MPKSupervisorCtxStack, MPKCageContext,
+    MPKSupervisorContext, MPKSupervisorCtxStack,
     MPKRuntimeInfo, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
     allocate_stack_in_vmmap,
 };
@@ -42,13 +42,14 @@ struct LinkMap {
     l_next: *mut LinkMap,
     l_prev: *mut LinkMap,
 }
+
 use std::sync::Arc;
 use wasmtime_lind_utils::LindCageManager;
 use sysdefs::constants::lind_platform_const::{UNUSED_ID,  UNUSED_ARG, WASMTIME_CAGEID, RAWPOSIX_CAGEID};
 use wasmtime_lind_multi_process::CAGE_START_ID;
 use threei::threei_const;
 use crate::lind_mpk::trampoline::{
-    grate_callback_trampoline, register_mpk_handler_for_cage,
+    grate_callback_trampoline, register_mpk_handler_for_cage,jmp_into_cage_prepared_gs_naked
 };
 
 // Import the type alias from RuntimeInfo module
@@ -151,22 +152,39 @@ const SUPERVISOR_STACK_GUARD: usize = 4096;            // one guard page
 // arch_prctl code for setting the GS base register.
 // Not always exported by the libc crate, so defined explicitly.
 const ARCH_SET_GS: c_int = 0x1001;
+const ARCH_GET_FS: c_int = 0x1003;
 
 // MPK has no Wasmtime epoch handler, so lind_signal_init receives a pointer to
 // this static zero, matching the disable_signals behaviour used in wasmtime.
 static MPK_EPOCH: AtomicU64 = AtomicU64::new(0);
 
-/// Allocates and initializes the per-thread GS and cage context pages, then
+/// Allocates and initializes the per-thread GS context page, then
 /// installs the GS base for the calling thread.
 pub(super) fn setup_gs_context(
     cageid: u64,
     os_tid: libc::pid_t,
-) -> anyhow::Result<(*mut MPKSupervisorCtxStack, *mut MPKCageCtxStack, usize, usize)> {
-    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
-    if page_size == 0 {
-        bail!("sysconf(_SC_PAGESIZE) failed");
+) -> anyhow::Result<(*mut MPKSupervisorCtxStack, usize, usize)> {
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if page_size <= 0 {
+        bail!(
+            "sysconf(_SC_PAGESIZE) failed: {}",
+            std::io::Error::last_os_error()
+        );
     }
-    let context_pages_size = page_size.checked_mul(2).context("context page size overflow")?;
+    let page_size = page_size as usize;
+    let mut fs_base = 0usize;
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_arch_prctl,
+            ARCH_GET_FS as libc::c_long,
+            &mut fs_base as *mut usize,
+        )
+    };
+    if ret != 0 {
+        bail!("arch_prctl(ARCH_GET_FS) failed: {}", std::io::Error::last_os_error());
+    }
+
+    let context_pages_size = page_size;
     let context_pages = unsafe {
         libc::mmap(
             std::ptr::null_mut(),
@@ -182,17 +200,14 @@ pub(super) fn setup_gs_context(
     }
 
     let gs_ptr = context_pages as *mut MPKSupervisorCtxStack;
-    let cage_ptr = (context_pages as usize + page_size) as *mut MPKCageCtxStack;
     unsafe {
         std::ptr::write(gs_ptr, MPKSupervisorCtxStack {
             current_context: 0,
             os_tid: os_tid as u64,
             contexts: [MPKSupervisorContext::default(); LIND_MPK_MAX_CONTEXTS],
         });
-        std::ptr::write(cage_ptr, MPKCageCtxStack {
-            current_context: 0,
-            contexts: [MPKCageContext::default(); LIND_MPK_MAX_CONTEXTS],
-        });
+        (*gs_ptr).contexts[0].cage_id = cageid;
+        (*gs_ptr).contexts[1].fs_base = fs_base;
     }
 
     let ret = unsafe {
@@ -207,23 +222,20 @@ pub(super) fn setup_gs_context(
         bail!("arch_prctl(ARCH_SET_GS) failed: {}", std::io::Error::last_os_error());
     }
 
-    Ok((gs_ptr, cage_ptr, context_pages as usize, context_pages_size))
+    Ok((gs_ptr, context_pages as usize, context_pages_size))
 }
 
 /// Allocates a supervisor stack and returns a `MpkThreadInfo` to be registered
 /// in `MPKRuntimeInfo::threads`. GS context setup is performed separately by
 /// `setup_gs_context` and can also be called independently.
 ///
-/// The custom glibc assembly (`syscall-interpose.h`) switches to the supervisor stack
-/// on every intercepted syscall by reading gs:8. This function must be called before
-/// `__enable_syscall_interpose` so that GS is valid when the first interposed syscall
-/// fires.
+/// This function must be called before `__enable_syscall_interpose` so that the GS
+/// context and supervisor stack are ready when the first intercepted syscall fires.
 ///
 /// Steps:
 /// 1. `mmap` a region with a `PROT_NONE` guard page at the bottom.
-/// 2. Allocate a `GsSegmentData` (via `Box`), writing the stack top to `supervisor_rsp`.
-/// 3. `arch_prctl(ARCH_SET_GS, gs_ptr)` — installs GS for the calling thread only.
-/// 4. Return `MpkThreadInfo`; the caller inserts it into `MPKRuntimeInfo::threads` keyed
+/// 2. `arch_prctl(ARCH_SET_GS, gs_ptr)` — installs GS for the calling thread only.
+/// 3. Return `MpkThreadInfo`; the caller inserts it into `MPKRuntimeInfo::threads` keyed
 ///    by the current OS thread ID so it is freed when the cage or thread exits.
 ///
 /// For fork-based cage isolation, child processes inherit the parent thread's GS value
@@ -231,8 +243,7 @@ pub(super) fn setup_gs_context(
 /// additional call is needed in the forked child.  For CLONE_VM in-process threads,
 /// each new thread must call this function before its first intercepted syscall.
 pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow::Result<MpkThreadInfo> {
-    let (gs_ptr, cage_ptr, context_pages, context_pages_size) =
-        setup_gs_context(cageid, os_tid)?;
+    let (gs_ptr, context_pages, context_pages_size) = setup_gs_context(cageid, os_tid)?;
 
     let total_size = SUPERVISOR_STACK_GUARD + SUPERVISOR_STACK_SIZE;
 
@@ -266,14 +277,6 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
     // Stack top is at the high end of the allocation (x86-64 stack grows down).
     let stack_top = (stack_base as usize + total_size) as u64;
 
-    unsafe {
-        (*gs_ptr).contexts[0] = MPKSupervisorContext {
-            super_rsp: stack_top,
-            cage_id: cageid,
-            pkru: 0,
-        };
-    }
-
     mpk_debug(format!(
         "supervisor stack (tid {}): guard=[{:p}..{:#x}], usable=[{:#x}..{:#x}], gs_data={:#x}",
         current_tid(),
@@ -282,9 +285,13 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
         gs_ptr as usize,
     ));
 
+    // Write the supervisor stack to the context stack.
+    unsafe {
+        (*gs_ptr).contexts[1].rsp = stack_top;
+    }
+
     Ok(MpkThreadInfo {
         gs_data: gs_ptr,
-        cage_data: cage_ptr,
         context_pages,
         context_pages_size,
         supervisor_stack_base: stack_base as usize,
@@ -294,95 +301,6 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
         child_tid: std::sync::atomic::AtomicU64::new(0),
     })
 }
-
-/// Allocates a fresh supervisor stack for a new thread by **copying** the usable
-/// contents of `parent`'s supervisor stack, and returns a ready-to-register
-/// `MpkThreadInfo`.
-///
-/// # Why a copy, not a blank stack
-///
-/// When `clone3` is called from within the interposition handler, execution is already
-/// on the supervisor stack.  The call frames from the interpose entry through
-/// `lind_syscall_handler` → `mpk_clone_syscall_entry` are live on that stack.
-/// The new thread created by `clone3` must unwind those same frames to return back
-/// to the application, so it needs its own private copy of the current stack contents.
-/// The copy is made before `clone3` is called so that both the parent and the child
-/// thread have independent, identical stack images to unwind from.
-///
-/// # What gets copied
-///
-/// The entire usable region (guard-page end → stack top) is copied.  The new
-/// `GsSegmentData::supervisor_rsp` points to the top of the new region; when the
-/// new thread installs GS and `clone3` returns `0`, its RSP is at the same offset
-/// below the top as the parent's, so all return addresses and saved registers are
-/// valid relative to the new stack base.
-///
-/// # GS is not installed
-///
-/// Like `setup_supervisor_stack_for_thread`, this function does **not** call
-/// `arch_prctl(ARCH_SET_GS, ...)`.  The new thread must install GS itself after
-/// `clone3` returns `0`, before the next intercepted syscall fires.
-///
-/// Caller responsibilities:
-/// - Insert the returned `MpkThreadInfo` into `MPKRuntimeInfo::threads` under the
-///   new thread's OS tid.
-/// - From within the new thread, call `arch_prctl(ARCH_SET_GS, gs_data_ptr)`.
-// pub(super) fn copy_supervisor_stack_for_thread(parent: &MpkThreadInfo) -> anyhow::Result<MpkThreadInfo> {
-//     let total_size = parent.supervisor_stack_size;
-
-//     let new_stack_base = unsafe {
-//         libc::mmap(
-//             std::ptr::null_mut(),
-//             total_size,
-//             libc::PROT_READ | libc::PROT_WRITE,
-//             libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-//             -1,
-//             0,
-//         )
-//     };
-//     if new_stack_base == libc::MAP_FAILED {
-//         bail!("mmap for cloned supervisor stack failed: {}", std::io::Error::last_os_error());
-//     }
-
-//     // Copy the usable portion of the parent's supervisor stack.
-//     // The guard page is left as zeroed memory for now; mprotect below makes it PROT_NONE.
-//     let usable_size = total_size - SUPERVISOR_STACK_GUARD;
-//     let src = (parent.supervisor_stack_base + SUPERVISOR_STACK_GUARD) as *const u8;
-//     let dst = (new_stack_base as usize + SUPERVISOR_STACK_GUARD) as *mut u8;
-//     unsafe { std::ptr::copy_nonoverlapping(src, dst, usable_size) };
-
-//     // Guard page at the bottom of the new stack.
-//     let ret = unsafe { libc::mprotect(new_stack_base, SUPERVISOR_STACK_GUARD, libc::PROT_NONE) };
-//     if ret != 0 {
-//         unsafe { libc::munmap(new_stack_base, total_size) };
-//         bail!("mprotect for cloned supervisor stack guard failed: {}", std::io::Error::last_os_error());
-//     }
-
-//     let new_stack_top = (new_stack_base as usize + total_size) as u64;
-
-//     let mut gs_data = Box::new(GsSegmentData {
-//         current_context: std::ptr::null_mut(),
-//         supervisor_rsp: new_stack_top,
-//         os_tid: current_tid() as u64,
-//         contexts: [Default::default(); crate::lind_mpk::RuntimeInfo::LIND_MPK_MAX_CONTEXTS],
-//     });
-//     gs_data.current_context = gs_data.contexts.as_mut_ptr();
-
-//     mpk_debug(format!(
-//         "cloned supervisor stack (tid {}): src=[{:#x}..{:#x}] -> dst=[{:p}..{:#x}], gs_data={:#x} (GS not yet installed)",
-//         current_tid(),
-//         parent.supervisor_stack_base + SUPERVISOR_STACK_GUARD,
-//         parent.supervisor_stack_base + total_size,
-//         new_stack_base, new_stack_base as usize + total_size,
-//         &*gs_data as *const GsSegmentData as u64,
-//     ));
-
-//     Ok(MpkThreadInfo {
-//         gs_data,
-//         supervisor_stack_base: new_stack_base as usize,
-//         supervisor_stack_size: total_size,
-//     })
-// }
 
 
 /// Returns the OS-level thread ID of the calling thread (Linux `gettid`).
@@ -398,6 +316,28 @@ fn mpk_debug(message: impl AsRef<str>) {
     if mpk_debug_enabled() {
         eprintln!("[lind-mpk] {}", message.as_ref());
     }
+}
+
+fn write_initial_stack_to_context_stack(
+    gs_data: *mut MPKSupervisorCtxStack,
+    cage_id: u64,
+    entry_rsp: u64,
+) -> anyhow::Result<()> {
+    if gs_data.is_null() {
+        bail!("MPK GS context is null while preparing initial stack");
+    }
+    if LIND_MPK_MAX_CONTEXTS < 2 {
+        bail!("MPK context stack capacity too small for initial setup");
+    }
+
+    unsafe {
+        // Initial cage entry runs on the stack prepared by write_process_entry_stack.
+        (*gs_data).contexts[0].rsp = entry_rsp;
+        (*gs_data).contexts[0].cage_id = cage_id;
+        (*gs_data).current_context = 0;
+    }
+
+    Ok(())
 }
 
 fn merge_host_ld_env_vars(vars: &mut Vec<(String, Option<String>)>) {
@@ -1048,6 +988,7 @@ fn exec_mpk_internal(
             stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
+            fs_base: 0, //TODO: register new TLS data for new thread in handling grates
         };
         grate_thread.allocate_grate_stack()?;
         grate_threads.insert(current_os_tid, grate_thread);
@@ -1105,6 +1046,7 @@ fn exec_mpk_internal(
         Some((current_os_tid, MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: cage_id,
+            fs_base: 0,
             stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
@@ -1134,7 +1076,12 @@ fn exec_mpk_internal(
         entry_rsp,
         loaded.binary_entrypoint,
     ));
-    unsafe { jump_to_entrypoint(entry_rsp, loaded.ldso_entrypoint as usize) }
+
+    write_initial_stack_to_context_stack(thread_info.gs_data, cage_id, entry_rsp as u64)?;
+
+
+    jmp_into_cage_prepared_gs_naked(loaded.ldso_entrypoint);
+    unreachable!("jmp_into_cage_prepared_gs_naked returned unexpectedly");
 }
 
 pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32> {
@@ -1220,6 +1167,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
             stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
+            fs_base: 0, //TODO: register new TLS data for new thread in handling grates
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);
@@ -1274,6 +1222,21 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         loaded.binary_entrypoint,
     ));
 
+    let gs_data = {
+        let runtime_info = cage.runtime_info.read();
+        let mpk_info = runtime_info
+            .as_any()
+            .downcast_ref::<MPKRuntimeInfo>()
+            .ok_or_else(|| anyhow::anyhow!("cage {} runtime is not MPK", cage_id))?;
+        let threads = mpk_info.threads.read();
+        let thread = threads
+            .get(&tid)
+            .ok_or_else(|| anyhow::anyhow!("thread {} has no MPK thread info", tid))?;
+        thread.thread_info.gs_data
+    };
+    write_initial_stack_to_context_stack(gs_data, cage_id, entry_rsp as u64)?;
+
     // Step 6: Transfer control to the loader entrypoint; execution returns via guest exit paths.
-    unsafe { jump_to_entrypoint(entry_rsp, loaded.ldso_entrypoint as usize) }
+    jmp_into_cage_prepared_gs_naked(loaded.ldso_entrypoint);
+    unreachable!("jmp_into_cage_prepared_gs_naked returned unexpectedly");
 }

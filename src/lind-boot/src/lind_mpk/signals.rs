@@ -3,7 +3,7 @@
 /// - find better solution for map_tid_to_cage
 /// - check ordering of context stack increment: Are there any races with signal handling?
 /// - prevent deadlocks by managing the signal mask carefully
-use crate::lind_mpk::RuntimeInfo::{MPKCageCtxStack, MPKRuntimeInfo, MPKSupervisorCtxStack, LIND_MPK_MAX_CONTEXTS};
+use crate::lind_mpk::RuntimeInfo::{MPKRuntimeInfo, MPKSupervisorCtxStack, LIND_MPK_MAX_CONTEXTS};
 use cage::memory::vmmap::VmmapOps;
 use cage::get_cage;
 use std::arch::asm;
@@ -103,7 +103,7 @@ fn cage_from_supervisor_ctx_top() -> Option<u64> {
         }
 
         let depth = (*gs_data).current_context;
-        if depth > LIND_MPK_MAX_CONTEXTS {
+        if depth >= LIND_MPK_MAX_CONTEXTS {
             return None;
         }
 
@@ -148,19 +148,6 @@ fn gs_base() -> usize {
         );
     }
     base
-}
-
-#[cfg(target_arch = "x86_64")]
-fn current_rsp() -> usize {
-    let rsp: usize;
-    unsafe {
-        asm!(
-            "mov %rsp, {out}",
-            out = out(reg) rsp,
-            options(nostack, preserves_flags, att_syntax),
-        );
-    }
-    rsp
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -521,6 +508,8 @@ pub fn wait_if_stopped(cageid: u64) -> bool {
     info.killed.load(Ordering::Acquire)
 }
 
+
+//TODO: This needs to do a context stack store, increment, load sequence to properly switch contexts.
 #[cfg(target_arch = "x86_64")]
 unsafe fn call_handler_on_cage_stack(
     stack_top: usize,
@@ -568,14 +557,15 @@ fn invoke_handler_on_cage_stack(
             return false;
         };
 
-        let (stack_top, cage_data) = {
+        let (stack_top, gs_data, fs_base) = {
             let threads = info.threads.read();
             let Some(thread) = threads.get(&os_tid) else {
                 return false;
             };
-            let cage_data = thread.thread_info.cage_data;
+            let gs_data = thread.thread_info.gs_data;
             let mut resolved_stack_top = 0usize;
             let mut do_stack_walk = true;
+            let mut fs_base = 0usize;
 
             if let Some(rsp_before_signal) = pre_signal_rsp {
                 if addr_in_cage_vmmap(cageid, rsp_before_signal) {
@@ -584,26 +574,19 @@ fn invoke_handler_on_cage_stack(
                 }
             } 
 
-            if do_stack_walk && !cage_data.is_null() {
-                let gs_data = gs_base() as *const MPKSupervisorCtxStack;
-                let cage_ctx = cage_data as *const MPKCageCtxStack;
-                let mut depth = unsafe {
-                    (*gs_data)
-                        .current_context
-                        .min((*cage_ctx).current_context)
-                        .min(LIND_MPK_MAX_CONTEXTS)
-                };
-                while depth > 0 {
-                    let idx = depth - 1;
-                    let matches_cage = unsafe { (*gs_data).contexts[idx].cage_id == cageid };
-                    if matches_cage {
-                        let saved_rsp = unsafe { (*cage_ctx).contexts[idx].rsp as usize };
-                        if saved_rsp != 0 {
-                            resolved_stack_top = saved_rsp.saturating_sub(SIGNAL_STACK_RED_ZONE);
+            if do_stack_walk && !gs_data.is_null() {
+                let gs_data = gs_data as *const MPKSupervisorCtxStack;
+                let current = unsafe { (*gs_data).current_context };
+                if current < LIND_MPK_MAX_CONTEXTS {
+                    for idx in (0..=current).rev() {
+                        let context = unsafe { &(*gs_data).contexts[idx] };
+                        if context.cage_id == cageid && context.rsp != 0 {
+                            resolved_stack_top =
+                                (context.rsp as usize).saturating_sub(SIGNAL_STACK_RED_ZONE);
+                            fs_base = context.fs_base as usize;
                             break;
                         }
                     }
-                    depth -= 1;
                 }
             }
 
@@ -617,29 +600,25 @@ fn invoke_handler_on_cage_stack(
             }
 
 
-            (resolved_stack_top, cage_data)
+            (resolved_stack_top, gs_data, fs_base)
         };
 
-        if stack_top == 0 || cage_data.is_null() {
+        if stack_top == 0 || gs_data.is_null() {
             return false;
         }
 
         unsafe {
-            let gs_data = gs_base() as *mut MPKSupervisorCtxStack;
-            let super_current = (*gs_data).current_context;
-            let cage_data = cage_data as *mut MPKCageCtxStack;
-            let cage_current = (*cage_data).current_context;
-            if super_current >= LIND_MPK_MAX_CONTEXTS || cage_current >= LIND_MPK_MAX_CONTEXTS {
+            let gs_data = gs_data as *mut MPKSupervisorCtxStack;
+            let current = (*gs_data).current_context;
+            if current >= LIND_MPK_MAX_CONTEXTS {
                 return false;
             }
 
-            // Prepare both context stacks before entering the cage signal handler.
-            // Supervisor stack can use a conservative decrement from current RSP.
-            let supervisor_rsp = current_rsp().saturating_sub(SIGNAL_STACK_RED_ZONE) & !0xf;
-            (*gs_data).contexts[super_current].super_rsp = supervisor_rsp as u64;
-            (*gs_data).contexts[super_current].cage_id = cageid;
-
-            (*cage_data).contexts[cage_current].rsp = (stack_top & !0xf) as u64;
+            // Prepare the target cage stack.
+            (*gs_data).contexts[current + 1].cage_id = cageid;
+            (*gs_data).contexts[current + 1].rsp = (stack_top & !0xf) as u64;
+            (*gs_data).contexts[current + 1].fs_base = fs_base;
+            (*gs_data).current_context += 1;
             let handler_fn: unsafe extern "C" fn(i32) = std::mem::transmute(handler as usize);
             call_handler_on_cage_stack(stack_top, handler_fn, signo);
         }

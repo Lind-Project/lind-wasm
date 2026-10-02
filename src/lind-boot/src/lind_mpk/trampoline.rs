@@ -1,5 +1,5 @@
 use crate::lind_mpk::RuntimeInfo::{
-    MPKCageCtxStack, MPKRuntimeInfo, MPKSupervisorContext, MPKSupervisorCtxStack, MpkCageThreadInfo,
+    MPKRuntimeInfo, MPKSupervisorContext, MPKSupervisorCtxStack, MpkCageThreadInfo,
     LIND_MPK_MAX_CONTEXTS,
 };
 use cage::get_cage;
@@ -9,15 +9,11 @@ use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::{THREEI_CAGEID, UNUSED_ARG, UNUSED_ID};
 use threei::threei_const::{REGISTER_HANDLER_SYSCALL, RUNTIME_TYPE_MPK};
 
-const GS_SUPER_CURRENT_CONTEXT: usize = offset_of!(MPKSupervisorCtxStack, current_context);
-pub const GS_SUPER_OS_TID: usize = offset_of!(MPKSupervisorCtxStack, os_tid);
-const GS_SUPER_CONTEXT_ARRAY: usize = offset_of!(MPKSupervisorCtxStack, contexts);
-const GS_SUPER_CONTEXT_SIZE: usize = size_of::<MPKSupervisorContext>();
-// `cage_data` is mapped one page after the GS data in setup_supervisor_stack.
-const MPK_CONTEXT_PAGE_SIZE: usize = 4096;
-const GS_CURRENT_CONTEXT: usize = MPK_CONTEXT_PAGE_SIZE + offset_of!(MPKCageCtxStack, current_context);
-const GS_CONTEXTS_ARRAY: usize = GS_CURRENT_CONTEXT + offset_of!(MPKCageCtxStack, contexts);
-const GS_CONTEXTS_SIZE: usize = size_of::<usize>();
+const GS_CURRENT_CONTEXT_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, current_context);
+pub const GS_OS_TID_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, os_tid);
+const GS_CONTEXT_ARRAY_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, contexts);
+const GS_CONTEXT_FS_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + offset_of!(MPKSupervisorContext, fs_base);
+const GS_CONTEXT_SIZE: usize = size_of::<MPKSupervisorContext>();
 
 fn mpk_debug(message: impl AsRef<str>) {
     if std::env::var_os("LIND_MPK_DEBUG").is_some() {
@@ -114,6 +110,7 @@ extern "C" fn mpk_register_handler(
                 stack_addr: std::sync::atomic::AtomicUsize::new(0),
                 stack_base: 0,
                 stack_size: 0,
+                fs_base: 0, //TODO: register new TLS data for new thread in handling grates
             };
             new_thread.allocate_grate_stack()?;
             new_thread.thread_info.register_cage(handle_func_cage);
@@ -157,6 +154,9 @@ extern "C" fn mpk_register_handler(
     }
 }
 
+///Note: This currently does not support circular invocation (reentry) on the grate stack.
+/// There is no mechanism to maintain a safe stack position for entering a grate G if G is already on the call chain.
+/// However, implementing this would only require keeping the latest stack position for the current thread for each grate
 pub extern "C" fn grate_callback_trampoline(
     in_grate_fn_ptr_u64: u64,
     cageid: u64,
@@ -191,10 +191,11 @@ pub extern "C" fn grate_callback_trampoline(
         current_context_index + 1 < LIND_MPK_MAX_CONTEXTS,
         "inner_grate_callback_trampoline: supervisor context stack is full"
     );
+    let switch_to_context_index = current_context_index + 1;
 
     let gs_data = gs_base as *mut MPKSupervisorCtxStack;
     let os_tid = unsafe { (*gs_data).os_tid as libc::pid_t };
-    let (grate_stack, cage_data) = {
+    let (grate_stack, grate_fs_base, thread_gs_data) = {
         let cage = get_cage(cageid).expect("inner_grate_callback_trampoline: cage not found");
         let runtime_info = cage.runtime_info.read();
         let mpk_info = runtime_info
@@ -207,18 +208,15 @@ pub extern "C" fn grate_callback_trampoline(
             .expect("inner_grate_callback_trampoline: thread is not registered in cage");
         (
             cage_thread.stack_addr.load(std::sync::atomic::Ordering::Relaxed),
-            cage_thread.thread_info.cage_data,
+            cage_thread.fs_base,
+            cage_thread.thread_info.gs_data,
         )
     };
-    assert!(!cage_data.is_null(), "inner_grate_callback_trampoline: null cage context");
-
-    assert!((gs_base + 0x1000) as u64 == cage_data as u64, "inner_grate_callback_trampoline: cage data is not related to gs base");
-
-    let cage_context_index = unsafe { (*cage_data).current_context };
-    assert!(
-        cage_context_index < LIND_MPK_MAX_CONTEXTS,
-        "inner_grate_callback_trampoline: cage context index out of bounds: {}",
-        cage_context_index
+    assert!(!thread_gs_data.is_null(), "inner_grate_callback_trampoline: null GS context");
+    assert_eq!(
+        thread_gs_data as usize,
+        gs_base,
+        "inner_grate_callback_trampoline: thread GS context does not match GS base"
     );
 
     //determine next stack. 
@@ -226,8 +224,9 @@ pub extern "C" fn grate_callback_trampoline(
     let next_stack = grate_stack;
     assert!(next_stack != 0, "inner_grate_callback_trampoline: grate stack is not initialized");
     unsafe {
-        (*cage_data).contexts[cage_context_index].rsp = (next_stack & !0xf) as u64; 
-        (*gs_data).contexts[current_context_index].cage_id = cageid;
+        (*gs_data).contexts[switch_to_context_index].rsp = (next_stack & !0xf) as u64;
+        (*gs_data).contexts[switch_to_context_index].cage_id = cageid;
+        (*gs_data).contexts[switch_to_context_index].fs_base = grate_fs_base;
     }
 
     let asm_entry: unsafe extern "sysv64" fn(
@@ -293,18 +292,30 @@ extern "sysv64" fn inner_grate_callback_trampoline_asm(
     //get context stack pointer and grate stack
     //switch to threads' grate stack, old rsp in r11
     "movq %rsp, %r11; ",
-    //write supervisor rsp to sup stack
-    "movq %gs:{gs_super_current_context_offset}, %r10 ;",
-    "imulq ${gs_super_context_size_value}, %r10;" ,
-    "subq $8, %rsp;", //16 byte alignment
-    "movq %rsp, %gs:{gs_super_context_array_offset}(%r10);",
-    //get grate stack
+    
+    //spill current rsp to current_context.rsp
     "movq %gs:{gs_current_context_offset}, %r10 ;",
     "imulq ${gs_contexts_size_value}, %r10;" ,
+    "subq $8, %rsp;", //16 byte alignment
+    "movq %rsp, %gs:{gs_contexts_array_offset}(%r10);",
+    
+    //spill current fs_base
+    "addq $8, %r10; ",// r10 now points to fs_base within the current context
+    "rdfsbase %rax; ",
+    "movq %rax, %gs:{gs_contexts_array_offset}(%r10);",
+    
+    
+    //get grate fs-base
+    "addq ${gs_contexts_size_value}, %r10; ", //r10 now points to the fs_base of the next context (e.g. grate context)
+    "movq %gs:{gs_contexts_array_offset}(%r10), %rax; ",
+    "wrfsbase %rax; ",
+    
+    //get grate stack
+    "subq $0x8, %r10; ", //r10 now points to the stack pointer of the grate context
     "movq %gs:{gs_contexts_array_offset}(%r10), %rsp ;",
 
 
-    "subq $0x58, %rsp; ", // room for 8 byte alignment (0x8) + 7 args (0x38) + 3 regs (0x18) 
+    "subq $0x58, %rsp; ", // room for 8 byte alignment (0x8) + 7 args (0x38) + 3 scratch regs (0x18) 
     "movq %rcx, 0x0(%rsp); ",
     "movq %rsi, 0x8(%rsp); ",
     "movq %rdi, 0x10(%rsp); ",
@@ -320,28 +331,79 @@ extern "sysv64" fn inner_grate_callback_trampoline_asm(
     "popq %rsi; ",
     "popq %rdi; ",
     
+    //increment the current context index
+    "incq %gs:{gs_current_context_offset}; ",
+    
     //switch pkru, get as offset from gs:r10
     //call fptr
     "call *%r11; ",
     //switch back pkru
-
+    
+    //decrement the current context index
+    "decq %gs:{gs_current_context_offset}; ",
 
     //switch back to supervisor stack
-    "movq %gs:{gs_super_current_context_offset}, %r10 ;",
-    "imulq ${gs_super_context_size_value}, %r10;" ,
-    "movq %gs:{gs_super_context_array_offset}(%r10), %rsp ;",
+    "movq %gs:{gs_current_context_offset}, %r10 ;",
+    "imulq ${gs_contexts_size_value}, %r10;" ,
+    "movq %gs:{gs_contexts_array_offset}(%r10), %rsp ;",
     "addq $8, %rsp; ", //undo 16 byte alignment
+
+    //switch back to supervisor fs_base
+    "addq $8, %r10; ", // r10 now points to the fs_base of the supervisor context
+    "movq %gs:{gs_contexts_array_offset}(%r10), %r11; ",
+    "wrfsbase %r11; ",
     
     "ret; "
         ,
-        gs_super_current_context_offset = const GS_SUPER_CURRENT_CONTEXT,
-        gs_super_context_array_offset = const GS_SUPER_CONTEXT_ARRAY,
-        gs_super_context_size_value = const GS_SUPER_CONTEXT_SIZE,
-        gs_current_context_offset = const GS_CURRENT_CONTEXT,
-        gs_contexts_array_offset = const GS_CONTEXTS_ARRAY,
-        gs_contexts_size_value = const GS_CONTEXTS_SIZE,
+        gs_current_context_offset = const GS_CURRENT_CONTEXT_OFFSET,
+        gs_contexts_array_offset = const GS_CONTEXT_ARRAY_OFFSET,
+        gs_contexts_size_value = const GS_CONTEXT_SIZE,
         options(att_syntax));
     }
     
     //End ASM
 }
+
+
+#[unsafe(naked)]
+pub extern "sysv64" fn jmp_into_cage_prepared_gs_naked(
+    entry_point: u64,
+) {
+    unsafe {
+        naked_asm!(
+            //at this point, we assume that contexts[0] is the user context to switch to and that contexts[1] is an already prepared supervisor context
+            "movq %gs:{gs_contexts_array_offset} , %rsp; ",
+            "movq %gs:{gs_context_fs_offset} , %rax; ",
+            "wrfsbase %rax; ",
+            "jmp *%rdi", //entry point in first arg         
+        gs_contexts_array_offset = const GS_CONTEXT_ARRAY_OFFSET,
+        gs_context_fs_offset = const GS_CONTEXT_FS_OFFSET,
+        options(att_syntax));
+
+    }
+}
+
+
+// #[unsafe(naked)]
+// pub extern "sysv64" fn call_into_cage_prepared_gs_naked(
+//     rdi: u64,
+//     rsi: u64,
+//     rcx: u64,
+//     r8: u64,
+//     r9: u64,
+//     r10: u64,
+// ) {
+//     unsafe {
+//         naked_asm!(
+//             //at this point, we assume that contexts[0] is the user context to switch to and that contexts[1] is an already prepared supervisor context
+//             ""
+
+
+//             ,
+//         gs_current_context_offset = const GS_CURRENT_CONTEXT_OFFSET,
+//         gs_contexts_array_offset = const GS_CONTEXT_ARRAY_OFFSET,
+//         gs_contexts_size_value = const GS_CONTEXT_SIZE,
+//         options(att_syntax));
+
+//     }
+// }

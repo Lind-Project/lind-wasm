@@ -106,28 +106,23 @@ pub type EnableInterposeF = unsafe extern "C" fn(
 pub const LIND_MPK_MAX_CONTEXTS: usize = 16;
 
 /// A saved MPK execution context.
+/// NOTE: The field offsets are used in assembly. Changes here need to be reflected in the corresponding assembly code.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MPKSupervisorContext {
-    pub super_rsp: u64,
-    pub cage_id: u64,
+    pub rsp: u64,
+    pub fs_base: usize,
+    pub cage_id: u64, // 0 for supervisor
     pub pkru: u32,
 }
 
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct MPKCageContext {
-    pub rsp: u64,
-}
-
 /// GS segment data layout for the syscall interposition assembly.
 ///
-/// This matches `lind_mpk_context_stack_t` in `syscall-interpose.h`:
-///   - gs:0  — pointer to the active MPK context
-///   - gs:8  — supervisor stack top
-///   - gs:16 — OS thread ID
-///   - gs:24 — fixed-capacity saved-context stack
+/// The GS base points at this struct:
+///   - gs:0  — current context index
+///   - gs:8  — OS thread ID
+///   - gs:16 — fixed-capacity saved-context array
 ///
 /// The GS base register is pointed at this struct via arch_prctl(ARCH_SET_GS, ...).
 /// Each thread must have its own instance because its active context is written on
@@ -140,28 +135,20 @@ pub struct MPKSupervisorCtxStack {
     pub contexts: [MPKSupervisorContext; LIND_MPK_MAX_CONTEXTS],
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct MPKCageCtxStack {
-    pub current_context: usize,
-    pub contexts: [MPKCageContext; LIND_MPK_MAX_CONTEXTS],
-}
 
 /// Per-thread supervisor stack state for MPK syscall interposition.
 ///
-/// Each in-process thread needs its own `GsSegmentData` and supervisor stack.
+/// Each in-process thread needs its own `MPKSupervisorCtxStack` and supervisor stack.
 /// Instances are stored in `MPKRuntimeInfo::threads`, keyed by OS thread ID
 /// (`gettid()`), and are freed when removed from that map or when the cage exits.
 #[derive(Debug)]
 pub struct MpkThreadInfo {
-    /// GS segment data for this thread.  The Box gives a stable heap address;
-    /// GS is set to point here via arch_prctl(ARCH_SET_GS, ...).
+    /// GS segment data for this thread, stored in the mapped context page and
+    /// installed via arch_prctl(ARCH_SET_GS, ...).
     /// The GS data is stable accross all cages for this thread and only accessible to 
     /// the supervisor.
     pub gs_data: *mut MPKSupervisorCtxStack,
-    /// Cage context data stored at the start of the second context page.
-    pub cage_data: *mut MPKCageCtxStack,
-    /// Mapping containing `gs_data` and `cage_data`, one page each.
+    /// Mapping containing the GS segment data.
     pub context_pages: usize,
     pub context_pages_size: usize,
     /// Base address of the mmap'd supervisor stack region (includes guard page).
@@ -191,9 +178,6 @@ impl Drop for MpkThreadInfo {
             if !self.gs_data.is_null() {
                 std::ptr::drop_in_place(self.gs_data);
             }
-            if !self.cage_data.is_null() {
-                std::ptr::drop_in_place(self.cage_data);
-            }
         }
         if self.context_pages != 0 && self.context_pages_size != 0 {
             unsafe {
@@ -208,13 +192,13 @@ impl Drop for MpkThreadInfo {
                 );
             }
         }
-        // gs_data (Box) is freed automatically.
+        // The context page is unmapped after dropping its initialized GS data.
     }
 }
 
 // SAFETY: MpkThreadInfo is owned by MPKRuntimeInfo::threads, which is protected
-// by a RwLock. supervisor_stack_base is a raw address stored as usize and does not
-// alias any Rust reference. gs_data is a Box<GsSegmentData> (plain u64 fields).
+// by a RwLock. Its pointers refer to mapped context/stack regions and are not
+// accessed through Rust references concurrently.
 unsafe impl Send for MpkThreadInfo {}
 unsafe impl Sync for MpkThreadInfo {}
 
@@ -264,6 +248,7 @@ pub struct MpkCageThreadInfo {
     pub stack_addr: AtomicUsize,
     pub stack_base: usize,
     pub stack_size: usize,
+    pub fs_base: usize,
 }
 
 impl MpkCageThreadInfo {
@@ -332,7 +317,7 @@ pub struct MPKRuntimeInfo {
     pub next_thread_id: RwLock<i32>,
     /// Per-thread supervisor stack state, keyed by OS thread ID (gettid()).
     /// Each in-process thread that runs guest code registers its MpkThreadInfo here
-    /// so its supervisor stack and GsSegmentData are tracked and freed on exit.
+    /// so its supervisor stack and GS context data are tracked and freed on exit.
     /// Empty for forked child cages (their resources live in their own address space).
     pub threads: RwLock<HashMap<pid_t, MpkCageThreadInfo>>,
     /// MPK cages do not have a Wasmtime epoch, so lifecycle transitions are

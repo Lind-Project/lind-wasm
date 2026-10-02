@@ -21,7 +21,7 @@ use sysdefs::constants::lind_platform_const::{INIT_CAGEID, RAWPOSIX_CAGEID, THRE
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::data::sys_struct::CloneArgStruct;
 use std::arch::asm;
-use crate::lind_mpk::trampoline::{GS_SUPER_OS_TID};
+use crate::lind_mpk::trampoline::{GS_OS_TID_OFFSET};
 use crate::lind_mpk::signals::{handle_signal};
 
 // Stored by execute.rs after it resolves __enable_syscall_interpose so that
@@ -347,6 +347,7 @@ fn mpk_clone_thread_entry(
             stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
+            fs_base: 0, //TODO: register new TLS data for new thread in handling grates
         };
         cage_info.thread_info.register_cage(cage_id);
         if let Err(error) = cage_info.allocate_grate_stack() {
@@ -369,18 +370,25 @@ fn mpk_clone_thread_entry(
     unsafe {
         let child_pointer_guard = current_pointer_guard();
         let stack_delta = new_stack_base_addr as isize - old_stack_base as isize;
-        //fix up all supervisor stack entries with the new stack base.
+        // Relocate context stack pointers that refer to the copied supervisor stack.
+        let current_context = (*new_gs_data).current_context;
         assert!(
-            (*new_gs_data).current_context > 0,
-            "mpk_clone: supervisor context stack is empty"
+            current_context < LIND_MPK_MAX_CONTEXTS,
+            "mpk_clone: supervisor context index out of bounds"
         );
-        //for all contexts, offset supervisor stack pointers with the stack delta
-        for i in 0..(*new_gs_data).current_context {
+        let old_stack_start = old_stack_base + CAGE_STACK_GUARD;
+        let old_stack_end = old_stack_base + thread_info.supervisor_stack_size;
+        for i in 0..=current_context {
+            let rsp = (*new_gs_data).contexts[i].rsp as usize;
+            if !(old_stack_start..=old_stack_end).contains(&rsp) {
+                continue;
+            }
+            let relocated_rsp = (rsp as isize + stack_delta) as u64;
             mpk_debug(&format!(
-                "mpk_clone: adjusting supervisor stack pointer for context {}: super_rsp = {:#x}, new super_rsp = {:#x}",
-                i, (*new_gs_data).contexts[i].super_rsp, ((*new_gs_data).contexts[i].super_rsp as isize + stack_delta) as u64
+                "mpk_clone: adjusting stack pointer for context {}: rsp = {:#x}, new rsp = {:#x}",
+                i, rsp, relocated_rsp
             ));
-            (*new_gs_data).contexts[i].super_rsp = ((*new_gs_data).contexts[i].super_rsp as isize + stack_delta) as u64;
+            (*new_gs_data).contexts[i].rsp = relocated_rsp;
         }
 
         (*copied_jump_buffer).rsp = relocate_mangled_stack_pointer(
@@ -989,12 +997,9 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             }
 
             let new_gs_data_addr = new_context_pages as usize;
-            let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
-            let new_cage_data_addr = new_context_pages as usize + page_size;
             let clear_child_tid_addr = if clear_child_tid { child_tid_ptr } else { 0 };
             let thread_info = Arc::new(MpkThreadInfo {
                 gs_data: new_gs_data_addr as *mut MPKSupervisorCtxStack,
-                cage_data: new_cage_data_addr as *mut crate::lind_mpk::RuntimeInfo::MPKCageCtxStack,
                 context_pages: new_context_pages as usize,
                 context_pages_size,
                 supervisor_stack_base: new_stack_base as usize,
@@ -1006,12 +1011,13 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
 
             // Fix up the top grate's return stack with the caller-provided stack.
             unsafe {
-                let cage_data = &mut *thread_info.cage_data;
+                let gs_data = &mut *thread_info.gs_data;
+                let current_context = gs_data.current_context;
                 assert!(
-                    cage_data.current_context > 0,
-                    "mpk_clone: cage context stack is empty"
+                    current_context < LIND_MPK_MAX_CONTEXTS,
+                    "mpk_clone: supervisor context index out of bounds"
                 );
-                cage_data.contexts[cage_data.current_context - 1].rsp = args.stack + args.stack_size;
+                gs_data.contexts[current_context - 1].rsp = args.stack + args.stack_size;
             }
 
 
@@ -1119,7 +1125,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 // Downcast to MPKRuntimeInfo to access the handles
                 if let Some(parent_mpk) = parent_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
                     // Create new MPKRuntimeInfo for child with the child's PID.
-                    // No initial_thread: per-thread resources (GsSegmentData, supervisor
+                    // No initial_thread: per-thread resources (GS context, supervisor
                     // stack) live in the child's address space via fork's copy-on-write
                     // duplication and are not tracked by the parent.
                     let child_mpk_info = MPKRuntimeInfo::new(
@@ -1192,7 +1198,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 }
 
 
-                let (gs_ptr, cage_ptr, context_pages, context_pages_size) =
+                let (gs_ptr, context_pages, context_pages_size) =
                     match setup_gs_context(child_cageid, pid) {
                         Ok(result) => result,
                         Err(error) => {
@@ -1206,7 +1212,6 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 // Create MpkThreadInfo from the GS context we just set up
                 let thread_info = Arc::new(MpkThreadInfo {
                     gs_data: gs_ptr,
-                    cage_data: cage_ptr,
                     context_pages,
                     context_pages_size,
                     supervisor_stack_base: 0, //not needed, the current thread was spawned on a supervisor stack
@@ -1226,6 +1231,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                         stack_addr: std::sync::atomic::AtomicUsize::new(0), //not needed, the worker thread does not enter the cage
                         stack_base: 0,
                         stack_size: 0,
+                        fs_base: 0, //TODO: register new TLS data for new thread in handling grates
                     };
                     cage_info.thread_info.register_cage(*cage_id);
 
@@ -1421,7 +1427,7 @@ pub extern "C" fn mpk_exit_syscall_entry(
                         asm!(
                             "mov %gs:{gs_super_os_tid_offset}, {cage_tid}",
                             cage_tid = out(reg) cage_tid,
-                            gs_super_os_tid_offset = const GS_SUPER_OS_TID,
+                            gs_super_os_tid_offset = const GS_OS_TID_OFFSET,
                             options(att_syntax)
                         );
                     }
@@ -1493,7 +1499,7 @@ extern "C" fn mpk_exit_syscall_entry_inner(
                     asm!(
                         "mov %gs:{gs_super_os_tid_offset}, {cage_tid}",
                         cage_tid = out(reg) cage_tid,
-                        gs_super_os_tid_offset = const GS_SUPER_OS_TID,
+                        gs_super_os_tid_offset = const GS_OS_TID_OFFSET,
                         options(att_syntax)
                     );
                 }
@@ -1501,7 +1507,7 @@ extern "C" fn mpk_exit_syscall_entry_inner(
             else {
                 //This cage is running in the same process, so we need to clean up the linker state.
                 // Remove the exiting thread's MpkThreadInfo from the map; Drop frees its
-                // supervisor stack and GsSegmentData.
+                // supervisor stack and GS context data.
                 cage_tid = current_tid();
             }
 
