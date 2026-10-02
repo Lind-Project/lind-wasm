@@ -14,6 +14,7 @@ use crate::lind_mpk::loader::{
 use crate::lind_mpk::syscalls::{
     ENABLE_INTERPOSE_PTR, LIND_MANAGER, NO_INTERPOSE,
     mpk_clone_syscall_entry, mpk_exit_syscall_entry, mpk_make_threei_call_wrapper,
+    register_arch_prctl_syscall_handler, register_set_tid_address_syscall_handler,
 };
 use crate::lind_mpk::RuntimeInfo::{
     MPKCageCtxStack, MPKSupervisorContext, MPKSupervisorCtxStack, MPKCageContext,
@@ -28,6 +29,7 @@ use std::arch::asm;
 use std::sync::atomic::{Ordering, AtomicU64};
 use std::env;
 use std::ffi::CStr;
+use sysdefs::constants::fs_const::PAGESHIFT;
 use sysdefs::constants::syscall_const::{CLONE3_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 /// Minimal reproduction of the `link_map` struct from `<link.h>`.
 /// The libc crate does not expose this type, so we define only the fields we
@@ -59,6 +61,76 @@ const RTLD_DI_LINKMAP: c_int = 2;
 // 4 GB virtual address space reserved for each cage with MAP_NORESERVE
 // (no swap space is committed until pages are actually touched).
 const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
+const MPK_HEAP_START_OFFSET: usize = 3 * 1024 * 1024 * 1024;
+const MPK_MEMORY_ALIGNMENT: usize = 1024 * 1024 * 1024;
+
+fn mmap_aligned_cage_memory() -> anyhow::Result<*mut c_void> {
+    let mapping_size = MPK_MEMORY_SIZE
+        .checked_add(MPK_MEMORY_ALIGNMENT)
+        .ok_or_else(|| anyhow::anyhow!("cage memory mapping size overflow"))?;
+    let mapping = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            mapping_size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
+            -1,
+            0,
+        )
+    };
+    if mapping == libc::MAP_FAILED {
+        bail!(
+            "mmap for aligned cage memory failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+
+    let mapping_addr = mapping as usize;
+    let Some(aligned_addr) = mapping_addr
+        .checked_add(MPK_MEMORY_ALIGNMENT - 1)
+        .map(|addr| addr & !(MPK_MEMORY_ALIGNMENT - 1))
+    else {
+        let error = std::io::Error::other("cage memory address alignment overflow");
+        if unsafe { libc::munmap(mapping, mapping_size) } != 0 {
+            bail!(
+                "{error}; also failed to release temporary mapping: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+        bail!("{error}");
+    };
+
+    let prefix_size = aligned_addr - mapping_addr;
+    let suffix_addr = aligned_addr + MPK_MEMORY_SIZE;
+    let mapping_end = mapping_addr + mapping_size;
+    let suffix_size = mapping_end - suffix_addr;
+
+    if prefix_size > 0 && unsafe { libc::munmap(mapping, prefix_size) } != 0 {
+        let error = std::io::Error::last_os_error();
+        if unsafe { libc::munmap(mapping, mapping_size) } != 0 {
+            bail!(
+                "failed to trim prefix from aligned cage memory mapping: {error}; also failed to release temporary mapping: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+        bail!("failed to trim prefix from aligned cage memory mapping: {error}");
+    }
+
+    if suffix_size > 0
+        && unsafe { libc::munmap(suffix_addr as *mut c_void, suffix_size) } != 0
+    {
+        let error = std::io::Error::last_os_error();
+        if unsafe { libc::munmap(aligned_addr as *mut c_void, MPK_MEMORY_SIZE + suffix_size) } != 0 {
+            bail!(
+                "failed to trim suffix from aligned cage memory mapping: {error}; also failed to release remaining mapping: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+        bail!("failed to trim suffix from aligned cage memory mapping: {error}");
+    }
+
+    Ok(aligned_addr as *mut c_void)
+}
 
 // Stack used to call the cage's own `main`, allocated out of the cage's
 // own vmmap so it is backed by memory the guest owns.
@@ -539,6 +611,7 @@ unsafe fn write_process_entry_stack(
         (auxv::AT_EXECFN, execfn_ptr as usize),
         (auxv::AT_PLATFORM, platform_ptr as usize),
         (auxv::AT_3ITRMP_PTR, auxv.threei_trampoline_ptr),
+        (auxv::AT_3I_MAKE_THREEI_CALL_PTR, auxv.threei_make_threei_call_ptr),
     ];
 
     // Keep the final entry RSP 16-byte aligned while preserving strict
@@ -769,6 +842,10 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
 
     crate::lind_mpk::signals::register_kill_syscall_handler()
         .expect("failed to register MPK kill syscall handler");
+    register_arch_prctl_syscall_handler()
+        .expect("failed to register MPK arch_prctl syscall handler");
+    register_set_tid_address_syscall_handler()
+        .expect("failed to register MPK set_tid_address syscall handler");
     crate::lind_mpk::signals::register_os_signal_handlers()
         .expect("failed to register MPK process signal handlers");
 
@@ -982,21 +1059,15 @@ fn exec_mpk_internal(
 
     // Step 6: Map fresh 4 GB for the new program and initialize vmmap.
     mpk_debug("mapping 4 GB cage memory for new program with MAP_NORESERVE");
-    let memory_base = unsafe {
-        libc::mmap(
-            std::ptr::null_mut(),
-            MPK_MEMORY_SIZE,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
-            -1,
-            0,
-        )
-    };
-    if memory_base == libc::MAP_FAILED {
-        bail!("mmap for new cage memory failed: {}", std::io::Error::last_os_error());
-    }
+    let memory_base = mmap_aligned_cage_memory()?;
     mpk_debug(format!("new cage memory mapped at {memory_base:p}"));
-    cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
+    let heap_start_page = MPK_HEAP_START_OFFSET >> PAGESHIFT;
+    cage::init_vmmap(
+        cage_id,
+        memory_base as usize,
+        Some(heap_start_page),
+        VmmapBitWidth::Vmmap64Bit,
+    );
 
     // Step 7: Load custom ld.so + target binary into cage vmmap.
     let loaded = {
@@ -1013,6 +1084,7 @@ fn exec_mpk_internal(
         &so_path,
         &loaded,
         lind_syscall_handler as *const () as usize,
+        mpk_make_threei_call_wrapper as *const () as usize,
     ) {
         Ok(v) => v,
         Err(e) => {
@@ -1096,25 +1168,19 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     // Step 2: Map 4 GB for the cage's virtual address space with MAP_NORESERVE,
     // then load ld.so + binary into vmmap and store MPKRuntimeInfo.
     mpk_debug("mapping 4 GB cage memory with MAP_NORESERVE");
-    let memory_base = unsafe {
-        libc::mmap(
-            std::ptr::null_mut(),
-            MPK_MEMORY_SIZE,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
-            -1,
-            0,
-        )
-    };
-    if memory_base == libc::MAP_FAILED {
-        bail!("mmap failed: {}", std::io::Error::last_os_error());
-    }
+    let memory_base = mmap_aligned_cage_memory()?;
     mpk_debug(format!("cage memory mapped at {memory_base:p}"));
 
     // Get the cage, initialize its vmmap, and store MPKRuntimeInfo.
     let cage = get_cage(cage_id)
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
-    cage::init_vmmap(cage_id, memory_base as usize, None, VmmapBitWidth::Vmmap64Bit);
+    let heap_start_page = MPK_HEAP_START_OFFSET >> PAGESHIFT;
+    cage::init_vmmap(
+        cage_id,
+        memory_base as usize,
+        Some(heap_start_page),
+        VmmapBitWidth::Vmmap64Bit,
+    );
     let loaded = {
         let mut vmmap = cage.vmmap.write();
         match mpk_load_ldso_and_binary_with_info(DEFAULT_LDSO_PATH, &so_path, &mut vmmap) {
@@ -1129,6 +1195,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         &so_path,
         &loaded,
         lind_syscall_handler as *const () as usize,
+        mpk_make_threei_call_wrapper as *const () as usize,
     ) {
         Ok(v) => v,
         Err(e) => {

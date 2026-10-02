@@ -158,6 +158,7 @@ pub const MAP_SHARING_MASK: u32 = 0x03; // Mask to isolate sharing bits
 pub const MAP_POPULATE: u32 = 0x8000; // Override lazy loading of pages
 pub const MAP_ANON: u32 = 0x20; // Don't use a file descriptor
 pub const MAP_STACK: u32 = 0x20000; // Used by glibc threads, no-op on linux, no-op on Lind
+pub const MAP_DENYWRITE: u32 = 0x0800; // used by ld.so on init, ignored by Lind and Linux 
 
 // ===== Page Size Constants =====
 // Note: These values are architecture-dependent

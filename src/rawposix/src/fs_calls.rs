@@ -852,6 +852,8 @@ pub extern "C" fn mmap_syscall(
         return syscall_error(Errno::EINVAL, "mmap", "MAP_HUGETLB not supported") as i64;
     }
 
+    let ignored_flags = MAP_DENYWRITE as i32;
+
     // Validate flags - only these flags are supported.
     // Unsupported flags trigger a debug panic rather than a silent EINVAL
     // so they surface during development instead of causing mysterious failures.
@@ -861,7 +863,8 @@ pub extern "C" fn mmap_syscall(
         | MAP_ANONYMOUS as i32
         | MAP_NORESERVE as i32
         | MAP_POPULATE as i32
-        | MAP_STACK as i32;
+        | MAP_STACK as i32
+        | ignored_flags;
     if flags & !allowed_flags != 0 {
         lind_debug_panic(&format!(
             "mmap: unsupported flags {:#x} (allowed: {:#x})",
@@ -869,9 +872,13 @@ pub extern "C" fn mmap_syscall(
         ));
     }
 
-    if prot & PROT_EXEC > 0 {
-        lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
-    }
+    flags &= !ignored_flags;
+
+    //TODO: Runtimes need to choose when to allow PROT_EXEC. 
+    // At load time, it needs to be allowed for MPK. 
+    // if prot & PROT_EXEC > 0 {
+    //     lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
+    // }
 
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as usize);
@@ -1233,7 +1240,7 @@ pub extern "C" fn brk_syscall(
 
     // passing 0 to brk will always return the current brk
     if brk == 0 {
-        return (PAGESIZE as usize * old_brk_page) as i64;
+        return vmmap.page_num_to_user(old_brk_page) as i64;
     }
     // round up the break to multiple of pages
     let brk_page = vmmap.user_to_page_num(round_up_page(brk));
@@ -1242,7 +1249,6 @@ pub extern "C" fn brk_syscall(
     if brk_page < vmmap.heap_start {
         return (syscall_error(Errno::ENOMEM, "brk", "no memory")) as i64;
     }
-
     // if we are incrementing program break, we need to check if we have enough space
     if brk_page > old_brk_page {
         if vmmap.check_existing_mapping(old_brk_page, brk_page - old_brk_page, 0) {
@@ -1266,10 +1272,10 @@ pub extern "C" fn brk_syscall(
         heap.cage_id,
     );
 
-    let old_heap_end_usr = old_brk_page * PAGESIZE as usize;
+    let old_heap_end_usr = vmmap.page_num_to_user(old_brk_page);
     let old_heap_end_sys = vmmap.user_to_sys(old_heap_end_usr) as *mut u8;
 
-    let new_heap_end_usr = brk_page * PAGESIZE as usize;
+    let new_heap_end_usr = vmmap.page_num_to_user(brk_page);
     let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
 
     drop(vmmap);
@@ -1315,7 +1321,7 @@ pub extern "C" fn brk_syscall(
     }
 
     // return brk address
-    (PAGESIZE as usize * brk_page) as i64
+    new_heap_end_usr as i64
 }
 
 //------------------------------------FCNTL SYSCALL------------------------------------

@@ -17,6 +17,7 @@ use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
 use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL, SIGACTION_SYSCALL};
+use sysdefs::constants::lind_platform_const::{INIT_CAGEID, RAWPOSIX_CAGEID, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::data::sys_struct::CloneArgStruct;
 use std::arch::asm;
@@ -73,6 +74,179 @@ fn mpk_debug(message: impl AsRef<str>) {
     if mpk_debug_enabled() {
         eprintln!("[lind-mpk] {}", message.as_ref());
     }
+}
+
+const ARCH_SET_GS_OP: i32 = 0x1001;
+const ARCH_SET_FS_OP: i32 = 0x1002;
+const ARCH_GET_FS_OP: i32 = 0x1003;
+const ARCH_GET_GS_OP: i32 = 0x1004;
+const ARCH_CET_STATUS_OP: i32 = 0x3001;
+const ARCH_CET_DISABLE_OP: i32 = 0x3002;
+const ARCH_CET_LOCK_OP: i32 = 0x3003;
+const ARCH_CET_ALLOC_SHSTK_OP: i32 = 0x3004;
+
+fn errno_negative_i64() -> i64 {
+    let errno = std::io::Error::last_os_error()
+        .raw_os_error()
+        .unwrap_or(libc::EINVAL);
+    -(errno as i64)
+}
+
+pub extern "C" fn mpk_arch_prctl_syscall_entry(
+    _cageid: u64,
+    code_arg: u64,
+    _code_arg_cageid: u64,
+    addr_arg: u64,
+    _addr_arg_cageid: u64,
+    arg3: u64,
+    _arg3_cageid: u64,
+    arg4: u64,
+    _arg4_cageid: u64,
+    arg5: u64,
+    _arg5_cageid: u64,
+    arg6: u64,
+    _arg6_cageid: u64,
+) -> i64 {
+    if arg3 != UNUSED_ARG
+        || arg4 != UNUSED_ARG
+        || arg5 != UNUSED_ARG
+        || arg6 != UNUSED_ARG
+    {
+        return -(libc::EINVAL as i64);
+    }
+
+    let code = code_arg as i32;
+    let supported = matches!(
+        code,
+        ARCH_SET_GS_OP
+            | ARCH_SET_FS_OP
+            | ARCH_GET_FS_OP
+            | ARCH_GET_GS_OP
+            | ARCH_CET_STATUS_OP
+            | ARCH_CET_DISABLE_OP
+            | ARCH_CET_LOCK_OP
+            | ARCH_CET_ALLOC_SHSTK_OP
+    );
+    if !supported {
+        return -(libc::EINVAL as i64);
+    }
+    //temporary: make set operations noops
+    if code == ARCH_SET_GS_OP || code == ARCH_SET_FS_OP {
+        return 0;
+    }
+
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_arch_prctl,
+            code as libc::c_long,
+            addr_arg as libc::c_long,
+        )
+    };
+    if ret == -1 {
+        errno_negative_i64()
+    } else {
+        ret as i64
+    }
+}
+
+pub fn register_arch_prctl_syscall_handler() -> anyhow::Result<()> {
+    let ret = threei::register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID,
+        INIT_CAGEID,
+        libc::SYS_arch_prctl as u64,
+        threei_const::RUNTIME_TYPE_MPK,
+        RAWPOSIX_CAGEID,
+        mpk_arch_prctl_syscall_entry as *const () as u64,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    if ret != 0 {
+        anyhow::bail!("registering MPK arch_prctl handler failed: {}", ret);
+    }
+    Ok(())
+}
+
+pub extern "C" fn mpk_set_tid_address_syscall_entry(
+    cageid: u64,
+    tidptr_arg: u64,
+    _tidptr_arg_cageid: u64,
+    arg2: u64,
+    _arg2_cageid: u64,
+    arg3: u64,
+    _arg3_cageid: u64,
+    arg4: u64,
+    _arg4_cageid: u64,
+    arg5: u64,
+    _arg5_cageid: u64,
+    arg6: u64,
+    _arg6_cageid: u64,
+) -> i64 {
+    if arg2 != UNUSED_ARG
+        || arg3 != UNUSED_ARG
+        || arg4 != UNUSED_ARG
+        || arg5 != UNUSED_ARG
+        || arg6 != UNUSED_ARG
+    {
+        return -(libc::EINVAL as i64);
+    }
+
+    let os_tid = current_tid();
+    let Some(cage) = get_cage(cageid) else {
+        return -(libc::ESRCH as i64);
+    };
+    let runtime_info = cage.runtime_info.read();
+    let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() else {
+        return -(libc::EINVAL as i64);
+    };
+
+    let threads = mpk_info.threads.write();
+
+    if let Some(thread) = threads.get(&os_tid) {
+        thread.thread_info.child_tid.store(tidptr_arg, Ordering::SeqCst);
+        return os_tid as i64;
+    }
+
+    // forked children may inherit a copied map keyed by the parent's tid.
+    // After fork there is a single surviving thread, so update that entry.
+    if threads.len() == 1 {
+        if let Some((_old_tid, thread)) = threads.iter().next() {
+            thread.thread_info.child_tid.store(tidptr_arg, Ordering::SeqCst);
+            return os_tid as i64;
+        }
+    }
+
+    -(libc::ESRCH as i64)
+}
+
+pub fn register_set_tid_address_syscall_handler() -> anyhow::Result<()> {
+    let ret = threei::register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID,
+        INIT_CAGEID,
+        libc::SYS_set_tid_address as u64,
+        threei_const::RUNTIME_TYPE_MPK,
+        RAWPOSIX_CAGEID,
+        mpk_set_tid_address_syscall_entry as *const () as u64,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    if ret != 0 {
+        anyhow::bail!("registering MPK set_tid_address handler failed: {}", ret);
+    }
+    Ok(())
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -1112,28 +1286,41 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                             execute_on_client: 0,
                         }
                     } else {
-                        // Forward the syscall to threei on behalf of the child cage.
-                        let retval = threei::make_syscall(
-                            child_cageid,
-                            msg.syscall_num,
-                            msg.syscall_name,
-                            msg.target_cageid,
-                            msg.arg1, msg.arg1_cageid,
-                            msg.arg2, msg.arg2_cageid,
-                            msg.arg3, msg.arg3_cageid,
-                            msg.arg4, msg.arg4_cageid,
-                            msg.arg5, msg.arg5_cageid,
-                            msg.arg6, msg.arg6_cageid,
-                        );
-                        let execute_on_client = if msg.syscall_num == SIGACTION_SYSCALL as u64 {
-                            1
+                        // arch_prctl and set_tid_address must execute in the
+                        // originating client thread because they mutate
+                        // thread-local process state.
+                        if msg.syscall_num == libc::SYS_arch_prctl as u64
+                            || msg.syscall_num == libc::SYS_set_tid_address as u64
+                        {
+                            SyscallResp {
+                                resp_kind: RESP_KIND_SYSCALL,
+                                retval: 0,
+                                execute_on_client: 1,
+                            }
                         } else {
-                            0
-                        };
-                        SyscallResp {
-                            resp_kind: RESP_KIND_SYSCALL,
-                            retval,
-                            execute_on_client,
+                            // Forward the syscall to threei on behalf of the child cage.
+                            let retval = threei::make_syscall(
+                                child_cageid,
+                                msg.syscall_num,
+                                msg.syscall_name,
+                                msg.target_cageid,
+                                msg.arg1, msg.arg1_cageid,
+                                msg.arg2, msg.arg2_cageid,
+                                msg.arg3, msg.arg3_cageid,
+                                msg.arg4, msg.arg4_cageid,
+                                msg.arg5, msg.arg5_cageid,
+                                msg.arg6, msg.arg6_cageid,
+                            );
+                            let execute_on_client = if msg.syscall_num == SIGACTION_SYSCALL as u64 {
+                                1
+                            } else {
+                                0
+                            };
+                            SyscallResp {
+                                resp_kind: RESP_KIND_SYSCALL,
+                                retval,
+                                execute_on_client,
+                            }
                         }
                     };
 

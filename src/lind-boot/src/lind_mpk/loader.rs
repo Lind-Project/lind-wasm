@@ -54,6 +54,8 @@ pub mod auxv {
 
 	// Custom lind auxv entry carrying the syscall interpose trampoline target.
 	pub const AT_3ITRMP_PTR: usize = 0x7000_0001;
+	// Custom lind auxv entry carrying the make_threei_call function pointer.
+	pub const AT_3I_MAKE_THREEI_CALL_PTR: usize = 0x7000_0002;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,6 +78,7 @@ pub struct ProcessAuxv {
 	pub secure: usize,
 	pub hwcap2: usize,
 	pub threei_trampoline_ptr: usize,
+	pub threei_make_threei_call_ptr: usize,
 }
 
 fn align_down(value: usize, align: usize) -> usize {
@@ -342,6 +345,7 @@ pub fn build_process_auxv(
 	binary_path: &str,
 	loaded: &LoadedImagesInfo,
 	threei_trampoline_ptr: usize,
+	threei_make_threei_call_ptr: usize,
 ) -> Result<ProcessAuxv> {
 	let file_bytes = std::fs::read(binary_path)
 		.with_context(|| format!("failed to read ELF file {}", binary_path))?;
@@ -370,6 +374,7 @@ pub fn build_process_auxv(
 		secure: host_auxv_value(auxv::AT_SECURE),
 		hwcap2: host_auxv_value(auxv::AT_HWCAP2),
 		threei_trampoline_ptr,
+		threei_make_threei_call_ptr,
 	})
 }
 
