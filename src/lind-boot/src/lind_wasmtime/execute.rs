@@ -734,9 +734,15 @@ fn load_main_module(
     // This function will be called at either the first cage or exec-ed cages.
     set_vmctx_thread(cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-    // Grate calls only supports static linking for now, so we only initialize the grate pool and register
-    // grate workers when dylink is not enabled.
-    if !dylink_metadata.dylink_enabled {
+    // Cheap and idempotent, so unconditional; building the actual worker
+    // pool below is the expensive part and stays gated.
+    init_grate_pool();
+
+    // Grate calls only support static linking, and only modules built with
+    // --compile-grate (exporting pass_fptr_to_wt) ever use a worker pool.
+    // Building it eagerly for every static cage made fork very expensive
+    // (fork_vmmap copies every worker's stack slot), so gate on actual need.
+    if !dylink_metadata.dylink_enabled && module.get_export("pass_fptr_to_wt").is_some() {
         // 4) register grate workers for this cage
         let grate_template = GrateTemplate {
             engine: module.engine().clone(),
@@ -745,9 +751,6 @@ fn load_main_module(
         };
         let host = store.data().clone();
 
-        // initialize the grate pool for later use in grate calls and
-        // other syscalls that require re-entry into wasmtime runtime.
-        init_grate_pool();
         unregister_grate_handler(cageid);
 
         register_grate_handler_for_cage(&grate_template, host, cageid)
