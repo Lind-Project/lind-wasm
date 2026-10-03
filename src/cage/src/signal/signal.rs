@@ -58,6 +58,18 @@ pub fn signal_epoch_trigger(cageid: u64) {
         unsafe {
             *epoch = EPOCH_SIGNAL;
         }
+
+        // Release the epoch_handler / main_threadid guards before touching the
+        // zombies mutex so we never hold them in the opposite order from
+        // waitpid (which holds `zombies` while calling signal_check_trigger).
+        drop(epoch_handler);
+        drop(threadid_guard);
+
+        // Wake up a thread blocked in wait() / waitpid() so it can return EINTR
+        // and let the signal be handled. The lock is taken so the wake-up cannot
+        // be lost between the waiter's check and its call to wait().
+        let _zombies = cage.zombies.lock();
+        cage.wait_cond.notify_all();
     }
 }
 
@@ -130,6 +142,14 @@ pub fn epoch_kill_all(cageid: u64, caller_tid: i32) {
                     libc::syscall(libc::SYS_tkill, os_tid as i32, libc::SIGUSR2);
                 }
             }
+        }
+
+        // A thread blocked in wait() / waitpid() sleeps on a condition variable,
+        // which is not interrupted by SIGUSR2. Wake it explicitly so it observes
+        // EPOCH_KILLED via signal_check_trigger and unwinds.
+        {
+            let _zombies = cage.zombies.lock();
+            cage.wait_cond.notify_all();
         }
     }
 }

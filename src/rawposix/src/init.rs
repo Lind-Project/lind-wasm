@@ -4,7 +4,7 @@ use crate::syscall_table::*;
 use cage::{add_cage, cagetable_clear, cagetable_init, timer::IntervalTimer, Cage, Vmmap};
 use dashmap::DashMap;
 use fdtables;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Condvar, Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering::*};
@@ -280,7 +280,8 @@ pub fn rawposix_start(verbosity: isize) {
         signalhandler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
         sigset: AtomicU64::new(0),
-        zombies: RwLock::new(vec![]),
+        zombies: Mutex::new(vec![]),
+        wait_cond: Condvar::new(),
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),
         final_exit_status: RwLock::new(None),
