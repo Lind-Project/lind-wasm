@@ -51,8 +51,8 @@ BASELINE_FAIL = "BASELINE_FAIL"
 ALL_OUTCOMES = (PASS_INTERPOSED, PASS_LOCAL_ONLY, FAIL_NUMERIC, FAIL_MARSHAL,
                 FAIL_ABI, TRAP, UNSUPPORTED, BASELINE_FAIL)
 
-_TRACE_CALL_RE = re.compile(r"^\[lind-trace\] call (\S+)$", re.MULTILINE)
-_TRACE_PTR_RE = re.compile(r"^\[lind-trace\] (\S+) ptr size_kind=(\S+) bytes=0x([0-9a-f]+)$", re.MULTILINE)
+_TRACE_CALL_RE = re.compile(r"\[lind-trace\] call (\S+)")
+_TRACE_PTR_RE = re.compile(r"\[lind-trace\] (\S+) ptr size_kind=(\S+) bytes=0x([0-9a-f]+)")
 
 
 def parse_call_counts(output):

@@ -21,6 +21,13 @@
 // call the underlying function with -- that dereference is separate from,
 // and does not substitute for, the one lind_marshal_dispatch performs
 // itself when evaluating each extent operand for X/Y's own sizing.
+//
+// A small 4096-byte arena (instead of the default 1MiB) keeps the
+// "arenaexhaust" mode's 160000-byte request reliably over capacity
+// regardless of what the shared default happens to be, while staying
+// comfortably bigger than every other mode's own small (tens-of-bytes)
+// buffers.
+#define LIND_MARSHAL_ARENA_SIZE 4096
 #include <lind_syscall.h>
 #include <stdio.h>
 #include <string.h>

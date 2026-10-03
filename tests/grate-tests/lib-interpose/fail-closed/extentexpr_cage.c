@@ -101,16 +101,26 @@ int main(int argc, char **argv) {
         return expect_reject("ceildiv-byzero", r);
     }
     if (strcmp(mode, "ceildiv-negdividend") == 0) {
+        // A negative dividend taints rather than aborts (see
+        // LIND_EXPR_CEIL_DIVIDE's own doc): the real callee's own XERBLA-
+        // style validation was always going to reject this request on its
+        // own, more gracefully, so this resolves to an empty (0-byte)
+        // shadow instead of trapping the whole process pre-emptively.
         r = toy_extent_probe(12, -5, 0, 0, 0, 0);
-        return expect_reject("ceildiv-negdividend", r);
+        return expect_value("ceildiv-negdividend", r, 0);
     }
     if (strcmp(mode, "ceildiv-negdivisor") == 0) {
         r = toy_extent_probe(20, -2, 0, 0, 0, 0);
         return expect_reject("ceildiv-negdivisor", r);
     }
     if (strcmp(mode, "negative-root") == 0) {
+        // A directly negative final value resolves to 0, the same
+        // reasoning as ceildiv-negdividend above: a negative extent is
+        // never a request this marshaller should service with real
+        // memory, but the real callee was always going to reject it
+        // itself, so there is no reason to abort the whole process first.
         r = toy_extent_probe(13, -1, 0, 0, 0, 0);
-        return expect_reject("negative-root", r);
+        return expect_value("negative-root", r, 0);
     }
     if (strcmp(mode, "zero-root") == 0) {
         r = toy_extent_probe(1, 0, 0, 0, 0, 0);
@@ -183,10 +193,14 @@ int main(int argc, char **argv) {
         return expect_reject("leaf-u64-overflow", r);
     }
     if (strcmp(mode, "product-negative-operands") == 0) {
-        // product(-2, -3): both operands negative must now be rejected,
-        // not silently accepted as a coincidentally-positive 6.
+        // product(-2, -3): both operands negative must resolve to 0, not
+        // silently succeed as the coincidentally-positive 6 the raw
+        // multiplication computes -- the taint flag catches this
+        // specifically because it tracks every operand independently,
+        // not just the tree's own final numeric value (which alone
+        // cannot tell this case apart from a genuinely valid product(2,3)).
         r = toy_extent_probe(27, -2, -3, 0, 0, 0);
-        return expect_reject("product-negative-operands", r);
+        return expect_value("product-negative-operands", r, 0);
     }
     if (strcmp(mode, "node-budget-exceeded") == 0) {
         r = toy_extent_probe(28, 0, 0, 0, 0, 0);

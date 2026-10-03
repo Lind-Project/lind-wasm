@@ -120,8 +120,13 @@ enum lind_size_kind {
     // argument value, a value loaded through a pointer argument, or a
     // compile-time constant baked into the spec itself -- see that struct's
     // doc), and const_size is the element size. n<=0 sizes to 0 (an empty
-    // vector, not an error); a negative stride is rejected (fail closed)
-    // rather than mishandled -- see _lind_compute_size's doc for both.
+    // vector, not an error); a negative stride read from the plain
+    // operand is rejected (fail closed) rather than mishandled -- a
+    // caller that has actually proven a magnitude-based envelope is safe
+    // (e.g. a library whose own wrapper rebases its base pointer forward
+    // before walking backward) represents that proof via the *_expr form
+    // instead, with an explicit ABS node -- see _lind_compute_size's doc
+    // for both.
     // Plain n*const_size (LIND_SIZE_FROM_ARG) undercounts any call whose
     // stride isn't 1: only every stride'th element is itself touched, but
     // the elements in between are still part of the buffer the real
@@ -199,25 +204,46 @@ enum lind_extent_expr_kind {
     LIND_EXPR_ARG_VALUE       = 1,  // raw_args[arg_index] is the value
     LIND_EXPR_ARG_POINTEE_I32 = 2,  // raw_args[arg_index] is a pointer to it
     LIND_EXPR_ABS             = 3,  // |lhs|
-    // PRODUCT/MAX/ADD all require EACH operand to already be non-negative
-    // (checked after evaluating lhs/rhs, before combining them) -- a
-    // negative value may only ever appear as ABS's own direct child.
-    // Without this, e.g. product(-2, -3) would silently succeed as 6: two
-    // individually-nonsensical "sizes" (a negative dimension is never a
-    // valid size on its own) coincidentally cancelling into something
-    // that merely LOOKS like a valid positive extent, rather than being
-    // rejected as the malformed input it actually is. Checking only the
-    // ROOT's final value (as this transport still also does -- see
-    // _lind_eval_extent_expr) is not enough to catch that: it is a
-    // property of the whole tree's shape, not just its final value.
-    LIND_EXPR_PRODUCT         = 4,  // lhs * rhs, checked
+    // A real BLAS/LAPACK-style callee always validates every scalar
+    // dimension argument before ever touching the array whose size one
+    // of these formulas computes -- that is the entire point of the
+    // XERBLA convention such libraries document and real conformance
+    // test suites rely on (e.g. OpenBLAS's own CBLAS conformance suite
+    // deliberately calls `cblas_dsymv(..., n=-1, ...)` specifically to
+    // prove the real function rejects it gracefully). So a negative
+    // dimension reaching this evaluator is never a request this
+    // marshaller should itself service with real memory -- but it is
+    // equally never a reason to abort the whole process pre-emptively,
+    // since the real callee was always going to reject it anyway, more
+    // gracefully, the moment it is actually called. PRODUCT/MAX/ADD
+    // therefore TAINT (see _lind_eval_extent_expr_depth's own
+    // `tainted` parameter) rather than abort when an operand is
+    // negative, and the tree's final value resolves to byte count 0 --
+    // an empty, harmless shadow -- once any taint anywhere in the tree
+    // is detected, the same outcome as a direct non-positive final
+    // value. Checking only the ROOT's final numeric value is not
+    // enough on its own: e.g. product(-2, -3) computes to a
+    // deceptively-positive 6 even though both individual "sizes" were
+    // already nonsensical -- the explicit taint flag catches that
+    // case, which a plain final-value sign check would miss.
+    LIND_EXPR_PRODUCT         = 4,  // lhs * rhs, overflow-checked
     LIND_EXPR_MAX             = 5,  // max(lhs, rhs)
-    LIND_EXPR_ADD             = 6,  // lhs + rhs, checked
-    // Ceiling division: ceil(lhs / rhs). Requires lhs >= 0 and rhs > 0 --
-    // every currently-known use (packed-storage n*(n+1)/2) is in this
-    // domain, and a signed convention for the general case (lhs<0 or
-    // rhs<0) has no established caller yet, so it fails closed rather
-    // than silently picking one.
+    LIND_EXPR_ADD             = 6,  // lhs + rhs, overflow-checked
+    // Ceiling division: ceil(lhs / rhs). A negative lhs taints the same
+    // way PRODUCT/MAX/ADD's operands do (see above) -- every currently-
+    // known use (packed-storage n*(n+1)/2) feeds lhs from a real
+    // dimension argument, exactly the shape a conformance test can feed
+    // a deliberate negative value. rhs stays a hard requirement (abort
+    // if non-positive): every currently-known use sources rhs from a
+    // literal constant baked into the formula itself (e.g. "divide by
+    // 2"), never from a caller-supplied argument, so a non-positive rhs
+    // is a malformed SPEC, not a deliberately-invalid call worth
+    // tolerating -- and this operator's own truncating-division
+    // semantics do not degrade a negative lhs to a non-positive result
+    // the way PRODUCT's multiplication does, so letting lhs through
+    // unchecked here (rather than tainting) could otherwise yield a
+    // small, deceptively-positive result from a genuinely invalid
+    // dimension.
     LIND_EXPR_CEIL_DIVIDE     = 7,
 };
 
@@ -402,8 +428,21 @@ static uint64_t _lind_marshal_grate_cage  = 0;
 // Shadow memory bump allocator
 // ---------------------------------------------------------------------------
 
+// Must be large enough to hold every shadow buffer a single real call
+// might need AT ONCE, not just the largest individual one -- a function
+// that marshals two or more independently-sized buffers (e.g. a matrix-
+// copy extension's separate source and destination matrices) needs the
+// SUM of their sizes live simultaneously, reset only once the whole call
+// returns. 128KiB proved too small for a real call this corpus already
+// generates a V2 handler for (OpenBLAS's `domatcopy_`/`somatcopy_`
+// family copying two independent ~100x100 double matrices, ~80000 bytes
+// each): a request that would otherwise marshal correctly instead found
+// the arena already exhausted by the first matrix and aborted. 1MiB
+// gives real headroom above every two-matrix case the current corpus
+// produces while staying a trivial static reservation for a wasm32
+// grate's linear memory.
 #ifndef LIND_MARSHAL_ARENA_SIZE
-#define LIND_MARSHAL_ARENA_SIZE (128 * 1024)
+#define LIND_MARSHAL_ARENA_SIZE (1024 * 1024)
 #endif
 
 static char   _lind_marshal_arena[LIND_MARSHAL_ARENA_SIZE];
@@ -806,13 +845,17 @@ static inline int32_t _lind_eval_extent_operand(
 // own doc).
 // ---------------------------------------------------------------------------
 
-// Aborts if `v` is negative. Shared by PRODUCT/ADD/MAX's operand checks
-// (see LIND_EXPR_PRODUCT's own doc for why each operand, not just the
-// final result, must be non-negative) -- a negative value may only ever
-// appear as ABS's own direct child.
-static inline int64_t _lind_require_nonneg(int64_t v, const char *reason) {
+// Records that some operand, somewhere in the tree, was negative --
+// shared by PRODUCT/ADD/MAX's operand checks and CEIL_DIVIDE's dividend
+// check (see LIND_EXPR_PRODUCT's own doc for why this taints rather than
+// aborts, and why a flag threaded through the whole evaluation, not just
+// the final value, is what actually catches a double-negative
+// cancellation). Returns `v` unchanged either way -- the caller still
+// needs it for its own (possibly now-irrelevant, since the result is
+// tainted) arithmetic.
+static inline int64_t _lind_taint_if_negative(int64_t v, int *tainted) {
     if (v < 0)
-        _lind_marshal_abort(reason);
+        *tainted = 1;
     return v;
 }
 
@@ -822,17 +865,19 @@ static inline int64_t _lind_require_nonneg(int64_t v, const char *reason) {
 // see LIND_EXTENT_EXPR_MAX_DEPTH/_MAX_NODES's own docs: a tree can be wide
 // rather than deep). `*nodes_remaining` is shared across the whole
 // evaluation (decremented here, threaded through every recursive call),
-// not reset per subtree. Every leaf and every operator result is a
-// genuine int64_t value strictly between INT64_MIN and INT64_MAX (never
-// exactly INT64_MIN: a leaf is a sign-extended/zero-extended value or a
-// const_value already checked <= INT64_MAX, and PRODUCT/ADD/CEIL_DIVIDE
-// are all checked against overflowing into that range), so ABS's plain
-// negation can never itself overflow.
+// not reset per subtree -- `*tainted` likewise (see LIND_EXPR_PRODUCT's
+// own doc on why a negative operand anywhere in the tree must taint the
+// WHOLE evaluation, not just the subtree it appears in). Every leaf and
+// every operator result is a genuine int64_t value strictly between
+// INT64_MIN and INT64_MAX (never exactly INT64_MIN: a leaf is a sign-
+// extended/zero-extended value or a const_value already checked <=
+// INT64_MAX, and PRODUCT/ADD are checked against overflowing into that
+// range), so ABS's plain negation can never itself overflow.
 static int64_t _lind_eval_extent_expr_depth(
     const struct lind_extent_expr *e,
     const uint64_t *raw_args, uint32_t nargs,
     uint64_t source_cage, uint64_t grate_cage,
-    uint32_t depth, uint32_t *nodes_remaining)
+    uint32_t depth, uint32_t *nodes_remaining, int *tainted)
 {
     if (e == NULL)
         _lind_marshal_abort("extent expression: null node");
@@ -858,17 +903,15 @@ static int64_t _lind_eval_extent_expr_depth(
 
         case LIND_EXPR_ABS: {
             int64_t v = _lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining);
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted);
             return v < 0 ? -v : v;
         }
 
         case LIND_EXPR_PRODUCT: {
-            int64_t a = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining),
-                "extent expression: product of a negative operand");
-            int64_t b = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining),
-                "extent expression: product of a negative operand");
+            int64_t a = _lind_taint_if_negative(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted), tainted);
+            int64_t b = _lind_taint_if_negative(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted), tainted);
             int64_t result;
             if (__builtin_mul_overflow(a, b, &result))
                 _lind_marshal_abort("extent expression: product overflow");
@@ -876,12 +919,10 @@ static int64_t _lind_eval_extent_expr_depth(
         }
 
         case LIND_EXPR_ADD: {
-            int64_t a = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining),
-                "extent expression: add of a negative operand");
-            int64_t b = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining),
-                "extent expression: add of a negative operand");
+            int64_t a = _lind_taint_if_negative(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted), tainted);
+            int64_t b = _lind_taint_if_negative(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted), tainted);
             int64_t result;
             if (__builtin_add_overflow(a, b, &result))
                 _lind_marshal_abort("extent expression: add overflow");
@@ -889,24 +930,22 @@ static int64_t _lind_eval_extent_expr_depth(
         }
 
         case LIND_EXPR_MAX: {
-            int64_t a = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining),
-                "extent expression: max of a negative operand");
-            int64_t b = _lind_require_nonneg(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining),
-                "extent expression: max of a negative operand");
+            int64_t a = _lind_taint_if_negative(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted), tainted);
+            int64_t b = _lind_taint_if_negative(_lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted), tainted);
             return a > b ? a : b;
         }
 
         case LIND_EXPR_CEIL_DIVIDE: {
-            int64_t a = _lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining);
+            int64_t a = _lind_taint_if_negative(_lind_eval_extent_expr_depth(e->lhs, raw_args, nargs,
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted), tainted);
             int64_t b = _lind_eval_extent_expr_depth(e->rhs, raw_args, nargs,
-                source_cage, grate_cage, depth + 1, nodes_remaining);
+                source_cage, grate_cage, depth + 1, nodes_remaining, tainted);
             if (b <= 0)
                 _lind_marshal_abort("extent expression: ceil_divide by non-positive divisor");
             if (a < 0)
-                _lind_marshal_abort("extent expression: ceil_divide of a negative dividend");
+                return 0;  // tainted already set above; this node's own value is moot.
             // a/b + (a%b != 0), not (a+b-1)/b: the latter can itself
             // overflow when a is near INT64_MAX, for no benefit (both
             // formulas are exact for every valid a>=0, b>0).
@@ -921,11 +960,19 @@ static int64_t _lind_eval_extent_expr_depth(
 }
 
 // Evaluates a general extent-expression tree to a final, checked size_t:
-// the root's value must be non-negative (a negative extent is never
-// meaningful) and must fit the real wasm32 target's size_t range (64-bit
-// evaluation throughout can succeed while still being too large for a
-// 32-bit size_t -- checked here the same way _lind_compute_size's own
-// LIND_SIZE_STRIDE_VECTOR case already does for its own final value).
+// a tainted tree (see LIND_EXPR_PRODUCT's own doc -- some dimension
+// argument feeding the formula was negative, the shape a real BLAS/
+// LAPACK-style callee's own XERBLA-style argument validation exists to
+// reject, not something this marshaller needs to pre-empt) resolves to
+// byte count 0 -- an empty, harmless shadow the real callee will reject
+// before ever touching -- same as a direct non-positive final value.
+// An UNTAINTED result must still fit the real wasm32 target's size_t
+// range (64-bit evaluation throughout can succeed while still being too
+// large for a 32-bit size_t -- checked here the same way
+// _lind_compute_size's own LIND_SIZE_STRIDE_VECTOR case already does for
+// its own final value) -- that remains a hard abort: an untainted
+// request this large is a genuine overflow/malformed-spec concern, not
+// a deliberately-invalid argument this evaluator can safely absorb.
 // Returns the tree's raw evaluated value directly, in whatever unit
 // (element count or byte count) the caller's own size_kind assigns to it
 // -- the same division of responsibility _lind_eval_extent_operand already
@@ -936,33 +983,42 @@ static inline size_t _lind_eval_extent_expr(
     uint64_t source_cage, uint64_t grate_cage)
 {
     uint32_t nodes_remaining = LIND_EXTENT_EXPR_MAX_NODES;
+    int tainted = 0;
     int64_t result = _lind_eval_extent_expr_depth(
-        e, raw_args, nargs, source_cage, grate_cage, 0, &nodes_remaining);
-    if (result < 0)
-        _lind_marshal_abort("extent expression: negative final extent");
+        e, raw_args, nargs, source_cage, grate_cage, 0, &nodes_remaining, &tainted);
+    if (tainted || result < 0)
+        return 0;
     if ((uint64_t)result > (uint64_t)(size_t)-1)
         _lind_marshal_abort("extent expression: final extent exceeds size_t range");
     return (size_t)result;
 }
 
 // Evaluates a general extent-expression tree to a signed int64_t WITHOUT
-// _lind_eval_extent_expr's own final non-negative/size_t-range checks --
-// for a tree that computes one intermediate sub-operand of a larger size
+// _lind_eval_extent_expr's own final size_t-range check -- for a tree
+// that computes one intermediate sub-operand of a larger size
 // computation (LIND_SIZE_STRIDE_VECTOR's own size_operand_expr/
-// stride_operand_expr below), not a complete byte count in its own right.
-// The caller applies whatever domain check that specific sub-operand
-// actually needs (e.g. LIND_SIZE_STRIDE_VECTOR's count may legitimately
-// evaluate non-positive -- "sizes to 0", not an error -- while its stride
-// may not be negative at all); see LIND_SIZE_EXPR's own doc for the case
-// that DOES want the full final-value checks instead.
+// stride_operand_expr below), not a complete byte count in its own
+// right. A tainted tree (see LIND_EXPR_PRODUCT's own doc) resolves to -1
+// regardless of its raw numeric result, so that a caller's own "<=0
+// means empty/invalid" domain check (e.g. LIND_SIZE_STRIDE_VECTOR's own
+// count operand, which legitimately treats any non-positive value as an
+// empty, zero-size vector) still catches a double-negative cancellation
+// inside this sub-expression the same way _lind_eval_extent_expr's own
+// final check does for a complete byte count. An UNTAINTED result is
+// returned exactly as evaluated, negative or not: the caller applies
+// whatever domain check that specific sub-operand actually needs (e.g.
+// LIND_SIZE_STRIDE_VECTOR's own stride operand still may not be
+// negative at all -- see that call site's own doc).
 static inline int64_t _lind_eval_extent_expr_signed(
     const struct lind_extent_expr *e,
     const uint64_t *raw_args, uint32_t nargs,
     uint64_t source_cage, uint64_t grate_cage)
 {
     uint32_t nodes_remaining = LIND_EXTENT_EXPR_MAX_NODES;
-    return _lind_eval_extent_expr_depth(
-        e, raw_args, nargs, source_cage, grate_cage, 0, &nodes_remaining);
+    int tainted = 0;
+    int64_t result = _lind_eval_extent_expr_depth(
+        e, raw_args, nargs, source_cage, grate_cage, 0, &nodes_remaining, &tainted);
+    return tainted ? -1 : result;
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,8 +1077,29 @@ static inline size_t _lind_compute_size(
             // address computed behind the one the callee passed, which no
             // other lind_arg_spec kind does and this one doesn't attempt:
             // fail closed rather than copy the wrong bytes or expose an
-            // address outside the real buffer. Left for whichever future
-            // change actually needs it.
+            // address outside the real buffer.
+            //
+            // This is a GENERIC primitive with no knowledge of any
+            // particular library's calling convention -- it cannot tell a
+            // real backward walk (where the fail-closed rejection below is
+            // the only safe answer) from a library whose own wrapper
+            // rebases the base pointer forward before doing its own
+            // backward walk internally (where the touched region,
+            // relative to the ORIGINAL pointer this marshaller sees, is
+            // actually the ordinary forward envelope sized by the
+            // stride's magnitude -- e.g. real BLAS/LAPACK's Level-1
+            // routines). A caller that has actually PROVEN the latter
+            // (not merely assumed it) represents that proof explicitly, as
+            // an extent-expression tree whose stride operand is wrapped in
+            // LIND_EXPR_ABS (stride_operand_expr, not the plain
+            // stride_operand below) -- see tools/marshal-infer's own
+            // LlmPrompt.cpp for the exact proof obligation ("the caller
+            // REBASES the base pointer... so the touched region is
+            // exactly this shape") and import_openblas_inference.py's
+            // lower_operand_tree for where that proof becomes this tree.
+            // By the time a stride reaches this plain-operand path at all,
+            // no such proof exists for it, so there is nothing safe to do
+            // with a negative value but reject it.
             // A non-NULL *_expr field always takes precedence over the
             // matching plain lind_extent_operand -- see
             // size_operand_expr/stride_operand_expr's own doc on
@@ -1032,7 +1109,10 @@ static inline size_t _lind_compute_size(
             // right, so the domain checks immediately following (n<=0,
             // stride<0) apply here exactly as they already do for the
             // plain-operand path, not _lind_eval_extent_expr's own
-            // (different) final-value checks.
+            // (different) final-value checks -- a tree that has already
+            // proven a non-negative magnitude (via its own ABS node) never
+            // trips the stride<0 check below; one that hasn't is rejected
+            // here exactly like an unproven plain operand would be.
             int64_t n = as->size_operand_expr
                 ? _lind_eval_extent_expr_signed(as->size_operand_expr, raw_args, nargs,
                                                  source_cage, grate_cage)

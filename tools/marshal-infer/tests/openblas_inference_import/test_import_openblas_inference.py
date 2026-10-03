@@ -341,6 +341,51 @@ class LowerPointerArgumentTests(unittest.TestCase):
             imp.lower_pointer_argument(pa, entry_args("ptr"), 8, "dd1")
 
 
+class ProvenInoutParamCorrectionTests(unittest.TestCase):
+    """_PROVEN_INOUT_PARAM_CORRECTIONS (issue #22 OpenBLAS inference-to-
+    runtime integration, Gate 7): interface/rotmg.c's own branch-dependent
+    partial write of its `param` output array makes it an INOUT contract,
+    not the OUT the corpus classifies it as -- corrected for exactly the
+    four reviewed rotmg symbols, never any other function with the same
+    surface shape."""
+
+    def _rotmg_like_record(self, param_direction="out"):
+        return {"source": "llm", "status": "resolved", "model": "test",
+                "pointer_arguments": [
+                    {"direction": "inout", "extent": "one", "extent_operand": None, "id": "arg0"},
+                    {"direction": "inout", "extent": "one", "extent_operand": None, "id": "arg1"},
+                    {"direction": "inout", "extent": "one", "extent_operand": None, "id": "arg2"},
+                    {"direction": param_direction, "extent": "constant",
+                     "extent_operand": {"size": const_leaf(40)}, "id": "arg4"},
+                ]}
+
+    def _manifest(self):
+        return manifest(entry_args(("ptr", "dd1"), ("ptr", "dd2"), ("ptr", "dx1"),
+                                    "double", ("ptr", "dparam")))
+
+    def test_reviewed_rotmg_symbol_param_direction_is_corrected_to_inout(self):
+        got = imp.lower_llm_function("drotmg_", self._rotmg_like_record(), self._manifest())
+        self.assertEqual(got["args"][4]["dir"], "inout")
+
+    def test_all_four_reviewed_symbols_are_corrected(self):
+        for name in ("drotmg_", "cblas_drotmg", "srotmg_", "cblas_srotmg"):
+            got = imp.lower_llm_function(name, self._rotmg_like_record(), self._manifest())
+            self.assertEqual(got["args"][4]["dir"], "inout", f"{name} was not corrected")
+
+    def test_unreviewed_symbol_with_the_same_shape_is_not_corrected(self):
+        # Same exact surface shape as the reviewed rotmg symbols, but a
+        # different name -- the correction must be scoped to the specific,
+        # individually-reviewed symbols, never inferred from shape alone.
+        got = imp.lower_llm_function("sfake_rotmg_lookalike", self._rotmg_like_record(), self._manifest())
+        self.assertEqual(got["args"][4]["dir"], "out")
+
+    def test_already_inout_is_left_alone(self):
+        # Defends against ever double-applying or erroring if a future
+        # corpus regeneration already gets this right.
+        got = imp.lower_llm_function("drotmg_", self._rotmg_like_record(param_direction="inout"), self._manifest())
+        self.assertEqual(got["args"][4]["dir"], "inout")
+
+
 class LowerLlmFunctionTests(unittest.TestCase):
     def test_scalar_and_pointer_mix(self):
         rec = {"source": "llm", "status": "resolved", "model": "test",
@@ -397,6 +442,143 @@ class LowerLlmFunctionTests(unittest.TestCase):
             imp.lower_llm_function("sfake_fn", rec, m)
 
 
+def _stride_vector_arg(size_source, stride_source, size_idx=0, stride_idx=3):
+    return {
+        "kind": "ptr", "type": "<ptr>", "size": 4, "dir": "in", "const_size": 8,
+        "size_kind": "stride_vector",
+        "size_operand": {"arg_index": size_idx, "source": size_source},
+        "stride_operand": {"arg_index": stride_idx, "source": stride_source},
+        "pointee": [{"kind": "scalar", "size": 8, "type": "double"}],
+    }
+
+
+def _static_record(name, args, warnings):
+    return {"name": name, "decision": "marshal", "args": args, "ret": {"kind": "void"},
+            "warnings": warnings}
+
+
+class ApplyProvenStrideRebaseTests(unittest.TestCase):
+    """_apply_proven_stride_rebase's own explicit, individually-reviewed
+    _PROVEN_SELF_REBASING_KERNELS allowlist (issue #22 OpenBLAS inference-
+    to-runtime integration review) -- never the mere presence of a
+    "found via kernel delegation" phrase, which the real amax/amin/max/
+    min/ismax/ismin/asum families equally have and are deliberately
+    excluded."""
+
+    def test_by_value_stride_on_reviewed_kernel_is_abs_wrapped(self):
+        args = [{"kind": "scalar"}] * 2 + [_stride_vector_arg("value", "value")]
+        rec = _static_record("daxpy_", args, [
+            "arg2: strided vector (length=arg0, stride=arg3, found via kernel "
+            "delegation to `daxpy_k`) — the whole contiguous envelope is copied",
+        ])
+        out = imp._apply_proven_stride_rebase("daxpy_", rec, entry_arguments=None)
+        a2 = out["args"][2]
+        self.assertNotIn("stride_operand", a2)
+        self.assertNotIn("size_operand", a2)
+        self.assertEqual(a2["stride_operand_expr"],
+                          {"op": "abs", "operand": {"op": "arg_value", "arg_index": 3, "leaf_type": "i32"}})
+        self.assertEqual(a2["size_operand_expr"], {"op": "arg_value", "arg_index": 0, "leaf_type": "i32"})
+        # Nothing else about the arg changes.
+        self.assertEqual(a2["dir"], "in")
+        self.assertEqual(a2["const_size"], 8)
+
+    def test_fortran_by_reference_stride_on_reviewed_kernel_is_abs_wrapped_and_marks_pointee_proven(self):
+        args = [
+            {"kind": "ptr", "size_kind": "const"},  # arg0: N
+            _stride_vector_arg("pointee_i32", "pointee_i32", size_idx=0, stride_idx=2),  # arg1: X
+            {"kind": "ptr", "size_kind": "const"},  # arg2: INCX
+        ]
+        rec = _static_record("daxpy_", args, [
+            "arg1: strided vector (length=arg0 (via pointer), stride=arg2 (via pointer), "
+            "found via kernel delegation to `daxpy_k`) — the whole contiguous envelope",
+        ])
+        ea = entry_args(("ptr", "N"), ("ptr", "X"), ("ptr", "INCX"))
+        out = imp._apply_proven_stride_rebase("daxpy_", rec, entry_arguments=ea)
+        a1 = out["args"][1]
+        self.assertEqual(a1["stride_operand_expr"],
+                          {"op": "abs", "operand": {"op": "arg_pointee_i32", "arg_index": 2}})
+        self.assertEqual(a1["size_operand_expr"], {"op": "arg_pointee_i32", "arg_index": 0})
+        self.assertTrue(out["args"][0]["int32_pointee_proven"])
+        self.assertTrue(out["args"][2]["int32_pointee_proven"])
+
+    def test_unreviewed_kernel_is_left_untouched(self):
+        # Same shape as a reviewed kernel, but delegates to one that was
+        # checked and explicitly excluded (interface/max.c has neither a
+        # rebase nor a guard) -- must NOT be converted.
+        args = [{"kind": "scalar"}] * 2 + [_stride_vector_arg("value", "value")]
+        rec = _static_record("damax_", args, [
+            "arg2: strided vector (length=arg0, stride=arg3, found via kernel "
+            "delegation to `damax_k`) — the whole contiguous envelope",
+        ])
+        out = imp._apply_proven_stride_rebase("damax_", rec, entry_arguments=None)
+        self.assertEqual(out, rec)
+
+    def test_loop_analysis_proof_is_left_untouched(self):
+        # No delegation at all -- a bare loop in the analyzed function's
+        # own body carries no rebase/guard guarantee whatsoever.
+        args = [{"kind": "scalar"}] * 2 + [_stride_vector_arg("value", "value")]
+        rec = _static_record("sfake_loop", args, [
+            "arg2: strided vector (length=arg0, stride=arg3, found via loop analysis) "
+            "— the whole contiguous envelope",
+        ])
+        out = imp._apply_proven_stride_rebase("sfake_loop", rec, entry_arguments=None)
+        self.assertEqual(out, rec)
+
+    def test_pointee_i32_with_unverified_argument_name_is_left_untouched(self):
+        # Referenced argument's real name isn't on the known OpenBLAS
+        # integer-dimension profile -- converting anyway would let
+        # gen_grate.py's own validator either reject the whole function or
+        # (if some other arg happened to satisfy it) dereference a
+        # pointer never actually proven to point at a 4-byte int.
+        args = [
+            {"kind": "ptr", "size_kind": "const"},  # arg0: N
+            _stride_vector_arg("pointee_i32", "pointee_i32", size_idx=0, stride_idx=2),  # arg1: X
+            {"kind": "ptr", "size_kind": "const"},  # arg2: INCX
+        ]
+        rec = _static_record("daxpy_", args, [
+            "arg1: strided vector (length=arg0 (via pointer), stride=arg2 (via pointer), "
+            "found via kernel delegation to `daxpy_k`) — the whole contiguous envelope",
+        ])
+        ea = entry_args(("ptr", "N"), ("ptr", "X"), ("ptr", "not_a_known_name"))
+        out = imp._apply_proven_stride_rebase("daxpy_", rec, entry_arguments=ea)
+        self.assertEqual(out, rec)
+
+    def test_pointee_i32_with_no_entry_arguments_is_left_untouched(self):
+        args = [
+            {"kind": "ptr", "size_kind": "const"},  # arg0: N
+            _stride_vector_arg("pointee_i32", "pointee_i32", size_idx=0, stride_idx=2),  # arg1: X
+            {"kind": "ptr", "size_kind": "const"},  # arg2: INCX
+        ]
+        rec = _static_record("daxpy_", args, [
+            "arg1: strided vector (length=arg0 (via pointer), stride=arg2 (via pointer), "
+            "found via kernel delegation to `daxpy_k`) — the whole contiguous envelope",
+        ])
+        out = imp._apply_proven_stride_rebase("daxpy_", rec, entry_arguments=None)
+        self.assertEqual(out, rec)
+
+    def test_record_with_no_stride_vector_args_is_left_untouched(self):
+        rec = _static_record("sfoo", [{"kind": "scalar"}], [])
+        out = imp._apply_proven_stride_rebase("sfoo", rec, entry_arguments=None)
+        self.assertEqual(out, rec)
+
+    def test_already_expr_sourced_arg_is_left_untouched(self):
+        # Nothing to do (and nothing to double-wrap) for a record that
+        # already carries the expr form -- defends against this function
+        # ever running twice over the same record.
+        a = _stride_vector_arg("value", "value")
+        a["stride_operand_expr"] = {"op": "abs", "operand": {"op": "arg_value", "arg_index": 3, "leaf_type": "i32"}}
+        a["size_operand_expr"] = {"op": "arg_value", "arg_index": 0, "leaf_type": "i32"}
+        del a["stride_operand"]
+        del a["size_operand"]
+        args = [{"kind": "scalar"}] * 2 + [a]
+        rec = _static_record("daxpy_", args, [
+            "arg2: strided vector (length=arg0, stride=arg3, found via kernel "
+            "delegation to `daxpy_k`) — the whole contiguous envelope",
+        ])
+        out = imp._apply_proven_stride_rebase("daxpy_", rec, entry_arguments=None)
+        self.assertEqual(out, rec)
+
+
 class ImportAllTests(unittest.TestCase):
     """End-to-end tests against small, synthetic artifacts (not the real
     203-function one -- see test_real_artifact.py's own module doc for why
@@ -419,6 +601,26 @@ class ImportAllTests(unittest.TestCase):
         functions, rows = self._run({"sfoo": {"source": "static", "status": "resolved", "static": static_record}}, {})
         self.assertEqual(functions["sfoo"], static_record)
         self.assertEqual(rows[0]["source"], "static")
+
+    def test_static_stride_rebase_correction_wired_through_import_all(self):
+        # End-to-end: import_all reads the prompt manifest for a STATIC-
+        # resolved function too (purely for entry_arguments' real names),
+        # and the reviewed-kernel correction actually reaches the output.
+        static_record = _static_record("daxpy_", [
+            {"kind": "ptr", "size_kind": "const"},  # arg0: N
+            _stride_vector_arg("pointee_i32", "pointee_i32", size_idx=0, stride_idx=2),  # arg1: X
+            {"kind": "ptr", "size_kind": "const"},  # arg2: INCX
+        ], [
+            "arg1: strided vector (length=arg0 (via pointer), stride=arg2 (via pointer), "
+            "found via kernel delegation to `daxpy_k`) — the whole contiguous envelope",
+        ])
+        m = manifest(entry_args(("ptr", "N"), ("ptr", "X"), ("ptr", "INCX")))
+        functions, rows = self._run(
+            {"daxpy_": {"source": "static", "status": "resolved", "static": static_record}},
+            {"daxpy_": m},
+        )
+        self.assertIn("abs", str(functions["daxpy_"]["args"][1]["stride_operand_expr"]))
+        self.assertTrue(functions["daxpy_"]["args"][2]["int32_pointee_proven"])
 
     def test_flagged_is_local_with_reason(self):
         functions, rows = self._run({"sfoo": {"source": "llm", "status": "flagged"}}, {})

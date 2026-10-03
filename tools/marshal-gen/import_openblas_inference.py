@@ -6,7 +6,15 @@ inference result").
 
 For a `"source":"static"` record, the unified artifact already stores
 exactly gen_grate.py's own schema (marshal-infer's own output) -- passed
-through unchanged. For a `"source":"llm","status":"resolved"` record, this
+through unchanged, except for one narrow, explicit correction
+(_apply_proven_stride_rebase): a stride_vector argument whose real kernel
+delegate is on the individually-reviewed _PROVEN_SELF_REBASING_KERNELS
+allowlist carries an independently-verified guarantee that an LLM-track
+equivalent (e.g. cblas_dnrm2/cblas_dger) already represents via an
+ABS-wrapped extent-expression tree, and the static track is brought in
+line with that same representation, for exactly those reviewed kernels,
+rather than left on a plain operand with no way to express it. For a
+`"source":"llm","status":"resolved"` record, this
 module lowers the LLM's own (differently-shaped) answer into that same
 schema, consulting the real function's own lowered-IR signature (the
 `llm-prompts/openblas-v6-full/<name>.prompt.json` manifest each function was
@@ -164,6 +172,200 @@ def _entry_arg_llvm_type(entry_arguments, idx, what):
     if not t:
         raise LowerError(f"{what}: argument index {idx} has no llvm_type in its manifest")
     return t
+
+
+# Matches marshal-infer's own Infer.cpp warning text for a stride_vector
+# pointer argument whose (length, stride) pair was proven by following a
+# delegated call into a real kernel function ("found via kernel delegation
+# to `saxpy_k`"), purely to EXTRACT which argument and which kernel are
+# named -- never as the proof itself. The proof is _PROVEN_SELF_REBASING_
+# KERNELS below: this text only tells us which kernel to look up there.
+_KERNEL_DELEGATION_WARNING_RE = re.compile(
+    r"^arg(\d+): strided vector \(.*found via kernel delegation to `([^`]+)`\)"
+)
+
+# Explicit, individually-reviewed allowlist of real OpenBLAS Level-1
+# kernels whose own CALLING wrapper (interface/<name>.c, read directly --
+# never inferred from the kernel delegation warning's mere existence,
+# which only proves A delegation happened, not that THIS one is safe) is
+# independently confirmed safe to size from a negative increment's
+# magnitude. "found via kernel delegation" alone is NOT this proof -- it
+# is also exactly how the amax/amin/max/min/ismax/ismin and asum families
+# are discovered, and those wrappers (interface/max.c, imax.c, asum.c)
+# were checked and do NOT qualify (see each one's own entry below) --
+# every entry here was checked the same way before being added, and a
+# function must stay off this list, not be guessed onto it, until it has
+# been.
+#
+# Two distinct, independently sufficient reasons appear below (see each
+# entry): REBASE (the wrapper computes `x -= (n-1)*incx` for a negative
+# incx before calling the kernel, so the touched region relative to the
+# ORIGINAL argument is the ordinary forward envelope -- lind_marshal.h's
+# own doc on LIND_EXPR_ABS's proof obligation), and GUARD (the wrapper
+# rejects a non-positive increment outright and returns without touching
+# memory at all, so ANY non-negative magnitude is a safe superset of what
+# the real call ever does -- the same "dominating guard" case
+# tools/marshal-infer/src/LlmPrompt.cpp's own abs() rule allows for (b)).
+_PROVEN_SELF_REBASING_KERNELS = {
+    # REBASE -- interface/axpy.c: `if (incx<0) x -= (n-1)*incx;` before AXPYU_K.
+    "daxpy_k": "REBASE: interface/axpy.c",
+    "saxpy_k": "REBASE: interface/axpy.c",
+    # REBASE -- interface/axpby.c: identical shape, two rebased pointers.
+    "daxpby_k": "REBASE: interface/axpby.c",
+    "saxpby_k": "REBASE: interface/axpby.c",
+    # REBASE -- interface/swap.c: identical shape, two rebased pointers.
+    "dswap_k": "REBASE: interface/swap.c",
+    "sswap_k": "REBASE: interface/swap.c",
+    # REBASE -- interface/copy.c: identical shape, two rebased pointers.
+    "dcopy_k": "REBASE: interface/copy.c",
+    "scopy_k": "REBASE: interface/copy.c",
+    # REBASE -- interface/dot.c: identical shape, two rebased pointers.
+    "ddot_k": "REBASE: interface/dot.c",
+    "sdot_k": "REBASE: interface/dot.c",
+    # REBASE -- interface/rot.c: identical shape, two rebased pointers.
+    "drot_k": "REBASE: interface/rot.c",
+    "srot_k": "REBASE: interface/rot.c",
+    # GUARD -- interface/scal.c: `if (incx<=0 || n<=0) return;` before
+    # ever calling SCAL_K -- a negative incx never touches memory at all.
+    "dscal_k": "GUARD: interface/scal.c",
+    "sscal_k": "GUARD: interface/scal.c",
+}
+# Checked and explicitly excluded (left fail-closed): interface/max.c and
+# imax.c (amax/amin/max/min/ismax/ismin's shared wrapper template) pass
+# `x`/`incx` straight through to MAX_K/IMAX_K completely unmodified -- no
+# rebase, no guard rejecting a negative value -- so a negative increment's
+# touched region is genuinely unproven from this wrapper alone; and
+# interface/asum.c, which likewise passes `x`/`incx` straight through to
+# ASUM_K with neither a rebase nor a guard.
+
+
+def _leaf_from_plain_operand(op, what):
+    """Converts one static-track plain StrideVector operand
+    ({"arg_index":.., "source": "value"|"pointee_i32"|"constant"}) into
+    the equivalent lind_extent_expr leaf node ({"op": "arg_value"|
+    "arg_pointee_i32"|"constant", ...}) -- the same vocabulary
+    lower_operand_tree already produces for the LLM track, so
+    gen_grate.py's own emitter and validator treat both identically."""
+    source = op.get("source")
+    if source == "constant":
+        cv = op.get("const_value")
+        if not isinstance(cv, int) or isinstance(cv, bool) or cv < 0:
+            raise LowerError(f"{what}: constant operand has invalid const_value {cv!r}")
+        return {"op": "constant", "value": cv}
+    idx = op.get("arg_index")
+    if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
+        raise LowerError(f"{what}: operand has invalid arg_index {idx!r}")
+    if source == "value":
+        return {"op": "arg_value", "arg_index": idx, "leaf_type": "i32"}
+    if source == "pointee_i32":
+        return {"op": "arg_pointee_i32", "arg_index": idx}
+    raise LowerError(f"{what}: operand has unrecognized source {source!r}")
+
+
+def _apply_proven_stride_rebase(name, record, entry_arguments):
+    """Rewrites every top-level stride_vector pointer argument whose real
+    kernel delegate is on the explicit, individually-reviewed
+    _PROVEN_SELF_REBASING_KERNELS allowlist above -- never merely because
+    SOME kernel-delegation proof exists, which the excluded amax/amin/max/
+    min/ismax/ismin/asum families equally have -- from a plain, unproven
+    stride_operand into the general extent-expression form with the
+    stride wrapped in an explicit ABS node.
+
+    This is NOT a claim that a negative-stride StrideVector argument is
+    safe to read as a magnitude in general -- lind_marshal.h's own plain-
+    operand path stays fail-closed for exactly that reason (an ordinary
+    function that indexes its passed pointer with a negative stride and
+    no rebase really does touch memory below it, and copying the forward
+    envelope instead would silently copy the wrong region). It is a
+    narrow, independently-verified fact about the exact kernels on that
+    allowlist, each checked by reading its own real wrapper source (see
+    the allowlist's own per-entry comments) -- never inferred from this
+    warning text alone, which only tells us WHICH kernel a given argument
+    delegates to, not whether that kernel's wrapper is safe. This is
+    exactly the proof obligation tools/marshal-infer's own LlmPrompt.cpp
+    already requires an LLM-inferred stride_vector operand to meet before
+    it may be represented as `abs(stride)` (see its "the caller REBASES
+    the base pointer..." rule, and its dominating-guard rule (b)); this
+    function applies the identical, individually-checked proof to the
+    static track's own analogous kernel-delegation evidence, which had no
+    ABS-wrapping step of its own yet. A stride_vector whose kernel is not
+    on the allowlist -- whether found via loop analysis or via delegation
+    to an unreviewed kernel -- carries no such proof and is left
+    untouched -- a negative value for one of those is still rejected at
+    dispatch, exactly as lind_marshal.h's own doc describes.
+
+    A `pointee_i32`-sourced operand (the Fortran-by-reference convention)
+    additionally needs its REFERENCED argument marked
+    `int32_pointee_proven` before gen_grate.py's own expression-tree
+    validator will accept dereferencing it -- set here via the same
+    `entry_arguments` name-profile check `lower_pointer_argument` already
+    uses for the LLM track (see _INT_SCALAR_NAMES), not re-derived
+    independently. If `entry_arguments` is unavailable, or a referenced
+    argument's name isn't on that profile, that one operand is left alone
+    (safe degradation: it keeps the original, fail-closed-on-negative
+    plain operand, not a guess)."""
+    args = record.get("args")
+    rwarnings = record.get("warnings") or []
+    if not isinstance(args, list):
+        return record
+    proven_arg_indices = set()
+    for w in rwarnings:
+        m = _KERNEL_DELEGATION_WARNING_RE.match(w)
+        if m and m.group(2) in _PROVEN_SELF_REBASING_KERNELS:
+            proven_arg_indices.add(int(m.group(1)))
+    if not proven_arg_indices:
+        return record
+
+    def proven_int32_pointee(idx):
+        if not entry_arguments or idx >= len(entry_arguments):
+            return False
+        argname = entry_arguments[idx].get("name") or ""
+        return argname.lower() in _INT_SCALAR_NAMES
+
+    new_args = list(args)
+
+    def mark_int32_pointee_proven(idx):
+        a = new_args[idx]
+        if isinstance(a, dict) and a.get("int32_pointee_proven") is not True:
+            new_args[idx] = {**a, "int32_pointee_proven": True}
+
+    for idx in proven_arg_indices:
+        if idx >= len(new_args):
+            continue
+        a = new_args[idx]
+        if (not isinstance(a, dict) or a.get("kind") != "ptr"
+                or a.get("size_kind") != "stride_vector"
+                or "stride_operand_expr" in a or "size_operand_expr" in a):
+            continue
+        stride_op, size_op = a.get("stride_operand"), a.get("size_operand")
+        if not isinstance(stride_op, dict) or not isinstance(size_op, dict):
+            continue
+        # A pointee_i32-sourced operand needs its referenced argument's
+        # own int32 proof BEFORE this conversion is safe -- skip (leave
+        # the plain operand, fail-closed on negative) rather than emit an
+        # expr tree gen_grate.py's own validator would reject outright.
+        if (stride_op.get("source") == "pointee_i32" and not proven_int32_pointee(stride_op.get("arg_index", -1))):
+            continue
+        if (size_op.get("source") == "pointee_i32" and not proven_int32_pointee(size_op.get("arg_index", -1))):
+            continue
+        what = f"{name}: arg{idx}"
+        try:
+            stride_leaf = _leaf_from_plain_operand(stride_op, what)
+            size_leaf = _leaf_from_plain_operand(size_op, what)
+        except LowerError:
+            continue
+        if stride_op.get("source") == "pointee_i32":
+            mark_int32_pointee_proven(stride_op["arg_index"])
+        if size_op.get("source") == "pointee_i32":
+            mark_int32_pointee_proven(size_op["arg_index"])
+        new_a = dict(new_args[idx])
+        new_a["stride_operand_expr"] = {"op": "abs", "operand": stride_leaf}
+        new_a["size_operand_expr"] = size_leaf
+        del new_a["stride_operand"]
+        del new_a["size_operand"]
+        new_args[idx] = new_a
+
+    return {**record, "args": new_args}
 
 
 def lower_operand_tree(node, entry_arguments, what):
@@ -418,6 +620,34 @@ def lower_pointer_argument(pa, entry_arguments, precision_size, what):
     raise LowerError(f"{what}: unsupported extent kind {extent!r}")
 
 
+# Explicit, individually-reviewed direction correction for OpenBLAS's
+# rotmg family -- the real routine (interface/rotmg.c, read directly)
+# writes its `param` output array CONDITIONALLY on the resulting flag:
+#
+#   if (flag < 0)       { param[1..4] = h11,h21,h12,h22; }
+#   else if (flag == 0) {              param[2..3] = h21,h12; }
+#   else                { param[1] = h11;         param[4] = h22; }
+#
+# so for flag==0 param[1]/param[4] are never written, and for flag>0
+# param[2]/param[3] are never written -- in either case the CALLER's own
+# pre-existing bytes in those untouched slots are expected to survive the
+# call unchanged (OpenBLAS's own test suite relies on exactly this,
+# always zeroing `param` itself before calling). The corpus classifies
+# `param` as a pure OUT pointer, which skips the copy-in step entirely --
+# the untouched slots end up holding whatever the shadow arena last held
+# instead of the source cage's own prior contents (confirmed in practice:
+# a real run left the `GAM` constant, 4096.0, leaked into `dparam[1]`
+# from a previous call's own internal rescaling loop). This is an INOUT
+# contract, not OUT. Corrected for exactly the four rotmg symbols the
+# real corpus analyzes this way -- `interface/rotmg.c`'s own branch-
+# dependent partial write is specific to this one function family, not a
+# property any general, symbol-agnostic validation rule could safely
+# infer from the corpus's own extent/direction vocabulary alone.
+_PROVEN_INOUT_PARAM_CORRECTIONS = {
+    ("drotmg_", 4), ("cblas_drotmg", 4), ("srotmg_", 4), ("cblas_srotmg", 4),
+}
+
+
 def lower_llm_function(name, rec, manifest):
     """Lowers one LLM-resolved function record into a gen_grate.py-shaped
     function dict, or raises LowerError with a precise reason."""
@@ -432,6 +662,8 @@ def lower_llm_function(name, rec, manifest):
         idx = _parse_arg_id(pa.get("id"), nargs, name)
         if idx in by_index:
             raise LowerError(f"argument index {idx} is described by more than one pointer_arguments entry")
+        if (name, idx) in _PROVEN_INOUT_PARAM_CORRECTIONS and pa.get("direction") == "out":
+            pa = {**pa, "direction": "inout"}
         by_index[idx] = pa
 
     precision_size = precision_bytes(name)
@@ -508,8 +740,20 @@ def import_all(artifact_path, prompts_dir):
 
         if source == "static" and status == "resolved":
             # Governing policy #1/#2: static proven inference takes
-            # precedence, reused unchanged.
-            functions[name] = rec["static"]
+            # precedence -- reused unchanged, except for the narrow,
+            # independently-verified ABS-wrap correction below (see
+            # _apply_proven_stride_rebase's own doc): the prompt manifest
+            # is read here purely for its entry_arguments' real argument
+            # names (the same name-profile proof the LLM track already
+            # uses), never for an LLM answer this status never needed.
+            entry_arguments = None
+            manifest_path = os.path.join(prompts_dir, f"{name}.prompt.json")
+            try:
+                with open(manifest_path) as fh:
+                    entry_arguments = json.load(fh).get("entry_arguments")
+            except (OSError, json.JSONDecodeError):
+                entry_arguments = None
+            functions[name] = _apply_proven_stride_rebase(name, rec["static"], entry_arguments)
             report_rows.append(row)
             continue
 

@@ -61,7 +61,13 @@ enum class SizeKind {
   // time -- a deliberate runtime-side choice, not something inference can
   // avoid by not emitting this kind for a function that might see a
   // negative stride at some call site; a constant-sourced stride is always
-  // proven positive before inference ever emits it).
+  // proven positive before inference ever emits it). A function PROVEN to
+  // rebase its own base pointer forward before walking backward -- so the
+  // touched region, relative to the ORIGINAL argument, is the ordinary
+  // magnitude-based envelope -- represents that proof by wrapping the
+  // stride operand in an explicit ABS node instead (see LlmPrompt.cpp's
+  // own proof obligation for when this is and isn't valid); the plain
+  // StrideVector operand pair below never does this on its own.
   StrideVector,
   Unknown,       // could not size — residue
 };

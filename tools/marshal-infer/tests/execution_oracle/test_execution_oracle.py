@@ -34,10 +34,19 @@ class ParseCallCountsTests(unittest.TestCase):
         self.assertEqual(oracle.parse_call_counts("[Cage|foo] PASS: bar\napp exited 0\n"), {})
 
     def test_unrelated_lines_mentioning_call_are_not_matched(self):
-        # Must anchor on the EXACT "[lind-trace] call " prefix, not just
-        # any line containing the word "call" somewhere.
+        # Must match the EXACT "[lind-trace] call " prefix, not just any
+        # line containing the word "call" somewhere.
         out = "[Grate|foo] registered 1/1 handlers\nthis test will call cblas_daxpy next\n"
         self.assertEqual(oracle.parse_call_counts(out), {})
+
+    def test_trace_tag_not_at_start_of_line_is_still_matched(self):
+        # A real test harness's own stdout print (e.g. ctest's "TEST N/M
+        # name ") routinely has no trailing newline before the grate's own
+        # stderr trace line begins, so the two interleave onto one
+        # physical line. The trace tag must still be found wherever it
+        # appears, not only at column 0.
+        out = "TEST 63/68 dgemv:0_nan_inf [lind-trace] call dgemv_\n"
+        self.assertEqual(oracle.parse_call_counts(out), {"dgemv_": 1})
 
 
 class ParsePtrSizesTests(unittest.TestCase):
@@ -54,6 +63,11 @@ class ParsePtrSizesTests(unittest.TestCase):
     def test_call_lines_are_not_mistaken_for_ptr_lines(self):
         out = "[lind-trace] call cblas_daxpy\n"
         self.assertEqual(oracle.parse_ptr_sizes(out), [])
+
+    def test_ptr_tag_not_at_start_of_line_is_still_matched(self):
+        out = "[OK]\nTEST 181/607 saxpby:x [lind-trace] cblas_saxpy ptr size_kind=stride_vector bytes=0x190\n"
+        self.assertEqual(oracle.parse_ptr_sizes(out),
+                          [("cblas_saxpy", "stride_vector", 0x190)])
 
 
 class ClassifyTests(unittest.TestCase):
