@@ -82,7 +82,10 @@ use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::*;
 use wasmtime::error::Context as WasmtimeContext;
-use wasmtime::{Engine, Extern, Global, Instance, Linker, Module, Store, TypedFunc, Val};
+use wasmtime::{
+    Caller, Engine, Extern, Func, FuncType, Global, Instance, Linker, Module, Ref, Store,
+    TypedFunc, Val, ValType,
+};
 
 type PassFptrTyped = TypedFunc<
     (
@@ -925,6 +928,96 @@ impl<T: 'static> GrateWorker<T> {
         }
     }
 
+    /// Gate 0 (cross-cage function-pointer callbacks) scaffolding: for every
+    /// index `registration.callback_params` marks, the caller's raw i32 is
+    /// a table index into ITS OWN indirect-function table (`source_cage`),
+    /// not an ordinary scalar. Resolve the real target `Func` there now --
+    /// while `source_cage`'s re-entry frame is still active -- build a host
+    /// proxy that calls back into it, install the proxy into THIS worker's
+    /// own table, and replace the argument with the proxy's local index
+    /// before the adapter ever sees it. `0` (wasm's conventional null
+    /// funcref slot) passes through unchanged: never a real target, so
+    /// never worth a proxy.
+    ///
+    /// The proxy's own signature is hardcoded to `(i32) -> ()`, the one
+    /// callback shape Gate 0 is scoped to prove; a real callback-signature
+    /// registry is Gate 1/2's "callback contract" schema, not this probe's
+    /// job. Returns `Err` (never a fabricated callback or a silent local
+    /// call) if `source_cage` has no active frame, the index is out of
+    /// bounds, the table slot isn't a function, or table growth fails.
+    fn install_callback_proxies(
+        &mut self,
+        source_cage: u64,
+        callback_params: &[u32],
+        args: &[Val],
+    ) -> Result<Vec<Val>, String> {
+        let mut args = args.to_vec();
+        for &idx in callback_params {
+            let idx = idx as usize;
+            let Some(&Val::I32(raw_index)) = args.get(idx) else {
+                return Err(format!(
+                    "callback parameter {idx} is not present or not an I32 table index"
+                ));
+            };
+            if raw_index == 0 {
+                continue;
+            }
+
+            let target =
+                wasmtime::with_active_frame::<T, _>(source_cage, |mut store_a, table_a| {
+                    match table_a.get(&mut store_a, raw_index as u64) {
+                        Some(Ref::Func(Some(f))) => Ok(f),
+                        Some(Ref::Func(None)) => {
+                            Err("callback table slot is null in the source cage".to_string())
+                        }
+                        Some(_) => Err("callback table slot is not a funcref".to_string()),
+                        None => {
+                            Err("callback table index out of bounds in source cage".to_string())
+                        }
+                    }
+                })
+                .ok_or_else(|| {
+                    format!("no active re-entry frame for source cage {source_cage}")
+                })??;
+
+            let proxy_ty = FuncType::new(self.store.engine(), [ValType::I32], []);
+            let proxy = Func::new(
+                &mut self.store,
+                proxy_ty,
+                move |_caller: Caller<'_, T>, params, results| match wasmtime::with_active_frame::<
+                    T,
+                    _,
+                >(
+                    source_cage,
+                    |store_a, _table_a| target.call(store_a, params, results),
+                ) {
+                    Some(inner) => inner,
+                    None => Err(wasmtime::Error::msg(format!(
+                        "callback proxy: no active re-entry frame for cage {source_cage}"
+                    ))),
+                },
+            );
+
+            let Some(Extern::Table(dest_table)) = self
+                .instance
+                .get_export(&mut self.store, "__indirect_function_table")
+            else {
+                return Err(
+                    "this grate's module does not export __indirect_function_table".to_string(),
+                );
+            };
+            let new_index = dest_table
+                .grow(&mut self.store, 1, Ref::Func(None))
+                .map_err(|e| format!("callback proxy table growth failed: {e:#}"))?;
+            dest_table
+                .set(&mut self.store, new_index, Ref::Func(Some(proxy)))
+                .map_err(|e| format!("callback proxy table install failed: {e:#}"))?;
+
+            args[idx] = Val::I32(new_index as i32);
+        }
+        Ok(args)
+    }
+
     /// Run one V2 (variable-width) grate request inside this worker: resolve
     /// (and cache) the registered adapter export, then call it with dynamic
     /// argument/result vectors -- no process-global mutable argument buffer,
@@ -940,6 +1033,24 @@ impl<T: 'static> GrateWorker<T> {
         self.reset_worker_stack();
         self.seed_errno_before_call();
 
+        // Resolved before the adapter lookup below: both mutably borrow
+        // `self` (the proxy installer through `self.store`/`self.instance`,
+        // the cache lookup through `self.v2_adapter_cache`), and the
+        // adapter lookup's result stays borrowed from `self` for the rest
+        // of this function, so the two calls cannot be interleaved.
+        let args_owned;
+        let args = if registration.callback_params.is_empty() {
+            args
+        } else {
+            match self.install_callback_proxies(source_cage, &registration.callback_params, args) {
+                Ok(replaced) => {
+                    args_owned = replaced;
+                    &args_owned
+                }
+                Err(reason) => return v2_adapter::V2CallOutcome::Rejected(reason),
+            }
+        };
+
         let adapter =
             match self
                 .v2_adapter_cache
@@ -950,6 +1061,7 @@ impl<T: 'static> GrateWorker<T> {
                     return v2_adapter::V2CallOutcome::Rejected(rejection.to_string());
                 }
             };
+
         let outcome = match v2_adapter::call_v2_adapter(
             &mut self.store,
             adapter,

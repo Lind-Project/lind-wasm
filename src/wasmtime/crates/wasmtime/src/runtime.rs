@@ -37,6 +37,7 @@ mod bug;
 #[macro_use]
 pub(crate) mod func;
 
+pub(crate) mod callback_reentry;
 pub(crate) mod code;
 pub(crate) mod code_memory;
 #[cfg(feature = "debug")]
@@ -87,6 +88,9 @@ cfg_if::cfg_if! {
 pub use bug::WasmtimeBug;
 #[cfg(feature = "component-model-async")]
 pub(crate) use bug::bail_bug;
+pub use callback_reentry::{
+    ActiveFrameGuard, get_cage_table, register_cage_table, with_active_frame,
+};
 pub use code_memory::CodeMemory;
 #[cfg(feature = "debug")]
 pub use debug::*;

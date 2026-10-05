@@ -128,6 +128,7 @@ fn registration(export: &str, params: &[V2ValueType], results: &[V2ValueType]) -
             params: params.to_vec(),
             results: results.to_vec(),
         },
+        callback_params: vec![],
     }
 }
 

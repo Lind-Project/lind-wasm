@@ -342,6 +342,7 @@ mod v2_trampoline_validation_tests {
                 params: vec![threei::V2ValueType::I32],
                 results: vec![],
             },
+            callback_params: vec![],
         };
         let signature_id = registration.signature.id();
         threei::register_lib_handler_v2_entry(

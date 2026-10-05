@@ -233,6 +233,11 @@ pub fn execute_with_lind(
         wstore.as_context_mut().set_stack_base(stack_high as u64);
         wstore.as_context_mut().set_stack_top(stack_low as u64);
 
+        // Gate 0 (cross-cage function-pointer callbacks) scaffolding: record
+        // this cage's own shared table so a callback proxy installed in some
+        // OTHER cage can later resolve a table index this cage handed it --
+        // see `callback_reentry::get_cage_table`'s own doc.
+        wasmtime::register_cage_table(cageid, table_inner);
         dylink_metadata.table = Some(table_inner);
         dylink_metadata.epoch_handler = Some(epoch);
     }

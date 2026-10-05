@@ -27,6 +27,18 @@ pub struct V2Registration {
     pub adapter_export: String,
     pub manifest_version: u32,
     pub signature: V2Signature,
+    /// Gate 0 (cross-cage function-pointer callbacks) scaffolding: 0-based
+    /// indices, into `signature.params`, of parameters the caller's raw i32
+    /// is a table index into the CALLING cage's own indirect-function table
+    /// rather than an ordinary scalar. Deliberately not part of
+    /// `V2Signature`: that type's equality is the WASM-level value-type
+    /// identity checked against a caller's independently-derived signature
+    /// (`v2_signature_from_func_ty` in `linker.rs`), which has no way to
+    /// know about callback semantics and would then never match. Empty for
+    /// every registration that isn't callback-aware -- the normal case,
+    /// checked once at portal-install time so calls to every other
+    /// interposed function pay nothing for this.
+    pub callback_params: Vec<u32>,
 }
 
 fn lib_handler_table_v2() -> &'static Mutex<HashMap<u64, HashMap<(String, String), u64>>> {
@@ -243,6 +255,7 @@ mod reclaim_tests {
                 params: vec![],
                 results: vec![],
             },
+            callback_params: vec![],
         }
     }
 
@@ -382,10 +395,18 @@ fn parse_v2_type_char(c: char) -> Option<V2ValueType> {
 }
 
 /// Parses a compact signature descriptor string of the form
-/// `"<manifest_version>:<params>:<results>"`, where `params`/`results` are
-/// each a (possibly empty) run of type characters (see
-/// `parse_v2_type_char`) -- e.g. `"2:iid:d"` is manifest version 2, params
-/// `[I32, I32, F64]`, results `[F64]`.
+/// `"<manifest_version>:<params>:<results>[:<callback_params>]"`, where
+/// `params`/`results` are each a (possibly empty) run of type characters
+/// (see `parse_v2_type_char`) -- e.g. `"2:iid:d"` is manifest version 2,
+/// params `[I32, I32, F64]`, results `[F64]`.
+///
+/// The optional 4th segment is Gate 0 (cross-cage function-pointer
+/// callbacks) scaffolding: a comma-separated list of 0-based parameter
+/// indices whose raw i32 is a table index into the CALLING cage's own
+/// indirect-function table, e.g. `"1:i::0"` marks parameter 0 of a
+/// one-param, void-result function. Absent or empty means no callback
+/// parameters -- every pre-existing 3-segment descriptor continues to parse
+/// identically to before this segment existed.
 ///
 /// A raw `extern "C"` syscall (see `register_lib_handler_v2` below) has a
 /// fixed six-raw-argument-pair shape, the exact width limitation V2 exists
@@ -396,11 +417,12 @@ fn parse_v2_type_char(c: char) -> Option<V2ValueType> {
 /// dispatch layer already translates to a host address" mechanism
 /// `lib_name_ptr`/`symbol_name_ptr` already rely on, instead of inventing a
 /// new argument-passing mechanism just for this one call.
-fn parse_v2_signature_desc(s: &str) -> Option<(u32, V2Signature)> {
-    let mut parts = s.splitn(3, ':');
+fn parse_v2_signature_desc(s: &str) -> Option<(u32, V2Signature, Vec<u32>)> {
+    let mut parts = s.splitn(4, ':');
     let version: u32 = parts.next()?.parse().ok()?;
     let params_str = parts.next()?;
     let results_str = parts.next()?;
+    let callback_params_str = parts.next().unwrap_or("");
     let params = params_str
         .chars()
         .map(parse_v2_type_char)
@@ -409,7 +431,15 @@ fn parse_v2_signature_desc(s: &str) -> Option<(u32, V2Signature)> {
         .chars()
         .map(parse_v2_type_char)
         .collect::<Option<Vec<_>>>()?;
-    Some((version, V2Signature { params, results }))
+    let callback_params = if callback_params_str.is_empty() {
+        Vec::new()
+    } else {
+        callback_params_str
+            .split(',')
+            .map(|p| p.parse::<u32>().ok())
+            .collect::<Option<Vec<_>>>()?
+    };
+    Some((version, V2Signature { params, results }, callback_params))
 }
 
 /// Register a V2 (variable-width) library-level handler for
@@ -474,7 +504,9 @@ pub fn register_lib_handler_v2(
         return -1;
     };
 
-    let Some((manifest_version, signature)) = parse_v2_signature_desc(&signature_desc) else {
+    let Some((manifest_version, signature, callback_params)) =
+        parse_v2_signature_desc(&signature_desc)
+    else {
         eprintln!(
             "[3i|register_lib_handler_v2] malformed signature descriptor: {signature_desc:?}"
         );
@@ -490,6 +522,7 @@ pub fn register_lib_handler_v2(
             adapter_export,
             manifest_version,
             signature,
+            callback_params,
         },
     );
 

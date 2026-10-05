@@ -1430,6 +1430,12 @@ impl<T> Linker<T> {
 
                             let grate_cage = registration.grate_cage;
                             let signature_id = registration.signature.id();
+                            // Gate 0 (cross-cage function-pointer callbacks)
+                            // scaffolding: checked once here, at install
+                            // time, not per call -- every other interposed
+                            // function's portal never even looks at the
+                            // active-frame stack.
+                            let has_callback_params = !registration.callback_params.is_empty();
                             let expected_results: Vec<threei::V2ValueType> = func_ty
                                 .results()
                                 .map(|r| {
@@ -1483,7 +1489,33 @@ impl<T> Linker<T> {
                                     };
 
                                     seed_grate_errno_from_caller(&mut caller);
-                                    let outcome = threei::dispatch_lib_call_v2(grate_cage, req);
+                                    let outcome = if has_callback_params {
+                                        match crate::get_cage_table(cid) {
+                                            Some(table) => {
+                                                // Pushed immediately before, popped
+                                                // (via Drop) immediately after this
+                                                // one call -- see
+                                                // `callback_reentry`'s module doc
+                                                // for why that nesting is what
+                                                // makes the raw pointer inside
+                                                // sound.
+                                                let _active_frame = crate::ActiveFrameGuard::push(
+                                                    cid,
+                                                    table,
+                                                    &mut caller.store,
+                                                );
+                                                threei::dispatch_lib_call_v2(grate_cage, req)
+                                            }
+                                            None => threei::V2Outcome::Rejected(
+                                                "no registered indirect-function table \
+                                                 for the calling cage; cannot support a \
+                                                 callback argument"
+                                                    .to_string(),
+                                            ),
+                                        }
+                                    } else {
+                                        threei::dispatch_lib_call_v2(grate_cage, req)
+                                    };
                                     relay_grate_errno_to_caller(&mut caller);
 
                                     match outcome {

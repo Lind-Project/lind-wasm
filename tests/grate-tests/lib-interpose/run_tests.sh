@@ -177,6 +177,20 @@ fi
 cp "$SCRIPT_DIR/fail-closed/libextentexpr_stub.so" "$LINDFS/lib/libextentexpr_stub.so"
 echo ""
 
+# gate0-callback/liblibrary_call_stub.c: preloaded fallback for the
+# cross-cage function-pointer callback feasibility probe (see
+# local-notes/active/plan-cross-cage-function-pointers.md, Gate 0) -- same
+# fail-closed-stub role as the others above.
+echo "Building shared fixture: liblibrary_call_stub.so"
+if ! "$LIND_COMPILE" --compile-library "$SCRIPT_DIR/gate0-callback/liblibrary_call_stub.c" \
+        > /tmp/lib-interpose-compile.log 2>&1; then
+    echo "FATAL: failed to build gate0-callback/liblibrary_call_stub.c:"
+    cat /tmp/lib-interpose-compile.log
+    exit 2
+fi
+cp "$SCRIPT_DIR/gate0-callback/liblibrary_call_stub.so" "$LINDFS/lib/liblibrary_call_stub.so"
+echo ""
+
 # auto-v2wide/v2wide_adapters.c is generated fresh here with
 # tools/marshal-gen/gen_v2_adapter.py from the checked-in
 # auto-v2wide/v2wide.spec.json) -- same "compiled fresh from source each
@@ -235,9 +249,20 @@ compile_src() {
 }
 
 # compile_grate <src.c> [extra clang/source args...]
+#
+# GRATE_NO_FPCAST_EMU=true (reset to the default after use, same convention
+# as GRATE_EXTRA) skips --fpcast-emu: Binaryen's emulation pass rewrites
+# every COMPILE-TIME table entry and call_indirect site to a canonical
+# wrapper shape, which a RUNTIME-installed host Func (Gate 0's callback
+# proxy, see gate0-callback/) never gets wrapped into -- calling through it
+# then traps with "indirect call type mismatch". Every other grate in this
+# suite wants the emulation; only a grate that installs new table entries
+# at runtime needs to opt out.
 compile_grate() {
     local src="$1"; shift
-    "$LIND_COMPILE" -s --compile-grate --fpcast-emu "$src" -I "$SCRIPT_DIR" "$@" \
+    local fpcast_flag="--fpcast-emu"
+    [[ "${GRATE_NO_FPCAST_EMU:-false}" == "true" ]] && fpcast_flag=""
+    "$LIND_COMPILE" -s --compile-grate ${fpcast_flag} "$src" -I "$SCRIPT_DIR" "$@" \
         > /tmp/lib-interpose-compile.log 2>&1
 }
 
@@ -1895,6 +1920,38 @@ run_test "auto-v2wide-real-exec" \
     -- "[Grate|v2wide-real] toy_wide_marshal handler ran"
 
 DECLARED_TESTS+=("auto-v2wide")
+
+# --------------------------------------------------------------------------
+# gate0-callback: cross-cage function-pointer callback feasibility probe
+# (local-notes/active/plan-cross-cage-function-pointers.md, Gate 0). Cage A
+# passes its own function pointer into the interposed `library_call`; the
+# host (GrateWorker::install_callback_proxies) resolves it against cage A's
+# re-entry frame, installs a host-side proxy into the grate's own table,
+# and the grate's adapter calls through that proxy -- which re-enters A's
+# own suspended Store to run A's real callback -- before `library_call`
+# returns. See callback_cage.c/callback_grate.c for the exact scenario; the
+# descriptor "1:i::0" marks parameter 0 as a callback table index, not an
+# ordinary scalar.
+#
+# Not run through the standard lind_marshal.h-generated adapter path: a
+# function-pointer argument has no representation in that schema yet
+# (Gate 1/2's "callback contract" work). GRATE_NO_FPCAST_EMU is required --
+# see compile_grate's own doc for why. --growable-table is required because
+# a statically-compiled table otherwise has no room for the proxy
+# (initial == max).
+# --------------------------------------------------------------------------
+GRATE_EXTRA=(-Wl,--export-table -Wl,--growable-table)
+GRATE_NO_FPCAST_EMU=true
+run_test "gate0-callback" \
+    "gate0-callback/callback_cage.c" \
+    "gate0-callback/callback_grate.c" \
+    "env=/lib/liblibrary_call_stub.so" "yes" \
+    "/callback_cage.cwasm" \
+    -- "[gate0-callback-grate] registered 1/1 handlers" \
+       "[Cage|gate0-callback] PASS: callback executed, observed=42" \
+    --
+GRATE_NO_FPCAST_EMU=false
+GRATE_EXTRA=()
 
 # --------------------------------------------------------------------------
 # Completeness check: every directory with a *_grate.c must be declared
