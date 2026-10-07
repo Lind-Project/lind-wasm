@@ -12,7 +12,7 @@ use crate::lind_mpk::loader::{
     ProcessAuxv,
 };
 use crate::lind_mpk::syscalls::{
-    ENABLE_INTERPOSE_PTR, LIND_MANAGER, NO_INTERPOSE,
+    LIND_MANAGER, NO_INTERPOSE,
     mpk_clone_syscall_entry, mpk_exit_syscall_entry, mpk_make_threei_call_wrapper,
     register_arch_prctl_syscall_handler, register_set_tid_address_syscall_handler,
 };
@@ -49,11 +49,12 @@ use sysdefs::constants::lind_platform_const::{UNUSED_ID,  UNUSED_ARG, WASMTIME_C
 use wasmtime_lind_multi_process::CAGE_START_ID;
 use threei::threei_const;
 use crate::lind_mpk::trampoline::{
-    grate_callback_trampoline, register_mpk_handler_for_cage,jmp_into_cage_prepared_gs_naked
+    grate_callback_trampoline, register_mpk_handler_for_cage, jmp_into_cage_prepared_gs_naked,
+    GS_OS_TID_OFFSET,
 };
 
-// Import the type alias from RuntimeInfo module
-use crate::lind_mpk::RuntimeInfo::EnableInterposeF;
+// Import type aliases from RuntimeInfo module
+use crate::lind_mpk::RuntimeInfo::{DlAllocateTlsF, EnableInterposeF};
 
 // dlinfo request codes not yet exposed by the libc crate.
 const RTLD_DI_LMID: c_int = 1;
@@ -306,6 +307,19 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
 /// Returns the OS-level thread ID of the calling thread (Linux `gettid`).
 pub(super) fn current_tid() -> libc::pid_t {
     unsafe { libc::syscall(libc::SYS_gettid) as libc::pid_t }
+}
+
+fn current_context_os_tid() -> libc::pid_t {
+    let os_tid: usize;
+    unsafe {
+        asm!(
+            "mov %gs:{gs_os_tid_offset}, {os_tid}",
+            os_tid = out(reg) os_tid,
+            gs_os_tid_offset = const GS_OS_TID_OFFSET,
+            options(att_syntax, nostack, preserves_flags)
+        );
+    }
+    os_tid as libc::pid_t
 }
 
 fn mpk_debug_enabled() -> bool {
@@ -626,18 +640,6 @@ unsafe fn jump_to_entrypoint(new_rsp: usize, entrypoint: usize) -> ! {
     }
 }
 
-unsafe extern "C" fn noop_enable_interpose(
-    _handler: Option<unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, i32, i64, u64) -> i64>,
-    _make_threei_call: Option<extern "C" fn(
-        u64, u64, u64, u64,
-        u64, u64, u64, u64,
-        u64, u64, u64, u64,
-        u64, u64, u64, u64,
-    ) -> i64>,
-) -> c_int {
-    0
-}
-
 // ── MPK SyscallRuntime implementation ────────────────────────────────────────
 
 /// MPK runtime implementation.
@@ -883,8 +885,9 @@ fn exec_mpk_internal(
     // Step 2: Tear down the existing namespace context now that arguments are safely copied.
     let cage = get_cage(cage_id)
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
-    let current_os_tid = current_tid();
-    let old_grate_cage_ids = {
+    let current_os_tid = current_context_os_tid(); //the os tid of the forked off child
+    let new_os_tid = current_tid();
+    let old_grate_cage_ids: std::collections::HashSet<u64> = {
         let runtime_info = cage.runtime_info.read();
         let mpk_info = runtime_info
             .as_any()
@@ -898,8 +901,8 @@ fn exec_mpk_internal(
             .unwrap_or_default()
     };
     mpk_debug(format!(
-        "exec: preserving registered grate cages for tid {}: {:?}",
-        current_os_tid, old_grate_cage_ids
+        "exec: preserving registered grate cages for tid {}: {:?}, rerigistering for new tid {}",
+        current_os_tid, old_grate_cage_ids, new_os_tid
     ));
     {
         let runtime_info = cage.runtime_info.read();
@@ -949,12 +952,9 @@ fn exec_mpk_internal(
         }
     }
 
-    let enable_interpose: EnableInterposeF = noop_enable_interpose;
-    ENABLE_INTERPOSE_PTR.store(noop_enable_interpose as usize as u64, Ordering::Release);
-
     // Step 5: Set up supervisor stack and install GS.
     // Returns MpkThreadInfo which is registered in MPKRuntimeInfo::threads below.
-    let thread_info = Arc::new(match setup_supervisor_stack(cage_id, current_os_tid) {
+    let thread_info = Arc::new(match setup_supervisor_stack(cage_id, new_os_tid) {
         Ok(v) => v,
         Err(e) => return Err(e),
     });
@@ -988,13 +988,16 @@ fn exec_mpk_internal(
             stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
-            fs_base: 0, //TODO: register new TLS data for new thread in handling grates
+            fs_base: 0,
+            dtv: std::ptr::null_mut(),
+            dtv_size: 0,
         };
         grate_thread.allocate_grate_stack()?;
-        grate_threads.insert(current_os_tid, grate_thread);
+        grate_thread.initialize_grate_tls(grate_mpk_info.dl_allocate_tls)?;
+        grate_threads.insert(new_os_tid, grate_thread);
         mpk_debug(format!(
             "exec: restored grate stack for cage {} and tid {}",
-            grate_cage_id, current_os_tid
+            grate_cage_id, new_os_tid
         ));
     }
 
@@ -1021,6 +1024,10 @@ fn exec_mpk_internal(
             }
         }
     };
+    let enable_interpose: EnableInterposeF =
+        unsafe { std::mem::transmute(loaded.enable_interpose_ptr as usize) };
+    let dl_allocate_tls: DlAllocateTlsF =
+        unsafe { std::mem::transmute(loaded.dl_allocate_tls_ptr as usize) };
     let process_auxv = match build_process_auxv(
         &so_path,
         &loaded,
@@ -1039,17 +1046,20 @@ fn exec_mpk_internal(
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         enable_interpose,
+        dl_allocate_tls,
         0,
         memory_base,
         MPK_MEMORY_SIZE,
         THREAD_START_ID + 1,
-        Some((current_os_tid, MpkCageThreadInfo {
+        Some((new_os_tid, MpkCageThreadInfo {
             thread_info: Arc::clone(&thread_info),
             grate_cage_id: cage_id,
             fs_base: 0,
             stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
+            dtv: std::ptr::null_mut(),
+            dtv_size: 0,
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);
@@ -1059,7 +1069,16 @@ fn exec_mpk_internal(
         MPK_MEMORY_SIZE,
     );
     cage.runtime_type.store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
-    mpk_debug(format!("updated MPKRuntimeInfo for cage {} (main tid={})", cage_id, current_os_tid));
+    mpk_debug(format!("updated MPKRuntimeInfo for cage {} (main tid={})", cage_id, new_os_tid));
+
+    let epoch_pointer: *mut u64 = MPK_EPOCH.as_ptr();  
+    lind_signal_init(
+        cage_id,
+        epoch_pointer,
+        THREAD_START_ID, //this is the first thread of the new cage
+        true, /* this is the main thread */
+    );
+    mpk_debug(format!("initialized lind signal handling for cage {}", cage_id));
 
     // Note: register_mpk_handler_for_cage does not need to be called.
 
@@ -1102,9 +1121,6 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         .to_str()
         .context("invalid UTF-8 in .so path")?
         .to_owned();
-    let enable_interpose: EnableInterposeF = noop_enable_interpose;
-    ENABLE_INTERPOSE_PTR.store(noop_enable_interpose as usize as u64, Ordering::Release);
-
     // Step 1: Allocate the supervisor stack and set GS.
     // Returns MpkThreadInfo which is registered in MPKRuntimeInfo::threads below.
     let thread_info = match setup_supervisor_stack(cage_id, current_tid()) {
@@ -1138,6 +1154,10 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
             }
         }
     };
+    let enable_interpose: EnableInterposeF =
+        unsafe { std::mem::transmute(loaded.enable_interpose_ptr as usize) };
+    let dl_allocate_tls: DlAllocateTlsF =
+        unsafe { std::mem::transmute(loaded.dl_allocate_tls_ptr as usize) };
     let process_auxv = match build_process_auxv(
         &so_path,
         &loaded,
@@ -1157,6 +1177,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         enable_interpose,
+        dl_allocate_tls,
         0,
         memory_base,
         MPK_MEMORY_SIZE,
@@ -1168,6 +1189,8 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
             stack_base: 0,
             stack_size: 0,
             fs_base: 0, //TODO: register new TLS data for new thread in handling grates
+            dtv: std::ptr::null_mut(),
+            dtv_size: 0,
         })),
     );
     *cage.runtime_info.write() = Box::new(mpk_info);

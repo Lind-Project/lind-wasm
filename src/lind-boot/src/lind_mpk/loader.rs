@@ -19,12 +19,16 @@ const PAGE_SIZE: usize = PAGESIZE as usize;
 struct LoadedImage {
 	load_bias: u64,
 	entrypoint: u64,
+	enable_interpose_ptr: Option<u64>,
+	dl_allocate_tls_ptr: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct LoadedImagesInfo {
 	pub ldso_load_bias: u64,
 	pub ldso_entrypoint: u64,
+	pub enable_interpose_ptr: u64,
+	pub dl_allocate_tls_ptr: u64,
 	pub binary_load_bias: u64,
 	pub binary_entrypoint: u64,
 }
@@ -293,10 +297,43 @@ fn map_elf_into_vmmap(vmmap: &mut Vmmap, path: &Path) -> Result<LoadedImage> {
 	let entrypoint = load_bias
 		.checked_add(elf.entry)
 		.ok_or_else(|| anyhow::anyhow!("entrypoint overflow for {}", path.display()))?;
-
+	let enable_interpose_ptr = elf
+		.dynsyms
+		.iter()
+		.find(|symbol| {
+			symbol.st_shndx != 0
+				&& elf.dynstrtab.get_at(symbol.st_name) == Some("__enable_syscall_interpose")
+		})
+		.map(|symbol| {
+			load_bias.checked_add(symbol.st_value).ok_or_else(|| {
+				anyhow::anyhow!(
+					"__enable_syscall_interpose address overflow for {}",
+					path.display()
+				)
+			})
+		})
+		.transpose()?;
+	let dl_allocate_tls_ptr = elf
+		.dynsyms
+		.iter()
+		.find(|symbol| {
+			symbol.st_shndx != 0
+				&& elf.dynstrtab.get_at(symbol.st_name) == Some("_lind_dl_allocate_tls")
+		})
+		.map(|symbol| {
+			load_bias.checked_add(symbol.st_value).ok_or_else(|| {
+				anyhow::anyhow!(
+					"_lind_dl_allocate_tls address overflow for {}",
+					path.display()
+				)
+			})
+		})
+		.transpose()?;
 	Ok(LoadedImage {
 		load_bias,
 		entrypoint,
+		enable_interpose_ptr,
+		dl_allocate_tls_ptr,
 	})
 }
 
@@ -402,11 +439,19 @@ pub fn mpk_load_ldso_and_binary_with_info(
 	}
 
 	let ldso = map_elf_into_vmmap(vmmap, Path::new(ldso_path))?;
+	let enable_interpose_ptr = ldso.enable_interpose_ptr.ok_or_else(|| {
+		anyhow::anyhow!("{} does not define __enable_syscall_interpose", ldso_path)
+	})?;
+	let dl_allocate_tls_ptr = ldso.dl_allocate_tls_ptr.ok_or_else(|| {
+		anyhow::anyhow!("{} does not define _lind_dl_allocate_tls", ldso_path)
+	})?;
 	let binary = map_elf_into_vmmap(vmmap, Path::new(binary_path))?;
 
 	Ok(LoadedImagesInfo {
 		ldso_load_bias: ldso.load_bias,
 		ldso_entrypoint: ldso.entrypoint,
+		enable_interpose_ptr,
+		dl_allocate_tls_ptr,
 		binary_load_bias: binary.load_bias,
 		binary_entrypoint: binary.entrypoint,
 	})
@@ -614,6 +659,31 @@ mod tests {
 		let image = map_elf_into_vmmap(&mut vmmap, &ldso).expect("failed to map real ld.so");
 		let parsed = Elf::parse(&file_bytes).expect("failed to parse ld.so for entrypoint check");
 		assert_eq!(image.entrypoint, image.load_bias + parsed.entry);
+		let enable_interpose_symbol = parsed
+			.dynsyms
+			.iter()
+			.find(|symbol| {
+				symbol.st_shndx != 0
+					&& parsed.dynstrtab.get_at(symbol.st_name)
+						== Some("__enable_syscall_interpose")
+			})
+			.expect("ld.so does not define __enable_syscall_interpose");
+		assert_eq!(
+			image.enable_interpose_ptr,
+			Some(image.load_bias + enable_interpose_symbol.st_value)
+		);
+		let dl_allocate_tls_symbol = parsed
+			.dynsyms
+			.iter()
+			.find(|symbol| {
+				symbol.st_shndx != 0
+					&& parsed.dynstrtab.get_at(symbol.st_name) == Some("_lind_dl_allocate_tls")
+			})
+			.expect("ld.so does not define _lind_dl_allocate_tls");
+		assert_eq!(
+			image.dl_allocate_tls_ptr,
+			Some(image.load_bias + dl_allocate_tls_symbol.st_value)
+		);
 
 		for seg in expected_segments {
 			let seg_vaddr = usize::try_from(seg.vaddr).expect("segment vaddr too large");
@@ -723,6 +793,53 @@ mod tests {
 		assert!(
 			found_libc_mappings == libc_segment_count,
 			"not all libc LOAD segments were reflected in vmmap"
+		);
+
+		unsafe {
+			libc::munmap(base, mapped_size);
+		}
+	}
+
+	#[test]
+	fn loader_returns_ldso_symbol_addresses() {
+		let ldso_path = real_ldso_path();
+		let libc_path = real_libc_path();
+		let ldso_bytes = std::fs::read(&ldso_path).expect("failed to read ld.so");
+		let ldso_elf = Elf::parse(&ldso_bytes).expect("failed to parse ld.so");
+		let enable_interpose_symbol = ldso_elf
+			.dynsyms
+			.iter()
+			.find(|symbol| {
+				symbol.st_shndx != 0
+					&& ldso_elf.dynstrtab.get_at(symbol.st_name)
+						== Some("__enable_syscall_interpose")
+			})
+			.expect("ld.so does not define __enable_syscall_interpose");
+		let dl_allocate_tls_symbol = ldso_elf
+			.dynsyms
+			.iter()
+			.find(|symbol| {
+				symbol.st_shndx != 0
+					&& ldso_elf.dynstrtab.get_at(symbol.st_name) == Some("_lind_dl_allocate_tls")
+			})
+			.expect("ld.so does not define _lind_dl_allocate_tls");
+
+		let mapped_size = PAGE_SIZE * 2048;
+		let (mut vmmap, base) = make_test_vmmap(mapped_size);
+		let loaded = mpk_load_ldso_and_binary_with_info(
+			ldso_path.to_str().expect("invalid UTF-8 path"),
+			libc_path.to_str().expect("invalid UTF-8 path"),
+			&mut vmmap,
+		)
+		.expect("loader failed for real ld.so/libc.so");
+
+		assert_eq!(
+			loaded.enable_interpose_ptr,
+			loaded.ldso_load_bias + enable_interpose_symbol.st_value
+		);
+		assert_eq!(
+			loaded.dl_allocate_tls_ptr,
+			loaded.ldso_load_bias + dl_allocate_tls_symbol.st_value
 		);
 
 		unsafe {

@@ -7,7 +7,7 @@ edition = "2024"
 default = ["fdtables-dashmaparray"]
 disable_signals = ["cage/disable_signals", "wasmtime-lind-multi-process/disable_signals"]
 secure = ["typemap/secure"]
-lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug" ]
+lind_debug = ["wasmtime-lind-common/lind_debug", "cage/lind_debug", "wasmtime/debug-builtins" ]
 debug-dylink = ["wasmtime-lind-dylink/debug-dylink", "wasmtime-lind-multi-process/debug-dylink", "wasmtime-lind-utils/debug-dylink", "wasmtime/debug-dylink"]
 debug-grate-calls = ["wasmtime-lind-3i/debug-grate-calls"]
 # Use the old asyncify-unwind/rewind based setjmp/longjmp instead of the default wasm-EH
@@ -38,3 +38,4 @@ anyhow = { version = "1.0.66", default-features = false }
 clap = { version = "4", features = ["derive"] }
 cfg-if = "1.0"
 libc = "0.2"
+goblin = "0.10"

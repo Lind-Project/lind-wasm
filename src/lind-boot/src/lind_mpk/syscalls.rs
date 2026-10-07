@@ -12,7 +12,7 @@ use cage::{get_cage, init_vmmap, lind_signal_init};
 use crate::lind_mpk::RuntimeInfo::{
     MPKRuntimeInfo, MPKSupervisorCtxStack, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
 };
-use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, setup_gs_context, CAGE_STACK_GUARD};
+use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, CAGE_STACK_GUARD};
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
@@ -23,10 +23,6 @@ use sysdefs::data::sys_struct::CloneArgStruct;
 use std::arch::asm;
 use crate::lind_mpk::trampoline::{GS_OS_TID_OFFSET};
 use crate::lind_mpk::signals::{handle_signal};
-
-// Stored by execute.rs after it resolves __enable_syscall_interpose so that
-// mpk_clone_syscall_entry can re-register a new handler in the child process.
-pub static ENABLE_INTERPOSE_PTR: AtomicU64 = AtomicU64::new(0);
 
 // When set to true (via --no-interpose), __enable_syscall_interpose is resolved
 // but never called, so all syscalls from inside the dlmopen namespace pass
@@ -60,9 +56,6 @@ unsafe extern "C" {
 // MPK has no Wasmtime epoch handler, so lind_signal_init receives a pointer to
 // this static zero, matching the disable_signals behaviour used in wasmtime.
 static MPK_EPOCH: AtomicU64 = AtomicU64::new(0);
-
-// Function type matching the glibc __enable_syscall_interpose ABI.
-use crate::lind_mpk::RuntimeInfo::EnableInterposeF;
 
 // ── Debug helpers ────────────────────────────────────────────────────────────
 
@@ -347,7 +340,9 @@ fn mpk_clone_thread_entry(
             stack_addr: std::sync::atomic::AtomicUsize::new(0),
             stack_base: 0,
             stack_size: 0,
-            fs_base: 0, //TODO: register new TLS data for new thread in handling grates
+            fs_base: 0,
+            dtv: std::ptr::null_mut(),
+            dtv_size: 0,
         };
         cage_info.thread_info.register_cage(cage_id);
         if let Err(error) = cage_info.allocate_grate_stack() {
@@ -362,6 +357,13 @@ fn mpk_clone_thread_entry(
             lind_debug_panic("mpk_clone: cage runtime changed while creating thread");
             return -EINVAL;
         };
+        if let Err(error) = cage_info.initialize_grate_tls(mpk_info.dl_allocate_tls) {
+            lind_debug_panic(&format!(
+                "mpk_clone: TLS initialization failed for cage {} and tid={}: {}",
+                cage_id, tid, error
+            ));
+            return -EINVAL;
+        }
         mpk_info.threads.write().insert(tid, cage_info);
     }
 
@@ -430,6 +432,7 @@ fn update_active_cage_context(cageid: u64, old_cageid: u64) {
             options(nostack, preserves_flags, att_syntax)
         );
     }
+
     assert!(
         current_context_index < LIND_MPK_MAX_CONTEXTS,
         "mpk: current context index out of bounds: {}",
@@ -1085,6 +1088,16 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             );
         }
 
+        let enable_interpose = {
+            let parent_cage =
+                get_cage(_parent_cageid).expect("mpk_clone: parent cage not found");
+            let runtime_info = parent_cage.runtime_info.read();
+            runtime_info
+                .as_any()
+                .downcast_ref::<MPKRuntimeInfo>()
+                .expect("mpk_clone: parent cage has no MPKRuntimeInfo")
+                .enable_interpose_fn
+        };
 
         // ── 2. Create a SOCK_SEQPACKET socketpair for syscall forwarding ──────────
         //
@@ -1121,7 +1134,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             if let Some(child_cage) = get_cage(child_cageid) {
                 let parent_cage = get_cage(_parent_cageid).expect("parent cage not found");
                 let parent_info = parent_cage.runtime_info.read();
-                
+
                 // Downcast to MPKRuntimeInfo to access the handles
                 if let Some(parent_mpk) = parent_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
                     // Create new MPKRuntimeInfo for child with the child's PID.
@@ -1132,6 +1145,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                         parent_mpk.loader_cage_handle, //this is shared with the parent and needs to be treated carefully
                         parent_mpk.loader_libc_handle,
                         parent_mpk.enable_interpose_fn,
+                        parent_mpk.dl_allocate_tls,
                         pid,
                         parent_mpk.memory_base,
                         parent_mpk.memory_size,
@@ -1149,7 +1163,6 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     child_cage
                         .runtime_type
                         .store(threei_const::RUNTIME_TYPE_MPK, Ordering::Release);
-
                 }
             }
             else {
@@ -1198,28 +1211,13 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 }
 
 
-                let (gs_ptr, context_pages, context_pages_size) =
-                    match setup_gs_context(child_cageid, pid) {
-                        Ok(result) => result,
-                        Err(error) => {
-                            eprintln!("[lind-mpk] parent worker thread: setup_gs_context failed for child cage {}: {}", child_cageid, error);
-                            return;
-                        }
-                    };
-
-                //create MPKThreadInfo and MPKCageThreadInfo and update in the child cage's MPK info
-                
-                // Create MpkThreadInfo from the GS context we just set up
-                let thread_info = Arc::new(MpkThreadInfo {
-                    gs_data: gs_ptr,
-                    context_pages,
-                    context_pages_size,
-                    supervisor_stack_base: 0, //not needed, the current thread was spawned on a supervisor stack
-                    supervisor_stack_size: 0,
-                    cage_ids: std::sync::Mutex::new(std::collections::HashSet::new()),
-                    exit_stack: std::sync::atomic::AtomicUsize::new(current_host_rsp()),
-                    child_tid: AtomicU64::new(0),
-                });
+                let thread_info = match setup_supervisor_stack(child_cageid, pid) {
+                    Ok(info) => Arc::new(info),
+                    Err(error) => {
+                        eprintln!("[lind-mpk] parent worker thread: setup_supervisor_stack failed for child cage {}: {}", child_cageid, error);
+                        return;
+                    }
+                };
 
                 let mut registered_cage_ids = parent_registered_cages;
                 registered_cage_ids.insert(child_cageid);
@@ -1231,19 +1229,36 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                         stack_addr: std::sync::atomic::AtomicUsize::new(0), //not needed, the worker thread does not enter the cage
                         stack_base: 0,
                         stack_size: 0,
-                        fs_base: 0, //TODO: register new TLS data for new thread in handling grates
+                        fs_base: 0,
+                        dtv: std::ptr::null_mut(),
+                        dtv_size: 0,
                     };
                     cage_info.thread_info.register_cage(*cage_id);
-
-                    if *cage_id != child_cageid {
-                        //the helper thread never accesses the cage, so no stack needed.
-                        cage_info.allocate_grate_stack();
-                        mpk_debug(format!("allocated grate stack for cage {}", cage_id));
-                    }
 
                     if let Some(cage) = get_cage(*cage_id) {
                         let runtime_info = cage.runtime_info.read();
                         if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+                            if *cage_id != child_cageid {
+                                // The helper thread can enter parent-side cages while proxying
+                                // syscalls, so prepare stack/TLS for those contexts.
+                                if let Err(error) = cage_info.allocate_grate_stack() {
+                                    eprintln!(
+                                        "[lind-mpk] parent worker thread: stack allocation failed for cage {}: {}",
+                                        cage_id, error
+                                    );
+                                    return;
+                                }
+                                if let Err(error) =
+                                    cage_info.initialize_grate_tls(mpk_info.dl_allocate_tls)
+                                {
+                                    eprintln!(
+                                        "[lind-mpk] parent worker thread: TLS initialization failed for cage {}: {}",
+                                        cage_id, error
+                                    );
+                                    return;
+                                }
+                                mpk_debug(format!("allocated grate stack for cage {}", cage_id));
+                            }
                             mpk_info.threads.write().insert(pid, cage_info);
                         } else {
                             eprintln!("[lind-mpk] parent worker thread: cage {} has no MPKRuntimeInfo", cage_id);
@@ -1360,12 +1375,6 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             // subsequent syscalls from inside the dlmopen namespace are forwarded
             // through the socket to the parent's worker thread.
             if !NO_INTERPOSE.load(Ordering::Acquire) {
-                let ptr = ENABLE_INTERPOSE_PTR.load(Ordering::Acquire);
-                assert!(
-                    ptr != 0,
-                    "mpk_clone: ENABLE_INTERPOSE_PTR not set - call init_mpk first"
-                );
-                let enable_interpose: EnableInterposeF = unsafe { std::mem::transmute(ptr as usize) };
                 let ret = unsafe { enable_interpose(Some(child_syscall_handler), Some(child_make_threei_call_handler)) };
                 assert!(ret == 0, "mpk_clone: __enable_syscall_interpose failed in child");
             }

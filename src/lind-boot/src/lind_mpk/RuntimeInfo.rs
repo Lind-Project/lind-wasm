@@ -9,6 +9,11 @@ use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
 const MPK_GRATE_STACK_SIZE: usize = 8 * 1024 * 1024;
 const MPK_GRATE_STACK_GUARD: usize = 4096;
 
+fn align_up_to_pages(value: usize) -> usize {
+    let page_size = 1usize << PAGESHIFT;
+    (value + page_size - 1) & !(page_size - 1)
+}
+
 /// Allocates a guard-page + usable stack region out of `cage_id`'s own vmmap.
 /// The cage's backing memory is already reserved via its 4 GB MAP_NORESERVE
 /// region, so only the vmmap bookkeeping and the guard-page protection need
@@ -89,6 +94,56 @@ pub fn free_stack_in_vmmap(cage_id: u64, guard_start_sys: usize, allocation_size
     }
 }
 
+/// Allocates a writable region out of `cage_id`'s vmmap and returns
+/// `(region_base_sys_addr, region_size)`.
+fn allocate_region_in_vmmap(cage_id: u64, size: usize) -> anyhow::Result<(usize, usize)> {
+    if size == 0 {
+        anyhow::bail!("cannot allocate zero-sized vmmap region");
+    }
+
+    let allocation_size = align_up_to_pages(size);
+    let npages = allocation_size >> PAGESHIFT;
+    let cage = get_cage(cage_id).ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
+    let mut vmmap = cage.vmmap.write();
+
+    let space = vmmap
+        .find_map_space(npages, 1)
+        .ok_or_else(|| anyhow::anyhow!("no space in cage {} vmmap for region", cage_id))?;
+    let start_page = space.start();
+    vmmap.add_entry_with_overwrite(
+        start_page,
+        npages,
+        PROT_READ | PROT_WRITE,
+        PROT_READ | PROT_WRITE,
+        0,
+        MemoryBackingType::Anonymous,
+        0,
+        0,
+        cage_id,
+    )?;
+    let region_base = vmmap.page_num_to_sys(start_page);
+    drop(vmmap);
+
+    unsafe {
+        std::ptr::write_bytes(region_base as *mut u8, 0, allocation_size);
+    }
+
+    Ok((region_base, allocation_size))
+}
+
+/// Releases a region previously allocated by `allocate_region_in_vmmap`.
+fn free_region_in_vmmap(cage_id: u64, base_sys: usize, allocation_size: usize) {
+    if base_sys == 0 || allocation_size == 0 {
+        return;
+    }
+    if let Some(cage) = get_cage(cage_id) {
+        let mut vmmap = cage.vmmap.write();
+        let start_page = vmmap.sys_to_page_num(base_sys);
+        let npages = allocation_size >> PAGESHIFT;
+        let _ = vmmap.remove_entry(start_page, npages);
+    }
+}
+
 /// Type alias for the __enable_syscall_interpose function pointer.
 /// This function is provided by the custom glibc loaded in the dlmopen
 /// namespace and is used to register syscall interposition handlers.
@@ -101,6 +156,19 @@ pub type EnableInterposeF = unsafe extern "C" fn(
         u64, u64, u64, u64, 
     ) -> i64>,
 ) -> libc::c_int;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LindAllocateTlsResult {
+    pub stackaddr: *mut c_void,
+    pub fs_base: *mut c_void,
+    pub stacktop: *mut c_void,
+    pub dtv: *mut c_void,
+    pub dtv_size: usize,
+}
+
+//int _lind_dl_allocate_tls (struct lind_dl_tls_result *result)
+pub type DlAllocateTlsF = unsafe extern "C" fn(result: *mut LindAllocateTlsResult) -> libc::c_int;
 
 /// Maximum number of nested MPK contexts in a thread's GS segment.
 pub const LIND_MPK_MAX_CONTEXTS: usize = 16;
@@ -249,9 +317,13 @@ pub struct MpkCageThreadInfo {
     pub stack_base: usize,
     pub stack_size: usize,
     pub fs_base: usize,
+    pub dtv: *mut c_void,
+    pub dtv_size: usize,
 }
 
 impl MpkCageThreadInfo {
+    const DTV_BUFFER_SIZE: usize = 4 * 1024;
+
     /// Allocates this thread's grate stack out of the grate's own vmmap
     /// (`grate_cage_id`), rather than an independent mmap. The grate's
     /// backing memory is already reserved via its 4 GB MAP_NORESERVE region,
@@ -273,6 +345,41 @@ impl MpkCageThreadInfo {
         self.stack_addr.store(stack_addr, Ordering::Relaxed);
         Ok(())
     }
+
+    pub fn initialize_grate_tls(&mut self, dl_allocate_tls: DlAllocateTlsF) -> anyhow::Result<()> {
+        let stack_addr = self.stack_addr.load(Ordering::Relaxed);
+        if stack_addr == 0 {
+            anyhow::bail!("grate stack is not initialized");
+        }
+        if self.dtv.is_null() {
+            let (dtv_base, dtv_size) = allocate_region_in_vmmap(self.grate_cage_id, Self::DTV_BUFFER_SIZE)?;
+            self.dtv = dtv_base as *mut c_void;
+            self.dtv_size = dtv_size;
+        }
+
+        let mut tls_result = LindAllocateTlsResult {
+            stackaddr: stack_addr as *mut c_void,
+            fs_base: std::ptr::null_mut(),
+            stacktop: std::ptr::null_mut(),
+            dtv: self.dtv,
+            dtv_size: self.dtv_size,
+        };
+        let ret = unsafe { dl_allocate_tls(&mut tls_result as *mut LindAllocateTlsResult) };
+        if ret != 0 {
+            anyhow::bail!(
+                "_lind_dl_allocate_tls failed: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+        if tls_result.fs_base.is_null() || tls_result.stacktop.is_null() {
+            anyhow::bail!("_lind_dl_allocate_tls returned null fs_base or stacktop");
+        }
+
+        self.fs_base = tls_result.fs_base as usize;
+        self.stack_addr
+            .store(tls_result.stacktop as usize, Ordering::Relaxed);
+        Ok(())
+    }
 }
 
 impl Drop for MpkCageThreadInfo {
@@ -287,6 +394,11 @@ impl Drop for MpkCageThreadInfo {
                 self.stack_size,
                 MPK_GRATE_STACK_GUARD,
             );
+        }
+        if !self.dtv.is_null() {
+            free_region_in_vmmap(self.grate_cage_id, self.dtv as usize, self.dtv_size);
+            self.dtv = std::ptr::null_mut();
+            self.dtv_size = 0;
         }
     }
 }
@@ -305,6 +417,8 @@ pub struct MPKRuntimeInfo {
     pub loader_libc_handle: *mut c_void,
     /// Function pointer to __enable_syscall_interpose in custom libc
     pub enable_interpose_fn: EnableInterposeF,
+    /// Function pointer to _lind_dl_allocate_tls in custom libc, needed for thread-local storage allocation.
+    pub dl_allocate_tls: DlAllocateTlsF,
     /// OS-level process ID of this cage's process.
     /// 0 if the cage runs in the main lind process; non-zero for forked children.
     pub pid: libc::pid_t,
@@ -339,6 +453,7 @@ impl MPKRuntimeInfo {
         cage_handle: *mut c_void,
         libc_handle: *mut c_void,
         enable_interpose: EnableInterposeF,
+        dl_allocate_tls: DlAllocateTlsF,
         pid: libc::pid_t,
         memory_base: *mut c_void,
         memory_size: usize,
@@ -353,6 +468,7 @@ impl MPKRuntimeInfo {
             loader_cage_handle: cage_handle,
             loader_libc_handle: libc_handle,
             enable_interpose_fn: enable_interpose,
+            dl_allocate_tls,
             pid,
             memory_base,
             memory_size,

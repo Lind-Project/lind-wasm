@@ -14,6 +14,8 @@ pub const GS_OS_TID_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, os_tid);
 const GS_CONTEXT_ARRAY_OFFSET: usize = offset_of!(MPKSupervisorCtxStack, contexts);
 const GS_CONTEXT_FS_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + offset_of!(MPKSupervisorContext, fs_base);
 const GS_CONTEXT_SIZE: usize = size_of::<MPKSupervisorContext>();
+const GS_CONTEXT_NEXT_SUP_RSP_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + 2*GS_CONTEXT_SIZE;
+const GS_CONTEXT_NEXT_SUP_FS_OFFSET: usize = GS_CONTEXT_ARRAY_OFFSET + 2*GS_CONTEXT_SIZE + offset_of!(MPKSupervisorContext, fs_base);
 
 fn mpk_debug(message: impl AsRef<str>) {
     if std::env::var_os("LIND_MPK_DEBUG").is_some() {
@@ -110,9 +112,12 @@ extern "C" fn mpk_register_handler(
                 stack_addr: std::sync::atomic::AtomicUsize::new(0),
                 stack_base: 0,
                 stack_size: 0,
-                fs_base: 0, //TODO: register new TLS data for new thread in handling grates
+                fs_base: 0,
+                dtv: std::ptr::null_mut(),
+                dtv_size: 0,
             };
             new_thread.allocate_grate_stack()?;
+            new_thread.initialize_grate_tls(grate_mpk_info.dl_allocate_tls)?;
             new_thread.thread_info.register_cage(handle_func_cage);
             grate_threads.insert(*tid, new_thread);
             added += 1;
@@ -192,6 +197,7 @@ pub extern "C" fn grate_callback_trampoline(
         "inner_grate_callback_trampoline: supervisor context stack is full"
     );
     let switch_to_context_index = current_context_index + 1;
+    let new_supervisor_context_index = current_context_index + 2;
 
     let gs_data = gs_base as *mut MPKSupervisorCtxStack;
     let os_tid = unsafe { (*gs_data).os_tid as libc::pid_t };
@@ -298,20 +304,20 @@ extern "sysv64" fn inner_grate_callback_trampoline_asm(
     "imulq ${gs_contexts_size_value}, %r10;" ,
     "subq $8, %rsp;", //16 byte alignment
     "movq %rsp, %gs:{gs_contexts_array_offset}(%r10);",
+    "movq %rsp, %gs:{gs_context_next_sup_rsp_offset}(%r10);", //use current supervisor stack as grate's supervisor stack
     
     //spill current fs_base
-    "addq $8, %r10; ",// r10 now points to fs_base within the current context
     "rdfsbase %rax; ",
-    "movq %rax, %gs:{gs_contexts_array_offset}(%r10);",
+    "movq %rax, %gs:{gs_context_fs_offset}(%r10);",
+    "movq %rax, %gs:{gs_context_next_sup_fs_offset}(%r10);", //use current supervisor fs_base as grate's supervisor fs_base
     
     
     //get grate fs-base
-    "addq ${gs_contexts_size_value}, %r10; ", //r10 now points to the fs_base of the next context (e.g. grate context)
-    "movq %gs:{gs_contexts_array_offset}(%r10), %rax; ",
+    "addq ${gs_contexts_size_value}, %r10; ", //r10 now holds the index of the grate context * context_size
+    "movq %gs:{gs_context_fs_offset}(%r10), %rax; ",
     "wrfsbase %rax; ",
     
     //get grate stack
-    "subq $0x8, %r10; ", //r10 now points to the stack pointer of the grate context
     "movq %gs:{gs_contexts_array_offset}(%r10), %rsp ;",
 
 
@@ -349,15 +355,92 @@ extern "sysv64" fn inner_grate_callback_trampoline_asm(
     "addq $8, %rsp; ", //undo 16 byte alignment
 
     //switch back to supervisor fs_base
-    "addq $8, %r10; ", // r10 now points to the fs_base of the supervisor context
-    "movq %gs:{gs_contexts_array_offset}(%r10), %r11; ",
+    "movq %gs:{gs_context_fs_offset}(%r10), %r11; ",
     "wrfsbase %r11; ",
     
     "ret; "
         ,
         gs_current_context_offset = const GS_CURRENT_CONTEXT_OFFSET,
         gs_contexts_array_offset = const GS_CONTEXT_ARRAY_OFFSET,
+        gs_context_fs_offset = const GS_CONTEXT_FS_OFFSET,
         gs_contexts_size_value = const GS_CONTEXT_SIZE,
+        gs_context_next_sup_rsp_offset = const GS_CONTEXT_NEXT_SUP_RSP_OFFSET,
+        gs_context_next_sup_fs_offset = const GS_CONTEXT_NEXT_SUP_FS_OFFSET,
+        options(att_syntax));
+    }
+    
+    //End ASM
+}
+
+#[unsafe(naked)]
+extern "sysv64" fn _call_into_cage_asm(
+    arg1: u64, //rdi
+    arg2: u64, //rsi
+    arg3: u64, //rdx
+    arg4: u64, //rcx
+    arg5: u64, //r8
+    in_grate_fn_ptr_u64: u64, //r9
+) {
+    unsafe {
+        naked_asm!(
+
+        
+    //here, our stack is 8-byte aligned, it needs to be 16-byte aligned before making a call!
+    //r9 hols our call target (in_grate_fn_ptr_u64)
+    
+    
+    
+    //get context stack pointer and grate stack
+    //spill current rsp to current_context.rsp
+    "movq %gs:{gs_current_context_offset}, %r10 ;",
+    "imulq ${gs_contexts_size_value}, %r10;" ,
+    "subq $8, %rsp;", //16 byte alignment
+    "movq %rsp, %gs:{gs_contexts_array_offset}(%r10);",
+    "movq %rsp, %gs:{gs_context_next_sup_rsp_offset}(%r10);", //use current supervisor stack as grate's supervisor stack
+    
+    //spill current fs_base
+    "rdfsbase %rax; ",
+    "movq %rax, %gs:{gs_context_fs_offset}(%r10);",
+    "movq %rax, %gs:{gs_context_next_sup_fs_offset}(%r10);", //use current supervisor fs_base as grate's supervisor fs_base
+    
+    
+    //get grate fs-base
+    "addq ${gs_contexts_size_value}, %r10; ", //r10 now holds the index of the grate context * context_size
+    "movq %gs:{gs_context_fs_offset}(%r10), %rax; ",
+    "wrfsbase %rax; ",
+    
+    //get grate stack //assume 16 byte alignment
+    "movq %gs:{gs_contexts_array_offset}(%r10), %rsp ;",
+
+    //increment the current context index
+    "incq %gs:{gs_current_context_offset}; ",
+    
+    //switch pkru, get as offset from gs:r10
+    //call fptr
+    "call *%r9; ",
+    //switch back pkru
+    
+    //decrement the current context index
+    "decq %gs:{gs_current_context_offset}; ",
+
+    //switch back to supervisor stack
+    "movq %gs:{gs_current_context_offset}, %r10 ;",
+    "imulq ${gs_contexts_size_value}, %r10;" ,
+    "movq %gs:{gs_contexts_array_offset}(%r10), %rsp ;",
+    "addq $8, %rsp; ", //undo 16 byte alignment
+
+    //switch back to supervisor fs_base
+    "movq %gs:{gs_context_fs_offset}(%r10), %r11; ",
+    "wrfsbase %r11; ",
+    
+    "ret; "
+        ,
+        gs_current_context_offset = const GS_CURRENT_CONTEXT_OFFSET,
+        gs_contexts_array_offset = const GS_CONTEXT_ARRAY_OFFSET,
+        gs_context_fs_offset = const GS_CONTEXT_FS_OFFSET,
+        gs_contexts_size_value = const GS_CONTEXT_SIZE,
+        gs_context_next_sup_rsp_offset = const GS_CONTEXT_NEXT_SUP_RSP_OFFSET,
+        gs_context_next_sup_fs_offset = const GS_CONTEXT_NEXT_SUP_FS_OFFSET,
         options(att_syntax));
     }
     
