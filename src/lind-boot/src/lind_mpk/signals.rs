@@ -509,31 +509,6 @@ pub fn wait_if_stopped(cageid: u64) -> bool {
 }
 
 
-//TODO: This needs to do a context stack store, increment, load sequence to properly switch contexts.
-#[cfg(target_arch = "x86_64")]
-unsafe fn call_handler_on_cage_stack(
-    stack_top: usize,
-    handler_fn: unsafe extern "C" fn(i32),
-    signo: i32,
-) {
-    // Keep 16-byte alignment before the call to satisfy SysV ABI.
-    let aligned_stack = stack_top & !0xf;
-    unsafe {
-        asm!(
-            "mov %rsp, %r15",
-            "mov {new_rsp}, %rsp",
-            "call *{handler}",
-            "mov %r15, %rsp",
-            new_rsp = in(reg) aligned_stack,
-            handler = in(reg) handler_fn,
-            in("edi") signo,
-            lateout("r15") _,
-            clobber_abi("C"),
-            options(att_syntax),
-        );
-    }
-}
-
 fn invoke_handler_on_cage_stack(
     cageid: u64,
     handler: u64,
@@ -564,27 +539,29 @@ fn invoke_handler_on_cage_stack(
             };
             let gs_data = thread.thread_info.gs_data;
             let mut resolved_stack_top = 0usize;
-            let mut do_stack_walk = true;
-            let mut fs_base = 0usize;
+            let mut fs_base = thread.fs_base;
 
             if let Some(rsp_before_signal) = pre_signal_rsp {
                 if addr_in_cage_vmmap(cageid, rsp_before_signal) {
                     resolved_stack_top = rsp_before_signal.saturating_sub(SIGNAL_STACK_RED_ZONE);
-                    do_stack_walk = false;
                 }
             } 
 
-            if do_stack_walk && !gs_data.is_null() {
+            if !gs_data.is_null() {
                 let gs_data = gs_data as *const MPKSupervisorCtxStack;
                 let current = unsafe { (*gs_data).current_context };
                 if current < LIND_MPK_MAX_CONTEXTS {
                     for idx in (0..=current).rev() {
                         let context = unsafe { &(*gs_data).contexts[idx] };
-                        if context.cage_id == cageid && context.rsp != 0 {
-                            resolved_stack_top =
-                                (context.rsp as usize).saturating_sub(SIGNAL_STACK_RED_ZONE);
+                        if context.cage_id == cageid {
                             fs_base = context.fs_base as usize;
-                            break;
+                            if resolved_stack_top == 0 && context.rsp != 0 {
+                                resolved_stack_top = (context.rsp as usize)
+                                    .saturating_sub(SIGNAL_STACK_RED_ZONE);
+                            }
+                            if resolved_stack_top != 0 {
+                                break;
+                            }
                         }
                     }
                 }
@@ -610,17 +587,33 @@ fn invoke_handler_on_cage_stack(
         unsafe {
             let gs_data = gs_data as *mut MPKSupervisorCtxStack;
             let current = (*gs_data).current_context;
-            if current >= LIND_MPK_MAX_CONTEXTS {
+            if current >= LIND_MPK_MAX_CONTEXTS - 2 {
                 return false;
             }
 
-            // Prepare the target cage stack.
+            let saved_contexts = [
+                (*gs_data).contexts[current],
+                (*gs_data).contexts[current + 1],
+                (*gs_data).contexts[current + 2],
+            ];
+
+            // The trampoline advances the context index itself and uses current + 2
+            // as its saved supervisor context.
             (*gs_data).contexts[current + 1].cage_id = cageid;
             (*gs_data).contexts[current + 1].rsp = (stack_top & !0xf) as u64;
             (*gs_data).contexts[current + 1].fs_base = fs_base;
-            (*gs_data).current_context += 1;
-            let handler_fn: unsafe extern "C" fn(i32) = std::mem::transmute(handler as usize);
-            call_handler_on_cage_stack(stack_top, handler_fn, signo);
+            crate::lind_mpk::trampoline::_call_into_cage_asm(
+                signo as u64,
+                0,
+                0,
+                0,
+                0,
+                handler,
+            );
+
+            (*gs_data).contexts[current] = saved_contexts[0];
+            (*gs_data).contexts[current + 1] = saved_contexts[1];
+            (*gs_data).contexts[current + 2] = saved_contexts[2];
         }
         true
     }

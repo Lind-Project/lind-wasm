@@ -329,6 +329,15 @@ fn mpk_clone_thread_entry(
         }
     }
 
+    let caller_context = unsafe {
+        let gs_data = &*new_gs_data;
+        assert!(
+            gs_data.current_context > 0 && gs_data.current_context < LIND_MPK_MAX_CONTEXTS,
+            "mpk_clone: supervisor context index out of bounds"
+        );
+        gs_data.contexts[gs_data.current_context - 1]
+    };
+    let mut cage_fs_bases = std::collections::HashMap::new();
     for cage_id in registered_cage_ids {
         let Some(cage) = get_cage(cage_id) else {
             lind_debug_panic(&format!("mpk_clone: cage {} not found", cage_id));
@@ -357,13 +366,19 @@ fn mpk_clone_thread_entry(
             lind_debug_panic("mpk_clone: cage runtime changed while creating thread");
             return -EINVAL;
         };
-        if let Err(error) = cage_info.initialize_grate_tls(mpk_info.dl_allocate_tls) {
-            lind_debug_panic(&format!(
-                "mpk_clone: TLS initialization failed for cage {} and tid={}: {}",
-                cage_id, tid, error
-            ));
-            return -EINVAL;
+        if cage_id == caller_context.cage_id {
+            // The caller's TLS is supplied by clone, or inherited without CLONE_SETTLS.
+            cage_info.fs_base = caller_context.fs_base;
+        } else {
+            if let Err(error) = cage_info.initialize_grate_tls(mpk_info.dl_allocate_tls) {
+                lind_debug_panic(&format!(
+                    "mpk_clone: TLS initialization failed for cage {} and tid={}: {}",
+                    cage_id, tid, error
+                ));
+                return -EINVAL;
+            }
         }
+        cage_fs_bases.insert(cage_id, cage_info.fs_base);
         mpk_info.threads.write().insert(tid, cage_info);
     }
 
@@ -372,26 +387,20 @@ fn mpk_clone_thread_entry(
     unsafe {
         let child_pointer_guard = current_pointer_guard();
         let stack_delta = new_stack_base_addr as isize - old_stack_base as isize;
-        // Relocate context stack pointers that refer to the copied supervisor stack.
-        let current_context = (*new_gs_data).current_context;
-        assert!(
-            current_context < LIND_MPK_MAX_CONTEXTS,
-            "mpk_clone: supervisor context index out of bounds"
+        let supervisor_fs_base: usize;
+        asm!(
+            "rdfsbase {}",
+            out(reg) supervisor_fs_base,
+            options(nostack, preserves_flags, att_syntax)
         );
-        let old_stack_start = old_stack_base + CAGE_STACK_GUARD;
-        let old_stack_end = old_stack_base + thread_info.supervisor_stack_size;
-        for i in 0..=current_context {
-            let rsp = (*new_gs_data).contexts[i].rsp as usize;
-            if !(old_stack_start..=old_stack_end).contains(&rsp) {
-                continue;
-            }
-            let relocated_rsp = (rsp as isize + stack_delta) as u64;
-            mpk_debug(&format!(
-                "mpk_clone: adjusting stack pointer for context {}: rsp = {:#x}, new rsp = {:#x}",
-                i, rsp, relocated_rsp
-            ));
-            (*new_gs_data).contexts[i].rsp = relocated_rsp;
-        }
+        relocate_cloned_contexts(
+            &mut *new_gs_data,
+            old_stack_base,
+            new_stack_base_addr,
+            thread_info.supervisor_stack_size,
+            supervisor_fs_base,
+            &cage_fs_bases,
+        );
 
         (*copied_jump_buffer).rsp = relocate_mangled_stack_pointer(
             (*copied_jump_buffer).rsp,
@@ -412,6 +421,140 @@ fn mpk_clone_thread_entry(
             child_pointer_guard,
         );
         longjmp(copied_jump_buffer as *mut libc::c_long, 1);
+    }
+}
+
+fn prepare_clone_caller_context(gs_data: &mut MPKSupervisorCtxStack, args: &CloneArgStruct) {
+    assert!(
+        gs_data.current_context > 0 && gs_data.current_context < LIND_MPK_MAX_CONTEXTS,
+        "mpk_clone: supervisor context index out of bounds"
+    );
+    let caller = &mut gs_data.contexts[gs_data.current_context - 1];
+    caller.rsp = args.stack + args.stack_size;
+    if args.flags & CLONE_SETTLS as u64 != 0 {
+        caller.fs_base = args.tls as usize;
+    }
+}
+
+fn relocate_cloned_contexts(
+    gs_data: &mut MPKSupervisorCtxStack,
+    old_stack_base: usize,
+    new_stack_base: usize,
+    stack_size: usize,
+    supervisor_fs_base: usize,
+    cage_fs_bases: &std::collections::HashMap<u64, usize>,
+) {
+    assert!(
+        gs_data.current_context < LIND_MPK_MAX_CONTEXTS,
+        "mpk_clone: supervisor context index out of bounds"
+    );
+    let stack_delta = new_stack_base as isize - old_stack_base as isize;
+    let old_stack_start = old_stack_base + CAGE_STACK_GUARD;
+    let old_stack_end = old_stack_base + stack_size;
+    for (i, context) in gs_data.contexts.iter_mut().enumerate() {
+        if context.cage_id == 0 {
+            context.fs_base = supervisor_fs_base;
+        } else if i <= gs_data.current_context {
+            context.fs_base = *cage_fs_bases
+                .get(&context.cage_id)
+                .expect("mpk_clone: active cage has no child TLS");
+        }
+
+        let rsp = context.rsp as usize;
+        if i > gs_data.current_context || !(old_stack_start..=old_stack_end).contains(&rsp) {
+            continue;
+        }
+        let relocated_rsp = (rsp as isize + stack_delta) as u64;
+        mpk_debug(&format!(
+            "mpk_clone: adjusting stack pointer for context {}: rsp = {:#x}, new rsp = {:#x}",
+            i, rsp, relocated_rsp
+        ));
+        context.rsp = relocated_rsp;
+    }
+}
+
+#[cfg(test)]
+mod clone_context_tests {
+    use super::*;
+    use crate::lind_mpk::RuntimeInfo::MPKSupervisorContext;
+
+    fn context_stack() -> MPKSupervisorCtxStack {
+        let mut gs_data = MPKSupervisorCtxStack {
+            current_context: 1,
+            os_tid: 0,
+            contexts: [MPKSupervisorContext::default(); LIND_MPK_MAX_CONTEXTS],
+        };
+        gs_data.contexts[0].cage_id = 1;
+        gs_data.contexts[0].fs_base = 0x1110;
+        gs_data
+    }
+
+    #[test]
+    fn clone_settls_uses_supplied_guest_fs() {
+        for tls in [0, 0x2220] {
+            let mut gs_data = context_stack();
+            let args = CloneArgStruct {
+                flags: (CLONE_VM | CLONE_SETTLS) as u64,
+                stack: 0x8000,
+                stack_size: 0x1000,
+                tls,
+                ..CloneArgStruct::default()
+            };
+            prepare_clone_caller_context(&mut gs_data, &args);
+            assert_eq!(gs_data.contexts[0].fs_base, tls as usize);
+            assert_eq!(gs_data.contexts[0].rsp, 0x9000);
+        }
+    }
+
+    #[test]
+    fn clone_without_settls_preserves_guest_fs() {
+        let mut gs_data = context_stack();
+        let args = CloneArgStruct {
+            flags: CLONE_VM as u64,
+            tls: 0x2220,
+            ..CloneArgStruct::default()
+        };
+        prepare_clone_caller_context(&mut gs_data, &args);
+        assert_eq!(gs_data.contexts[0].fs_base, 0x1110);
+    }
+
+    #[test]
+    fn clone_relocates_stacks_and_refreshes_nested_context_tls() {
+        let mut gs_data = context_stack();
+        gs_data.current_context = 5;
+        for i in [1, 3, 5] {
+            gs_data.contexts[i].rsp = 0x11000 + (i as u64 * 0x100);
+            gs_data.contexts[i].fs_base = 0x3330;
+        }
+        // TLS must be refreshed even if this supervisor RSP is not relocated.
+        gs_data.contexts[3].rsp = 0x50000;
+        for i in [2, 4] {
+            gs_data.contexts[i].cage_id = 2;
+            gs_data.contexts[i].fs_base = 0x4440;
+            gs_data.contexts[i].rsp = 0x60000;
+        }
+        let cage_fs_bases = std::collections::HashMap::from([(1, 0x2220), (2, 0x5550)]);
+        relocate_cloned_contexts(
+            &mut gs_data,
+            0x10000,
+            0x20000,
+            0x10000,
+            0x7770,
+            &cage_fs_bases,
+        );
+        assert_eq!(gs_data.contexts[0].fs_base, 0x2220);
+        for i in [2, 4] {
+            assert_eq!(gs_data.contexts[i].fs_base, 0x5550);
+            assert_eq!(gs_data.contexts[i].rsp, 0x60000);
+        }
+        for context in &gs_data.contexts {
+            if context.cage_id == 0 {
+                assert_eq!(context.fs_base, 0x7770);
+            }
+        }
+        assert_eq!(gs_data.contexts[1].rsp, 0x21100);
+        assert_eq!(gs_data.contexts[3].rsp, 0x50000);
+        assert_eq!(gs_data.contexts[5].rsp, 0x21500);
     }
 }
 
@@ -853,7 +996,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
         //thread like semantics
         //Rawposix only respects CLONE_VM. Other flags are ignored.
         //Forwarded flags are
-        //CLONE_SETTLS: We dont interfere with libc's TLS setup
+        //CLONE_SETTLS: Use the caller-provided TLS for the child guest context
         //CLONE_PARENT_SETTID: Store TID at parent_tid
         //CLONE_CHILD_SETTID: Store TID at child_tid
         //CLONE_CHILD_CLEARTID: Clear TID and futex wake at child_tid on thread exit
@@ -1014,13 +1157,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
 
             // Fix up the top grate's return stack with the caller-provided stack.
             unsafe {
-                let gs_data = &mut *thread_info.gs_data;
-                let current_context = gs_data.current_context;
-                assert!(
-                    current_context < LIND_MPK_MAX_CONTEXTS,
-                    "mpk_clone: supervisor context index out of bounds"
-                );
-                gs_data.contexts[current_context - 1].rsp = args.stack + args.stack_size;
+                prepare_clone_caller_context(&mut *thread_info.gs_data, args);
             }
 
 

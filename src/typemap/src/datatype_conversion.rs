@@ -7,14 +7,14 @@
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use crate::cage_helpers::validate_cageid;
-use cage::get_cage;
+use cage::{cage_is_mpk, get_cage};
 use std::error::Error;
 use std::os::raw::c_char;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
-    FSData, ITimerVal, KernelSigactionStruct, PipeArray, Rlimit, ShmidsStruct, SigactionStruct,
+    FSData, ITimerVal, KernelSigactionStruct, PipeArray, Rlimit, Rlimit64, ShmidsStruct, SigactionStruct,
     SigsetType, Stat64Data, Statfs64Data, StatData,
 };
 
@@ -678,7 +678,7 @@ pub fn sc_convert_addr_to_stat64data<'a>(
 
 /// 'sc_convert_addr_to_rlimit'
 /// converts a u64 argument to a mutable reference to a Rlimit struct.
-/// Used by prlimit64_syscall to write resource limit to the caller
+/// Targets the 32-bit resource limit layout used by Wasm cages.
 /// If secure feature is on, the function validates that the argument's cage id and the caller's cage id matches.
 /// function assumes pointer is not nullptr.
 pub fn sc_convert_addr_to_rlimit<'a>(
@@ -694,6 +694,44 @@ pub fn sc_convert_addr_to_rlimit<'a>(
     }
     let pointer = arg as *mut Rlimit;
     Ok(unsafe { &mut *pointer })
+}
+
+/// Converts an address to the native MPK resource limit layout.
+/// Like `sc_convert_addr_to_rlimit`, assumes the pointer is non-null and valid.
+pub fn sc_convert_addr_to_rlimit64<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut Rlimit64, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalid Cage ID");
+        }
+    }
+    let pointer = arg as *mut Rlimit64;
+    Ok(unsafe { &mut *pointer })
+}
+
+/// Writes resource limits using the calling cage's ABI: two 32-bit fields for
+/// Wasm, or two 64-bit fields for native MPK. The buffer must be non-null and valid.
+/// Limits that do not fit the Wasm layout are reported as `EOVERFLOW`.
+pub fn convert_rlimit_to_user(
+    cageid: u64,
+    arg: u64,
+    arg_cageid: u64,
+    limit: Rlimit64,
+) -> Result<(), Errno> {
+    if cage_is_mpk(cageid) {
+        let limit_ptr = sc_convert_addr_to_rlimit64(arg, arg_cageid, cageid)?;
+        *limit_ptr = limit;
+    } else {
+        let rlim_cur = u32::try_from(limit.rlim_cur).map_err(|_| Errno::EOVERFLOW)?;
+        let rlim_max = u32::try_from(limit.rlim_max).map_err(|_| Errno::EOVERFLOW)?;
+        let limit_ptr = sc_convert_addr_to_rlimit(arg, arg_cageid, cageid)?;
+        *limit_ptr = Rlimit { rlim_cur, rlim_max };
+    }
+    Ok(())
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into

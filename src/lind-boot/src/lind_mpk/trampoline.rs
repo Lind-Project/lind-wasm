@@ -373,7 +373,7 @@ extern "sysv64" fn inner_grate_callback_trampoline_asm(
 }
 
 #[unsafe(naked)]
-extern "sysv64" fn _call_into_cage_asm(
+pub(super) extern "sysv64" fn _call_into_cage_asm(
     arg1: u64, //rdi
     arg2: u64, //rsi
     arg3: u64, //rdx

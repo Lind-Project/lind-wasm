@@ -94,11 +94,18 @@ pub struct Stat64Data {
     pub __glibc_reserved: [i64; 3],
 }
 
-//R Limit for getrlimit system call
+/// Resource limit layout used by Wasm cages (32-bit `rlim_t` fields).
 #[repr(C)]
 pub struct Rlimit {
     pub rlim_cur: u32,
     pub rlim_max: u32,
+}
+
+/// Native MPK resource limit layout (64-bit unsigned long `rlim_t` fields).
+#[repr(C)]
+pub struct Rlimit64 {
+    pub rlim_cur: u64,
+    pub rlim_max: u64,
 }
 
 #[derive(Eq, PartialEq, Default, Copy, Clone, Debug)]

@@ -29,7 +29,7 @@ use sysdefs::constants::sys_const::{
     SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::constants::syscall_const;
-use sysdefs::data::fs_struct::{ITimerVal, KernelSigactionStruct, Rlimit, SigactionStruct};
+use sysdefs::data::fs_struct::{ITimerVal, KernelSigactionStruct, Rlimit64, SigactionStruct};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
@@ -1336,6 +1336,7 @@ pub extern "C" fn sigprocmask_syscall(
 /// soft limit is the value that kernel enforces for the reponse. Hard limit the ceiling for how high the soft limit can be set.
 /// An unprevileged process may set only the soft limit and irreversibly lower hard limit.
 /// A previleged process may make arbitrary changes to either hard/soft values.
+/// Returned limits use 32-bit fields for Wasm cages and 64-bit fields for native MPK cages.
 /// ## Returns
 /// On success, returns 0. On error, -1 is returned, and errno is set.
 
@@ -1379,36 +1380,23 @@ pub extern "C" fn prlimit64_syscall(
     // handle getrlimit calls
     // default to 1024.
     if !sc_convert_arg_nullity(arg4, arg4_cageid, cageid) {
-        let old_limit = match sc_convert_addr_to_rlimit(arg4, arg4_cageid, cageid) {
-            Ok(rlim) => rlim,
-            Err(e) => return (syscall_error(e, "prlimit64", "bad address")) as i64,
-        };
-        match resource {
-            RLIMIT_STACK => {
-                old_limit.rlim_cur = 8 * 1024 * 1024;
-                old_limit.rlim_max = 8 * 1024 * 1024;
-            }
-            RLIMIT_NOFILE => {
-                old_limit.rlim_cur = 1024;
-                old_limit.rlim_max = 1024;
-            }
-            RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => {
-                old_limit.rlim_cur = MAX_LINEAR_MEMORY_SIZE as u32;
-                old_limit.rlim_max = MAX_LINEAR_MEMORY_SIZE as u32;
-            }
-            RLIMIT_NPROC => {
-                old_limit.rlim_cur = MAX_CAGEID as u32;
-                old_limit.rlim_max = MAX_CAGEID as u32;
-            }
-            RLIMIT_CORE => {
-                old_limit.rlim_cur = 0;
-                old_limit.rlim_max = 0;
-            }
+        let limit = match resource {
+            RLIMIT_STACK => 8 * 1024 * 1024,
+            RLIMIT_NOFILE => 1024,
+            RLIMIT_DATA | RLIMIT_RSS | RLIMIT_AS => MAX_LINEAR_MEMORY_SIZE,
+            RLIMIT_NPROC => MAX_CAGEID as u64,
+            RLIMIT_CORE => 0,
             _ => {
                 lind_debug_panic(&format!("prlimit64: unsupported resource {}", resource));
-                old_limit.rlim_cur = 0;
-                old_limit.rlim_max = 0;
+                0
             }
+        };
+        let old_limit = Rlimit64 {
+            rlim_cur: limit,
+            rlim_max: limit,
+        };
+        if let Err(e) = convert_rlimit_to_user(cageid, arg4, arg4_cageid, old_limit) {
+            return (syscall_error(e, "prlimit64", "could not write resource limit")) as i64;
         }
     }
 
