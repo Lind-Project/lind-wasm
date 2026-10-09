@@ -39,12 +39,14 @@ LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", REPO_ROOT / "lindfs")).resolve(
 GRATE_CLANG = os.environ.get("GRATE_CLANG", "lind-clang")
 GRATE_RUNNER = os.environ.get("GRATE_RUNNER", "lind-wasm")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
+TARGET_KIND = "wasm"
 
 error_types = {
     "Compile_Failure": "Compile Failure",
     "Runtime_Failure": "Runtime Failure",
     "Timeout": "Timeout",
     "Missing_Pair": "Missing Grate/Cage Pair",
+    "Unsupported_Target": "Target Unsupported for Runtime Execution",
 }
 
 
@@ -83,7 +85,7 @@ def add_test_result(result: dict[str, Any], test_name: str, status: str, error_t
 
     result["number_of_failures"] += 1
     result["failures"].append(test_name)
-    if error_type == "Compile_Failure":
+    if error_type == "Compile_Failure" or error_type == "Unsupported_Target":
         result["number_of_compile_failures"] += 1
         result["compile_failures"].append(test_name)
     elif error_type == "Runtime_Failure":
@@ -108,6 +110,8 @@ def check_timeout(value: str) -> int:
 
 
 def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
+    global TARGET_KIND
+
     parser = argparse.ArgumentParser(description="Run grate tests and generate a report")
     parser.add_argument("--skip", nargs="*", default=[], help="List of folders to skip")
     parser.add_argument("--run", nargs="*", default=[], help="List of folders to run")
@@ -118,7 +122,12 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--testfiles", type=Path, nargs="+", help="Specific grate files (*_grate.c) to run")
     parser.add_argument("--clean-results", action="store_true", help="Delete output files and exit")
-    return parser.parse_args(argv)
+    parser.add_argument("--target", choices=["wasm", "mpk"], default=TARGET_KIND, help="Compile target used for grate/cage modules. Use mpk for MPK/shared-library output.")
+    parser.add_argument("--wasm", action="store_const", dest="target", const="wasm", help="Force the default WASM target.")
+    parser.add_argument("--mpk", action="store_const", dest="target", const="mpk", help="Force the MPK/shared-library target.")
+    args = parser.parse_args(argv)
+    TARGET_KIND = args.target
+    return args
 
 
 @dataclass(frozen=True)
@@ -143,6 +152,16 @@ def resolve_module_output(source_file: Path, cwd: Path) -> Path:
     precompiled `.cwasm` artifact. In some environments/tests a plain `.wasm`
     is executed instead. Support both and prefer the artifact that exists.
     """
+    if TARGET_KIND == "mpk":
+        candidates = [
+            source_file.with_suffix(""),
+            cwd / source_file.with_suffix("").name,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return source_file.with_suffix("")
+
     candidates = [
         source_file.with_suffix(".cwasm"),
         source_file.with_suffix(".wasm"),
@@ -239,8 +258,12 @@ def run_subprocess(cmd: list[str], timeout: int | None = None, cwd: Path | None 
 
 
 def compile_grate_test(test: GrateTestCase) -> tuple[bool, str]:
-    grate_compile_cmd = [GRATE_CLANG, "-s", "--compile-grate", "--output-dir", "grates", test.grate_source.name]
-    cage_compile_cmd = [GRATE_CLANG, test.cage_source.name]
+    if TARGET_KIND == "mpk":
+        grate_compile_cmd = [GRATE_CLANG, "--target", "mpk", "--output-dir", "grates", test.grate_source.name]
+        cage_compile_cmd = [GRATE_CLANG, "--target", "mpk", test.cage_source.name]
+    else:
+        grate_compile_cmd = [GRATE_CLANG, "-s", "--compile-grate", "--output-dir", "grates", test.grate_source.name]
+        cage_compile_cmd = [GRATE_CLANG, test.cage_source.name]
 
     try:
         grate_proc = run_subprocess(grate_compile_cmd, cwd=test.grate_source.parent)
@@ -417,6 +440,8 @@ def run_report(argv: list[str] | None = None) -> dict[str, Any]:
             add_test_result(result, test.name, "Success", None, output)
         elif status == "Timeout":
             add_test_result(result, test.name, "Failure", "Timeout", output)
+        elif status == "Unsupported_Target":
+            add_test_result(result, test.name, "Failure", "Unsupported_Target", output)
         else:
             add_test_result(result, test.name, "Failure", "Runtime_Failure", output)
 

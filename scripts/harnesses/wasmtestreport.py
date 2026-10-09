@@ -35,6 +35,8 @@ try:
 except ImportError:
     import libcpptestreport
 
+TARGET_KIND = "wasm"
+
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
 logger.setLevel(logging.DEBUG)  # default to DEBUG, we will be overriding with CLI args
@@ -338,6 +340,26 @@ class TestResultHandler:
 
 
 # ----------------------------------------------------------------------
+# Function: timeout_output
+#
+# Purpose:
+#   Build a failure message for a subprocess.TimeoutExpired, combining stdout
+#   and stderr the same way completed-process branches do (proc.stdout +
+#   proc.stderr), instead of discarding whatever the process printed before
+#   it was killed.
+# ----------------------------------------------------------------------
+def timeout_output(e: subprocess.TimeoutExpired, timeout_sec) -> str:
+    def _decode(x):
+        if x is None:
+            return ""
+        return x.decode(errors="replace") if isinstance(x, bytes) else x
+
+    captured = _decode(e.stdout) + _decode(e.stderr)
+    header = f"Timed Out (timeout: {timeout_sec}s)"
+    return f"{header}\n{captured}" if captured else header
+
+
+# ----------------------------------------------------------------------
 # Function: compile_and_run_native
 #
 # Purpose:
@@ -406,8 +428,8 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
             return True, proc.stdout, 0, None, timing_info
         else:
             return False, proc.stdout + proc.stderr, proc.returncode, "Failure_native_running", timing_info
-    except subprocess.TimeoutExpired:
-        return False, f"Timed Out (timeout: {timeout_sec}s)", "timeout", "Native_Timeout", timing_info
+    except subprocess.TimeoutExpired as e:
+        return False, timeout_output(e, timeout_sec), "timeout", "Native_Timeout", timing_info
     except Exception as e:
         return False, f"Exception: {e}", "unknown_error", "Failure_native_running", timing_info
     finally:
@@ -495,10 +517,13 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
         if result.returncode != 0:
             return (None, result.stdout + "\n" + result.stderr, compile_time)
         else:
-            # Return the generated artifact: .cwasm when precompiled, otherwise .wasm
-            wasm_file = Path(testcase + (".cwasm" if allow_precompiled else ".wasm"))
+            if TARGET_KIND == "mpk":
+                wasm_file = Path(testcase)
+            else:
+                # Return the generated artifact: .cwasm when precompiled, otherwise .wasm
+                wasm_file = Path(testcase + (".cwasm" if allow_precompiled else ".wasm"))
             if not wasm_file.exists():
-                return (None, f"Expected wasm output not found: {wasm_file}", compile_time)
+                return (None, f"Expected build output not found: {wasm_file}", compile_time)
             return (wasm_file, "", compile_time)
     except Exception as e:
         return (None, f"Exception during compilation: {str(e)}", None)
@@ -563,7 +588,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
         return (proc.returncode, output, run_time)
 
     except subprocess.TimeoutExpired as e:
-        return ("timeout", f"Timed Out (timeout: {timeout_sec}s)", None)
+        return ("timeout", timeout_output(e, timeout_sec), None)
     except Exception as e:
         return ("unknown_error", f"Exception during wasm run: {str(e)}", None)
 
@@ -1242,6 +1267,9 @@ def parse_arguments(argv=None):
     parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
+    parser.add_argument("--target", choices=["wasm", "mpk"], default=TARGET_KIND, help="Compile target used by lind_compile. Use mpk to produce the MPK/shared-library variant.")
+    parser.add_argument("--wasm", action="store_const", dest="target", const="wasm", help="Force the default WASM target.")
+    parser.add_argument("--mpk", action="store_const", dest="target", const="mpk", help="Force the MPK/shared-library target.")
     parser.add_argument("--static", action="store_true", dest="static_build", help="Pass --static before the source file in lind_compile invocations (static WASM build, no dynamic linking)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
     parser.add_argument("--grate", default=None, help="Path (resolved inside lindfs) to a single grate cwasm/wasm to chain before each test, e.g. grates/ipc-grate.cwasm")
@@ -1514,7 +1542,13 @@ def main():
     artifacts_dir_arg = args.artifacts_dir
     keep_artifacts = args.keep_artifacts
     GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
-    LIND_PRE_FLAGS = ["--static"] if args.static_build else []
+    global TARGET_KIND
+    TARGET_KIND = getattr(args, "target", TARGET_KIND)
+    LIND_PRE_FLAGS = []
+    if TARGET_KIND == "mpk":
+        LIND_PRE_FLAGS = ["--target", "mpk"]
+    elif args.static_build:
+        LIND_PRE_FLAGS = ["--static"]
     GRATE_PREFIX = args.grate
     GRATE_ARGS = shlex.split(args.grate_args) if args.grate_args else []
     GRATE_CHAIN = shlex.split(args.grate_prefix) if args.grate_prefix else []

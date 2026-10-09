@@ -42,6 +42,12 @@ def parse_args() -> argparse.Namespace:
         help="Only run specific harness module name(s), e.g. --harness wasmtestreport",
     )
     parser.add_argument(
+        "--target",
+        choices=["wasm", "mpk"],
+        default="wasm",
+        help="Target backend used by the report harnesses. Use mpk for MPK/shared-library builds.",
+    )
+    parser.add_argument(
         "--export-report",
         type=Path,
         help="Optional path to copy combined reports/report.html for external export.",
@@ -237,6 +243,8 @@ def main() -> None:
     for module_name in harness_modules:
         print(f"Running harness: {module_name}")
         harness_args = list(passthrough_args)
+        if cli_args.target != "wasm":
+            harness_args.append(f"--target={cli_args.target}")
 
         if module_name == "wasmtestreport":
             harness_args.append("--allow-pre-compiled")
