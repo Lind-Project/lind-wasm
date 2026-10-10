@@ -729,6 +729,12 @@ fn load_main_module(
 
         register_grate_handler_for_cage(&grate_template, host, cageid)
             .with_context(|| format!("failed to register grate workers for cage {}", cageid))?;
+    } else {
+        // Not a grate (any more). A cage forked from a grate that then execs
+        // an ordinary program must not build worker pools for its children,
+        // and its old pool would keep the previous image's memory alive.
+        sysdefs::constants::lind_platform_const::unmark_grate_handler_registered(cageid as usize);
+        let _ = unregister_grate_handler(cageid);
     }
 
     // 5) Notify threei of the cage runtime type

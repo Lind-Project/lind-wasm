@@ -296,6 +296,13 @@ pub fn mark_grate_handler_registered(cage_id: usize) {
     flags[cage_id] = true;
 }
 
+/// Clears `cage_id`'s flag when it execs a program that is not a grate.
+pub fn unmark_grate_handler_registered(cage_id: usize) {
+    if let Some(flag) = grate_handler_registered_flags().write().unwrap().get_mut(cage_id) {
+        *flag = false;
+    }
+}
+
 /// Returns whether `cage_id` has ever registered a grate handler.
 pub fn is_grate_handler_registered(cage_id: usize) -> bool {
     let flags = grate_handler_registered_flags().read().unwrap();
