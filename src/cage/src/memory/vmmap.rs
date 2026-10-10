@@ -390,6 +390,23 @@ impl Vmmap {
         user as u32
     }
 
+    /// Page ranges within [start, end) that are currently mapped (any
+    /// protection, any backing), clipped to the request.
+    pub fn mapped_page_ranges(&self, start: u32, end: u32) -> Vec<(u32, u32)> {
+        if start >= end {
+            return Vec::new();
+        }
+
+        self.entries
+            .overlapping(ie(start, end))
+            .map(|(interval, _)| {
+                let act_start = interval.start().max(start);
+                let act_end = interval.end().saturating_add(1).min(end);
+                (act_start, act_end)
+            })
+            .collect()
+    }
+
     // Visits each entry in the vmmap, applying a visitor function to each entry
     //
     // The visitor function should be used to:

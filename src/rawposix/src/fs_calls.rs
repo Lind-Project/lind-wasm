@@ -988,6 +988,20 @@ pub extern "C" fn mmap_syscall(
 
     let sysaddr = vmmap.user_to_sys(useraddr);
 
+    // Pages this anonymous mapping replaces. Under SGX mmap_inner keeps the
+    // old bytes, so they are cleared after mapping (see mmap_inner).
+    let replaced = if flags & MAP_ANONYMOUS as i32 > 0 {
+        let first = useraddr >> PAGESHIFT;
+        let end = ((useraddr as u64 + rounded_length) >> PAGESHIFT) as u32;
+        vmmap.mapped_page_ranges(first, end)
+    } else {
+        Vec::new()
+    };
+    let replaced_sys: Vec<(usize, usize)> = replaced
+        .iter()
+        .map(|&(s, e)| (vmmap.user_to_sys(s << PAGESHIFT), ((e - s) as usize) << PAGESHIFT))
+        .collect();
+
     drop(vmmap);
 
     if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
@@ -1021,6 +1035,12 @@ pub extern "C" fn mmap_syscall(
         if is_mmap_error(result) {
             let errno = get_errno();
             return handle_errno(errno, "mmap");
+        }
+
+        if fildes == -1 && prot != PROT_NONE as i32 {
+            for &(start, len) in &replaced_sys {
+                unsafe { std::ptr::write_bytes(start as *mut u8, 0, len) };
+            }
         }
 
         let vmmap = cage.vmmap.read();
@@ -1163,10 +1183,15 @@ pub extern "C" fn mmap_inner(
             "[mmap_inner] anonymous fixed mapping, returning addr={:?}",
             addr
         );
-        // The range keeps whatever it held before, but a fresh anonymous
-        // mapping must read as zero: brk shrink-then-grow and glibc calloc
-        // rely on it. Clear it as the kernel would.
-        unsafe { std::ptr::write_bytes(addr, 0, len) };
+        // The range keeps whatever it held before. Memory that is not mapped
+        // must read as zero when it is mapped again (brk shrink-then-grow,
+        // glibc calloc), so a release (PROT_NONE, as brk shrink does) clears
+        // it. Mapping over pages that were still mapped is cleared by
+        // mmap_syscall; never-used pages are zero already and are left
+        // alone, so they are not committed early.
+        if prot == PROT_NONE as i32 {
+            unsafe { std::ptr::write_bytes(addr, 0, len) };
+        }
         return addr as usize;
     }
     // end
@@ -1290,6 +1315,12 @@ pub extern "C" fn munmap_syscall(
                 0,
             ) as usize
         };
+        // Under SGX the shim rejects MAP_FIXED; keep the reservation and
+        // clear the pages instead, so they read as zero when reused.
+        if result as isize == -1 && get_errno() == libc::ENOTSUP {
+            unsafe { std::ptr::write_bytes(act_start_addr as *mut u8, 0, act_len) };
+            continue;
+        }
         if result != act_start_addr {
             lind_debug_panic!(
                 "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
