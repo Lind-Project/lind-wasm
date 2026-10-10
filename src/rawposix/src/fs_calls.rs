@@ -1163,6 +1163,10 @@ pub extern "C" fn mmap_inner(
             "[mmap_inner] anonymous fixed mapping, returning addr={:?}",
             addr
         );
+        // The range keeps whatever it held before, but a fresh anonymous
+        // mapping must read as zero: brk shrink-then-grow and glibc calloc
+        // rely on it. Clear it as the kernel would.
+        unsafe { std::ptr::write_bytes(addr, 0, len) };
         return addr as usize;
     }
     // end
