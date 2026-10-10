@@ -1200,6 +1200,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             .as_context_mut()
                             .set_syscall_asyncify_data(syscall_asyncify_data);
 
+                        sysdefs::lind_instrument!(
+                            "[instrument] fork child _start invoked, child_cage={}",
+                            child_cageid
+                        );
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
                         // Wasm instance crashed — perform the same cleanup
                         // as the signal-handler error path so the parent
@@ -1823,6 +1827,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     ) -> Result<i32> {
         // linux limits the maximum recursion depth of shebang
         // it's typical value is 4, so let's use the same value
+        sysdefs::lind_instrument!("[instrument] execve_call entered cage={}", self.cageid);
         if recursion_depth > MAX_SHEBANG_DEPTH {
             return Ok(-(Errno::ELOOP as i32));
         }
@@ -2087,6 +2092,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // actual exit syscall that would kill other threads is not supported yet
     // TODO: exit_call should be switched to epoch interrupt method later
     pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, _is_last_thread: u64) {
+        sysdefs::lind_instrument!("[instrument] exit_call cage={} code={}", self.cageid, code);
         // Capture values for the deferred OnCalledAction closure.
         // Every thread defers lind_thread_exit to OnCalledAction so that
         // the epoch_handler entry stays alive until the asyncify unwind

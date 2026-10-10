@@ -385,6 +385,7 @@ pub fn alloc_cage_id() -> Option<u64> {
 ///    waitpid() in the parent unblocks.
 /// 3. Removes the cage from the fd table and global cage table.
 pub fn cage_finalize(cageid: u64) {
+    sysdefs::lind_instrument!("[instrument] cage_finalize begin cage={}", cageid);
     if let Some(cage) = get_cage(cageid) {
         // Wait for all in-flight grate dispatches to drain.
         while cage.grate_inflight.load(Ordering::Acquire) > 0 {
@@ -415,6 +416,7 @@ pub fn cage_finalize(cageid: u64) {
 
     fdtables::remove_cage_from_fdtable(cageid);
     remove_cage(cageid);
+    sysdefs::lind_instrument!("[instrument] cage_finalize end cage={}", cageid);
 }
 
 mod tests {

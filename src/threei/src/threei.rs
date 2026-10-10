@@ -427,6 +427,12 @@ pub fn make_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    sysdefs::lind_instrument!(
+        "[instrument] sys cage={} nr={} target={}",
+        self_cageid,
+        syscall_num,
+        target_cageid
+    );
     // Block cross-cage calls to a dead or removed cage (e.g. grate-forwarded
     // syscalls).  The cage's own threads are allowed to keep making
     // syscalls until the epoch kill fires — without the self != target

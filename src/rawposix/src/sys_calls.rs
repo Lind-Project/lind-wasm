@@ -237,6 +237,7 @@ pub extern "C" fn exec_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    sysdefs::lind_instrument!("[instrument] rawposix exec_syscall cage={}", cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
