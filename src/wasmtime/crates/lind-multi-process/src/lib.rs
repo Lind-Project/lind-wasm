@@ -7,7 +7,8 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::fs_const::O_RDONLY;
 use sysdefs::constants::lind_platform_const::{
-    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
+    UNUSED_ARG, UNUSED_ID, UNUSED_NAME, fork_grate_handler_flag_for_child,
+    is_grate_handler_registered, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{
     CLOSE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, FSTAT_SYSCALL, OPEN_SYSCALL,
@@ -1127,9 +1128,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
-                    // Grate calls only supports static linking for now, so we only register
-                    // grate workers when dylink is not enabled.
-                    if !dylink_enabled {
+                    // Only rebuild a worker pool for the child if the parent actually
+                    // registered a grate handler; skips the fork_vmmap copy cost for
+                    // the common non-grate case instead of just deferring it.
+                    if !dylink_enabled && is_grate_handler_registered(parent_cageid as usize) {
                         let grate_template = GrateTemplate {
                             engine: module.engine().clone(),
                             module: module.clone(),
@@ -1147,6 +1149,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             format!("failed to register grate workers for cage {}", child_cageid)
                         })
                         .expect("create_handler_for_cage failed");
+
+                        fork_grate_handler_flag_for_child(
+                            parent_cageid as usize,
+                            child_cageid as usize,
+                        );
                     }
 
                     // get the asyncify_rewind_start and module start function
