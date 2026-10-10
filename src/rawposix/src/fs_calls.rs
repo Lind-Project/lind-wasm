@@ -991,7 +991,7 @@ pub extern "C" fn mmap_syscall(
     drop(vmmap);
 
     if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[mmap-syscall-hit-ffffe000-sys] cage={} user=[{:#x},{:#x}) sys=[{:#x},{:#x}) target_host={:#x}",
             cageid,
             useraddr,
@@ -1076,7 +1076,7 @@ pub extern "C" fn mmap_syscall(
                 let target_host = sysaddr + (FUTEX_GUEST_ADDR - useraddr) as usize;
                 let target_val = unsafe { *(target_host as *const u32) };
 
-                eprintln!(
+                sysdefs::lind_instrument!(
                     "[vmmap-add-hit-ffffe000-before] cage={} user=[{:#x},{:#x}) pages={} sys=[{:#x},{:#x}) target_host={:#x} target_val={} prot={:#x} maxprot={:#x} flags={:#x} backing={:?} off={:#x} orig_len={:#x}",
                     cageid,
                     useraddr,
@@ -1108,7 +1108,7 @@ pub extern "C" fn mmap_syscall(
             );
 
             if range_hits_addr(useraddr, rounded_length, FUTEX_GUEST_ADDR) {
-                eprintln!(
+                sysdefs::lind_instrument!(
                     "[vmmap-add-hit-ffffe000-after] cage={} ret={:?}",
                     cageid, add_ret,
                 );
@@ -1159,7 +1159,7 @@ pub extern "C" fn mmap_inner(
     let is_shared = flags & (MAP_SHARED as i32) != 0;
 
     if vfd_arg == -1 && has_anon && has_fixed && (is_private || is_shared) {
-        println!(
+        sysdefs::lind_instrument!(
             "[mmap_inner] anonymous fixed mapping, returning addr={:?}",
             addr
         );

@@ -617,13 +617,13 @@ impl Instance {
                     }
                 };
 
-                println!(
+                sysdefs::lind_instrument!(
                     "[debug] child cage {} memory base address: {:#x}",
                     child_cageid, child_address
                 );
                 fork_vmmap(parent_cageid as u64, child_cageid);
 
-                println!(
+                sysdefs::lind_instrument!(
                     "[debug] forked memory from parent cage {} to child cage {}",
                     parent_cageid, child_cageid
                 );
@@ -637,7 +637,7 @@ impl Instance {
                                 parent_cageid, child_cageid, e
                             )
                         });
-                    println!(
+                    sysdefs::lind_instrument!(
                         "[stack-arena] parent={} child={} parent_base={:?} child_base={:?}",
                         parent_cageid,
                         child_cageid,

@@ -224,7 +224,7 @@ fn read_file_via_lind_syscalls(
             (UNUSED_ARG, UNUSED_ID),
         ],
     );
-    eprintln!(
+    sysdefs::lind_instrument!(
         "[instrument] exec-3i open cage={} path={} ret={}",
         cageid, path, fd
     );
@@ -254,7 +254,7 @@ fn read_file_via_lind_syscalls(
             if errno == Errno::EINTR as i32 {
                 continue;
             }
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[instrument] exec-3i read FAILED errno={} total={}",
                 errno,
                 bytes.len()
@@ -269,7 +269,7 @@ fn read_file_via_lind_syscalls(
         }
         scratch.append_to(&mut bytes, n);
     }
-    eprintln!("[instrument] exec-3i read done total={} bytes", bytes.len());
+    sysdefs::lind_instrument!("[instrument] exec-3i read done total={} bytes", bytes.len());
 
     match (read_errno, close_via_lind_syscall(cageid, fd)) {
         (Some(errno), _) => Err(errno),
@@ -532,17 +532,17 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // 5. fork the memory region to child (including saved unwind context)
     // 6. start the rewind for both parent and child
     pub fn fork_call(&self, mut caller: &mut Caller<'_, T>, child_cageid: u64) -> Result<i32> {
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[instrument] fork_call entered, parent_cage={}, child_cage={}",
             self.cageid, child_cageid
         );
-        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+        if let Some(status) = sysdefs::logging::instrument_proc_status() {
             for line in status.lines() {
                 if line.starts_with("VmRSS:")
                     || line.starts_with("VmHWM:")
                     || line.starts_with("VmSize:")
                 {
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[instrument] fork_call mem parent_cage={} child_cage={} {}",
                         self.cageid, child_cageid, line
                     );
@@ -647,13 +647,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let is_parent_thread = store.is_thread();
 
         store.set_on_called(Box::new(move |mut store| {
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[instrument] fork on_called fired, child_cage={}",
                 child_cageid
             );
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[instrument] fork asyncify_stop_unwind done, child_cage={}",
                 child_cageid
             );
@@ -663,7 +663,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let barrier = Arc::new(Barrier::new(2));
             let barrier_clone = Arc::clone(&barrier);
 
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[instrument] fork about to spawn thread, child_cage={}",
                 child_cageid
             );
@@ -672,7 +672,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 .stack_size(thread_stack_size);
             builder
                 .spawn(move || {
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[instrument] fork spawned thread entered, child_cage={}",
                         child_cageid
                     );
@@ -703,7 +703,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner)
                         .expect("failed to create store");
 
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[instrument] fork calling new_child_linker, child_cage={}",
                         child_cageid
                     );
@@ -717,7 +717,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             &snapshot.2,
                         )
                         .expect("failed to create child linker");
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[instrument] fork new_child_linker returned, child_cage={}",
                         child_cageid
                     );
@@ -817,7 +817,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     }
 
                     // don't use child's stack_arena_base since it is not initialized yet, use parent's stack_arena_base instead
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[instrument] fork calling instantiate_with_lind (child), child_cage={}",
                         child_cageid
                     );
@@ -831,7 +831,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             },
                         )
                         .unwrap();
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[instrument] fork instantiate_with_lind (child) returned, child_cage={}",
                         child_cageid
                     );
@@ -1689,7 +1689,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         // enarx edits:
         // start
-        println!(
+        sysdefs::lind_instrument!(
             "execve called with path: {}, argv: {:?}, envs: {:?}",
             path, argv, environs
         );
@@ -1709,11 +1709,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let engine = main_module.engine().clone();
 
         let exec_file_path = Path::new(&path);
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[instrument] execve cage={} opening exec file {} (via 3i)",
             self.cageid, path
         );
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[instrument] execve cage={} reading exec file to end",
             self.cageid
         );
@@ -1722,25 +1722,25 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             match read_file_via_lind_syscalls(self.cageid as u64, exec_memory_base, &path) {
                 Ok(bytes) => bytes,
                 Err(errno) => {
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[instrument] execve cage={} 3i read FAILED errno={}",
                         self.cageid, errno
                     );
                     return Ok(-errno);
                 }
             };
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[instrument] execve cage={} read {} bytes, deserializing module",
             self.cageid,
             exec_webasm.len()
         );
-        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+        if let Some(status) = sysdefs::logging::instrument_proc_status() {
             for line in status.lines() {
                 if line.starts_with("VmRSS:")
                     || line.starts_with("VmHWM:")
                     || line.starts_with("VmSize:")
                 {
-                    eprintln!("[instrument] execve mem cage={} {}", self.cageid, line);
+                    sysdefs::lind_instrument!("[instrument] execve mem cage={} {}", self.cageid, line);
                 }
             }
         }
@@ -1752,7 +1752,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             Some(_) => unsafe { Module::deserialize(&engine, &exec_webasm) },
             None => Module::from_binary(&engine, &exec_webasm),
         };
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[instrument] execve cage={} module deserialize/from_binary returned, ok={}",
             self.cageid,
             exec_module.is_ok()
@@ -1823,13 +1823,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         }
 
         // mark the start of unwind
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[instrument] execve calling asyncify_start_unwind, cage={}",
             self.cageid
         );
         let _res =
             asyncify_start_unwind_func.call(&mut caller, parent_unwind_data_start_usr as i32);
-        eprintln!(
+        sysdefs::lind_instrument!(
             "[instrument] execve asyncify_start_unwind returned, cage={}",
             self.cageid
         );
@@ -1847,13 +1847,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let exec_call = self.exec_host.clone();
 
         store.set_on_called(Box::new(move |mut store| {
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[instrument] execve on_called fired, cage={}",
                 cloned_cageid
             );
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[instrument] execve asyncify_stop_unwind done, cage={}",
                 cloned_cageid
             );
@@ -1881,7 +1881,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 });
             }
 
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[instrument] cage={} calling exec_call/execute_with_lind",
                 cloned_cageid
             );

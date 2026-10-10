@@ -541,3 +541,34 @@ macro_rules! lind_debug_panic {
         }
     };
 }
+
+// ---------------------------------------------------------------------------
+// Fork/exec/mmap tracing
+// ---------------------------------------------------------------------------
+
+/// Whether the runtime was built with `LIND_INSTRUMENT` set in the build
+/// environment. Instrumented builds print the `[instrument]` fork/exec/mmap
+/// trace and read `/proc/self/status` around fork and exec; both cost host
+/// calls (ocalls under SGX) on every fork and exec, so they are compiled out
+/// otherwise.
+pub const INSTRUMENT: bool = option_env!("LIND_INSTRUMENT").is_some();
+
+/// `eprintln!` that only exists in instrumented builds (see [`INSTRUMENT`]).
+/// Arguments are not evaluated otherwise.
+#[macro_export]
+macro_rules! lind_instrument {
+    ($($arg:tt)*) => {
+        if $crate::logging::INSTRUMENT {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
+/// `/proc/self/status`, read only in instrumented builds.
+pub fn instrument_proc_status() -> Option<String> {
+    if INSTRUMENT {
+        std::fs::read_to_string("/proc/self/status").ok()
+    } else {
+        None
+    }
+}

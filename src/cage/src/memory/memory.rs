@@ -89,7 +89,7 @@ pub fn get_base_address(cageid: u64) -> usize {
 /// * `parent_cageid` - cageid of parent
 /// * `child_cageid` - caegid of child
 pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
-    eprintln!("[fork_vmmap] begin");
+    sysdefs::lind_instrument!("[fork_vmmap] begin");
     // first retrieve corresponding vmmaps
     let parent_cage = get_cage(parent_cageid).unwrap();
     let child_cage = get_cage(child_cageid).unwrap();
@@ -127,7 +127,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
         let hit = addr_st <= 0xffffe000 && 0xffffe000 < addr_st.wrapping_add(addr_len as u32);
 
         if hit {
-            eprintln!(
+            sysdefs::lind_instrument!(
                 "[fork_vmmap-hit-ffffe000] user=[{:#x},{:#x}) len={:#x} parent={:#x} child={:#x} prot={:#x} flags={:#x} backing={:?}",
                 addr_st,
                 addr_st.wrapping_add(addr_len as u32),
@@ -153,7 +153,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 let child_value_before = std::ptr::read_volatile(child_st as *const u32);
 
                 if hits_target {
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[fork-shared-before] cage={}->{} \
                         user={:#x} len={:#x} \
                         parent={:#x} child={:#x} \
@@ -190,7 +190,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 let child_value_after = std::ptr::read_volatile(child_st as *const u32);
 
                 if hits_target {
-                    eprintln!(
+                    sysdefs::lind_instrument!(
                         "[fork-shared-after] ret={:?} errno={} \
                         parent_value={} child_value={} \
                         same_address={}",
