@@ -7,3 +7,4 @@ process_tests/deterministic/fork_max_cages.c
 process_tests/deterministic/waitpid_from_thread_exit_group.c
 ci/deterministic/ci_intentional_failure_tmp.c
 memory_tests/deterministic/mmap_null_address_mapping.c
+static_tests/deterministic/stack_overflow.c
