@@ -10,8 +10,10 @@ use sysdefs::constants::lind_platform_const::{
     UNUSED_ARG, UNUSED_ID, UNUSED_NAME, unset_stack_arena_base,
 };
 use sysdefs::constants::syscall_const::{
-    CLOSE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, OPEN_SYSCALL, READ_SYSCALL,
+    CLOSE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, FSTAT_SYSCALL, OPEN_SYSCALL,
+    READ_SYSCALL,
 };
+use sysdefs::data::fs_struct::StatData;
 use sysdefs::constants::{Errno, MAX_SHEBANG_DEPTH, MMAP_SYSCALL, MUNMAP_SYSCALL};
 use sysdefs::lind_debug_panic;
 use sysdefs::lind_log;
@@ -24,7 +26,8 @@ use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Barrier, Mutex};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Barrier, LazyLock, Mutex};
 use std::thread;
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ChildLibraryType, Engine, ExternType,
@@ -195,11 +198,119 @@ fn close_via_lind_syscall(cageid: u64, fd: i32) -> Result<(), i32> {
     }
 }
 
-fn read_file_via_lind_syscalls(
+fn fstat_via_lind_syscall(cageid: u64, fd: i32, scratch: &CageScratch) -> Option<StatData> {
+    let ret = lind_syscall(
+        cageid,
+        FSTAT_SYSCALL,
+        [
+            (fd as u64, cageid),
+            (scratch.sys_addr(), cageid),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+            (UNUSED_ARG, UNUSED_ID),
+        ],
+    );
+    if ret < 0 {
+        return None;
+    }
+    Some(unsafe { std::ptr::read_unaligned(scratch.host_ptr() as *const StatData) })
+}
+
+/// Identity of an exec'd file as fstat reports it through 3i.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct ExecFileKey {
+    path: String,
+    dev: u64,
+    ino: u64,
+    size: u64,
+    mtime: (u64, u64),
+    ctime: (u64, u64),
+}
+
+impl ExecFileKey {
+    /// None when the file system does not version its files: with mtime and
+    /// ctime both zero a rewrite of the same size looks unchanged, so such
+    /// files are never cached.
+    fn new(path: &str, st: &StatData) -> Option<Self> {
+        if st.st_mtim == (0, 0) && st.st_ctim == (0, 0) {
+            return None;
+        }
+        Some(ExecFileKey {
+            path: path.to_string(),
+            dev: st.st_dev,
+            ino: st.st_ino as u64,
+            size: st.st_size as u64,
+            mtime: st.st_mtim,
+            ctime: st.st_ctim,
+        })
+    }
+}
+
+/// Upper bound on the serialized size of the modules kept in
+/// [`EXEC_MODULE_CACHE`].
+const EXEC_MODULE_CACHE_LIMIT: usize = 1 << 30;
+
+/// Modules of recently exec'd files, least recently used first. Reading and
+/// deserializing a large precompiled module dominates exec under SGX (cc1 is
+/// about 250 MB), and build tools exec the same few binaries over and over.
+/// A `Module` holds only immutable compiled code, so cages can share it.
+#[derive(Default)]
+struct ExecModuleCache {
+    entries: HashMap<ExecFileKey, (Module, usize)>,
+    lru: VecDeque<ExecFileKey>,
+    bytes: usize,
+}
+
+impl ExecModuleCache {
+    fn get(&mut self, key: &ExecFileKey, engine: &Engine) -> Option<Module> {
+        let (module, _) = self.entries.get(key)?;
+        if !Engine::same(module.engine(), engine) {
+            return None;
+        }
+        let module = module.clone();
+        self.lru.retain(|k| k != key);
+        self.lru.push_back(key.clone());
+        Some(module)
+    }
+
+    fn insert(&mut self, key: ExecFileKey, module: Module, size: usize) {
+        if size > EXEC_MODULE_CACHE_LIMIT {
+            return;
+        }
+        if let Some((_, old)) = self.entries.insert(key.clone(), (module, size)) {
+            self.bytes -= old;
+            self.lru.retain(|k| k != &key);
+        }
+        self.bytes += size;
+        self.lru.push_back(key);
+        while self.bytes > EXEC_MODULE_CACHE_LIMIT {
+            let Some(oldest) = self.lru.pop_front() else { break };
+            if let Some((_, old)) = self.entries.remove(&oldest) {
+                self.bytes -= old;
+            }
+        }
+    }
+}
+
+static EXEC_MODULE_CACHE: LazyLock<Mutex<ExecModuleCache>> =
+    LazyLock::new(|| Mutex::new(ExecModuleCache::default()));
+
+/// What the exec loader found at a path.
+enum ExecFile {
+    /// A module cached from an earlier exec of the same, unchanged file.
+    Cached(Module),
+    /// The file's bytes, and the key to cache its module under when fstat
+    /// gave the same versioned identity before and after reading.
+    Read { bytes: Vec<u8>, key: Option<ExecFileKey> },
+}
+
+fn load_exec_file(
     cageid: u64,
     host_base: *mut u8,
     path: &str,
-) -> Result<Vec<u8>, i32> {
+    engine: &Engine,
+) -> Result<ExecFile, i32> {
     let path_bytes = path.as_bytes();
     if path_bytes.contains(&0) || path_bytes.len() + 1 > EXEC_SCRATCH_SIZE {
         return Err(Errno::EINVAL as i32);
@@ -233,7 +344,21 @@ fn read_file_via_lind_syscalls(
         None => fd,
     };
 
-    let mut bytes = Vec::new();
+    let stat = fstat_via_lind_syscall(cageid, fd, &scratch);
+    let key = stat.as_ref().and_then(|st| ExecFileKey::new(path, st));
+    if let Some(key) = &key {
+        let cached = EXEC_MODULE_CACHE.lock().unwrap().get(key, engine);
+        if let Some(module) = cached {
+            sysdefs::lind_instrument!("[instrument] execve cage={} module cache hit", cageid);
+            close_via_lind_syscall(cageid, fd)?;
+            return Ok(ExecFile::Cached(module));
+        }
+    }
+
+    // One allocation of the final size: growing the buffer would copy the
+    // module several times, and under SGX every fresh page is a commit.
+    let capacity = stat.as_ref().map_or(0, |st| st.st_size.min(1 << 32));
+    let mut bytes = Vec::with_capacity(capacity);
     let mut read_errno = None;
 
     loop {
@@ -271,10 +396,18 @@ fn read_file_via_lind_syscalls(
     }
     sysdefs::lind_instrument!("[instrument] exec-3i read done total={} bytes", bytes.len());
 
+    // Cache only if nothing changed the file while it was read.
+    let key = key.filter(|k| {
+        fstat_via_lind_syscall(cageid, fd, &scratch)
+            .and_then(|st| ExecFileKey::new(path, &st))
+            .as_ref()
+            == Some(k)
+    });
+
     match (read_errno, close_via_lind_syscall(cageid, fd)) {
         (Some(errno), _) => Err(errno),
         (None, Err(errno)) => Err(errno),
-        (None, Ok(())) => Ok(bytes),
+        (None, Ok(())) => Ok(ExecFile::Read { bytes, key }),
     }
 }
 
@@ -1718,9 +1851,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             self.cageid
         );
         let exec_memory_base = get_memory_base(&mut caller) as *mut u8;
-        let exec_webasm =
-            match read_file_via_lind_syscalls(self.cageid as u64, exec_memory_base, &path) {
-                Ok(bytes) => bytes,
+        let exec_file =
+            match load_exec_file(self.cageid as u64, exec_memory_base, &path, &engine) {
+                Ok(file) => file,
                 Err(errno) => {
                     sysdefs::lind_instrument!(
                         "[instrument] execve cage={} 3i read FAILED errno={}",
@@ -1729,34 +1862,50 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     return Ok(-errno);
                 }
             };
-        sysdefs::lind_instrument!(
-            "[instrument] execve cage={} read {} bytes, deserializing module",
-            self.cageid,
-            exec_webasm.len()
-        );
-        if let Some(status) = sysdefs::logging::instrument_proc_status() {
-            for line in status.lines() {
-                if line.starts_with("VmRSS:")
-                    || line.starts_with("VmHWM:")
-                    || line.starts_with("VmSize:")
-                {
-                    sysdefs::lind_instrument!("[instrument] execve mem cage={} {}", self.cageid, line);
-                }
-            }
-        }
 
         // let detected = Engine::detect_precompiled_file(exec_file_path);
         // println!("detect_precompiled_file: {:?}", detected);
 
-        let exec_module = match Engine::detect_precompiled(&exec_webasm) {
-            Some(_) => unsafe { Module::deserialize(&engine, &exec_webasm) },
-            None => Module::from_binary(&engine, &exec_webasm),
+        let exec_module = match exec_file {
+            ExecFile::Cached(module) => Ok(module),
+            ExecFile::Read { bytes, key } => {
+                sysdefs::lind_instrument!(
+                    "[instrument] execve cage={} read {} bytes, deserializing module",
+                    self.cageid,
+                    bytes.len()
+                );
+                if let Some(status) = sysdefs::logging::instrument_proc_status() {
+                    for line in status.lines() {
+                        if line.starts_with("VmRSS:")
+                            || line.starts_with("VmHWM:")
+                            || line.starts_with("VmSize:")
+                        {
+                            sysdefs::lind_instrument!(
+                                "[instrument] execve mem cage={} {}",
+                                self.cageid,
+                                line
+                            );
+                        }
+                    }
+                }
+                let module = match Engine::detect_precompiled(&bytes) {
+                    Some(_) => unsafe { Module::deserialize(&engine, &bytes) },
+                    None => Module::from_binary(&engine, &bytes),
+                };
+                sysdefs::lind_instrument!(
+                    "[instrument] execve cage={} module deserialize/from_binary returned, ok={}",
+                    self.cageid,
+                    module.is_ok()
+                );
+                if let (Ok(module), Some(key)) = (&module, key) {
+                    EXEC_MODULE_CACHE
+                        .lock()
+                        .unwrap()
+                        .insert(key, module.clone(), bytes.len());
+                }
+                module
+            }
         };
-        sysdefs::lind_instrument!(
-            "[instrument] execve cage={} module deserialize/from_binary returned, ok={}",
-            self.cageid,
-            exec_module.is_ok()
-        );
 
         // let exec_module = match detected {
         //     Ok(Some(_)) => unsafe { Module::deserialize_file(&engine, exec_file_path) },
