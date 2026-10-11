@@ -96,8 +96,20 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     init_vmctx_pool();
 
     // -- Initialize the Wasmtime execution environment --
-    let wt_config =
+    let mut wt_config =
         make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
+    // Let wasm code use most of the host stack of the thread it runs on, as
+    // a native process uses its whole stack: Cranelift's frames are larger
+    // than a native compiler's, and wasmtime's default limit (512 KiB) traps
+    // early, e.g. cc1 parsing a long `else if` chain. Cages forked or exec'd
+    // run on threads of `thread_stack_size`; keep a margin for the host
+    // frames below the wasm ones.
+    wt_config.max_wasm_stack(
+        lindboot_cli
+            .thread_stack_size
+            .saturating_sub(WASM_STACK_MARGIN)
+            .max(DEFAULT_MAX_WASM_STACK),
+    );
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create execution engine")?;
@@ -1023,6 +1035,11 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
 
     Ok(results)
 }
+
+/// Room left on a cage thread's host stack for the frames below wasm code.
+const WASM_STACK_MARGIN: usize = 8 << 20;
+/// Wasmtime's own default limit for the wasm stack.
+const DEFAULT_MAX_WASM_STACK: usize = 512 << 10;
 
 /// Generates a wasmtime config based on the whether or not the --wasmtime-backtrace flag was
 /// provided to lind-boot.
