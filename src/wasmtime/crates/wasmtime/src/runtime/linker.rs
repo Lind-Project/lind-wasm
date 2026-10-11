@@ -624,15 +624,9 @@ impl<T> Linker<T> {
 
                     let base = mem.get_memory_base();
                     memory_base = Some(base);
-                    // eprintln!("[fork-child] before mprotect");
-                    let ret = unsafe {
-                        libc::mprotect(base as *mut libc::c_void, 1usize << 32, libc::PROT_NONE)
-                    };
-                    // eprintln!(
-                    //     "[fork-child] after mprotect ret={}, errno={}",
-                    //     ret,
-                    //     std::io::Error::last_os_error()
-                    // );
+                    // lind-wasm: reset the child's fresh 4 GiB to PROT_NONE before
+                    // rawposix takes ownership via init_vmmap + fork_vmmap.
+                    cage::memory::reset_linear_memory(base as usize);
 
                     // eprintln!("[fork-child] before linker.define");
                     new_linker.define(&mut store, &module, &name, mem)?;

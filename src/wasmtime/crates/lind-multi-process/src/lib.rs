@@ -2986,13 +2986,7 @@ pub fn attach_shared_memory<
         // them. early_init_stack (dylink) and the make_syscall in
         // new_started_impl_with_lind re-establish the required initial regions
         // before any wasm code runs.
-        unsafe {
-            libc::mprotect(
-                memory_base as *mut libc::c_void,
-                1usize << 32,
-                libc::PROT_NONE,
-            );
-        }
+        cage::reset_linear_memory(memory_base as usize);
 
         cage::init_vmmap(cageid as u64, memory_base as usize, None);
     }
