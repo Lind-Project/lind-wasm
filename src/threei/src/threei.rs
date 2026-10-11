@@ -8,6 +8,7 @@ use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use std::sync::RwLock;
 use sysdefs::constants::err_const::Errno;
+use sysdefs::constants::fs_const::PAGESIZE;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use sysdefs::lind_log;
@@ -789,23 +790,33 @@ fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<()
 /// - max_len: The maximum number of bytes to scan, acting as a bound to prevent
 /// overflow.
 ///
+/// The scan proceeds one page at a time: each page is validated once with
+/// `check_addr_read`, then searched with `memchr`. Pages after the one holding
+/// the terminator are never validated or read.
+///
 /// ## Returns:
 /// - Some(length) if a null terminator is found within max_len.
 /// - None if no null byte is found, indicating a malformed or unterminated string.
 fn _strlen_in_cage(cageid: u64, srcaddr: u64, max_len: usize) -> Option<usize> {
-    for i in 0..max_len {
-        let addr = srcaddr.checked_add(i as u64)?;
+    let page_size = PAGESIZE as usize;
+    let mut scanned = 0;
 
-        // validate this byte before dereference
-        if check_addr_read(cageid, addr, 1).is_err() {
+    while scanned < max_len {
+        let addr = srcaddr.checked_add(scanned as u64)?;
+        // Stop the chunk at the end of the current page or at max_len.
+        let chunk = (page_size - (addr as usize & (page_size - 1))).min(max_len - scanned);
+
+        // validate this chunk before dereference
+        if check_addr_read(cageid, addr, chunk).is_err() {
             return None;
         }
 
-        let byte = unsafe { *(addr as *const u8) };
-
-        if byte == 0 {
-            return Some(i);
+        let bytes = unsafe { std::slice::from_raw_parts(addr as *const u8, chunk) };
+        if let Some(pos) = memchr::memchr(0, bytes) {
+            return Some(scanned + pos);
         }
+
+        scanned += chunk;
     }
 
     None // null terminator not found within max_len

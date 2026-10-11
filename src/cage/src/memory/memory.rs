@@ -3,7 +3,7 @@
 //! This file provides helper functions related to vmmap, including address alignment,
 //! initializing vmmap, helper functions for handling vmmap during a fork syscall, and
 //! address translation and validation related to vmmap
-use crate::cage::{get_cage, Cage};
+use crate::cage::{get_cage, with_cage, Cage};
 use crate::memory::VmmapOps;
 use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
@@ -409,13 +409,12 @@ pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
 /// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not readable
 pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-    let mut vmmap = cage.vmmap.write();
-
-    if vmmap.check_addr_read(addr, length) {
-        Ok(true)
-    } else {
-        Err(Errno::EFAULT)
+    match with_cage(cageid, |cage| {
+        cage.vmmap.read().check_addr_read(addr, length)
+    }) {
+        Some(true) => Ok(true),
+        Some(false) => Err(Errno::EFAULT),
+        None => Err(Errno::EINVAL),
     }
 }
 
@@ -434,13 +433,12 @@ pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Er
 /// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not writable
 pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-    let mut vmmap = cage.vmmap.write();
-
-    if vmmap.check_addr_write(addr, length) {
-        Ok(true)
-    } else {
-        Err(Errno::EFAULT)
+    match with_cage(cageid, |cage| {
+        cage.vmmap.read().check_addr_write(addr, length)
+    }) {
+        Some(true) => Ok(true),
+        Some(false) => Err(Errno::EFAULT),
+        None => Err(Errno::EINVAL),
     }
 }
 
@@ -459,12 +457,9 @@ pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, E
 /// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or lacks read/write permissions
 pub fn check_addr_rw(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
-    let mut vmmap = cage.vmmap.write();
-
-    if vmmap.check_addr_rw(addr, length) {
-        Ok(true)
-    } else {
-        Err(Errno::EFAULT)
+    match with_cage(cageid, |cage| cage.vmmap.read().check_addr_rw(addr, length)) {
+        Some(true) => Ok(true),
+        Some(false) => Err(Errno::EFAULT),
+        None => Err(Errno::EINVAL),
     }
 }
