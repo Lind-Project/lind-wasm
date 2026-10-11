@@ -58,6 +58,9 @@ pub fn signal_handler<
             })
             .unwrap_or(0);
         ctx.exit_call(caller, exit_code, 0);
+        if let Some(e) = crate::take_exit_trap(cageid) {
+            return Err(e);
+        }
         return Ok(0);
     }
 
@@ -96,6 +99,9 @@ pub fn signal_handler<
             cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
             threei::handler_table::_rm_grate_from_handler(cageid);
             ctx.exit_call(caller, 1, 0);
+            if let Some(e) = crate::take_exit_trap(cageid) {
+                return Err(e);
+            }
         }
         return Ok(0);
     }
@@ -136,6 +142,9 @@ pub fn signal_handler<
                     // Asyncify unwind; OnCalledAction handles cage_finalize
                     // when the actual last thread finishes.
                     ctx.exit_call(caller, 128 + signo, 0);
+                    if let Some(e) = crate::take_exit_trap(cageid) {
+                        return Err(e);
+                    }
                     return Ok(0);
                 }
                 sysdefs::constants::SignalDefaultHandler::Ignore => {
@@ -200,6 +209,9 @@ pub fn signal_handler<
                 cage::signal::epoch_kill_all(cageid, ctx.tid as i32);
                 threei::handler_table::_rm_grate_from_handler(cageid);
                 ctx.exit_call(caller, 1, 0);
+                if let Some(e) = crate::take_exit_trap(cageid) {
+                    return Err(e);
+                }
                 return Ok(0);
             }
 

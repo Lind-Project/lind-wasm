@@ -1043,6 +1043,10 @@ impl Func {
                     // Finish means we can just do the normal exit and there is no need to invoke again
                     // For example, exit syscall uses this routine after it finishes the unwind process
                     Ok(OnCalledAction::Finish(ret)) => {
+                        // The run ended with an exit: by Asyncify unwinding
+                        // (a normal return) or by the trap of a cage without
+                        // Asyncify, which is no error either.
+                        result = Ok(());
                         // propogate the exit code
                         let retval = ret.get(0).unwrap();
                         if let Val::I32(res) = retval {

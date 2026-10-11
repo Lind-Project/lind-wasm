@@ -666,6 +666,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // 5. fork the memory region to child (including saved unwind context)
     // 6. start the rewind for both parent and child
     pub fn fork_call(&self, mut caller: &mut Caller<'_, T>, child_cageid: u64) -> Result<i32> {
+        // fork copies the caller's stack, which takes Asyncify.
+        if caller.get_export(ASYNCIFY_START_UNWIND).is_none() {
+            return Ok(-(Errno::ENOSYS as i32));
+        }
         sysdefs::lind_instrument!(
             "[instrument] fork_call entered, parent_cage={}, child_cage={}",
             self.cageid, child_cageid
@@ -1285,6 +1289,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         stack_size: u32,
         child_tid: u64,
     ) -> Result<i32> {
+        // A new thread starts from a copy of the caller's stack (Asyncify).
+        if caller.get_export(ASYNCIFY_START_UNWIND).is_none() {
+            return Ok(-(Errno::ENOSYS as i32));
+        }
         // get the base address and size of the memory
         let (mem_base_u64, mem_size) = get_memory_base_and_size(&mut caller);
         let parent_address = mem_base_u64 as *mut u8;
@@ -1831,6 +1839,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         if recursion_depth > MAX_SHEBANG_DEPTH {
             return Ok(-(Errno::ELOOP as i32));
         }
+        // exec unwinds the caller's stack before the new program starts.
+        if caller.get_export(ASYNCIFY_START_UNWIND).is_none() {
+            return Ok(-(Errno::ENOSYS as i32));
+        }
 
         // enarx edits:
         // start
@@ -2114,7 +2126,28 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
 
-        // start unwind
+        // A module without Asyncify cannot unwind: register the same exit
+        // and have the host function return a trap (see `take_exit_trap`).
+        if caller.get_export(ASYNCIFY_START_UNWIND).is_none() {
+            let store = caller.as_context_mut().0;
+            store.set_on_called(Box::new(move |_store| {
+                let is_last = cage::signal::lind_thread_exit(deferred_cageid, deferred_tid);
+                if is_last {
+                    cage::cage_finalize(deferred_cageid);
+                    if !rm_vmctx_thread(deferred_cageid, 0) {
+                        lind_log!(
+                            Default,
+                            "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
+                            deferred_cageid
+                        );
+                    }
+                    deferred_lind_manager.decrement();
+                }
+                Ok(OnCalledAction::Finish(vec![Val::I32(code)]))
+            }));
+            EXIT_TRAP.with(|t| t.set(Some((deferred_cageid, code))));
+            return;
+        }
         let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
 
         // store the parameter at the top of the stack
@@ -3033,6 +3066,47 @@ pub fn early_init_stack(cageid: u64, stack_start: i32, stack_end: i32) -> Result
     }
 
     Ok(())
+}
+
+/// The exit of a cage whose module was built without Asyncify (one that
+/// never forks, execs or starts threads, such as a compiler pass): it cannot
+/// unwind its stack, so the host function that handles its exit syscall
+/// returns this error instead, which Wasmtime raises as a trap and unwinds
+/// natively. The `OnCalledAction` that `exit_call` registered then finishes
+/// the exit as it does after an Asyncify unwind.
+#[derive(Debug)]
+pub struct ExitWithoutAsyncify {
+    pub cageid: u64,
+    pub code: i32,
+}
+
+impl std::fmt::Display for ExitWithoutAsyncify {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "cage {} exited with {}", self.cageid, self.code)
+    }
+}
+
+impl std::error::Error for ExitWithoutAsyncify {}
+
+thread_local! {
+    /// Set by `exit_call` for a module without Asyncify: the cage that
+    /// exited and its exit code, until the host function the cage called
+    /// takes it (see [`take_exit_trap`]).
+    static EXIT_TRAP: std::cell::Cell<Option<(u64, i32)>> = const { std::cell::Cell::new(None) };
+}
+
+/// The trap that ends cage `cageid`, if it just exited without Asyncify.
+/// A host function called by that cage returns it as its error. Only that
+/// cage's call takes it: an exit routed through a grate returns through the
+/// grate's own host calls first, which must not trap.
+pub fn take_exit_trap(cageid: u64) -> Option<wasmtime::Error> {
+    EXIT_TRAP.with(|t| match t.get() {
+        Some((cage, code)) if cage == cageid => {
+            t.set(None);
+            Some(wasmtime::Error::new(ExitWithoutAsyncify { cageid, code }))
+        }
+        _ => None,
+    })
 }
 
 // check if the module has the necessary exported Asyncify functions

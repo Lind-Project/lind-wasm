@@ -204,6 +204,13 @@ fn add_syscall_to_linker<
                 arg6cageid,
             );
 
+            // This cage exited and cannot unwind (no Asyncify): end its run
+            // with a trap, which the exit's OnCalledAction turns into its
+            // exit code.
+            if let Some(e) = wasmtime_lind_multi_process::take_exit_trap(self_cageid) {
+                return Err(e);
+            }
+
             if call_number as i32 == CLONE_SYSCALL {
                 // Save the grate-defined return value produced by the normal clone execution. 
                 // The guest-visible parent return is produced later during Asyncify rewind 
