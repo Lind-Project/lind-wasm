@@ -240,8 +240,9 @@ pub fn rawposix_start(verbosity: isize) {
         libc::sigemptyset(&mut sa.sa_mask);
         libc::sigaction(libc::SIGUSR2, &sa, std::ptr::null_mut());
     }
-
-    init_fd_limit();
+    
+    // enarx edits:
+    // init_fd_limit();
 
     // init cage table
     cagetable_init();
