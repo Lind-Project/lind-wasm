@@ -5,6 +5,7 @@
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
 use crate::memory::VmmapOps;
+use std::sync::atomic::{AtomicBool, Ordering};
 use sysdefs::constants::err_const::{get_errno, Errno};
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE,
@@ -13,6 +14,29 @@ use sysdefs::{lind_debug_panic, lind_log};
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
+
+/// Whether the host enforces page protection in linear memory, as Linux does.
+///
+/// An Enarx SGX keep does not: its shim refuses `PROT_NONE` (EACCES) and
+/// anonymous `MAP_FIXED` mappings (ENOTSUP), so a linear memory stays
+/// accessible after `reset_linear_memory`, and rawposix maps anonymous memory
+/// in place instead of asking the host (see `mmap_inner`). Set by every
+/// `reset_linear_memory`, which comes before any mapping in that memory.
+static HOST_ENFORCES_PROT: AtomicBool = AtomicBool::new(true);
+
+pub fn host_enforces_prot() -> bool {
+    HOST_ENFORCES_PROT.load(Ordering::Relaxed)
+}
+
+/// Resets a cage's whole 4 GiB linear memory at `base` to `PROT_NONE` before
+/// its vmmap takes it over. rawposix then makes accessible what the cage maps:
+/// the module's initial region when it is instantiated, or the parent's
+/// mappings in a forked child (`fork_vmmap`). Records whether the host
+/// enforced the reset (`host_enforces_prot`).
+pub fn reset_linear_memory(base: usize) {
+    let ret = unsafe { libc::mprotect(base as *mut libc::c_void, 1usize << 32, PROT_NONE) };
+    HOST_ENFORCES_PROT.store(ret == 0, Ordering::Relaxed);
+}
 
 /// Round up the address length to be multiple of pages
 ///
@@ -147,17 +171,28 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
             start <= TARGET && TARGET < end
         };
 
+        // The child's linear memory was reset to PROT_NONE (reset_linear_memory).
+        // Where the host enforces that (Linux), each range is made accessible
+        // before it is written; in an SGX keep it is accessible already, and only
+        // a range without PROT_WRITE needs it for the copy.
+        let make_accessible = host_enforces_prot();
+        let needs_write = entry.prot & PROT_WRITE == 0;
+
         if entry.flags & (MAP_SHARED as i32) != 0 {
             unsafe {
-                let parent_value_before = std::ptr::read_volatile(parent_st as *const u32);
-                let child_value_before = std::ptr::read_volatile(child_st as *const u32);
+                // Instrumentation only (its arguments are not evaluated
+                // otherwise); the child's page is readable once mapped.
+                let child_value = |mapped: bool| {
+                    (mapped || !make_accessible)
+                        .then(|| std::ptr::read_volatile(child_st as *const u32))
+                };
 
                 if hits_target {
                     sysdefs::lind_instrument!(
                         "[fork-shared-before] cage={}->{} \
                         user={:#x} len={:#x} \
                         parent={:#x} child={:#x} \
-                        parent_value={} child_value={} \
+                        parent_value={} child_value={:?} \
                         prot={:#x} flags={:#x} backing={:?}",
                         parent_cageid,
                         child_cageid,
@@ -165,8 +200,8 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                         addr_len,
                         parent_st,
                         child_st,
-                        parent_value_before,
-                        child_value_before,
+                        std::ptr::read_volatile(parent_st as *const u32),
+                        child_value(false),
                         entry.prot,
                         entry.flags,
                         entry.backing,
@@ -186,18 +221,15 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
 
                 let errno = *libc::__errno_location();
 
-                let parent_value_after = std::ptr::read_volatile(parent_st as *const u32);
-                let child_value_after = std::ptr::read_volatile(child_st as *const u32);
-
                 if hits_target {
                     sysdefs::lind_instrument!(
                         "[fork-shared-after] ret={:?} errno={} \
-                        parent_value={} child_value={} \
+                        parent_value={} child_value={:?} \
                         same_address={}",
                         ret,
                         errno,
-                        parent_value_after,
-                        child_value_after,
+                        std::ptr::read_volatile(parent_st as *const u32),
+                        child_value(ret != libc::MAP_FAILED),
                         parent_st == child_st,
                     );
                 }
@@ -222,8 +254,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     // live in this page: it is kept in rawposix, keyed by
                     // (shared region id, offset), so a stale copy of the value
                     // here is harmless.
-                    let needs_write = entry.prot & PROT_WRITE == 0;
-                    if needs_write {
+                    if make_accessible || needs_write {
                         let mret = libc::mprotect(
                             child_st as *mut libc::c_void,
                             addr_len,
@@ -244,12 +275,10 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                 }
             }
         } else {
-            let needs_write = entry.prot & PROT_WRITE == 0;
-
             // eprintln!("[fork_vmmap] before writable mprotect");
             unsafe {
                 // temporarily enable write on child's memory region to write parent data
-                if needs_write {
+                if make_accessible || needs_write {
                     let ret = libc::mprotect(
                         child_st as *mut libc::c_void,
                         addr_len,

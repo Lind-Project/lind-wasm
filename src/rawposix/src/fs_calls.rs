@@ -1,7 +1,7 @@
 use cage::{
-    get_base_address, get_cage, get_shm_length, is_mmap_error, new_shm_segment, round_up_page,
-    shmat_helper, shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType, VmmapOps,
-    HEAP_ENTRY_INDEX, SHM_METADATA,
+    get_base_address, get_cage, get_shm_length, host_enforces_prot, is_mmap_error, new_shm_segment,
+    round_up_page, shmat_helper, shmdt_helper, signal::signal::lind_send_signal, MemoryBackingType,
+    VmmapOps, HEAP_ENTRY_INDEX, SHM_METADATA,
 };
 use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
@@ -989,8 +989,9 @@ pub extern "C" fn mmap_syscall(
     let sysaddr = vmmap.user_to_sys(useraddr);
 
     // Pages this anonymous mapping replaces. Under SGX mmap_inner keeps the
-    // old bytes, so they are cleared after mapping (see mmap_inner).
-    let replaced = if flags & MAP_ANONYMOUS as i32 > 0 {
+    // old bytes, so they are cleared after mapping (see mmap_inner); a host
+    // mapping (Linux) is zero-filled already.
+    let replaced = if flags & MAP_ANONYMOUS as i32 > 0 && !host_enforces_prot() {
         let first = useraddr >> PAGESHIFT;
         let end = ((useraddr as u64 + rounded_length) >> PAGESHIFT) as u32;
         vmmap.mapped_page_ranges(first, end)
@@ -1173,12 +1174,18 @@ pub extern "C" fn mmap_inner(
     //     );
     // }
     // SGX workaround: translated addr is already inside Wasmtime linear memory.
+    // The shim rejects MAP_FIXED, and the memory is accessible already since it
+    // does not enforce PROT_NONE either. Where the host does (Linux), it maps
+    // the range itself: the range may be PROT_NONE (released, or never mapped
+    // since reset_linear_memory), and fork_vmmap aliases a MAP_SHARED mapping,
+    // which then has to be a real one.
     let has_anon = flags & (MAP_ANONYMOUS as i32) != 0;
     let has_fixed = flags & (MAP_FIXED as i32) != 0;
     let is_private = flags & (MAP_PRIVATE as i32) != 0;
     let is_shared = flags & (MAP_SHARED as i32) != 0;
 
-    if vfd_arg == -1 && has_anon && has_fixed && (is_private || is_shared) {
+    if vfd_arg == -1 && has_anon && has_fixed && (is_private || is_shared) && !host_enforces_prot()
+    {
         sysdefs::lind_instrument!(
             "[mmap_inner] anonymous fixed mapping, returning addr={:?}",
             addr
