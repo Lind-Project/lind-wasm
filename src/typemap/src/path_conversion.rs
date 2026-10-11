@@ -290,4 +290,62 @@ mod tests {
         let result = normpath(PathBuf::from("foo/../../bar"), cageid);
         assert_eq!(result, PathBuf::from("/a/bar"));
     }
+
+    #[test]
+    /*
+    ISO-004: root clamp must also work when a path starts absolute,
+    not only when climbing down from relative cwd
+    */
+    fn normpath_clamps_excess_parent_dir_for_absolute_path() {
+        let cageid = 1503;
+        make_test_cage(cageid, "/home/user/project");
+
+        let result = normpath(PathBuf::from("/../../etc/passwd"), cageid);
+        assert_eq!(result, PathBuf::from("/etc/passwd"));
+    }
+
+    #[test]
+    // ISO-004: "." components must be dropped, not pushed as literal segments
+    fn normpath_drops_curdir_components_in_absolute_path() {
+        let cageid = 1504;
+        make_test_cage(cageid, "/");
+
+        let result = normpath(PathBuf::from("/a/./b/."), cageid);
+        assert_eq!(result, PathBuf::from("/a/b"));
+    }
+
+    #[test]
+    /*
+    ISO-004: a leading "." in a realtive path must resolve against cwd,
+    not be treated as a no-op that skips cwd prefix
+    */
+    fn normpath_resolves_curdir_relative_to_cwd() {
+        let cageid = 1505;
+        make_test_cage(cageid, "/a");
+
+        let result = normpath(PathBuf::from("./foo"), cageid);
+        assert_eq!(result, PathBuf::from("/a/foo"));
+    }
+
+    #[test]
+    /*
+    ISO-004: climbing all the way to root while preserving a trailing
+    slash must land on "/" not "//"
+    */
+    fn normpath_clamps_to_root_without_double_slash() {
+        let cageid = 1506;
+        make_test_cage(cageid, "/a/b");
+        let result = normpath(PathBuf::from("../../../"), cageid);
+        assert_eq!(result, PathBuf::from("/"));
+    }
+
+    #[test]
+    // ISO-004: trailing slash must survive being combined with ".." resolution
+    fn normpath_preserves_trailing_slash_after_parent_dir_resolution() {
+        let cageid = 1507;
+        make_test_cage(cageid, "/a");
+
+        let result = normpath(PathBuf::from("foo/../bar/"), cageid);
+        assert_eq!(result, PathBuf::from("/a/bar/"));
+    }
 }

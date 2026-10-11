@@ -49,7 +49,7 @@ int main() {
     int sentinel_fd = open("/tmp/lind/sentinel.txt", O_RDONLY);
 
     if(sentinel_fd == -1) {
-        fprintf(stderr, "symlink_confinement test: FAIL - could not open "
+        fprintf(stderr, "symlink_confinement test: FAIL, could not open "
                 "/tmp/lind/sentinel.txt from inside the cage (errno %d)\n", errno);
         assert(0);
     }
@@ -62,11 +62,11 @@ int main() {
     sentinel_buf[sentinel_n] = '\0';
 
     if(strcmp(sentinel_buf, "LIND_HOST_ONLY") == 0) {
-        fprintf(stderr, "symlink_confinement test: FAIL - read host sentinel "
+        fprintf(stderr, "symlink_confinement test: FAIL, read host sentinel "
                 "from inside the cage, chroot escape\n");
         assert(0);
     } else if(strcmp(sentinel_buf, "LIND_CAGE_ONLY") != 0) {
-        fprintf(stderr, "symlink_confinement test: FAIL - unexpected sentinel "
+        fprintf(stderr, "symlink_confinement test: FAIL, unexpected sentinel "
                 "content: \"%s\"\n", sentinel_buf);
         assert(0);
     }
@@ -76,7 +76,7 @@ int main() {
     errno = 0;
     int link_sentinel_fd = open("evil_link_sentinel", O_RDONLY);
     if(link_sentinel_fd == -1) {
-        fprintf(stderr, "symlink_confinement test: FAIL - could not open "
+        fprintf(stderr, "symlink_confinement test: FAIL, could not open "
                 "evil_link sentinel from inside the cage (errno %d)\n", errno);
         assert(0);
     }
@@ -89,16 +89,48 @@ int main() {
     link_sentinel_buf[link_sentinel_n] = '\0';
 
     if(strcmp(link_sentinel_buf, "LIND_HOST_ONLY") == 0) {
-        fprintf(stderr, "symlink_confinement test: FAIL - read host sentinel "
+        fprintf(stderr, "symlink_confinement test: FAIL, read host sentinel "
                 "via symlink from inside the cage, chroot escape via symlink target\n");
         assert(0);
     } else if(strcmp(link_sentinel_buf, "LIND_CAGE_ONLY") != 0) {
-        fprintf(stderr, "symlink_confinement test: FAIL - unexpected sentinel "
+        fprintf(stderr, "symlink_confinement test: FAIL, unexpected sentinel "
                 "content via symlink: \"%s\"\n", link_sentinel_buf);
         assert(0);
     }
 
     unlink("evil_link_sentinel");
+
+    unlink("rel_link");
+    assert(symlink("../../../../../../tmp/lind/sentinel.txt", "rel_link") == 0);
+
+    errno = 0;
+    int rel_link_fd = open("rel_link", O_RDONLY);
+
+    if(rel_link_fd == -1) {
+        fprintf(stderr, "symlink_confinement test: FAIL, could not open "
+                "rel_link from inside the cage (errno %d)\n", errno);
+        assert(0);
+    }
+
+    char rel_link_buf[64] = {0};
+    ssize_t rel_link_n = read(rel_link_fd, rel_link_buf, sizeof(rel_link_buf) - 1);
+    close(rel_link_fd);
+
+    assert(rel_link_n >= 0);
+    rel_link_buf[rel_link_n] = '\0';
+
+    if(strcmp(rel_link_buf, "LIND_HOST_ONLY") == 0) {
+        fprintf(stderr, "symlink_confinement test: FAIL, read host sentinel "
+                  "via relative symlink target, chroot escape via kernel-resolved "
+                  "\"..\" components\n");
+        assert(0);
+    } else if(strcmp(rel_link_buf, "LIND_CAGE_ONLY") != 0) {
+        fprintf(stderr, "symlink_confinement test: FAIL, unexpected sentinel "
+                  "content via relative symlink: \"%s\"\n", rel_link_buf);
+        assert(0);
+    }
+
+    unlink("rel_link");
 
     printf("symlink_confinement test: PASS\n");
     return 0;
