@@ -139,7 +139,26 @@ impl MmapMemory {
         // like the GC heap are accessible from the start. Guard regions being
         // host-accessible is safe because lind-wasm relies on explicit bounds checks,
         // not SIGSEGV-on-PROT_NONE, for out-of-bounds detection.
-        let mmap = Mmap::accessible_reserved(request_bytes, request_bytes)?;
+        //
+        // The region is reserved and then made accessible, which ends up the
+        // same as mapping it accessible at once, except for a runtime that
+        // commits memory as it becomes accessible (TriSeal's SGX shim, to
+        // avoid an exception per first touch): it commits only a bounded
+        // part of a large region made accessible, and the memory's initial
+        // size, which is used right away, through the hint below.
+        let mmap = Mmap::accessible_reserved(HostAlignedByteCount::ZERO, request_bytes)?;
+        unsafe {
+            mmap.make_accessible(HostAlignedByteCount::ZERO, request_bytes)?;
+        }
+        if minimum > 0 {
+            unsafe {
+                let _ = rustix::mm::madvise(
+                    mmap.as_mut_ptr().add(pre_guard_bytes.byte_count()).cast(),
+                    minimum,
+                    rustix::mm::Advice::WillNeed,
+                );
+            }
+        }
 
         Ok(Self {
             mmap: try_new::<Arc<_>>(mmap)?,

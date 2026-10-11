@@ -139,3 +139,7 @@ pub const SEM_DESTROY_SYSCALL: i32 = 354;
 pub const LIND_SHM_INFO_SYSCALL: i32 = 2001;
 pub const LIND_SHM_READ_SYSCALL: i32 = 2002;
 pub const LIND_SHM_DUMP_SYSCALL: i32 = 2003;
+
+// A phase mark (not a Linux syscall): the workload entered a phase, such as
+// the start of a build; see rawposix::phase.
+pub const LIND_PHASE_SYSCALL: i32 = 2004;

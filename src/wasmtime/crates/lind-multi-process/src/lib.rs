@@ -2968,6 +2968,18 @@ pub fn attach_shared_memory<
     if need_init {
         let memory_base = mem.get_memory_base();
 
+        // The modules' initial memory (data, stack, start of the heap) is
+        // written as soon as they are instantiated: say so, so that a
+        // runtime that commits memory on first touch (an SGX enclave,
+        // through an exception) can commit it now instead.
+        unsafe {
+            libc::madvise(
+                memory_base as *mut libc::c_void,
+                (combined_min as usize) << 16,
+                libc::MADV_WILLNEED,
+            );
+        }
+
         // lind-wasm: reset the entire 4 GiB wasm linear memory to PROT_NONE
         // before handing it to rawposix. rawposix vmmap is solely responsible
         // for promoting pages to PROT_READ|PROT_WRITE as the guest accesses

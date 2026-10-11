@@ -1191,6 +1191,11 @@ pub extern "C" fn mmap_inner(
         // alone, so they are not committed early.
         if prot == PROT_NONE as i32 {
             unsafe { std::ptr::write_bytes(addr, 0, len) };
+        } else {
+            // The cage is about to use these pages: say so, so that a
+            // runtime that commits memory on first touch (an SGX enclave,
+            // through an exception) can commit them now instead.
+            unsafe { libc::madvise(addr as *mut c_void, len, libc::MADV_WILLNEED) };
         }
         return addr as usize;
     }

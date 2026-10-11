@@ -149,6 +149,11 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
 
         if entry.flags & (MAP_SHARED as i32) != 0 {
             unsafe {
+                // The child's pages are read and filled below: say so, so
+                // that a runtime that commits memory on first touch (an SGX
+                // enclave, through an exception) can commit them now instead.
+                libc::madvise(child_st as *mut libc::c_void, addr_len, libc::MADV_WILLNEED);
+
                 let parent_value_before = std::ptr::read_volatile(parent_st as *const u32);
                 let child_value_before = std::ptr::read_volatile(child_st as *const u32);
 
@@ -257,6 +262,11 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
                     );
                     assert_eq!(ret, 0, "failed to make child mapping writable");
                 }
+
+                // The child's pages are about to be filled: say so, so that a
+                // runtime that commits memory on first touch (an SGX enclave,
+                // through an exception) can commit them now instead.
+                libc::madvise(child_st as *mut libc::c_void, addr_len, libc::MADV_WILLNEED);
 
                 // write parent data
                 let local_iov = libc::iovec {
