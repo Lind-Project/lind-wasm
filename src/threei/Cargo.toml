@@ -27,3 +27,7 @@ serial_test = "3"
 [[bench]]
 name = "handler_lookup"
 harness = false
+
+[[bench]]
+name = "cage_copy"
+harness = false
