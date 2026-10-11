@@ -62,6 +62,16 @@ use wasmtime_lind_utils::{LindCageManager, LindGOT};
 /// shutting down RawPOSIX, ensuring runtime-wide cleanup happens only after the
 /// last process terminates.
 pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
+    // -- Map the shared-memory preload and dump regions, if any --
+    if let Some(path) = lindboot_cli.preload_shm.as_deref() {
+        rawposix::shm::map_preload_file(path)
+            .with_context(|| format!("cannot map the preload region {path}"))?;
+    }
+    if let Some(path) = lindboot_cli.dump_shm.as_deref() {
+        rawposix::shm::map_dump_file(path, lindboot_cli.dump_shm_size)
+            .with_context(|| format!("cannot map the dump region {path}"))?;
+    }
+
     // -- Initialize Lind + RawPOSIX + 3i runtime --
     // Initialize the Lind cage counter
     let lind_manager = Arc::new(LindCageManager::new(0));

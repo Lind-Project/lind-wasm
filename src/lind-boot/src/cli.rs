@@ -77,6 +77,22 @@ pub struct CliOptions {
     /// Defaults to 64 MiB.
     #[arg(long = "thread-stack-size", default_value_t = 64 * 1024 * 1024)]
     pub thread_stack_size: usize,
+
+    /// Map this file (a bundle of IMFS preload archives, built ahead of time
+    /// with mkpreload) as the shared-memory preload region before the first
+    /// cage starts. Grates read it with the LIND_SHM_READ call.
+    #[arg(long = "preload-shm", value_name = "PATH")]
+    pub preload_shm: Option<String>,
+
+    /// Create this file and map it as the shared-memory dump region. A grate
+    /// writes one archive of output files to it with the LIND_SHM_DUMP call,
+    /// which truncates the file to the archive's length.
+    #[arg(long = "dump-shm", value_name = "PATH")]
+    pub dump_shm: Option<String>,
+
+    /// Capacity of the dump region, in bytes. Defaults to 256 MiB.
+    #[arg(long = "dump-shm-size", value_name = "BYTES", default_value_t = 256 * 1024 * 1024)]
+    pub dump_shm_size: usize,
 }
 
 pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
