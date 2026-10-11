@@ -131,3 +131,11 @@ pub const SEM_WAIT_SYSCALL: i32 = 351;
 pub const SEM_POST_SYSCALL: i32 = 352;
 pub const SEM_GETVALUE_SYSCALL: i32 = 353;
 pub const SEM_DESTROY_SYSCALL: i32 = 354;
+
+// Lind shared-memory preload and dump regions (2001-2003 are not Linux
+// syscalls). A grate copies its preload bundle out of, and its dump archive
+// into, memory the runtime mapped before the first cage started; see
+// rawposix::shm.
+pub const LIND_SHM_INFO_SYSCALL: i32 = 2001;
+pub const LIND_SHM_READ_SYSCALL: i32 = 2002;
+pub const LIND_SHM_DUMP_SYSCALL: i32 = 2003;

@@ -30,6 +30,7 @@ use super::net_calls::{
 use super::sem_calls::{
     sem_destroy_syscall, sem_getvalue_syscall, sem_init_syscall, sem_post_syscall, sem_wait_syscall,
 };
+use super::shm::{shm_dump_syscall, shm_info_syscall, shm_read_syscall};
 use super::sys_calls::{
     exec_syscall, exit_group_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall,
     getgid_syscall, getpgid_syscall, getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall,
@@ -197,4 +198,16 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (syscall_const::PRLIMIT64_SYSCALL as u64, prlimit64_syscall),
     (syscall_const::RENAMEAT2_SYSCALL as u64, renameat2_syscall),
     (syscall_const::GETRANDOM_SYSCALL as u64, getrandom_syscall),
+    (
+        syscall_const::LIND_SHM_INFO_SYSCALL as u64,
+        shm_info_syscall,
+    ),
+    (
+        syscall_const::LIND_SHM_READ_SYSCALL as u64,
+        shm_read_syscall,
+    ),
+    (
+        syscall_const::LIND_SHM_DUMP_SYSCALL as u64,
+        shm_dump_syscall,
+    ),
 ];
