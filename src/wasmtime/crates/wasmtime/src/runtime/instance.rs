@@ -19,7 +19,7 @@ use core::ptr::NonNull;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 use sysdefs::constants::fs_const::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
 use sysdefs::constants::{
@@ -570,6 +570,15 @@ impl Instance {
                 init_vmmap(cageid, memory_base, Some(required_memory_page));
                 // Allocated memory should include stack AND constant data region
 
+                // Only mark the module's own footprint RW; the grate stack arena
+                // stays PROT_NONE until a worker claims its slot (create_worker),
+                // so non-grate cages never fault in or fork-copy it.
+                let initial_accessible_size = if dylink_enabled {
+                    required_memory_size
+                } else {
+                    stack_arena_base
+                };
+
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                 make_syscall(
@@ -579,7 +588,7 @@ impl Instance {
                     cageid, // target cageid (should be same)
                     start_addr as u64,
                     cageid,
-                    required_memory_size as u64,
+                    initial_accessible_size as u64,
                     cageid,
                     (PROT_READ | PROT_WRITE) as u64,
                     cageid,
@@ -592,6 +601,34 @@ impl Instance {
                     0,
                     cageid,
                 );
+
+                // Reserve the rest of the arena as a PROT_NONE vmmap entry so
+                // vmmap's free-space search can't hand a guard page or an
+                // inactive worker slot to an unrelated guest mmap(). Still
+                // skipped by fork_vmmap, since it stays PROT_NONE.
+                if !dylink_enabled {
+                    let stack_arena_size = lind_platform_const::MAX_GRATE_WORKERS as usize
+                        * (lind_platform_const::GRATE_STACK_GUARD_SIZE as usize
+                            + lind_platform_const::GRATE_STACK_SLOT_SIZE as usize);
+                    make_syscall(
+                        cageid,
+                        (MMAP_SYSCALL) as u64,
+                        0,
+                        cageid,
+                        stack_arena_base as u64,
+                        cageid,
+                        stack_arena_size as u64,
+                        cageid,
+                        (PROT_NONE) as u64,
+                        cageid,
+                        (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+                        cageid,
+                        (0 - 1) as u64,
+                        cageid,
+                        0,
+                        cageid,
+                    );
+                }
             }
             // InstantiateChild: this is the child wasm instance forked by parent
             InstantiateType::InstantiateChild {
