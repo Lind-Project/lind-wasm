@@ -171,8 +171,11 @@ By participating, you agree to uphold it.
 
 ## License
 
-By contributing to Lind, you agree that your contributions will be licensed under
-the same license as the project. See [LICENSE](LICENSE) for details.
+Lind-wasm source code is licensed under the [Apache License 2.0](LICENSE). Vendored upstream code keeps its own license (for example, `src/wasmtime` and `src/glibc`).
+
+By contributing, you agree to the Lind [Contributor License Agreement](https://github.com/Lind-Project/community/blob/main/CONTRIBUTOR_LICENSE_AGREEMENT.md), which is based on the [Community Specification License 1.0](https://github.com/Lind-Project/community/blob/main/COMMUNITY_SPECIFICATION_LICENSE.md). See the project-wide [licensing policy](https://github.com/Lind-Project/community/blob/main/LICENSING.md) for how specifications, code, data, and documentation are licensed.
+
+Every commit must carry a [Developer Certificate of Origin](https://developercertificate.org) sign-off. Use `git commit -s` to add a `Signed-off-by:` line.
 
 ## Need Help?
 
