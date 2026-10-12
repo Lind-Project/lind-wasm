@@ -739,16 +739,16 @@ fn load_main_module(
     // pool below is the expensive part and stays gated.
     init_grate_pool();
 
-    // Grate calls only support static linking, and only modules built with
-    // --compile-grate (exporting pass_fptr_to_wt) ever use a worker pool.
-    // Building it eagerly for every static cage made fork very expensive
-    // (fork_vmmap copies every worker's stack slot), so gate on actual need.
     // Drop any handler from the cage's previous image unconditionally -- exec
     // can transition a cage from grate-using to non-grate-using, and a stale
     // handler would otherwise keep 32 Stores tied to the replaced module and
     // linear memory alive, with grate calls dispatching into invalid state.
     unregister_grate_handler(cageid);
 
+    // Grate calls only support static linking, and only modules built with
+    // --compile-grate (exporting pass_fptr_to_wt) ever use a worker pool.
+    // Building it eagerly for every static cage made fork very expensive
+    // (fork_vmmap copies every worker's stack slot), so gate on actual need.
     if !dylink_metadata.dylink_enabled && module.get_export("pass_fptr_to_wt").is_some() {
         // 4) register grate workers for this cage
         let grate_template = GrateTemplate {
