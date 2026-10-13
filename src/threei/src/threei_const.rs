@@ -14,6 +14,10 @@ pub const ELINDAPIABORTED: u64 = 0xE001_0001;
 // (handlefunccage) is in the EXITING state.
 /// See function-level comments for specific usage details.  
 pub const ELINDESRCH: u64 = 0xE001_0002;
+/// ELINDEPERM: the calling cage may not change the routing of the target
+/// cage, or may not route its calls to the requested handler cage.
+/// See `register_handler_syscall` for the rule.
+pub const ELINDEPERM: u64 = 0xE001_0003;
 /// Indicates a successful Grate call.
 /// This value (0) is returned from functions that perform a Grate-side
 /// operation or callback through Wasmtime when the call completes

@@ -149,6 +149,7 @@ pub extern "C" fn fork_syscall(
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
+            execd: AtomicBool::new(false),
         };
 
         // increment child counter for parent
@@ -281,6 +282,9 @@ pub extern "C" fn exec_syscall(
 
         // Copy necessary data from current cage
         let selfcage = get_cage(cageid).unwrap();
+
+        // The cage now runs its own image, not its parent's.
+        selfcage.execd.store(true, Release);
 
         selfcage.rev_shm.lock().clear();
 

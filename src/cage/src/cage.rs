@@ -262,6 +262,11 @@ pub struct Cage {
     /// Could also be moved to wasmtime/crate/lind-3i if grate_inflight
     /// tracking is considered a VMContext-level concern.
     pub grate_inflight: AtomicU64,
+    /// Set once the cage has successfully exec'd a new image.  Until then
+    /// a forked cage still runs its parent's code, which is what lets 3i
+    /// trust a pre-exec child to route its own syscalls to its parent grate
+    /// (see `register_handler_syscall` in threei).
+    pub execd: AtomicBool,
 }
 
 /// Global cage table indexed by cage ID.
@@ -465,6 +470,7 @@ mod tests {
             exit_group_initiated: AtomicBool::new(false),
             is_dead: AtomicBool::new(false),
             grate_inflight: AtomicU64::new(0),
+            execd: AtomicBool::new(false),
         };
 
         add_cage(2, test_cage);

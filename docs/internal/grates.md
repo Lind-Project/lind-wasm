@@ -26,6 +26,14 @@ In Lind, the system call handler table is part of that execution context. If Cag
 
 In addition to inheritance across fork, an ancestor grate may modify the system call tables of its descendants. This capability is used in several patterns, including clamping, but is not limited to it. It allows structural control over how routing evolves as new cages are created.
 
+3i enforces this for calls made by cages. The runtime tells 3i which cage actually issued `register_handler` or `copy_handler_table_to_cage`, and 3i refuses the call (`ELINDEPERM`) unless:
+
+- the target cage is the caller or one of its descendants;
+- for `register_handler`, the handler cage is the caller or one of its descendants, or the caller's parent when a forked child that has not exec'd yet registers its own call (the child still runs the grate's code, the usual "register in the child before exec" pattern). RawPOSIX, Wasmtime and 3i can never be named as the handler cage, since their handler addresses are native function pointers;
+- for `copy_handler_table_to_cage`, the source cage is the caller or one of its descendants, so a cage cannot copy in the table of a grate above it and step around that grate.
+
+The runtime's own setup calls these functions directly and is not checked.
+
 
 ## Cross-cage buffers
 
