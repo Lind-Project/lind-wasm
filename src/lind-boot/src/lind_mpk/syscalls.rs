@@ -11,12 +11,16 @@ use libc::{
 use cage::{get_cage, init_vmmap, lind_signal_init};
 use crate::lind_mpk::RuntimeInfo::{
     MPKRuntimeInfo, MPKSupervisorCtxStack, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
+    current_ctx_stack, current_context_stack, allocate_context_pages,
+    alias_context_stack, context_stack_aliases, privatize_context_stack_after_fork,
+    context_stack_page_for_fs, guest_tcb_size,
 };
+use std::ffi::c_void;
 use crate::lind_mpk::execute::{setup_supervisor_stack, current_tid, CAGE_STACK_GUARD};
 use threei::threei_const;
 use wasmtime_lind_multi_process::THREAD_START_ID;
 use wasmtime_lind_utils::LindCageManager;
-use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL, SIGACTION_SYSCALL};
+use sysdefs::constants::syscall_const::{EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL, MMAP_SYSCALL, SIGACTION_SYSCALL};
 use sysdefs::constants::lind_platform_const::{INIT_CAGEID, RAWPOSIX_CAGEID, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID};
 use sysdefs::logging::lind_debug_panic;
 use sysdefs::data::sys_struct::CloneArgStruct;
@@ -85,8 +89,51 @@ fn errno_negative_i64() -> i64 {
     -(errno as i64)
 }
 
+/// Cage memory `(base, size)` used to bounds-check guest-supplied FS values.
+fn cage_memory_region(cageid: u64) -> Option<(usize, usize)> {
+    // In a forked child process the child cage's runtime info is only
+    // updated in the parent; the memory is the fork-inherited parent region.
+    if CHILD_ACTIVE_CAGEID.load(Ordering::Acquire) == cageid {
+        let (base, size) = *CHILD_MEMORY_REGION.get()?;
+        return Some((base, size));
+    }
+    let cage = get_cage(cageid)?;
+    let runtime_info = cage.runtime_info.read();
+    let mpk_info = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>()?;
+    if mpk_info.memory_base.is_null() {
+        return None;
+    }
+    Some((mpk_info.memory_base as usize, mpk_info.memory_size))
+}
+
+/// arch_prctl(ARCH_SET_FS) from guest code: aliases the context stack onto
+/// the page after the new TCB and makes `fs` the caller's FS, which the
+/// trampoline restores with wrfsbase on return.
+fn set_guest_fs_base(cageid: u64, fs: usize) -> anyhow::Result<()> {
+    let (region_base, region_size) = cage_memory_region(cageid)
+        .ok_or_else(|| anyhow::anyhow!("cage {cageid} has no MPK memory region"))?;
+    let context_stack = current_context_stack();
+    alias_context_stack(context_stack, cageid, fs, region_base, region_size)?;
+    unsafe {
+        let stack = &mut *context_stack;
+        if stack.current_context == 0 || stack.current_context >= LIND_MPK_MAX_CONTEXTS {
+            anyhow::bail!("arch_prctl(ARCH_SET_FS) outside of a trampoline call");
+        }
+        stack.contexts[stack.current_context - 1].fs_base = fs;
+    }
+    if let Some(cage) = get_cage(cageid) {
+        let runtime_info = cage.runtime_info.read();
+        if let Some(mpk_info) = runtime_info.as_any().downcast_ref::<MPKRuntimeInfo>() {
+            if let Some(thread) = mpk_info.threads.write().get_mut(&current_tid()) {
+                thread.fs_base = fs;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub extern "C" fn mpk_arch_prctl_syscall_entry(
-    _cageid: u64,
+    cageid: u64,
     code_arg: u64,
     _code_arg_cageid: u64,
     addr_arg: u64,
@@ -123,8 +170,17 @@ pub extern "C" fn mpk_arch_prctl_syscall_entry(
     if !supported {
         return -(libc::EINVAL as i64);
     }
-    //temporary: make set operations noops
-    if code == ARCH_SET_GS_OP || code == ARCH_SET_FS_OP {
+    if code == ARCH_SET_FS_OP {
+        return match set_guest_fs_base(cageid, addr_arg as usize) {
+            Ok(()) => 0,
+            Err(error) => {
+                mpk_debug(format!("arch_prctl(ARCH_SET_FS, {addr_arg:#x}) rejected: {error}"));
+                -(libc::EINVAL as i64)
+            }
+        };
+    }
+    // GS is reserved for the supervisor.
+    if code == ARCH_SET_GS_OP {
         return 0;
     }
 
@@ -242,6 +298,91 @@ pub fn register_set_tid_address_syscall_handler() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Lind-specific mmap flag used by glibc's `_dl_allocate_tls_storage` for static
+/// TLS mappings (see glibc's `syscall-interpose.h`). The guest TCB ends in the
+/// last page of such a mapping; the glibc trampolines expect the per-thread
+/// supervisor context stack in the page directly after it.
+pub const MAP_LIND_TLS: u64 = 0x200000;
+
+pub extern "C" fn mpk_mmap_syscall_entry(
+    cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    len_arg: u64,
+    len_cageid: u64,
+    prot_arg: u64,
+    prot_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    off_arg: u64,
+    off_cageid: u64,
+) -> i64 {
+    let mut len_arg = len_arg;
+    let mut flags_arg = flags_arg;
+
+    if flags_arg & MAP_LIND_TLS != 0 {
+        // Strip the Lind-only flag and extend the mapping by one blank page at
+        // the first page boundary after the guest TCB. The context stack is
+        // aliased onto it once the TCB is installed (see `alias_context_stack`).
+        // TODO: the context-stack page must be tagged with the supervisor MPK
+        // key so the guest cannot access its own context stack.
+        // TODO: glibc only munmaps the TLS part, so the extra page outlives
+        // the thread's TLS.
+        flags_arg &= !MAP_LIND_TLS;
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
+        let Some(rounded_len) = len_arg
+            .checked_add(page_size - 1)
+            .map(|len| len & !(page_size - 1))
+            .and_then(|len| len.checked_add(page_size))
+        else {
+            return -(libc::ENOMEM as i64);
+        };
+        len_arg = rounded_len;
+    }
+
+    rawposix::fs_calls::mmap_syscall(
+        cageid,
+        addr_arg,
+        addr_cageid,
+        len_arg,
+        len_cageid,
+        prot_arg,
+        prot_cageid,
+        flags_arg,
+        flags_cageid,
+        vfd_arg,
+        vfd_cageid,
+        off_arg,
+        off_cageid,
+    )
+}
+
+pub fn register_mmap_syscall_handler() -> anyhow::Result<()> {
+    let ret = threei::register_handler(
+        UNUSED_ID,
+        THREEI_CAGEID,
+        INIT_CAGEID,
+        MMAP_SYSCALL as u64,
+        threei_const::RUNTIME_TYPE_MPK,
+        RAWPOSIX_CAGEID,
+        mpk_mmap_syscall_entry as *const () as u64,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
+    if ret != 0 {
+        anyhow::bail!("registering MPK mmap handler failed: {}", ret);
+    }
+    Ok(())
+}
+
 #[cfg(target_arch = "x86_64")]
 fn current_host_rsp() -> usize {
     let rsp: usize;
@@ -329,6 +470,7 @@ fn mpk_clone_thread_entry(
         }
     }
 
+    current_ctx_stack.set(new_gs_data);
     let caller_context = unsafe {
         let gs_data = &*new_gs_data;
         assert!(
@@ -367,10 +509,23 @@ fn mpk_clone_thread_entry(
             return -EINVAL;
         };
         if cage_id == caller_context.cage_id {
-            // The caller's TLS is supplied by clone, or inherited without CLONE_SETTLS.
+            // The caller supplies a distinct guest thread descriptor via
+            // CLONE_SETTLS; glibc reserved the page after it (MAP_LIND_TLS).
             cage_info.fs_base = caller_context.fs_base;
+            if let Err(error) = thread_info.alias_context_stack(
+                cage_id,
+                cage_info.fs_base,
+                mpk_info.memory_base as usize,
+                mpk_info.memory_size,
+            ) {
+                lind_debug_panic(&format!(
+                    "mpk_clone: context-stack TLS initialization failed for cage {} and tid={}: {}",
+                    cage_id, tid, error
+                ));
+                return -EINVAL;
+            }
         } else {
-            if let Err(error) = cage_info.initialize_grate_tls(mpk_info.dl_allocate_tls) {
+            if let Err(error) = cage_info.initialize_grate_tls(mpk_info) {
                 lind_debug_panic(&format!(
                     "mpk_clone: TLS initialization failed for cage {} and tid={}: {}",
                     cage_id, tid, error
@@ -393,6 +548,10 @@ fn mpk_clone_thread_entry(
             out(reg) supervisor_fs_base,
             options(nostack, preserves_flags, att_syntax)
         );
+        let tcb_size = match guest_tcb_size() {
+            Ok(size) => size,
+            Err(error) => lind_debug_panic(&format!("mpk_clone: {}", error)),
+        };
         relocate_cloned_contexts(
             &mut *new_gs_data,
             old_stack_base,
@@ -400,6 +559,7 @@ fn mpk_clone_thread_entry(
             thread_info.supervisor_stack_size,
             supervisor_fs_base,
             &cage_fs_bases,
+            tcb_size,
         );
 
         (*copied_jump_buffer).rsp = relocate_mangled_stack_pointer(
@@ -431,9 +591,18 @@ fn prepare_clone_caller_context(gs_data: &mut MPKSupervisorCtxStack, args: &Clon
     );
     let caller = &mut gs_data.contexts[gs_data.current_context - 1];
     caller.rsp = args.stack + args.stack_size;
-    if args.flags & CLONE_SETTLS as u64 != 0 {
-        caller.fs_base = args.tls as usize;
+    caller.fs_base = args.tls as usize;
+}
+
+fn validate_clone_tls(gs_data: &MPKSupervisorCtxStack, args: &CloneArgStruct) -> anyhow::Result<()> {
+    if gs_data.current_context == 0 || gs_data.current_context >= LIND_MPK_MAX_CONTEXTS {
+        anyhow::bail!("mpk_clone: supervisor context index out of bounds");
     }
+    let parent_fs = gs_data.contexts[gs_data.current_context - 1].fs_base;
+    if args.flags & CLONE_SETTLS as u64 == 0 || args.tls == 0 || args.tls as usize == parent_fs {
+        anyhow::bail!("mpk_clone: thread clones require CLONE_SETTLS with distinct non-null guest TLS");
+    }
+    Ok(())
 }
 
 fn relocate_cloned_contexts(
@@ -443,6 +612,7 @@ fn relocate_cloned_contexts(
     stack_size: usize,
     supervisor_fs_base: usize,
     cage_fs_bases: &std::collections::HashMap<u64, usize>,
+    guest_tcb_size: usize,
 ) {
     assert!(
         gs_data.current_context < LIND_MPK_MAX_CONTEXTS,
@@ -471,6 +641,35 @@ fn relocate_cloned_contexts(
         ));
         context.rsp = relocated_rsp;
     }
+
+    // Every supervisor context entered from a guest trampoline records the
+    // supervisor-stack slot holding the caller's context-stack pointer. The
+    // copied slots still name the parent's context stack; point them at the
+    // child's (as seen through the caller's FS) so each guest return path
+    // unwinds the child's context stack.
+    for i in 1..=gs_data.current_context {
+        if gs_data.contexts[i].cage_id != 0 {
+            continue;
+        }
+        let slot = unsafe { gs_data.contexts[i].pkru_context_stack_ptr.context_stack_ptr } as usize;
+        if slot % size_of::<usize>() != 0
+            || !(old_stack_start..old_stack_end).contains(&slot)
+        {
+            continue;
+        }
+        let caller_fs = gs_data.contexts[i - 1].fs_base;
+        let child_context_stack = context_stack_page_for_fs(caller_fs, guest_tcb_size)
+            .expect("mpk_clone: caller FS overflows");
+        let relocated_slot = (slot as isize + stack_delta) as *mut *mut MPKSupervisorCtxStack;
+        mpk_debug(&format!(
+            "mpk_clone: context {} context-stack slot {:#x} -> {:#x} = {:#x}",
+            i, slot, relocated_slot as usize, child_context_stack
+        ));
+        unsafe {
+            *relocated_slot = child_context_stack as *mut MPKSupervisorCtxStack;
+        }
+        gs_data.contexts[i].pkru_context_stack_ptr.context_stack_ptr = relocated_slot;
+    }
 }
 
 #[cfg(test)]
@@ -491,7 +690,7 @@ mod clone_context_tests {
 
     #[test]
     fn clone_settls_uses_supplied_guest_fs() {
-        for tls in [0, 0x2220] {
+        for tls in [0x2220, 0x3330] {
             let mut gs_data = context_stack();
             let args = CloneArgStruct {
                 flags: (CLONE_VM | CLONE_SETTLS) as u64,
@@ -500,6 +699,7 @@ mod clone_context_tests {
                 tls,
                 ..CloneArgStruct::default()
             };
+            validate_clone_tls(&gs_data, &args).unwrap();
             prepare_clone_caller_context(&mut gs_data, &args);
             assert_eq!(gs_data.contexts[0].fs_base, tls as usize);
             assert_eq!(gs_data.contexts[0].rsp, 0x9000);
@@ -507,15 +707,27 @@ mod clone_context_tests {
     }
 
     #[test]
-    fn clone_without_settls_preserves_guest_fs() {
-        let mut gs_data = context_stack();
+    fn clone_without_settls_is_rejected() {
+        let gs_data = context_stack();
         let args = CloneArgStruct {
             flags: CLONE_VM as u64,
             tls: 0x2220,
             ..CloneArgStruct::default()
         };
-        prepare_clone_caller_context(&mut gs_data, &args);
-        assert_eq!(gs_data.contexts[0].fs_base, 0x1110);
+        assert!(validate_clone_tls(&gs_data, &args).is_err());
+    }
+
+    #[test]
+    fn clone_null_or_shared_tls_is_rejected() {
+        let gs_data = context_stack();
+        for tls in [0, gs_data.contexts[0].fs_base as u64] {
+            let args = CloneArgStruct {
+                flags: (CLONE_VM | CLONE_SETTLS) as u64,
+                tls,
+                ..CloneArgStruct::default()
+            };
+            assert!(validate_clone_tls(&gs_data, &args).is_err());
+        }
     }
 
     #[test]
@@ -541,6 +753,7 @@ mod clone_context_tests {
             0x10000,
             0x7770,
             &cage_fs_bases,
+            0x100,
         );
         assert_eq!(gs_data.contexts[0].fs_base, 0x2220);
         for i in [2, 4] {
@@ -556,32 +769,56 @@ mod clone_context_tests {
         assert_eq!(gs_data.contexts[3].rsp, 0x50000);
         assert_eq!(gs_data.contexts[5].rsp, 0x21500);
     }
+
+    #[test]
+    fn clone_rewrites_context_stack_slots_on_supervisor_stack() {
+        let words = (CAGE_STACK_GUARD + 0x1000) / size_of::<usize>();
+        let old_stack = vec![0usize; words];
+        let mut new_stack = vec![0usize; words];
+        let old_base = old_stack.as_ptr() as usize;
+        let new_base = new_stack.as_mut_ptr() as usize;
+        let stack_size = words * size_of::<usize>();
+        let slot_at = |base: usize, index: usize| (base + CAGE_STACK_GUARD + index * 8) as *mut *mut MPKSupervisorCtxStack;
+
+        let mut gs_data = context_stack();
+        gs_data.current_context = 3;
+        gs_data.contexts[2].cage_id = 2;
+        gs_data.contexts[1].pkru_context_stack_ptr.context_stack_ptr = slot_at(old_base, 10);
+        gs_data.contexts[3].pkru_context_stack_ptr.context_stack_ptr = slot_at(old_base, 20);
+        // Inactive or out-of-range values are left alone.
+        gs_data.contexts[5].pkru_context_stack_ptr.context_stack_ptr = slot_at(old_base, 30);
+        gs_data.contexts[2].pkru_context_stack_ptr.pkru = 0x55;
+
+        let tcb_size = 0x100;
+        let cage_fs_bases = std::collections::HashMap::from([(1, 0x2_2340), (2, 0x5_5f40)]);
+        relocate_cloned_contexts(
+            &mut gs_data, old_base, new_base, stack_size, 0x7770, &cage_fs_bases, tcb_size,
+        );
+
+        unsafe {
+            assert_eq!(gs_data.contexts[1].pkru_context_stack_ptr.context_stack_ptr, slot_at(new_base, 10));
+            assert_eq!(gs_data.contexts[3].pkru_context_stack_ptr.context_stack_ptr, slot_at(new_base, 20));
+            assert_eq!(gs_data.contexts[5].pkru_context_stack_ptr.context_stack_ptr, slot_at(old_base, 30));
+            assert_eq!(gs_data.contexts[2].pkru_context_stack_ptr.pkru, 0x55);
+            assert_eq!(*slot_at(new_base, 10) as usize, 0x2_3000);
+            assert_eq!(*slot_at(new_base, 20) as usize, 0x5_7000);
+            assert!((*slot_at(new_base, 30)).is_null());
+        }
+        assert!(old_stack.iter().all(|&word| word == 0));
+    }
 }
 
 /// replaces any occurrence of the old cage in the supervisor context stack with the new cage id.
 /// This is used in the context of fork to return to a child cage
 fn update_active_cage_context(cageid: u64, old_cageid: u64) {
-    let gs_base: usize;
-    let current_context_index: usize;
-    unsafe {
-        asm!(
-            "mov %gs:0, {}",
-            out(reg) current_context_index,
-            options(nostack, preserves_flags, att_syntax)
-        );
-        asm!(
-            "rdgsbase {}",
-            out(reg) gs_base,
-            options(nostack, preserves_flags, att_syntax)
-        );
-    }
+    let gs_data = current_context_stack();
+    let current_context_index = unsafe { (*gs_data).current_context };
 
     assert!(
         current_context_index < LIND_MPK_MAX_CONTEXTS,
         "mpk: current context index out of bounds: {}",
         current_context_index
     );
-    let gs_data = gs_base as *mut MPKSupervisorCtxStack;
     unsafe {
         for context in &mut (*gs_data).contexts {
             if context.cage_id == old_cageid {
@@ -635,6 +872,8 @@ const RESP_KIND_FETCH_PENDING_SIGNAL: u64 = 2;
 // exactly one thread in the child and we never spawn any before we set this.
 static CHILD_SOCKET_FD: AtomicI32 = AtomicI32::new(-1);
 static CHILD_ACTIVE_CAGEID: AtomicU64 = AtomicU64::new(0);
+/// Memory region `(base, size)` of the active cage in a forked child process.
+static CHILD_MEMORY_REGION: OnceLock<(usize, usize)> = OnceLock::new();
 
 fn helper_take_pending_signal(cageid: u64) -> i32 {
     let Some(cage) = get_cage(cageid) else {
@@ -993,6 +1232,10 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
     let isthread = args.flags & (CLONE_VM as u64) != 0; //CLONE_VM is set for threads, not for forked processes
 
     if (isthread) {
+        if let Err(error) = unsafe { validate_clone_tls(&*current_context_stack(), args) } {
+            eprintln!("[lind-mpk] {}", error);
+            return -EINVAL;
+        }
         //thread like semantics
         //Rawposix only respects CLONE_VM. Other flags are ignored.
         //Forwarded flags are
@@ -1087,24 +1330,21 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             let jump_buffer_addr = jump_buffer as usize;
             let old_stack_base = parent_thread_info.supervisor_stack_base;
             let stack_size = parent_thread_info.supervisor_stack_size;
-            let context_pages_size = parent_thread_info.context_pages_size;
             let parent_pointer_guard = current_pointer_guard();
 
-            if stack_size == 0 || context_pages_size == 0 {
+            if stack_size == 0 || parent_thread_info.gs_data.is_null() {
                 lind_debug_panic("mpk_clone: parent thread has no supervisor context");
                 return -EINVAL;
             }
 
-            let new_context_pages = unsafe {
-                libc::mmap(
-                    std::ptr::null_mut(),
-                    context_pages_size,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-                    -1,
-                    0,
-                )
-            };
+            let (new_context_pages, context_pages_size, new_gs_data) =
+                match allocate_context_pages() {
+                    Ok(pages) => pages,
+                    Err(error) => {
+                        lind_debug_panic(&format!("mpk_clone: {error}"));
+                        return -EINVAL;
+                    }
+                };
             let new_stack_base = unsafe {
                 libc::mmap(
                     std::ptr::null_mut(),
@@ -1115,13 +1355,8 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     0,
                 )
             };
-            if new_context_pages == libc::MAP_FAILED || new_stack_base == libc::MAP_FAILED {
-                if new_context_pages != libc::MAP_FAILED {
-                    unsafe { libc::munmap(new_context_pages, context_pages_size) };
-                }
-                if new_stack_base != libc::MAP_FAILED {
-                    unsafe { libc::munmap(new_stack_base, stack_size) };
-                }
+            if new_stack_base == libc::MAP_FAILED {
+                unsafe { libc::munmap(new_context_pages as *mut c_void, context_pages_size) };
                 lind_debug_panic("mpk_clone: failed to duplicate thread context");
                 return -EINVAL;
             }
@@ -1129,11 +1364,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             let new_stack_base_addr = new_stack_base as usize;
 
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    parent_thread_info.context_pages as *const u8,
-                    new_context_pages as *mut u8,
-                    context_pages_size,
-                );
+                std::ptr::copy_nonoverlapping(parent_thread_info.gs_data, new_gs_data, 1);
                 std::ptr::copy_nonoverlapping(
                     (parent_thread_info.supervisor_stack_base as u64 + CAGE_STACK_GUARD as u64) as *const u8,
                     (new_stack_base as u64 + CAGE_STACK_GUARD as u64) as *mut u8,
@@ -1142,11 +1373,11 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 libc::mprotect(new_stack_base, CAGE_STACK_GUARD, libc::PROT_NONE);
             }
 
-            let new_gs_data_addr = new_context_pages as usize;
+            let new_gs_data_addr = new_gs_data as usize;
             let clear_child_tid_addr = if clear_child_tid { child_tid_ptr } else { 0 };
             let thread_info = Arc::new(MpkThreadInfo {
                 gs_data: new_gs_data_addr as *mut MPKSupervisorCtxStack,
-                context_pages: new_context_pages as usize,
+                context_pages: new_context_pages,
                 context_pages_size,
                 supervisor_stack_base: new_stack_base as usize,
                 supervisor_stack_size: stack_size,
@@ -1225,15 +1456,18 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             );
         }
 
-        let enable_interpose = {
+        let (enable_interpose, parent_memory_region) = {
             let parent_cage =
                 get_cage(_parent_cageid).expect("mpk_clone: parent cage not found");
             let runtime_info = parent_cage.runtime_info.read();
-            runtime_info
+            let parent_mpk = runtime_info
                 .as_any()
                 .downcast_ref::<MPKRuntimeInfo>()
-                .expect("mpk_clone: parent cage has no MPKRuntimeInfo")
-                .enable_interpose_fn
+                .expect("mpk_clone: parent cage has no MPKRuntimeInfo");
+            (
+                parent_mpk.enable_interpose_fn,
+                (parent_mpk.memory_base as usize, parent_mpk.memory_size),
+            )
         };
 
         // ── 2. Create a SOCK_SEQPACKET socketpair for syscall forwarding ──────────
@@ -1252,6 +1486,12 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
         assert!(rc == 0, "mpk_clone: socketpair failed: {}", std::io::Error::last_os_error());
         let parent_fd = fds[0];
         let child_fd = fds[1];
+
+        // The child's context stack starts as a copy of the parent's, taken
+        // right before fork (no locks may be held across fork).
+        let context_stack = current_context_stack();
+        let context_stack_snapshot = unsafe { std::ptr::read(context_stack) };
+        let context_stack_alias_pages = context_stack_aliases(context_stack);
 
         // ── 4. Fork the OS process ────────────────────────────────────────────────
         let pid = unsafe { libc::fork() };
@@ -1386,7 +1626,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                                     return;
                                 }
                                 if let Err(error) =
-                                    cage_info.initialize_grate_tls(mpk_info.dl_allocate_tls)
+                                    cage_info.initialize_grate_tls(mpk_info)
                                 {
                                     eprintln!(
                                         "[lind-mpk] parent worker thread: TLS initialization failed for cage {}: {}",
@@ -1506,7 +1746,20 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             unsafe { libc::close(parent_fd) };        // Publish the socket fd so child_syscall_handler can find it.
             CHILD_SOCKET_FD.store(child_fd, Ordering::Release);
             CHILD_ACTIVE_CAGEID.store(child_cageid, Ordering::Release);
+            let _ = CHILD_MEMORY_REGION.set(parent_memory_region);
             install_child_sigusr2_handler();
+
+            // The context-stack page and its guest aliases are shared mappings
+            // and therefore still shared with the parent; make them private.
+            if let Err(error) = unsafe {
+                privatize_context_stack_after_fork(
+                    context_stack,
+                    &context_stack_snapshot,
+                    &context_stack_alias_pages,
+                )
+            } {
+                lind_debug_panic(&format!("mpk fork: {error}"));
+            }
 
             // Re-register the syscall interposition hook in the child so that all
             // subsequent syscalls from inside the dlmopen namespace are forwarded

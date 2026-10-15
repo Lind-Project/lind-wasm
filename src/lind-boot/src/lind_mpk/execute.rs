@@ -14,12 +14,15 @@ use crate::lind_mpk::loader::{
 use crate::lind_mpk::syscalls::{
     LIND_MANAGER, NO_INTERPOSE,
     mpk_clone_syscall_entry, mpk_exit_syscall_entry, mpk_make_threei_call_wrapper,
-    register_arch_prctl_syscall_handler, register_set_tid_address_syscall_handler,
+    register_arch_prctl_syscall_handler, register_mmap_syscall_handler,
+    register_set_tid_address_syscall_handler,
 };
 use crate::lind_mpk::RuntimeInfo::{
     MPKSupervisorContext, MPKSupervisorCtxStack,
     MPKRuntimeInfo, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
     allocate_stack_in_vmmap,
+    allocate_context_pages, bootstrap_fs_base,
+    current_ctx_stack,
 };
 use crate::shims::SyscallRuntime;
 use anyhow::{Context, bail};
@@ -159,20 +162,12 @@ const ARCH_GET_FS: c_int = 0x1003;
 // this static zero, matching the disable_signals behaviour used in wasmtime.
 static MPK_EPOCH: AtomicU64 = AtomicU64::new(0);
 
-/// Allocates and initializes the per-thread GS context page, then
-/// installs the GS base for the calling thread.
+/// Allocates and initializes the per-thread context stack (see
+/// `allocate_context_pages`), then installs the GS base for the calling thread.
 pub(super) fn setup_gs_context(
     cageid: u64,
     os_tid: libc::pid_t,
 ) -> anyhow::Result<(*mut MPKSupervisorCtxStack, usize, usize)> {
-    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-    if page_size <= 0 {
-        bail!(
-            "sysconf(_SC_PAGESIZE) failed: {}",
-            std::io::Error::last_os_error()
-        );
-    }
-    let page_size = page_size as usize;
     let mut fs_base = 0usize;
     let ret = unsafe {
         libc::syscall(
@@ -185,22 +180,7 @@ pub(super) fn setup_gs_context(
         bail!("arch_prctl(ARCH_GET_FS) failed: {}", std::io::Error::last_os_error());
     }
 
-    let context_pages_size = page_size;
-    let context_pages = unsafe {
-        libc::mmap(
-            std::ptr::null_mut(),
-            context_pages_size,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-            -1,
-            0,
-        )
-    };
-    if context_pages == libc::MAP_FAILED {
-        bail!("mmap for MPK context pages failed: {}", std::io::Error::last_os_error());
-    }
-
-    let gs_ptr = context_pages as *mut MPKSupervisorCtxStack;
+    let (context_pages, context_pages_size, gs_ptr) = allocate_context_pages()?;
     unsafe {
         std::ptr::write(gs_ptr, MPKSupervisorCtxStack {
             current_context: 0,
@@ -219,11 +199,12 @@ pub(super) fn setup_gs_context(
         )
     };
     if ret != 0 {
-        unsafe { libc::munmap(context_pages, context_pages_size) };
+        unsafe { libc::munmap(context_pages as *mut c_void, context_pages_size) };
         bail!("arch_prctl(ARCH_SET_GS) failed: {}", std::io::Error::last_os_error());
     }
 
-    Ok((gs_ptr, context_pages as usize, context_pages_size))
+    current_ctx_stack.set(gs_ptr);
+    Ok((gs_ptr, context_pages, context_pages_size))
 }
 
 /// Allocates a supervisor stack and returns a `MpkThreadInfo` to be registered
@@ -259,6 +240,7 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
         )
     };
     if stack_base == libc::MAP_FAILED {
+        current_ctx_stack.set(std::ptr::null_mut());
         unsafe {
             libc::munmap(context_pages as *mut c_void, context_pages_size)
         };
@@ -268,6 +250,7 @@ pub(super) fn setup_supervisor_stack(cageid: u64, os_tid: libc::pid_t) -> anyhow
     // Guard page: lowest page is PROT_NONE to catch supervisor stack overflow.
     let ret = unsafe { libc::mprotect(stack_base, SUPERVISOR_STACK_GUARD, libc::PROT_NONE) };
     if ret != 0 {
+        current_ctx_stack.set(std::ptr::null_mut());
         unsafe { libc::munmap(stack_base, total_size) };
         unsafe {
             libc::munmap(context_pages as *mut c_void, context_pages_size)
@@ -351,6 +334,17 @@ fn write_initial_stack_to_context_stack(
         (*gs_data).current_context = 0;
     }
 
+    Ok(())
+}
+
+/// Points the guest FS at a bootstrap TCB that ends right before this
+/// thread's context-stack page, so guest code can reach the context stack
+/// before glibc installs its own TLS via arch_prctl(ARCH_SET_FS).
+fn initialize_bootstrap_tls(gs_data: *mut MPKSupervisorCtxStack) -> anyhow::Result<()> {
+    let fs_base = bootstrap_fs_base(gs_data)?;
+    unsafe {
+        (*gs_data).contexts[0].fs_base = fs_base;
+    }
     Ok(())
 }
 
@@ -788,6 +782,8 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
         .expect("failed to register MPK arch_prctl syscall handler");
     register_set_tid_address_syscall_handler()
         .expect("failed to register MPK set_tid_address syscall handler");
+    register_mmap_syscall_handler()
+        .expect("failed to register MPK mmap syscall handler");
     crate::lind_mpk::signals::register_os_signal_handlers()
         .expect("failed to register MPK process signal handlers");
 
@@ -993,7 +989,7 @@ fn exec_mpk_internal(
             dtv_size: 0,
         };
         grate_thread.allocate_grate_stack()?;
-        grate_thread.initialize_grate_tls(grate_mpk_info.dl_allocate_tls)?;
+        grate_thread.initialize_grate_tls(grate_mpk_info)?;
         grate_threads.insert(new_os_tid, grate_thread);
         mpk_debug(format!(
             "exec: restored grate stack for cage {} and tid {}",
@@ -1097,6 +1093,7 @@ fn exec_mpk_internal(
     ));
 
     write_initial_stack_to_context_stack(thread_info.gs_data, cage_id, entry_rsp as u64)?;
+    initialize_bootstrap_tls(thread_info.gs_data)?;
 
 
     jmp_into_cage_prepared_gs_naked(loaded.ldso_entrypoint);
@@ -1258,6 +1255,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         thread.thread_info.gs_data
     };
     write_initial_stack_to_context_stack(gs_data, cage_id, entry_rsp as u64)?;
+    initialize_bootstrap_tls(gs_data)?;
 
     // Step 6: Transfer control to the loader entrypoint; execution returns via guest exit paths.
     jmp_into_cage_prepared_gs_naked(loaded.ldso_entrypoint);

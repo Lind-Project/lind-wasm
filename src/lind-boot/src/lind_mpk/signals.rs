@@ -609,6 +609,7 @@ fn invoke_handler_on_cage_stack(
                 0,
                 0,
                 handler,
+                gs_data,
             );
 
             (*gs_data).contexts[current] = saved_contexts[0];

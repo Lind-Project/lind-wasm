@@ -21,6 +21,7 @@ struct LoadedImage {
 	entrypoint: u64,
 	enable_interpose_ptr: Option<u64>,
 	dl_allocate_tls_ptr: Option<u64>,
+	tls_tcb_size: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -329,11 +330,32 @@ fn map_elf_into_vmmap(vmmap: &mut Vmmap, path: &Path) -> Result<LoadedImage> {
 			})
 		})
 		.transpose()?;
+	let tls_tcb_size = elf.dynsyms.iter().find(|symbol| {
+		symbol.st_shndx != 0
+			&& elf.dynstrtab.get_at(symbol.st_name) == Some("_lind_tls_tcb_size")
+	}).map(|symbol| -> Result<usize> {
+		if symbol.st_size != std::mem::size_of::<usize>() as u64 {
+			bail!("invalid _lind_tls_tcb_size size in {}", path.display());
+		}
+		let symbol_end = symbol.st_value.checked_add(symbol.st_size)
+			.ok_or_else(|| anyhow::anyhow!("_lind_tls_tcb_size symbol size overflow"))?;
+		if !elf.program_headers.iter().any(|ph| {
+			ph.p_type == PT_LOAD && ph.p_flags & PF_R != 0
+				&& symbol.st_value >= ph.p_vaddr
+				&& ph.p_vaddr.checked_add(ph.p_filesz).is_some_and(|end| symbol_end <= end)
+		}) {
+			bail!("_lind_tls_tcb_size is outside a readable file-backed segment in {}", path.display());
+		}
+		let address = load_bias.checked_add(symbol.st_value)
+			.ok_or_else(|| anyhow::anyhow!("_lind_tls_tcb_size address overflow"))?;
+		Ok(unsafe { std::ptr::read_unaligned(address as *const usize) })
+	}).transpose()?;
 	Ok(LoadedImage {
 		load_bias,
 		entrypoint,
 		enable_interpose_ptr,
 		dl_allocate_tls_ptr,
+		tls_tcb_size,
 	})
 }
 
@@ -445,6 +467,10 @@ pub fn mpk_load_ldso_and_binary_with_info(
 	let dl_allocate_tls_ptr = ldso.dl_allocate_tls_ptr.ok_or_else(|| {
 		anyhow::anyhow!("{} does not define _lind_dl_allocate_tls", ldso_path)
 	})?;
+	let tls_tcb_size = ldso.tls_tcb_size.ok_or_else(|| {
+		anyhow::anyhow!("{} does not define _lind_tls_tcb_size; rebuild native glibc", ldso_path)
+	})?;
+	crate::lind_mpk::RuntimeInfo::set_guest_tcb_size(tls_tcb_size)?;
 	let binary = map_elf_into_vmmap(vmmap, Path::new(binary_path))?;
 
 	Ok(LoadedImagesInfo {
@@ -493,24 +519,32 @@ mod tests {
 	}
 
 	fn real_ldso_path() -> PathBuf {
-		let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-			.join("..")
-			.join("..")
-			.join("lindfs")
-			.join("lib")
-			.join("ld.so");
+		let path = std::env::var_os("LIND_TEST_LDSO")
+			.map(PathBuf::from)
+			.unwrap_or_else(|| {
+				Path::new(env!("CARGO_MANIFEST_DIR"))
+					.join("..")
+					.join("..")
+					.join("lindfs")
+					.join("lib")
+					.join("ld.so")
+			});
 		assert!(path.is_file(), "missing test ELF file: {}", path.display());
 		path
 	}
 
 	fn real_libc_path() -> PathBuf {
-		let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-			.join("..")
-			.join("..")
-			.join("lindfs")
-			.join("lib")
-			.join("elf")
-			.join("libc.so");
+		let path = std::env::var_os("LIND_TEST_LIBC")
+			.map(PathBuf::from)
+			.unwrap_or_else(|| {
+				Path::new(env!("CARGO_MANIFEST_DIR"))
+					.join("..")
+					.join("..")
+					.join("lindfs")
+					.join("lib")
+					.join("elf")
+					.join("libc.so")
+			});
 		assert!(path.is_file(), "missing test ELF file: {}", path.display());
 		path
 	}
@@ -684,6 +718,8 @@ mod tests {
 			image.dl_allocate_tls_ptr,
 			Some(image.load_bias + dl_allocate_tls_symbol.st_value)
 		);
+		let tcb_size = image.tls_tcb_size.expect("ld.so does not export _lind_tls_tcb_size");
+		assert!(tcb_size > 0 && tcb_size <= PAGE_SIZE, "invalid guest TCB size {tcb_size}");
 
 		for seg in expected_segments {
 			let seg_vaddr = usize::try_from(seg.vaddr).expect("segment vaddr too large");
