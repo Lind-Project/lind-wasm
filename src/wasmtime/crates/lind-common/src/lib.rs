@@ -97,7 +97,7 @@ fn add_syscall_to_linker<
         move |mut caller: Caller<'_, T>,
               call_number: u32,
               call_name: u64,
-              self_cageid: u64,
+              _guest_self_cageid: u64, // the guest's claim; authenticated below
               target_cageid: u64,
               arg1: u64,
               arg1cageid: u64,
@@ -165,6 +165,18 @@ fn add_syscall_to_linker<
                 return Ok(retval);
             }
 
+            // The guest supplies self_cageid, but it is only a claim. 3i uses
+            // it to pick the handler table that routes this syscall, so a cage
+            // that named another cage (e.g. the grate stacked above it) would
+            // route through that cage's table and reach, say, RawPOSIX
+            // directly -- escaping its grate and reading host files. Replace it
+            // with the id of the cage that actually issued the call. Legitimate
+            // callers already pass their own id here (glibc uses __lind_cageid;
+            // a forwarding grate passes its own cage), so this only rejects a
+            // spoof. Runtime-internal syscalls call make_syscall in Rust and
+            // never pass through this import, so they are unaffected.
+            let self_cageid = wasmtime_lind_multi_process::current_cageid(&mut caller) as u64;
+
             // Some thread-related operations must be executed against a specific thread's
             // VMContext (e.g., pthread_create/exit). Because syscalls may be interposed/routed
             // through 3i functionality and the effective thread instance cannot be reliably derived
@@ -186,16 +198,16 @@ fn add_syscall_to_linker<
             };
 
             // register_handler and copy_handler_table_to_cage are only allowed for
-            // cages the caller controls, and the cage ids passed in are the guest's
-            // own claims. Neither call uses arg6cageid, so carry the id of the cage
-            // that actually made this call there (see "handler table authorization"
-            // in threei).
+            // cages the caller controls. They carry their own cage ids in other
+            // args (glibc's register_handler even puts the handler cage in
+            // self_cageid), so the authenticated caller id travels in arg6cageid,
+            // which neither call uses (see "handler table authorization" in threei).
             let final_arg6cageid = if matches!(
                 call_number as u64,
                 threei_const::REGISTER_HANDLER_SYSCALL
                     | threei_const::COPY_HANDLER_TABLE_TO_CAGE_SYSCALL
             ) {
-                wasmtime_lind_multi_process::current_cageid(&mut caller) as u64
+                self_cageid
             } else {
                 arg6cageid
             };

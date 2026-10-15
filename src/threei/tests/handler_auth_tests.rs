@@ -7,9 +7,10 @@ use cage::{
 };
 use serial_test::serial;
 use std::sync::Arc;
+use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, THREEI_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const::{ELINDEPERM, THREEI_DEREGISTER};
-use threei::{copy_handler_table_to_cage_syscall, register_handler_syscall};
+use threei::{copy_handler_table_to_cage_syscall, make_syscall, register_handler_syscall};
 mod common;
 use common::*;
 
@@ -158,4 +159,16 @@ fn copy_needs_control_of_source_and_target() {
     // Nor may it overwrite a cage it does not control.
     assert_eq!(copy(LEAF, LEAF, SIBLING), DENIED);
     assert_eq!(mappings_for(LEAF, SYS_WRITE), vec![(GRATE, FN)]);
+}
+
+#[test]
+#[serial]
+fn syscall_with_no_handler_returns_enosys_not_panic() {
+    setup();
+    // A cage (self == target) whose table holds no handler for this syscall
+    // must get an error for that one call, not bring down the enclave. Before
+    // the self_cageid spoof fix a bogus self_cageid reached this path and
+    // panicked.
+    let rc = make_syscall(LEAF, SYS_WRITE, 0, LEAF, 0, LEAF, 0, LEAF, 0, LEAF, 0, LEAF, 0, LEAF, 0, LEAF);
+    assert_eq!(rc, -(Errno::ENOSYS as i32));
 }

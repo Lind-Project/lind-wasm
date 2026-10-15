@@ -746,12 +746,17 @@ pub fn make_syscall(
         }
     }
 
-    // _get_handler returned None — the target_map for this
-    // (self_cageid, syscall_num) exists but has no dest_grateid entry.
-    panic!(
-        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
-        self_cageid, syscall_num
+    // _get_handler returned None: this cage has no handler registered for
+    // this syscall (an unregistered or stray syscall number, or a cage whose
+    // table is not set up). Return an error for this one call rather than
+    // panicking, so a single cage cannot bring down the whole enclave.
+    lind_log!(
+        THREEI,
+        "[3i|make_syscall] no handler for self_cageid={} syscall_num={}",
+        self_cageid,
+        syscall_num
     );
+    -(Errno::ENOSYS as i32)
 }
 
 /***************************** trigger_harsh_cage_exit & harsh_cage_exit *****************************/
