@@ -3,6 +3,7 @@
 // This library provides POSIX-compliant system call implementations that operate
 // within the Lind-WASM sandbox environment using the 3i (Three Interposition) system.
 
+pub mod evidence;
 pub mod fs_calls;
 pub mod init;
 pub mod net_calls;

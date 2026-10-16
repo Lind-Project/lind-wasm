@@ -143,3 +143,8 @@ pub const LIND_SHM_DUMP_SYSCALL: i32 = 2003;
 // A phase mark (not a Linux syscall): the workload entered a phase, such as
 // the start of a build; see rawposix::phase.
 pub const LIND_PHASE_SYSCALL: i32 = 2004;
+
+// The run's evidence (not a Linux syscall): the root cage hands the runtime
+// what it recorded and gets back what the runtime signs; see
+// rawposix::evidence.
+pub const LIND_EVIDENCE_SYSCALL: i32 = 2005;

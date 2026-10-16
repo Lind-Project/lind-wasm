@@ -27,6 +27,7 @@ use super::net_calls::{
     ppoll_syscall, recvfrom_syscall, recvmsg_syscall, select_syscall, sendmsg_syscall,
     sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
 };
+use super::evidence::evidence_syscall;
 use super::phase::phase_syscall;
 use super::sem_calls::{
     sem_destroy_syscall, sem_getvalue_syscall, sem_init_syscall, sem_post_syscall, sem_wait_syscall,
@@ -212,4 +213,5 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
         shm_dump_syscall,
     ),
     (syscall_const::LIND_PHASE_SYSCALL as u64, phase_syscall),
+    (syscall_const::LIND_EVIDENCE_SYSCALL as u64, evidence_syscall),
 ];

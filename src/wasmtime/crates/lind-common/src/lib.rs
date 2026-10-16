@@ -28,7 +28,7 @@ use wasmtime_lind_multi_process::{LindHost, get_memory_base, get_memory_base_and
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
 use sysdefs::constants::syscall_const::{
-    CLONE_SYSCALL, EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL,
+    CLONE_SYSCALL, EXEC_SYSCALL, EXIT_GROUP_SYSCALL, EXIT_SYSCALL, LIND_EVIDENCE_SYSCALL,
 };
 
 /// Stores argv and environment variables for the guest program. During glibc's
@@ -185,6 +185,15 @@ fn add_syscall_to_linker<
                 arg2
             };
 
+            // LIND_EVIDENCE is served only for the first cage of the run: tell
+            // RawPOSIX which cage really makes the call (a cage names itself
+            // and the cage the call is for, so neither can be trusted).
+            let final_arg6cageid = if call_number as i32 == LIND_EVIDENCE_SYSCALL {
+                wasmtime_lind_multi_process::current_cageid(&mut caller) as u64
+            } else {
+                arg6cageid
+            };
+
             let retval = make_syscall(
                 self_cageid,
                 call_number as u64,
@@ -201,7 +210,7 @@ fn add_syscall_to_linker<
                 arg5,
                 arg5cageid,
                 arg6,
-                arg6cageid,
+                final_arg6cageid,
             );
 
             // This cage exited and cannot unwind (no Asyncify): end its run
