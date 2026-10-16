@@ -15,6 +15,10 @@ set -Eeuo pipefail
 #
 # Options:
 #   --fpcast-emu          Enable function-pointer-cast emulation.
+#   --fpcast-thunks       Export fpcast thunks (`$fpcast_emu$<name>`) for every exported
+#                         function WITHOUT switching the module to the fpcast ABI. Lets a
+#                         non-fpcast library/libc be called through function pointers by
+#                         fpcast modules. Dynamic targets only; ignored if --fpcast-emu is set.
 #   --without-asyncify    Omit asyncify instrumentation.
 #   --without-epoch       Omit epoch/signal instrumentation.
 #   -v, --verbose         Print the exact wasm-opt command before executing it.
@@ -36,6 +40,7 @@ usage() {
 TARGET=""
 STATIC="false"
 WITH_FPCAST="false"
+WITH_FPCAST_THUNKS="false"
 WITHOUT_ASYNCIFY="false"
 WITHOUT_EPOCH="false"
 PRINT_CMD="false"
@@ -56,6 +61,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --fpcast-emu)
       WITH_FPCAST="true"
+      ;;
+    --fpcast-thunks)
+      WITH_FPCAST_THUNKS="true"
       ;;
     --without-asyncify)
       WITHOUT_ASYNCIFY="true"
@@ -164,6 +172,8 @@ elif [[ "${TARGET}" == "main" ]]; then
   fi
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
+  elif [[ "${WITH_FPCAST_THUNKS}" == "true" ]]; then
+    LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast --pass-arg=fpcast-thunks-only)
   fi
   # Convert clang 18 legacy EH (try/catch/throw) to standard EH (try_table/throw) after
   # asyncify: asyncify handles legacy EH natively but Cranelift only supports standard EH.
@@ -184,6 +194,8 @@ elif [[ "${TARGET}" == "library" ]]; then
   fi
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
+  elif [[ "${WITH_FPCAST_THUNKS}" == "true" ]]; then
+    LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast --pass-arg=fpcast-thunks-only)
   fi
   [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 else  # libc — owns signal_callback; inject epoch calls without redefining/reimporting it
@@ -200,6 +212,8 @@ else  # libc — owns signal_callback; inject epoch calls without redefining/rei
   fi
   if [[ "${WITH_FPCAST}" == "true" ]]; then
     LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast)
+  elif [[ "${WITH_FPCAST_THUNKS}" == "true" ]]; then
+    LIND_FLAGS+=(--fpcast-emu --pass-arg=relocatable-fpcast --pass-arg=fpcast-thunks-only)
   fi
   [[ -z "${LIND_ASYNCIFY_SETJMP:-}" ]] && LIND_FLAGS+=(--translate-to-exnref)
 fi

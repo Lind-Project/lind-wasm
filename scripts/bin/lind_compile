@@ -47,6 +47,9 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     --print-args, --debug-args  print parsed arguments after option handling
     --compile-grate             add grate-specific clang flags (exports pass_fptr_to_wt);
                                 compatible with dynamic and static backends
+    --fpcast-thunks             export fpcast thunks without using the fpcast ABI
+                                (dynamic/library builds only), so fpcast modules can call this
+                                module through function pointers
     --fpcast-emu                enable function-pointer-cast emulation via wasm-opt
                                 (applies to full and --opt-only modes; for dynamic/library
                                 builds also passes --pass-arg=relocatable-fpcast)
@@ -81,6 +84,7 @@ MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
 SHARED_BUILD="true"
 WITH_FPCAST="false"
+WITH_FPCAST_THUNKS="false"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
 COMPILE_GRATE="false"
@@ -129,6 +133,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --fpcast-emu)
       WITH_FPCAST="true"
+      ;;
+    --fpcast-thunks)
+      WITH_FPCAST_THUNKS="true"
       ;;
     --print-args|--debug-args)
       PRINT_ARGS="true"
@@ -482,6 +489,9 @@ do_compile() {
 do_optimize() {
   local fpcast_flag=()
   [[ "${WITH_FPCAST}" == "true" ]] && fpcast_flag=(--fpcast-emu)
+  if [[ "${WITH_FPCAST_THUNKS}" == "true" ]] && [[ "${SHARED_BUILD}" == "true" || "${COMPILE_LIBRARY}" == "true" ]]; then
+    fpcast_flag+=(--fpcast-thunks)
+  fi
 
   if [[ "${SHARED_BUILD}" == "true" ]]; then
     run_cmd "${LIND_WASM_OPT_BIN}" --target=main "${fpcast_flag[@]}" "${OUT_WASM}" -o "${OUT_WASM}"

@@ -6,6 +6,7 @@ use std::sync::{
 };
 
 use dashmap::DashMap;
+use sysdefs::constants::FPCAST_FUNC_SIGNATURE;
 use sysdefs::lind_log;
 
 pub mod symbol_table;
@@ -265,7 +266,21 @@ impl LindGOT {
             let val = cell.load(Ordering::Acquire);
 
             if val == 0 {
-                lind_log!(DYLINK, "Warning: GOT entry \"{}\" unresolved", name);
+                // An fpcast-ABI importer (key `$fpcast_emu$<sym>`) can only be satisfied by a
+                // provider that exports the thunk. A raw-only provider is an ABI mismatch,
+                // which would otherwise surface as an opaque indirect-call type trap.
+                let raw_only = name
+                    .strip_prefix(FPCAST_FUNC_SIGNATURE)
+                    .is_some_and(|raw| self.symbol_cache.contains_key(raw));
+                if raw_only {
+                    lind_log!(
+                        DYLINK,
+                        "Warning: GOT entry \"{}\" unresolved: the providing module is not built with fpcast (no thunk export), so an fpcast module cannot call it through a function pointer",
+                        name
+                    );
+                } else {
+                    lind_log!(DYLINK, "Warning: GOT entry \"{}\" unresolved", name);
+                }
             }
         }
     }

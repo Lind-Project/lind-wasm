@@ -125,6 +125,10 @@ pub enum DylinkErrorCode {
 
 pub const FPCAST_FUNC_SIGNATURE: &str = "$fpcast_emu$";
 
+/// Function export added by binaryen's `fpcast-thunks-only` mode. A module carrying it
+/// exports `$fpcast_emu$*` thunks for others to use but runs on the native ABI itself.
+pub const FPCAST_PROVIDER_ONLY_MARKER: &str = "__lind_fpcast_provider_only";
+
 /// The import namespace / name under which every lind-wasm module imports its
 /// shared linear memory. `wasm-ld --import-memory` always emits `env`.`memory`,
 /// and lind's toolchain builds every module (main, glibc, preloads) that way, so

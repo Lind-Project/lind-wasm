@@ -27,6 +27,22 @@ use wasmtime_lind_utils::symbol_table::SymbolMap;
 
 use super::{InstanceId, InstantiateType};
 
+/// Linker namespace holding the `GOT.func` placeholder cells of fpcast-ABI consumers.
+///
+/// A function exported by a module has two table entries when the process mixes
+/// fpcast and non-fpcast modules: the raw function (what a non-fpcast
+/// `call_indirect` expects) and its `$fpcast_emu$` thunk (what an fpcast
+/// `call_indirect` expects). A `GOT.func.<name>` cell must hold the entry matching
+/// the *importing* module's ABI, so fpcast importers get their own cell, kept in
+/// this namespace and keyed in `LindGOT` as `$fpcast_emu$<name>`. They are
+/// re-pointed at it by `_instantiate_pre`.
+pub(crate) const GOT_FUNC_FPCAST_NS: &str = "GOT.func.fpcast";
+
+/// `LindGOT` / symbol-cache key of the fpcast-ABI variant of `name`.
+pub(crate) fn fpcast_got_key(name: &str) -> String {
+    format!("{FPCAST_FUNC_SIGNATURE}{name}")
+}
+
 /// Returns true if `name` is a module-internal symbol that must not be exposed
 /// through cross-module linking or GOT entries.
 pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
@@ -50,6 +66,7 @@ pub(crate) fn is_dylink_internal_symbol(name: &str) -> bool {
         | "asyncify_get_state"
         // lind-specific
         | "__get_aligned_tls_size"
+        | "__lind_fpcast_provider_only"
     )
 }
 
@@ -390,7 +407,33 @@ impl<T> Linker<T> {
     where
         T: 'static,
     {
+        let module_is_fpcast = module.is_fpcast();
         for import in module.imports() {
+            // fpcast-ABI importers of GOT.func get a separate cell holding the
+            // thunk table index (see `GOT_FUNC_FPCAST_NS`).
+            if module_is_fpcast
+                && import.module() == "GOT.func"
+                && self._get(GOT_FUNC_FPCAST_NS, import.name()).is_none()
+            {
+                let got_placeholder = Global::new(
+                    &mut store,
+                    GlobalType::new(ValType::I32, crate::Mutability::Var),
+                    Val::I32(0),
+                )
+                .unwrap();
+                self.define(
+                    &mut store,
+                    GOT_FUNC_FPCAST_NS,
+                    import.name(),
+                    got_placeholder,
+                );
+                let handler = got_placeholder.get_handler_as_u32(&mut store);
+                got.new_entry(fpcast_got_key(import.name()), handler);
+                continue;
+            }
+            if module_is_fpcast && import.module() == "GOT.func" {
+                continue;
+            }
             if let Err(import_err) = self._get_by_import(&import) {
                 lind_log!(
                     DYLINK,
@@ -460,6 +503,7 @@ impl<T> Linker<T> {
                     match ext {
                         Extern::Global(global) => {
                             if module == "GOT.mem" || module == "GOT.func" // GOT entries
+                               || module == GOT_FUNC_FPCAST_NS // fpcast GOT.func entries
                                || (module == "env" && name == "__memory_base") // main module memory base
                                || (module == "env" && name == "__table_base") // main module table base
                                || module == "lib.memory_base" // library __memory_base
@@ -555,6 +599,9 @@ impl<T> Linker<T> {
                 if module == "GOT.func" || module == "GOT.mem" {
                     let handler = cloned_global.get_handler_as_u32(&mut store);
                     got.new_entry(name.clone(), handler);
+                } else if module == GOT_FUNC_FPCAST_NS {
+                    let handler = cloned_global.get_handler_as_u32(&mut store);
+                    got.new_entry(fpcast_got_key(name), handler);
                 }
             }
 
@@ -1322,14 +1369,7 @@ impl<T> Linker<T> {
                 // After instantiation, the loader has patched `__memory_base`; read it back from the slot.
                 let memory_base = unsafe { *handler };
 
-                let fpcast_enabled = self.engine.config().fpcast_enabled;
-                instance.apply_GOT_relocs(
-                    &mut store,
-                    Some(got),
-                    table,
-                    Some(memory_base),
-                    fpcast_enabled,
-                )?;
+                instance.apply_GOT_relocs(&mut store, Some(got), table, Some(memory_base))?;
 
                 // If the module has a start function, run it (Wasm start semantics).
                 if let Some(start) = module.compiled_module().module().start_func {
@@ -1410,9 +1450,8 @@ impl<T> Linker<T> {
                         .register_named_instance(wasm_name.to_string(), instance_id);
                 }
 
-                let fpcast_enabled = self.engine.config().fpcast_enabled;
                 // for child library, just append the library function into function table without doing GOT relocation
-                instance.apply_GOT_relocs(&mut store, None, table, None, fpcast_enabled)?;
+                instance.apply_GOT_relocs(&mut store, None, table, None)?;
 
                 // clone the wasm global for the child instance
                 instance.apply_global_snapshots(&mut store, snapshots);
@@ -1567,44 +1606,27 @@ impl<T> Linker<T> {
                     });
 
                 for (name, func) in funcs {
-                    // skip updating GOT only if fpcast is enabled
-                    // and the function is NOT a fpcast function
-                    let should_skip = if fpcast_enabled {
-                        !name.starts_with(FPCAST_FUNC_SIGNATURE)
-                    } else {
-                        false
+                    // Every function export gets a table slot; see `apply_GOT_relocs`.
+                    let index = match shared_table.as_ref() {
+                        Some(t) => {
+                            t.grow(store.as_context_mut(), 1, crate::Ref::Func(Some(func)))? as u32
+                        }
+                        None => bail!("cannot grow table: no indirect function table"),
                     };
 
-                    if !should_skip {
-                        let index = match shared_table.as_ref() {
-                            Some(t) => {
-                                t.grow(store.as_context_mut(), 1, crate::Ref::Func(Some(func)))?
-                                    as u32
-                            }
-                            None => bail!("cannot grow table: no indirect function table"),
-                        };
+                    // Cache the resolved table index; also updates the GOT cell if it exists.
+                    if got.cache_symbol(&name, index) {
+                        lind_log!(DYLINK, "[debug] update GOT.func.{} to {}", name, index);
+                    }
 
-                        let final_name = {
-                            if fpcast_enabled {
-                                // restore to its original name
-                                name.strip_prefix(FPCAST_FUNC_SIGNATURE).unwrap()
-                            } else {
-                                &name
-                            }
-                        };
-
-                        // Cache the resolved table index; also updates the GOT cell if it exists.
-                        if got.cache_symbol(final_name, index) {
-                            lind_log!(
-                                DYLINK,
-                                "[debug] update GOT.func.{} to {}",
-                                final_name,
-                                index
-                            );
+                    // dlsym lookups: the caller's ABI is unknown here, so expose the
+                    // variant matching the process-wide default (`--enable-fpcast`).
+                    if fpcast_enabled {
+                        if let Some(orig) = name.strip_prefix(FPCAST_FUNC_SIGNATURE) {
+                            symbol_map.add(orig.to_string(), index);
                         }
-
-                        // append the symbol into mappings
-                        symbol_map.add(final_name.to_string(), index);
+                    } else if !name.starts_with(FPCAST_FUNC_SIGNATURE) {
+                        symbol_map.add(name.clone(), index);
                     }
                 }
                 for (name, global) in globals {
@@ -2072,9 +2094,17 @@ impl<T> Linker<T> {
     where
         T: 'static,
     {
+        let module_is_fpcast = module.is_fpcast();
         let mut imports: TryVec<_> = module
             .imports()
-            .map(|import| Ok(self._get_by_import(&import)?))
+            .map(|import| {
+                if module_is_fpcast && import.module() == "GOT.func" {
+                    if let Some(item) = self._get(GOT_FUNC_FPCAST_NS, import.name()) {
+                        return Ok(item.clone());
+                    }
+                }
+                Ok(self._get_by_import(&import)?)
+            })
             .try_collect::<_, Error>()?;
         if let Some(store) = store {
             for import in imports.iter_mut() {

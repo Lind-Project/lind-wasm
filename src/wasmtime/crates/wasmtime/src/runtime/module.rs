@@ -17,6 +17,7 @@ use core::ops::Range;
 use core::ptr::NonNull;
 #[cfg(feature = "std")]
 use std::{fs::File, path::Path};
+use sysdefs::constants::{FPCAST_FUNC_SIGNATURE, FPCAST_PROVIDER_ONLY_MARKER};
 use wasmparser::{Parser, ValidPayload, Validator};
 #[cfg(feature = "debug")]
 use wasmtime_environ::FrameTable;
@@ -1099,6 +1100,42 @@ impl Module {
                 len: loc.length as usize,
             }
         })
+    }
+
+    /// lind-wasm: tri-state detection of the fpcast ABI mode of this module.
+    ///
+    /// `Some(true)`  - the module exports `$fpcast_emu$*` thunks (built with
+    ///                 `--fpcast-emu --pass-arg=relocatable-fpcast`), so its table
+    ///                 entries and `call_indirect`s use the uniform fpcast ABI.
+    /// `Some(false)` - the module exports functions but uses the native ABI: either
+    ///                 it has no thunk exports, or it carries the
+    ///                 `FPCAST_PROVIDER_ONLY_MARKER` (thunks exported for others only).
+    /// `None`        - the module exports no functions, so the mode cannot be
+    ///                 told from its exports; callers should fall back to the
+    ///                 engine-wide default.
+    #[allow(missing_docs)]
+    pub fn fpcast_mode(&self) -> Option<bool> {
+        let mut any_func = false;
+        let mut has_thunks = false;
+        for export in self.exports() {
+            if export.ty().func().is_none() {
+                continue;
+            }
+            any_func = true;
+            if export.name() == FPCAST_PROVIDER_ONLY_MARKER {
+                return Some(false);
+            }
+            has_thunks |= export.name().starts_with(FPCAST_FUNC_SIGNATURE);
+        }
+        if any_func { Some(has_thunks) } else { None }
+    }
+
+    /// lind-wasm: whether this module uses the fpcast ABI, falling back to the
+    /// engine-wide `--enable-fpcast` default when it cannot be detected.
+    #[allow(missing_docs)]
+    pub fn is_fpcast(&self) -> bool {
+        self.fpcast_mode()
+            .unwrap_or_else(|| self.engine().fpcast_enabled())
     }
 
     // lind-wasm: retrieve dynamic loading memory information

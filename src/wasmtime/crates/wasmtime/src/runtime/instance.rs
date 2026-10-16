@@ -22,9 +22,7 @@ use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE,
 };
 use sysdefs::constants::syscall_const::MMAP_SYSCALL;
-use sysdefs::constants::{
-    DEFAULT_STACKSIZE, FPCAST_FUNC_SIGNATURE, GUARD_SIZE, PAGESIZE, lind_platform_const,
-};
+use sysdefs::constants::{DEFAULT_STACKSIZE, GUARD_SIZE, PAGESIZE, lind_platform_const};
 use sysdefs::lind_log;
 use threei::threei::make_syscall;
 use wasmparser::WasmFeatures;
@@ -1260,7 +1258,6 @@ impl Instance {
         got: Option<&LindGOT>,
         table: &Table,
         memory_base: Option<u32>,
-        fpcast_enabled: bool,
     ) -> Result<()> {
         // if updating GOT is not needed (in case of fork or thread creation, as the GOT is already cloned)
         // just append the library function into function table
@@ -1291,41 +1288,18 @@ impl Instance {
         // Patch GOT function entries with the runtime table index of each exported function.
         // We only update slots that are still unresolved to preserve first-definition-wins
         // semantics (load-order precedence / interposition).
+        //
+        // Every function export gets its own table slot: raw exports feed `GOT.func.<name>`
+        // cells of non-fpcast importers, and `$fpcast_emu$<name>` thunk exports feed the
+        // separate cells of fpcast importers (see `GOT_FUNC_FPCAST_NS`). The symbol-cache
+        // key is the export name verbatim, so the two variants never collide.
         for (name, func) in funcs {
-            // skip updating GOT only if fpcast is enabled
-            // and the function is NOT a fpcast function
-            let should_skip = if fpcast_enabled {
-                if name.starts_with(FPCAST_FUNC_SIGNATURE) {
-                    false
-                } else {
-                    true
-                }
-            } else {
-                false
-            };
-
-            if !should_skip {
-                let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
-                if need_update_got {
-                    let final_name = {
-                        if fpcast_enabled {
-                            // restore to its original name
-                            name.strip_prefix(FPCAST_FUNC_SIGNATURE).unwrap()
-                        } else {
-                            &name
-                        }
-                    };
-
-                    // Cache the resolved table index; also updates the GOT cell if it exists.
-                    let got_inner = got.as_ref().unwrap();
-                    if got_inner.cache_symbol(final_name, index as u32) {
-                        lind_log!(
-                            DYLINK,
-                            "[debug] update GOT.func.{} to {}",
-                            final_name,
-                            index
-                        );
-                    }
+            let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func)))?;
+            if need_update_got {
+                // Cache the resolved table index; also updates the GOT cell if it exists.
+                let got_inner = got.as_ref().unwrap();
+                if got_inner.cache_symbol(&name, index as u32) {
+                    lind_log!(DYLINK, "[debug] update GOT.func.{} to {}", name, index);
                 }
             }
         }
