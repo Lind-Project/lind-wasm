@@ -1912,9 +1912,17 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         }
                     }
                 }
-                let module = match Engine::detect_precompiled(&bytes) {
-                    Some(_) => unsafe { Module::deserialize(&engine, &bytes) },
-                    None => Module::from_binary(&engine, &bytes),
+                let precompiled = Engine::detect_precompiled(&bytes);
+                let module = match wasmtime_lind_utils::admission::check(
+                    &bytes,
+                    precompiled.is_some(),
+                    &path,
+                ) {
+                    Err(e) => Err(wasmtime::Error::msg(format!("{e:#}"))),
+                    Ok(()) => match precompiled {
+                        Some(_) => unsafe { Module::deserialize(&engine, &bytes) },
+                        None => Module::from_binary(&engine, &bytes),
+                    },
                 };
                 sysdefs::lind_instrument!(
                     "[instrument] execve cage={} module deserialize/from_binary returned, ok={}",

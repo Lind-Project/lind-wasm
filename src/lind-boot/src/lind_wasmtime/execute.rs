@@ -30,6 +30,7 @@ use wasmtime_lind_dylink::DynamicLoader;
 use wasmtime_lind_multi_process::{
     CAGE_START_ID, LindCtx, THREAD_START_ID, attach_shared_memory, early_init_stack,
 };
+use wasmtime_lind_utils::admission;
 use wasmtime_lind_utils::symbol_table::SymbolMap;
 use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
@@ -958,7 +959,9 @@ pub(crate) fn read_wasm_or_cwasm_bytes(
     bytes: &[u8],
     source_name: &str,
 ) -> Result<Module> {
-    match Engine::detect_precompiled(bytes) {
+    let precompiled = Engine::detect_precompiled(bytes);
+    admission::check(bytes, precompiled.is_some(), source_name)?;
+    match precompiled {
         Some(Precompiled::Module) => unsafe { Module::deserialize(engine, bytes) }
             .map_err(anyhow::Error::from)
             .with_context(|| format!("failed to deserialize precompiled module {source_name}")),
@@ -977,6 +980,13 @@ pub(crate) fn read_wasm_or_cwasm_bytes(
 /// If the file is a precompiled module it is deserialized directly (skipping
 /// compilation). Otherwise it is compiled from source via `Module::from_file`.
 fn read_wasm_or_cwasm(engine: &Engine, path: &Path) -> Result<Module> {
+    // A module that must be admitted is checked and loaded from the same
+    // bytes in memory, not mapped from a file that could change in between.
+    if admission::is_registered() {
+        let bytes = std::fs::read(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        return read_wasm_or_cwasm_bytes(engine, &bytes, &path.display().to_string());
+    }
     // `detect_precompiled_file` *expects* input to already be an ELF file. It is used to detect
     // whether this ELF matches the current host architecture.
     //
@@ -1083,13 +1093,17 @@ fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Confi
 
     // Enable compilation cache — compiled .wasm artifacts are stored on disk
     // so subsequent runs skip compilation. Best-effort: if config loading
-    // fails (e.g. no home dir), caching is simply disabled.
-    match Cache::from_file(None) {
-        Ok(cache) => {
-            wt_config.cache(Some(cache));
-        }
-        Err(e) => {
-            eprintln!("[lind-boot] warning: failed to enable wasm cache: {e}");
+    // fails (e.g. no home dir), caching is simply disabled. Not when modules
+    // must be admitted: the cache would hand over compiled code nobody
+    // checked (see `admission`).
+    if !admission::is_registered() {
+        match Cache::from_file(None) {
+            Ok(cache) => {
+                wt_config.cache(Some(cache));
+            }
+            Err(e) => {
+                eprintln!("[lind-boot] warning: failed to enable wasm cache: {e}");
+            }
         }
     }
 
