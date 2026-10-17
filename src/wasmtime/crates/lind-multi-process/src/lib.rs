@@ -2906,9 +2906,10 @@ pub fn current_cageid<
 >(
     caller: &mut Caller<'_, T>,
 ) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
-    ctx.this_cageid()
+    // Read it in place: cloning the host context to get at it would clone
+    // the whole lind context (linker, module lists, lind-boot options), and
+    // make-syscall asks for it on every syscall.
+    caller.data_mut().get_ctx_mut().this_cageid()
 }
 
 // Get thread id of current caller
