@@ -14,7 +14,8 @@ use sysdefs::constants::{
     STDIN_FILENO, STDOUT_FILENO, THREEI_CAGEID, UNUSED_ARG, UNUSED_ID, VERBOSE,
 };
 use threei::{
-    copy_data_between_cages, copy_handler_table_to_cage, register_handler,
+    copy_data_between_cages, copy_handler_table_to_cage_syscall, register_handler,
+    register_handler_syscall,
     COPY_DATA_BETWEEN_CAGES_SYSCALL, COPY_HANDLER_TABLE_TO_CAGE_SYSCALL, EXITING_TABLE,
     REGISTER_HANDLER_SYSCALL, RUNTIME_TYPE_WASMTIME,
 };
@@ -113,8 +114,9 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
 /// - 0 on success.
 /// - Panics if registration of either handlers fails.
 pub fn register_threei_syscall(self_cageid: u64) -> i32 {
-    // Register `register_handler` syscall for this cage
-    let fp_register = register_handler as *const () as usize as u64;
+    // Register `register_handler` syscall for this cage. Cages get the checked
+    // version; see "handler table authorization" in threei.
+    let fp_register = register_handler_syscall as *const () as usize as u64;
     let register_ret = register_handler(
         UNUSED_ID,
         THREEI_CAGEID, // target cageid for this syscall handler
@@ -151,8 +153,8 @@ pub fn register_threei_syscall(self_cageid: u64) -> i32 {
         UNUSED_ID,
     );
 
-    // Register `copy_handler_table_to_cage` syscall for this cage
-    let fp_copy_handler_table = copy_handler_table_to_cage as *const () as usize as u64;
+    // Register `copy_handler_table_to_cage` syscall for this cage (checked version)
+    let fp_copy_handler_table = copy_handler_table_to_cage_syscall as *const () as usize as u64;
     let copy_handler_table_ret = register_handler(
         UNUSED_ID,
         THREEI_CAGEID, // target cageid for this syscall handler
@@ -289,6 +291,7 @@ pub fn rawposix_start(verbosity: isize) {
         exit_group_initiated: AtomicBool::new(false),
         is_dead: AtomicBool::new(false),
         grate_inflight: AtomicU64::new(0),
+        execd: AtomicBool::new(false),
     };
 
     // Add cage to cagetable

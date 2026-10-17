@@ -79,18 +79,32 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 pub fn _get_handler(self_cageid: u64, syscall_num: u64, target_cageid: u64) -> Option<(u64, u64)> {
     let handler_table = HANDLERTABLE.lock().unwrap();
 
-    let call_map = handler_table.get(&self_cageid).unwrap_or_else(|| {
-        panic!(
-            "[3i|_get_handler] no handler table for self_cageid: {}",
-            self_cageid
-        )
-    });
-    let target_map = call_map.get(&syscall_num).unwrap_or_else(|| {
-        panic!(
-            "[3i|_get_handler] no handler for syscall_num: {} in self_cageid: {}",
-            syscall_num, self_cageid
-        )
-    });
+    // A cage with no table, or no handler for this syscall, gets None rather
+    // than a panic: make_syscall turns it into an error for that one call, so
+    // a stray or unregistered syscall cannot take down the whole enclave.
+    let call_map = match handler_table.get(&self_cageid) {
+        Some(m) => m,
+        None => {
+            lind_log!(
+                THREEI,
+                "[3i|_get_handler] no handler table for self_cageid: {}",
+                self_cageid
+            );
+            return None;
+        }
+    };
+    let target_map = match call_map.get(&syscall_num) {
+        Some(m) => m,
+        None => {
+            lind_log!(
+                THREEI,
+                "[3i|_get_handler] no handler for syscall_num: {} in self_cageid: {}",
+                syscall_num,
+                self_cageid
+            );
+            return None;
+        }
+    };
 
     let grateid = target_map.keys().next().copied()?;
     let addr = target_map.values().next().copied()?;

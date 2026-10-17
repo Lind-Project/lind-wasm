@@ -364,6 +364,177 @@ pub fn copy_handler_table_to_cage(
     copy_handler_table_to_cage_impl(srccage, targetcage)
 }
 
+/***************************** handler table authorization *****************************/
+//
+// `register_handler` and `copy_handler_table_to_cage` decide which code runs when a
+// cage makes a syscall. The two functions above stay unchecked for the runtime's own
+// setup (RawPOSIX init, lind-boot); cages reach the checked versions below, which
+// RawPOSIX installs as the handlers of syscalls 1001 and 1003.
+//
+// The cage ids a cage passes to `make_syscall` are claims it chose, so they cannot
+// identify the caller. Instead the runtime overwrites `arg6cageid`, which neither
+// call uses, with the id of the cage that actually issued the call (the lind
+// `make-syscall` import in lind-common). A grate that interposes on these calls
+// and forwards them is in turn the caller of the forwarded call.
+
+/// Whether `anc` is `cageid` itself or one of its ancestors, following the parent
+/// links recorded at fork. The walk stops at a cage that is gone, so a removed
+/// ancestor no longer counts.
+fn _is_self_or_ancestor(anc: u64, cageid: u64) -> bool {
+    let mut cur = cageid;
+    // Bounded: parent links can only loop through a reused cage id.
+    for _ in 0..lind_platform_const::MAX_CAGEID {
+        if cur == anc {
+            return true;
+        }
+        match with_cage(cur, |c| c.parent) {
+            Some(parent) if parent != cur => cur = parent,
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// The rule of `register_handler_syscall`.
+fn _may_register_handler(caller: u64, targetcage: u64, handlefunccage: u64) -> bool {
+    // Only a cage itself or one of its ancestors may change its routing.
+    if !_is_self_or_ancestor(caller, targetcage) {
+        return false;
+    }
+    match handlefunccage {
+        threei_const::THREEI_DEREGISTER => true,
+        // Their handler addresses are native function pointers.
+        lind_platform_const::RAWPOSIX_CAGEID
+        | lind_platform_const::WASMTIME_CAGEID
+        | lind_platform_const::THREEI_CAGEID => false,
+        // The caller's own functions, or those of a cage it controls.
+        h if _is_self_or_ancestor(caller, h) => true,
+        // A forked child that has not exec'd still runs its parent's code, so it may
+        // route its own calls to that parent (grates often register in the child
+        // before exec).
+        h => {
+            caller == targetcage
+                && with_cage(caller, |c| {
+                    c.parent == h && !c.execd.load(std::sync::atomic::Ordering::Acquire)
+                })
+                .unwrap_or(false)
+        }
+    }
+}
+
+/// `register_handler` as a syscall made by a cage (1001).
+///
+/// The issuing cage (`caller`, written into `arg6cageid` by the runtime) may
+/// register when both hold:
+/// - `targetcage` is the caller or a descendant of it, and
+/// - the handler is a deregistration, the caller itself or one of its descendants,
+///   or the caller's parent when the caller registers its own call and has not
+///   exec'd yet.
+///
+/// A cage can never name RawPOSIX, Wasmtime or 3i as the handler cage.
+///
+/// ## Returns:
+/// `ELINDEPERM` if the rule does not hold, otherwise what `register_handler` returns.
+pub extern "C" fn register_handler_syscall(
+    self_cageid: u64,
+    target_cageid: u64,
+    targetcage: u64,
+    targetcallnum: u64,
+    runtime_id: u64,
+    handlefunccage: u64,
+    in_grate_fn_ptr_u64: u64,
+    arg3cageid: u64,
+    arg4: u64,
+    arg4cageid: u64,
+    arg5: u64,
+    arg5cageid: u64,
+    arg6: u64,
+    caller: u64,
+) -> i32 {
+    if !_may_register_handler(caller, targetcage, handlefunccage) {
+        lind_log!(
+            THREEI,
+            "[3i|register_handler] denied: cage {} -> target {} call {} handler cage {}",
+            caller,
+            targetcage,
+            targetcallnum,
+            handlefunccage
+        );
+        return threei_const::ELINDEPERM as i32;
+    }
+    register_handler(
+        self_cageid,
+        target_cageid,
+        targetcage,
+        targetcallnum,
+        runtime_id,
+        handlefunccage,
+        in_grate_fn_ptr_u64,
+        arg3cageid,
+        arg4,
+        arg4cageid,
+        arg5,
+        arg5cageid,
+        arg6,
+        caller,
+    )
+}
+
+/// `copy_handler_table_to_cage` as a syscall made by a cage (1003).
+///
+/// The issuing cage (`caller`, written into `arg6cageid` by the runtime) must be
+/// `targetcage` or an ancestor of it, and `srccage` or an ancestor of it: the call
+/// replaces the target's whole routing, and a cage that could copy in a table it
+/// does not control (say, the table of the grate above it) would step around that
+/// grate.
+///
+/// ## Returns:
+/// `ELINDEPERM` if the rule does not hold, otherwise what
+/// `copy_handler_table_to_cage` returns.
+pub extern "C" fn copy_handler_table_to_cage_syscall(
+    thiscage: u64,
+    targetcage_arg: u64,
+    srccage: u64,
+    targetcage: u64,
+    arg2: u64,
+    arg2cage: u64,
+    arg3: u64,
+    arg3cage: u64,
+    arg4: u64,
+    arg4cage: u64,
+    arg5: u64,
+    arg5cage: u64,
+    arg6: u64,
+    caller: u64,
+) -> i32 {
+    if !(_is_self_or_ancestor(caller, targetcage) && _is_self_or_ancestor(caller, srccage)) {
+        lind_log!(
+            THREEI,
+            "[3i|copy_handler_table_to_cage] denied: cage {} copying {} -> {}",
+            caller,
+            srccage,
+            targetcage
+        );
+        return threei_const::ELINDEPERM as i32;
+    }
+    copy_handler_table_to_cage(
+        thiscage,
+        targetcage_arg,
+        srccage,
+        targetcage,
+        arg2,
+        arg2cage,
+        arg3,
+        arg3cage,
+        arg4,
+        arg4cage,
+        arg5,
+        arg5cage,
+        arg6,
+        caller,
+    ) as i32
+}
+
 /// actually performs a call.  Not interposable
 ///
 /// This actually performs a threei call.  It is not interposable.  This
@@ -575,12 +746,17 @@ pub fn make_syscall(
         }
     }
 
-    // _get_handler returned None — the target_map for this
-    // (self_cageid, syscall_num) exists but has no dest_grateid entry.
-    panic!(
-        "[3i|make_syscall] _get_handler returned None for self_cageid={} syscall_num={}",
-        self_cageid, syscall_num
+    // _get_handler returned None: this cage has no handler registered for
+    // this syscall (an unregistered or stray syscall number, or a cage whose
+    // table is not set up). Return an error for this one call rather than
+    // panicking, so a single cage cannot bring down the whole enclave.
+    lind_log!(
+        THREEI,
+        "[3i|make_syscall] no handler for self_cageid={} syscall_num={}",
+        self_cageid,
+        syscall_num
     );
+    -(Errno::ENOSYS as i32)
 }
 
 /***************************** trigger_harsh_cage_exit & harsh_cage_exit *****************************/

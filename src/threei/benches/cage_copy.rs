@@ -55,6 +55,7 @@ fn make_cage(cageid: u64) -> Cage {
         exit_group_initiated: AtomicBool::new(false),
         is_dead: AtomicBool::new(false),
         grate_inflight: AtomicU64::new(0),
+        execd: AtomicBool::new(false),
     }
 }
 
