@@ -471,6 +471,19 @@ impl<T> Linker<T> {
                 }
             }
         }
+        if module_is_fpcast {
+            // learn the uniform ABI arity from this module's thunks (binaryen max-func-params)
+            for export in module.exports() {
+                if export.name().starts_with(FPCAST_FUNC_SIGNATURE) {
+                    if let Some(ft) = export.ty().func() {
+                        super::fpcast_thunk::set_fpcast_arity(ft.params().len());
+                        break;
+                    }
+                }
+            }
+            // providers loaded before this consumer (dlopen): thunk their native exports now
+            self.synth_fpcast_thunks_for_imports(&mut store, module, Some(&*got))?;
+        }
         Ok(())
     }
 
@@ -1370,6 +1383,7 @@ impl<T> Linker<T> {
                 let memory_base = unsafe { *handler };
 
                 instance.apply_GOT_relocs(&mut store, Some(got), table, Some(memory_base))?;
+                self.synth_fpcast_thunks_for_exports(&mut store, instance, table, Some(got))?;
 
                 // If the module has a start function, run it (Wasm start semantics).
                 if let Some(start) = module.compiled_module().module().start_func {
@@ -1450,8 +1464,12 @@ impl<T> Linker<T> {
                         .register_named_instance(wasm_name.to_string(), instance_id);
                 }
 
+                // replay thunks synthesized for this library's fpcast imports (see
+                // `synth_fpcast_thunks_for_imports`); they sit before its own exports in the table
+                self.synth_fpcast_thunks_for_imports(&mut store, module, None)?;
                 // for child library, just append the library function into function table without doing GOT relocation
                 instance.apply_GOT_relocs(&mut store, None, table, None)?;
+                self.synth_fpcast_thunks_for_exports(&mut store, instance, table, None)?;
 
                 // clone the wasm global for the child instance
                 instance.apply_global_snapshots(&mut store, snapshots);
@@ -1628,6 +1646,10 @@ impl<T> Linker<T> {
                     } else if !name.starts_with(FPCAST_FUNC_SIGNATURE) {
                         symbol_map.add(name.clone(), index);
                     }
+                }
+                if let Some(t) = shared_table.as_ref() {
+                    // consumers (fpcast) already waiting for native exports of this library
+                    self.synth_fpcast_thunks_for_exports(&mut store, instance, t, Some(got))?;
                 }
                 for (name, global) in globals {
                     let val = global.get(&mut store);
@@ -2567,3 +2589,128 @@ impl fmt::Display for UnknownImportError {
 }
 
 impl core::error::Error for UnknownImportError {}
+
+/// Load-time synthesis of fpcast thunks for native-ABI providers (see `fpcast_thunk`).
+///
+/// An fpcast importer's `GOT.func` cell (`GOT_FUNC_FPCAST_NS`) can only be filled by a
+/// `$fpcast_emu$<name>` thunk export. When the provider is a native-ABI module without that
+/// export, the loader generates the thunk instead. Thunk slots are appended to the shared
+/// table, so a forked child must append them at exactly the same positions as the parent: the
+/// cell values are copied into the child, which makes "cell == next table index" a reliable
+/// marker for "a synthesized thunk was appended here" during replay.
+impl<T: 'static> Linker<T> {
+    /// Value of the fpcast `GOT.func` cell for `name`, if the cell exists.
+    fn fpcast_cell(&self, store: &mut impl AsContextMut<Data = T>, name: &str) -> Option<u32> {
+        match self.get(&mut *store, GOT_FUNC_FPCAST_NS, name).ok()? {
+            Extern::Global(g) => g.get(&mut *store).i32().map(|v| v as u32),
+            _ => None,
+        }
+    }
+
+    /// Synthesize thunks for the native function exports of `instance` that an already
+    /// registered fpcast importer is waiting for. With `got` (the process that is loading
+    /// the module) the thunk is created for every still-unresolved cell and the cell is
+    /// filled. With `None` (replay in a forked child / new thread) only the slots the
+    /// parent already created are re-created, in the same order.
+    pub fn synth_fpcast_thunks_for_exports(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        instance: Instance,
+        table: &Table,
+        got: Option<&LindGOT>,
+    ) -> Result<()> {
+        let mut funcs = vec![];
+        let mut names = std::collections::HashSet::new();
+        for export in instance.exports(&mut store) {
+            let name = export.name().to_owned();
+            if is_dylink_internal_symbol(&name) {
+                continue;
+            }
+            if let Extern::Func(func) = export.into_extern() {
+                names.insert(name.clone());
+                funcs.push((name, func));
+            }
+        }
+
+        for (name, func) in funcs {
+            if name.starts_with(FPCAST_FUNC_SIGNATURE) || names.contains(&fpcast_got_key(&name)) {
+                continue;
+            }
+            self.synth_one(&mut store, &name, func, table, got)?;
+        }
+        Ok(())
+    }
+
+    /// Synthesize thunks for the `GOT.func` imports of a freshly registered fpcast `module`
+    /// that are already provided by a loaded native-ABI module (provider loaded before
+    /// consumer, e.g. `dlopen` of an fpcast library against a native libc).
+    pub fn synth_fpcast_thunks_for_imports(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+        got: Option<&LindGOT>,
+    ) -> Result<()> {
+        if !module.is_fpcast() {
+            return Ok(());
+        }
+        let table = match self.get(&mut store, "env", "__indirect_function_table") {
+            Ok(Extern::Table(t)) => t,
+            _ => return Ok(()),
+        };
+        for import in module.imports() {
+            if import.module() != "GOT.func" {
+                continue;
+            }
+            let name = import.name();
+            // the provider's raw export, if some native module already defined it
+            let Ok(Extern::Func(func)) = self.get(&mut store, "env", name) else {
+                continue;
+            };
+            self.synth_one(&mut store, name, func, &table, got)?;
+        }
+        Ok(())
+    }
+
+    fn synth_one(
+        &self,
+        store: &mut impl AsContextMut<Data = T>,
+        name: &str,
+        func: Func,
+        table: &Table,
+        got: Option<&LindGOT>,
+    ) -> Result<()> {
+        let Some(cell) = self.fpcast_cell(store, name) else {
+            return Ok(());
+        };
+        let fill = match (cell, got) {
+            // unresolved cell and we are the loading process: create and publish the thunk
+            (0, Some(_)) => true,
+            // child replay: the parent appended a synthesized thunk at exactly this slot
+            (c, _) if c != 0 && c as u64 == table.size(&mut *store) => false,
+            _ => return Ok(()),
+        };
+        let thunk = match super::fpcast_thunk::synthesize_fpcast_thunk(&mut *store, func) {
+            Ok(t) => t,
+            Err(e) => {
+                lind_log!(
+                    DYLINK,
+                    "[debug] cannot synthesize fpcast thunk for {}: {}",
+                    name,
+                    e
+                );
+                return Ok(());
+            }
+        };
+        let index = table.grow(&mut *store, 1, crate::Ref::Func(Some(thunk)))? as u32;
+        if fill {
+            got.unwrap().cache_symbol(&fpcast_got_key(name), index);
+            lind_log!(
+                DYLINK,
+                "[debug] synthesized fpcast thunk {} = {}",
+                name,
+                index
+            );
+        }
+        Ok(())
+    }
+}

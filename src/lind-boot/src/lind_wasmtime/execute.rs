@@ -668,6 +668,9 @@ fn load_main_module(
         let table = dylink_metadata.table.as_ref().unwrap();
         let memory_base = GUARD_SIZE + DEFAULT_STACKSIZE + GUARD_SIZE;
         instance.apply_GOT_relocs(&mut store, Some(&got_guard), table, Some(memory_base));
+        linker_guard
+            .synth_fpcast_thunks_for_exports(&mut store, instance, table, Some(&got_guard))
+            .unwrap();
 
         // expose main module's exported symbol to linker
         // skip `signal_callback` since this is not supposed to by exposed by main module

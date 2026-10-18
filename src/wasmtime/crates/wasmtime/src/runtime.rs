@@ -46,6 +46,7 @@ pub(crate) mod exception;
 pub(crate) mod externals;
 #[cfg(feature = "async")]
 pub(crate) mod fiber;
+pub(crate) mod fpcast_thunk;
 pub(crate) mod gc;
 pub(crate) mod instance;
 pub(crate) mod instantiate;

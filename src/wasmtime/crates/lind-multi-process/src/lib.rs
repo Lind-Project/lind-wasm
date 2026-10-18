@@ -600,6 +600,14 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None);
+                        linker
+                            .synth_fpcast_thunks_for_exports(
+                                &mut store,
+                                instance,
+                                &child_table,
+                                None,
+                            )
+                            .unwrap();
 
                         linker
                             .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
@@ -1178,6 +1186,14 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     if dylink_enabled {
                         let mut child_table = child_table.unwrap();
                         instance.apply_GOT_relocs(&mut store, None, &child_table, None);
+                        linker
+                            .synth_fpcast_thunks_for_exports(
+                                &mut store,
+                                instance,
+                                &child_table,
+                                None,
+                            )
+                            .unwrap();
 
                         linker
                             .instance_dylink(&mut store, "env", instance, vec!["signal_callback"])
