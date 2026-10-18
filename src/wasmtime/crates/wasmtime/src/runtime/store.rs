@@ -531,6 +531,8 @@ pub struct StoreOpaque {
     // lind-wasm: adapters created by the `call_indirect` mismatch libcall, keyed by
     // (callee `VMFuncRef` address, expected `VMSharedTypeIndex`) -> adapter `VMFuncRef` address.
     fpcast_adapters: std::collections::HashMap<(usize, u32), usize>,
+    // direct-mapped front cache for `fpcast_adapters`: (callee, expected_ty, adapter)
+    fpcast_adapter_cache: [(usize, u32, usize); 256],
 
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
@@ -809,6 +811,7 @@ impl<T> Store<T> {
             library_symbols: SymbolTable::new(),
             named_module_instances: Vec::new(),
             fpcast_adapters: std::collections::HashMap::new(),
+            fpcast_adapter_cache: [(0, 0, 0); 256],
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             stack_top: 0,
@@ -934,6 +937,7 @@ impl<T> Store<T> {
             library_symbols: symbol_table,
             named_module_instances: Vec::new(),
             fpcast_adapters: std::collections::HashMap::new(),
+            fpcast_adapter_cache: [(0, 0, 0); 256],
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             stack_top: 0,
@@ -2084,7 +2088,17 @@ fn set_fuel(
 }
 
 impl StoreOpaque {
+    #[inline]
+    fn fpcast_slot(callee: usize, expected_ty: u32) -> usize {
+        ((callee >> 4) ^ (expected_ty as usize).wrapping_mul(0x9e37)) & 255
+    }
+
+    #[inline]
     pub(crate) fn fpcast_adapter(&self, callee: usize, expected_ty: u32) -> Option<usize> {
+        let (c, t, a) = self.fpcast_adapter_cache[Self::fpcast_slot(callee, expected_ty)];
+        if c == callee && t == expected_ty && a != 0 {
+            return Some(a);
+        }
         self.fpcast_adapters.get(&(callee, expected_ty)).copied()
     }
 
@@ -2095,6 +2109,8 @@ impl StoreOpaque {
         adapter: usize,
     ) {
         self.fpcast_adapters.insert((callee, expected_ty), adapter);
+        self.fpcast_adapter_cache[Self::fpcast_slot(callee, expected_ty)] =
+            (callee, expected_ty, adapter);
     }
 }
 
