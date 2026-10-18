@@ -280,3 +280,46 @@ pub(crate) fn adapt_mismatched_callee(
     opaque.insert_fpcast_adapter(key, expected.bits(), adapter_ref.as_ptr() as usize);
     Ok(Some(adapter_ref))
 }
+
+/// Diagnostic counters: total `call_indirect`s (when compiled with `count_indirect_calls`) and
+/// signature mismatches handled by the lenient path. Printed at process exit when
+/// `LIND_INDIRECT_STATS` is set.
+pub(crate) mod stats {
+    use std::sync::Once;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TOTAL: AtomicU64 = AtomicU64::new(0);
+    static MISMATCHED: AtomicU64 = AtomicU64::new(0);
+    static REGISTER: Once = Once::new();
+
+    extern "C" fn print_stats() {
+        let total = TOTAL.load(Ordering::Relaxed);
+        let mism = MISMATCHED.load(Ordering::Relaxed);
+        eprintln!(
+            "LIND_INDIRECT_STATS total_indirect_calls={total} mismatched={mism} crossing_pct={:.4}",
+            if total == 0 {
+                0.0
+            } else {
+                100.0 * mism as f64 / total as f64
+            }
+        );
+    }
+
+    fn register() {
+        REGISTER.call_once(|| {
+            if std::env::var_os("LIND_INDIRECT_STATS").is_some() {
+                unsafe { libc::atexit(print_stats) };
+            }
+        });
+    }
+
+    pub(crate) fn count_total() {
+        register();
+        TOTAL.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn count_mismatch() {
+        register();
+        MISMATCHED.fetch_add(1, Ordering::Relaxed);
+    }
+}

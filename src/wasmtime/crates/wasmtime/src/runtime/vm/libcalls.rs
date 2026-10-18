@@ -633,6 +633,11 @@ fn table_get_lazy_init_func_ref(
     }
 }
 
+/// lind-wasm (diagnostics): count one `call_indirect`.
+fn count_indirect_call(_store: &mut dyn VMStore, _instance: InstanceId) {
+    crate::runtime::fpcast_thunk::stats::count_total();
+}
+
 /// lind-wasm: `call_indirect` signature mismatch. Returns a `VMFuncRef` of the expected type
 /// adapting `callee`, or null if the mismatch cannot be adapted (the caller then traps).
 fn indirect_call_mismatch(
@@ -645,6 +650,7 @@ fn indirect_call_mismatch(
         return core::ptr::null_mut();
     };
     let expected = wasmtime_environ::VMSharedTypeIndex::new(expected_ty);
+    crate::runtime::fpcast_thunk::stats::count_mismatch();
     match crate::runtime::fpcast_thunk::adapt_mismatched_callee(store, callee, expected) {
         Ok(Some(adapter)) => adapter.as_ptr().cast(),
         Ok(None) => core::ptr::null_mut(),

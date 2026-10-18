@@ -28,6 +28,8 @@ macro_rules! foreach_builtin_function {
             // `VMFuncRef` and the caller's expected `VMSharedTypeIndex`, returns a `VMFuncRef`
             // of the expected type that adapts the callee, or null if it cannot be adapted.
             indirect_call_mismatch(vmctx: vmctx, callee: pointer, expected_ty: u32) -> pointer;
+            // lind-wasm (diagnostics): invoked before every `call_indirect` when counting.
+            count_indirect_call(vmctx: vmctx);
             // Returns an index for Wasm's `table.grow` instruction for `funcref`s.
             table_grow_func_ref(vmctx: vmctx, table: u32, delta: u64, init: pointer) -> pointer;
             // Returns an index for Wasm's `table.fill` instruction for `funcref`s.

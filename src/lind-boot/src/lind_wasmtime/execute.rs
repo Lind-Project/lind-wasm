@@ -1061,6 +1061,7 @@ fn make_wasmtime_config(
     // functions at runtime instead of trapping. Affects code generation, so it must be set
     // for `--precompile` as well as for running.
     wt_config.lenient_indirect_call(std::env::var_os("LIND_LENIENT_INDIRECT_CALL").is_some());
+    wt_config.count_indirect_calls(std::env::var_os("LIND_COUNT_INDIRECT_CALLS").is_some());
     wt_config.wasm_threads(true);
     wt_config.shared_memory(true);
     wt_config.lind_internal_memory_reservation(lind_internal_memory_reservation);

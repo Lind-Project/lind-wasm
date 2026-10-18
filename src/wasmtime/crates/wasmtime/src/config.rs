@@ -1556,6 +1556,13 @@ impl Config {
         self
     }
 
+    /// lind-wasm (diagnostics): count every `call_indirect` (see `LIND_INDIRECT_STATS`).
+    #[allow(missing_docs)]
+    pub fn count_indirect_calls(&mut self, enable: bool) -> &mut Self {
+        self.tunables.count_indirect_calls = Some(enable);
+        self
+    }
+
     /// Enable or disable function pointer cast emulation (lind-wasm extension).
     #[allow(missing_docs)]
     pub fn fpcast_enabled(&mut self, enable: bool) -> &mut Self {

@@ -138,6 +138,9 @@ define_tunables! {
         /// trapping immediately.
         pub lenient_indirect_call: bool,
 
+        /// lind-wasm (diagnostics): call a counting builtin on every `call_indirect`.
+        pub count_indirect_calls: bool,
+
         /// Whether CoW images might be used to initialize linear memories.
         pub memory_init_cow: bool,
 
@@ -241,6 +244,7 @@ impl Tunables {
             winch_callable: false,
             signals_based_traps: false,
             lenient_indirect_call: false,
+            count_indirect_calls: false,
             memory_init_cow: true,
             inlining: false,
             inlining_intra_module: IntraModuleInlining::WhenUsingGc,
@@ -265,6 +269,7 @@ impl Tunables {
             memory_reservation_for_growth: 1 << 20, // 1MB
             signals_based_traps: true,
             lenient_indirect_call: false,
+            count_indirect_calls: false,
 
             ..Tunables::default_miri()
         }
@@ -294,6 +299,7 @@ impl Tunables {
             signals_based_traps: true,
 
             lenient_indirect_call: false,
+            count_indirect_calls: false,
             ..Tunables::default_miri()
         }
     }

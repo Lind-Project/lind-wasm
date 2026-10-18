@@ -2062,6 +2062,15 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
             }
         }
 
+        if self.env.tunables.count_indirect_calls {
+            let count = self
+                .env
+                .builtin_functions
+                .count_indirect_call(self.builder.func);
+            let vmctx = self.env.vmctx_val(&mut self.builder.cursor());
+            self.builder.ins().call(count, &[vmctx]);
+        }
+
         // Load the caller's `VMSharedTypeIndex.
         let interned_ty = self.env.module.types[ty_index].unwrap_module_type_index();
         let caller_sig_id = self
