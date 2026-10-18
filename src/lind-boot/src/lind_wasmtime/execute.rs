@@ -97,8 +97,11 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     init_vmctx_pool();
 
     // -- Initialize the Wasmtime execution environment --
-    let mut wt_config =
-        make_wasmtime_config(lindboot_cli.wasmtime_backtrace, lindboot_cli.enable_fpcast);
+    let mut wt_config = make_wasmtime_config(
+        lindboot_cli.wasmtime_backtrace,
+        lindboot_cli.enable_fpcast,
+        lindboot_cli.explicit_bounds_checks,
+    );
     // Let wasm code use most of the host stack of the thread it runs on, as
     // a native process uses its whole stack: Cranelift's frames are larger
     // than a native compiler's, and wasmtime's default limit (512 KiB) traps
@@ -924,7 +927,7 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     let wasm_path = Path::new(cli.wasm_file());
     let cwasm_path = wasm_path.with_extension("cwasm");
 
-    let wt_config = make_wasmtime_config(cli.wasmtime_backtrace, false);
+    let wt_config = make_wasmtime_config(cli.wasmtime_backtrace, false, cli.explicit_bounds_checks);
     let engine = Engine::new(&wt_config)
         .map_err(anyhow::Error::from)
         .context("failed to create engine")?;
@@ -1053,12 +1056,27 @@ const DEFAULT_MAX_WASM_STACK: usize = 512 << 10;
 
 /// Generates a wasmtime config based on the whether or not the --wasmtime-backtrace flag was
 /// provided to lind-boot.
-fn make_wasmtime_config(backtrace: bool, enable_fpcast: bool) -> wasmtime::Config {
+fn make_wasmtime_config(
+    backtrace: bool,
+    enable_fpcast: bool,
+    explicit_bounds_checks: bool,
+) -> wasmtime::Config {
     let mut wt_config = wasmtime::Config::new();
     wt_config.wasm_backtrace(backtrace);
     wt_config.fpcast_enabled(enable_fpcast);
     wt_config.wasm_threads(true);
     wt_config.shared_memory(true);
+
+    // Generated code that never relies on a fault: every linear-memory
+    // access is checked against the memory's current length (and division
+    // by zero and the like explicitly too), and memories get no guard
+    // regions, which would only serve accesses that are meant to fault.
+    // Wasmtime then installs no signal handlers either.
+    if explicit_bounds_checks {
+        wt_config.signals_based_traps(false);
+        wt_config.memory_guard_size(0);
+        wt_config.guard_before_linear_memory(false);
+    }
     // wasm-opt --translate-to-exnref converts clang 18's legacy EH to the standard proposal.
     // The standard EXCEPTIONS proposal is supported by Cranelift; the legacy proposal is not.
     #[cfg(not(feature = "asyncify-setjmp"))]

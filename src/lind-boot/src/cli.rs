@@ -39,6 +39,16 @@ pub struct CliOptions {
     #[arg(long = "enable-fpcast")]
     pub enable_fpcast: bool,
 
+    /// Check every linear-memory access explicitly in the generated code,
+    /// with no guard regions and no signal handlers, so that wasm memory
+    /// safety does not depend on page permissions (which a TEE shim may
+    /// manage on its own: TriSeal's SGX shim maps every page readable).
+    ///
+    /// For .cwasm files, this configuration must remain the same during
+    /// compile and run.
+    #[arg(long = "explicit-bounds-checks")]
+    pub explicit_bounds_checks: bool,
+
     /// Optional in-memory Wasm module bytes.
     ///
     /// This is not parsed from the command line. When present, lind-boot loads
