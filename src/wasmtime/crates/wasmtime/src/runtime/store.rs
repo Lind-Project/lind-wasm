@@ -528,6 +528,9 @@ pub struct StoreOpaque {
     // preloaded libraries, the main module, and dlopen'd libraries. Used by
     // get_global_snapshot to avoid iterating all INSTANCE_NUMBER slots.
     named_module_instances: Vec<(String, InstanceId)>,
+    // lind-wasm: adapters created by the `call_indirect` mismatch libcall, keyed by
+    // (callee `VMFuncRef` address, expected `VMSharedTypeIndex`) -> adapter `VMFuncRef` address.
+    fpcast_adapters: std::collections::HashMap<(usize, u32), usize>,
 
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
@@ -805,6 +808,7 @@ impl<T> Store<T> {
             signal_asyncify_counter: 0,
             library_symbols: SymbolTable::new(),
             named_module_instances: Vec::new(),
+            fpcast_adapters: std::collections::HashMap::new(),
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             stack_top: 0,
@@ -929,6 +933,7 @@ impl<T> Store<T> {
             signal_asyncify_counter: 0,
             library_symbols: symbol_table,
             named_module_instances: Vec::new(),
+            fpcast_adapters: std::collections::HashMap::new(),
             syscall_asyncify_data: Vec::new(),
             syscall_asyncify_counter: 0,
             stack_top: 0,
@@ -2076,6 +2081,21 @@ fn set_fuel(
     // Within the VM we increment to count fuel, so inject a negative amount. The VM will halt when
     // this counter is positive.
     *injected_fuel = -(injected as i64);
+}
+
+impl StoreOpaque {
+    pub(crate) fn fpcast_adapter(&self, callee: usize, expected_ty: u32) -> Option<usize> {
+        self.fpcast_adapters.get(&(callee, expected_ty)).copied()
+    }
+
+    pub(crate) fn insert_fpcast_adapter(
+        &mut self,
+        callee: usize,
+        expected_ty: u32,
+        adapter: usize,
+    ) {
+        self.fpcast_adapters.insert((callee, expected_ty), adapter);
+    }
 }
 
 #[doc(hidden)]

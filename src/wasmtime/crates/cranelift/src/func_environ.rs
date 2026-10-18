@@ -1921,7 +1921,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         );
 
         // If necessary, check the signature.
-        let check =
+        let (check, funcref_ptr) =
             self.check_indirect_call_type_signature(features, table_index, ty_index, funcref_ptr);
 
         let trap_code = match check {
@@ -1960,7 +1960,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         table_index: TableIndex,
         ty_index: TypeIndex,
         funcref_ptr: ir::Value,
-    ) -> CheckIndirectCallTypeSignature {
+    ) -> (CheckIndirectCallTypeSignature, ir::Value) {
         let table = &self.env.module.tables[table_index];
         let sig_id_size = self.env.offsets.size_of_vmshared_type_index();
         let sig_id_type = Type::int(u16::from(sig_id_size) * 8).unwrap();
@@ -1983,9 +1983,12 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
                 // necessary.
                 let specified_ty = self.env.module.types[ty_index].unwrap_module_type_index();
                 if specified_ty == table_ty {
-                    return CheckIndirectCallTypeSignature::StaticMatch {
-                        may_be_null: table.ref_type.nullable,
-                    };
+                    return (
+                        CheckIndirectCallTypeSignature::StaticMatch {
+                            may_be_null: table.ref_type.nullable,
+                        },
+                        funcref_ptr,
+                    );
                 }
 
                 if features.gc() {
@@ -2021,7 +2024,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
                         }
                     }
                     self.env.trap(self.builder, crate::TRAP_BAD_SIGNATURE);
-                    return CheckIndirectCallTypeSignature::StaticTrap;
+                    return (CheckIndirectCallTypeSignature::StaticTrap, funcref_ptr);
                 }
             }
 
@@ -2031,7 +2034,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
                 assert!(table.ref_type.nullable);
                 self.env
                     .trap(self.builder, crate::TRAP_INDIRECT_CALL_TO_NULL);
-                return CheckIndirectCallTypeSignature::StaticTrap;
+                return (CheckIndirectCallTypeSignature::StaticTrap, funcref_ptr);
             }
 
             // Engine-indexed types don't show up until runtime and it's a Wasm
@@ -2097,9 +2100,48 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
                 .ins()
                 .icmp(IntCC::Equal, callee_sig_id, caller_sig_id)
         };
+        if self.env.tunables.lenient_indirect_call && !features.gc() {
+            // lind-wasm: instead of trapping right away, let the runtime try to adapt the
+            // callee to the caller's expected signature (fpcast thunk <-> native function).
+            // The matching path is unchanged; the mismatch path is a cold block that yields
+            // the funcref to call, or traps if the runtime cannot adapt the callee.
+            let mismatch_block = self.builder.create_block();
+            let cont_block = self.builder.create_block();
+            self.builder.set_cold_block(mismatch_block);
+            let pointer_type = self.env.pointer_type();
+            let funcref_param = self.builder.append_block_param(cont_block, pointer_type);
+
+            self.builder.ins().brif(
+                matches,
+                cont_block,
+                &[funcref_ptr.into()],
+                mismatch_block,
+                &[],
+            );
+            self.builder.seal_block(mismatch_block);
+
+            self.builder.switch_to_block(mismatch_block);
+            let mismatch = self
+                .env
+                .builtin_functions
+                .indirect_call_mismatch(self.builder.func);
+            let vmctx = self.env.vmctx_val(&mut self.builder.cursor());
+            let call = self
+                .builder
+                .ins()
+                .call(mismatch, &[vmctx, funcref_ptr, caller_sig_id]);
+            let adapted = self.builder.func.dfg.inst_results(call)[0];
+            self.env
+                .trapz(self.builder, adapted, crate::TRAP_BAD_SIGNATURE);
+            self.builder.ins().jump(cont_block, &[adapted.into()]);
+            self.builder.seal_block(cont_block);
+
+            self.builder.switch_to_block(cont_block);
+            return (CheckIndirectCallTypeSignature::Runtime, funcref_param);
+        }
         self.env
             .trapz(self.builder, matches, crate::TRAP_BAD_SIGNATURE);
-        CheckIndirectCallTypeSignature::Runtime
+        (CheckIndirectCallTypeSignature::Runtime, funcref_ptr)
     }
 
     /// Call a typed function reference.

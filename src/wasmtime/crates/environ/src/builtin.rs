@@ -24,6 +24,10 @@ macro_rules! foreach_builtin_function {
             data_drop(vmctx: vmctx, data: u32) -> bool;
             // Returns a table entry after lazily initializing it.
             table_get_lazy_init_func_ref(vmctx: vmctx, table: u32, index: u64) -> pointer;
+            // lind-wasm: invoked on a `call_indirect` signature mismatch. Given the callee's
+            // `VMFuncRef` and the caller's expected `VMSharedTypeIndex`, returns a `VMFuncRef`
+            // of the expected type that adapts the callee, or null if it cannot be adapted.
+            indirect_call_mismatch(vmctx: vmctx, callee: pointer, expected_ty: u32) -> pointer;
             // Returns an index for Wasm's `table.grow` instruction for `funcref`s.
             table_grow_func_ref(vmctx: vmctx, table: u32, delta: u64, init: pointer) -> pointer;
             // Returns an index for Wasm's `table.fill` instruction for `funcref`s.
@@ -456,6 +460,7 @@ impl BuiltinFunctionIndex {
             // These libcalls can't trap
             (@get ref_func pointer) => (return None);
             (@get table_get_lazy_init_func_ref pointer) => (return None);
+            (@get indirect_call_mismatch pointer) => (return None);
             (@get get_interned_func_ref pointer) => (return None);
             (@get intern_func_ref_for_gc_heap u64) => (return None);
             (@get is_subtype u32) => (return None);

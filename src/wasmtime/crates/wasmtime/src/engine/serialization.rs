@@ -332,6 +332,10 @@ impl Metadata<'_> {
             // Call-indirect caching: runtime optimization, doesn't affect ABI.
             cache_call_indirects: _,
             max_call_indirect_cache_slots: _,
+
+            // lind-wasm: only changes what a signature-mismatched `call_indirect` does
+            // (adapt vs trap), so artifacts compiled with and without it stay compatible.
+            lenient_indirect_call: _,
         } = self.tunables;
 
         Self::check_collector(collector, other.collector)?;

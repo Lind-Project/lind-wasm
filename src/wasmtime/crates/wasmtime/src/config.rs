@@ -1546,6 +1546,16 @@ impl Config {
         self
     }
 
+    /// lind-wasm: make `call_indirect` signature mismatches call into the runtime, which
+    /// adapts fpcast thunks to native callers and native functions to fpcast callers,
+    /// instead of trapping. Changes the generated code, so it must be set when compiling
+    /// (including `--precompile`) as well as when running.
+    #[allow(missing_docs)]
+    pub fn lenient_indirect_call(&mut self, enable: bool) -> &mut Self {
+        self.tunables.lenient_indirect_call = Some(enable);
+        self
+    }
+
     /// Enable or disable function pointer cast emulation (lind-wasm extension).
     #[allow(missing_docs)]
     pub fn fpcast_enabled(&mut self, enable: bool) -> &mut Self {

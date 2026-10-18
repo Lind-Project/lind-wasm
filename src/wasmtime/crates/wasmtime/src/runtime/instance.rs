@@ -245,6 +245,41 @@ impl Instance {
         unsafe { Instance::new_started(&mut store, module, imports.as_ref(), Asyncness::Yes).await }
     }
 
+    /// lind-wasm: instantiate a module that has no start function against a bare
+    /// `StoreOpaque` (i.e. without knowing the store's `T`). Used by the `call_indirect`
+    /// mismatch libcall to instantiate adapter modules from inside running wasm.
+    pub(crate) fn new_adapter_instance(
+        store: &mut dyn crate::runtime::vm::VMStore,
+        module: &Module,
+        imports: &[Extern],
+    ) -> Result<Instance> {
+        store.store_opaque_mut().validate_sync_call()?;
+        let imports = Instance::typecheck_externs(store.store_opaque_mut(), module, imports)?;
+        let (mut limiter, store) = store.resource_limiter_and_store_opaque();
+        // SAFETY: `typecheck_externs` above checked that all imports are valid for `module`.
+        let (instance, start) = vm::assert_ready(unsafe {
+            Instance::new_raw(
+                store,
+                limiter.as_mut(),
+                module,
+                imports.as_ref(),
+                Asyncness::No,
+            )
+        })?;
+        if start.is_some() {
+            bail!("adapter modules must not have a start function");
+        }
+        Ok(instance)
+    }
+
+    /// lind-wasm: `get_export` for a bare `StoreOpaque`.
+    pub(crate) fn get_export_opaque(&self, store: &mut StoreOpaque, name: &str) -> Option<Extern> {
+        let module = store[self.id].env_module();
+        let name = module.strings.get_atom(name)?;
+        let entity = *module.exports.get(&name)?;
+        Some(self._get_export(store, entity))
+    }
+
     fn typecheck_externs(
         store: &mut StoreOpaque,
         module: &Module,

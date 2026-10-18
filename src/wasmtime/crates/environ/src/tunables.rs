@@ -133,6 +133,11 @@ define_tunables! {
         /// SIGSEGV, etc) to implement traps.
         pub signals_based_traps: bool,
 
+        /// lind-wasm: on an `call_indirect` signature mismatch, call into the runtime
+        /// to try to adapt the callee (fpcast thunk <-> native function) instead of
+        /// trapping immediately.
+        pub lenient_indirect_call: bool,
+
         /// Whether CoW images might be used to initialize linear memories.
         pub memory_init_cow: bool,
 
@@ -235,6 +240,7 @@ impl Tunables {
             relaxed_simd_deterministic: false,
             winch_callable: false,
             signals_based_traps: false,
+            lenient_indirect_call: false,
             memory_init_cow: true,
             inlining: false,
             inlining_intra_module: IntraModuleInlining::WhenUsingGc,
@@ -258,6 +264,7 @@ impl Tunables {
             memory_guard_size: 0x1_0000,
             memory_reservation_for_growth: 1 << 20, // 1MB
             signals_based_traps: true,
+            lenient_indirect_call: false,
 
             ..Tunables::default_miri()
         }
@@ -285,6 +292,8 @@ impl Tunables {
             memory_reservation_for_growth: 2 << 30, // 2GB
 
             signals_based_traps: true,
+
+            lenient_indirect_call: false,
             ..Tunables::default_miri()
         }
     }

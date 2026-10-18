@@ -633,6 +633,28 @@ fn table_get_lazy_init_func_ref(
     }
 }
 
+/// lind-wasm: `call_indirect` signature mismatch. Returns a `VMFuncRef` of the expected type
+/// adapting `callee`, or null if the mismatch cannot be adapted (the caller then traps).
+fn indirect_call_mismatch(
+    store: &mut dyn VMStore,
+    _instance: InstanceId,
+    callee: *mut u8,
+    expected_ty: u32,
+) -> *mut u8 {
+    let Some(callee) = NonNull::new(callee.cast::<VMFuncRef>()) else {
+        return core::ptr::null_mut();
+    };
+    let expected = wasmtime_environ::VMSharedTypeIndex::new(expected_ty);
+    match crate::runtime::fpcast_thunk::adapt_mismatched_callee(store, callee, expected) {
+        Ok(Some(adapter)) => adapter.as_ptr().cast(),
+        Ok(None) => core::ptr::null_mut(),
+        Err(e) => {
+            log::debug!("call_indirect mismatch adapter failed: {e:?}");
+            core::ptr::null_mut()
+        }
+    }
+}
+
 /// Drop a GC reference.
 #[cfg(feature = "gc-drc")]
 fn drop_gc_ref(store: &mut dyn VMStore, _instance: InstanceId, gc_ref: u32) {
