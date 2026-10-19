@@ -9,8 +9,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-// Test: fork memory isolation
-// Verifies that parent and child cages don't share writable memory
+/*
+ Test: fork memory isolation
+ Checks that a parent and its forked child never end up sharing writable memory
+*/
 
 #define PARENT_SENTINEL 0xA1
 #define CHILD_SENTINEL  0xB2
@@ -104,6 +106,10 @@ int main(void)
 	assert(pid >= 0);
 
 	if (pid == 0) {
+		// Child scribbles over the buffer it inherited, the parent shouldn't see this
+		memset(before, CHILD_SENTINEL, BUF_SIZE);
+		assert_all(before, BUF_SIZE, CHILD_SENTINEL);
+
 		unsigned char *child_buf = malloc(BUF_SIZE);
 		assert(child_buf != NULL);
 
@@ -130,10 +136,24 @@ int main(void)
 
 	assert(munmap(slot, BUF_SIZE) == 0);
 
+	/*
+	 Use two pipes so things happen in a fixed order
+	 The child writes first, then the parent checks its copy and writes,
+	 then the child checks its copy again
+	 That way each side gets to confirm the other's write never reached it
+	*/
+	int child_ready[2], parent_done[2];
+	char token;
+	assert(pipe(child_ready) == 0);
+	assert(pipe(parent_done) == 0);
+
 	pid = fork();
 	assert(pid >= 0);
 
 	if (pid == 0) {
+		close(child_ready[0]);
+		close(parent_done[1]);
+
 		unsigned char *child_map = mmap(slot, BUF_SIZE,
 		                               PROT_READ | PROT_WRITE,
 		                               MAP_PRIVATE | MAP_ANONYMOUS |
@@ -143,10 +163,19 @@ int main(void)
 		assert(child_map == slot);
 
 		memset(child_map, CHILD_SENTINEL, BUF_SIZE);
+
+		// Let the parent know we're done writing, then wait for it to write too
+		assert(write(child_ready[1], "c", 1) == 1);
+		assert(read(parent_done[0], &token, 1) == 1);
+
+		// The parent has written by now, our copy should still be untouched
 		assert_all(child_map, BUF_SIZE, CHILD_SENTINEL);
 
 		exit(0);
 	}
+
+	close(child_ready[1]);
+	close(parent_done[0]);
 
 	unsigned char *parent_map = mmap(slot, BUF_SIZE,
 	                                 PROT_READ | PROT_WRITE,
@@ -156,11 +185,22 @@ int main(void)
 
 	assert(parent_map == slot);
 
+	/*
+	 Wait for the child to finish writing, then make sure none of it leaked over
+	 A brand new anonymous mapping starts out as all zeros
+	*/
+	assert(read(child_ready[0], &token, 1) == 1);
+	assert_all(parent_map, BUF_SIZE, 0);
+
 	memset(parent_map, PARENT_SENTINEL, BUF_SIZE);
+	assert(write(parent_done[1], "p", 1) == 1);
 
 	wait_child(pid);
 
-	// Same address, different cages, no shared data
+	close(child_ready[0]);
+	close(parent_done[1]);
+
+	// Same address in both cages, but the data shouldn't be shared
 	assert_all(parent_map, BUF_SIZE, PARENT_SENTINEL);
 
 	assert(munmap(parent_map, BUF_SIZE) == 0);
