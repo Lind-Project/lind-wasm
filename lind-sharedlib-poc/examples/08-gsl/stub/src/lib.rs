@@ -9,7 +9,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use core::ffi::c_int;
+use core::ffi::{c_int, c_void};
 
 use lind_boot::{Arg, CliOptions, OutLen, SandboxedLib, init_sandboxed_lib};
 
@@ -94,3 +94,31 @@ pub extern "C" fn gsl_poly_solve_cubic(
     }
     n
 }
+
+/// gsl_poly_eval_derivs(c[lenc], lenc, x, res[lenres], lenres): evaluate the polynomial with
+/// coefficients `c` and its derivatives at `x`, writing lenres results into `res`. First GSL
+/// function with an input array AND an output array:
+///   - `c`   -> Arg::Buf  (copy lenc doubles INTO the guest)
+///   - `res` -> Arg::Out  (guest writes lenres doubles; copied straight back into the caller's
+///              buffer — we view res's bytes directly as the Out dst, so no extra copy)
+/// GSL fully fills res[0..lenres], so Out (not InOut) is safe.
+#[unsafe(no_mangle)]
+pub extern "C" fn gsl_poly_eval_derivs(
+    c: *const f64, lenc: usize, x: f64, res: *mut f64, lenres: usize,
+) -> c_int {
+    let cb = unsafe { core::slice::from_raw_parts(c as *const u8, lenc.saturating_mul(8)) };
+    let resb = unsafe { core::slice::from_raw_parts_mut(res as *mut u8, lenres.saturating_mul(8)) };
+    call(
+        "lind_gsl_poly_eval_derivs",
+        &mut [
+            Arg::Buf(cb),
+            Arg::USize(lenc),
+            Arg::F64(x),
+            Arg::Out { dst: resb, len: OutLen::Cap },
+            Arg::USize(lenres),
+        ],
+    ) as c_int
+}
+
+// GSL sort module — generated marshalling (see gen_gsl_sort.py).
+include!("sort_generated.rs");

@@ -17,6 +17,7 @@
 
 extern int gsl_poly_solve_quadratic(double a, double b, double c, double *x0, double *x1);
 extern int gsl_poly_solve_cubic(double a, double b, double c, double *x0, double *x1, double *x2);
+extern int gsl_poly_eval_derivs(const double c[], size_t lenc, double x, double res[], size_t lenres);
 
 __attribute__((export_name("guest_malloc")))
 void *guest_malloc(size_t n) { return malloc(n); }
@@ -33,3 +34,11 @@ __attribute__((export_name("lind_gsl_poly_solve_cubic")))
 int lind_gsl_poly_solve_cubic(double a, double b, double c, double *x0, double *x1, double *x2) {
     return gsl_poly_solve_cubic(a, b, c, x0, x1, x2);
 }
+
+__attribute__((export_name("lind_gsl_poly_eval_derivs")))
+int lind_gsl_poly_eval_derivs(const double c[], size_t lenc, double x, double res[], size_t lenres) {
+    return gsl_poly_eval_derivs(c, lenc, x, res, lenres);
+}
+
+// GSL sort module — generated forwarders (see gen_gsl_sort.py).
+#include "generated/sort_shim.inc.c"
