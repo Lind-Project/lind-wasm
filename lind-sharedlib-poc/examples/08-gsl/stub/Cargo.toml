@@ -1,0 +1,15 @@
+[package]
+name = "lind-libgsl"
+version = "0.1.0"
+edition = "2024"
+
+# Native shared object. `name = "gsl"` -> `libgsl.so`, so the test suite / app links `-lgsl`
+# and the forwarded gsl_* symbols run inside the lind sandbox.
+[lib]
+name = "gsl"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Reuses lind-boot's sandboxed-lib API (init_sandboxed_lib / SandboxedLib / Arg / OutLen).
+# This crate lives at lind-sharedlib-poc/examples/08-gsl/stub, so lind-boot is four up.
+lind-boot = { path = "../../../../src/lind-boot" }
