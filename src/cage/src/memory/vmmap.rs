@@ -257,12 +257,17 @@ pub trait VmmapOps {
 /// - entries: NoditMap storing the memory regions indexed by page number
 /// - cached_entry: Optional cached entry for performance optimization
 /// - base_address: Optional base address for WASM memory
+/// - logical_offset: Distance between the system addresses and the user
+///   addresses of this cage (see `set_logical_offset`)
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Vmmap {
     pub entries: NoditMap<usize, Interval<usize>, VmmapEntry>, // Keyed by `page_num`
     pub cached_entry: Option<VmmapEntry>,                  // TODO: is this still needed?
     // Use Option for safety
     pub base_address: Option<usize>, // wasm base address. None means uninitialized yet
+    // `sys - user`, wrapping. Nonzero for MPK cages forked in-process (gs-fork),
+    // whose guest addresses refer to the memory of the cage they were forked from.
+    pub logical_offset: usize,
 
     pub start_address: usize, // start address of valid vmmap address range
     pub end_address: usize,   // end address of valid vmmap address range
@@ -279,6 +284,7 @@ impl Vmmap {
             entries: NoditMap::new(),
             cached_entry: None,
             base_address: None,
+            logical_offset: 0,
             start_address: 0,
             end_address: DEFAULT_VMMAP_SIZE,
             heap_start: 0,
@@ -295,6 +301,7 @@ impl Vmmap {
         self.entries = NoditMap::new();
         self.cached_entry = None;
         self.base_address = None;
+        self.logical_offset = 0;
         self.start_address = 0;
         self.end_address = DEFAULT_VMMAP_SIZE;
         self.heap_start = 0;
@@ -334,6 +341,20 @@ impl Vmmap {
         self.base_address = Some(base_address);
     }
 
+    /// Sets the offset that is added to user addresses to get system
+    /// addresses (and subtracted on the way back), on top of the base address.
+    ///
+    /// A cage forked in-process by the MPK runtime keeps the addresses of the
+    /// cage it was forked from, while its memory lives at a copy that is
+    /// `offset` bytes away (wrapping). Setting the offset lets mmap/brk hand
+    /// out addresses the guest can use directly.
+    ///
+    /// Arguments:
+    /// - offset: `sys - user`, computed with wrapping arithmetic
+    pub fn set_logical_offset(&mut self, offset: usize) {
+        self.logical_offset = offset;
+    }
+
     /// Sets the heap start page number for the memory
     ///
     /// Arguments:
@@ -353,11 +374,11 @@ impl Vmmap {
         match self.user_addr_bit_width {
             VmmapBitWidth::Vmmap32Bit => {
                 //TODO: do we need to check here whether address is > u32::MAX? 
-                address + self.base_address.unwrap()
+                (address + self.base_address.unwrap()).wrapping_add(self.logical_offset)
             }
             VmmapBitWidth::Vmmap64Bit => {
-                // For 64-bit, user and system addresses are the same. user_to_sys is supported for generality.
-                address
+                // For 64-bit, user and system addresses are the same up to the logical offset.
+                address.wrapping_add(self.logical_offset)
             }
         }
     }
@@ -372,11 +393,11 @@ impl Vmmap {
         // Subtract base address from system address to get user address
         match self.user_addr_bit_width {
             VmmapBitWidth::Vmmap32Bit => {
-                address - self.base_address.unwrap()
+                address.wrapping_sub(self.logical_offset) - self.base_address.unwrap()
             }
             VmmapBitWidth::Vmmap64Bit => {
-                // For 64-bit, user and system addresses are the same. sys_to_user is supported for generality.
-                address
+                // For 64-bit, user and system addresses are the same up to the logical offset.
+                address.wrapping_sub(self.logical_offset)
             }
         }
     }
@@ -385,10 +406,10 @@ impl Vmmap {
     pub fn page_num_to_user(&self, page_num: usize) -> usize {
         match self.user_addr_bit_width {
             VmmapBitWidth::Vmmap32Bit => {
-                page_num << PAGESHIFT
+                (page_num << PAGESHIFT).wrapping_sub(self.logical_offset)
             }
             VmmapBitWidth::Vmmap64Bit => {
-                (page_num << PAGESHIFT) + self.base_address.unwrap()
+                ((page_num << PAGESHIFT) + self.base_address.unwrap()).wrapping_sub(self.logical_offset)
             }
         }
     }
@@ -396,10 +417,10 @@ impl Vmmap {
     pub fn user_to_page_num(&self, user_addr: usize) -> usize {
         match self.user_addr_bit_width {
             VmmapBitWidth::Vmmap32Bit => {
-                user_addr >> PAGESHIFT
+                user_addr.wrapping_add(self.logical_offset) >> PAGESHIFT
             }
             VmmapBitWidth::Vmmap64Bit => {
-                (user_addr - self.base_address.unwrap()) >> PAGESHIFT
+                (user_addr.wrapping_add(self.logical_offset) - self.base_address.unwrap()) >> PAGESHIFT
             }
         }
     }
@@ -697,19 +718,67 @@ impl VmmapOps for Vmmap {
             cage_id,
         };
 
-        // Insert new entry, overwriting any existing entries in the range
-        let _ = self
+        // Save overlapping entries before removing them so the portions outside
+        // the requested range can be reinserted with correct mapping metadata.
+        let overlapping_entries: Vec<_> = self
             .entries
-            .insert_overwrite(ie(new_region_start_page, new_region_end_page), new_entry);
+            .overlapping(ie(new_region_start_page, new_region_end_page))
+            .map(|(interval, entry)| {
+                let entry_start = interval.start();
+                let entry_end = interval.end() + 1;
+                let suffix_file_offset = if new_region_end_page < entry_end {
+                    Some(
+                        (new_region_end_page - entry_start)
+                            .checked_mul(PAGESIZE as usize)
+                            .and_then(|bytes| i64::try_from(bytes).ok())
+                            .and_then(|bytes| entry.file_offset.checked_add(bytes))
+                            .ok_or_else(|| {
+                                io::Error::new(io::ErrorKind::InvalidInput, "File offset overflow")
+                            })?,
+                    )
+                } else {
+                    None
+                };
 
-        // If removing, delete the entry after insertion
-        if remove {
-            // Remove all entries that overlap with the specified range
+                Ok((entry_start, entry_end, entry.clone(), suffix_file_offset))
+            })
+            .collect::<Result<Vec<_>, io::Error>>()?;
+
+        for (entry_start, entry_end, _, _) in &overlapping_entries {
             let _ = self
                 .entries
-                .remove_overlapping(ie(new_region_start_page, new_region_end_page));
+                .remove_overlapping(ie(*entry_start, *entry_end));
         }
 
+        for (entry_start, entry_end, original_entry, suffix_file_offset) in overlapping_entries {
+            if entry_start < new_region_start_page {
+                let mut before_entry = original_entry.clone();
+                before_entry.page_num = entry_start;
+                before_entry.npages = new_region_start_page - entry_start;
+                let _ = self
+                    .entries
+                    .insert_overwrite(ie(entry_start, new_region_start_page), before_entry);
+            }
+
+            if let Some(suffix_file_offset) = suffix_file_offset {
+                let mut after_entry = original_entry;
+                after_entry.page_num = new_region_end_page;
+                after_entry.npages = entry_end - new_region_end_page;
+                after_entry.file_offset = suffix_file_offset;
+                let _ = self
+                    .entries
+                    .insert_overwrite(ie(new_region_end_page, entry_end), after_entry);
+            }
+        }
+
+        // Insert the new entry unless this update is removing the range.
+        if !remove {
+            let _ = self
+                .entries
+                .insert_overwrite(ie(new_region_start_page, new_region_end_page), new_entry);
+        }
+
+        self.cached_entry = None;
         Ok(())
     }
 
@@ -1215,6 +1284,30 @@ impl VmmapOps for Vmmap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Test: A logical offset shifts user addresses relative to system addresses
+    /// Expected: Conversions round-trip and map user addresses onto the copy
+    /// Mirrors an MPK cage forked in-process into memory below its parent
+    #[test]
+    fn test_logical_offset_shifts_user_addresses() {
+        let root_base = 0x7ffe_8000_0000;
+        let child_base = 0x7ffd_0000_0000;
+        let mut vmmap = Vmmap::new();
+        vmmap.user_addr_bit_width = VmmapBitWidth::Vmmap64Bit;
+        vmmap.set_base_address(child_base);
+        vmmap.set_logical_offset(child_base.wrapping_sub(root_base));
+
+        let user = root_base + 0x1234_5000;
+        let sys = child_base + 0x1234_5000;
+        assert_eq!(vmmap.user_to_sys(user), sys);
+        assert_eq!(vmmap.sys_to_user(sys), user);
+        assert_eq!(vmmap.user_to_page_num(user), 0x1234_5000 >> PAGESHIFT);
+        assert_eq!(vmmap.page_num_to_user(0x1234_5000 >> PAGESHIFT), user);
+        assert_eq!(vmmap.sys_to_page_num(sys), 0x1234_5000 >> PAGESHIFT);
+
+        vmmap.clear();
+        assert_eq!(vmmap.logical_offset, 0);
+    }
 
     /// Test: Change protection on entire continuous region
     /// Expected: Region should remain continuous with updated protection
@@ -1798,6 +1891,83 @@ mod tests {
         let last = vmmap.find_page(115).expect("Last part should exist");
         assert_eq!(last.prot, PROT_READ | PROT_WRITE);
         assert_eq!(last.backing, MemoryBackingType::Anonymous);
+    }
+
+    #[test]
+    fn test_mmap_overwrite_preserves_mapping_metadata() {
+        let mut vmmap = Vmmap::new();
+        let page_size = PAGESIZE as usize;
+        let original_start = 0x7fff7f57b000usize / page_size;
+        let original_npages = 0x23d000usize / page_size;
+        let new_start = 0x7fff7f5a9000usize / page_size;
+        let new_npages = 0x1a3000usize / page_size;
+
+        vmmap
+            .add_entry_with_overwrite(
+                original_start,
+                original_npages,
+                PROT_READ,
+                PROT_READ | PROT_WRITE,
+                0x812,
+                MemoryBackingType::FileDescriptor(3),
+                0,
+                0x400000,
+                1,
+            )
+            .unwrap();
+
+        assert!(
+            vmmap
+                .check_addr_mapping(original_start, original_npages, PROT_READ)
+                .is_some(),
+            "original mapping should be cached before replacement"
+        );
+
+        vmmap
+            .add_entry_with_overwrite(
+                new_start,
+                new_npages,
+                PROT_READ | PROT_EXEC,
+                PROT_READ | PROT_EXEC,
+                0x812,
+                MemoryBackingType::FileDescriptor(3),
+                0x2e000,
+                0x400000,
+                1,
+            )
+            .unwrap();
+
+        let prefix = vmmap
+            .find_page(original_start)
+            .expect("prefix should remain");
+        assert_eq!(prefix.page_num, original_start);
+        assert_eq!(prefix.npages, new_start - original_start);
+        assert_eq!(prefix.file_offset, 0);
+
+        let replacement = vmmap
+            .find_page(new_start)
+            .expect("new mapping should exist");
+        assert_eq!(replacement.page_num, new_start);
+        assert_eq!(replacement.npages, new_npages);
+        assert_eq!(replacement.prot, PROT_READ | PROT_EXEC);
+        assert_eq!(replacement.file_offset, 0x2e000);
+        assert!(
+            vmmap
+                .check_addr_mapping(new_start, new_npages, PROT_EXEC)
+                .is_some(),
+            "replacement permissions should be checked against the new mapping"
+        );
+
+        let suffix_start = new_start + new_npages;
+        let suffix = vmmap.find_page(suffix_start).expect("suffix should remain");
+        assert_eq!(suffix.page_num, suffix_start);
+        assert_eq!(
+            suffix.npages,
+            original_start + original_npages - suffix_start
+        );
+        assert_eq!(suffix.file_offset, 0x2e000 + 0x1a3000);
+
+        assert_eq!(vmmap.entries.iter().count(), 3);
     }
 
     /// Test: add_entry_with_overwrite completely removes overlapped smaller entries

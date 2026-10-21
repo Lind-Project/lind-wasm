@@ -21,8 +21,11 @@ use crate::lind_mpk::RuntimeInfo::{
     MPKSupervisorContext, MPKSupervisorCtxStack,
     MPKRuntimeInfo, MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
     allocate_stack_in_vmmap,
-    allocate_context_pages, bootstrap_fs_base,
-    current_ctx_stack,
+    allocate_context_pages, prepare_bootstrap_tcb,
+    current_ctx_stack, current_context_stack,
+};
+use crate::lind_mpk::gs_fork::{
+    record_guest_stack, release_cage_memory, set_gs_base, CAGE_RESERVATION_SIZE, GS_FORK_ARENA_SIZE,
 };
 use crate::shims::SyscallRuntime;
 use anyhow::{Context, bail};
@@ -53,11 +56,10 @@ use wasmtime_lind_multi_process::CAGE_START_ID;
 use threei::threei_const;
 use crate::lind_mpk::trampoline::{
     grate_callback_trampoline, register_mpk_handler_for_cage, jmp_into_cage_prepared_gs_naked,
-    GS_OS_TID_OFFSET,
 };
 
 // Import type aliases from RuntimeInfo module
-use crate::lind_mpk::RuntimeInfo::{DlAllocateTlsF, EnableInterposeF};
+use crate::lind_mpk::RuntimeInfo::{DlAllocateTlsF, InterposeHandlers, interpose_handlers, set_interpose_handlers};
 
 // dlinfo request codes not yet exposed by the libc crate.
 const RTLD_DI_LMID: c_int = 1;
@@ -65,12 +67,15 @@ const RTLD_DI_LINKMAP: c_int = 2;
 
 // 4 GB virtual address space reserved for each cage with MAP_NORESERVE
 // (no swap space is committed until pages are actually touched).
-const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
+pub(super) const MPK_MEMORY_SIZE: usize = 4 * 1024 * 1024 * 1024;
 const MPK_HEAP_START_OFFSET: usize = 3 * 1024 * 1024 * 1024;
 const MPK_MEMORY_ALIGNMENT: usize = 1024 * 1024 * 1024;
 
-fn mmap_aligned_cage_memory() -> anyhow::Result<*mut c_void> {
-    let mapping_size = MPK_MEMORY_SIZE
+/// Reserves `CAGE_RESERVATION_SIZE` bytes, 1 GiB aligned: `MPK_MEMORY_SIZE`
+/// bytes of read/write cage memory followed by the `PROT_NONE` arena that
+/// holds the stacks of GS-forked children (see `gs_fork`).
+pub(super) fn mmap_aligned_cage_memory() -> anyhow::Result<*mut c_void> {
+    let mapping_size = CAGE_RESERVATION_SIZE
         .checked_add(MPK_MEMORY_ALIGNMENT)
         .ok_or_else(|| anyhow::anyhow!("cage memory mapping size overflow"))?;
     let mapping = unsafe {
@@ -106,7 +111,7 @@ fn mmap_aligned_cage_memory() -> anyhow::Result<*mut c_void> {
     };
 
     let prefix_size = aligned_addr - mapping_addr;
-    let suffix_addr = aligned_addr + MPK_MEMORY_SIZE;
+    let suffix_addr = aligned_addr + CAGE_RESERVATION_SIZE;
     let mapping_end = mapping_addr + mapping_size;
     let suffix_size = mapping_end - suffix_addr;
 
@@ -125,13 +130,20 @@ fn mmap_aligned_cage_memory() -> anyhow::Result<*mut c_void> {
         && unsafe { libc::munmap(suffix_addr as *mut c_void, suffix_size) } != 0
     {
         let error = std::io::Error::last_os_error();
-        if unsafe { libc::munmap(aligned_addr as *mut c_void, MPK_MEMORY_SIZE + suffix_size) } != 0 {
+        if unsafe { libc::munmap(aligned_addr as *mut c_void, CAGE_RESERVATION_SIZE + suffix_size) } != 0 {
             bail!(
                 "failed to trim suffix from aligned cage memory mapping: {error}; also failed to release remaining mapping: {}",
                 std::io::Error::last_os_error()
             );
         }
         bail!("failed to trim suffix from aligned cage memory mapping: {error}");
+    }//0x7ffdff5a9020
+
+    let arena = (aligned_addr + MPK_MEMORY_SIZE) as *mut c_void;
+    if unsafe { libc::mprotect(arena, GS_FORK_ARENA_SIZE, libc::PROT_NONE) } != 0 {
+        let error = std::io::Error::last_os_error();
+        unsafe { libc::munmap(aligned_addr as *mut c_void, CAGE_RESERVATION_SIZE) };
+        bail!("failed to reserve the fork stack arena: {error}");
     }
 
     Ok(aligned_addr as *mut c_void)
@@ -139,10 +151,10 @@ fn mmap_aligned_cage_memory() -> anyhow::Result<*mut c_void> {
 
 // Stack used to call the cage's own `main`, allocated out of the cage's
 // own vmmap so it is backed by memory the guest owns.
-const CAGE_STACK_SIZE: usize = 8 * 1024 * 1024;
+pub(super) const CAGE_STACK_SIZE: usize = 8 * 1024 * 1024;
 pub const CAGE_STACK_GUARD: usize = 4096;
 
-const DEFAULT_LDSO_PATH: &str = "/lib/ld.so";
+const DEFAULT_LDSO_PATH: &str = "/lib/ld-linux-x86-64.so.2";
 
 /// C main entrypoint signature.
 type MainFn = unsafe extern "C" fn(c_int, *const *const c_char, *const *const c_char) -> c_int;
@@ -182,25 +194,9 @@ pub(super) fn setup_gs_context(
 
     let (context_pages, context_pages_size, gs_ptr) = allocate_context_pages()?;
     unsafe {
-        std::ptr::write(gs_ptr, MPKSupervisorCtxStack {
-            current_context: 0,
-            os_tid: os_tid as u64,
-            contexts: [MPKSupervisorContext::default(); LIND_MPK_MAX_CONTEXTS],
-        });
+        std::ptr::write(gs_ptr, MPKSupervisorCtxStack::new(os_tid as u64, interpose_handlers()));
         (*gs_ptr).contexts[0].cage_id = cageid;
         (*gs_ptr).contexts[1].fs_base = fs_base;
-    }
-
-    let ret = unsafe {
-        libc::syscall(
-            libc::SYS_arch_prctl,
-            ARCH_SET_GS as libc::c_long,
-            gs_ptr as u64,
-        )
-    };
-    if ret != 0 {
-        unsafe { libc::munmap(context_pages as *mut c_void, context_pages_size) };
-        bail!("arch_prctl(ARCH_SET_GS) failed: {}", std::io::Error::last_os_error());
     }
 
     current_ctx_stack.set(gs_ptr);
@@ -211,8 +207,9 @@ pub(super) fn setup_gs_context(
 /// in `MPKRuntimeInfo::threads`. GS context setup is performed separately by
 /// `setup_gs_context` and can also be called independently.
 ///
-/// This function must be called before `__enable_syscall_interpose` so that the GS
-/// context and supervisor stack are ready when the first intercepted syscall fires.
+/// The context stack is created with the process-wide interposition handlers
+/// (`interpose_handlers()`), so the GS context and supervisor stack must be
+/// ready before the thread issues its first guest syscall.
 ///
 /// Steps:
 /// 1. `mmap` a region with a `PROT_NONE` guard page at the bottom.
@@ -293,16 +290,7 @@ pub(super) fn current_tid() -> libc::pid_t {
 }
 
 fn current_context_os_tid() -> libc::pid_t {
-    let os_tid: usize;
-    unsafe {
-        asm!(
-            "mov %gs:{gs_os_tid_offset}, {os_tid}",
-            os_tid = out(reg) os_tid,
-            gs_os_tid_offset = const GS_OS_TID_OFFSET,
-            options(att_syntax, nostack, preserves_flags)
-        );
-    }
-    os_tid as libc::pid_t
+    unsafe { (*current_context_stack()).os_tid as libc::pid_t }
 }
 
 fn mpk_debug_enabled() -> bool {
@@ -339,9 +327,10 @@ fn write_initial_stack_to_context_stack(
 
 /// Points the guest FS at a bootstrap TCB that ends right before this
 /// thread's context-stack page, so guest code can reach the context stack
-/// before glibc installs its own TLS via arch_prctl(ARCH_SET_FS).
+/// before glibc installs its own TLS via arch_prctl(ARCH_SET_FS). The dummy
+/// TCB is writable and zeroed.
 fn initialize_bootstrap_tls(gs_data: *mut MPKSupervisorCtxStack) -> anyhow::Result<()> {
-    let fs_base = bootstrap_fs_base(gs_data)?;
+    let fs_base = prepare_bootstrap_tcb(gs_data)?;
     unsafe {
         (*gs_data).contexts[0].fs_base = fs_base;
     }
@@ -558,8 +547,6 @@ unsafe fn write_process_entry_stack(
         (auxv::AT_HWCAP2, auxv.hwcap2),
         (auxv::AT_EXECFN, execfn_ptr as usize),
         (auxv::AT_PLATFORM, platform_ptr as usize),
-        (auxv::AT_3ITRMP_PTR, auxv.threei_trampoline_ptr),
-        (auxv::AT_3I_MAKE_THREEI_CALL_PTR, auxv.threei_make_threei_call_ptr),
     ];
 
     // Keep the final entry RSP 16-byte aligned while preserving strict
@@ -722,9 +709,9 @@ impl SyscallRuntime for MpkRuntime {
 /// the isolated dlmopen namespace through 3i's dispatch table so it reaches
 /// RawPOSIX for sandboxed handling, exactly like a Wasm cage.
 ///
-/// This function is registered with the custom glibc via
-/// `__enable_syscall_interpose`. Once registered, any libc-level syscall made
-/// by the guest .so calls this handler instead of entering the kernel directly.
+/// `init_mpk` installs it as the process-wide handler, which is copied into
+/// the header of every context stack (`MPKSupervisorCtxStack::handler`). The
+/// glibc trampolines call it instead of entering the kernel directly.
 extern "C" fn lind_syscall_handler(
     a1: i64,
     a2: i64,
@@ -775,6 +762,10 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
     mpk_debug("initializing lind-mpk");
     // Publish the manager globally so mpk_clone_syscall_entry can reach it.
     LIND_MANAGER.set(lind_manager).ok();
+    set_interpose_handlers(InterposeHandlers {
+        handler: Some(lind_syscall_handler),
+        make_threei_call: Some(mpk_make_threei_call_wrapper),
+    });
 
     crate::lind_mpk::signals::register_kill_syscall_handler()
         .expect("failed to register MPK kill syscall handler");
@@ -883,7 +874,9 @@ fn exec_mpk_internal(
         .ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
     let current_os_tid = current_context_os_tid(); //the os tid of the forked off child
     let new_os_tid = current_tid();
-    let old_grate_cage_ids: std::collections::HashSet<u64> = {
+    // Exec runs on this thread's supervisor stack, so the thread's
+    // MpkThreadInfo must survive replacing the cage's runtime info below.
+    let old_thread_info: Option<Arc<MpkThreadInfo>> = {
         let runtime_info = cage.runtime_info.read();
         let mpk_info = runtime_info
             .as_any()
@@ -893,9 +886,12 @@ fn exec_mpk_internal(
             .threads
             .read()
             .get(&current_os_tid)
-            .map(|thread| thread.thread_info.cage_ids.lock().unwrap().clone())
-            .unwrap_or_default()
+            .map(|thread| Arc::clone(&thread.thread_info))
     };
+    let old_grate_cage_ids: std::collections::HashSet<u64> = old_thread_info
+        .as_ref()
+        .map(|thread_info| thread_info.cage_ids.lock().unwrap().clone())
+        .unwrap_or_default();
     mpk_debug(format!(
         "exec: preserving registered grate cages for tid {}: {:?}, rerigistering for new tid {}",
         current_os_tid, old_grate_cage_ids, new_os_tid
@@ -918,7 +914,7 @@ fn exec_mpk_internal(
                 // lives in the child's address space and is reclaimed when we kill it.
                 if !mpk_info.memory_base.is_null() && mpk_info.memory_size > 0 {
                     mpk_debug("unmapping old cage memory region");
-                    unsafe { libc::munmap(mpk_info.memory_base, mpk_info.memory_size); }
+                    release_cage_memory(cage_id, mpk_info.memory_base as usize);
                 }
                 mpk_debug("old namespace context torn down");
             }
@@ -948,12 +944,17 @@ fn exec_mpk_internal(
         }
     }
 
-    // Step 5: Set up supervisor stack and install GS.
-    // Returns MpkThreadInfo which is registered in MPKRuntimeInfo::threads below.
-    let thread_info = Arc::new(match setup_supervisor_stack(cage_id, new_os_tid) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    });
+    // Step 5: Reuse this thread's supervisor stack and context stack, or set
+    // them up if the thread has none yet. The MpkThreadInfo is registered in
+    // MPKRuntimeInfo::threads below.
+    let thread_info = match old_thread_info {
+        Some(thread_info) => {
+            thread_info.reset_for_exec(cage_id, new_os_tid);
+            current_ctx_stack.set(thread_info.gs_data);
+            thread_info
+        }
+        None => Arc::new(setup_supervisor_stack(cage_id, new_os_tid)?),
+    };
 
     // Keep the new cage and all restored grates attached to the same
     // supervisor state for this OS thread.
@@ -1015,24 +1016,17 @@ fn exec_mpk_internal(
         match mpk_load_ldso_and_binary_with_info(DEFAULT_LDSO_PATH, &so_path, &mut vmmap) {
             Ok(v) => v,
             Err(e) => {
-                unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+                unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
                 return Err(e);
             }
         }
     };
-    let enable_interpose: EnableInterposeF =
-        unsafe { std::mem::transmute(loaded.enable_interpose_ptr as usize) };
     let dl_allocate_tls: DlAllocateTlsF =
         unsafe { std::mem::transmute(loaded.dl_allocate_tls_ptr as usize) };
-    let process_auxv = match build_process_auxv(
-        &so_path,
-        &loaded,
-        lind_syscall_handler as *const () as usize,
-        mpk_make_threei_call_wrapper as *const () as usize,
-    ) {
+    let process_auxv = match build_process_auxv(&so_path, &loaded) {
         Ok(v) => v,
         Err(e) => {
-            unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+            unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
             return Err(e);
         }
     };
@@ -1041,7 +1035,6 @@ fn exec_mpk_internal(
     let mpk_info = MPKRuntimeInfo::new(
         std::ptr::null_mut(),
         std::ptr::null_mut(),
-        enable_interpose,
         dl_allocate_tls,
         0,
         memory_base,
@@ -1081,9 +1074,12 @@ fn exec_mpk_internal(
     // Step 9: Allocate a stack for the guest inside the cage's own vmmap,
     // write argc/argv/envp entry layout, then jump into ld.so.
     let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
+    record_guest_stack(new_os_tid, cage_stack_top - CAGE_STACK_SIZE, CAGE_STACK_SIZE);
     let entry_rsp = unsafe {
         write_process_entry_stack(cage_stack_top, &args, &vars, &so_path, &process_auxv)
     };
+    // A GS-forked cage that execs runs a program of its own: no offset.
+    set_gs_base(0);
 
     mpk_debug(format!(
         "jumping to ld.so entrypoint {:#x} on cage stack rsp={:#x} (binary_entry={:#x})",
@@ -1107,6 +1103,9 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     NO_INTERPOSE.store(lindboot_cli.no_interpose, Ordering::Release);
     if lindboot_cli.no_interpose {
         mpk_debug("--no-interpose: syscall interposition disabled");
+        // Context stacks are created with null handlers, so the guest
+        // trampolines issue raw syscalls.
+        set_interpose_handlers(InterposeHandlers::default());
     }
 
     mpk_debug(format!("starting execute_mpk for {}, cwd={}", so_path, std::env::current_dir().unwrap().display()));
@@ -1146,24 +1145,17 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
         match mpk_load_ldso_and_binary_with_info(DEFAULT_LDSO_PATH, &so_path, &mut vmmap) {
             Ok(v) => v,
             Err(e) => {
-                unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+                unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
                 return Err(e);
             }
         }
     };
-    let enable_interpose: EnableInterposeF =
-        unsafe { std::mem::transmute(loaded.enable_interpose_ptr as usize) };
     let dl_allocate_tls: DlAllocateTlsF =
         unsafe { std::mem::transmute(loaded.dl_allocate_tls_ptr as usize) };
-    let process_auxv = match build_process_auxv(
-        &so_path,
-        &loaded,
-        lind_syscall_handler as *const () as usize,
-        mpk_make_threei_call_wrapper as *const () as usize,
-    ) {
+    let process_auxv = match build_process_auxv(&so_path, &loaded) {
         Ok(v) => v,
         Err(e) => {
-            unsafe { libc::munmap(memory_base, MPK_MEMORY_SIZE) };
+            unsafe { libc::munmap(memory_base, CAGE_RESERVATION_SIZE) };
             return Err(e);
         }
     };
@@ -1173,7 +1165,6 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     let mpk_info = MPKRuntimeInfo::new(
         std::ptr::null_mut(),
         std::ptr::null_mut(),
-        enable_interpose,
         dl_allocate_tls,
         0,
         memory_base,
@@ -1221,6 +1212,7 @@ pub fn execute_mpk(lindboot_cli: CliOptions, cage_id: u64) -> anyhow::Result<i32
     // Step 5: Allocate a stack for the guest inside the cage's own vmmap and
     // write argc/argv/envp entry layout.
     let (_, cage_stack_top) = allocate_stack_in_vmmap(cage_id, CAGE_STACK_GUARD, CAGE_STACK_SIZE)?;
+    record_guest_stack(tid, cage_stack_top - CAGE_STACK_SIZE, CAGE_STACK_SIZE);
     let mut launch_vars = lindboot_cli.vars.clone();
     merge_host_ld_env_vars(&mut launch_vars);
     ensure_ld_library_path_contains_lib_elf(&mut launch_vars);

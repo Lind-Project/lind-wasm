@@ -22,6 +22,7 @@ struct LoadedImage {
 	enable_interpose_ptr: Option<u64>,
 	dl_allocate_tls_ptr: Option<u64>,
 	tls_tcb_size: Option<usize>,
+	tls_sandbox_offset: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,11 +57,6 @@ pub mod auxv {
 	pub const AT_EXECFN: usize = 31;
 	pub const AT_SYSINFO_EHDR: usize = 33;
 	pub const AT_MINSIGSTKSZ: usize = 51;
-
-	// Custom lind auxv entry carrying the syscall interpose trampoline target.
-	pub const AT_3ITRMP_PTR: usize = 0x7000_0001;
-	// Custom lind auxv entry carrying the make_threei_call function pointer.
-	pub const AT_3I_MAKE_THREEI_CALL_PTR: usize = 0x7000_0002;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,8 +78,6 @@ pub struct ProcessAuxv {
 	pub egid: usize,
 	pub secure: usize,
 	pub hwcap2: usize,
-	pub threei_trampoline_ptr: usize,
-	pub threei_make_threei_call_ptr: usize,
 }
 
 fn align_down(value: usize, align: usize) -> usize {
@@ -330,32 +324,37 @@ fn map_elf_into_vmmap(vmmap: &mut Vmmap, path: &Path) -> Result<LoadedImage> {
 			})
 		})
 		.transpose()?;
-	let tls_tcb_size = elf.dynsyms.iter().find(|symbol| {
-		symbol.st_shndx != 0
-			&& elf.dynstrtab.get_at(symbol.st_name) == Some("_lind_tls_tcb_size")
-	}).map(|symbol| -> Result<usize> {
-		if symbol.st_size != std::mem::size_of::<usize>() as u64 {
-			bail!("invalid _lind_tls_tcb_size size in {}", path.display());
-		}
-		let symbol_end = symbol.st_value.checked_add(symbol.st_size)
-			.ok_or_else(|| anyhow::anyhow!("_lind_tls_tcb_size symbol size overflow"))?;
-		if !elf.program_headers.iter().any(|ph| {
-			ph.p_type == PT_LOAD && ph.p_flags & PF_R != 0
-				&& symbol.st_value >= ph.p_vaddr
-				&& ph.p_vaddr.checked_add(ph.p_filesz).is_some_and(|end| symbol_end <= end)
-		}) {
-			bail!("_lind_tls_tcb_size is outside a readable file-backed segment in {}", path.display());
-		}
-		let address = load_bias.checked_add(symbol.st_value)
-			.ok_or_else(|| anyhow::anyhow!("_lind_tls_tcb_size address overflow"))?;
-		Ok(unsafe { std::ptr::read_unaligned(address as *const usize) })
-	}).transpose()?;
+	let read_usize_symbol = |name: &str| -> Result<Option<usize>> {
+		elf.dynsyms.iter().find(|symbol| {
+			symbol.st_shndx != 0
+				&& elf.dynstrtab.get_at(symbol.st_name) == Some(name)
+		}).map(|symbol| -> Result<usize> {
+			if symbol.st_size != std::mem::size_of::<usize>() as u64 {
+				bail!("invalid {name} size in {}", path.display());
+			}
+			let symbol_end = symbol.st_value.checked_add(symbol.st_size)
+				.ok_or_else(|| anyhow::anyhow!("{name} symbol size overflow"))?;
+			if !elf.program_headers.iter().any(|ph| {
+				ph.p_type == PT_LOAD && ph.p_flags & PF_R != 0
+					&& symbol.st_value >= ph.p_vaddr
+					&& ph.p_vaddr.checked_add(ph.p_filesz).is_some_and(|end| symbol_end <= end)
+			}) {
+				bail!("{name} is outside a readable file-backed segment in {}", path.display());
+			}
+			let address = load_bias.checked_add(symbol.st_value)
+				.ok_or_else(|| anyhow::anyhow!("{name} address overflow"))?;
+			Ok(unsafe { std::ptr::read_unaligned(address as *const usize) })
+		}).transpose()
+	};
+	let tls_tcb_size = read_usize_symbol("_lind_tls_tcb_size")?;
+	let tls_sandbox_offset = read_usize_symbol("_lind_tls_sandbox_offset")?;
 	Ok(LoadedImage {
 		load_bias,
 		entrypoint,
 		enable_interpose_ptr,
 		dl_allocate_tls_ptr,
 		tls_tcb_size,
+		tls_sandbox_offset,
 	})
 }
 
@@ -403,8 +402,6 @@ fn compute_phdr_addr(elf: &Elf, load_bias: u64) -> Option<u64> {
 pub fn build_process_auxv(
 	binary_path: &str,
 	loaded: &LoadedImagesInfo,
-	threei_trampoline_ptr: usize,
-	threei_make_threei_call_ptr: usize,
 ) -> Result<ProcessAuxv> {
 	let file_bytes = std::fs::read(binary_path)
 		.with_context(|| format!("failed to read ELF file {}", binary_path))?;
@@ -432,8 +429,6 @@ pub fn build_process_auxv(
 		egid: unsafe { libc::getegid() as usize },
 		secure: host_auxv_value(auxv::AT_SECURE),
 		hwcap2: host_auxv_value(auxv::AT_HWCAP2),
-		threei_trampoline_ptr,
-		threei_make_threei_call_ptr,
 	})
 }
 
@@ -471,6 +466,9 @@ pub fn mpk_load_ldso_and_binary_with_info(
 		anyhow::anyhow!("{} does not define _lind_tls_tcb_size; rebuild native glibc", ldso_path)
 	})?;
 	crate::lind_mpk::RuntimeInfo::set_guest_tcb_size(tls_tcb_size)?;
+	if let Some(offset) = ldso.tls_sandbox_offset {
+		crate::lind_mpk::RuntimeInfo::set_guest_sandbox_offset(offset, tls_tcb_size)?;
+	}
 	let binary = map_elf_into_vmmap(vmmap, Path::new(binary_path))?;
 
 	Ok(LoadedImagesInfo {

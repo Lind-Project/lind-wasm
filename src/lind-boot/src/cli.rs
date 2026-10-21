@@ -71,7 +71,7 @@ pub struct CliOptions {
     pub thread_stack_size: usize,
 
     /// Debug: skip registering the syscall interposition handler
-    /// (__enable_syscall_interpose is resolved but never called).
+    /// (context stacks are created without handlers).
     #[arg(long = "no-interpose")]
     pub no_interpose: bool,
 }

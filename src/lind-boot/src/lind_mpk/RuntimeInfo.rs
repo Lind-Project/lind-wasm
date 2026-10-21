@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use cage::{get_cage, MemoryBackingType, RuntimeInfo, RwLock, VmmapOps};
 use sysdefs::constants::fs_const::{PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE};
+use crate::lind_mpk::gs_fork::{cage_gs_offset, with_gs_base};
 
 const MPK_GRATE_STACK_SIZE: usize = 8 * 1024 * 1024;
 const MPK_GRATE_STACK_GUARD: usize = 4096;
@@ -144,18 +145,56 @@ fn free_region_in_vmmap(cage_id: u64, base_sys: usize, allocation_size: usize) {
     }
 }
 
-/// Type alias for the __enable_syscall_interpose function pointer.
-/// This function is provided by the custom glibc loaded in the dlmopen
-/// namespace and is used to register syscall interposition handlers.
-pub type EnableInterposeF = unsafe extern "C" fn(
-    handler: Option<unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, i32, i64, u64) -> i64>,
-    make_threei_call: Option<extern "C" fn(
-        u64, u64, u64, u64, 
-        u64, u64, u64, u64, 
-        u64, u64, u64, u64, 
-        u64, u64, u64, u64, 
-    ) -> i64>,
-) -> libc::c_int;
+/// Supervisor entry for intercepted guest syscalls:
+/// `(arg1..arg6, nargs, number, cageid) -> result`. `nargs`, `number` and
+/// `cageid` are passed on the stack by the glibc trampolines.
+pub type SyscallHandlerF =
+    unsafe extern "C" fn(i64, i64, i64, i64, i64, i64, i32, i64, u64) -> i64;
+
+/// Supervisor entry for guest `__make_threei_call` (16 u64 arguments).
+pub type MakeThreeiCallF = unsafe extern "C" fn(
+    u64, u64, u64, u64,
+    u64, u64, u64, u64,
+    u64, u64, u64, u64,
+    u64, u64, u64, u64,
+) -> i64;
+
+/// Supervisor entry points the glibc trampolines call. They are stored in the
+/// header of every context stack; a null `handler` disables interposition for
+/// that thread (glibc then issues the raw syscall).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InterposeHandlers {
+    pub handler: Option<SyscallHandlerF>,
+    pub make_threei_call: Option<MakeThreeiCallF>,
+}
+
+// Process-wide handlers installed into newly created context stacks.
+// Atomics rather than a lock so the state stays usable in a forked child.
+static INTERPOSE_HANDLER: AtomicUsize = AtomicUsize::new(0);
+static INTERPOSE_MAKE_THREEI_CALL: AtomicUsize = AtomicUsize::new(0);
+
+/// Sets the handlers that `setup_gs_context` installs into new context stacks.
+/// Existing context stacks are not changed (see
+/// `MPKSupervisorCtxStack::set_interpose_handlers`).
+pub fn set_interpose_handlers(handlers: InterposeHandlers) {
+    INTERPOSE_HANDLER.store(handlers.handler.map_or(0, |f| f as usize), Ordering::Release);
+    INTERPOSE_MAKE_THREEI_CALL.store(
+        handlers.make_threei_call.map_or(0, |f| f as usize),
+        Ordering::Release,
+    );
+}
+
+pub fn interpose_handlers() -> InterposeHandlers {
+    let handler = INTERPOSE_HANDLER.load(Ordering::Acquire);
+    let make_threei_call = INTERPOSE_MAKE_THREEI_CALL.load(Ordering::Acquire);
+    // Safety: only valid function pointers (or 0) are stored above.
+    unsafe {
+        InterposeHandlers {
+            handler: std::mem::transmute::<usize, Option<SyscallHandlerF>>(handler),
+            make_threei_call: std::mem::transmute::<usize, Option<MakeThreeiCallF>>(make_threei_call),
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -177,22 +216,24 @@ pub const LIND_MPK_MAX_CONTEXTS: usize = 16;
 ///
 /// User contexts may store a PKRU value. A supervisor context entered from a guest
 /// trampoline stores the address of the supervisor-stack slot that holds the
-/// caller's context-stack pointer. Clone rewrites those slots for the child.
+/// caller's FS base. The trampoline's return path restores FS from that slot
+/// (before it can reach the context stack through FS again), so clone and
+/// arch_prctl(ARCH_SET_FS) rewrite it.
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(non_camel_case_types)]
-pub union PKRU_ContextStackPtr {
+pub union PKRU_GuestFsSlot {
     pub pkru: u64,
-    pub context_stack_ptr: *mut *mut MPKSupervisorCtxStack,
+    pub guest_fs_slot: *mut usize,
 }
 
-impl Default for PKRU_ContextStackPtr {
+impl Default for PKRU_GuestFsSlot {
     fn default() -> Self {
         Self { pkru: 0 }
     }
 }
 
-impl std::fmt::Debug for PKRU_ContextStackPtr {
+impl std::fmt::Debug for PKRU_GuestFsSlot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:#x}", unsafe { self.pkru })
     }
@@ -207,26 +248,32 @@ pub struct MPKSupervisorContext {
     pub fs_base: usize,
     pub cage_id: u64, // 0 for supervisor
     /// For supervisor contexts entered from the guest: pointer to the slot on the
-    /// supervisor stack holding the caller's context-stack pointer. Needed for the
-    /// clone return path.
-    pub pkru_context_stack_ptr: PKRU_ContextStackPtr,
+    /// supervisor stack holding the caller's FS base. Needed for the clone and
+    /// arch_prctl(ARCH_SET_FS) return paths.
+    pub pkru_guest_fs_slot: PKRU_GuestFsSlot,
 }
 
 const _: () = assert!(std::mem::size_of::<MPKSupervisorContext>() == 32);
-const _: () = assert!(std::mem::offset_of!(MPKSupervisorContext, pkru_context_stack_ptr) == 24);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorContext, rsp) == 0);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorContext, fs_base) == 8);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorContext, cage_id) == 16);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorContext, pkru_guest_fs_slot) == 24);
 
 
 /// Context stack shared with the guest syscall interposition assembly.
 ///
-/// The GS base points at this struct:
-///   - gs:0  — current context index
-///   - gs:8  — OS thread ID
-///   - gs:16 — fixed-capacity saved-context array
+/// Layout (mirrored by `lind_mpk_context_stack_t` in glibc's
+/// `syscall-interpose.h`):
+///   - 0x00 — current context index
+///   - 0x08 — OS thread ID
+///   - 0x10 — syscall handler (null: interposition disabled)
+///   - 0x18 — make_threei_call handler
+///   - 0x20 — fixed-capacity saved-context array
 ///
 /// Supervisor Rust code accesses this struct through `current_ctx_stack` in host
 /// TLS. Guest glibc reaches it through FS, on the page after its TCB, where the
-/// runtime aliases it (see `alias_context_stack`).
-/// GS base is retained for loader TLS setup and cloned-frame recovery.
+/// runtime aliases it (see `alias_context_stack`). The glibc trampolines only
+/// use `%fs:`-relative memory operands, which the GS rewriter preserves.
 /// Each thread must have its own instance because its active context is written on
 /// every intercepted syscall.
 #[repr(C)]
@@ -234,7 +281,38 @@ const _: () = assert!(std::mem::offset_of!(MPKSupervisorContext, pkru_context_st
 pub struct MPKSupervisorCtxStack {
     pub current_context: usize,
     pub os_tid: u64,
+    pub handler: Option<SyscallHandlerF>,
+    pub make_threei_call: Option<MakeThreeiCallF>,
     pub contexts: [MPKSupervisorContext; LIND_MPK_MAX_CONTEXTS],
+}
+
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorCtxStack, current_context) == 0x00);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorCtxStack, os_tid) == 0x08);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorCtxStack, handler) == 0x10);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorCtxStack, make_threei_call) == 0x18);
+const _: () = assert!(std::mem::offset_of!(MPKSupervisorCtxStack, contexts) == 0x20);
+const _: () = assert!(std::mem::size_of::<MPKSupervisorCtxStack>() <= CONTEXT_PAGE_SIZE);
+
+impl MPKSupervisorCtxStack {
+    pub fn new(os_tid: u64, handlers: InterposeHandlers) -> Self {
+        MPKSupervisorCtxStack {
+            current_context: 0,
+            os_tid,
+            handler: handlers.handler,
+            make_threei_call: handlers.make_threei_call,
+            contexts: [MPKSupervisorContext::default(); LIND_MPK_MAX_CONTEXTS],
+        }
+    }
+
+    pub fn interpose_handlers(&self) -> InterposeHandlers {
+        InterposeHandlers { handler: self.handler, make_threei_call: self.make_threei_call }
+    }
+
+    /// Takes effect on the next guest syscall of this thread.
+    pub fn set_interpose_handlers(&mut self, handlers: InterposeHandlers) {
+        self.handler = handlers.handler;
+        self.make_threei_call = handlers.make_threei_call;
+    }
 }
 
 thread_local! {
@@ -284,6 +362,33 @@ pub fn guest_tcb_size() -> anyhow::Result<usize> {
     }
 }
 
+/// `offsetof(struct pthread, sandbox_offset)` of the guest glibc, read from
+/// `_lind_tls_sandbox_offset`. `usize::MAX` means the loaded ld.so does not
+/// export it (older glibc); GS-based fork then refuses to run.
+static GUEST_SANDBOX_OFFSET: AtomicUsize = AtomicUsize::new(usize::MAX);
+
+pub fn set_guest_sandbox_offset(offset: usize, tcb_size: usize) -> anyhow::Result<()> {
+    if offset.checked_add(std::mem::size_of::<usize>()).map_or(true, |end| end > tcb_size) {
+        anyhow::bail!("guest sandbox_offset field {offset:#x} lies outside struct pthread ({tcb_size:#x})");
+    }
+    match GUEST_SANDBOX_OFFSET.compare_exchange(usize::MAX, offset, Ordering::AcqRel, Ordering::Acquire) {
+        Ok(_) => Ok(()),
+        Err(existing) if existing == offset => Ok(()),
+        Err(existing) => anyhow::bail!(
+            "guest sandbox_offset changed from {existing:#x} to {offset:#x}; all cages must use the same ld.so"
+        ),
+    }
+}
+
+pub fn guest_sandbox_offset() -> anyhow::Result<usize> {
+    match GUEST_SANDBOX_OFFSET.load(Ordering::Acquire) {
+        usize::MAX => anyhow::bail!(
+            "ld.so does not export _lind_tls_sandbox_offset; rebuild native glibc"
+        ),
+        offset => Ok(offset),
+    }
+}
+
 /// Page at which guest glibc expects the context stack for thread pointer `fs`.
 pub fn context_stack_page_for_fs(fs: usize, tcb_size: usize) -> Option<usize> {
     fs.checked_add(tcb_size + CONTEXT_PAGE_SIZE - 1)
@@ -292,7 +397,7 @@ pub fn context_stack_page_for_fs(fs: usize, tcb_size: usize) -> Option<usize> {
 
 /// Allocates a thread's context pages: a private bootstrap page followed by
 /// the shareable context-stack page. Until glibc installs its own TLS, the
-/// guest FS points into the bootstrap page (see `bootstrap_fs_base`).
+/// guest FS points into the bootstrap page (see `prepare_bootstrap_tcb`).
 /// Returns `(mapping_base, mapping_size, context_stack)`.
 pub(super) fn allocate_context_pages() -> anyhow::Result<(usize, usize, *mut MPKSupervisorCtxStack)> {
     let size = 2 * CONTEXT_PAGE_SIZE;
@@ -331,9 +436,40 @@ pub(super) fn allocate_context_pages() -> anyhow::Result<(usize, usize, *mut MPK
 }
 
 /// Guest FS base used before glibc installs its TLS: the TCB ends exactly at
-/// the context-stack page allocated by `allocate_context_pages`.
-pub fn bootstrap_fs_base(context_stack: *mut MPKSupervisorCtxStack) -> anyhow::Result<usize> {
-    Ok(context_stack as usize - guest_tcb_size()?)
+/// the context-stack page allocated by `allocate_context_pages`. Makes the
+/// bootstrap page in front of `context_stack` writable and zeroes it, so the
+/// guest finds a writable, zeroed dummy TCB at the returned FS base.
+pub fn prepare_bootstrap_tcb(context_stack: *mut MPKSupervisorCtxStack) -> anyhow::Result<usize> {
+    prepare_bootstrap_tcb_with_size(context_stack, guest_tcb_size()?)
+}
+
+fn prepare_bootstrap_tcb_with_size(
+    context_stack: *mut MPKSupervisorCtxStack,
+    tcb_size: usize,
+) -> anyhow::Result<usize> {
+    let stack_page = context_stack as usize;
+    if stack_page & (CONTEXT_PAGE_SIZE - 1) != 0 || stack_page < CONTEXT_PAGE_SIZE {
+        anyhow::bail!("context stack {stack_page:#x} is not preceded by a bootstrap page");
+    }
+    if tcb_size == 0 || tcb_size > CONTEXT_PAGE_SIZE {
+        anyhow::bail!("unsupported guest TCB size {tcb_size:#x}");
+    }
+    let bootstrap_page = stack_page - CONTEXT_PAGE_SIZE;
+    let ret = unsafe {
+        libc::mprotect(
+            bootstrap_page as *mut c_void,
+            CONTEXT_PAGE_SIZE,
+            libc::PROT_READ | libc::PROT_WRITE,
+        )
+    };
+    if ret != 0 {
+        anyhow::bail!(
+            "mprotect for bootstrap TCB page {bootstrap_page:#x} failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+    unsafe { std::ptr::write_bytes(bootstrap_page as *mut u8, 0, CONTEXT_PAGE_SIZE) };
+    Ok(stack_page - tcb_size)
 }
 
 fn alias_page(source_page: usize, target_page: usize) -> std::io::Result<()> {
@@ -469,20 +605,12 @@ mod context_stack_tests {
 
     #[test]
     fn current_context_stack_is_thread_local() {
-        let mut stack = MPKSupervisorCtxStack {
-            current_context: 0,
-            os_tid: 0,
-            contexts: [MPKSupervisorContext::default(); LIND_MPK_MAX_CONTEXTS],
-        };
+        let mut stack = MPKSupervisorCtxStack::new(0, InterposeHandlers::default());
         let previous = current_ctx_stack.replace(&mut stack);
         assert_eq!(current_context_stack(), &mut stack as *mut _);
         std::thread::spawn(|| {
             assert!(current_ctx_stack.get().is_null());
-            let mut child_stack = MPKSupervisorCtxStack {
-                current_context: 0,
-                os_tid: 0,
-                contexts: [MPKSupervisorContext::default(); LIND_MPK_MAX_CONTEXTS],
-            };
+            let mut child_stack = MPKSupervisorCtxStack::new(0, InterposeHandlers::default());
             current_ctx_stack.set(&mut child_stack);
             assert_eq!(current_context_stack(), &mut child_stack as *mut _);
             current_ctx_stack.set(std::ptr::null_mut());
@@ -526,6 +654,25 @@ mod context_stack_tests {
         assert_eq!(stack as usize, base + PAGE);
         assert_eq!(context_stack_page_for_fs(stack as usize - TCB, TCB), Some(stack as usize));
         unsafe { libc::munmap(base as *mut c_void, size) };
+    }
+
+    #[test]
+    fn bootstrap_tcb_is_zeroed_and_writable() {
+        let (base, size, stack) = allocate_context_pages().unwrap();
+        unsafe {
+            std::ptr::write_bytes(base as *mut u8, 0xa5, PAGE);
+            (*stack).os_tid = 0x1234;
+            assert_eq!(libc::mprotect(base as *mut c_void, PAGE, libc::PROT_READ), 0);
+        }
+        let fs = prepare_bootstrap_tcb_with_size(stack, TCB).unwrap();
+        assert_eq!(fs, stack as usize - TCB);
+        unsafe {
+            let page = std::slice::from_raw_parts_mut(base as *mut u8, PAGE);
+            assert!(page.iter().all(|&b| b == 0));
+            page.fill(0x5a);
+            assert_eq!((*stack).os_tid, 0x1234, "context stack must be untouched");
+            libc::munmap(base as *mut c_void, size);
+        }
     }
 
     #[test]
@@ -627,6 +774,27 @@ impl MpkThreadInfo {
         region_size: usize,
     ) -> anyhow::Result<()> {
         alias_context_stack(self.gs_data, cage_id, fs, region_base, region_size)
+    }
+
+    /// Prepares this thread's state to run the program `cage_id` is about to
+    /// exec. The supervisor stack and context stack are kept, since exec
+    /// itself runs on them; state referring to the old program is dropped.
+    pub fn reset_for_exec(&self, cage_id: u64, os_tid: libc::pid_t) {
+        if let Some(aliases) = context_stack_aliases_map()
+            .lock()
+            .unwrap()
+            .get_mut(&(self.gs_data as usize))
+        {
+            // The alias lived in the old program's memory, which exec releases.
+            aliases.remove(&cage_id);
+        }
+        // The clear_child_tid address pointed into the old program's memory.
+        self.child_tid.store(0, Ordering::Release);
+        unsafe {
+            (*self.gs_data).os_tid = os_tid as u64;
+            (*self.gs_data).current_context = 0;
+            (*self.gs_data).contexts[0].cage_id = cage_id;
+        }
     }
 }
 
@@ -755,14 +923,23 @@ impl MpkCageThreadInfo {
             self.dtv_size = dtv_size;
         }
 
+        // `_lind_dl_allocate_tls` is rewritten guest code: it runs with the
+        // grate's GS base and dereferences every pointer through GS, so all
+        // pointers it sees (including `tls_result` on the supervisor stack)
+        // are `real - gs_offset`, and the pointers it returns are converted back.
+        let gs_offset = cage_gs_offset(self.grate_cage_id);
+        let to_guest = |real: usize| real.wrapping_sub(gs_offset) as *mut c_void;
         let mut tls_result = LindAllocateTlsResult {
-            stackaddr: stack_addr as *mut c_void,
+            stackaddr: to_guest(stack_addr),
             fs_base: std::ptr::null_mut(),
             stacktop: std::ptr::null_mut(),
-            dtv: self.dtv,
+            dtv: to_guest(self.dtv as usize),
             dtv_size: self.dtv_size,
         };
-        let ret = unsafe { (grate.dl_allocate_tls)(&mut tls_result as *mut LindAllocateTlsResult) };
+        let result_ptr = to_guest(&mut tls_result as *mut LindAllocateTlsResult as usize);
+        let ret = with_gs_base(gs_offset, || unsafe {
+            (grate.dl_allocate_tls)(result_ptr as *mut LindAllocateTlsResult)
+        });
         if ret != 0 {
             anyhow::bail!(
                 "_lind_dl_allocate_tls failed: {}",
@@ -773,7 +950,12 @@ impl MpkCageThreadInfo {
             anyhow::bail!("_lind_dl_allocate_tls returned null fs_base or stacktop");
         }
 
-        let fs_base = tls_result.fs_base as usize;
+        let fs_base = (tls_result.fs_base as usize).wrapping_add(gs_offset);
+        let stacktop = (tls_result.stacktop as usize).wrapping_add(gs_offset);
+        if gs_offset != 0 {
+            let field = fs_base + guest_sandbox_offset()?;
+            unsafe { std::ptr::write_unaligned(field as *mut usize, gs_offset) };
+        }
         let expected_alias = stack_addr;
         if context_stack_page_for_fs(fs_base, guest_tcb_size()?) != Some(expected_alias) {
             anyhow::bail!(
@@ -788,8 +970,7 @@ impl MpkCageThreadInfo {
         )?;
 
         self.fs_base = fs_base;
-        self.stack_addr
-            .store(tls_result.stacktop as usize, Ordering::Relaxed);
+        self.stack_addr.store(stacktop, Ordering::Relaxed);
         Ok(())
     }
 }
@@ -827,8 +1008,6 @@ pub struct MPKRuntimeInfo {
     pub loader_cage_handle: *mut c_void,
     /// Handle to the custom libc loaded in the isolated namespace
     pub loader_libc_handle: *mut c_void,
-    /// Function pointer to __enable_syscall_interpose in custom libc
-    pub enable_interpose_fn: EnableInterposeF,
     /// Function pointer to _lind_dl_allocate_tls in custom libc, needed for thread-local storage allocation.
     pub dl_allocate_tls: DlAllocateTlsF,
     /// OS-level process ID of this cage's process.
@@ -864,7 +1043,6 @@ impl MPKRuntimeInfo {
     pub fn new(
         cage_handle: *mut c_void,
         libc_handle: *mut c_void,
-        enable_interpose: EnableInterposeF,
         dl_allocate_tls: DlAllocateTlsF,
         pid: libc::pid_t,
         memory_base: *mut c_void,
@@ -879,7 +1057,6 @@ impl MPKRuntimeInfo {
         MPKRuntimeInfo {
             loader_cage_handle: cage_handle,
             loader_libc_handle: libc_handle,
-            enable_interpose_fn: enable_interpose,
             dl_allocate_tls,
             pid,
             memory_base,

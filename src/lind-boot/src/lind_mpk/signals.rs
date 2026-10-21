@@ -3,7 +3,10 @@
 /// - find better solution for map_tid_to_cage
 /// - check ordering of context stack increment: Are there any races with signal handling?
 /// - prevent deadlocks by managing the signal mask carefully
-use crate::lind_mpk::RuntimeInfo::{MPKRuntimeInfo, MPKSupervisorCtxStack, LIND_MPK_MAX_CONTEXTS};
+use crate::lind_mpk::RuntimeInfo::{
+    context_stack_page_for_fs, MPKRuntimeInfo, MPKSupervisorCtxStack, GUEST_TCB_SIZE,
+    LIND_MPK_MAX_CONTEXTS,
+};
 use cage::memory::vmmap::VmmapOps;
 use cage::get_cage;
 use std::arch::asm;
@@ -97,7 +100,14 @@ fn cage_from_supervisor_ctx_top() -> Option<u64> {
 
     #[cfg(target_arch = "x86_64")]
     unsafe {
-        let gs_data = gs_base() as *const MPKSupervisorCtxStack;
+        // Only called after guest code was interrupted, so FS is the guest
+        // thread pointer and the context-stack page is mapped right after its
+        // TCB. GS cannot be used: it holds the cage's sandbox offset.
+        let tcb_size = GUEST_TCB_SIZE.load(Ordering::Acquire);
+        if tcb_size == 0 {
+            return None;
+        }
+        let gs_data = context_stack_page_for_fs(fs_base(), tcb_size)? as *const MPKSupervisorCtxStack;
         if gs_data.is_null() {
             return None;
         }
@@ -138,11 +148,11 @@ fn addr_in_cage_vmmap(cageid: u64, addr: usize) -> bool {
 }
 
 #[cfg(target_arch = "x86_64")]
-fn gs_base() -> usize {
+fn fs_base() -> usize {
     let base: usize;
     unsafe {
         asm!(
-            "rdgsbase {out}",
+            "rdfsbase {out}",
             out = out(reg) base,
             options(nostack, preserves_flags, att_syntax),
         );

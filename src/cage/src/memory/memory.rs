@@ -162,6 +162,7 @@ pub fn init_vmmap(cageid: u64, base_address: usize, heap_start: Option<usize>, u
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
+    vmmap.set_logical_offset(0);
     if heap_start.is_some() {
         vmmap.set_heap_start(heap_start.unwrap());
     }

@@ -444,17 +444,25 @@ pub(super) unsafe extern "sysv64" fn _call_into_cage_asm(
 }
 
 
-#[unsafe(naked)]
+/// Enters contexts[0] from host TLS; contexts[1] must already contain the supervisor context.
 pub extern "sysv64" fn jmp_into_cage_prepared_gs_naked(
     entry_point: u64,
-) {
+) -> ! {
+    let context_stack = current_context_stack();
+    unsafe { jmp_into_cage_asm(entry_point, context_stack) }
+}
+
+#[unsafe(naked)]
+unsafe extern "sysv64" fn jmp_into_cage_asm(
+    entry_point: u64,
+    context_stack: *mut MPKSupervisorCtxStack,
+) -> ! {
     unsafe {
         naked_asm!(
-            //at this point, we assume that contexts[0] is the user context to switch to and that contexts[1] is an already prepared supervisor context
-            "movq %gs:{gs_contexts_array_offset} , %rsp; ",
-            "movq %gs:{gs_context_fs_offset} , %rax; ",
+            "movq {gs_contexts_array_offset}(%rsi), %rsp; ",
+            "movq {gs_context_fs_offset}(%rsi), %rax; ",
             "wrfsbase %rax; ",
-            "jmp *%rdi", //entry point in first arg         
+            "jmp *%rdi",
         gs_contexts_array_offset = const GS_CONTEXT_ARRAY_OFFSET,
         gs_context_fs_offset = const GS_CONTEXT_FS_OFFSET,
         options(att_syntax));
@@ -511,6 +519,70 @@ mod context_stack_tests {
             }
             current_ctx_stack.set(self.previous_stack);
         }
+    }
+
+    #[unsafe(naked)]
+    unsafe extern "sysv64" fn check_cage_entry(expected_rsp: u64, expected_fs: u64) -> u64 {
+        naked_asm!(
+            "pushq %r12",
+            "pushq %r13",
+            "pushq %r14",
+            "pushq %r15",
+            "subq $8, %rsp",
+            "movq %rsp, %r12",
+            "rdfsbase %r13",
+            "movq %rdi, %r14",
+            "movq %rsi, %r15",
+            "leaq {entry}(%rip), %rdi",
+            "call {jump}",
+            "ud2",
+            entry = sym cage_entry_probe,
+            jump = sym jmp_into_cage_prepared_gs_naked,
+            options(att_syntax),
+        );
+    }
+
+    #[unsafe(naked)]
+    unsafe extern "sysv64" fn cage_entry_probe() -> ! {
+        naked_asm!(
+            // Compare the entry registers, then bypass the non-returning wrapper
+            // to restore the test caller's stack, TLS, and callee-saved registers.
+            "movq %rsp, %rax",
+            "xorq %r14, %rax",
+            "rdfsbase %rdx",
+            "xorq %r15, %rdx",
+            "orq %rdx, %rax",
+            "wrfsbase %r13",
+            "movq %r12, %rsp",
+            "addq $8, %rsp",
+            "popq %r15",
+            "popq %r14",
+            "popq %r13",
+            "popq %r12",
+            "ret",
+            options(att_syntax),
+        );
+    }
+
+    #[test]
+    fn cage_entry_uses_thread_local_context_stack_instead_of_gs() {
+        let stack = ContextStack::new();
+        let mut gs_context = MPKSupervisorCtxStack::new(0, Default::default());
+        unsafe {
+            (*stack.pointer).current_context = 0;
+            (*stack.pointer).contexts[0].rsp = (*stack.pointer).contexts[2].rsp;
+            (*stack.pointer).contexts[0].fs_base = stack.pointer as usize;
+            asm!("wrgsbase {}", in(reg) &mut gs_context, options(nostack, preserves_flags));
+            assert_eq!(
+                check_cage_entry(
+                    (*stack.pointer).contexts[0].rsp,
+                    (*stack.pointer).contexts[0].fs_base as u64,
+                ),
+                0,
+            );
+        }
+        assert_eq!(current_context_stack(), stack.pointer);
+        assert_eq!(unsafe { (*stack.pointer).current_context }, 0);
     }
 
     extern "sysv64" fn grate(
