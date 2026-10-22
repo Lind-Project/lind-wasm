@@ -39,6 +39,10 @@ int main(void) {
 
         fn("child, before second fork");
 
+        /* Flush before forking so the grandchild does not inherit (and
+           print a second time) the line still sitting in stdout's buffer. */
+        fflush(stdout);
+
         /* Fork again from within the child so the grandchild inherits the
            already-dlopened library and must be able to call it. */
         int pid2 = fork();
