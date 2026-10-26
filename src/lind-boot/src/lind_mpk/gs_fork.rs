@@ -910,28 +910,15 @@ fn gs_fork_inner(
     Ok(child_cageid)
 }
 
-/// Starts the child's host thread with `pthread_create` directly on
-/// `gs_fork_thread_start`, so no Rust frames are below the `longjmp`.
+/// Starts the child's host thread and detaches it by dropping its join handle.
 fn spawn_child_thread(launch: ChildLaunch) -> anyhow::Result<()> {
-    let launch = Box::into_raw(Box::new(launch));
-    let mut thread: libc::pthread_t = 0;
-    let mut attr: libc::pthread_attr_t = unsafe { std::mem::zeroed() };
-    let ret = unsafe {
-        libc::pthread_attr_init(&mut attr);
-        libc::pthread_attr_setdetachstate(&mut attr, libc::PTHREAD_CREATE_DETACHED);
-        let ret = libc::pthread_create(
-            &mut thread,
-            &attr,
-            gs_fork_thread_start,
-            launch as *mut c_void,
-        );
-        libc::pthread_attr_destroy(&mut attr);
-        ret
-    };
-    if ret != 0 {
-        drop(unsafe { Box::from_raw(launch) });
-        anyhow::bail!("pthread_create failed: {}", std::io::Error::from_raw_os_error(ret));
-    }
+    let thread = std::thread::Builder::new()
+        .spawn(move || {
+            let launch = Box::into_raw(Box::new(launch));
+            let _ = gs_fork_thread_start(launch.cast());
+        })
+        .map_err(|error| anyhow::anyhow!("failed to spawn child thread: {error}"))?;
+    drop(thread);
     Ok(())
 }
 

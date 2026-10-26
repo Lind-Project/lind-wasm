@@ -96,37 +96,63 @@ pub fn free_stack_in_vmmap(cage_id: u64, guard_start_sys: usize, allocation_size
 }
 
 /// Allocates a writable region out of `cage_id`'s vmmap and returns
-/// `(region_base_sys_addr, region_size)`.
+/// `(region_base_sys_addr, region_size)`. Free vmmap ranges may have been
+/// unmapped or protected by guest syscalls, so replace their host backing.
 pub(super) fn allocate_region_in_vmmap(cage_id: u64, size: usize) -> anyhow::Result<(usize, usize)> {
     if size == 0 {
         anyhow::bail!("cannot allocate zero-sized vmmap region");
     }
 
+    size.checked_add((1usize << PAGESHIFT) - 1)
+        .ok_or_else(|| anyhow::anyhow!("vmmap region size overflow"))?;
     let allocation_size = align_up_to_pages(size);
-    let npages = allocation_size >> PAGESHIFT;
     let cage = get_cage(cage_id).ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
     let mut vmmap = cage.vmmap.write();
+    map_region_in_vmmap(&mut vmmap, cage_id, allocation_size)
+}
 
+fn map_region_in_vmmap(
+    vmmap: &mut cage::Vmmap,
+    cage_id: u64,
+    allocation_size: usize,
+) -> anyhow::Result<(usize, usize)> {
+    let npages = allocation_size >> PAGESHIFT;
     let space = vmmap
         .find_map_space(npages, 1)
         .ok_or_else(|| anyhow::anyhow!("no space in cage {} vmmap for region", cage_id))?;
     let start_page = space.start();
+    let flags = libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_FIXED;
     vmmap.add_entry_with_overwrite(
         start_page,
         npages,
         PROT_READ | PROT_WRITE,
         PROT_READ | PROT_WRITE,
-        0,
+        flags,
         MemoryBackingType::Anonymous,
         0,
         0,
         cage_id,
     )?;
     let region_base = vmmap.page_num_to_sys(start_page);
-    drop(vmmap);
-
-    unsafe {
-        std::ptr::write_bytes(region_base as *mut u8, 0, allocation_size);
+    let mapping = unsafe {
+        libc::mmap(
+            region_base as *mut c_void,
+            allocation_size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            flags,
+            -1,
+            0,
+        )
+    };
+    if mapping == libc::MAP_FAILED {
+        let error = std::io::Error::last_os_error();
+        vmmap.remove_entry(start_page, npages).map_err(|cleanup_error| {
+            anyhow::anyhow!(
+                "mmap for cage {} region failed: {}; vmmap rollback failed: {}",
+                cage_id, error, cleanup_error
+            )
+        })?;
+        anyhow::bail!("mmap for cage {} region failed: {}", cage_id, error);
     }
 
     Ok((region_base, allocation_size))
@@ -760,6 +786,101 @@ mod context_stack_tests {
             libc::munmap(region as *mut c_void, 2 * PAGE);
             libc::munmap(base as *mut c_void, size);
         }
+    }
+}
+
+#[cfg(test)]
+mod vmmap_region_tests {
+    use super::*;
+
+    const PAGE: usize = 1usize << PAGESHIFT;
+
+    struct TestRegion {
+        base: *mut c_void,
+        vmmap: cage::Vmmap,
+    }
+
+    impl TestRegion {
+        fn new() -> Self {
+            let base = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    3 * PAGE,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            assert_ne!(base, libc::MAP_FAILED);
+            let mut vmmap = cage::Vmmap::new();
+            vmmap.set_base_address(base as usize);
+            vmmap.start_address = 0;
+            vmmap.end_address = 3;
+            Self { base, vmmap }
+        }
+
+        fn allocate(&mut self) {
+            let (base, size) = map_region_in_vmmap(&mut self.vmmap, 1, 2 * PAGE).unwrap();
+            assert_eq!(base, self.base as usize);
+            assert_eq!(size, 2 * PAGE);
+            let entry = self.vmmap.find_page(0).unwrap();
+            assert_eq!(entry.prot, PROT_READ | PROT_WRITE);
+            assert_eq!(entry.backing, MemoryBackingType::Anonymous);
+            assert_eq!(
+                entry.flags,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_FIXED
+            );
+            unsafe {
+                let bytes = std::slice::from_raw_parts_mut(base as *mut u8, size);
+                assert!(bytes.iter().all(|&byte| byte == 0));
+                bytes.fill(0xa5);
+            }
+        }
+    }
+
+    impl Drop for TestRegion {
+        fn drop(&mut self) {
+            assert_eq!(unsafe { libc::munmap(self.base, 3 * PAGE) }, 0);
+        }
+    }
+
+    #[test]
+    fn region_replaces_prot_none_backing() {
+        let mut region = TestRegion::new();
+        assert_eq!(unsafe { libc::mprotect(region.base, 2 * PAGE, libc::PROT_NONE) }, 0);
+        region.allocate();
+    }
+
+    #[test]
+    fn region_replaces_unmapped_backing() {
+        let mut region = TestRegion::new();
+        assert_eq!(unsafe { libc::munmap(region.base, 2 * PAGE) }, 0);
+        region.allocate();
+    }
+
+    #[test]
+    fn region_reuse_is_zeroed() {
+        let mut region = TestRegion::new();
+        region.allocate();
+        region.vmmap.remove_entry(0, 2).unwrap();
+        region.allocate();
+    }
+
+    #[test]
+    fn region_mmap_failure_rolls_back_vmmap() {
+        let mut region = TestRegion::new();
+        region.vmmap.set_base_address(region.base as usize + 1);
+        let error = map_region_in_vmmap(&mut region.vmmap, 1, 2 * PAGE).unwrap_err();
+        assert!(error.to_string().contains("mmap for cage 1 region failed"));
+        assert!(region.vmmap.entries.is_empty());
+        assert_eq!(region.vmmap.find_map_space(2, 1).unwrap().start(), 0);
+    }
+
+    #[test]
+    fn region_rejects_invalid_sizes() {
+        assert!(allocate_region_in_vmmap(1, 0).is_err());
+        assert!(allocate_region_in_vmmap(1, usize::MAX).is_err());
     }
 }
 
