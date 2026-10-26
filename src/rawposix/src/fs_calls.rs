@@ -3151,9 +3151,20 @@ pub extern "C" fn dup_syscall(
     }
     let vfd = wrappedvfd.unwrap();
     let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
-    let ret_vfd =
-        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
-    return ret_vfd as i32;
+    if ret_kernelfd < 0 {
+        return handle_errno(get_errno(), "dup");
+    }
+    // A full virtual fd table is an EMFILE condition, not a reason to panic inside
+    // a syscall. Close the host fd we just created so the failure path does not leak it.
+    match fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0) {
+        Ok(ret_vfd) => ret_vfd as i32,
+        Err(_) => {
+            unsafe {
+                libc::close(ret_kernelfd);
+            }
+            syscall_error(Errno::EMFILE, "dup", "Too many open files")
+        }
+    }
 }
 
 /// dup2() performs the same task as dup(), so we utilize dup() here and mapping underlying kernel
