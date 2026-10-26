@@ -1479,7 +1479,10 @@ pub extern "C" fn fcntl_syscall(
                 arg as u64,
             ) {
                 Ok(new_vfd) => return new_vfd as i32,
-                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+                // `vfd_arg` was already validated by `_fcntl_helper` above, so the only
+                // remaining failure mode here is an exhausted virtual fd table, which POSIX
+                // requires to be reported as `EMFILE` rather than `EBADF`.
+                Err(_) => return syscall_error(Errno::EMFILE, "fcntl", "Too many files opened"),
             }
         }
         // As for `F_DUPFD`, but additionally set the close-on-exec flag
@@ -1501,7 +1504,10 @@ pub extern "C" fn fcntl_syscall(
                 arg as u64,
             ) {
                 Ok(new_vfd) => return new_vfd as i32,
-                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+                // `vfd_arg` was already validated by `_fcntl_helper` above, so the only
+                // remaining failure mode here is an exhausted virtual fd table, which POSIX
+                // requires to be reported as `EMFILE` rather than `EBADF`.
+                Err(_) => return syscall_error(Errno::EMFILE, "fcntl", "Too many files opened"),
             }
         }
         // Return (as the function result) the file descriptor flags.
