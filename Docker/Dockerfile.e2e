@@ -135,6 +135,21 @@ RUN make sysroot \
  && test -f lindfs/lib/libc.cwasm \
  && test -f lindfs/lib/libm.cwasm
 
+# Build fpcast variant of the runtime libraries (libc/libm .so and .cwasm)
+# NOTE: WITH_FPCAST=1 only changes the runtime libraries in lindfs/lib (they
+# are passed through `wasm-opt --fpcast-emu`); the sysroot is identical to the
+# default build. This runs as a separate stage so it does not overwrite the
+# default runtime from 'build-glibc', and BuildKit can build both in parallel.
+# Only the 'release' stage uses it, so the e2e 'test' target is not affected.
+FROM base AS build-glibc-fpcast
+COPY scripts ./scripts
+COPY tools ./tools
+COPY --parents src/glibc Makefile .
+COPY --from=build-lind-boot --parents build/lind-boot .
+RUN make sysroot WITH_FPCAST=1 \
+ && test -f lindfs/lib/libc.cwasm \
+ && test -f lindfs/lib/libm.cwasm
+
 
 # Build Docker image that includes the full lind-wasm toolchain
 FROM base AS release
@@ -150,6 +165,13 @@ COPY --from=build-glibc --parents lindfs .
 # against directly (lind-wasm-apps: zlib, gnulib, openssl, libtirpc, bash).
 # It is not part of the installed sysroot, so it would otherwise be dropped.
 COPY --from=build-glibc --parents src/glibc/build/lind_debug.o .
+
+# Ship the fpcast runtime libraries next to (not inside) lindfs. The default
+# runtime in /lindfs/lib is unchanged. Apps built with `wasm-opt --fpcast-emu`
+# (lind-wasm-apps) need these; to use them, copy over the default runtime:
+#     cp -a /prebuilt-lindfs-fpcast/lib/. /lindfs/lib/
+# This mirrors the PREBUILT_LINDFS_ROOT handling in the Makefile 'test' target.
+COPY --from=build-glibc-fpcast /lindfs/lib/ /prebuilt-lindfs-fpcast/lib/
 
 COPY --parents scripts tests tools skip_test_cases.txt .
 
