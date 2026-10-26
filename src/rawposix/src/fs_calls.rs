@@ -829,13 +829,9 @@ pub extern "C" fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i64 {
-    let addr = {
-        if addr_arg == 0 {
-            0 as *mut u8
-        } else {
-            sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
-        }
-    };
+    // `addr` is a user address that the vmmap translates (including the
+    // cage's logical offset) below, so it is not converted as a pointer here.
+    let addr = sc_convert_sysarg_to_usize(addr_arg, addr_cageid, cageid) as *mut u8;
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -4428,7 +4424,7 @@ pub extern "C" fn nanosleep_time64_syscall(
 pub extern "C" fn mprotect_syscall(
     cageid: u64,
     addr_arg: u64,
-    _addr_cageid: u64,
+    addr_cageid: u64,
     len_arg: u64,
     len_cageid: u64,
     prot_arg: u64,
@@ -4441,7 +4437,7 @@ pub extern "C" fn mprotect_syscall(
     arg6_cageid: u64,
 ) -> i64 {
     // Type conversion
-    let addr = addr_arg as *mut u8;
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
 
@@ -5036,7 +5032,7 @@ pub extern "C" fn shmdt_syscall(
     // NOTE: glibc's shmdt wrapper already calls TRANSLATE_GUEST_POINTER_TO_HOST,
     // so shmaddr_arg is already a host/system pointer. Do NOT translate again.
     // This avoids dependency on vmmap.base_address which can change after fork/exec.
-    let sysaddr = shmaddr_arg as usize;
+    let sysaddr = sc_convert_to_u8_mut(shmaddr_arg, shmaddr_cageid, cageid) as usize;
 
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)

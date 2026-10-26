@@ -35,6 +35,24 @@ fn is_unused(val: u64, placeholder: u64) -> bool {
     val == 0 || val == placeholder
 }
 
+/// Converts a pointer argument of cage `arg_cageid` to the host address it
+/// refers to, applying the logical offset of the cage's vmmap (see
+/// `Vmmap::guest_ptr_to_sys`). A gs-forked cage's guest code uses the
+/// addresses of the cage it was forked from, while its memory lives at those
+/// addresses plus that offset. NULL stays NULL.
+///
+/// Takes the cage's vmmap read lock: do not call while holding its write lock.
+#[inline]
+pub fn sc_convert_ptr_to_host(arg: u64, arg_cageid: u64) -> u64 {
+    if arg == 0 {
+        return 0;
+    }
+    match get_cage(arg_cageid) {
+        Some(cage) => cage.vmmap.read().guest_ptr_to_sys(arg as usize) as u64,
+        None => arg,
+    }
+}
+
 pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
     #[cfg(feature = "secure")]
     return is_unused(arg, UNUSED_ARG);
@@ -130,7 +148,7 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) 
         }
     }
 
-    unsafe { &mut *(arg as *mut i32) }
+    unsafe { &mut *(sc_convert_ptr_to_host(arg, arg_cageid) as *mut i32) }
 }
 
 /// Converts a u64 syscall argument to a mutable c_char pointer.
@@ -149,7 +167,7 @@ pub fn sc_convert_to_cchar_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut c
         }
     }
 
-    arg as *mut c_char
+    sc_convert_ptr_to_host(arg, arg_cageid) as *mut c_char
 }
 
 /// ## Arguments:
@@ -258,7 +276,7 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
         }
     }
 
-    arg as *mut u8
+    sc_convert_ptr_to_host(arg, arg_cageid) as *mut u8
 }
 
 /// This function translates the buffer pointer from user buffer address to system address, because we are
@@ -270,8 +288,8 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 ///
 /// ## Returns:
 ///     - buf: actual system address, which is the actual position that stores data
-pub fn sc_convert_buf(buf_arg: u64, _arg_cageid: u64, _cageid: u64) -> *const u8 {
-    buf_arg as *const u8
+pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, _cageid: u64) -> *const u8 {
+    sc_convert_ptr_to_host(buf_arg, arg_cageid) as *const u8
 }
 
 // TODO: This function can be removed/revamped significantly
@@ -342,7 +360,7 @@ pub fn sc_convert_addr_to_epollevent<'a>(
         }
     }
 
-    let pointer = arg as *mut libc::epoll_event;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut libc::epoll_event;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -373,7 +391,7 @@ pub fn sc_convert_sigactionStruct<'a>(
         return None;
     }
 
-    let ptr = act_arg as *const SigactionStruct;
+    let ptr = sc_convert_ptr_to_host(act_arg, act_arg_cageid) as *const SigactionStruct;
     unsafe { Some(&*ptr) }
 }
 
@@ -404,7 +422,7 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
         return None;
     }
 
-    let ptr = act_arg as *mut SigactionStruct;
+    let ptr = sc_convert_ptr_to_host(act_arg, act_arg_cageid) as *mut SigactionStruct;
     unsafe { Some(&mut *ptr) }
 }
 
@@ -425,7 +443,7 @@ pub fn sc_convert_kernel_sigactionStruct<'a>(
         return None;
     }
 
-    let ptr = act_arg as *const KernelSigactionStruct;
+    let ptr = sc_convert_ptr_to_host(act_arg, act_arg_cageid) as *const KernelSigactionStruct;
     unsafe { Some(&*ptr) }
 }
 
@@ -446,7 +464,7 @@ pub fn sc_convert_kernel_sigactionStruct_mut<'a>(
         return None;
     }
 
-    let ptr = act_arg as *mut KernelSigactionStruct;
+    let ptr = sc_convert_ptr_to_host(act_arg, act_arg_cageid) as *mut KernelSigactionStruct;
     unsafe { Some(&mut *ptr) }
 }
 
@@ -476,7 +494,7 @@ pub fn sc_convert_sigset(
     if set_arg == 0 {
         return None; // If the argument is 0, return None
     } else {
-        let ptr = set_arg as *mut SigsetType;
+        let ptr = sc_convert_ptr_to_host(set_arg, set_cageid) as *mut SigsetType;
         if !ptr.is_null() {
             unsafe {
                 return Some(&mut *ptr);
@@ -573,7 +591,7 @@ pub fn sc_convert_itimerval(
     if val_arg == 0 {
         None
     } else {
-        match get_constitimerval(val_arg) {
+        match get_constitimerval(sc_convert_ptr_to_host(val_arg, val_arg_cageid)) {
             Ok(itimeval) => itimeval,
             Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
@@ -613,7 +631,7 @@ pub fn sc_convert_itimerval_mut(
     if val_arg == 0 {
         None
     } else {
-        match get_itimerval(val_arg) {
+        match get_itimerval(sc_convert_ptr_to_host(val_arg, val_arg_cageid)) {
             Ok(itimeval) => itimeval,
             Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
@@ -652,7 +670,7 @@ pub fn sc_convert_addr_to_statdata<'a>(
         }
     }
 
-    let pointer = arg as *mut StatData;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut StatData;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -672,7 +690,7 @@ pub fn sc_convert_addr_to_stat64data<'a>(
         }
     }
 
-    let pointer = arg as *mut Stat64Data;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut Stat64Data;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -692,7 +710,7 @@ pub fn sc_convert_addr_to_rlimit<'a>(
             panic!("Invalid Cage ID");
         }
     }
-    let pointer = arg as *mut Rlimit;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut Rlimit;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -709,7 +727,7 @@ pub fn sc_convert_addr_to_rlimit64<'a>(
             panic!("Invalid Cage ID");
         }
     }
-    let pointer = arg as *mut Rlimit64;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut Rlimit64;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -753,7 +771,7 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
         }
     }
 
-    let pointer = arg as *mut FSData;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut FSData;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -773,7 +791,7 @@ pub fn sc_convert_addr_to_statfs64data<'a>(
         }
     }
 
-    let pointer = arg as *mut Statfs64Data;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut Statfs64Data;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -800,7 +818,7 @@ pub fn sc_convert_addr_to_pipearray<'a>(
         }
     }
 
-    let pointer = arg as *mut PipeArray;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut PipeArray;
     Ok(unsafe { &mut *pointer })
 }
 
@@ -827,7 +845,7 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
         }
     }
 
-    let pointer = arg as *mut ShmidsStruct;
+    let pointer = sc_convert_ptr_to_host(arg, arg_cageid) as *mut ShmidsStruct;
     Ok(unsafe { &mut *pointer })
 }
 

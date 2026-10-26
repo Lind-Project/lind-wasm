@@ -27,6 +27,7 @@ use sysdefs::data::sys_struct::CloneArgStruct;
 use std::arch::asm;
 use crate::lind_mpk::signals::{handle_signal};
 use crate::lind_mpk::gs_fork;
+use typemap::datatype_conversion::sc_convert_ptr_to_host;
 
 // When set to true (via --no-interpose), context stacks are created without
 // handlers, so all syscalls from inside the dlmopen namespace pass through to
@@ -255,6 +256,8 @@ pub extern "C" fn mpk_set_tid_address_syscall_entry(
     }
 
     let os_tid = current_tid();
+    // Cleared and futex-woken at thread exit, so store the host address.
+    let tidptr_arg = sc_convert_ptr_to_host(tidptr_arg, _tidptr_arg_cageid);
     let Some(cage) = get_cage(cageid) else {
         return -(libc::ESRCH as i64);
     };
@@ -456,6 +459,7 @@ fn mpk_clone_thread_entry(
     registered_cage_ids: std::collections::HashSet<u64>,
     thread_info: Arc<MpkThreadInfo>,
     guest_stack: (usize, usize),
+    gs_base: usize,
 ) -> i32 {
     thread_info
         .exit_stack
@@ -573,6 +577,7 @@ fn mpk_clone_thread_entry(
             parent_pointer_guard,
             child_pointer_guard,
         );
+        gs_fork::set_gs_base(gs_base);
         longjmp(copied_jump_buffer as *mut libc::c_long, 1);
     }
 }
@@ -1215,14 +1220,14 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
     _arg6: u64,
     _arg6_cageid: u64,
 ) -> i32 {
-    let args = unsafe { &mut *(_clone_arg as *mut CloneArgStruct) };
+    // The clone arguments live in the calling cage's memory; in a gs-forked
+    // cage its pointers are shifted by the cage's logical offset.
+    let args = unsafe {
+        &mut *(sc_convert_ptr_to_host(_clone_arg, _clone_arg_cageid) as *mut CloneArgStruct)
+    };
     let isthread = args.flags & (CLONE_VM as u64) != 0; //CLONE_VM is set for threads, not for forked processes
 
     if (isthread) {
-        if gs_fork::is_gs_forked_cage(_parent_cageid) {
-            eprintln!("[lind-mpk] mpk_clone: threads are not supported in GS-forked cages");
-            return -libc::ENOSYS;
-        }
         if let Err(error) = unsafe { validate_clone_tls(&*current_context_stack(), args) } {
             eprintln!("[lind-mpk] {}", error);
             return -EINVAL;
@@ -1235,8 +1240,8 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
         //CLONE_CHILD_SETTID: Store TID at child_tid
         //CLONE_CHILD_CLEARTID: Clear TID and futex wake at child_tid on thread exit
 
-        let parent_tid_ptr = args.parent_tid;
-        let child_tid_ptr = args.child_tid;
+        let parent_tid_ptr = sc_convert_ptr_to_host(args.parent_tid, _clone_arg_cageid);
+        let child_tid_ptr = sc_convert_ptr_to_host(args.child_tid, _clone_arg_cageid);
         let set_parent_tid = (args.flags & (CLONE_PARENT_SETTID as u64)) != 0;
         let set_child_tid = (args.flags & (CLONE_CHILD_SETTID as u64)) != 0;
         let clear_child_tid = (args.flags & (CLONE_CHILD_CLEARTID as u64)) != 0;
@@ -1322,6 +1327,11 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
             let old_stack_base = parent_thread_info.supervisor_stack_base;
             let stack_size = parent_thread_info.supervisor_stack_size;
             let parent_pointer_guard = current_pointer_guard();
+            // The sandbox offset of a GS-forked cage; the thread shares it.
+            let parent_gs_base: usize;
+            unsafe {
+                asm!("rdgsbase {}", out(reg) parent_gs_base, options(nostack, preserves_flags));
+            }
 
             if stack_size == 0 || parent_thread_info.gs_data.is_null() {
                 lind_debug_panic("mpk_clone: parent thread has no supervisor context");
@@ -1352,6 +1362,25 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                 return -EINVAL;
             }
 
+            // In a GS-forked cage the thread runs on a real TLS and arena stack.
+            let mut clone_args = *args;
+            match gs_fork::prepare_thread(_parent_cageid, args.tls as usize, args.stack_size as usize) {
+                Ok(Some(gs_thread)) => {
+                    clone_args.tls = gs_thread.fs_base as u64;
+                    clone_args.stack = gs_thread.stack_lo as u64;
+                    clone_args.stack_size = gs_thread.stack_size as u64;
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    unsafe {
+                        libc::munmap(new_stack_base, stack_size);
+                        libc::munmap(new_context_pages as *mut c_void, context_pages_size);
+                    }
+                    eprintln!("[lind-mpk] mpk_clone: {error:#}");
+                    return -libc::EAGAIN;
+                }
+            }
+
             let new_stack_base_addr = new_stack_base as usize;
 
             unsafe {
@@ -1379,14 +1408,14 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
 
             // Fix up the top grate's return stack with the caller-provided stack.
             unsafe {
-                prepare_clone_caller_context(&mut *thread_info.gs_data, args);
+                prepare_clone_caller_context(&mut *thread_info.gs_data, &clone_args);
             }
 
 
             // Spawn the child on a normal Rust stack, then switch it to the copied
             // supervisor stack before resuming at the saved setjmp return point.
             let (tid_sender, tid_receiver) = std::sync::mpsc::sync_channel(1);
-            let guest_stack = (args.stack as usize, args.stack_size as usize);
+            let guest_stack = (clone_args.stack as usize, clone_args.stack_size as usize);
             let handle = thread::spawn(move || {
                 mpk_clone_thread_entry(
                     tid_sender,
@@ -1398,6 +1427,7 @@ pub extern "C" fn inner_mpk_clone_syscall_entry(
                     registered_cage_ids,
                     thread_info,
                     guest_stack,
+                    parent_gs_base,
                 )
             });
 

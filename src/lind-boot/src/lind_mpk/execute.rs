@@ -28,6 +28,7 @@ use crate::lind_mpk::gs_fork::{
     record_guest_stack, release_cage_memory, set_gs_base, CAGE_RESERVATION_SIZE, GS_FORK_ARENA_SIZE,
 };
 use crate::shims::SyscallRuntime;
+use typemap::datatype_conversion::sc_convert_ptr_to_host;
 use anyhow::{Context, bail};
 use cage::{VmmapBitWidth, get_cage, lind_signal_init};
 use libc::{c_char, c_int, c_ulong, c_void};
@@ -663,16 +664,22 @@ impl SyscallRuntime for MpkRuntime {
 
         let _ = (cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid);
         
-        let path_ptr = arg1 as *const c_char;
-        let path_ptr_cageid = arg1_cageid;
-        let argv_ptr = arg2 as *const *const c_char;
-        let argv_ptr_cageid = arg2_cageid;
-        let envp_ptr = arg3 as *const *const c_char;
-        let envp_ptr_cageid = arg3_cageid;
+        // The pointers (and the string pointers in argv/envp) are guest
+        // addresses of the cage that owns them; in a gs-forked cage they are
+        // shifted by the cage's logical offset.
+        let path_ptr = sc_convert_ptr_to_host(arg1, arg1_cageid) as *const c_char;
+        let argv = GuestPtrArray {
+            ptr: sc_convert_ptr_to_host(arg2, arg2_cageid) as *const u64,
+            cageid: arg2_cageid,
+        };
+        let envp = GuestPtrArray {
+            ptr: sc_convert_ptr_to_host(arg3, arg3_cageid) as *const u64,
+            cageid: arg3_cageid,
+        };
 
         //TODO: handle argument gathering from different cages
         //cageid is the rawposix cageid
-        match exec_mpk_internal(arg1_cageid, path_ptr, argv_ptr, envp_ptr) {
+        match exec_mpk_internal(arg1_cageid, path_ptr, argv, envp) {
             Ok(code) => code,
             Err(e) => {
                 eprintln!("[lind-mpk] exec failed: {}", e);
@@ -759,6 +766,9 @@ extern "C" fn lind_syscall_handler(
 
 
 pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
+    cage::memory::vmmap::set_debug_context_provider(
+        crate::lind_mpk::RuntimeInfo::current_vmmap_debug_context,
+    );
     mpk_debug("initializing lind-mpk");
     // Publish the manager globally so mpk_clone_syscall_entry can reach it.
     LIND_MANAGER.set(lind_manager).ok();
@@ -802,11 +812,26 @@ pub fn init_mpk(lind_manager: Arc<LindCageManager>) {
 /// 1. Retrieves and tears down the existing MPKRuntimeInfo (closes dlmopen handles)
 /// 2. Parses the path, argv, and envp from the native pointers
 /// 3. Loads and executes the new .so using the same logic as execute_mpk
+/// A NULL-terminated array of guest string pointers (argv/envp). `ptr` is
+/// already converted to a host address; its entries are guest addresses of
+/// cage `cageid`.
+struct GuestPtrArray {
+    ptr: *const u64,
+    cageid: u64,
+}
+
+impl GuestPtrArray {
+    /// Host address of the string at `index`, or NULL at the end of the array.
+    unsafe fn get(&self, index: usize) -> *const c_char {
+        sc_convert_ptr_to_host(*self.ptr.add(index), self.cageid) as *const c_char
+    }
+}
+
 fn exec_mpk_internal(
     cage_id: u64,
     path_ptr: *const c_char,
-    argv_ptr: *const *const c_char,
-    envp_ptr: *const *const c_char
+    argv: GuestPtrArray,
+    envp: GuestPtrArray,
 ) -> anyhow::Result<i32> {
     mpk_debug(format!("exec_mpk_internal for cage {}", cage_id));
 
@@ -820,7 +845,7 @@ fn exec_mpk_internal(
 
     // step 1.1: locate the .so file and canonicalize it.
     let canonical_so_path = std::fs::canonicalize(&so_path)
-        .context("failed to canonicalize .so path")?;
+        .with_context(|| format!("failed to canonicalize .so path {so_path:?}"))?;
     let so_path = canonical_so_path
         .to_str()
         .context("invalid UTF-8 in .so path")?
@@ -829,10 +854,10 @@ fn exec_mpk_internal(
     mpk_debug(format!("executing new program: {}", so_path));
 
     let mut args = Vec::new();
-    if !argv_ptr.is_null() {
+    if !argv.ptr.is_null() {
         let mut i = 0;
         loop {
-            let arg_ptr = unsafe { *argv_ptr.offset(i) };
+            let arg_ptr = unsafe { argv.get(i) };
             if arg_ptr.is_null() {
                 break;
             }
@@ -846,10 +871,10 @@ fn exec_mpk_internal(
     }
 
     let mut vars = Vec::new();
-    if !envp_ptr.is_null() {
+    if !envp.ptr.is_null() {
         let mut i = 0;
         loop {
-            let env_ptr = unsafe { *envp_ptr.offset(i) };
+            let env_ptr = unsafe { envp.get(i) };
             if env_ptr.is_null() {
                 break;
             }

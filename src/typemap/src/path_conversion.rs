@@ -3,6 +3,7 @@
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
 use crate::cage_helpers::validate_cageid;
+use crate::datatype_conversion::sc_convert_ptr_to_host;
 use cage::get_cage;
 pub use libc::*;
 pub use std::env;
@@ -164,7 +165,7 @@ pub fn sc_convert_path_to_host(
         }
     }
 
-    let path = match get_cstr(path_arg) {
+    let path = match get_cstr(sc_convert_ptr_to_host(path_arg, path_arg_cageid)) {
         Ok(path) => path,
         Err(_) => return Err(Errno::EFAULT),
     };

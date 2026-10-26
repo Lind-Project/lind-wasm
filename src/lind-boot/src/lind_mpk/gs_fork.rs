@@ -23,9 +23,6 @@
 //! root's memory stays mapped until every member of its family has exited.
 
 
-//0x7ffdff5a9020
-
-
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -115,10 +112,22 @@ enum MemoryOp {
     Reserve(usize, usize),
 }
 
+/// Arena slot holding the real stack of a thread created in a GS-forked cage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ThreadStack {
+    cage_id: u64,
+    root_base: usize,
+    slot: usize,
+    /// GS offset of the cage; the stack is aliased at `+ offset`.
+    offset: usize,
+}
+
 #[derive(Debug, Default)]
 struct Registry {
     families: HashMap<usize, Family>,
     cages: HashMap<u64, ForkedCage>,
+    /// Thread stacks of GS-forked cages, keyed by their lowest address.
+    thread_stacks: HashMap<usize, ThreadStack>,
 }
 
 impl Registry {
@@ -153,6 +162,18 @@ impl Registry {
     fn release(&mut self, cage_id: u64, base: usize) -> Vec<MemoryOp> {
         let mut ops = Vec::new();
         if self.cages.get(&cage_id).is_some_and(|cage| cage.region_base == base) {
+            // The aliases of the cage's thread stacks go with its reservation.
+            let thread_stacks: Vec<usize> = self
+                .thread_stacks
+                .iter()
+                .filter(|(_, stack)| stack.cage_id == cage_id)
+                .map(|(lo, _)| *lo)
+                .collect();
+            for lo in thread_stacks {
+                let stack = self.thread_stacks.remove(&lo).unwrap();
+                self.free_slot(stack.root_base, stack.slot);
+                ops.push(MemoryOp::Reserve(slot_addr(stack.root_base, stack.slot), STACK_SLOT_SIZE));
+            }
             let cage = self.cages.remove(&cage_id).unwrap();
             ops.push(MemoryOp::Unmap(base, CAGE_RESERVATION_SIZE));
             let family = self
@@ -181,38 +202,22 @@ impl Registry {
         ops.push(MemoryOp::Unmap(base, CAGE_RESERVATION_SIZE));
         ops
     }
+
+    /// Memory operations releasing the thread stack at `lo`, if there is one.
+    fn release_thread_stack(&mut self, lo: usize) -> Vec<MemoryOp> {
+        let Some(stack) = self.thread_stacks.remove(&lo) else {
+            return Vec::new();
+        };
+        self.free_slot(stack.root_base, stack.slot);
+        let addr = slot_addr(stack.root_base, stack.slot);
+        vec![
+            MemoryOp::Reserve(addr, STACK_SLOT_SIZE),
+            MemoryOp::Reserve(addr.wrapping_add(stack.offset), STACK_SLOT_SIZE),
+        ]
+    }
 }
 
-fn registry() -> &'static Mutex<Registry> {
-    static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
-    REGISTRY.get_or_init(|| Mutex::new(Registry::default()))
-}
-
-/// Guest stack `(lo, size)` of each host thread running guest code.
-fn guest_stacks() -> &'static Mutex<HashMap<pid_t, (usize, usize)>> {
-    static STACKS: OnceLock<Mutex<HashMap<pid_t, (usize, usize)>>> = OnceLock::new();
-    STACKS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// Records the guest stack of host thread `tid`; fork duplicates it.
-pub(super) fn record_guest_stack(tid: pid_t, lo: usize, size: usize) {
-    guest_stacks().lock().unwrap().insert(tid, (lo, size));
-}
-
-pub(super) fn forget_guest_stack(tid: pid_t) {
-    guest_stacks().lock().unwrap().remove(&tid);
-}
-
-/// Whether `cage_id` was created by GS fork (and has not exec'd since).
-pub(super) fn is_gs_forked_cage(cage_id: u64) -> bool {
-    registry().lock().unwrap().cages.contains_key(&cage_id)
-}
-
-/// Releases the reservation of a cage's memory at `base` when the cage exits
-/// or execs. Memory still needed by a fork family is kept until its last
-/// member is gone.
-pub(super) fn release_cage_memory(cage_id: u64, base: usize) {
-    let ops = registry().lock().unwrap().release(cage_id, base);
+fn apply_memory_ops(ops: Vec<MemoryOp>) {
     for op in ops {
         match op {
             MemoryOp::Unmap(addr, len) => {
@@ -233,10 +238,147 @@ pub(super) fn release_cage_memory(cage_id: u64, base: usize) {
     }
 }
 
+fn registry() -> &'static Mutex<Registry> {
+    static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(Registry::default()))
+}
+
+/// Guest stack `(lo, size)` of each host thread running guest code.
+fn guest_stacks() -> &'static Mutex<HashMap<pid_t, (usize, usize)>> {
+    static STACKS: OnceLock<Mutex<HashMap<pid_t, (usize, usize)>>> = OnceLock::new();
+    STACKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Records the guest stack of host thread `tid`; fork duplicates it.
+pub(super) fn record_guest_stack(tid: pid_t, lo: usize, size: usize) {
+    guest_stacks().lock().unwrap().insert(tid, (lo, size));
+}
+
+/// Forgets the guest stack of exiting host thread `tid` and releases it if it
+/// is the arena stack of a thread in a GS-forked cage.
+pub(super) fn forget_guest_stack(tid: pid_t) {
+    let Some((lo, _)) = guest_stacks().lock().unwrap().remove(&tid) else {
+        return;
+    };
+    let ops = registry().lock().unwrap().release_thread_stack(lo);
+    apply_memory_ops(ops);
+}
+
+/// Whether `cage_id` was created by GS fork (and has not exec'd since).
+pub(super) fn is_gs_forked_cage(cage_id: u64) -> bool {
+    registry().lock().unwrap().cages.contains_key(&cage_id)
+}
+
+/// Releases the reservation of a cage's memory at `base` when the cage exits
+/// or execs. Memory still needed by a fork family is kept until its last
+/// member is gone.
+pub(super) fn release_cage_memory(cage_id: u64, base: usize) {
+    let ops = registry().lock().unwrap().release(cage_id, base);
+    apply_memory_ops(ops);
+}
+
 /// Sandbox offset (GS base) of `cage_id`: `region_base - root_base` for a
 /// GS-forked cage, 0 otherwise.
 pub(super) fn cage_gs_offset(cage_id: u64) -> usize {
     registry().lock().unwrap().cages.get(&cage_id).map_or(0, |cage| cage.offset)
+}
+
+/// GS base of the guest code the supervisor returns to on `stack`: the
+/// sandbox offset of the cage of the most recent guest context.
+pub(super) fn active_guest_gs_base(stack: &MPKSupervisorCtxStack) -> Option<usize> {
+    let current = stack.current_context.min(LIND_MPK_MAX_CONTEXTS);
+    (0..current)
+        .rev()
+        .map(|i| stack.contexts[i].cage_id)
+        .find(|&cage_id| cage_id != 0)
+        .map(cage_gs_offset)
+}
+
+/// Runs `f`, which calls into guest code of `cage_id` from the supervisor,
+/// with that cage's GS base. Afterwards installs the GS base of the guest code
+/// the supervisor returns to. It is looked up instead of saved, because a fork
+/// inside `f` resumes the child on a copy of this frame.
+pub(super) fn call_with_cage_gs<R>(cage_id: u64, f: impl FnOnce() -> R) -> R {
+    let caller: usize;
+    unsafe {
+        std::arch::asm!("rdgsbase {}", out(reg) caller, options(nostack, preserves_flags));
+    }
+    set_gs_base(cage_gs_offset(cage_id));
+    let result = f();
+    let stack = current_ctx_stack.get();
+    let resume = if stack.is_null() {
+        None
+    } else {
+        active_guest_gs_base(unsafe { &*stack })
+    };
+    set_gs_base(resume.unwrap_or(caller));
+    result
+}
+
+/// Guest state of a new thread in a GS-forked cage.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct GsThread {
+    /// Real address of the thread descriptor (FS base).
+    pub fs_base: usize,
+    /// Real stack in an arena slot of the family root.
+    pub stack_lo: usize,
+    pub stack_size: usize,
+}
+
+/// Prepares a thread of `cage_id` whose descriptor glibc placed at guest
+/// address `tls`. For a GS-forked cage, sets the descriptor's
+/// `sandbox_offset` and returns its real address together with a new stack.
+/// RSP-relative accesses are not GS-prefixed, so the stack is real memory in
+/// an arena slot, aliased at `+ X` for GS-relative accesses through pointers
+/// to it; the guest-allocated stack is not used. Returns `None` for other cages.
+pub(super) fn prepare_thread(cage_id: u64, tls: usize, stack_size: usize) -> anyhow::Result<Option<GsThread>> {
+    let (root_base, region_base, offset, slot) = {
+        let mut registry = registry().lock().unwrap();
+        let Some(cage) = registry.cages.get(&cage_id) else {
+            return Ok(None);
+        };
+        let (root_base, region_base, offset) = (cage.root_base, cage.region_base, cage.offset);
+        let slot = registry
+            .alloc_slot(root_base)
+            .ok_or_else(|| anyhow::anyhow!("no free stack slot in the arena of {root_base:#x}"))?;
+        (root_base, region_base, offset, slot)
+    };
+    let stack_size = stack_size.next_multiple_of(PAGE_SIZE).clamp(PAGE_SIZE, CAGE_STACK_SIZE);
+    let stack_lo = slot_stack_lo(root_base, slot, stack_size);
+    let result = (|| {
+        let sandbox_offset_field = guest_sandbox_offset()?;
+        let fs_base = tls.wrapping_add(offset);
+        let field = fs_base.wrapping_add(sandbox_offset_field);
+        if fs_base < region_base
+            || field
+                .checked_add(size_of::<usize>())
+                .is_none_or(|end| end > region_base + MPK_MEMORY_SIZE)
+            || sandbox_offset_field + size_of::<usize>() > guest_tcb_size()?
+        {
+            anyhow::bail!("thread pointer {tls:#x} is outside the memory of cage {cage_id}");
+        }
+        create_aliased_stack(stack_lo, stack_size, &[stack_lo], offset, region_base)?;
+        unsafe { std::ptr::write_unaligned(field as *mut usize, offset) };
+        Ok(fs_base)
+    })();
+    let mut registry = registry().lock().unwrap();
+    registry
+        .thread_stacks
+        .insert(stack_lo, ThreadStack { cage_id, root_base, slot, offset });
+    match result {
+        Ok(fs_base) => {
+            gs_debug(format!(
+                "cage {cage_id}: thread FS {tls:#x} -> {fs_base:#x}, stack {stack_lo:#x}+{stack_size:#x} (slot {slot})"
+            ));
+            Ok(Some(GsThread { fs_base, stack_lo, stack_size }))
+        }
+        Err(error) => {
+            let ops = registry.release_thread_stack(stack_lo);
+            drop(registry);
+            apply_memory_ops(ops);
+            Err(error)
+        }
+    }
 }
 
 /// Runs `f` with the GS base of the calling host thread set to `value`, for
@@ -386,6 +528,26 @@ fn create_child_stack(
     child_base: usize,
 ) -> anyhow::Result<()> {
     let (parent_lo, stack_size) = parent_stack;
+    create_aliased_stack(real_lo, stack_size, views, offset, child_base)?;
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            copy_lo as *const u8,
+            (real_lo + (copy_lo - parent_lo)) as *mut u8,
+            parent_lo + stack_size - copy_lo,
+        );
+    }
+    Ok(())
+}
+
+/// Maps an empty `stack_size` memfd stack at `real_lo` and aliases it at every
+/// `view + offset`, which must fall inside the cage reservation at `child_base`.
+fn create_aliased_stack(
+    real_lo: usize,
+    stack_size: usize,
+    views: &[usize],
+    offset: usize,
+    child_base: usize,
+) -> anyhow::Result<()> {
     let fd = unsafe { libc::memfd_create(c"lind-gs-fork-stack".as_ptr(), libc::MFD_CLOEXEC) };
     if fd < 0 {
         anyhow::bail!("memfd_create for child stack failed: {}", std::io::Error::last_os_error());
@@ -395,13 +557,6 @@ fn create_child_stack(
             anyhow::bail!("ftruncate of child stack failed: {}", std::io::Error::last_os_error());
         }
         map_shared_fixed(fd, real_lo, stack_size)?;
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                copy_lo as *const u8,
-                (real_lo + (copy_lo - parent_lo)) as *mut u8,
-                parent_lo + stack_size - copy_lo,
-            );
-        }
         let child_end = child_base + CAGE_RESERVATION_SIZE;
         for view in views {
             let alias = view.wrapping_add(offset);
@@ -616,8 +771,8 @@ fn gs_fork_inner(
     let child_vmmap = {
         let mut vmmap = parent_vmmap.clone();
         vmmap.set_base_address(child_base);
-        // The child's guest addresses are those of the root, so mmap/brk
-        // must return and accept root addresses for the child's memory.
+        // The child's guest addresses are those of the root, so mmap/brk and
+        // pointer arguments must be shifted onto the child's memory.
         vmmap.set_logical_offset(gs_offset);
         vmmap
     };
@@ -728,6 +883,10 @@ fn gs_fork_inner(
         .expect("mpk_clone: LIND_MANAGER not set – call init_mpk first")
         .increment();
 
+    // The child resumes in the code that issued the fork, which is a grate
+    // when the fork was interposed.
+    let resume_gs = active_guest_gs_base(unsafe { &*new_gs_data }).unwrap_or(gs_offset);
+
     let (tid_sender, tid_receiver) = std::sync::mpsc::sync_channel(1);
     let launch = ChildLaunch {
         tid_sender,
@@ -736,7 +895,7 @@ fn gs_fork_inner(
         child_cageid,
         child_base,
         child_fs,
-        gs_offset,
+        gs_offset: resume_gs,
         stack_lo,
         stack_size,
         jump_buffer_addr: jump_buffer as usize,
@@ -968,6 +1127,78 @@ mod tests {
         );
         assert_eq!(registry.alloc_slot(ROOT), Some(slot));
         assert_eq!(registry.release(1, ROOT), vec![MemoryOp::Unmap(ROOT, CAGE_RESERVATION_SIZE)]);
+    }
+
+    #[test]
+    fn thread_stacks_return_their_slots() {
+        let child = ROOT + 2 * CAGE_RESERVATION_SIZE;
+        let offset = child - ROOT;
+        let mut registry = Registry::default();
+        let slot = registry.alloc_slot(ROOT).unwrap();
+        registry.add_child(2, forked(ROOT, child, slot));
+        let add_thread = |registry: &mut Registry| {
+            let thread_slot = registry.alloc_slot(ROOT).unwrap();
+            let lo = slot_stack_lo(ROOT, thread_slot, CAGE_STACK_SIZE);
+            registry.thread_stacks.insert(lo, ThreadStack { cage_id: 2, root_base: ROOT, slot: thread_slot, offset });
+            (lo, thread_slot)
+        };
+        let (exiting, exiting_slot) = add_thread(&mut registry);
+        let (_, remaining_slot) = add_thread(&mut registry);
+
+        let addr = slot_addr(ROOT, exiting_slot);
+        assert_eq!(
+            registry.release_thread_stack(exiting),
+            vec![
+                MemoryOp::Reserve(addr, STACK_SLOT_SIZE),
+                MemoryOp::Reserve(addr + offset, STACK_SLOT_SIZE),
+            ]
+        );
+        assert!(registry.release_thread_stack(exiting).is_empty());
+        // Threads still running when the cage exits lose their aliases with it.
+        assert_eq!(
+            registry.release(2, child),
+            vec![
+                MemoryOp::Reserve(slot_addr(ROOT, remaining_slot), STACK_SLOT_SIZE),
+                MemoryOp::Unmap(child, CAGE_RESERVATION_SIZE),
+                MemoryOp::Reserve(slot_addr(ROOT, slot), STACK_SLOT_SIZE),
+            ]
+        );
+        assert!(registry.thread_stacks.is_empty());
+        assert_eq!(registry.alloc_slot(ROOT), Some(0));
+    }
+
+    #[test]
+    fn grate_calls_switch_gs_to_the_callee_and_back_to_the_active_guest() {
+        const FORKED: u64 = u64::MAX - 7;
+        const GRATE: u64 = u64::MAX - 8;
+        let offset = 3 * CAGE_RESERVATION_SIZE;
+        registry().lock().unwrap().cages.insert(FORKED, forked(ROOT, ROOT + offset, 0));
+
+        let mut stack = MPKSupervisorCtxStack::new(0, InterposeHandlers::default());
+        stack.contexts[0].cage_id = FORKED;
+        stack.current_context = 1;
+        assert_eq!(active_guest_gs_base(&stack), Some(offset));
+        stack.contexts[2].cage_id = GRATE;
+        stack.current_context = 3;
+        assert_eq!(active_guest_gs_base(&stack), Some(0));
+        stack.current_context = 0;
+        assert_eq!(active_guest_gs_base(&stack), None);
+
+        // The forked cage calls into the (unforked) grate and back.
+        stack.current_context = 1;
+        let previous = current_ctx_stack.replace(&mut stack);
+        set_gs_base(offset);
+        let read_gs = || {
+            let gs: usize;
+            unsafe { std::arch::asm!("rdgsbase {}", out(reg) gs, options(nostack, preserves_flags)) };
+            gs
+        };
+        assert_eq!(call_with_cage_gs(GRATE, read_gs), 0);
+        assert_eq!(read_gs(), offset);
+        assert_eq!(call_with_cage_gs(FORKED, read_gs), offset);
+        set_gs_base(0);
+        current_ctx_stack.set(previous);
+        registry().lock().unwrap().cages.remove(&FORKED);
     }
 
     #[test]

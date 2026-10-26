@@ -612,15 +612,17 @@ fn invoke_handler_on_cage_stack(
             (*gs_data).contexts[current + 1].cage_id = cageid;
             (*gs_data).contexts[current + 1].rsp = (stack_top & !0xf) as u64;
             (*gs_data).contexts[current + 1].fs_base = fs_base;
-            crate::lind_mpk::trampoline::_call_into_cage_asm(
-                signo as u64,
-                0,
-                0,
-                0,
-                0,
-                handler,
-                gs_data,
-            );
+            crate::lind_mpk::gs_fork::call_with_cage_gs(cageid, || {
+                crate::lind_mpk::trampoline::_call_into_cage_asm(
+                    signo as u64,
+                    0,
+                    0,
+                    0,
+                    0,
+                    handler,
+                    gs_data,
+                )
+            });
 
             (*gs_data).contexts[current] = saved_contexts[0];
             (*gs_data).contexts[current + 1] = saved_contexts[1];

@@ -3,6 +3,7 @@ use crate::lind_mpk::RuntimeInfo::{
     LIND_MPK_MAX_CONTEXTS, CONTEXT_PAGE_SIZE, GUEST_TCB_SIZE,
     current_ctx_stack, current_context_stack,
 };
+use crate::lind_mpk::gs_fork;
 use cage::get_cage;
 use std::arch::naked_asm;
 use std::mem::{offset_of, size_of};
@@ -222,7 +223,7 @@ pub extern "C" fn grate_callback_trampoline(
         (*gs_data).contexts[switch_to_context_index].fs_base = grate_fs_base;
     }
 
-    let return_value = unsafe { inner_grate_callback_trampoline_asm(
+    let return_value = gs_fork::call_with_cage_gs(cageid, || unsafe { inner_grate_callback_trampoline_asm(
         cageid,
         arg1,
         arg1cageid,
@@ -238,7 +239,7 @@ pub extern "C" fn grate_callback_trampoline(
         arg6cageid,
         in_grate_fn_ptr_u64,
         thread_gs_data,
-    ) };
+    ) });
     
     return_value
 }

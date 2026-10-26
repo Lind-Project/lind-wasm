@@ -327,6 +327,16 @@ pub(super) fn current_context_stack() -> *mut MPKSupervisorCtxStack {
     stack
 }
 
+pub(super) fn current_vmmap_debug_context() -> Option<(u64, u64)> {
+    if current_ctx_stack.get().is_null() {
+        return None;
+    }
+
+    let stack = unsafe { &*current_context_stack() };
+    let context = stack.contexts.get(stack.current_context)?;
+    Some((context.cage_id, stack.os_tid))
+}
+
 // ── Guest view of the context stack ─────────────────────────────────────────
 //
 // Guest glibc locates the context stack on the first page after its TCB,
@@ -618,6 +628,31 @@ mod context_stack_tests {
         .join()
         .unwrap();
         assert_eq!(current_context_stack(), &mut stack as *mut _);
+        current_ctx_stack.set(previous);
+    }
+
+    #[test]
+    fn vmmap_debug_context_tracks_current_stack_and_context() {
+        let mut stack = MPKSupervisorCtxStack::new(101, InterposeHandlers::default());
+        stack.contexts[0].cage_id = 1;
+        stack.contexts[1].cage_id = 2;
+        let previous = current_ctx_stack.replace(&mut stack);
+        assert_eq!(current_vmmap_debug_context(), Some((1, 101)));
+
+        unsafe { (*current_context_stack()).current_context = 1 };
+        assert_eq!(current_vmmap_debug_context(), Some((2, 101)));
+        unsafe { (*current_context_stack()).os_tid = 202 };
+        assert_eq!(current_vmmap_debug_context(), Some((2, 202)));
+
+        let mut replacement = MPKSupervisorCtxStack::new(303, InterposeHandlers::default());
+        replacement.contexts[0].cage_id = 3;
+        current_ctx_stack.set(&mut replacement);
+        assert_eq!(current_vmmap_debug_context(), Some((3, 303)));
+        std::thread::spawn(|| assert_eq!(current_vmmap_debug_context(), None))
+            .join()
+            .unwrap();
+        current_ctx_stack.set(std::ptr::null_mut());
+        assert_eq!(current_vmmap_debug_context(), None);
         current_ctx_stack.set(previous);
     }
 

@@ -7,14 +7,43 @@
 //! and searching for memory regions, ensuring proper alignment, protection, and handling of shared
 //! and file-backed memory.
 //! This file defines `vmmap` data structures.
+//!
+//! Set `LIND_VMMAP_DEBUG` (any value) to emit debug messages to stderr.
+//! The runtime context provider is called at each log site, so cage and OSTID
+//! reflect the calling thread's active context, not the registration context.
 use fdtables;
 use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
 use std::io;
+use std::sync::OnceLock;
 use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::fs_const::{
     PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
 };
+
+type DebugContextProvider = fn() -> Option<(u64, u64)>;
+static DEBUG_CONTEXT_PROVIDER: OnceLock<DebugContextProvider> = OnceLock::new();
+
+/// Registers a callback, not a context snapshot. It must read the calling
+/// thread's current cage and OSTID whenever invoked, or return `None` if unset.
+pub fn set_debug_context_provider(provider: fn() -> Option<(u64, u64)>) {
+    DEBUG_CONTEXT_PROVIDER.get_or_init(|| provider);
+}
+
+macro_rules! vmmap_debug {
+    ($($arg:tt)*) => {
+        if std::env::var_os("LIND_VMMAP_DEBUG").is_some() {
+            match DEBUG_CONTEXT_PROVIDER.get().and_then(|provider| provider()) {
+                Some((cage_id, ostid)) => {
+                    eprintln!("[vmmap cage={cage_id} ostid={ostid}] {}", format_args!($($arg)*));
+                }
+                None => {
+                    eprintln!("[vmmap cage=unknown ostid=unknown] {}", format_args!($($arg)*));
+                }
+            }
+        }
+    };
+}
 
 /// Default number of virtual memory pages in a `vmmap`.
 /// Calculated as 2^(32 - PAGESHIFT), which represents the total pages
@@ -355,6 +384,18 @@ impl Vmmap {
         self.logical_offset = offset;
     }
 
+    /// Converts a pointer the guest passed as a syscall argument to the host
+    /// address it refers to. Unlike `user_to_sys`, the base address is not
+    /// added: pointer arguments already carry it (wasm glibc translates them,
+    /// native MPK code uses host addresses); only the logical offset of a
+    /// gs-forked cage is applied. NULL stays NULL.
+    pub fn guest_ptr_to_sys(&self, ptr: usize) -> usize {
+        if ptr == 0 {
+            return 0;
+        }
+        ptr.wrapping_add(self.logical_offset)
+    }
+
     /// Sets the heap start page number for the memory
     ///
     /// Arguments:
@@ -570,6 +611,14 @@ impl VmmapOps for Vmmap {
     /// - Start: vmmap_entry_ref.page_num
     /// - End: vmmap_entry_ref.page_num + vmmap_entry_ref.npages (inclusive)
     fn add_entry(&mut self, vmmap_entry_ref: VmmapEntry) {
+        vmmap_debug!(
+            "add_entry page_num={} npages={} prot={:#x} cage_id={} backing={:?}",
+            vmmap_entry_ref.page_num,
+            vmmap_entry_ref.npages,
+            vmmap_entry_ref.prot,
+            vmmap_entry_ref.cage_id,
+            vmmap_entry_ref.backing
+        );
         // Create interval from page range and insert entry with strict bounds checking
         let _ = self.entries.insert_strict(
             // pages x to y, y included
@@ -612,6 +661,9 @@ impl VmmapOps for Vmmap {
         file_size: i64,
         cage_id: u64,
     ) -> Result<(), io::Error> {
+        vmmap_debug!(
+            "add_entry_with_overwrite page_num={page_num} npages={npages} prot={prot:#x} maxprot={maxprot:#x} flags={flags:#x} cage_id={cage_id} backing={backing:?}"
+        );
         // Call update() to handle the insertion with overwrite capability
         self.update(
             page_num,
@@ -644,6 +696,7 @@ impl VmmapOps for Vmmap {
     /// - Ok(()) on success
     /// - Err(io::Error) on failure
     fn remove_entry(&mut self, page_num: usize, npages: usize) -> Result<(), io::Error> {
+        vmmap_debug!("remove_entry page_num={page_num} npages={npages}");
         // Call update() with remove flag set to true
         self.update(
             page_num,
@@ -692,6 +745,9 @@ impl VmmapOps for Vmmap {
         file_size: i64,
         cage_id: u64,
     ) -> Result<(), io::Error> {
+        vmmap_debug!(
+            "update page_num={page_num} npages={npages} prot={prot:#x} maxprot={maxprot:#x} flags={flags:#x} remove={remove} cage_id={cage_id} backing={backing:?}"
+        );
         // Validate input - number of pages must be non-zero
         if npages == 0 {
             return Err(io::Error::new(
@@ -797,6 +853,7 @@ impl VmmapOps for Vmmap {
     /// - Maintains mapping consistency during protection changes
     /// - Updates protection flags for fully contained pages
     fn change_prot(&mut self, page_num: usize, npages: usize, new_prot: i32) {
+        vmmap_debug!("change_prot page_num={page_num} npages={npages} new_prot={new_prot:#x}");
         // Calculate page range
         let new_region_end_page = page_num + npages;
         let new_region_start_page = page_num;
@@ -900,6 +957,9 @@ impl VmmapOps for Vmmap {
     /// - true if mapping exists with compatible protection
     /// - false if mapping doesn't exist or protection is incompatible
     fn check_existing_mapping(&self, page_num: usize, npages: usize, prot: i32) -> bool {
+        vmmap_debug!(
+            "check_existing_mapping page_num={page_num} npages={npages} prot={prot:#x}"
+        );
         // Calculate end page and create interval for region
         let region_end_page = page_num + npages;
         let region_interval = ie(page_num, region_end_page);
@@ -957,6 +1017,7 @@ impl VmmapOps for Vmmap {
     /// - Enforces PROT_READ when other protections are set
     /// - Handles partial overlaps and gaps
     fn check_addr_mapping(&mut self, page_num: usize, npages: usize, prot: i32) -> Option<usize> {
+        vmmap_debug!("check_addr_mapping page_num={page_num} npages={npages} prot={prot:#x}");
         // Calculate end page of region
         let region_end_page = page_num + npages;
 
@@ -1284,6 +1345,64 @@ impl VmmapOps for Vmmap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_vmmap_debug_logging() {
+        // Run in subprocesses to isolate the environment and global provider.
+        if std::env::var_os("LIND_VMMAP_DEBUG_TEST_CHILD").is_some() {
+            thread_local! {
+                static CONTEXT: std::cell::Cell<Option<(u64, u64)>> =
+                    const { std::cell::Cell::new(None) };
+            }
+            set_debug_context_provider(|| CONTEXT.get());
+            vmmap_debug!("unset");
+            CONTEXT.set(Some((1, 101)));
+            vmmap_debug!("first");
+            CONTEXT.set(Some((2, 101)));
+            vmmap_debug!("switched");
+            std::thread::spawn(|| {
+                CONTEXT.set(Some((3, 202)));
+                vmmap_debug!("other thread");
+            })
+            .join()
+            .unwrap();
+            vmmap_debug!("original thread");
+            return;
+        }
+
+        for enabled in [false, true] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "memory::vmmap::tests::test_vmmap_debug_logging",
+                    "--nocapture",
+                ])
+                .env("LIND_VMMAP_DEBUG_TEST_CHILD", "1");
+            if enabled {
+                child.env("LIND_VMMAP_DEBUG", "1");
+            } else {
+                child.env_remove("LIND_VMMAP_DEBUG");
+            }
+            let output = child.output().unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            if enabled {
+                assert_eq!(
+                    stderr,
+                    concat!(
+                        "[vmmap cage=unknown ostid=unknown] unset\n",
+                        "[vmmap cage=1 ostid=101] first\n",
+                        "[vmmap cage=2 ostid=101] switched\n",
+                        "[vmmap cage=3 ostid=202] other thread\n",
+                        "[vmmap cage=2 ostid=101] original thread\n",
+                    )
+                );
+            } else {
+                assert!(stderr.is_empty(), "{stderr}");
+            }
+        }
+    }
 
     /// Test: A logical offset shifts user addresses relative to system addresses
     /// Expected: Conversions round-trip and map user addresses onto the copy
