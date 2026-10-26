@@ -29,7 +29,7 @@ All numbers below come from microbenchmarks and a bash run done on one machine. 
 - **First call at each distinct (callee, expected type):** creates the adapter. This is the only expensive step; its cost was not measured separately.
 - **Every later crossing call:** still goes through the builtin, because the table slot cannot be rewritten without breaking callers of the other ABI. A 256-entry direct-mapped cache in the store makes this about 4 ns per call (about 14 ns before the cache, when a std `HashMap` lookup dominated).
 
-**Switches:** `LIND_LENIENT_INDIRECT_CALL=1` must be set at `--precompile` time and at run time (it changes generated code). Adding the tunable changed the serialized settings, so every existing `.cwasm` must be recompiled.
+**Switches:** `lind-boot --lenient-indirect-call` must be given at `--precompile` time and at run time (it changes generated code). Adding the tunable changed the serialized settings, so every existing `.cwasm` must be recompiled.
 
 ## Performance
 
@@ -54,7 +54,7 @@ Notes:
 
 ## Real-world check: bash
 
-Setup: dynamic fpcast bash on the native libc (every libc-to-bash callback is a crossing), with counters enabled (`LIND_COUNT_INDIRECT_CALLS=1` at precompile, `LIND_INDIRECT_STATS=1` at run time).
+Setup: dynamic fpcast bash on the native libc (every libc-to-bash callback is a crossing), with counters enabled (`lind-boot --count-indirect-calls` at precompile, `LIND_INDIRECT_STATS=1` at run time).
 
 | workload | total indirect calls | crossings |
 |---|---|---|
@@ -68,7 +68,7 @@ Setup: dynamic fpcast bash on the native libc (every libc-to-bash callback is a 
 - Cost in absolute terms: 421 × ~4 ns ≈ 2 µs for B, versus ~0.1-0.2 ms of per-call overhead for A over 62k-202k indirect calls. Both are negligible against run times of 0.6-7 s.
 - Across 43 small unit-test programs: 540 indirect calls in total, 4 crossings.
 
-Wall-clock comparison (all times in **milliseconds**, from starting `lind-boot` to process exit, so they include startup, library loading and any forks), same dynamic fpcast bash in both columns, median of 3 runs. **A** runs on an fpcast libc/libm (built from the same sysroot link output with `lind-wasm-opt --fpcast-emu`; bash and libc compiled without mixed mode). **B** runs on the stock native libc/libm (compiled with `LIND_LENIENT_INDIRECT_CALL=1`). A static fpcast bash is included only as a reference for the cost of dynamic linking.
+Wall-clock comparison (all times in **milliseconds**, from starting `lind-boot` to process exit, so they include startup, library loading and any forks), same dynamic fpcast bash in both columns, median of 3 runs. **A** runs on an fpcast libc/libm (built from the same sysroot link output with `lind-wasm-opt --fpcast-emu`; bash and libc compiled without mixed mode). **B** runs on the stock native libc/libm (compiled with `--lenient-indirect-call`). A static fpcast bash is included only as a reference for the cost of dynamic linking.
 
 | workload (wall-clock time, ms) | A: dynamic, fpcast libc (ms) | B: dynamic, native libc, mixed (ms) | static fpcast bash, reference (ms) |
 |---|---|---|---|

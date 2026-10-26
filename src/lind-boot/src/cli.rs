@@ -39,6 +39,17 @@ pub struct CliOptions {
     #[arg(long = "enable-fpcast")]
     pub enable_fpcast: bool,
 
+    /// Experimental: let a signature-mismatched `call_indirect` adapt fpcast thunks <-> native
+    /// functions at runtime instead of trapping (cross-fpcast module support).
+    /// Changes code generation, so it must be given both to `--precompile` and when running.
+    #[arg(long = "lenient-indirect-call")]
+    pub lenient_indirect_call: bool,
+
+    /// Diagnostics: count every `call_indirect` (print totals at exit with LIND_INDIRECT_STATS=1).
+    /// Changes code generation, so it must be given to `--precompile`.
+    #[arg(long = "count-indirect-calls")]
+    pub count_indirect_calls: bool,
+
     /// Optional in-memory Wasm module bytes.
     ///
     /// This is not parsed from the command line. When present, lind-boot loads

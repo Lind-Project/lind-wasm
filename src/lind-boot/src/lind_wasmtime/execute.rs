@@ -90,6 +90,8 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<i32> {
     let wt_config = make_wasmtime_config(
         lindboot_cli.wasmtime_backtrace,
         lindboot_cli.enable_fpcast,
+        lindboot_cli.lenient_indirect_call,
+        lindboot_cli.count_indirect_calls,
         lindboot_cli.lind_internal_memory_reservation,
     );
     let engine = Engine::new(&wt_config)
@@ -926,6 +928,8 @@ pub fn precompile_module(cli: &CliOptions) -> Result<()> {
     let wt_config = make_wasmtime_config(
         cli.wasmtime_backtrace,
         false,
+        cli.lenient_indirect_call,
+        cli.count_indirect_calls,
         cli.lind_internal_memory_reservation,
     );
     let engine = Engine::new(&wt_config)
@@ -1052,6 +1056,8 @@ fn invoke_func(store: &mut Store<HostCtx>, func: Func, args: &[String]) -> Resul
 fn make_wasmtime_config(
     backtrace: bool,
     enable_fpcast: bool,
+    lenient_indirect_call: bool,
+    count_indirect_calls: bool,
     lind_internal_memory_reservation: u64,
 ) -> wasmtime::Config {
     let mut wt_config = wasmtime::Config::new();
@@ -1060,8 +1066,8 @@ fn make_wasmtime_config(
     // Experimental: let a signature-mismatched call_indirect adapt fpcast thunks <-> native
     // functions at runtime instead of trapping. Affects code generation, so it must be set
     // for `--precompile` as well as for running.
-    wt_config.lenient_indirect_call(std::env::var_os("LIND_LENIENT_INDIRECT_CALL").is_some());
-    wt_config.count_indirect_calls(std::env::var_os("LIND_COUNT_INDIRECT_CALLS").is_some());
+    wt_config.lenient_indirect_call(lenient_indirect_call);
+    wt_config.count_indirect_calls(count_indirect_calls);
     wt_config.wasm_threads(true);
     wt_config.shared_memory(true);
     wt_config.lind_internal_memory_reservation(lind_internal_memory_reservation);
