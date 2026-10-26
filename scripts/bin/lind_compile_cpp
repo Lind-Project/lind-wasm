@@ -320,7 +320,7 @@ do_optimize() {
 }
 
 do_precompile() {
-  run_cmd "${LINDBOOT_BIN}" --precompile "${OUT_WASM}"
+  run_cmd "${LINDBOOT_BIN}" --lenient-indirect-call --precompile "${OUT_WASM}"
 }
 
 cp_to_lindfs() {

@@ -54,4 +54,4 @@ $REPO_ROOT/scripts/bin/lind-wasm-opt --target=library $FPCAST_FLAG $SYSROOT/lib/
 
 # do precompile (call lind-boot directly to avoid lind_compile copying to lindfs root)
 rm -f $REPO_ROOT/lindfs/lib/libm.cwasm
-$REPO_ROOT/build/lind-boot --precompile $REPO_ROOT/lindfs/lib/libm.so
+$REPO_ROOT/build/lind-boot --lenient-indirect-call --precompile $REPO_ROOT/lindfs/lib/libm.so

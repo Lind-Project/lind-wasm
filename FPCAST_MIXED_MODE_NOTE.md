@@ -5,6 +5,15 @@
 
 All numbers below come from microbenchmarks and a bash run done on one machine. They are rough, not a full benchmark. Code is on branch `fix-cross-fpcast` (commits `8c7505425`, `8d9d20a80`, `830a32c20`, `9e14b6e56`, `a19396d45`).
 
+## Quick start (testers)
+
+On this branch the helper scripts already pass `--lenient-indirect-call` to `lind-boot` (`lind_compile`, `lind_compile_cpp`, `lind_run`, and the libc/libm build scripts). So:
+1. Rebuild: `make build` (the serialized settings changed, so all old `.cwasm` files must be recompiled, including `lindfs/lib/libc.cwasm` / `libm.cwasm`).
+2. Compile apps/libs as usual. Use `lind_compile --fpcast-emu` for modules that need fpcast, plain `lind_compile` otherwise. Mixing them in one process (including `dlopen`) now works.
+3. Run with `lind_run`.
+
+Outside this repo, anything that calls `lind-boot --precompile` directly (for example the `lind-wasm-apps` build scripts) must add `--lenient-indirect-call` itself, otherwise those binaries trap on cross-ABI callbacks.
+
 ## Case 1: function pointers resolved by symbol (not passed as data)
 
 **A:** nothing to do. Every pointer is already a thunk.
