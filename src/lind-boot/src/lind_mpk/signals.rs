@@ -3,9 +3,10 @@
 /// - find better solution for map_tid_to_cage
 /// - check ordering of context stack increment: Are there any races with signal handling?
 /// - prevent deadlocks by managing the signal mask carefully
+/// - spill user's fs:scratch space before entering the cage with _call_into_cage_asm
 use crate::lind_mpk::RuntimeInfo::{
-    context_stack_page_for_fs, MPKRuntimeInfo, MPKSupervisorCtxStack, GUEST_TCB_SIZE,
-    LIND_MPK_MAX_CONTEXTS,
+    context_stack_page_for_fs, guest_tcb_size, scratch_offset, MPKRuntimeInfo,
+    MPKSupervisorCtxStack, GUEST_TCB_SIZE, LIND_MPK_MAX_CONTEXTS,
 };
 use cage::memory::vmmap::VmmapOps;
 use cage::get_cage;
@@ -594,6 +595,28 @@ fn invoke_handler_on_cage_stack(
             return false;
         }
 
+        let scratch_offset = match (scratch_offset(), guest_tcb_size()) {
+            (Ok(offset), Ok(tcb_size))
+                if offset
+                    .checked_add(std::mem::size_of::<usize>())
+                    .is_some_and(|end| end <= tcb_size) =>
+            {
+                offset
+            }
+            _ => return false,
+        };
+        let Some(scratch_field) = fs_base.checked_add(scratch_offset) else {
+            return false;
+        };
+        let Some(scratch_field_end) = scratch_field.checked_add(std::mem::size_of::<usize>()) else {
+            return false;
+        };
+        if !addr_in_cage_vmmap(cageid, scratch_field)
+            || !addr_in_cage_vmmap(cageid, scratch_field_end - 1)
+        {
+            return false;
+        }
+
         unsafe {
             let gs_data = gs_data as *mut MPKSupervisorCtxStack;
             let current = (*gs_data).current_context;
@@ -601,6 +624,8 @@ fn invoke_handler_on_cage_stack(
                 return false;
             }
 
+            let saved_scratch =
+                std::ptr::read_unaligned(scratch_field as *const usize);
             let saved_contexts = [
                 (*gs_data).contexts[current],
                 (*gs_data).contexts[current + 1],
@@ -624,6 +649,7 @@ fn invoke_handler_on_cage_stack(
                 )
             });
 
+            std::ptr::write_unaligned(scratch_field as *mut usize, saved_scratch);
             (*gs_data).contexts[current] = saved_contexts[0];
             (*gs_data).contexts[current + 1] = saved_contexts[1];
             (*gs_data).contexts[current + 2] = saved_contexts[2];
