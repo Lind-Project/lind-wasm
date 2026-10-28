@@ -5,6 +5,7 @@ use threei::{copy_handler_table_to_cage, register_handler, EXITING_TABLE};
 pub fn clear_globals() {
     #[cfg(feature = "hashmap")]
     {
+        HANDLERTABLE.clear_poison();
         HANDLERTABLE.lock().unwrap().clear();
     }
     #[cfg(feature = "dashmap")]

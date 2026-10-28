@@ -27,7 +27,7 @@
  */
 #define GRATE_MEMORY_FLAG ((uint64_t)1 << 63)
 
-int make_threei_call (unsigned int callnumber, 
+int64_t make_threei_call (unsigned int callnumber,
     uint64_t callname, 
     uint64_t self_cageid, uint64_t target_cageid,
     uint64_t arg1, uint64_t arg1cageid,

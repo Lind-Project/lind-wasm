@@ -3,12 +3,12 @@
 use anyhow::Result;
 use cage::memory::{check_addr_read, check_addr_write};
 use rand::Rng;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use sysdefs::constants::Errno;
+use std::sync::Arc;
 use sysdefs::constants::fs_const::PAGESIZE;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::Errno;
 use sysdefs::lind_debug_panic;
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
@@ -16,7 +16,7 @@ use threei::threei::{
 use threei::threei_const;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_dylink::DynamicLoader;
-use wasmtime_lind_multi_process::{LindHost, get_memory_base, get_memory_base_and_size};
+use wasmtime_lind_multi_process::{get_memory_base, get_memory_base_and_size, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed
@@ -111,7 +111,7 @@ fn add_syscall_to_linker<
               arg5cageid: u64,
               arg6: u64,
               arg6cageid: u64|
-              -> wasmtime::Result<i32> {
+              -> wasmtime::Result<i64> {
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
@@ -139,11 +139,11 @@ fn add_syscall_to_linker<
                             // Only override the return value with the pending visible retval if it is actually set.
                             // If it's not set, that means the clone syscall being replayed on rewind is the one in the child process, and we should return the actual syscall return value (0) instead of the pending visible retval from the parent process.
                             if retval > 0 {
-                                return Ok(retval);
+                                return Ok(retval as i64);
                             }
                         }
                     }
-                    return Ok(rewind_res);
+                    return Ok(rewind_res as i64);
                 }
             }
 
@@ -162,7 +162,7 @@ fn add_syscall_to_linker<
                 };
                 // let signal handler finish rest of the rewinding process
                 wasmtime_lind_multi_process::signal::signal_handler(&mut caller)?;
-                return Ok(retval);
+                return Ok(retval as i64);
             }
 
             // Some thread-related operations must be executed against a specific thread's
@@ -218,8 +218,7 @@ fn add_syscall_to_linker<
             // If the syscall was interrupted by a signal (EINTR), invoke the signal handler.
             // If fork is called within the signal handler, asyncify will unwind the stack;
             // we save the syscall return value so it can be restored on rewind.
-            // Only negate `retval` if it falls within the valid errno range;
-            // since negating `I32::MIN` would cause an overflow panic.
+            // Only negate `retval` if it falls within the valid errno range.
             if retval < 0 && retval > -256 && -retval == sysdefs::constants::Errno::EINTR as i64 {
                 caller.as_context_mut().append_syscall_asyncify_data(retval as i32);
                 if let Err(e) =
@@ -236,7 +235,7 @@ fn add_syscall_to_linker<
                 }
             }
 
-            Ok(retval as i32)
+            Ok(retval)
         },
     )?;
     Ok(())

@@ -431,7 +431,7 @@ pub fn copy_handler_table_to_cage(
 /// each argument.
 ///
 /// Returns:
-/// - `i32` syscall result of the dispatched handler.
+/// - `i64` syscall result of the dispatched handler.
 /// - Returns `-ESRCH` if the target cage is dead or in `EXITING_TABLE` (unless the syscall
 /// is an exit variant or the caller is the target itself), or if the destination grate is
 /// already dead.
@@ -527,7 +527,7 @@ pub fn make_syscall(
                 arg5_cageid,
                 arg6,
                 arg6_cageid,
-            );
+            ) as i64;
         }
 
         // Grate case: call into the corresponding grate function

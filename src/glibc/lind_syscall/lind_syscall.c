@@ -5,7 +5,7 @@
 #include "lind_constants.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
-int __lind_make_syscall_trampoline(unsigned int callnumber, 
+int64_t __lind_make_syscall_trampoline(unsigned int callnumber,
     uint64_t callname, 
     uint64_t self_cageid, uint64_t target_cageid,
     uint64_t arg1, uint64_t arg1cageid,
@@ -67,7 +67,7 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  * post-processing at this layer. Other syscalls, however, rely on the standard 
  * POSIX errno translation implemented here.
  */
-int make_threei_call (unsigned int callnumber, 
+int64_t make_threei_call (unsigned int callnumber,
     uint64_t callname, 
     uint64_t self_cageid, uint64_t target_cageid,
     uint64_t arg1, uint64_t arg1cageid,
@@ -78,7 +78,7 @@ int make_threei_call (unsigned int callnumber,
     uint64_t arg6, uint64_t arg6cageid,
     int translate_errno)
 {
-    int ret = __lind_make_syscall_trampoline(callnumber, 
+    int64_t ret = __lind_make_syscall_trampoline(callnumber,
         callname, 
         self_cageid, target_cageid,
         TRANSLATE_ARG_TO_HOST(arg1, arg1cageid),
@@ -92,12 +92,8 @@ int make_threei_call (unsigned int callnumber,
     if(translate_errno == TRANSLATE_ERRNO_OFF) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
-    // but this may cause some issues for mmap syscall, because mmap syscall
-    // is returning an 32-bit address, which may overflow the int type (i32)
-    // luckily we can handle this easily because the return value of mmap is always
-    // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
-    // the errno and mmap result by simply checking if the return value is
-    // within the valid errno range
+    // mmap returns an address, so keep the full 64-bit result while checking
+    // whether it falls in the reserved errno range.
     //
     // errno should only be 'set' and never 'unset'. i.e. successful calls should not set this to 0.
     if(ret < 0 && ret > -MAX_ERRNO)
