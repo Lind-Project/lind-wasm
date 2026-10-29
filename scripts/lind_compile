@@ -28,13 +28,15 @@ set -Eeuo pipefail
 
 usage() {
   cat >&2 <<EOF
-usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
+usage: $(basename "$0") [OPTIONS] <source> [-- <compiler args>]
 
   Target selection (defaults to wasm):
     --target wasm       : compile for the WASM runtime (default)
     --target mpk        : compile a native MPK/shared-library target
     --wasm              : shorthand for --target wasm
     --mpk               : shorthand for --target mpk
+
+  MPK builds require gsfork-elf on PATH; set GSFORK_ELF_BIN to override its location.
 
   Modes (at most one, defaults to full pipeline):
     (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
@@ -62,9 +64,10 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     --no-default-clang-flags    do not add lind_compile's optional clang flags
     -h, --help                  show this help
 
-  Additional clang args:
-    Any extra arguments after the source file are passed through to clang.
-    Use -- to separate lind_compile flags from clang flags if needed.
+  Additional compiler args:
+    Any extra arguments after the source file are passed through to clang for
+    WASM builds and gcc for MPK builds. Use -- to separate lind_compile flags
+    from compiler flags if needed.
 
   Examples:
     $(basename "$0") hello.c                              # dynamic wasm build (default)
@@ -274,7 +277,7 @@ EXT="${SRC##*.}"
 
 OUT_WASM=""
 OUT_CWASM=""
-OUT_SO=""
+OUT_MPK=""
 
 case "${TARGET_KIND}" in
   wasm)
@@ -322,7 +325,7 @@ case "${TARGET_KIND}" in
       usage
       exit 2
     fi
-    OUT_SO="${SRC%.c}.so"
+    OUT_MPK="${SRC%.c}"
     ;;
   *)
     echo "error: internal: unknown target kind '${TARGET_KIND}'" >&2
@@ -336,6 +339,8 @@ LIND_WASM_OPT_BIN="${REPO_ROOT}/scripts/lind-wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
 LINDFS_ROOT="${REPO_ROOT}/lindfs/"
 MPK_LIBC_DIR="${REPO_ROOT}/glibc-2.35/build"
+MPK_LIBC_INSTALL_DIR="${REPO_ROOT}/glibc-2.35/install"
+GSFORK_ELF_BIN="${GSFORK_ELF_BIN:-gsfork-elf}"
 
 if [[ -n "${TARGET_DIR}" ]]; then
   LINDFS_ROOT="${REPO_ROOT}/lindfs/${TARGET_DIR}/"
@@ -367,6 +372,7 @@ fi
 
 if [[ "${TARGET_KIND}" == "mpk" ]]; then
   command -v "${CC:-gcc}" >/dev/null 2>&1 || { echo "error: gcc not found on PATH" >&2; exit 2; }
+  command -v "${GSFORK_ELF_BIN}" >/dev/null 2>&1 || { echo "error: gsfork-elf not found (set GSFORK_ELF_BIN to its path)" >&2; exit 2; }
 fi
 
 # --- debug output (post-normalization) ---
@@ -558,9 +564,40 @@ do_compile() {
 do_mpk_compile() {
   run_cmd "${CC:-gcc}" \
     -Wall -g -fPIC \
-    -shared -Wl,--rpath=/lib/elf \
-    -o "${OUT_SO}" "${SRC}" \
-    -L"${MPK_LIBC_DIR}" -lc
+    -Wl,--rpath=/lib/elf \
+    -fomit-frame-pointer \
+    -o "${OUT_MPK}" "${SRC}" "${EXTRA_CLANG_ARGS[@]}" \
+    -I"${MPK_LIBC_INSTALL_DIR}/include" \
+    -L"${MPK_LIBC_DIR}" -lc \
+    "${MPK_LIBC_DIR}/elf/ld.so"
+
+  local rewrite_tmp_dir rewrite_output
+  rewrite_tmp_dir="$(mktemp -d -- "$(dirname -- "${OUT_MPK}")/.lind-mpk-rewrite.XXXXXX")"
+  rewrite_output="${rewrite_tmp_dir}/$(basename -- "${OUT_MPK}").gs"
+
+  if ! run_cmd "${GSFORK_ELF_BIN}" rewrite "${OUT_MPK}" "${rewrite_output}" \
+    --scratch-field=sandbox_scratch \
+    --sandbox-field=sandbox_offset \
+    -L "${MPK_LIBC_DIR}/elf" \
+    -L "${MPK_LIBC_DIR}" \
+    --tcb-layout "${MPK_LIBC_DIR}/libc.so.6" \
+    --trust-library ld-linux-x86-64.so.2 \
+    --trust-library libm.so.6 \
+    --trust-library libc.so.6; then
+    # rm -rf -- "${rewrite_tmp_dir}"
+    return 1
+  fi
+
+  if ! chmod --reference="${OUT_MPK}" "${rewrite_output}"; then
+    rm -rf -- "${rewrite_tmp_dir}"
+    return 1
+  fi
+
+  if ! mv -- "${rewrite_output}" "${OUT_MPK}"; then
+    rm -rf -- "${rewrite_tmp_dir}"
+    return 1
+  fi
+  rm -rf -- "${rewrite_tmp_dir}"
 }
 
 do_optimize() {
@@ -583,7 +620,7 @@ do_precompile() {
 cp_to_lindfs() {
   mkdir -p "${LINDFS_ROOT}"
   if [[ "${TARGET_KIND}" == "mpk" ]]; then
-    cp "${OUT_SO}" "${LINDFS_ROOT}"
+    cp "${OUT_MPK}" "${LINDFS_ROOT}"
     return
   fi
   if [[ -n "${OUT_CWASM}" && -f "${OUT_CWASM}" ]]; then
@@ -619,7 +656,7 @@ esac
 # --- result summary ---
 case "${TARGET_KIND}" in
   mpk)
-    echo "OK: ${OUT_SO}"
+    echo "OK: ${OUT_MPK}"
     ;;
   wasm)
     case "${MODE}" in
