@@ -515,9 +515,13 @@ pub fn make_syscall(
                 .grate_inflight
                 .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             if grate.is_dead.load(std::sync::atomic::Ordering::Acquire) {
-                grate
+                let _ = grate
                     .grate_inflight
-                    .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+                    .fetch_update(
+                        std::sync::atomic::Ordering::AcqRel,
+                        std::sync::atomic::Ordering::Acquire,
+                        |inflight| Some(inflight.saturating_sub(1)),
+                    );
                 return -(Errno::ESRCH as i64);
             }
             0
@@ -546,9 +550,13 @@ pub fn make_syscall(
 
         // Decrement the in-flight counter now that the dispatch returned.
         with_cage(grateid, |grate| {
-            grate
+            let _ = grate
                 .grate_inflight
-                .fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+                .fetch_update(
+                    std::sync::atomic::Ordering::AcqRel,
+                    std::sync::atomic::Ordering::Acquire,
+                    |inflight| Some(inflight.saturating_sub(1)),
+                );
         });
 
         if let Some(ret) = grate_result {
