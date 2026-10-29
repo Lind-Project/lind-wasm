@@ -3,7 +3,6 @@
 /// - find better solution for map_tid_to_cage
 /// - check ordering of context stack increment: Are there any races with signal handling?
 /// - prevent deadlocks by managing the signal mask carefully
-/// - spill user's fs:scratch space before entering the cage with _call_into_cage_asm
 use crate::lind_mpk::RuntimeInfo::{
     context_stack_page_for_fs, guest_tcb_size, scratch_offset, MPKRuntimeInfo,
     MPKSupervisorCtxStack, GUEST_TCB_SIZE, LIND_MPK_MAX_CONTEXTS,

@@ -16,62 +16,61 @@ fn align_up_to_pages(value: usize) -> usize {
 }
 
 /// Allocates a guard-page + usable stack region out of `cage_id`'s own vmmap.
-/// The cage's backing memory is already reserved via its 4 GB MAP_NORESERVE
-/// region, so only the vmmap bookkeeping and the guard-page protection need
-/// to be set up here. Returns `(guard_start_sys_addr, stack_top_sys_addr)`.
+/// Replaces the host backing with fresh anonymous memory and protects the
+/// guard pages. Returns `(guard_start_sys_addr, stack_top_sys_addr)`.
 pub fn allocate_stack_in_vmmap(
     cage_id: u64,
     guard_size: usize,
     usable_size: usize,
 ) -> anyhow::Result<(usize, usize)> {
-    let allocation_size = guard_size + usable_size;
-    let npages = allocation_size >> PAGESHIFT;
-    let guard_pages = guard_size >> PAGESHIFT;
-
     let cage = get_cage(cage_id).ok_or_else(|| anyhow::anyhow!("cage {} not found", cage_id))?;
     let mut vmmap = cage.vmmap.write();
+    map_stack_in_vmmap(&mut vmmap, cage_id, guard_size, usable_size)
+}
 
-    let space = vmmap
-        .find_map_space(npages, 1)
-        .ok_or_else(|| anyhow::anyhow!("no space in cage {} vmmap for stack", cage_id))?;
-
-    let guard_start = space.start();
-    let stack_start = guard_start + guard_pages;
-
-    // Guard page: reserved in the vmmap, no access.
-    vmmap.add_entry_with_overwrite(
-        guard_start,
-        guard_pages,
-        PROT_NONE,
-        PROT_NONE,
-        0,
-        MemoryBackingType::Anonymous,
-        0,
-        0,
-        cage_id,
-    )?;
-
-    // Usable stack region.
-    vmmap.add_entry_with_overwrite(
-        stack_start,
-        npages - guard_pages,
-        PROT_READ | PROT_WRITE,
-        PROT_READ | PROT_WRITE,
-        0,
-        MemoryBackingType::Anonymous,
-        0,
-        0,
-        cage_id,
-    )?;
-
-    let guard_start_sys = vmmap.page_num_to_sys(guard_start);
-    drop(vmmap);
-
-    if unsafe { libc::mprotect(guard_start_sys as *mut c_void, guard_size, libc::PROT_NONE) } != 0 {
-        anyhow::bail!(
-            "mprotect for stack guard failed: {}",
-            std::io::Error::last_os_error()
-        );
+fn map_stack_in_vmmap(
+    vmmap: &mut cage::Vmmap,
+    cage_id: u64,
+    guard_size: usize,
+    usable_size: usize,
+) -> anyhow::Result<(usize, usize)> {
+    let page_size = 1usize << PAGESHIFT;
+    if guard_size == 0 || usable_size == 0
+        || guard_size % page_size != 0 || usable_size % page_size != 0
+    {
+        anyhow::bail!("vmmap stack guard and usable sizes must be nonzero and page-aligned");
+    }
+    let allocation_size = guard_size.checked_add(usable_size)
+        .ok_or_else(|| anyhow::anyhow!("vmmap stack size overflow"))?;
+    let (guard_start_sys, _) = map_region_in_vmmap(vmmap, cage_id, allocation_size)?;
+    let guard_start = vmmap.sys_to_page_num(guard_start_sys);
+    let result = (|| -> anyhow::Result<()> {
+        vmmap.add_entry_with_overwrite(
+            guard_start,
+            guard_size >> PAGESHIFT,
+            PROT_NONE,
+            PROT_NONE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_FIXED,
+            MemoryBackingType::Anonymous,
+            0,
+            0,
+            cage_id,
+        )?;
+        if unsafe { libc::mprotect(guard_start_sys as *mut c_void, guard_size, libc::PROT_NONE) } != 0 {
+            anyhow::bail!(
+                "mprotect for stack guard failed: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        vmmap.remove_entry(guard_start, allocation_size >> PAGESHIFT)
+            .map_err(|cleanup_error| anyhow::anyhow!(
+                "stack allocation failed: {}; vmmap rollback failed: {}",
+                error, cleanup_error
+            ))?;
+        return Err(error);
     }
 
     Ok((guard_start_sys, guard_start_sys + allocation_size))
@@ -422,6 +421,20 @@ pub fn guest_sandbox_offset() -> anyhow::Result<usize> {
             "ld.so does not export _lind_tls_sandbox_offset; rebuild native glibc"
         ),
         offset => Ok(offset),
+    }
+}
+
+pub fn scratch_offset() -> anyhow::Result<usize> {
+    match guest_sandbox_offset() {
+        Ok(offset) => Ok(offset + std::mem::size_of::<usize>()),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn parent_stack_offset() -> anyhow::Result<usize> {
+    match guest_sandbox_offset() {
+        Ok(offset) => Ok(offset + 2 * std::mem::size_of::<usize>()),
+        Err(e) => Err(e),
     }
 }
 
@@ -837,6 +850,33 @@ mod vmmap_region_tests {
                 bytes.fill(0xa5);
             }
         }
+
+        fn allocate_stack(&mut self) {
+            let (base, top) = map_stack_in_vmmap(&mut self.vmmap, 1, PAGE, PAGE).unwrap();
+            assert_eq!(base, self.base as usize);
+            assert_eq!(top, base + 2 * PAGE);
+            let guard = self.vmmap.find_page(0).unwrap();
+            assert_eq!(guard.prot, PROT_NONE);
+            assert_eq!(guard.maxprot, PROT_NONE);
+            assert_eq!(guard.npages, 1);
+            let stack = self.vmmap.find_page(1).unwrap();
+            assert_eq!(stack.prot, PROT_READ | PROT_WRITE);
+            assert_eq!(stack.maxprot, PROT_READ | PROT_WRITE);
+            assert_eq!(stack.npages, 1);
+            let maps = std::fs::read_to_string("/proc/self/maps").unwrap();
+            assert!(maps.lines().any(|line| {
+                let mut fields = line.split_whitespace();
+                let (start, end) = fields.next().unwrap().split_once('-').unwrap();
+                usize::from_str_radix(start, 16).unwrap() <= base
+                    && usize::from_str_radix(end, 16).unwrap() >= base + PAGE
+                    && fields.next() == Some("---p")
+            }), "stack guard must be inaccessible in the host mapping");
+            unsafe {
+                let bytes = std::slice::from_raw_parts_mut((base + PAGE) as *mut u8, PAGE);
+                assert!(bytes.iter().all(|&byte| byte == 0));
+                bytes.fill(0xa5);
+            }
+        }
     }
 
     impl Drop for TestRegion {
@@ -881,6 +921,49 @@ mod vmmap_region_tests {
     fn region_rejects_invalid_sizes() {
         assert!(allocate_region_in_vmmap(1, 0).is_err());
         assert!(allocate_region_in_vmmap(1, usize::MAX).is_err());
+    }
+
+    #[test]
+    fn stack_replaces_prot_none_backing() {
+        let mut region = TestRegion::new();
+        assert_eq!(unsafe { libc::mprotect(region.base, 2 * PAGE, libc::PROT_NONE) }, 0);
+        region.allocate_stack();
+    }
+
+    #[test]
+    fn stack_replaces_unmapped_backing() {
+        let mut region = TestRegion::new();
+        assert_eq!(unsafe { libc::munmap(region.base, 2 * PAGE) }, 0);
+        region.allocate_stack();
+    }
+
+    #[test]
+    fn stack_reuse_is_zeroed_and_guarded() {
+        let mut region = TestRegion::new();
+        region.allocate_stack();
+        region.vmmap.remove_entry(0, 2).unwrap();
+        region.allocate_stack();
+    }
+
+    #[test]
+    fn stack_mmap_failure_rolls_back_vmmap() {
+        let mut region = TestRegion::new();
+        region.vmmap.set_base_address(region.base as usize + 1);
+        let error = map_stack_in_vmmap(&mut region.vmmap, 1, PAGE, PAGE).unwrap_err();
+        assert!(error.to_string().contains("mmap for cage 1 region failed"));
+        assert!(region.vmmap.entries.is_empty());
+    }
+
+    #[test]
+    fn stack_rejects_invalid_sizes() {
+        let mut region = TestRegion::new();
+        for (guard, usable) in [
+            (0, PAGE), (PAGE, 0), (1, PAGE), (PAGE, PAGE + 1),
+            (PAGE, usize::MAX & !(PAGE - 1)),
+        ] {
+            assert!(map_stack_in_vmmap(&mut region.vmmap, 1, guard, usable).is_err());
+            assert!(region.vmmap.entries.is_empty());
+        }
     }
 }
 
@@ -1042,9 +1125,8 @@ impl MpkCageThreadInfo {
 
     /// Allocates this thread's grate stack out of the grate's own vmmap
     /// (`grate_cage_id`), rather than an independent mmap. The grate's
-    /// backing memory is already reserved via its 4 GB MAP_NORESERVE region,
-    /// so only the vmmap bookkeeping and the guard-page protection need to
-    /// be set up here.
+    /// backing is replaced with fresh anonymous memory to make reused ranges
+    /// writable, while the guard pages remain inaccessible.
     pub fn allocate_grate_stack(&mut self) -> anyhow::Result<()> {
         if self.stack_addr.load(Ordering::Relaxed) != 0 {
             return Ok(());

@@ -43,8 +43,8 @@ use crate::lind_mpk::syscalls::{
 };
 use crate::lind_mpk::RuntimeInfo::{
     allocate_context_pages, current_context_stack, current_ctx_stack, guest_sandbox_offset,
-    guest_tcb_size, MPKRuntimeInfo, MPKSupervisorCtxStack, MpkCageThreadInfo, MpkThreadInfo,
-    LIND_MPK_MAX_CONTEXTS,
+    guest_tcb_size, parent_stack_offset, MPKRuntimeInfo, MPKSupervisorCtxStack,
+    MpkCageThreadInfo, MpkThreadInfo, LIND_MPK_MAX_CONTEXTS,
 };
 
 const PAGE_SIZE: usize = 1 << PAGESHIFT;
@@ -702,6 +702,7 @@ fn gs_fork_inner(
 ) -> anyhow::Result<u64> {
     let tcb_size = guest_tcb_size()?;
     let sandbox_offset_field = guest_sandbox_offset()?;
+    let parent_stack_offset_field = parent_stack_offset()?;
     let parent_cage = get_cage(parent_cageid)
         .ok_or_else(|| anyhow::anyhow!("parent cage {parent_cageid} not found"))?;
     let child_cage = get_cage(child_cageid)
@@ -828,13 +829,26 @@ fn gs_fork_inner(
     }
     let child_fs = caller.fs_base.wrapping_add(region_delta);
     let field = child_fs.wrapping_add(sandbox_offset_field);
+    let parent_stack_field = child_fs.wrapping_add(parent_stack_offset_field);
     if child_fs < child_base
         || field.checked_add(size_of::<usize>()).is_none_or(|end| end > child_base + MPK_MEMORY_SIZE)
         || sandbox_offset_field + size_of::<usize>() > tcb_size
+        || parent_stack_field
+            .checked_add(size_of::<usize>())
+            .is_none_or(|end| end > child_base + MPK_MEMORY_SIZE)
+        || parent_stack_offset_field + size_of::<usize>() > tcb_size
     {
         anyhow::bail!("child thread pointer {child_fs:#x} is outside the child memory");
     }
     unsafe { std::ptr::write_unaligned(field as *mut usize, gs_offset) };
+    let parent_stack_base = parent_stack_lo + stack_size;
+    let child_stack_base = stack_lo + stack_size;
+    unsafe {
+        std::ptr::write_unaligned(
+            parent_stack_field as *mut usize,
+            child_stack_base.wrapping_sub(parent_stack_base),
+        )
+    };
 
     let mut registered_cage_ids = parent_thread.cage_ids.lock().unwrap().clone();
     registered_cage_ids.remove(&parent_cageid);
