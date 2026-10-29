@@ -16,9 +16,9 @@ pub const LINDFS_ROOT: &str = "/home/lind/lind-wasm/lindfs";
 /// (e.g., in-memory pipes).
 pub const FDKIND_KERNEL: u32 = 0;
 /// Maximum allowed Cage ID.  
-/// This limit is inherited from earlier implementations and may be
-/// adjusted in the future.
-pub const MAX_CAGEID: i32 = 2048;
+/// Cage IDs are never reused, so this also caps how many cages one run can
+/// create. A large build starts a cage per command, more than 2048.
+pub const MAX_CAGEID: i32 = 8192;
 pub const MAXFD: usize = 1024; // Maximum file descriptors per cage
 /// Maximum linear memory size for a single Wasm module in the current lind-wasm runtime.
 /// Since lind-wasm uses 32-bit memories, the linear memory address space is limited to 4 GiB.
