@@ -1,0 +1,9 @@
+img {
+    border-radius: 3pt;
+}
+
+.md-nav--primary .md-nav__title,
+.md-nav--primary .md-nav__link {
+    font-size: 18px; /* Set your desired font size */
+    font-weight: bold; /* Make text bold */
+}
