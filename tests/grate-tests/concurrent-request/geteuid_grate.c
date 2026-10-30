@@ -8,7 +8,7 @@
 #include <assert.h>
 
 // Dispatcher function
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
                     uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
                     uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
@@ -18,12 +18,12 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
     assert(0);
   }
 
-  int (*fn)(uint64_t) = (int (*)(uint64_t))(uintptr_t)fn_ptr_uint;
+  int64_t (*fn)(uint64_t) = (int64_t (*)(uint64_t))(uintptr_t)fn_ptr_uint;
 
   return fn(cageid);
 }
 
-int geteuid_grate(uint64_t cageid) {
+int64_t geteuid_grate(uint64_t cageid) {
   return 10;
 }
 

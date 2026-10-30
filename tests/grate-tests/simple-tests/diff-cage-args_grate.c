@@ -9,7 +9,7 @@
 #include <unistd.h>
 
 // Dispatcher function
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		    uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
 		    uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
 		    uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
@@ -24,10 +24,10 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 	       "%llu\n",
 	       fn_ptr_uint, cageid);
 
-	int (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+	int64_t (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		  uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		  uint64_t) =
-	    (int (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+	    (int64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		     uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		     uint64_t))(uintptr_t)fn_ptr_uint;
 
@@ -35,7 +35,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		  arg4cage, arg5, arg5cage, arg6, arg6cage);
 }
 
-int read_grate(uint64_t grateid, uint64_t arg1, uint64_t arg1cage,
+int64_t read_grate(uint64_t grateid, uint64_t arg1, uint64_t arg1cage,
 	       uint64_t arg2, uint64_t arg2cage, uint64_t arg3,
 	       uint64_t arg3cage, uint64_t arg4, uint64_t arg4cage,
 	       uint64_t arg5, uint64_t arg5cage, uint64_t arg6,
@@ -59,7 +59,7 @@ int read_grate(uint64_t grateid, uint64_t arg1, uint64_t arg1cage,
 	return ret;
 }
 
-int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
+int64_t open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	       uint64_t arg2cage, uint64_t arg3, uint64_t arg3cage,
 	       uint64_t arg4, uint64_t arg4cage, uint64_t arg5,
 	       uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
@@ -72,7 +72,7 @@ int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	// Overwrite the path supplied to open with a different path.
 	char new_path[20] = "/tmp/redirected.txt";
 
-	int ret = make_threei_call(
+	int64_t ret = make_threei_call(
 	    2, 0, self_grate_id, arg1cage,
 	    // We need to modify the cageid here to indicate that we want the
 	    // address translated.

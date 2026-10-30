@@ -8,7 +8,7 @@
 #include <assert.h>
 
 // Dispatcher function
-int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
+long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		    uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
 		    uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
 		    uint64_t arg4cage, uint64_t arg5, uint64_t arg5cage,
@@ -25,10 +25,10 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 	       "cage: %llu\n",
 	       fn_ptr_uint, cageid);
 
-	int (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+	int64_t (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		  uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		  uint64_t) =
-	    (int (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+	    (int64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		     uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		     uint64_t))(uintptr_t)fn_ptr_uint;
 
@@ -36,7 +36,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		  arg4cage, arg5, arg5cage, arg6, arg6cage);
 }
 
-int geteuid_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
+int64_t geteuid_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
 		  uint64_t arg2, uint64_t arg2cage, uint64_t arg3,
 		  uint64_t arg3cage, uint64_t arg4, uint64_t arg4cage,
 		  uint64_t arg5, uint64_t arg5cage, uint64_t arg6,
@@ -51,7 +51,7 @@ int geteuid_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
 //
 // This implementation overrides the (fn_ptr_addr, grate-2) with
 // (&geteuid_grate, grate-1)
-int register_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
+int64_t register_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage,
 		   uint64_t arg2, uint64_t arg2cage, uint64_t arg3,
 		   uint64_t arg3cage, uint64_t arg4, uint64_t arg4cage,
 		   uint64_t arg5, uint64_t arg5cage, uint64_t arg6,
