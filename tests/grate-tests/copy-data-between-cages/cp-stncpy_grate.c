@@ -17,10 +17,10 @@ long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		return -1;
 	}
 
-	int (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+	int64_t (*fn)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		  uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		  uint64_t) =
-	    (int (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+	    (int64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		     uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
 		     uint64_t))(uintptr_t)fn_ptr_uint;
 
@@ -28,7 +28,7 @@ long long pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 		  arg4cage, arg5, arg5cage, arg6, arg6cage);
 }
 
-int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
+int64_t open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 	       uint64_t arg2cage, uint64_t arg3, uint64_t arg3cage,
 	       uint64_t arg4, uint64_t arg4cage, uint64_t arg5,
 	       uint64_t arg5cage, uint64_t arg6, uint64_t arg6cage) {
