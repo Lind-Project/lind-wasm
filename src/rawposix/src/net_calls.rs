@@ -825,7 +825,8 @@ pub extern "C" fn epoll_ctl_syscall(
             if op == EPOLL_CTL_DEL {
                 None
             } else {
-                return (syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid address")) as i64;
+                return (syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid address"))
+                    as i64;
             }
         }
     };
@@ -982,7 +983,9 @@ pub extern "C" fn epoll_wait_syscall(
     // Convert events array from user space
     let events_ptr = match sc_convert_addr_to_epollevent(events_arg, events_cageid, cageid) {
         Ok(p) => p,
-        Err(_e) => return (syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address")) as i64,
+        Err(_e) => {
+            return (syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address")) as i64
+        }
     };
 
     // We do not let the kernel write epoll events directly into the guest's
